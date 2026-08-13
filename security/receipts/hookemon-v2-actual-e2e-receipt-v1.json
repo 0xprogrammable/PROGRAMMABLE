@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "receiptClass": "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF",
+  "activationAllowed": false,
+  "testedSourceRevision": {
+    "commit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+    "tree": "5db55ccac5b4a75a479f0a4cfbe7c3fdde8cf694"
+  },
+  "isolatedCheckout": {
+    "method": "git archive 3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+    "preexistingLibPresent": false,
+    "dependencyHydrationCommand": "node scripts/hydrate-hookemon-v2-dependencies.mjs lib",
+    "dependencyVerificationResult": "12 exact clean Git commit and tree pins"
+  },
+  "toolchain": {
+    "forgeVersion": "1.7.1",
+    "forgeCommit": "4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+    "solcVersion": "0.8.26+commit.8a97fa7a.Darwin.appleclang"
+  },
+  "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test '^testV2ActualEntrypoint' -vv",
+  "exitCode": 0,
+  "testSource": {
+    "path": "test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol",
+    "sha256": "6acf3ade4c6f3559275252316ff668846788c51640dc7b29f2a5c1b8b798cfd3"
+  },
+  "sourceBoundary": {
+    "productionSourceClosureCommitmentSha256": "871642d2a7c236adb6d8931c0699709812ec29fd2d879d0de79f2f68d1fcbf14",
+    "dependencyLock": {
+      "path": "dependencies/foundry-dependencies-v1.json",
+      "sha256": "4858b96d48b9ee05b287de985a3bfc0bcba5f149db806c682a08200238502945"
+    },
+    "foundryConfigSha256": "b40800f2d4068ce7c6a79c991b50f2cd9cf794b1c1006926115ba50aff09456f",
+    "remappingsSha256": "2f87686a246a21832728206395e762da51036a9fdf196ae43f7ead4768694ec0",
+    "frozenSharedAuthorityProvenanceSha256": "36b03b43d03855c5105ae62d4f315560f9d7a3d77fa5d623a5a81300672e1ec7"
+  },
+  "rawLog": {
+    "path": "security/receipts/hookemon-v2-actual-e2e-8361201f.log",
+    "sha256": "8361201ff1b6c3ac5d44aff548dc03564930500fac3849caee9f03cd56d8ef3d",
+    "byteLength": 642
+  },
+  "result": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "testNames": [
+    "testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries",
+    "testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel",
+    "testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute"
+  ],
+  "limitations": [
+    "The Kernel reviewer, currentness and Applicant wallet signatures use permissive ERC-1271 test authorities; this proves route integration, not production signer or governance configuration.",
+    "This receipt is local isolated integration evidence, not deployment, onchain runtime, finality, public Website, remote publication or audit evidence."
+  ],
+  "deploymentAddresses": null,
+  "releaseActivationTransaction": null
+}

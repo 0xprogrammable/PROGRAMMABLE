@@ -1,7 +1,7 @@
 {
   "activationAllowed": false,
-  "command": "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-slither-freeze.json",
-  "contentCommitmentSha256": "a39917521885a3cd05db1e18eca7f8d79ea644c2b3d8456c689c6326ad8c6b36",
+  "command": "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-isolated-slither.json",
+  "contentCommitmentSha256": "df5dac161ec31416215695578834f5ffe6866b787c3fe68c21fcb09ce3129998",
   "cwd": "/Users/hazar/Documents/Codex/2026-08-12/bernimm-den-launch-end-to-end/work/hookemon-reusable-profile-v2-20260812",
   "deploymentAddresses": null,
   "limitations": [
@@ -18,11 +18,11 @@
       "Low": 44,
       "Medium": 58
     },
-    "byteLength": 12143814,
+    "byteLength": 12058079,
     "committed": false,
     "detectorInstances": 314,
-    "pathAtReview": "/tmp/hookemon-v2-slither-freeze.json",
-    "sha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
+    "pathAtReview": "/tmp/hookemon-v2-isolated-slither.json",
+    "sha256": "c8de9d2e51d2c2448ec992ac819381f735a789718ab7a1a8520fe854f15c6621",
     "success": true
   },
   "releaseActivationTransaction": null,

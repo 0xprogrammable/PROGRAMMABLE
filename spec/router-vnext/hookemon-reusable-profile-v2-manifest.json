@@ -107,9 +107,158 @@
       "sourceSha256": "455494efe3eea8f539482e1d3c6f48d073418b02019c1739de02a323ace9511a"
     }
   ],
-  "contentCommitmentSha256": "8cd6ee493722ad0ff6f2edd6a8ed63e0abb2cdbbe9aa56c1d115e1b2bef79aea",
+  "contentCommitmentSha256": "02ede51cc2ef3b54f8c8430263391b77c79a3b86cc3ffb865607cb3e24c705fa",
   "deploymentAddresses": null,
   "evidenceBindings": {
+    "actualV2RawLog": {
+      "byteLength": 642,
+      "path": "security/receipts/hookemon-v2-actual-e2e-8361201f.log",
+      "sha256": "8361201ff1b6c3ac5d44aff548dc03564930500fac3849caee9f03cd56d8ef3d"
+    },
+    "actualV2Receipt": {
+      "content": {
+        "activationAllowed": false,
+        "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test '^testV2ActualEntrypoint' -vv",
+        "deploymentAddresses": null,
+        "exitCode": 0,
+        "isolatedCheckout": {
+          "dependencyHydrationCommand": "node scripts/hydrate-hookemon-v2-dependencies.mjs lib",
+          "dependencyVerificationResult": "12 exact clean Git commit and tree pins",
+          "method": "git archive 3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+          "preexistingLibPresent": false
+        },
+        "limitations": [
+          "The Kernel reviewer, currentness and Applicant wallet signatures use permissive ERC-1271 test authorities; this proves route integration, not production signer or governance configuration.",
+          "This receipt is local isolated integration evidence, not deployment, onchain runtime, finality, public Website, remote publication or audit evidence."
+        ],
+        "rawLog": {
+          "byteLength": 642,
+          "path": "security/receipts/hookemon-v2-actual-e2e-8361201f.log",
+          "sha256": "8361201ff1b6c3ac5d44aff548dc03564930500fac3849caee9f03cd56d8ef3d"
+        },
+        "receiptClass": "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF",
+        "releaseActivationTransaction": null,
+        "result": {
+          "failed": 0,
+          "passed": 3,
+          "skipped": 0
+        },
+        "schemaVersion": 1,
+        "sourceBoundary": {
+          "dependencyLock": {
+            "path": "dependencies/foundry-dependencies-v1.json",
+            "sha256": "4858b96d48b9ee05b287de985a3bfc0bcba5f149db806c682a08200238502945"
+          },
+          "foundryConfigSha256": "b40800f2d4068ce7c6a79c991b50f2cd9cf794b1c1006926115ba50aff09456f",
+          "frozenSharedAuthorityProvenanceSha256": "36b03b43d03855c5105ae62d4f315560f9d7a3d77fa5d623a5a81300672e1ec7",
+          "productionSourceClosureCommitmentSha256": "871642d2a7c236adb6d8931c0699709812ec29fd2d879d0de79f2f68d1fcbf14",
+          "remappingsSha256": "2f87686a246a21832728206395e762da51036a9fdf196ae43f7ead4768694ec0"
+        },
+        "testNames": [
+          "testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries",
+          "testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel",
+          "testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute"
+        ],
+        "testSource": {
+          "path": "test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol",
+          "sha256": "6acf3ade4c6f3559275252316ff668846788c51640dc7b29f2a5c1b8b798cfd3"
+        },
+        "testedSourceRevision": {
+          "commit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+          "tree": "5db55ccac5b4a75a479f0a4cfbe7c3fdde8cf694"
+        },
+        "toolchain": {
+          "forgeCommit": "4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+          "forgeVersion": "1.7.1",
+          "solcVersion": "0.8.26+commit.8a97fa7a.Darwin.appleclang"
+        }
+      },
+      "path": "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json",
+      "sha256": "6569debf20e778cabf5f6431b4d35d1550cfe35ec322d854c29862c588e2b26c"
+    },
+    "foundryDependencyLock": {
+      "content": {
+        "activationAllowed": false,
+        "dependencies": [
+          {
+            "commit": "38fe20bc0341d5bc2780d41f90dadb70e10f8cea",
+            "directory": "blocknumberish",
+            "repository": "https://github.com/Uniswap/blocknumberish.git",
+            "tree": "0a53fd6d9926fc58130e7247e880b3ff457a14e0"
+          },
+          {
+            "commit": "3b20d60d14b343ee4f908cb8079495c07f5e8981",
+            "directory": "forge-std",
+            "repository": "https://github.com/foundry-rs/forge-std.git",
+            "tree": "12dc77680520b52f871a992281dd8d817e46c4bf"
+          },
+          {
+            "commit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
+            "directory": "liquidity-launcher",
+            "repository": "https://github.com/Uniswap/liquidity-launcher.git",
+            "tree": "1f15e52e3e44c75bc3875c74bcb67cc2ae90db47"
+          },
+          {
+            "commit": "21c8312b022f495ebe3621d5daeed20552b43ff9",
+            "directory": "openzeppelin-contracts",
+            "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
+            "tree": "d18c9a1f95b08da49268ae7ec787e71c064b95f8"
+          },
+          {
+            "commit": "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
+            "directory": "openzeppelin-uniswap-hooks",
+            "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+            "tree": "ada96daa76ed8d3b77c9934da4ef356bf7df6a4f"
+          },
+          {
+            "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+            "directory": "permit2",
+            "repository": "https://github.com/Uniswap/permit2.git",
+            "tree": "9a2c109c928d5ac805b979167ce8eb613ec37054"
+          },
+          {
+            "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+            "directory": "shards-v1",
+            "repository": "https://github.com/jesse-stahl/shards-v1.git",
+            "tree": "92d6def8609e829487adea66c13901734e43c8c7"
+          },
+          {
+            "commit": "33b4b98e350bbcba6aa85642957c313e98b5f911",
+            "directory": "solady",
+            "repository": "https://github.com/Vectorized/solady.git",
+            "tree": "65ed0325407f291e24ffcf7d880ae411a33613ba"
+          },
+          {
+            "commit": "4b47a19038b798b4a33d9749d25e570443520647",
+            "directory": "solmate",
+            "repository": "https://github.com/transmissions11/solmate.git",
+            "tree": "c39bcd962c6ae0395369f8fae1e37a6f15e1067c"
+          },
+          {
+            "commit": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68",
+            "directory": "uerc20-factory",
+            "repository": "https://github.com/Uniswap/uerc20-factory.git",
+            "tree": "7211dbd66b44b8aab1ae090ad5cff722b83b0b8c"
+          },
+          {
+            "commit": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
+            "directory": "v4-core",
+            "repository": "https://github.com/Uniswap/v4-core.git",
+            "tree": "eb2b71f69fae17a743bcdddd54b5fe941236d949"
+          },
+          {
+            "commit": "ad04c9f24a170accf5ea1b2836bbafd514537ca6",
+            "directory": "v4-periphery",
+            "repository": "https://github.com/Uniswap/v4-periphery.git",
+            "tree": "be7e2efe29a6d352ed97c5bd9bf02a0c84decf6b"
+          }
+        ],
+        "purpose": "Exact Git object pins for deterministic Hookemon V2 Foundry dependency hydration; the lib directory itself is never committed",
+        "schemaVersion": 1
+      },
+      "path": "dependencies/foundry-dependencies-v1.json",
+      "sha256": "4858b96d48b9ee05b287de985a3bfc0bcba5f149db806c682a08200238502945"
+    },
     "frozenSharedAuthoritySourceBundle": {
       "files": [
         {
@@ -382,8 +531,8 @@
     "slitherTriage": {
       "content": {
         "activationAllowed": false,
-        "command": "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-slither-freeze.json",
-        "contentCommitmentSha256": "a39917521885a3cd05db1e18eca7f8d79ea644c2b3d8456c689c6326ad8c6b36",
+        "command": "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-isolated-slither.json",
+        "contentCommitmentSha256": "df5dac161ec31416215695578834f5ffe6866b787c3fe68c21fcb09ce3129998",
         "cwd": "/Users/hazar/Documents/Codex/2026-08-12/bernimm-den-launch-end-to-end/work/hookemon-reusable-profile-v2-20260812",
         "deploymentAddresses": null,
         "limitations": [
@@ -400,11 +549,11 @@
             "Low": 44,
             "Medium": 58
           },
-          "byteLength": 12143814,
+          "byteLength": 12058079,
           "committed": false,
           "detectorInstances": 314,
-          "pathAtReview": "/tmp/hookemon-v2-slither-freeze.json",
-          "sha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
+          "pathAtReview": "/tmp/hookemon-v2-isolated-slither.json",
+          "sha256": "c8de9d2e51d2c2448ec992ac819381f735a789718ab7a1a8520fe854f15c6621",
           "success": true
         },
         "releaseActivationTransaction": null,
@@ -1292,13 +1441,12 @@
         }
       },
       "path": "security/hookemon-reusable-profile-v2-slither-triage.json",
-      "sha256": "7ea40aa31258d4bfc2de4e889ab248afd018fe6b7c95591f738f54d014534f51"
+      "sha256": "c236a29185b7634460d8b891375f429ff758c56d23e7563fbdeb2e8455795e4d"
     },
     "tests": {
       "content": {
         "activationAllowed": false,
         "actualV2EntrypointEndToEnd": {
-          "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test '^testV2ActualEntrypoint' -vv",
           "coverage": [
             "actual Applicant wallet to V2 Profile launchExactHookemonV2 entrypoint",
             "PlanModule validateAndCommitPlanV2, buildReservationsV2, validatePermitV2, verifyPostconditionsV2 and buildLaunchRegistrationV2",
@@ -1307,19 +1455,10 @@
             "permanent repository-once rejection through a second actual V2 release route"
           ],
           "entrypoint": "launchExactHookemonV2",
-          "rawLogByteLength": 694,
-          "rawLogCommitted": false,
-          "rawLogPathAtReview": "/tmp/hookemon-v2-actual-e2e-freeze.log",
-          "rawLogSha256": "d0fe3faddf7d58d70bbd4c79276b6c9bbbff454c9e11fe361b10003f86230b68",
-          "result": "3 passed; 0 failed; 0 skipped",
-          "testContract": "ProgrammableExactHookemonNormalCreateProfileV1Test",
-          "testNames": [
-            "testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel",
-            "testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries",
-            "testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute"
-          ],
-          "testSourcePath": "test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol",
-          "testSourceSha256": "6acf3ade4c6f3559275252316ff668846788c51640dc7b29f2a5c1b8b798cfd3"
+          "evidenceClass": "COMMITTED_CONTENT_ADDRESSED_LOCAL_INTEGRATION_RECEIPT",
+          "limitation": "Permissive ERC-1271 test authorities prove route integration, not production signer or governance configuration.",
+          "rawLogCommitted": true,
+          "receiptPath": "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json"
         },
         "deploymentAddresses": null,
         "focusedHookemonPostconditions": {
@@ -1359,29 +1498,42 @@
         },
         "fullForgeSuite": {
           "command": "forge test -vv",
-          "rawLogByteLength": 42041,
+          "rawLogByteLength": 40001,
           "rawLogCommitted": false,
-          "rawLogPathAtReview": "/tmp/hookemon-full-test-freeze2.log",
-          "rawLogSha256": "59acae7629daf97c1a7f92cd73b40ccf83853c144211cc9ede5fc16e80a666dc",
+          "rawLogPathAtReview": "/tmp/hookemon-v2-isolated-full-forge.log",
+          "rawLogSha256": "747946ca6f12bb254c3b6f6cedc75121c16bef1b858d01384c2fb32de3ca13fe",
           "result": "238 passed; 0 failed; 3 skipped; 241 total",
           "skipNote": "Three pre-existing fork-dependent suites are explicitly skipped when their external fork configuration is absent; no focused Hookemon V2 test is skipped."
         },
-        "normalSolc": "0.8.26",
-        "releaseActivationTransaction": null,
-        "reproducibleNormalBuilds": {
+        "isolatedCleanBuildObservation": {
           "artifactBindingsCanonicalSha256Build1": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
           "artifactBindingsCanonicalSha256Build2": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
-          "build2RawLogByteLength": 169359,
-          "build2RawLogCommitted": false,
-          "build2RawLogPathAtReview": "/tmp/hookemon-v2-build-freeze2.log",
-          "build2RawLogSha256": "b0f3f62aefd9e2f679358b08efc793ad54b127afba4ab1bcc50bd9f385f0dec6",
+          "build1RawLog": {
+            "byteLength": 169359,
+            "pathAtReview": "/tmp/hookemon-v2-isolated-build1.log",
+            "sha256": "07572490d895b3a2f2cc7652f0e00e10c25ea6cc861eb1df02442e6902380c76"
+          },
+          "build2RawLog": {
+            "byteLength": 169360,
+            "pathAtReview": "/tmp/hookemon-v2-isolated-build2.log",
+            "sha256": "e3e677f975d42e6dd2314edf87193692c33b07e3323a72bd55b32f8c78d8a2c9"
+          },
+          "checkoutMethod": "git archive testedSourceCommit into an empty temporary directory",
           "cleanBuildsCompared": 2,
-          "command": "forge clean && forge build --sizes && node scripts/generate-hookemon-reusable-profile-v2.mjs"
+          "command": "forge clean && forge build --sizes && node scripts/generate-hookemon-reusable-profile-v2.mjs",
+          "dependencyHydration": "node scripts/hydrate-hookemon-v2-dependencies.mjs lib; 12 exact clean Git commit and tree pins verified",
+          "evidenceClass": "LOCAL_OBSERVATION_RERUNNABLE_NOT_SELF_PROVING",
+          "limitation": "This is a transparent local observation backed by committed hydration and verification tooling; it is not an independent build attestation.",
+          "rawLogsCommitted": false,
+          "testedSourceCommit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+          "testedSourceTree": "5db55ccac5b4a75a479f0a4cfbe7c3fdde8cf694"
         },
+        "normalSolc": "0.8.26",
+        "releaseActivationTransaction": null,
         "schemaVersion": 1
       },
       "path": "security/hookemon-reusable-profile-v2-test-evidence.json",
-      "sha256": "8bcde204e1e2adcd59ead9214df811ae25041e0f99732a5c0bdcc76384defca5"
+      "sha256": "6288c585ef521e889a5639d13329bdf640bb7496ded580817776267cea3a6054"
     }
   },
   "releaseActivationTransaction": null,
@@ -1436,17 +1588,18 @@
     ],
     "evidenceRequirements": {
       "actualV2EndToEndTests": "3 passed; 0 failed; 0 skipped",
+      "actualV2ReceiptPath": "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json",
       "artifactBindingsCanonicalSha256": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
       "focusedLifecycleTests": "7 passed; 0 failed; 0 skipped",
       "focusedPostconditionTests": "5 passed; 0 failed; 0 skipped",
       "fullForgeSuite": "238 passed; 0 failed; 3 skipped; 241 total",
+      "isolatedCleanBuildsObserved": 2,
       "kernelRegistrationGasRegressionMaximum": 8200000,
       "measuredKernelRegistrationGas": 8136327,
       "profileRuntimeByteRegressionMaximum": 22000,
-      "reproducibleCleanBuilds": 2,
-      "slitherReportByteLength": 12143814,
-      "slitherReportPath": "/tmp/hookemon-v2-slither-freeze.json",
-      "slitherReportSha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
+      "slitherReportByteLength": 12058079,
+      "slitherReportPath": "/tmp/hookemon-v2-isolated-slither.json",
+      "slitherReportSha256": "c8de9d2e51d2c2448ec992ac819381f735a789718ab7a1a8520fe854f15c6621",
       "slitherScopedTriagePath": "security/hookemon-reusable-profile-v2-slither-triage.json",
       "slitherTotalDetectorInstances": 314,
       "slitherVersion": "0.11.5",
@@ -1504,6 +1657,12 @@
       "rollback": "Any deployment, postcondition, Registry or Kernel finalization revert rolls back Authority consumption, Registry record and every new contract."
     },
     "sourceRevisions": {
+      "foundryDependencyLock": {
+        "libTracked": false,
+        "path": "dependencies/foundry-dependencies-v1.json",
+        "pinCount": 12,
+        "sha256": "4858b96d48b9ee05b287de985a3bfc0bcba5f149db806c682a08200238502945"
+      },
       "hookemonApprovedRepositoryHead": {
         "commit": "9943c158998147f4fea9049fb42b8c4a5d044c1d",
         "numericGithubRepositoryId": 1324982531,
@@ -1522,6 +1681,10 @@
         },
         "provenancePath": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json",
         "remoteReachabilityProven": false
+      },
+      "testedCandidateSourceRevision": {
+        "commit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+        "tree": "5db55ccac5b4a75a479f0a4cfbe7c3fdde8cf694"
       }
     },
     "walletUx": {

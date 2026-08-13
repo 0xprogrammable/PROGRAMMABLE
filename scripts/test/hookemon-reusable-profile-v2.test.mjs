@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACTUAL_V2_COMMAND,
+  ACTUAL_V2_FORGE_COMMIT,
+  ACTUAL_V2_FORGE_VERSION,
+  ACTUAL_V2_SOLC_VERSION,
+  ACTUAL_V2_TEST_NAMES,
+  ACTUAL_V2_TEST_SOURCE,
+  actualV2ReceiptErrors,
   canonicalJson,
   exactAbiEntry,
   requireNoScopedHighOrMedium,
   scopeSlitherDetectors,
+  sha256,
   sourceClosureCommitment,
   verifySemanticAssertions
 } from "../hookemon-reusable-profile-v2-core.mjs";
@@ -36,13 +44,21 @@ function fixture() {
         sharedShardsAuthority: {
           remoteReachabilityProven: false,
           localFrozenSourceBundle: { commit: "8afe4548", tree: "19393b3a" }
-        }
+        },
+        foundryDependencyLock: {
+          path: "dependencies/foundry-dependencies-v1.json",
+          sha256: "lock",
+          pinCount: 12,
+          libTracked: false
+        },
+        testedCandidateSourceRevision: { commit: "3a7ce454", tree: "5db55cca" }
       },
       externalActivationGates: { sharedAuthorityCanonicalPublicationEvidence: null },
       evidenceRequirements: {
         measuredKernelRegistrationGas: 8_100_000,
         kernelRegistrationGasRegressionMaximum: 8_200_000,
         profileRuntimeByteRegressionMaximum: 22_000,
+        actualV2ReceiptPath: "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json",
         slitherVersion: "0.11.5",
         slitherReportSha256: "raw",
         slitherReportByteLength: 123,
@@ -62,6 +78,10 @@ function fixture() {
           releasePublicationGate: { satisfied: false },
           sourceBundle: { files: [{}, {}, {}, {}, {}] }
         }
+      },
+      foundryDependencyLock: {
+        sha256: "lock",
+        content: { activationAllowed: false, dependencies: Array.from({ length: 12 }, (_, index) => ({ index })) }
       },
       productionSourceClosure: {
         derivation: "solc-metadata-sources-union-v1",
@@ -103,6 +123,34 @@ function fixture() {
             profileRuntimeByteRegressionMaximum: 22_000
           }
         }
+      },
+      actualV2Receipt: {
+        path: "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json",
+        sha256: "receipt",
+        content: {
+          receiptClass: "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF",
+          activationAllowed: false,
+          testedSourceRevision: { commit: "3a7ce454", tree: "5db55cca" },
+          toolchain: {
+            forgeVersion: ACTUAL_V2_FORGE_VERSION,
+            forgeCommit: ACTUAL_V2_FORGE_COMMIT,
+            solcVersion: ACTUAL_V2_SOLC_VERSION
+          },
+          command: ACTUAL_V2_COMMAND,
+          result: { passed: 3, failed: 0, skipped: 0 },
+          testNames: ACTUAL_V2_TEST_NAMES,
+          rawLog: {
+            path: "security/receipts/hookemon-v2-actual-e2e-abcdef01.log",
+            sha256: "abcdef0123456789",
+            byteLength: 642
+          },
+          limitations: ["Route integration evidence, not production signer or governance configuration."]
+        }
+      },
+      actualV2RawLog: {
+        path: "security/receipts/hookemon-v2-actual-e2e-abcdef01.log",
+        sha256: "abcdef0123456789",
+        byteLength: 642
       }
     }
   };
@@ -124,6 +172,16 @@ test("activation, provenance, source closure, Slither, revenue and size mutation
     (value) => { value.reviewedInput.sourceRevisions.sharedShardsAuthority.remoteReachabilityProven = true; },
     (value) => { value.evidenceBindings.sharedAuthorityProvenance.content.remoteReachabilityProven = true; },
     (value) => { value.evidenceBindings.sharedAuthorityProvenance.content.sourceBundle.files.pop(); },
+    (value) => { delete value.evidenceBindings.foundryDependencyLock; },
+    (value) => { value.evidenceBindings.foundryDependencyLock.content.dependencies.pop(); },
+    (value) => { value.reviewedInput.sourceRevisions.foundryDependencyLock.libTracked = true; },
+    (value) => { delete value.evidenceBindings.actualV2Receipt; },
+    (value) => { value.evidenceBindings.actualV2Receipt.content.receiptClass = "PRODUCTION_AUTHORITY_PROOF"; },
+    (value) => { value.evidenceBindings.actualV2Receipt.content.toolchain.forgeVersion = "1.7.0"; },
+    (value) => { value.evidenceBindings.actualV2Receipt.content.result.failed = 1; },
+    (value) => { value.evidenceBindings.actualV2Receipt.content.testNames.pop(); },
+    (value) => { value.evidenceBindings.actualV2RawLog.sha256 = "changed"; },
+    (value) => { value.evidenceBindings.actualV2RawLog.path = "security/receipts/unbound.log"; },
     (value) => { value.reviewedInput.externalActivationGates.sharedAuthorityCanonicalPublicationEvidence = { transaction: "invented" }; },
     (value) => { delete value.evidenceBindings.slitherTriage; },
     (value) => { value.evidenceBindings.slitherTriage.content.scope.analyzedFirstPartyPaths.pop(); },
@@ -143,6 +201,89 @@ test("activation, provenance, source closure, Slither, revenue and size mutation
     mutate(value);
     assert.notDeepEqual(verifySemanticAssertions(value), []);
   }
+});
+
+function receiptFixture() {
+  const rawLog = Buffer.from([
+    ...ACTUAL_V2_TEST_NAMES.map((name) => `[PASS] ${name}() (gas: 1)`),
+    "Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.00s",
+    "Ran 1 test suite in 1.00s: 3 tests passed, 0 failed, 0 skipped (3 total tests)",
+    ""
+  ].join("\n"));
+  const rawLogSha256 = sha256(rawLog);
+  const expected = {
+    testedSourceCommit: "a".repeat(40),
+    testedSourceTree: "b".repeat(40),
+    testSourceSha256: "c".repeat(64),
+    productionSourceClosure: "d".repeat(64),
+    dependencyLockPath: "dependencies/foundry-dependencies-v1.json",
+    dependencyLockSha256: "e".repeat(64),
+    foundryConfigSha256: "f".repeat(64),
+    remappingsSha256: "0".repeat(64),
+    provenanceSha256: "1".repeat(64)
+  };
+  const receipt = {
+    receiptClass: "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF",
+    activationAllowed: false,
+    deploymentAddresses: null,
+    releaseActivationTransaction: null,
+    testedSourceRevision: { commit: expected.testedSourceCommit, tree: expected.testedSourceTree },
+    isolatedCheckout: {
+      method: `git archive ${expected.testedSourceCommit}`,
+      preexistingLibPresent: false,
+      dependencyHydrationCommand: "node scripts/hydrate-hookemon-v2-dependencies.mjs lib",
+      dependencyVerificationResult: "12 exact clean Git commit and tree pins"
+    },
+    toolchain: {
+      forgeVersion: ACTUAL_V2_FORGE_VERSION,
+      forgeCommit: ACTUAL_V2_FORGE_COMMIT,
+      solcVersion: ACTUAL_V2_SOLC_VERSION
+    },
+    command: ACTUAL_V2_COMMAND,
+    exitCode: 0,
+    testSource: { path: ACTUAL_V2_TEST_SOURCE, sha256: expected.testSourceSha256 },
+    sourceBoundary: {
+      productionSourceClosureCommitmentSha256: expected.productionSourceClosure,
+      dependencyLock: { path: expected.dependencyLockPath, sha256: expected.dependencyLockSha256 },
+      foundryConfigSha256: expected.foundryConfigSha256,
+      remappingsSha256: expected.remappingsSha256,
+      frozenSharedAuthorityProvenanceSha256: expected.provenanceSha256
+    },
+    rawLog: {
+      path: `security/receipts/hookemon-v2-actual-e2e-${rawLogSha256.slice(0, 8)}.log`,
+      sha256: rawLogSha256,
+      byteLength: rawLog.length
+    },
+    result: { passed: 3, failed: 0, skipped: 0 },
+    testNames: ACTUAL_V2_TEST_NAMES,
+    limitations: ["This proves route integration, not production signer or governance configuration."]
+  };
+  return { receipt, rawLog, expected };
+}
+
+test("content-addressed actual V2 receipt validates command, toolchain, source boundary and raw passes", () => {
+  const value = receiptFixture();
+  assert.deepEqual(actualV2ReceiptErrors(value.receipt, value.rawLog, value.expected), []);
+  for (const mutate of [
+    (receipt) => { receipt.receiptClass = "PRODUCTION_AUTHORITY_PROOF"; },
+    (receipt) => { receipt.activationAllowed = true; },
+    (receipt) => { receipt.command = "forge test"; },
+    (receipt) => { receipt.toolchain.forgeCommit = "2".repeat(40); },
+    (receipt) => { receipt.result.failed = 1; },
+    (receipt) => { receipt.testNames.pop(); },
+    (receipt) => { receipt.rawLog.path = "security/receipts/unbound.log"; },
+    (receipt) => { receipt.rawLog.sha256 = "3".repeat(64); },
+    (receipt) => { receipt.testedSourceRevision.commit = "4".repeat(40); },
+    (receipt) => { receipt.sourceBoundary.dependencyLock.sha256 = "5".repeat(64); },
+    (receipt) => { receipt.isolatedCheckout.preexistingLibPresent = true; },
+    (receipt) => { receipt.limitations = []; }
+  ]) {
+    const receipt = structuredClone(value.receipt);
+    mutate(receipt);
+    assert.notDeepEqual(actualV2ReceiptErrors(receipt, value.rawLog, value.expected), []);
+  }
+  const omittedPass = Buffer.from(value.rawLog.toString("utf8").replace(`[PASS] ${ACTUAL_V2_TEST_NAMES[0]}() (gas: 1)\n`, ""));
+  assert.notDeepEqual(actualV2ReceiptErrors(value.receipt, omittedPass, value.expected), []);
 });
 
 test("a raw Policy Medium can never be represented as a zero-Medium scoped result", () => {

@@ -23,6 +23,16 @@
         "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
       },
       "provenancePath": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json"
+    },
+    "foundryDependencyLock": {
+      "path": "dependencies/foundry-dependencies-v1.json",
+      "sha256": "4858b96d48b9ee05b287de985a3bfc0bcba5f149db806c682a08200238502945",
+      "pinCount": 12,
+      "libTracked": false
+    },
+    "testedCandidateSourceRevision": {
+      "commit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+      "tree": "5db55ccac5b4a75a479f0a4cfbe7c3fdde8cf694"
     }
   },
   "productBoundary": {
@@ -98,7 +108,8 @@
   ],
   "evidenceRequirements": {
     "actualV2EndToEndTests": "3 passed; 0 failed; 0 skipped",
-    "reproducibleCleanBuilds": 2,
+    "actualV2ReceiptPath": "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json",
+    "isolatedCleanBuildsObserved": 2,
     "artifactBindingsCanonicalSha256": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
     "focusedLifecycleTests": "7 passed; 0 failed; 0 skipped",
     "focusedPostconditionTests": "5 passed; 0 failed; 0 skipped",
@@ -107,9 +118,9 @@
     "profileRuntimeByteRegressionMaximum": 22000,
     "fullForgeSuite": "238 passed; 0 failed; 3 skipped; 241 total",
     "slitherVersion": "0.11.5",
-    "slitherReportPath": "/tmp/hookemon-v2-slither-freeze.json",
-    "slitherReportSha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
-    "slitherReportByteLength": 12143814,
+    "slitherReportPath": "/tmp/hookemon-v2-isolated-slither.json",
+    "slitherReportSha256": "c8de9d2e51d2c2448ec992ac819381f735a789718ab7a1a8520fe854f15c6621",
+    "slitherReportByteLength": 12058079,
     "slitherTotalDetectorInstances": 314,
     "slitherScopedTriagePath": "security/hookemon-reusable-profile-v2-slither-triage.json",
     "testEvidencePath": "security/hookemon-reusable-profile-v2-test-evidence.json"

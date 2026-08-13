@@ -2,9 +2,22 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { readDependencyLock } from "./hookemon-v2-dependencies-core.mjs";
 
 export const EIP170_LIMIT = 24_576;
 export const EIP3860_LIMIT = 49_152;
+export const ACTUAL_V2_COMMAND =
+  "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test '^testV2ActualEntrypoint' -vv";
+export const ACTUAL_V2_TEST_SOURCE =
+  "test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol";
+export const ACTUAL_V2_TEST_NAMES = [
+  "testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries",
+  "testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel",
+  "testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute"
+];
+export const ACTUAL_V2_FORGE_VERSION = "1.7.1";
+export const ACTUAL_V2_FORGE_COMMIT = "4072e48705af9d93e3c0f6e29e93b5e9a40caed8";
+export const ACTUAL_V2_SOLC_VERSION = "0.8.26+commit.8a97fa7a.Darwin.appleclang";
 
 export function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -58,6 +71,61 @@ export function requireNoScopedHighOrMedium(detectors) {
       `scoped High/Medium requires source fix: ${unresolved.map((item) => `${item.check}:${item.id}`).join(",")}`
     );
   }
+}
+
+export function actualV2ReceiptErrors(receipt, rawLogBytes, expected) {
+  const errors = [];
+  const rawLog = rawLogBytes.toString("utf8");
+  const rawLogSha256 = sha256(rawLogBytes);
+  const contentAddressedRawLogPath =
+    `security/receipts/hookemon-v2-actual-e2e-${rawLogSha256.slice(0, 8)}.log`;
+  if (
+    receipt?.receiptClass !== "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF"
+      || receipt?.activationAllowed !== false || receipt?.deploymentAddresses !== null
+      || receipt?.releaseActivationTransaction !== null
+  ) errors.push("receipt classification");
+  if (
+    receipt?.command !== ACTUAL_V2_COMMAND || receipt?.exitCode !== 0
+      || receipt?.result?.passed !== 3 || receipt?.result?.failed !== 0 || receipt?.result?.skipped !== 0
+      || canonicalJson(receipt?.testNames) !== canonicalJson(ACTUAL_V2_TEST_NAMES)
+  ) errors.push("receipt command or result");
+  if (
+    receipt?.rawLog?.sha256 !== rawLogSha256
+      || receipt?.rawLog?.byteLength !== rawLogBytes.length
+      || receipt?.rawLog?.path !== contentAddressedRawLogPath
+      || /\[FAIL(?:.|\n)*?\]/u.test(rawLog)
+      || !rawLog.includes("3 tests passed, 0 failed, 0 skipped (3 total tests)")
+  ) errors.push("receipt raw log");
+  for (const testName of ACTUAL_V2_TEST_NAMES) {
+    if (!rawLog.includes(`[PASS] ${testName}()`)) errors.push(`receipt pass ${testName}`);
+  }
+  if (
+    receipt?.toolchain?.forgeVersion !== ACTUAL_V2_FORGE_VERSION
+      || receipt?.toolchain?.forgeCommit !== ACTUAL_V2_FORGE_COMMIT
+      || receipt?.toolchain?.solcVersion !== ACTUAL_V2_SOLC_VERSION
+  ) errors.push("receipt toolchain");
+  if (
+    receipt?.testedSourceRevision?.commit !== expected.testedSourceCommit
+      || receipt?.testedSourceRevision?.tree !== expected.testedSourceTree
+      || receipt?.testSource?.path !== ACTUAL_V2_TEST_SOURCE
+      || receipt?.testSource?.sha256 !== expected.testSourceSha256
+      || receipt?.sourceBoundary?.productionSourceClosureCommitmentSha256 !== expected.productionSourceClosure
+      || receipt?.sourceBoundary?.dependencyLock?.path !== expected.dependencyLockPath
+      || receipt?.sourceBoundary?.dependencyLock?.sha256 !== expected.dependencyLockSha256
+      || receipt?.sourceBoundary?.foundryConfigSha256 !== expected.foundryConfigSha256
+      || receipt?.sourceBoundary?.remappingsSha256 !== expected.remappingsSha256
+      || receipt?.sourceBoundary?.frozenSharedAuthorityProvenanceSha256 !== expected.provenanceSha256
+  ) errors.push("receipt source boundary");
+  if (
+    receipt?.isolatedCheckout?.method !== `git archive ${expected.testedSourceCommit}`
+      || receipt?.isolatedCheckout?.preexistingLibPresent !== false
+      || receipt?.isolatedCheckout?.dependencyHydrationCommand
+        !== "node scripts/hydrate-hookemon-v2-dependencies.mjs lib"
+      || receipt?.isolatedCheckout?.dependencyVerificationResult
+        !== "12 exact clean Git commit and tree pins"
+      || !receipt?.limitations?.some((item) => item.includes("not production signer"))
+  ) errors.push("receipt isolation or limitation");
+  return errors;
 }
 
 export async function readJson(file) {
@@ -166,14 +234,29 @@ export async function buildManifest(root, descriptor) {
   const provenancePath = descriptor.sourceRevisions.sharedShardsAuthority.provenancePath;
   const slitherPath = descriptor.evidenceRequirements.slitherScopedTriagePath;
   const testEvidencePath = descriptor.evidenceRequirements.testEvidencePath;
-  const [provenanceBytes, slitherBytes, testEvidenceBytes] = await Promise.all([
+  const receiptPath = descriptor.evidenceRequirements.actualV2ReceiptPath;
+  const dependencyLockPath = descriptor.sourceRevisions.foundryDependencyLock.path;
+  if (dependencyLockPath !== "dependencies/foundry-dependencies-v1.json") {
+    throw new Error("unexpected dependency lock path");
+  }
+  const [provenanceBytes, slitherBytes, testEvidenceBytes, receiptBytes, dependencyLockBytes] = await Promise.all([
     readFile(path.join(root, provenancePath)),
     readFile(path.join(root, slitherPath)),
-    readFile(path.join(root, testEvidencePath))
+    readFile(path.join(root, testEvidencePath)),
+    readFile(path.join(root, receiptPath)),
+    readFile(path.join(root, dependencyLockPath))
   ]);
   const provenance = JSON.parse(provenanceBytes);
   const slither = JSON.parse(slitherBytes);
   const testEvidence = JSON.parse(testEvidenceBytes);
+  const actualV2Receipt = JSON.parse(receiptBytes);
+  const dependencyLock = JSON.parse(dependencyLockBytes);
+  const { lock: validatedDependencyLock } = await readDependencyLock(root);
+  if (canonicalJson(validatedDependencyLock) !== canonicalJson(dependencyLock)) {
+    throw new Error("dependency lock validation mismatch");
+  }
+  const actualV2RawLogPath = actualV2Receipt.rawLog?.path;
+  const actualV2RawLogBytes = await readFile(path.join(root, actualV2RawLogPath));
   const sharedRevision = descriptor.sourceRevisions.sharedShardsAuthority;
   const sourceBundle = provenance.sourceBundle;
   if (
@@ -212,24 +295,69 @@ export async function buildManifest(root, descriptor) {
   const requirements = descriptor.evidenceRequirements;
   const lifecycle = testEvidence.focusedSharedAuthorityRegistryLifecycle;
   const actualV2 = testEvidence.actualV2EntrypointEndToEnd;
-  const reproducibleBuilds = testEvidence.reproducibleNormalBuilds;
+  const isolatedBuilds = testEvidence.isolatedCleanBuildObservation;
   const profileArtifact = contracts.find((contract) => contract.contractName === "ProgrammableExactHookemonReusableNormalCreateProfileV2");
-  const actualV2Source = actualV2?.testSourcePath
-    ? await readFile(path.join(root, actualV2.testSourcePath))
-    : null;
+  const actualV2Source = await readFile(path.join(root, ACTUAL_V2_TEST_SOURCE));
+  const foundryConfigBytes = await readFile(path.join(root, "foundry.toml"));
+  const remappingsBytes = await readFile(path.join(root, "remappings.txt"));
+  const testedSourceCommit = descriptor.sourceRevisions.testedCandidateSourceRevision.commit;
+  const testedSourceTree = execFileSync("git", ["rev-parse", `${testedSourceCommit}^{tree}`], {
+    cwd: root,
+    encoding: "utf8"
+  }).trim();
+  execFileSync("git", ["merge-base", "--is-ancestor", testedSourceCommit, "HEAD"], { cwd: root });
+  const trackedBoundaryPaths = [
+    "foundry.toml",
+    "remappings.txt",
+    dependencyLockPath,
+    provenancePath,
+    ACTUAL_V2_TEST_SOURCE,
+    ...productionSourceClosure.files
+      .filter((file) => !file.path.startsWith("lib/"))
+      .map((file) => file.path)
+  ];
+  execFileSync("git", ["diff", "--quiet", testedSourceCommit, "--", ...new Set(trackedBoundaryPaths)], {
+    cwd: root
+  });
+  const testedManifest = JSON.parse(execFileSync(
+    "git",
+    ["show", `${testedSourceCommit}:spec/router-vnext/hookemon-reusable-profile-v2-manifest.json`],
+    { cwd: root, encoding: "utf8" }
+  ));
+  const receiptErrors = actualV2ReceiptErrors(actualV2Receipt, actualV2RawLogBytes, {
+    rawLogPath: actualV2RawLogPath,
+    testedSourceCommit,
+    testedSourceTree,
+    testSourceSha256: sha256(actualV2Source),
+    productionSourceClosure: productionSourceClosure.commitmentSha256,
+    dependencyLockPath,
+    dependencyLockSha256: sha256(dependencyLockBytes),
+    foundryConfigSha256: sha256(foundryConfigBytes),
+    remappingsSha256: sha256(remappingsBytes),
+    provenanceSha256: sha256(provenanceBytes)
+  });
   if (
     testEvidence.activationAllowed !== false
-      || actualV2?.result !== requirements.actualV2EndToEndTests
-      || !actualV2Source || actualV2.testSourceSha256 !== sha256(actualV2Source)
-      || actualV2.entrypoint !== "launchExactHookemonV2"
-      || actualV2.testNames?.length !== 3
+      || receiptErrors.length !== 0
+      || requirements.actualV2EndToEndTests !== "3 passed; 0 failed; 0 skipped"
+      || actualV2?.receiptPath !== receiptPath || actualV2.rawLogCommitted !== true
       || !actualV2Source.includes(Buffer.from("launchExactHookemonV2"))
-      || actualV2.testNames.some((testName) => !actualV2Source.includes(Buffer.from(`function ${testName}(`)))
-      || requirements.reproducibleCleanBuilds !== 2
-      || reproducibleBuilds?.cleanBuildsCompared !== requirements.reproducibleCleanBuilds
-      || reproducibleBuilds?.artifactBindingsCanonicalSha256Build1 !== requirements.artifactBindingsCanonicalSha256
-      || reproducibleBuilds?.artifactBindingsCanonicalSha256Build2 !== requirements.artifactBindingsCanonicalSha256
+      || ACTUAL_V2_TEST_NAMES.some((testName) => !actualV2Source.includes(Buffer.from(`function ${testName}(`)))
+      || requirements.isolatedCleanBuildsObserved !== 2
+      || isolatedBuilds?.evidenceClass !== "LOCAL_OBSERVATION_RERUNNABLE_NOT_SELF_PROVING"
+      || isolatedBuilds?.testedSourceCommit !== testedSourceCommit
+      || isolatedBuilds?.testedSourceTree !== testedSourceTree
+      || isolatedBuilds?.cleanBuildsCompared !== requirements.isolatedCleanBuildsObserved
+      || isolatedBuilds?.artifactBindingsCanonicalSha256Build1 !== requirements.artifactBindingsCanonicalSha256
+      || isolatedBuilds?.artifactBindingsCanonicalSha256Build2 !== requirements.artifactBindingsCanonicalSha256
       || sha256(canonicalJson(contracts)) !== requirements.artifactBindingsCanonicalSha256
+      || dependencyLock.activationAllowed !== false || dependencyLock.dependencies?.length !== 12
+      || descriptor.sourceRevisions.foundryDependencyLock.sha256 !== sha256(dependencyLockBytes)
+      || descriptor.sourceRevisions.foundryDependencyLock.pinCount !== 12
+      || descriptor.sourceRevisions.foundryDependencyLock.libTracked !== false
+      || testedSourceTree !== descriptor.sourceRevisions.testedCandidateSourceRevision.tree
+      || testedManifest.evidenceBindings?.productionSourceClosure?.commitmentSha256
+        !== productionSourceClosure.commitmentSha256
       || lifecycle?.result !== requirements.focusedLifecycleTests
       || testEvidence.focusedHookemonPostconditions?.result !== requirements.focusedPostconditionTests
       || testEvidence.fullForgeSuite?.result !== requirements.fullForgeSuite
@@ -250,9 +378,20 @@ export async function buildManifest(root, descriptor) {
     evidenceBindings: {
       sharedAuthorityProvenance: { path: provenancePath, sha256: sha256(provenanceBytes), content: provenance },
       frozenSharedAuthoritySourceBundle: sourceBundle,
+      foundryDependencyLock: {
+        path: dependencyLockPath,
+        sha256: sha256(dependencyLockBytes),
+        content: dependencyLock
+      },
       productionSourceClosure,
       slitherTriage: { path: slitherPath, sha256: sha256(slitherBytes), content: slither },
-      tests: { path: testEvidencePath, sha256: sha256(testEvidenceBytes), content: testEvidence }
+      tests: { path: testEvidencePath, sha256: sha256(testEvidenceBytes), content: testEvidence },
+      actualV2Receipt: { path: receiptPath, sha256: sha256(receiptBytes), content: actualV2Receipt },
+      actualV2RawLog: {
+        path: actualV2RawLogPath,
+        sha256: sha256(actualV2RawLogBytes),
+        byteLength: actualV2RawLogBytes.length
+      }
     }
   };
   manifest.contentCommitmentSha256 = sha256(canonicalJson(manifest));
@@ -267,6 +406,7 @@ export function verifySemanticAssertions(manifest) {
   if (manifest.deploymentAddresses !== null || manifest.releaseActivationTransaction !== null) errors.push("null live evidence");
   const sharedRevision = descriptor?.sourceRevisions?.sharedShardsAuthority;
   const provenance = manifest.evidenceBindings?.sharedAuthorityProvenance?.content;
+  const dependencyLock = manifest.evidenceBindings?.foundryDependencyLock;
   if (
     sharedRevision?.remoteReachabilityProven !== false
       || !sharedRevision?.localFrozenSourceBundle?.commit
@@ -276,6 +416,13 @@ export function verifySemanticAssertions(manifest) {
       || provenance?.sourceBundle?.files?.length !== 5
       || descriptor?.externalActivationGates?.sharedAuthorityCanonicalPublicationEvidence !== null
   ) errors.push("shared Authority external publication gate");
+  if (
+    dependencyLock?.content?.activationAllowed !== false
+      || dependencyLock?.content?.dependencies?.length !== 12
+      || dependencyLock?.sha256 !== descriptor?.sourceRevisions?.foundryDependencyLock?.sha256
+      || descriptor?.sourceRevisions?.foundryDependencyLock?.pinCount !== 12
+      || descriptor?.sourceRevisions?.foundryDependencyLock?.libTracked !== false
+  ) errors.push("foundry dependency lock");
   if (!boundary || boundary.hiddenManualPerLaunchTransition !== false) errors.push("no hidden transition");
   if (boundary?.registryPrivilegedPreauthorizationPerLaunch !== false) errors.push("no Registry preauth");
   for (const field of ["tokenName", "tokenSymbol", "applicant and funding wallet"]) {
@@ -300,6 +447,9 @@ export function verifySemanticAssertions(manifest) {
     (artifact) => artifact.contractName === "ProgrammableExactHookemonReusableNormalCreateProfileV2"
   );
   const lifecycle = manifest.evidenceBindings?.tests?.content?.focusedSharedAuthorityRegistryLifecycle;
+  const actualV2ReceiptBinding = manifest.evidenceBindings?.actualV2Receipt;
+  const actualV2Receipt = manifest.evidenceBindings?.actualV2Receipt?.content;
+  const actualV2RawLog = manifest.evidenceBindings?.actualV2RawLog;
   if (
     !requirements || !profileArtifact || !lifecycle
       || requirements.measuredKernelRegistrationGas > requirements.kernelRegistrationGasRegressionMaximum
@@ -308,6 +458,29 @@ export function verifySemanticAssertions(manifest) {
       || lifecycle.kernelRegistrationGasRegressionMaximum !== requirements.kernelRegistrationGasRegressionMaximum
       || lifecycle.profileRuntimeByteRegressionMaximum !== requirements.profileRuntimeByteRegressionMaximum
   ) errors.push("Kernel/Profile scan envelope");
+  if (
+    !actualV2ReceiptBinding || !actualV2Receipt || !actualV2RawLog
+      || actualV2ReceiptBinding.path !== requirements?.actualV2ReceiptPath
+      || actualV2Receipt.activationAllowed !== false
+      || actualV2Receipt.receiptClass !== "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF"
+      || actualV2RawLog.sha256 !== actualV2Receipt.rawLog?.sha256
+      || actualV2RawLog.byteLength !== actualV2Receipt.rawLog?.byteLength
+      || actualV2RawLog.path !== actualV2Receipt.rawLog?.path
+      || actualV2RawLog.path
+        !== `security/receipts/hookemon-v2-actual-e2e-${actualV2RawLog.sha256?.slice(0, 8)}.log`
+      || actualV2Receipt.command !== ACTUAL_V2_COMMAND
+      || actualV2Receipt.toolchain?.forgeVersion !== ACTUAL_V2_FORGE_VERSION
+      || actualV2Receipt.toolchain?.forgeCommit !== ACTUAL_V2_FORGE_COMMIT
+      || actualV2Receipt.toolchain?.solcVersion !== ACTUAL_V2_SOLC_VERSION
+      || actualV2Receipt.testedSourceRevision?.commit
+        !== descriptor?.sourceRevisions?.testedCandidateSourceRevision?.commit
+      || actualV2Receipt.testedSourceRevision?.tree
+        !== descriptor?.sourceRevisions?.testedCandidateSourceRevision?.tree
+      || actualV2Receipt.result?.passed !== 3 || actualV2Receipt.result?.failed !== 0
+      || actualV2Receipt.result?.skipped !== 0
+      || canonicalJson(actualV2Receipt.testNames) !== canonicalJson(ACTUAL_V2_TEST_NAMES)
+      || !actualV2Receipt.limitations?.some((item) => item.includes("not production signer"))
+  ) errors.push("actual V2 committed receipt");
   const closure = manifest.evidenceBindings?.productionSourceClosure;
   const slither = manifest.evidenceBindings?.slitherTriage?.content;
   if (

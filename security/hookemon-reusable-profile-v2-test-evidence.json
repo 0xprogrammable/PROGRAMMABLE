@@ -2,28 +2,26 @@
   "schemaVersion": 1,
   "activationAllowed": false,
   "normalSolc": "0.8.26",
-  "reproducibleNormalBuilds": {
+  "isolatedCleanBuildObservation": {
+    "evidenceClass": "LOCAL_OBSERVATION_RERUNNABLE_NOT_SELF_PROVING",
+    "testedSourceCommit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",
+    "testedSourceTree": "5db55ccac5b4a75a479f0a4cfbe7c3fdde8cf694",
+    "checkoutMethod": "git archive testedSourceCommit into an empty temporary directory",
+    "dependencyHydration": "node scripts/hydrate-hookemon-v2-dependencies.mjs lib; 12 exact clean Git commit and tree pins verified",
     "command": "forge clean && forge build --sizes && node scripts/generate-hookemon-reusable-profile-v2.mjs",
     "cleanBuildsCompared": 2,
     "artifactBindingsCanonicalSha256Build1": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
     "artifactBindingsCanonicalSha256Build2": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
-    "build2RawLogCommitted": false,
-    "build2RawLogPathAtReview": "/tmp/hookemon-v2-build-freeze2.log",
-    "build2RawLogSha256": "b0f3f62aefd9e2f679358b08efc793ad54b127afba4ab1bcc50bd9f385f0dec6",
-    "build2RawLogByteLength": 169359
+    "rawLogsCommitted": false,
+    "build1RawLog": { "pathAtReview": "/tmp/hookemon-v2-isolated-build1.log", "sha256": "07572490d895b3a2f2cc7652f0e00e10c25ea6cc861eb1df02442e6902380c76", "byteLength": 169359 },
+    "build2RawLog": { "pathAtReview": "/tmp/hookemon-v2-isolated-build2.log", "sha256": "e3e677f975d42e6dd2314edf87193692c33b07e3323a72bd55b32f8c78d8a2c9", "byteLength": 169360 },
+    "limitation": "This is a transparent local observation backed by committed hydration and verification tooling; it is not an independent build attestation."
   },
   "actualV2EntrypointEndToEnd": {
-    "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test '^testV2ActualEntrypoint' -vv",
-    "result": "3 passed; 0 failed; 0 skipped",
+    "evidenceClass": "COMMITTED_CONTENT_ADDRESSED_LOCAL_INTEGRATION_RECEIPT",
+    "receiptPath": "security/receipts/hookemon-v2-actual-e2e-receipt-v1.json",
+    "rawLogCommitted": true,
     "entrypoint": "launchExactHookemonV2",
-    "testSourcePath": "test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol",
-    "testSourceSha256": "6acf3ade4c6f3559275252316ff668846788c51640dc7b29f2a5c1b8b798cfd3",
-    "testContract": "ProgrammableExactHookemonNormalCreateProfileV1Test",
-    "testNames": [
-      "testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel",
-      "testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries",
-      "testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute"
-    ],
     "coverage": [
       "actual Applicant wallet to V2 Profile launchExactHookemonV2 entrypoint",
       "PlanModule validateAndCommitPlanV2, buildReservationsV2, validatePermitV2, verifyPostconditionsV2 and buildLaunchRegistrationV2",
@@ -31,10 +29,7 @@
       "exact downstream verifier failure rollback of Kernel, Authority, Registry, Executor, Launcher and allowance followed by identical signed-permit retry",
       "permanent repository-once rejection through a second actual V2 release route"
     ],
-    "rawLogCommitted": false,
-    "rawLogPathAtReview": "/tmp/hookemon-v2-actual-e2e-freeze.log",
-    "rawLogSha256": "d0fe3faddf7d58d70bbd4c79276b6c9bbbff454c9e11fe361b10003f86230b68",
-    "rawLogByteLength": 694
+    "limitation": "Permissive ERC-1271 test authorities prove route integration, not production signer or governance configuration."
   },
   "focusedSharedAuthorityRegistryLifecycle": {
     "command": "forge test --match-path test/router_vnext/ProgrammableHookemonLaunchRegistryV1.t.sol -vv",
@@ -75,9 +70,9 @@
     "command": "forge test -vv",
     "result": "238 passed; 0 failed; 3 skipped; 241 total",
     "rawLogCommitted": false,
-    "rawLogPathAtReview": "/tmp/hookemon-full-test-freeze2.log",
-    "rawLogSha256": "59acae7629daf97c1a7f92cd73b40ccf83853c144211cc9ede5fc16e80a666dc",
-    "rawLogByteLength": 42041,
+    "rawLogPathAtReview": "/tmp/hookemon-v2-isolated-full-forge.log",
+    "rawLogSha256": "747946ca6f12bb254c3b6f6cedc75121c16bef1b858d01384c2fb32de3ca13fe",
+    "rawLogByteLength": 40001,
     "skipNote": "Three pre-existing fork-dependent suites are explicitly skipped when their external fork configuration is absent; no focused Hookemon V2 test is skipped."
   },
   "deploymentAddresses": null,
