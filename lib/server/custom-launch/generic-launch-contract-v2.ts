@@ -48,19 +48,37 @@ export interface GenericLaunchSourceProjectionV2 {
     registryRuntimeCodeKeccak256: `0x${string}`;
     registryPolicyCommitment: `0x${string}`;
     minimumFinalityBlocks: string;
-    primaryLaunchTransactionHash: `0x${string}`;
-    authorizationTransactionHash: `0x${string}`;
-    registrationTransactionHash: `0x${string}`;
-    finalizationTransactionHash: `0x${string}`;
-    finalizedAtBlock: string;
-    finalizedBlockHash: `0x${string}`;
-    finalizationLogIndex: string;
+    primaryLaunch: Readonly<{
+      transactionHash: `0x${string}`;
+      sender: `0x${string}`;
+      blockHash: `0x${string}`;
+      blockNumber: string;
+      transactionIndex: string;
+      status: "success";
+    }>;
+    authorization: RegistryEventEvidenceV2<"CustomLaunchApprovalAuthorizedV2">;
+    registration: readonly [
+      RegistryEventEvidenceV2<"CustomLaunchRegisteredV2">,
+      RegistryEventEvidenceV2<"CustomLaunchDescriptorCommittedV2">,
+      RegistryEventEvidenceV2<"CustomLaunchDescriptorEvidenceCommittedV2">,
+    ];
+    finalization: RegistryEventEvidenceV2<"CustomLaunchFinalizedV2">;
     latestCommonHead: string;
     latestCommonHeadHash: `0x${string}`;
     latestStatus: "finalized";
     revokedAtBlock: "0";
     revocationEvidenceHash: typeof ZERO_HASH32;
   }>;
+}
+
+export interface RegistryEventEvidenceV2<EventName extends string> {
+  readonly eventName: EventName;
+  readonly transactionHash: `0x${string}`;
+  readonly blockHash: `0x${string}`;
+  readonly blockNumber: string;
+  readonly transactionIndex: string;
+  readonly logIndex: string;
+  readonly removed: false;
 }
 
 export interface GenericLaunchRecordV2 {
@@ -137,11 +155,10 @@ export function parseSourceProjectionV2(
     "protocolFeeBps", "sourceArtifactHash",
   ]);
   const lifecycleValue = exactObject(value.lifecycle, "registry lifecycle", [
-    "authorizationTransactionHash", "chainId", "finalizationLogIndex",
-    "finalizationTransactionHash", "finalizedAtBlock", "finalizedBlockHash",
-    "generation", "latestCommonHead", "latestCommonHeadHash", "latestStatus",
-    "minimumFinalityBlocks", "primaryLaunchTransactionHash", "registryAddress",
-    "registrationTransactionHash", "registryPolicyCommitment",
+    "authorization", "chainId", "finalization", "generation",
+    "latestCommonHead", "latestCommonHeadHash", "latestStatus",
+    "minimumFinalityBlocks", "primaryLaunch", "registryAddress",
+    "registration", "registryPolicyCommitment",
     "registryRuntimeCodeKeccak256", "revocationEvidenceHash", "revokedAtBlock",
   ]);
 
@@ -168,22 +185,101 @@ export function parseSourceProjectionV2(
     descriptorValue.marketModeValue,
     descriptorValue.protocolFeeBps,
   );
+  const launchWallet = address(descriptorValue.launchWallet, "launch wallet");
+
+  const primaryLaunchValue = exactObject(
+    lifecycleValue.primaryLaunch,
+    "primary launch receipt",
+    [
+      "blockHash", "blockNumber", "sender", "status", "transactionHash",
+      "transactionIndex",
+    ],
+  );
+  if (primaryLaunchValue.status !== "success") {
+    throw new TypeError("Primary launch receipt status is invalid");
+  }
+  const primaryLaunch = Object.freeze({
+    transactionHash: hash32(
+      primaryLaunchValue.transactionHash,
+      "primary launch transaction hash",
+    ),
+    sender: address(primaryLaunchValue.sender, "primary launch sender"),
+    blockHash: hash32(primaryLaunchValue.blockHash, "primary launch block hash"),
+    blockNumber: decimal(primaryLaunchValue.blockNumber, "primary launch block"),
+    transactionIndex: decimal(
+      primaryLaunchValue.transactionIndex,
+      "primary launch transaction index",
+    ),
+    status: "success" as const,
+  });
+  if (primaryLaunch.sender !== launchWallet) {
+    throw new TypeError("primary launch sender is not the descriptor launch wallet");
+  }
+  const authorization = registryEvent(
+    lifecycleValue.authorization,
+    "CustomLaunchApprovalAuthorizedV2",
+  );
+  if (!Array.isArray(lifecycleValue.registration)
+    || lifecycleValue.registration.length !== 3) {
+    throw new TypeError("Registry registration evidence is invalid");
+  }
+  if (lifecycleValue.registration.some((entry, index) =>
+    entry === null || typeof entry !== "object" || Array.isArray(entry)
+    || (entry as { eventName?: unknown }).eventName !== [
+      "CustomLaunchRegisteredV2",
+      "CustomLaunchDescriptorCommittedV2",
+      "CustomLaunchDescriptorEvidenceCommittedV2",
+    ][index])) {
+    throw new TypeError("Registry registration evidence is invalid");
+  }
+  const registration = Object.freeze([
+    registryEvent(
+      lifecycleValue.registration[0],
+      "CustomLaunchRegisteredV2",
+    ),
+    registryEvent(
+      lifecycleValue.registration[1],
+      "CustomLaunchDescriptorCommittedV2",
+    ),
+    registryEvent(
+      lifecycleValue.registration[2],
+      "CustomLaunchDescriptorEvidenceCommittedV2",
+    ),
+  ] as const);
+  const [registered, descriptorCommitted, descriptorEvidenceCommitted] =
+    registration;
+  if (!sameRegistryReceipt(registered, descriptorCommitted)
+    || !sameRegistryReceipt(registered, descriptorEvidenceCommitted)
+    || BigInt(registered.logIndex) >= BigInt(descriptorCommitted.logIndex)
+    || BigInt(descriptorCommitted.logIndex)
+      >= BigInt(descriptorEvidenceCommitted.logIndex)) {
+    throw new TypeError("Registry registration evidence is invalid");
+  }
+  const finalization = registryEvent(
+    lifecycleValue.finalization,
+    "CustomLaunchFinalizedV2",
+  );
 
   const minimumFinalityBlocks = positiveDecimal(
     lifecycleValue.minimumFinalityBlocks,
     "minimum finality blocks",
   );
-  const finalizedAtBlock = decimal(
-    lifecycleValue.finalizedAtBlock,
-    "finalized block",
-  );
   const latestCommonHead = decimal(
     lifecycleValue.latestCommonHead,
     "latest common head",
   );
+  if (compareTransactionPosition(primaryLaunch, authorization) >= 0
+    || compareEventPosition(authorization, registered) >= 0
+    || compareEventPosition(
+      descriptorEvidenceCommitted,
+      finalization,
+    ) >= 0
+    || BigInt(finalization.blockNumber) > BigInt(latestCommonHead)) {
+    throw new TypeError("Registry lifecycle order is invalid");
+  }
   if (
     BigInt(latestCommonHead)
-      < BigInt(finalizedAtBlock) + BigInt(minimumFinalityBlocks)
+      < BigInt(finalization.blockNumber) + BigInt(minimumFinalityBlocks)
   ) throw new TypeError("Registry lifecycle finality is insufficient");
 
   return Object.freeze({
@@ -206,7 +302,7 @@ export function parseSourceProjectionV2(
     descriptor: Object.freeze({
       descriptorHash: hash32(descriptorValue.descriptorHash, "descriptor hash"),
       launchId: hash32(descriptorValue.launchId, "launch ID"),
-      launchWallet: address(descriptorValue.launchWallet, "launch wallet"),
+      launchWallet,
       primaryContract: address(descriptorValue.primaryContract, "primary contract"),
       primaryRuntimeCodeHash: hash32(
         descriptorValue.primaryRuntimeCodeHash,
@@ -232,31 +328,10 @@ export function parseSourceProjectionV2(
         "registry policy commitment",
       ),
       minimumFinalityBlocks,
-      primaryLaunchTransactionHash: hash32(
-        lifecycleValue.primaryLaunchTransactionHash,
-        "primary launch transaction hash",
-      ),
-      authorizationTransactionHash: hash32(
-        lifecycleValue.authorizationTransactionHash,
-        "authorization transaction hash",
-      ),
-      registrationTransactionHash: hash32(
-        lifecycleValue.registrationTransactionHash,
-        "registration transaction hash",
-      ),
-      finalizationTransactionHash: hash32(
-        lifecycleValue.finalizationTransactionHash,
-        "finalization transaction hash",
-      ),
-      finalizedAtBlock,
-      finalizedBlockHash: hash32(
-        lifecycleValue.finalizedBlockHash,
-        "finalized block hash",
-      ),
-      finalizationLogIndex: decimal(
-        lifecycleValue.finalizationLogIndex,
-        "finalization log index",
-      ),
+      primaryLaunch,
+      authorization,
+      registration,
+      finalization,
       latestCommonHead,
       latestCommonHeadHash: hash32(
         lifecycleValue.latestCommonHeadHash,
@@ -267,6 +342,67 @@ export function parseSourceProjectionV2(
       revocationEvidenceHash: ZERO_HASH32,
     }),
   });
+}
+
+function registryEvent<EventName extends string>(
+  raw: unknown,
+  expectedEventName: EventName,
+): RegistryEventEvidenceV2<EventName> {
+  const value = exactObject(raw, "Registry event evidence", [
+    "blockHash", "blockNumber", "eventName", "logIndex", "removed",
+    "transactionHash", "transactionIndex",
+  ]);
+  if (value.eventName !== expectedEventName || value.removed !== false) {
+    throw new TypeError("Registry event evidence is invalid");
+  }
+  return Object.freeze({
+    eventName: expectedEventName,
+    transactionHash: hash32(value.transactionHash, "Registry transaction hash"),
+    blockHash: hash32(value.blockHash, "Registry block hash"),
+    blockNumber: decimal(value.blockNumber, "Registry block number"),
+    transactionIndex: decimal(
+      value.transactionIndex,
+      "Registry transaction index",
+    ),
+    logIndex: decimal(value.logIndex, "Registry log index"),
+    removed: false as const,
+  });
+}
+
+function sameRegistryReceipt(
+  left: RegistryEventEvidenceV2<string>,
+  right: RegistryEventEvidenceV2<string>,
+): boolean {
+  return left.transactionHash === right.transactionHash
+    && left.blockHash === right.blockHash
+    && left.blockNumber === right.blockNumber
+    && left.transactionIndex === right.transactionIndex;
+}
+
+function compareTransactionPosition(
+  left: Readonly<{ blockNumber: string; transactionIndex: string }>,
+  right: Readonly<{ blockNumber: string; transactionIndex: string }>,
+): number {
+  const blockOrder = compareDecimal(left.blockNumber, right.blockNumber);
+  return blockOrder === 0
+    ? compareDecimal(left.transactionIndex, right.transactionIndex)
+    : blockOrder;
+}
+
+function compareEventPosition(
+  left: RegistryEventEvidenceV2<string>,
+  right: RegistryEventEvidenceV2<string>,
+): number {
+  const transactionOrder = compareTransactionPosition(left, right);
+  return transactionOrder === 0
+    ? compareDecimal(left.logIndex, right.logIndex)
+    : transactionOrder;
+}
+
+function compareDecimal(left: string, right: string): number {
+  const leftValue = BigInt(left);
+  const rightValue = BigInt(right);
+  return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
 }
 
 function exactObject(
@@ -303,7 +439,8 @@ function hash32(value: unknown, label: string): `0x${string}` {
 }
 
 function address(value: unknown, label: string): `0x${string}` {
-  if (typeof value !== "string" || !ADDRESS.test(value)) {
+  if (typeof value !== "string" || !ADDRESS.test(value)
+    || value === `0x${"00".repeat(20)}`) {
     throw new TypeError(`Generic launch ${label} is invalid`);
   }
   return value as `0x${string}`;

@@ -57,13 +57,61 @@ function projection(): GenericLaunchSourceProjectionV2 {
       registryRuntimeCodeKeccak256: hash("7"),
       registryPolicyCommitment: hash("8"),
       minimumFinalityBlocks: "12",
-      primaryLaunchTransactionHash: hash("9"),
-      authorizationTransactionHash: hash("a"),
-      registrationTransactionHash: hash("b"),
-      finalizationTransactionHash: hash("c"),
-      finalizedAtBlock: "100",
-      finalizedBlockHash: hash("d"),
-      finalizationLogIndex: "4",
+      primaryLaunch: {
+        transactionHash: hash("9"),
+        sender: address("5"),
+        blockHash: hash("a"),
+        blockNumber: "88",
+        transactionIndex: "2",
+        status: "success",
+      },
+      authorization: {
+        eventName: "CustomLaunchApprovalAuthorizedV2",
+        transactionHash: hash("a"),
+        blockHash: hash("b"),
+        blockNumber: "90",
+        transactionIndex: "3",
+        logIndex: "4",
+        removed: false,
+      },
+      registration: [
+        {
+          eventName: "CustomLaunchRegisteredV2",
+          transactionHash: hash("b"),
+          blockHash: hash("c"),
+          blockNumber: "95",
+          transactionIndex: "4",
+          logIndex: "5",
+          removed: false,
+        },
+        {
+          eventName: "CustomLaunchDescriptorCommittedV2",
+          transactionHash: hash("b"),
+          blockHash: hash("c"),
+          blockNumber: "95",
+          transactionIndex: "4",
+          logIndex: "6",
+          removed: false,
+        },
+        {
+          eventName: "CustomLaunchDescriptorEvidenceCommittedV2",
+          transactionHash: hash("b"),
+          blockHash: hash("c"),
+          blockNumber: "95",
+          transactionIndex: "4",
+          logIndex: "7",
+          removed: false,
+        },
+      ],
+      finalization: {
+        eventName: "CustomLaunchFinalizedV2",
+        transactionHash: hash("c"),
+        blockHash: hash("d"),
+        blockNumber: "100",
+        transactionIndex: "5",
+        logIndex: "8",
+        removed: false,
+      },
       latestCommonHead: "112",
       latestCommonHeadHash: hash("e"),
       latestStatus: "finalized",
@@ -124,6 +172,131 @@ describe("Generic launch record V2", () => {
     })).toThrow(/finality is insufficient/u);
   });
 
+  it("binds the independently verified primary receipt sender to the launch wallet", () => {
+    const sourceProjection = projection();
+    expect(() => record({
+      ...sourceProjection,
+      lifecycle: {
+        ...sourceProjection.lifecycle,
+        primaryLaunch: {
+          ...sourceProjection.lifecycle.primaryLaunch,
+          sender: address("f"),
+        },
+      },
+    })).toThrow(/primary launch sender/u);
+  });
+
+  it.each([
+    ["launch wallet", (candidate: GenericLaunchSourceProjectionV2) => ({
+      ...candidate,
+      descriptor: { ...candidate.descriptor, launchWallet: address("0") },
+    })],
+    ["primary contract", (candidate: GenericLaunchSourceProjectionV2) => ({
+      ...candidate,
+      descriptor: { ...candidate.descriptor, primaryContract: address("0") },
+    })],
+    ["registry address", (candidate: GenericLaunchSourceProjectionV2) => ({
+      ...candidate,
+      lifecycle: { ...candidate.lifecycle, registryAddress: address("0") },
+    })],
+  ])("rejects a zero %s", (_label, mutate) => {
+    expect(() => record(
+      mutate(projection()) as GenericLaunchSourceProjectionV2,
+    )).toThrow(/invalid/u);
+  });
+
+  it.each([
+    ["primary after authorization", (candidate: GenericLaunchSourceProjectionV2) => ({
+      ...candidate,
+      lifecycle: {
+        ...candidate.lifecycle,
+        primaryLaunch: {
+          ...candidate.lifecycle.primaryLaunch,
+          blockNumber: "91",
+        },
+      },
+    })],
+    ["primary later in authorization block", (
+      candidate: GenericLaunchSourceProjectionV2,
+    ) => ({
+      ...candidate,
+      lifecycle: {
+        ...candidate.lifecycle,
+        primaryLaunch: {
+          ...candidate.lifecycle.primaryLaunch,
+          blockNumber: "90",
+          transactionIndex: "3",
+        },
+      },
+    })],
+    ["authorization after registration", (
+      candidate: GenericLaunchSourceProjectionV2,
+    ) => ({
+      ...candidate,
+      lifecycle: {
+        ...candidate.lifecycle,
+        authorization: {
+          ...candidate.lifecycle.authorization,
+          blockNumber: "96",
+        },
+      },
+    })],
+    ["finalization before registration", (
+      candidate: GenericLaunchSourceProjectionV2,
+    ) => ({
+      ...candidate,
+      lifecycle: {
+        ...candidate.lifecycle,
+        finalization: {
+          ...candidate.lifecycle.finalization,
+          blockNumber: "94",
+        },
+      },
+    })],
+    ["finalization after common head", (
+      candidate: GenericLaunchSourceProjectionV2,
+    ) => ({
+      ...candidate,
+      lifecycle: {
+        ...candidate.lifecycle,
+        finalization: {
+          ...candidate.lifecycle.finalization,
+          blockNumber: "113",
+        },
+        latestCommonHead: "112",
+      },
+    })],
+  ])("rejects invalid lifecycle order: %s", (_label, mutate) => {
+    expect(() => record(
+      mutate(projection()) as GenericLaunchSourceProjectionV2,
+    )).toThrow(/lifecycle order/u);
+  });
+
+  it("requires the exact ordered same-receipt Registry registration logs", () => {
+    const sourceProjection = projection();
+    const [registered, descriptor, evidence] =
+      sourceProjection.lifecycle.registration;
+    expect(() => record({
+      ...sourceProjection,
+      lifecycle: {
+        ...sourceProjection.lifecycle,
+        registration: [registered, evidence, descriptor],
+      },
+    } as unknown as GenericLaunchSourceProjectionV2))
+      .toThrow(/registration evidence/u);
+    expect(() => record({
+      ...sourceProjection,
+      lifecycle: {
+        ...sourceProjection.lifecycle,
+        registration: [
+          registered,
+          { ...descriptor, transactionHash: hash("f") },
+          evidence,
+        ],
+      },
+    } as GenericLaunchSourceProjectionV2)).toThrow(/registration evidence/u);
+  });
+
   it("treats descriptor market fields as exact authenticated data", () => {
     const sourceProjection = projection();
     expect(() => record({
@@ -165,7 +338,13 @@ describe("Generic launch record V2", () => {
     })],
     ["transaction", (candidate: GenericLaunchSourceProjectionV2) => ({
       ...candidate,
-      lifecycle: { ...candidate.lifecycle, registrationTransactionHash: "0x1234" },
+      lifecycle: {
+        ...candidate.lifecycle,
+        finalization: {
+          ...candidate.lifecycle.finalization,
+          transactionHash: "0x1234",
+        },
+      },
     })],
   ])("rejects invalid %s identity", (_label, mutate) => {
     expect(() => record(
