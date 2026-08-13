@@ -2,8 +2,14 @@ import "server-only";
 
 import descriptorSource from
   "@/config/generic-launch-foundation.prelaunch.v1.json";
-import { canonicalizeJson } from "../projection-target/canonical-json";
-import type { Sha256Digest } from "../projection-target/hashing";
+import {
+  canonicalizeJson,
+  type JsonValue,
+} from "../projection-target/canonical-json";
+import {
+  canonicalSha256,
+  type Sha256Digest,
+} from "../projection-target/hashing";
 import {
   parseGenericLaunchFoundationDescriptorV1,
   parseGenericLaunchRecordV1,
@@ -12,65 +18,219 @@ import {
 } from "./generic-launch-contract-v1";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
+const CURSOR = /^[A-Za-z0-9_-]{1,1024}$/u;
+const DECIMAL = /^(?:0|[1-9][0-9]{0,15})$/u;
+const AUTHENTICATOR_MINT = Symbol("generic-launch-read-authenticator-v1");
+const AUTHENTICATED_STORE_MINT = Symbol("authenticated-generic-launch-read-store-v1");
+
+export interface GenericLaunchReadModelContractV1 {
+  readonly schemaVersion: "programmable.generic-launch-read-model-contract.v1";
+  readonly sourceLane: "generic.finalized-launch";
+  readonly implementationBindingHash: Sha256Digest;
+  readonly persistenceBindingHash: Sha256Digest;
+  readonly queryContractBindingHash: Sha256Digest;
+}
+
+export interface GenericLaunchReadPageV1 {
+  readonly records: readonly GenericLaunchRecordV1[];
+  readonly nextCursor: string | null;
+  readonly total: string;
+}
 
 export interface GenericLaunchReadStoreV1 {
   readonly sourceLane: "generic.finalized-launch";
-  readonly bindingHash: Sha256Digest;
+  readonly readModelContract: GenericLaunchReadModelContractV1;
   findFinalizedLaunches(input: Readonly<{
     limit: number;
+    cursor?: string;
     signal: AbortSignal;
-  }>): Promise<readonly GenericLaunchRecordV1[]>;
+  }>): Promise<GenericLaunchReadPageV1>;
   findFinalizedLaunchByRecordHash(input: Readonly<{
     recordHash: Sha256Digest;
     signal: AbortSignal;
   }>): Promise<GenericLaunchRecordV1 | null>;
 }
 
+interface ReadAuthenticatorEntryV1 {
+  readonly verifierBindingHash: Sha256Digest;
+  readonly verifyCanonicalReadModel: (input: Readonly<{
+    activationBindingHash: Sha256Digest;
+    subjectSourceBindingHash: Sha256Digest;
+    executionResultSourceBindingHash: Sha256Digest;
+    readModelBindingHash: Sha256Digest;
+    verifierBindingHash: Sha256Digest;
+    canonicalReadModelContract: string;
+    signal: AbortSignal;
+  }>) => Promise<boolean>;
+}
+
+const AUTHENTICATORS = new WeakMap<
+  GenericLaunchReadStoreAuthenticatorV1,
+  Readonly<ReadAuthenticatorEntryV1>
+>();
+const AUTHENTICATED_STORES = new WeakMap<
+  AuthenticatedGenericLaunchReadStoreV1,
+  Readonly<{
+    store: GenericLaunchReadStoreV1;
+    activationBindingHash: Sha256Digest;
+    verifierBindingHash: Sha256Digest;
+  }>
+>();
+
+export class GenericLaunchReadStoreAuthenticatorV1 {
+  constructor(
+    mint: typeof AUTHENTICATOR_MINT,
+    entry: Readonly<ReadAuthenticatorEntryV1>,
+  ) {
+    if (mint !== AUTHENTICATOR_MINT) {
+      throw new TypeError("generic launch read authenticator mint is invalid");
+    }
+    AUTHENTICATORS.set(this, entry);
+    Object.freeze(this);
+  }
+}
+
+export function createGenericLaunchReadStoreAuthenticatorV1(
+  input: Readonly<ReadAuthenticatorEntryV1>,
+): GenericLaunchReadStoreAuthenticatorV1 {
+  if (!DIGEST.test(input.verifierBindingHash)
+    || typeof input.verifyCanonicalReadModel !== "function") {
+    throw new TypeError("generic launch read authenticator is invalid");
+  }
+  return new GenericLaunchReadStoreAuthenticatorV1(
+    AUTHENTICATOR_MINT,
+    Object.freeze({ ...input }),
+  );
+}
+
+export class AuthenticatedGenericLaunchReadStoreV1 {
+  constructor(
+    mint: typeof AUTHENTICATED_STORE_MINT,
+    entry: Readonly<{
+      store: GenericLaunchReadStoreV1;
+      activationBindingHash: Sha256Digest;
+      verifierBindingHash: Sha256Digest;
+    }>,
+  ) {
+    if (mint !== AUTHENTICATED_STORE_MINT) {
+      throw new TypeError("authenticated generic launch store mint is invalid");
+    }
+    AUTHENTICATED_STORES.set(this, entry);
+    Object.freeze(this);
+  }
+}
+
+export async function authenticateGenericLaunchReadStoreV1(
+  input: Readonly<{
+    descriptor: GenericLaunchFoundationDescriptorV1;
+    store: GenericLaunchReadStoreV1;
+    authenticator: GenericLaunchReadStoreAuthenticatorV1;
+    signal: AbortSignal;
+  }>,
+): Promise<AuthenticatedGenericLaunchReadStoreV1> {
+  input.signal.throwIfAborted();
+  const descriptor = parseGenericLaunchFoundationDescriptorV1(input.descriptor);
+  if (descriptor.activation !== true
+    || descriptor.activationBindingHash === null
+    || descriptor.subjectSourceBindingHash === null
+    || descriptor.executionResultSourceBindingHash === null
+    || descriptor.readModelBindingHash === null
+    || descriptor.readModelVerifierBindingHash === null) {
+    throw new TypeError("generic launch foundation is not active");
+  }
+  const authenticator = AUTHENTICATORS.get(input.authenticator);
+  if (authenticator === undefined
+    || authenticator.verifierBindingHash
+      !== descriptor.readModelVerifierBindingHash) {
+    throw new TypeError("generic launch read authenticator is not descriptor-bound");
+  }
+  assertStore(input.store);
+  const readModelContract = parseGenericLaunchReadModelContractV1(
+    input.store.readModelContract,
+  );
+  const boundStore: GenericLaunchReadStoreV1 = Object.freeze({
+    sourceLane: "generic.finalized-launch" as const,
+    readModelContract,
+    findFinalizedLaunches: input.store.findFinalizedLaunches.bind(input.store),
+    findFinalizedLaunchByRecordHash:
+      input.store.findFinalizedLaunchByRecordHash.bind(input.store),
+  });
+  const readModelBindingHash = canonicalSha256(
+    readModelContract.schemaVersion,
+    readModelContract,
+  );
+  if (readModelBindingHash !== descriptor.readModelBindingHash) {
+    throw new TypeError("generic launch read model contract is not descriptor-bound");
+  }
+  const verified = await authenticator.verifyCanonicalReadModel(Object.freeze({
+    activationBindingHash: descriptor.activationBindingHash,
+    subjectSourceBindingHash: descriptor.subjectSourceBindingHash,
+    executionResultSourceBindingHash:
+      descriptor.executionResultSourceBindingHash,
+    readModelBindingHash,
+    verifierBindingHash: authenticator.verifierBindingHash,
+    canonicalReadModelContract: canonicalizeJson(
+      readModelContract as unknown as JsonValue,
+    ),
+    signal: input.signal,
+  }));
+  input.signal.throwIfAborted();
+  if (verified !== true) {
+    throw new TypeError("generic launch read model authentication failed");
+  }
+  return new AuthenticatedGenericLaunchReadStoreV1(
+    AUTHENTICATED_STORE_MINT,
+    Object.freeze({
+      store: boundStore,
+      activationBindingHash: descriptor.activationBindingHash,
+      verifierBindingHash: authenticator.verifierBindingHash,
+    }),
+  );
+}
+
 export function createGenericLaunchReadHandlersV1(
   input: Readonly<{
     descriptor: GenericLaunchFoundationDescriptorV1;
-    store: GenericLaunchReadStoreV1 | null;
+    authenticatedStore: AuthenticatedGenericLaunchReadStoreV1 | null;
   }>,
 ) {
   const descriptor = parseGenericLaunchFoundationDescriptorV1(input.descriptor);
+  const authenticated = input.authenticatedStore === null
+    ? null
+    : AUTHENTICATED_STORES.get(input.authenticatedStore);
   if (descriptor.activation === true) {
-    assertStore(input.store);
-    if (input.store.bindingHash !== descriptor.readModelBindingHash) {
-      throw new TypeError("generic launch read store binding is invalid");
+    if (authenticated === undefined || authenticated === null
+      || authenticated.activationBindingHash !== descriptor.activationBindingHash
+      || authenticated.verifierBindingHash
+        !== descriptor.readModelVerifierBindingHash) {
+      throw new TypeError("active generic launch store capability is invalid");
     }
-  } else if (input.store !== null) {
+  } else if (input.authenticatedStore !== null) {
     throw new TypeError("disabled generic launch foundation cannot bind a read store");
   }
 
   return Object.freeze({
     async feed(request: Request): Promise<Response> {
-      if (!validReadRequest(request)) {
+      const query = parseFeedRequest(request);
+      if (query === null) {
         return errorResponse(400, "invalid_generic_launch_feed_request");
       }
-      if (descriptor.activation === false || input.store === null) {
+      if (descriptor.activation === false || authenticated === null
+        || authenticated === undefined) {
         return errorResponse(503, "generic_launch_foundation_not_active");
       }
       try {
-        const records = await input.store.findFinalizedLaunches({
-          limit: 100,
+        const page = await authenticated.store.findFinalizedLaunches({
+          limit: query.limit,
+          ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
           signal: request.signal,
         });
-        if (!Array.isArray(records) || records.length > 100) {
-          throw new TypeError("generic launch feed exceeds its bound");
-        }
-        const parsed = records.map((record) =>
-          assertDescriptorBoundRecord(descriptor, record));
-        if (new Set(parsed.map(({ recordHash }) => recordHash)).size
-          !== parsed.length) {
-          throw new TypeError("generic launch feed contains duplicate records");
-        }
-        const verified = Object.freeze(parsed.sort((left, right) =>
-          right.executionResult.finality.observedAt.localeCompare(
-            left.executionResult.finality.observedAt,
-          ) || left.recordHash.localeCompare(right.recordHash)));
+        const verified = assertPage(descriptor, page, query.limit);
         return jsonResponse(200, {
           schemaVersion: "programmable.generic-launch-feed.v1",
-          records: verified,
+          records: verified.records,
+          nextCursor: verified.nextCursor,
+          total: verified.total,
         });
       } catch {
         return errorResponse(503, "generic_launch_read_model_unavailable");
@@ -78,14 +238,16 @@ export function createGenericLaunchReadHandlersV1(
     },
 
     async detail(request: Request, recordHash: string): Promise<Response> {
-      if (!validReadRequest(request) || !DIGEST.test(recordHash)) {
+      if (!validBaseReadRequest(request) || new URL(request.url).search !== ""
+        || !DIGEST.test(recordHash)) {
         return errorResponse(400, "invalid_generic_launch_detail_request");
       }
-      if (descriptor.activation === false || input.store === null) {
+      if (descriptor.activation === false || authenticated === null
+        || authenticated === undefined) {
         return errorResponse(503, "generic_launch_foundation_not_active");
       }
       try {
-        const record = await input.store.findFinalizedLaunchByRecordHash({
+        const record = await authenticated.store.findFinalizedLaunchByRecordHash({
           recordHash: recordHash as Sha256Digest,
           signal: request.signal,
         });
@@ -112,7 +274,7 @@ export const PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1 =
 
 const prelaunchHandlers = createGenericLaunchReadHandlersV1({
   descriptor: PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1,
-  store: null,
+  authenticatedStore: null,
 });
 
 export function handleProductionGenericLaunchFeedV1(
@@ -128,44 +290,184 @@ export function handleProductionGenericLaunchDetailV1(
   return prelaunchHandlers.detail(request, recordHash);
 }
 
+function parseGenericLaunchReadModelContractV1(
+  raw: unknown,
+): GenericLaunchReadModelContractV1 {
+  const value = exactObject(raw, [
+    "implementationBindingHash", "persistenceBindingHash",
+    "queryContractBindingHash", "schemaVersion", "sourceLane",
+  ], "generic launch read model contract");
+  if (value.schemaVersion !== "programmable.generic-launch-read-model-contract.v1"
+    || value.sourceLane !== "generic.finalized-launch") {
+    throw new TypeError("generic launch read model contract is invalid");
+  }
+  return Object.freeze({
+    schemaVersion: "programmable.generic-launch-read-model-contract.v1" as const,
+    sourceLane: "generic.finalized-launch" as const,
+    implementationBindingHash: digest(
+      value.implementationBindingHash,
+      "read model implementation",
+    ),
+    persistenceBindingHash: digest(
+      value.persistenceBindingHash,
+      "read model persistence",
+    ),
+    queryContractBindingHash: digest(
+      value.queryContractBindingHash,
+      "read model query contract",
+    ),
+  });
+}
+
+function assertPage(
+  descriptor: GenericLaunchFoundationDescriptorV1,
+  raw: unknown,
+  limit: number,
+): GenericLaunchReadPageV1 {
+  const value = exactObject(raw, ["nextCursor", "records", "total"],
+    "generic launch page");
+  if (!Array.isArray(value.records) || value.records.length > limit) {
+    throw new TypeError("generic launch page exceeds its bound");
+  }
+  const records = value.records.map((record) =>
+    assertDescriptorBoundRecord(descriptor, record));
+  if (new Set(records.map(({ recordHash }) => recordHash)).size !== records.length) {
+    throw new TypeError("generic launch page contains duplicate records");
+  }
+  const nextCursor = value.nextCursor === null
+    ? null
+    : cursor(value.nextCursor, "generic launch next cursor");
+  if (nextCursor !== null && records.length === 0) {
+    throw new TypeError("empty generic launch page cannot advance a cursor");
+  }
+  const total = decimal(value.total, "generic launch total");
+  if (BigInt(total) < BigInt(records.length)) {
+    throw new TypeError("generic launch total is invalid");
+  }
+  return Object.freeze({ records: Object.freeze(records), nextCursor, total });
+}
+
 function assertDescriptorBoundRecord(
-  descriptor: Extract<GenericLaunchFoundationDescriptorV1, { activation: true }> |
-    GenericLaunchFoundationDescriptorV1,
+  descriptor: GenericLaunchFoundationDescriptorV1,
   raw: unknown,
 ): GenericLaunchRecordV1 {
-  if (descriptor.activation !== true || descriptor.routeAdapterReleases === null) {
+  if (descriptor.activation !== true || descriptor.routeAdapterReleases === null
+    || descriptor.subjectSourceBindingHash === null
+    || descriptor.executionResultSourceBindingHash === null
+    || descriptor.readModelBindingHash === null) {
     throw new TypeError("generic launch foundation is not active");
   }
   const record = parseGenericLaunchRecordV1(raw);
-  if (!descriptor.routeAdapterReleases.some(
-    ({ releaseHash }) => releaseHash === record.routeAdapterRelease.releaseHash,
-  )) {
-    throw new TypeError("generic launch record uses an unbound adapter release");
+  if (record.subject.subjectSourceBindingHash
+      !== descriptor.subjectSourceBindingHash
+    || record.executionResult.executionResultSourceBindingHash
+      !== descriptor.executionResultSourceBindingHash
+    || record.readModelBindingHash !== descriptor.readModelBindingHash
+    || !descriptor.routeAdapterReleases.some(
+      ({ releaseHash }) => releaseHash === record.routeAdapterRelease.releaseHash,
+    )) {
+    throw new TypeError("generic launch record is not descriptor-bound");
   }
   return record;
 }
 
-function assertStore(
-  store: GenericLaunchReadStoreV1 | null,
-): asserts store is GenericLaunchReadStoreV1 {
+function assertStore(store: GenericLaunchReadStoreV1): void {
   if (store === null || typeof store !== "object"
     || store.sourceLane !== "generic.finalized-launch"
-    || !DIGEST.test(store.bindingHash)
     || typeof store.findFinalizedLaunches !== "function"
     || typeof store.findFinalizedLaunchByRecordHash !== "function") {
-    throw new TypeError("active generic launch read store is invalid");
+    throw new TypeError("generic launch read store is invalid");
   }
 }
 
-function validReadRequest(request: Request): boolean {
+function parseFeedRequest(
+  request: Request,
+): Readonly<{ limit: number; cursor?: string }> | null {
+  if (!validBaseReadRequest(request)) return null;
+  const url = new URL(request.url);
+  if (url.search === "") return Object.freeze({ limit: 100 });
+  const keys = [...url.searchParams.keys()];
+  if (keys.length < 1 || keys.length > 2 || keys[0] !== "limit"
+    || (keys.length === 2 && keys[1] !== "cursor")) return null;
+  const limitValue = url.searchParams.get("limit");
+  if (limitValue === null || !/^(?:[1-9]|[1-9][0-9]|100)$/u.test(limitValue)) {
+    return null;
+  }
+  const limit = Number(limitValue);
+  const cursorValue = url.searchParams.get("cursor");
+  if (cursorValue !== null && !CURSOR.test(cursorValue)) return null;
+  const canonical = `?limit=${limit}${cursorValue === null
+    ? ""
+    : `&cursor=${cursorValue}`}`;
+  if (url.search !== canonical) return null;
+  return Object.freeze({
+    limit,
+    ...(cursorValue === null ? {} : { cursor: cursorValue }),
+  });
+}
+
+function validBaseReadRequest(request: Request): boolean {
   if (request.method !== "GET" || request.body !== null
     || request.headers.has("content-type")
     || request.headers.get("accept")?.trim().toLowerCase() !== "application/json") {
     return false;
   }
   const url = new URL(request.url);
-  return url.username === "" && url.password === ""
-    && url.search === "" && url.hash === "";
+  return url.username === "" && url.password === "" && url.hash === "";
+}
+
+function exactObject(
+  raw: unknown,
+  expectedKeys: readonly string[],
+  label: string,
+): Readonly<Record<string, unknown>> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+  const prototype = Object.getPrototypeOf(raw) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const ownKeys = Reflect.ownKeys(raw);
+  if (ownKeys.some((key) => typeof key !== "string")) {
+    throw new TypeError(`${label} contains symbol properties`);
+  }
+  const keys = (ownKeys as string[]).sort();
+  const expected = [...expectedKeys].sort();
+  if (keys.length !== expected.length
+    || keys.some((key, index) => key !== expected[index])) {
+    throw new TypeError(`${label} has unexpected properties`);
+  }
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(raw, key);
+    if (descriptor === undefined || descriptor.get !== undefined
+      || descriptor.set !== undefined || !descriptor.enumerable
+      || !("value" in descriptor)) {
+      throw new TypeError(`${label} contains non-data properties`);
+    }
+  }
+  return raw as Readonly<Record<string, unknown>>;
+}
+
+function digest(raw: unknown, label: string): Sha256Digest {
+  if (typeof raw !== "string" || !DIGEST.test(raw)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return raw as Sha256Digest;
+}
+
+function cursor(raw: unknown, label: string): string {
+  if (typeof raw !== "string" || !CURSOR.test(raw)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return raw;
+}
+
+function decimal(raw: unknown, label: string): string {
+  if (typeof raw !== "string" || !DECIMAL.test(raw)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return raw;
 }
 
 function jsonResponse(status: number, body: Readonly<Record<string, unknown>>): Response {

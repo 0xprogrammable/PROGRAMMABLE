@@ -6,13 +6,13 @@ import {
 } from "../projection-target/hashing";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
-const NUMERIC_ID = /^[1-9][0-9]*$/u;
+const NUMERIC_ID = /^[1-9][0-9]{0,31}$/u;
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const ADAPTER_ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 const CAIP2 = /^[a-z0-9][a-z0-9-]{2,7}:[A-Za-z0-9][A-Za-z0-9-]{0,31}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
-const DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
+const DECIMAL = /^(?:0|[1-9][0-9]{0,77})$/u;
 
 export const GENERIC_LAUNCH_FEED_PATH_V1 =
   "/api/custom-launch/generic/v1/launches" as const;
@@ -23,6 +23,7 @@ export type { Sha256Digest };
 
 export interface ApplicantLaunchSubjectV1 {
   readonly schemaVersion: "programmable.applicant-launch-subject.v1";
+  readonly subjectSourceBindingHash: Sha256Digest;
   readonly sourceRepository: Readonly<{
     forge: "github";
     repositoryId: string;
@@ -66,6 +67,7 @@ export type CandidateExecutionStatusV1 = "succeeded" | "failed";
 
 export interface CandidateExecutionResultV1 {
   readonly schemaVersion: "programmable.candidate-execution-result.v1";
+  readonly executionResultSourceBindingHash: Sha256Digest;
   readonly attemptId: Sha256Digest;
   readonly subjectHash: Sha256Digest;
   readonly routeAdapterReleaseHash: Sha256Digest;
@@ -95,6 +97,7 @@ export interface GenericLaunchRecordV1 {
   readonly subject: ApplicantLaunchSubjectV1;
   readonly routeAdapterRelease: RouteAdapterReleaseV1;
   readonly executionResult: CandidateExecutionResultV1;
+  readonly readModelBindingHash: Sha256Digest;
   readonly publicProjectionHash: Sha256Digest;
   readonly recordHash: Sha256Digest;
 }
@@ -107,6 +110,7 @@ export interface GenericLaunchFoundationDescriptorV1 {
   readonly subjectSourceBindingHash: Sha256Digest | null;
   readonly executionResultSourceBindingHash: Sha256Digest | null;
   readonly readModelBindingHash: Sha256Digest | null;
+  readonly readModelVerifierBindingHash: Sha256Digest | null;
   readonly routeAdapterReleases: readonly RouteAdapterReleaseV1[] | null;
   readonly api: Readonly<{
     feedPath: typeof GENERIC_LAUNCH_FEED_PATH_V1;
@@ -135,6 +139,10 @@ export function createApplicantLaunchSubjectV1(
   const sourceRevision = gitRevision(input.sourceRevision);
   const core = Object.freeze({
     schemaVersion: "programmable.applicant-launch-subject.v1" as const,
+    subjectSourceBindingHash: digest(
+      input.subjectSourceBindingHash,
+      "Applicant subject source",
+    ),
     sourceRepository,
     application,
     sourceRevision,
@@ -154,7 +162,7 @@ export function parseApplicantLaunchSubjectV1(
 ): ApplicantLaunchSubjectV1 {
   const value = exactObject(raw, [
     "application", "principalBindingHash", "schemaVersion", "sourceRepository",
-    "sourceRevision", "subjectHash",
+    "sourceRevision", "subjectHash", "subjectSourceBindingHash",
   ], "Applicant launch subject");
   literal(
     value.schemaVersion,
@@ -162,6 +170,7 @@ export function parseApplicantLaunchSubjectV1(
     "Applicant launch subject schema",
   );
   const subject = createApplicantLaunchSubjectV1({
+    subjectSourceBindingHash: value.subjectSourceBindingHash as Sha256Digest,
     sourceRepository: value.sourceRepository as ApplicantLaunchSubjectV1["sourceRepository"],
     application: value.application as ApplicantLaunchSubjectV1["application"],
     sourceRevision: value.sourceRevision as ApplicantLaunchSubjectV1["sourceRevision"],
@@ -205,6 +214,7 @@ export function createRouteAdapterReleaseV1(
       input.releaseVersion,
       SEMVER,
       "route adapter release version",
+      128,
     ),
     sourceRepository: githubRepository(input.sourceRepository),
     sourceRevision: gitRevision(input.sourceRevision),
@@ -297,6 +307,10 @@ export function createCandidateExecutionResultV1(
     "candidate execution status");
   const core = Object.freeze({
     schemaVersion: "programmable.candidate-execution-result.v1" as const,
+    executionResultSourceBindingHash: digest(
+      input.executionResultSourceBindingHash,
+      "execution result source",
+    ),
     attemptId: digest(input.attemptId, "execution attempt id"),
     subjectHash: digest(input.subjectHash, "execution subject"),
     routeAdapterReleaseHash: digest(
@@ -321,7 +335,7 @@ export function parseCandidateExecutionResultV1(
   const value = exactObject(raw, [
     "attemptId", "finality", "network", "resultHash", "resultPayloadHash",
     "routeAdapterReleaseHash", "schemaVersion", "status", "subjectHash",
-    "transaction",
+    "transaction", "executionResultSourceBindingHash",
   ], "candidate execution result");
   literal(
     value.schemaVersion,
@@ -329,6 +343,8 @@ export function parseCandidateExecutionResultV1(
     "candidate execution result schema",
   );
   const result = createCandidateExecutionResultV1({
+    executionResultSourceBindingHash:
+      value.executionResultSourceBindingHash as Sha256Digest,
     attemptId: value.attemptId as Sha256Digest,
     subjectHash: value.subjectHash as Sha256Digest,
     routeAdapterReleaseHash: value.routeAdapterReleaseHash as Sha256Digest,
@@ -364,6 +380,10 @@ export function createGenericLaunchRecordV1(
     subject,
     routeAdapterRelease,
     executionResult,
+    readModelBindingHash: digest(
+      input.readModelBindingHash,
+      "generic launch read model",
+    ),
     publicProjectionHash: digest(
       input.publicProjectionHash,
       "generic launch public projection",
@@ -378,7 +398,7 @@ export function createGenericLaunchRecordV1(
 export function parseGenericLaunchRecordV1(raw: unknown): GenericLaunchRecordV1 {
   const value = exactObject(raw, [
     "executionResult", "publicProjectionHash", "recordHash",
-    "routeAdapterRelease", "schemaVersion", "subject",
+    "readModelBindingHash", "routeAdapterRelease", "schemaVersion", "subject",
   ], "generic launch record");
   literal(
     value.schemaVersion,
@@ -389,6 +409,7 @@ export function parseGenericLaunchRecordV1(raw: unknown): GenericLaunchRecordV1 
     subject: value.subject as ApplicantLaunchSubjectV1,
     routeAdapterRelease: value.routeAdapterRelease as RouteAdapterReleaseV1,
     executionResult: value.executionResult as CandidateExecutionResultV1,
+    readModelBindingHash: value.readModelBindingHash as Sha256Digest,
     publicProjectionHash: value.publicProjectionHash as Sha256Digest,
   });
   if (record.recordHash !== value.recordHash) {
@@ -403,6 +424,7 @@ export function parseGenericLaunchFoundationDescriptorV1(
   const value = exactObject(raw, [
     "activatedAt", "activation", "activationBindingHash", "api",
     "executionResultSourceBindingHash", "readModelBindingHash",
+    "readModelVerifierBindingHash",
     "routeAdapterReleases", "schemaVersion", "subjectSourceBindingHash",
   ], "generic launch foundation descriptor");
   literal(
@@ -432,6 +454,7 @@ export function parseGenericLaunchFoundationDescriptorV1(
       || value.subjectSourceBindingHash !== null
       || value.executionResultSourceBindingHash !== null
       || value.readModelBindingHash !== null
+      || value.readModelVerifierBindingHash !== null
       || value.routeAdapterReleases !== null
     ) {
       throw new TypeError("disabled generic launch foundation must retain null bindings");
@@ -444,6 +467,7 @@ export function parseGenericLaunchFoundationDescriptorV1(
       subjectSourceBindingHash: null,
       executionResultSourceBindingHash: null,
       readModelBindingHash: null,
+      readModelVerifierBindingHash: null,
       routeAdapterReleases: null,
       api,
     });
@@ -454,30 +478,121 @@ export function parseGenericLaunchFoundationDescriptorV1(
     throw new TypeError("active generic launch adapter release set is invalid");
   }
   const routeAdapterReleases = Object.freeze(
-    value.routeAdapterReleases.map(parseRouteAdapterReleaseV1),
+    value.routeAdapterReleases.map(parseRouteAdapterReleaseV1).sort(
+      (left, right) => left.releaseHash.localeCompare(right.releaseHash),
+    ),
   );
   const releaseHashes = routeAdapterReleases.map(({ releaseHash }) => releaseHash);
+  const releaseIdentities = routeAdapterReleases.map(
+    ({ adapterId, releaseVersion }) => `${adapterId}\0${releaseVersion}`,
+  );
   if (new Set(releaseHashes).size !== releaseHashes.length
-    || releaseHashes.some((hash, index) => index > 0 && hash <= releaseHashes[index - 1]!)) {
-    throw new TypeError("generic launch adapter releases must be unique and hash-sorted");
+    || new Set(releaseIdentities).size !== releaseIdentities.length) {
+    throw new TypeError("generic launch adapter release identities must be unique");
   }
+  const descriptor = createActiveGenericLaunchFoundationDescriptorV1({
+    activatedAt: value.activatedAt as string,
+    subjectSourceBindingHash: value.subjectSourceBindingHash as Sha256Digest,
+    executionResultSourceBindingHash:
+      value.executionResultSourceBindingHash as Sha256Digest,
+    readModelBindingHash: value.readModelBindingHash as Sha256Digest,
+    readModelVerifierBindingHash:
+      value.readModelVerifierBindingHash as Sha256Digest,
+    routeAdapterReleases,
+    api,
+  });
+  if (descriptor.activationBindingHash !== value.activationBindingHash) {
+    throw new TypeError("generic launch activation binding is invalid");
+  }
+  return descriptor;
+}
+
+export function createActiveGenericLaunchFoundationDescriptorV1(
+  input: Readonly<{
+    activatedAt: string;
+    subjectSourceBindingHash: Sha256Digest;
+    executionResultSourceBindingHash: Sha256Digest;
+    readModelBindingHash: Sha256Digest;
+    readModelVerifierBindingHash: Sha256Digest;
+    routeAdapterReleases: readonly RouteAdapterReleaseV1[];
+    api: Readonly<{
+      feedPath: typeof GENERIC_LAUNCH_FEED_PATH_V1;
+      detailPathTemplate: typeof GENERIC_LAUNCH_DETAIL_PATH_TEMPLATE_V1;
+    }>;
+  }>,
+): GenericLaunchFoundationDescriptorV1 {
+  if (!Array.isArray(input.routeAdapterReleases)
+    || input.routeAdapterReleases.length < 1
+    || input.routeAdapterReleases.length > 256) {
+    throw new TypeError("active generic launch adapter release set is invalid");
+  }
+  const routeAdapterReleases = Object.freeze(
+    input.routeAdapterReleases.map(parseRouteAdapterReleaseV1).sort(
+      (left, right) => left.releaseHash.localeCompare(right.releaseHash),
+    ),
+  );
+  const routeAdapterReleaseHashes = routeAdapterReleases.map(
+    ({ releaseHash }) => releaseHash,
+  );
+  const routeAdapterReleaseIdentities = routeAdapterReleases.map(
+    ({ adapterId, releaseVersion }) => `${adapterId}\0${releaseVersion}`,
+  );
+  if (new Set(routeAdapterReleaseHashes).size !== routeAdapterReleaseHashes.length
+    || new Set(routeAdapterReleaseIdentities).size
+      !== routeAdapterReleaseIdentities.length) {
+    throw new TypeError("generic launch adapter release identities must be unique");
+  }
+  const apiValue = exactObject(input.api, ["detailPathTemplate", "feedPath"],
+    "generic launch API paths");
+  literal(apiValue.feedPath, GENERIC_LAUNCH_FEED_PATH_V1, "generic launch feed path");
+  literal(
+    apiValue.detailPathTemplate,
+    GENERIC_LAUNCH_DETAIL_PATH_TEMPLATE_V1,
+    "generic launch detail path",
+  );
+  const api = Object.freeze({
+    feedPath: GENERIC_LAUNCH_FEED_PATH_V1,
+    detailPathTemplate: GENERIC_LAUNCH_DETAIL_PATH_TEMPLATE_V1,
+  });
+  const activatedAt = instant(input.activatedAt, "generic launch activation time");
+  const subjectSourceBindingHash = digest(
+    input.subjectSourceBindingHash,
+    "generic launch subject source",
+  );
+  const executionResultSourceBindingHash = digest(
+    input.executionResultSourceBindingHash,
+    "generic launch execution result source",
+  );
+  const readModelBindingHash = digest(
+    input.readModelBindingHash,
+    "generic launch read model",
+  );
+  const readModelVerifierBindingHash = digest(
+    input.readModelVerifierBindingHash,
+    "generic launch read model verifier",
+  );
+  const activationCore = Object.freeze({
+    schemaVersion: "programmable.generic-launch-foundation-activation.v1" as const,
+    activatedAt,
+    subjectSourceBindingHash,
+    executionResultSourceBindingHash,
+    readModelBindingHash,
+    readModelVerifierBindingHash,
+    routeAdapterReleaseHashes: Object.freeze(routeAdapterReleaseHashes),
+    api,
+  });
   return Object.freeze({
     schemaVersion: "programmable.generic-launch-foundation-descriptor.v1" as const,
     activation: true as const,
-    activationBindingHash: digest(value.activationBindingHash, "generic launch activation"),
-    activatedAt: instant(value.activatedAt, "generic launch activation time"),
-    subjectSourceBindingHash: digest(
-      value.subjectSourceBindingHash,
-      "generic launch subject source",
+    activationBindingHash: canonicalSha256(
+      activationCore.schemaVersion,
+      activationCore,
     ),
-    executionResultSourceBindingHash: digest(
-      value.executionResultSourceBindingHash,
-      "generic launch execution result source",
-    ),
-    readModelBindingHash: digest(
-      value.readModelBindingHash,
-      "generic launch read model",
-    ),
+    activatedAt,
+    subjectSourceBindingHash,
+    executionResultSourceBindingHash,
+    readModelBindingHash,
+    readModelVerifierBindingHash,
     routeAdapterReleases,
     api,
   });
@@ -537,8 +652,13 @@ function literal<T extends string>(raw: unknown, expected: T, label: string): T 
   return expected;
 }
 
-function patternedString(raw: unknown, pattern: RegExp, label: string): string {
-  if (typeof raw !== "string" || !pattern.test(raw)) {
+function patternedString(
+  raw: unknown,
+  pattern: RegExp,
+  label: string,
+  maximumLength = 1024,
+): string {
+  if (typeof raw !== "string" || raw.length > maximumLength || !pattern.test(raw)) {
     throw new TypeError(`${label} is invalid`);
   }
   return raw;

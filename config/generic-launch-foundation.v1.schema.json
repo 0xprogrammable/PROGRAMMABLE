@@ -18,7 +18,7 @@
     },
     "numericId": {
       "type": "string",
-      "pattern": "^[1-9][0-9]*$"
+      "pattern": "^[1-9][0-9]{0,31}$"
     },
     "githubRepository": {
       "type": "object",
@@ -43,6 +43,7 @@
       "additionalProperties": false,
       "required": [
         "schemaVersion",
+        "subjectSourceBindingHash",
         "sourceRepository",
         "application",
         "sourceRevision",
@@ -51,6 +52,7 @@
       ],
       "properties": {
         "schemaVersion": { "const": "programmable.applicant-launch-subject.v1" },
+        "subjectSourceBindingHash": { "$ref": "#/$defs/digest" },
         "sourceRepository": { "$ref": "#/$defs/githubRepository" },
         "application": {
           "type": "object",
@@ -58,7 +60,11 @@
           "required": ["repositoryId", "pullRequestNumber", "approvalBindingHash"],
           "properties": {
             "repositoryId": { "$ref": "#/$defs/numericId" },
-            "pullRequestNumber": { "type": "integer", "minimum": 1 },
+            "pullRequestNumber": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
             "approvalBindingHash": { "$ref": "#/$defs/digest" }
           }
         },
@@ -84,10 +90,12 @@
         "schemaVersion": { "const": "programmable.route-adapter-release.v1" },
         "adapterId": {
           "type": "string",
+          "maxLength": 64,
           "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
         },
         "releaseVersion": {
           "type": "string",
+          "maxLength": 128,
           "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
         },
         "sourceRepository": { "$ref": "#/$defs/githubRepository" },
@@ -117,6 +125,7 @@
       "additionalProperties": false,
       "required": [
         "schemaVersion",
+        "executionResultSourceBindingHash",
         "attemptId",
         "subjectHash",
         "routeAdapterReleaseHash",
@@ -129,6 +138,7 @@
       ],
       "properties": {
         "schemaVersion": { "const": "programmable.candidate-execution-result.v1" },
+        "executionResultSourceBindingHash": { "$ref": "#/$defs/digest" },
         "attemptId": { "$ref": "#/$defs/digest" },
         "subjectHash": { "$ref": "#/$defs/digest" },
         "routeAdapterReleaseHash": { "$ref": "#/$defs/digest" },
@@ -151,8 +161,8 @@
           "properties": {
             "transactionHash": { "$ref": "#/$defs/hash32" },
             "blockHash": { "$ref": "#/$defs/hash32" },
-            "blockNumber": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)$" },
-            "transactionIndex": { "type": "integer", "minimum": 0 }
+            "blockNumber": { "type": "string", "pattern": "^(?:0|[1-9][0-9]{0,77})$" },
+            "transactionIndex": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
           }
         },
         "finality": {
@@ -166,11 +176,15 @@
             "observedAt"
           ],
           "properties": {
-            "requiredConfirmations": { "type": "integer", "minimum": 1 },
-            "observedConfirmations": { "type": "integer", "minimum": 1 },
+            "requiredConfirmations": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "observedConfirmations": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
             "policyBindingHash": { "$ref": "#/$defs/digest" },
             "evidenceBindingHash": { "$ref": "#/$defs/digest" },
-            "observedAt": { "type": "string", "format": "date-time" }
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+            }
           }
         },
         "resultPayloadHash": { "$ref": "#/$defs/digest" },
@@ -185,6 +199,7 @@
         "subject",
         "routeAdapterRelease",
         "executionResult",
+        "readModelBindingHash",
         "publicProjectionHash",
         "recordHash"
       ],
@@ -193,8 +208,29 @@
         "subject": { "$ref": "#/$defs/applicantLaunchSubject" },
         "routeAdapterRelease": { "$ref": "#/$defs/routeAdapterRelease" },
         "executionResult": { "$ref": "#/$defs/candidateExecutionResult" },
+        "readModelBindingHash": { "$ref": "#/$defs/digest" },
         "publicProjectionHash": { "$ref": "#/$defs/digest" },
         "recordHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "genericLaunchReadModelContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sourceLane",
+        "implementationBindingHash",
+        "persistenceBindingHash",
+        "queryContractBindingHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-read-model-contract.v1"
+        },
+        "sourceLane": { "const": "generic.finalized-launch" },
+        "implementationBindingHash": { "$ref": "#/$defs/digest" },
+        "persistenceBindingHash": { "$ref": "#/$defs/digest" },
+        "queryContractBindingHash": { "$ref": "#/$defs/digest" }
       }
     },
     "genericLaunchFoundationDescriptor": {
@@ -208,6 +244,7 @@
         "subjectSourceBindingHash",
         "executionResultSourceBindingHash",
         "readModelBindingHash",
+        "readModelVerifierBindingHash",
         "routeAdapterReleases",
         "api"
       ],
@@ -220,7 +257,14 @@
           "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
         },
         "activatedAt": {
-          "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+            },
+            { "type": "null" }
+          ]
         },
         "subjectSourceBindingHash": {
           "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
@@ -229,6 +273,9 @@
           "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
         },
         "readModelBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "readModelVerifierBindingHash": {
           "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
         },
         "routeAdapterReleases": {
@@ -265,16 +312,22 @@
               "subjectSourceBindingHash": { "type": "null" },
               "executionResultSourceBindingHash": { "type": "null" },
               "readModelBindingHash": { "type": "null" },
+              "readModelVerifierBindingHash": { "type": "null" },
               "routeAdapterReleases": { "type": "null" }
             }
           },
           "else": {
             "properties": {
               "activationBindingHash": { "$ref": "#/$defs/digest" },
-              "activatedAt": { "type": "string", "format": "date-time" },
+              "activatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+              },
               "subjectSourceBindingHash": { "$ref": "#/$defs/digest" },
               "executionResultSourceBindingHash": { "$ref": "#/$defs/digest" },
               "readModelBindingHash": { "$ref": "#/$defs/digest" },
+              "readModelVerifierBindingHash": { "$ref": "#/$defs/digest" },
               "routeAdapterReleases": {
                 "type": "array",
                 "minItems": 1,

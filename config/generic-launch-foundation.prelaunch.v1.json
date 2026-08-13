@@ -6,6 +6,7 @@
   "subjectSourceBindingHash": null,
   "executionResultSourceBindingHash": null,
   "readModelBindingHash": null,
+  "readModelVerifierBindingHash": null,
   "routeAdapterReleases": null,
   "api": {
     "feedPath": "/api/custom-launch/generic/v1/launches",
