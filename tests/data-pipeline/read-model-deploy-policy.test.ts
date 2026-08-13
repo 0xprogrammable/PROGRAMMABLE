@@ -669,7 +669,7 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("set -o pipefail");
     expect(workflow).toContain(
-      '--output-file "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+      '--metadata-file "$RUNNER_TEMP/vercel-production-env-metadata.json"',
     );
     expect(workflow).not.toContain(
       '> "$RUNNER_TEMP/vercel-production-env-metadata.json"',
