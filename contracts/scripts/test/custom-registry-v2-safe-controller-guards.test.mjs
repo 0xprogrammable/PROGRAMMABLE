@@ -31,7 +31,11 @@ import {
   AUTHORIZATION_SEMANTICS,
   FLASHBOTS_PRIVATE_SUBMISSION,
 } from "../custom-registry-v2-deployment-guards.mjs";
-import { verifySafeCustodyRoleReadbacks } from "../custom-registry-v2-keychain-custody.mjs";
+import {
+  assertDefaultUserKeychainIsSoleSearchTarget,
+  keychainLookupArguments,
+  verifySafeCustodyRoleReadbacks,
+} from "../custom-registry-v2-keychain-custody.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const root = path.resolve(
@@ -47,6 +51,59 @@ const setup = {
   payment: "0",
   paymentReceiver: ZERO,
 };
+
+test("uses the macOS security CLI singleton search-list lookup contract", () => {
+  const arguments_ = keychainLookupArguments({
+    service: "programmable.custom-registry.v2.production-custody.20260813.deployer",
+    account: "0x1111111111111111111111111111111111111111",
+  });
+  assert.deepEqual(arguments_, [
+    "find-generic-password",
+    "-w",
+    "-s",
+    "programmable.custom-registry.v2.production-custody.20260813.deployer",
+    "-a",
+    "0x1111111111111111111111111111111111111111",
+  ]);
+  assert.equal(arguments_.includes("-k"), false);
+  assert.equal(
+    arguments_.includes("/Users/test/Library/Keychains/login.keychain-db"),
+    false,
+  );
+});
+
+test("requires the default user Keychain to be the sole search target", () => {
+  const defaultKeychainPath =
+    "/Users/test/Library/Keychains/login.keychain-db";
+  assert.equal(
+    assertDefaultUserKeychainIsSoleSearchTarget({
+      defaultKeychainPath,
+      userKeychainSearchList: [defaultKeychainPath],
+    }),
+    defaultKeychainPath,
+  );
+  assert.throws(
+    () =>
+      assertDefaultUserKeychainIsSoleSearchTarget({
+        defaultKeychainPath,
+        userKeychainSearchList: [
+          defaultKeychainPath,
+          "/Users/test/Library/Keychains/another.keychain-db",
+        ],
+      }),
+    /not the sole search target/u,
+  );
+  assert.throws(
+    () =>
+      assertDefaultUserKeychainIsSoleSearchTarget({
+        defaultKeychainPath,
+        userKeychainSearchList: [
+          "/Users/test/Library/Keychains/another.keychain-db",
+        ],
+      }),
+    /not the sole search target/u,
+  );
+});
 
 test("predicts a stable owner-bound Safe CREATE2 address", () => {
   const owner = "0x1111111111111111111111111111111111111111";
