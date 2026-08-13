@@ -10,12 +10,19 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
+    sha256: "2d0731780d7c1eba7bbb087ffabb751f1e948783d84954c4041a9f342abcfce0",
     schedulerWatchdog: Object.freeze({
       provider: "github-actions",
       workflow: Object.freeze({
         path: ".github/workflows/refresh-production-read-model.yml",
-        sha256: "e4dd949194ef4046382e9930fe66bd3f63195578b63ed970b0e9ae2a421d2a9d",
+        sha256: "3da07d2ec2ae59991aea77da64c0552e8d9fc7ed96a7d6b9130bdc469d7cc9c6",
+      }),
+      nodeRuntime: Object.freeze({
+        setupAction: "actions/setup-node",
+        setupActionSha: "820762786026740c76f36085b0efc47a31fe5020",
+        setupActionRelease: "v7.0.0",
+        version: "24.14.0",
+        dependencyCache: false,
       }),
       schedule: "2-57/5 * * * *",
       targetOrigin: "https://programmable.market",
@@ -786,6 +793,16 @@ function legacySchedulerWatchdogIsFailClosed(
   source,
   expectedSha256Overrides,
 ) {
+  const pinnedNodeSetup = [
+    "      - name: Install pinned Node.js runtime",
+    `        uses: ${binding?.nodeRuntime?.setupAction}@${binding?.nodeRuntime?.setupActionSha} # ${binding?.nodeRuntime?.setupActionRelease}`,
+    "        with:",
+    `          node-version: ${binding?.nodeRuntime?.version}`,
+    `          cache: ${binding?.nodeRuntime?.dependencyCache}`,
+  ].join("\n");
+  const pinnedNodeSetupIndex = workflowSource?.indexOf(pinnedNodeSetup) ?? -1;
+  const watchdogStepIndex =
+    workflowSource?.indexOf("      - name: Refresh and prove durable freshness") ?? -1;
   return (
     typeof workflowSource === "string" &&
     binding?.provider === "github-actions" &&
@@ -795,6 +812,12 @@ function legacySchedulerWatchdogIsFailClosed(
     binding.secretEnvironment === "CRON_SECRET" &&
     binding.concurrencyGroup === "production-read-model-refresh" &&
     binding.freshnessMaximumAgeSeconds === 600 &&
+    binding.nodeRuntime?.setupAction === "actions/setup-node" &&
+    binding.nodeRuntime?.setupActionSha ===
+      "820762786026740c76f36085b0efc47a31fe5020" &&
+    binding.nodeRuntime?.setupActionRelease === "v7.0.0" &&
+    binding.nodeRuntime?.version === "24.14.0" &&
+    binding.nodeRuntime?.dependencyCache === false &&
     binding.rpcProof?.confirmedBlockRequired === true &&
     binding.rpcProof?.providerPairRequired === true &&
     binding.rpcProof?.maximumHeadAgeSeconds === 300 &&
@@ -810,6 +833,9 @@ function legacySchedulerWatchdogIsFailClosed(
     workflowSource.includes("github.ref == 'refs/heads/production'") &&
     workflowSource.includes("    timeout-minutes: 9") &&
     workflowSource.includes("      name: production") &&
+    pinnedNodeSetupIndex >= 0 &&
+    pinnedNodeSetupIndex < watchdogStepIndex &&
+    workflowSource.match(/uses:\s*actions\/setup-node@/gu)?.length === 1 &&
     workflowSource.includes("CRON_SECRET: ${{ secrets.CRON_SECRET }}") &&
     workflowSource.includes("TARGET_ORIGIN: https://programmable.market") &&
     workflowSource.includes('targetOrigin !== "https://programmable.market"') &&
