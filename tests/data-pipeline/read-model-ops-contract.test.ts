@@ -392,7 +392,8 @@ describe("read-model operations source contract", () => {
 
   it.each([
     ["missing confirmed block", (rpc: Record<string, unknown>) => {
-      const { confirmedBlock: _removed, ...remaining } = rpc;
+      const remaining = { ...rpc };
+      delete remaining.confirmedBlock;
       return remaining;
     }],
     ["zero confirmed block hash", (rpc: Record<string, unknown>) => ({
@@ -674,6 +675,60 @@ describe("read-model operations source contract", () => {
       "lib/onchain/classic-v3-read-model.ts",
       "error instanceof LimitExceededRpcError ||",
       "false ||",
+    ],
+    [
+      "Classic V3 shared four-cursor checkpoint",
+      "lib/onchain/classic-v3-read-model.ts",
+      "expectedCursorBindings: clients.length * 2",
+      "expectedCursorBindings: clients.length",
+    ],
+    [
+      "Classic V3 symmetric provider streams",
+      "lib/onchain/classic-v3-read-model.ts",
+      "expectedStreamsPerProvider: 2",
+      "expectedStreamsPerProvider: 1",
+    ],
+    [
+      "Classic V3 bounded checkpoint window",
+      "lib/onchain/classic-v3-read-model.ts",
+      "bindPersistentRpcIntegrityCheckpointWindow({",
+      "void ({",
+    ],
+    [
+      "Classic V3 raw event provenance quorum",
+      "lib/onchain/classic-v3-read-model.ts",
+      "eventProvenance: value.eventProvenance",
+      "eventProvenance: []",
+    ],
+    [
+      "v4 cache namespace",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";',
+      'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";',
+    ],
+    [
+      "single group-head CAS",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "const published = checkpoint.etag === null",
+      "const published = \"created\"",
+    ],
+    [
+      "post-publish marker activation",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      'scope.commitId,\n          "committed",',
+      'scope.commitId,\n          "pending",',
+    ],
+    [
+      "previous whole-generation fallback",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      'pointedMarker.status !== "committed"',
+      'pointedMarker.status === "committed"',
+    ],
+    [
+      "retired namespace rejection",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "Persistent RPC cache path uses a retired namespace",
+      "Persistent RPC cache path is accepted",
     ],
     [
       "Stock launcher topic-OR filtering",

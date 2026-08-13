@@ -38,6 +38,7 @@ import {
 } from "./metadata";
 import {
   persistentRpcHttp,
+  persistentRpcProviderId,
   withPersistentRpcIntegrityScope,
 } from "./persistent-rpc-cache.server";
 import { enrichExploreModelWithUsd } from "./usd";
@@ -717,12 +718,13 @@ async function readReadyModel(
   config: ReadyOnchainDeployment,
 ): Promise<ExploreReadModel> {
   const client = createOnchainClient(config);
-  const clients = [
-    client,
-    ...(config.rpcUrlSecondary
-      ? [createOnchainClient(config, config.rpcUrlSecondary)]
-      : []),
+  const providerEndpoints = [
+    config.rpcUrl,
+    ...(config.rpcUrlSecondary ? [config.rpcUrlSecondary] : []),
   ];
+  const clients = providerEndpoints.map((endpoint, index) =>
+    index === 0 ? client : createOnchainClient(config, endpoint)
+  );
   const chainStates = await withReadStage("chain-heads", () =>
     mapInBatches(
       clients,
@@ -820,10 +822,21 @@ async function readReadyModel(
   );
 
   const indexedEventSets = await allSettledOrThrow(
-    clients.map((candidate) =>
+    clients.map((candidate, providerIndex) =>
       withReadStage("classic-events", () =>
-        withPersistentRpcIntegrityScope(() =>
-          indexVerifiedEvents(candidate, config, toBlock),
+        withPersistentRpcIntegrityScope(
+          () => indexVerifiedEvents(candidate, config, toBlock),
+          {
+            checkpointGroup: [
+              "classic-events",
+              config.chainId,
+              config.deploymentBlock.toString(),
+              config.launcher.toLowerCase(),
+              config.feeHook.toLowerCase(),
+              persistentRpcProviderId(providerEndpoints[providerIndex]),
+            ].join(":"),
+            expectedCursorBindings: 2,
+          },
         ),
       ),
     ),

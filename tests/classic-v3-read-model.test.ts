@@ -8,8 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   mergeClassicV3ExploreModel,
   readClassicV3Events,
+  readClassicV3EventsQuorum,
   type ClassicV3Release,
 } from "../lib/onchain/classic-v3-read-model";
+import { PersistentRpcCacheError } from
+  "../lib/onchain/persistent-rpc-cache.server";
 import type {
   ExploreReadModel,
   ReadyOnchainDeployment,
@@ -79,6 +82,18 @@ afterEach(() => {
 });
 
 describe("Classic V3 event scan", () => {
+  it("requires exactly two independent providers for a checkpoint", async () => {
+    await expect(
+      readClassicV3EventsQuorum(
+        [{ getLogs: vi.fn(), getBlock: vi.fn() } as unknown as PublicClient],
+        readyDeployment,
+        release,
+        1_000n,
+        1n,
+      ),
+    ).rejects.toThrow("exactly two independent RPCs");
+  });
+
   it("settles the two scalar canonical contract filters concurrently", async () => {
     const resolvers: Array<(logs: readonly []) => void> = [];
     const getLogs = vi.fn(
@@ -103,6 +118,7 @@ describe("Classic V3 event scan", () => {
     expect(getLogs.mock.calls.every(([input]) => input.strict)).toBe(true);
     for (const resolve of resolvers) resolve([]);
     await expect(pending).resolves.toEqual({
+      eventProvenance: [],
       launches: [],
       volumes: new Map(),
     });
@@ -127,7 +143,32 @@ describe("Classic V3 event scan", () => {
         1_000n,
         1n,
       ),
-    ).resolves.toEqual({ launches: [], volumes: new Map() });
+    ).resolves.toEqual({ eventProvenance: [], launches: [], volumes: new Map() });
+    expect(getLogs).toHaveBeenCalledTimes(6);
+  });
+
+  it("bisects a complete range when its durable segment exceeds the byte cap", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new PersistentRpcCacheError(
+          "Persistent RPC cache log segment exceeds 4194304 bytes",
+        );
+      }
+      return [];
+    });
+
+    await expect(
+      readClassicV3Events(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_000n,
+        1n,
+      ),
+    ).resolves.toEqual({ eventProvenance: [], launches: [], volumes: new Map() });
     expect(getLogs).toHaveBeenCalledTimes(6);
   });
 
@@ -152,7 +193,7 @@ describe("Classic V3 event scan", () => {
         1_000n,
         1n,
       ),
-    ).resolves.toEqual({ launches: [], volumes: new Map() });
+    ).resolves.toEqual({ eventProvenance: [], launches: [], volumes: new Map() });
     expect(getLogs).toHaveBeenCalledTimes(4);
   });
 
@@ -178,6 +219,95 @@ describe("Classic V3 event scan", () => {
         1n,
       ),
     ).rejects.toThrow(/non-canonical Classic V3 contract/);
+  });
+
+  it("requires both providers to agree on every raw fee-log provenance record", async () => {
+    const feeLog = (transactionHash: string) => ({
+      eventName: "NativeSwapFeesAccrued",
+      address: release.hook,
+      removed: false,
+      blockNumber: 1n,
+      blockHash: `0x${"77".repeat(32)}`,
+      transactionHash,
+      transactionIndex: 0,
+      logIndex: 0,
+      args: {
+        poolId: `0x${"88".repeat(32)}`,
+        grossNativeAmount: 100n,
+        creatorFee: 10n,
+        launcherFee: 1n,
+      },
+    });
+    const client = (transactionHash: string) => ({
+      async getLogs(input: { address: string }) {
+        return input.address === release.hook ? [feeLog(transactionHash)] : [];
+      },
+      async getBlock() {
+        return { number: 1_000n, hash: `0x${"99".repeat(32)}` };
+      },
+    }) as unknown as PublicClient;
+    await expect(
+      readClassicV3EventsQuorum(
+        [
+          client(`0x${"aa".repeat(32)}`),
+          client(`0x${"bb".repeat(32)}`),
+        ],
+        readyDeployment,
+        release,
+        1_000n,
+        1n,
+      ),
+    ).rejects.toThrow(/disagree on the Classic V3 checkpoint window/);
+  });
+
+  it("requires both providers to agree on the checkpoint boundary hash", async () => {
+    const client = (hash: string) => ({
+      async getLogs() {
+        return [];
+      },
+      async getBlock() {
+        return { number: 1_000n, hash };
+      },
+    }) as unknown as PublicClient;
+    await expect(
+      readClassicV3EventsQuorum(
+        [
+          client(`0x${"aa".repeat(32)}`),
+          client(`0x${"bb".repeat(32)}`),
+        ],
+        readyDeployment,
+        release,
+        1_000n,
+        1n,
+      ),
+    ).rejects.toThrow(/disagree on the Classic V3 checkpoint window/);
+  });
+
+  it("publishes at most 1,000 blocks in one provider-group checkpoint", async () => {
+    const boundaryReads: bigint[] = [];
+    const client = {
+      async getLogs() {
+        return [];
+      },
+      async getBlock(input: { blockNumber: bigint }) {
+        boundaryReads.push(input.blockNumber);
+        return {
+          number: input.blockNumber,
+          hash: `0x${input.blockNumber.toString(16).padStart(64, "0")}`,
+        };
+      },
+    } as unknown as PublicClient;
+
+    await expect(
+      readClassicV3EventsQuorum(
+        [client, client],
+        { ...readyDeployment, logBlockRange: 5_000n },
+        release,
+        2_000n,
+        1n,
+      ),
+    ).resolves.toEqual({ eventProvenance: [], launches: [], volumes: new Map() });
+    expect(boundaryReads).toEqual([1_000n, 1_000n, 2_000n, 2_000n]);
   });
 });
 

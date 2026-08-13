@@ -32,6 +32,7 @@ import { stateViewReadAbi, uerc20ReadAbi } from "./abis";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
 import {
   persistentRpcHttp,
+  persistentRpcProviderId,
   withPersistentRpcIntegrityScope,
 } from "./persistent-rpc-cache.server";
 import {
@@ -866,12 +867,13 @@ export async function readStockPairedExploreModel(
   );
   if (activeReleases.length === 0) return [];
 
-  const clients = [
-    clientFor(config.rpcUrl, config, activeReleases),
-    ...(config.rpcUrlSecondary
-      ? [clientFor(config.rpcUrlSecondary, config, activeReleases)]
-      : []),
+  const providerEndpoints = [
+    config.rpcUrl,
+    ...(config.rpcUrlSecondary ? [config.rpcUrlSecondary] : []),
   ];
+  const clients = providerEndpoints.map((endpoint) =>
+    clientFor(endpoint, config, activeReleases)
+  );
   await mapInBatches(
     clients,
     RPC_PROVENANCE_BATCH_SIZE,
@@ -930,15 +932,26 @@ export async function readStockPairedExploreModel(
     1,
     async (release) => {
       const eventSets = await allSettledOrThrow(
-        clients.map((candidate) =>
-          withPersistentRpcIntegrityScope(() =>
-            readStockPairedEvents(
-              candidate,
-              config,
-              release,
-              toBlock,
-              options.fromBlock ?? BigInt(release.startBlock),
-            ),
+        clients.map((candidate, providerIndex) =>
+          withPersistentRpcIntegrityScope(
+            () =>
+              readStockPairedEvents(
+                candidate,
+                config,
+                release,
+                toBlock,
+                options.fromBlock ?? BigInt(release.startBlock),
+              ),
+            {
+              checkpointGroup: [
+                "stock-paired-events",
+                config.chainId,
+                release.internalContractRelease,
+                release.startBlock,
+                persistentRpcProviderId(providerEndpoints[providerIndex]),
+              ].join(":"),
+              expectedCursorBindings: 3,
+            },
           )),
       );
       const fingerprint = eventFingerprint(eventSets[0]);

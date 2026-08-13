@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "programmable.read-model-private-blob-backfill-evidence.v1",
+  "environment": "production-private-blob",
+  "cacheSchema": "programmable-rpc-log-cursor-v4",
+  "sourceBaseCommit": "dd536a90439665ac63a426207abc460902d1ee52",
+  "checkpoint": {
+    "chainId": 1,
+    "groupDomain": "classic-v3-events-v2",
+    "groupId": "417e71f686d80738a617f5904c22bea74e9b50694ba346b618b15aa53346cdfe",
+    "headCommitId": "c82a7ed0-a648-43a0-981b-f0f0216c657f",
+    "providerIds": [
+      "1ea1c2f6afc5dfeb337015523196009c66e4bd70aca6cc1f2b5f845126bcfbdf",
+      "aff9065b48df62a3041df32ee22a260e6c5f14ce722042185f60fd4c237614d2"
+    ],
+    "providerCount": 2,
+    "streamIdentitiesPerProvider": 2,
+    "cursorCount": 4
+  },
+  "lineage": {
+    "startBlock": "25639596",
+    "targetBlock": "25747604",
+    "maximumWindowBlocks": 1000,
+    "committedWindows": 109,
+    "firstWindow": {
+      "fromBlock": "25639596",
+      "toBlock": "25640595"
+    },
+    "lastWindow": {
+      "fromBlock": "25747596",
+      "toBlock": "25747604"
+    },
+    "gaps": 0,
+    "overlaps": 0,
+    "allMarkersCommitted": true,
+    "allEnvelopeContentHashesVerified": true
+  },
+  "activeReferences": {
+    "segmentsPerCursor": [8, 8, 8, 8],
+    "uniqueSegments": 32,
+    "declaredBytes": 18649356
+  },
+  "restartReplay": {
+    "windows": 109,
+    "blobReads": 1744,
+    "blobCreates": 0,
+    "blobReplaces": 0,
+    "rpcGetLogs": 0,
+    "rpcGetBlockByNumber": 654,
+    "otherRpcRequests": 0
+  },
+  "freshProcessResume": {
+    "windowsWritten": 0,
+    "blobReads": 2,
+    "blobCreates": 0,
+    "blobReplaces": 0
+  },
+  "physicalInventory": {
+    "objects": 1996,
+    "bytes": 130370497,
+    "checkpointHeads": 2,
+    "integrityMarkers": 214,
+    "cursorVersions": 890,
+    "segments": 890,
+    "scope": "all v4 objects, including unreachable experimental checkpoint domains"
+  },
+  "safety": {
+    "rpcUrlsRecorded": false,
+    "credentialsRecorded": false,
+    "retiredV3ReadDuringProof": false,
+    "productionAliasChanged": false
+  }
+}
