@@ -828,6 +828,28 @@ describe("read-model production deploy policy", () => {
       workflow.indexOf("Record registry identity and combined market path"),
     );
     expect(bitquerySmoke).toContain(
+      "MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}",
+    );
+    expect(bitquerySmoke).toContain(
+      "MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}",
+    );
+    expect(bitquerySmoke).toContain(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
+    );
+    expect(bitquerySmoke).toContain(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
+    );
+    expect(bitquerySmoke).toContain(
+      '"./scripts/perf/read-model-provider-binding.mjs"',
+    );
+    expect(bitquerySmoke).toContain(
+      "runtimeProductionProviderBindingsFromUrls({",
+    );
+    expect(bitquerySmoke).toContain(
+      "binding.endpointCommitment !== expectedCommitment",
+    );
+    expect(bitquerySmoke).toContain("rpcUrls: independentRpcUrls");
+    expect(bitquerySmoke).toContain(
       "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
     );
     expect(bitquerySmoke.match(/historicalBitqueryMarketContract/g)).toHaveLength(3);
@@ -836,7 +858,7 @@ describe("read-model production deploy policy", () => {
     expect(bitquerySmoke).not.toContain("/api/ops/health");
     expect(bitquerySmoke).not.toContain("/api/explore/profile");
     expect(bitquerySmoke).not.toMatch(
-      /\b(?:database|projector|quicknode|envio|real-block|sla)\b/iu,
+      /\b(?:database|projector|envio|real-block|sla)\b/iu,
     );
     expect(workflow).toContain("Reverify staged candidate binding");
     expect(workflow).toContain("Record staged candidate handoff");
