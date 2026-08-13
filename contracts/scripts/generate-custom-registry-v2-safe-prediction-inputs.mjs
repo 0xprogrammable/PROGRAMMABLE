@@ -1,11 +1,18 @@
 import { randomBytes, createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { getAddress } from "viem";
 
 import { assertReleaseEvidenceOutput } from "./custom-registry-v2-release-evidence.mjs";
+import { assertProductionPolicyApprovalBinding } from "./custom-registry-v2-safe-controller-guards.mjs";
 import { trustedNetworkTime } from "./custom-registry-v2-transaction-journal.mjs";
+
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 
 const required = (name) => {
   const value = process.env[name]?.trim();
@@ -84,16 +91,24 @@ async function main() {
   }
   const sourceCommit = required("REGISTRY_SOURCE_COMMIT");
   const sourceTree = required("REGISTRY_SOURCE_TREE");
-  const approvalPolicyCommitment = required(
+  const configuredApprovalPolicyCommitment = required(
     "REGISTRY_APPROVAL_POLICY_COMMITMENT",
   );
   if (
     !/^[0-9a-f]{40}$/u.test(sourceCommit) ||
     !/^[0-9a-f]{40}$/u.test(sourceTree) ||
-    !/^0x[0-9a-f]{64}$/u.test(approvalPolicyCommitment)
+    !/^0x[0-9a-f]{64}$/u.test(configuredApprovalPolicyCommitment)
   ) {
     throw new Error("frozen source or Approval policy identity is invalid");
   }
+  const productionPolicyBytes = await readFile(
+    path.join(root, "config/custom-registry-v2-production-policy.json"),
+  );
+  const { approvalPolicyCommitment, productionPolicySha256 } =
+    assertProductionPolicyApprovalBinding({
+      bytes: productionPolicyBytes,
+      configuredApprovalPolicyCommitment,
+    });
   const generated = trustedNetworkTime();
   const retiredSaltCommitments = new Set(
     (process.env.REGISTRY_RETIRED_SAFE_SALT_COMMITMENTS ?? "")
@@ -111,9 +126,10 @@ async function main() {
   });
   const output = assertReleaseEvidenceOutput(process.argv[outputIndex + 1]);
   const evidence = {
-    schemaVersion: "programmable.custom-registry-v2-safe-prediction-inputs.v2",
+    schemaVersion: "programmable.custom-registry-v2-safe-prediction-inputs.v3",
     source: { commit: sourceCommit, tree: sourceTree },
     approvalPolicyCommitment,
+    productionPolicySha256,
     generatedAtTimestamp: generated.adjustedTimestamp,
     generatedTrustedTime: generated,
     generatedAfterPublicSourceAndApprovalPolicyFreeze: true,

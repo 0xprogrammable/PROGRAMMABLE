@@ -16,6 +16,7 @@ import {
   SAFE_FACTORY_ABI,
   SAFE_PLAN_SCHEMA,
   SAFE_READ_ABI,
+  assertProductionPolicyApprovalBinding,
   assertSafeCostReviewEnvelope,
   assertSafeCustodyProof,
   assertSafePolicyBoundPlan,
@@ -208,6 +209,17 @@ const policyBytes = await readFile(
 );
 const policy = JSON.parse(policyBytes);
 const policySha256 = `0x${createHash("sha256").update(policyBytes).digest("hex")}`;
+const productionPolicyBytes = await readFile(
+  path.join(root, "config/custom-registry-v2-production-policy.json"),
+);
+const configuredApprovalPolicyCommitment = required(
+  "REGISTRY_APPROVAL_POLICY_COMMITMENT",
+);
+const { approvalPolicyCommitment, productionPolicySha256 } =
+  assertProductionPolicyApprovalBinding({
+    bytes: productionPolicyBytes,
+    configuredApprovalPolicyCommitment,
+  });
 if (
   policy.schemaVersion !==
     "programmable.custom-registry-v2-safe-controller-policy.v2" ||
@@ -285,6 +297,9 @@ if (
   manifest.sourceDigests?.[
     "config/custom-registry-v2-safe-controller-policy.json"
   ] !== policySha256 ||
+  manifest.sourceDigests?.[
+    "config/custom-registry-v2-production-policy.json"
+  ] !== productionPolicySha256 ||
   getAddress(manifest.releaseAuthorization?.owner) !== releaseOwner ||
   manifest.releaseAuthorization
     ?.maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
@@ -306,15 +321,15 @@ assertTrustedTimeEvidence(
 );
 if (
   predictionInputs?.schemaVersion !==
-    "programmable.custom-registry-v2-safe-prediction-inputs.v2" ||
+    "programmable.custom-registry-v2-safe-prediction-inputs.v3" ||
   predictionInputs.source?.commit !== sourceCommit ||
   predictionInputs.source?.tree !== sourceTree ||
   predictionInputs.generatedAfterPublicSourceAndApprovalPolicyFreeze !== true ||
   predictionInputs.publicPredictionsRetired !== true ||
   !Number.isSafeInteger(predictionInputs.generatedAtTimestamp) ||
   !Number.isSafeInteger(predictionInputs.retiredSaltCommitmentsChecked) ||
-  predictionInputs.approvalPolicyCommitment !==
-    required("REGISTRY_APPROVAL_POLICY_COMMITMENT") ||
+  predictionInputs.approvalPolicyCommitment !== approvalPolicyCommitment ||
+  predictionInputs.productionPolicySha256 !== productionPolicySha256 ||
   predictionInputs.roles?.length !== roles.length ||
   predictionInputs.roles.some(
     (entry, index) =>
@@ -573,6 +588,8 @@ const plan = {
     .update(manifestBytes)
     .digest("hex")}`,
   policySha256,
+  productionPolicySha256,
+  approvalPolicyCommitment,
   custodyProofSha256,
   predictionInputsSha256,
   custody: {
