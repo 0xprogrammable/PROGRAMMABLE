@@ -214,7 +214,10 @@ paths = [
   '''contracts/test/ProgrammableExactShardsRouteGatedFactoryV2\.t\.sol''',
 ]
 regexes = [
-  '''(?:tokenSalt|effectiveTokenSalt|shardToken|tokenInitCodeHash|goldenTokenSalt)"?\s*[:=]\s*"?0x[0-9a-fA-F]{64}''',
+  '''(?:tokenSalt"?\s*:\s*"?|goldenTokenSalt\s*=\s*)0xfe9ef1c901ff8ef4524c0b3f9a9aa5a5134bada183857dd44cbff850b3ca238f''',
+  '''effectiveTokenSalt"?\s*:\s*"?0xcc7626fbe5708a49b432b1604bf3b08795ad0029288b199b678e1c031586f886''',
+  '''shardToken"?\s*:\s*"?0xa6461c32c0121f0090519945d9c22ed6406a783994e020f72a20e85796cad107''',
+  '''tokenInitCodeHash"?\s*:\s*"?0xa7519cca9ec2db12e7c4a0c35f0a6b779594f7eaa1010d51e2d1731526cfbc2a''',
 ]
 
 [[allowlists]]
