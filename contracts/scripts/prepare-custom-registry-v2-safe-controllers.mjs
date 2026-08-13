@@ -9,7 +9,10 @@ import {
   SAFE_FACTORY_ABI,
   SAFE_PLAN_SCHEMA,
   SAFE_READ_ABI,
+  assertSafeCostReviewEnvelope,
   assertSafeCustodyProof,
+  assertSafePolicyBoundPlan,
+  assertSafePreflightEnvelope,
   assertDistinctControllerOwners,
   predictSafeProxyAddress,
   safeInitializer,
@@ -104,6 +107,8 @@ if (
   policy.singleton?.address !== "0x41675C099F32341bf84BFc5382aF534df5C7461a" ||
   policy.proxyFactory?.address !==
     "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67" ||
+  keccak256(policy.proxyFactory?.proxyCreationCode) !==
+    policy.proxyFactory?.proxyCreationCodeKeccak256 ||
   policy.proxyFactory?.proxyRuntimeCodeKeccak256 !==
     "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c" ||
   policy.proxyFactory?.proxyCreationEvent !==
@@ -193,7 +198,8 @@ const baseObservations = await Promise.all(
       singletonVersion !== policy.safeVersion ||
       keccak256(factoryCode) !== policy.proxyFactory.runtimeCodeKeccak256 ||
       keccak256(proxyCreationCode) !==
-        policy.proxyFactory.proxyCreationCodeKeccak256
+        policy.proxyFactory.proxyCreationCodeKeccak256 ||
+      proxyCreationCode !== policy.proxyFactory.proxyCreationCode
     )
       throw new Error("Safe singleton or factory runtime binding failed");
     return {
@@ -236,8 +242,16 @@ const controllerPlans = await Promise.all(
     });
     const observations = await Promise.all(
       clients.map(async (client) => {
-        const [code, gas] = await Promise.all([
+        const [code, nonce, balance, gas] = await Promise.all([
           client.getCode({ address: predictedAddress, blockTag: "latest" }),
+          client.getTransactionCount({
+            address: predictedAddress,
+            blockTag: "latest",
+          }),
+          client.getBalance({
+            address: predictedAddress,
+            blockTag: "latest",
+          }),
           client.estimateContractGas({
             address: policy.proxyFactory.address,
             abi: SAFE_FACTORY_ABI,
@@ -246,9 +260,13 @@ const controllerPlans = await Promise.all(
             account: deployer,
           }),
         ]);
-        if (code !== undefined && code !== "0x")
-          throw new Error(`predicted ${role} Safe is occupied`);
-        return { gas };
+        if (
+          (code !== undefined && code !== "0x") ||
+          nonce !== 0 ||
+          balance !== 0n
+        )
+          throw new Error(`predicted ${role} Safe is occupied or prefunded`);
+        return { gas, nonce, balance };
       }),
     );
     const gasLimit =
@@ -275,6 +293,10 @@ const controllerPlans = await Promise.all(
         maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
       },
       gasEstimates: observations.map(({ gas }) => gas.toString()),
+      predictedAddressNonces: observations.map(({ nonce }) => nonce),
+      predictedAddressBalancesWei: observations.map(({ balance }) =>
+        balance.toString(),
+      ),
       gasLimit: gasLimit.toString(),
     };
   }),
@@ -324,6 +346,7 @@ const fundingSufficient = a.balance >= maximumTotalCostWei;
 if (!costReviewOnly && !fundingSufficient)
   throw new Error("Safe controller deployer balance is insufficient");
 
+const createdAtTimestamp = Math.floor(Date.now() / 1000);
 const plan = {
   schemaVersion: SAFE_PLAN_SCHEMA,
   status: costReviewOnly
@@ -349,7 +372,9 @@ const plan = {
   },
   safeVersion: policy.safeVersion,
   singleton: policy.singleton,
-  proxyFactory: policy.proxyFactory,
+  proxyFactory: {
+    ...policy.proxyFactory,
+  },
   storageSlots: policy.storageSlots,
   commonFinalizedAnchor: {
     blockNumber: a.finalized.number.toString(),
@@ -370,10 +395,20 @@ const plan = {
   reviewedMaxTotalCostWei: maxTotalCostWei.toString(),
   maximumTotalCostWei: maximumTotalCostWei.toString(),
   fundingSufficient,
-  expiresAtTimestamp: Math.floor(Date.now() / 1000) + Number(validitySeconds),
+  createdAtTimestamp,
+  validitySeconds: Number(validitySeconds),
+  expiresAtTimestamp: createdAtTimestamp + Number(validitySeconds),
   signingAllowed: false,
   broadcastAllowed: false,
 };
+assertSafePolicyBoundPlan({
+  plan,
+  policy,
+  manifest,
+  sourceManifestSha256: plan.sourceManifestSha256,
+});
+if (costReviewOnly) assertSafeCostReviewEnvelope(plan);
+else assertSafePreflightEnvelope(plan, createdAtTimestamp);
 await writeFile(output, `${JSON.stringify(plan, null, 2)}\n`, {
   flag: "wx",
   mode: 0o600,

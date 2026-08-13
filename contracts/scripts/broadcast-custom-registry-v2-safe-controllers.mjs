@@ -17,6 +17,7 @@ import {
   SAFE_FACTORY_ABI,
   SAFE_RECEIPTS_SCHEMA,
   SAFE_READ_ABI,
+  assertSafePolicyBoundPlan,
   assertSafePreflightEnvelope,
   assertSafeReviewedAuthorization,
   safeTransactionInput,
@@ -96,6 +97,17 @@ if (
 )
   throw new Error("Safe controller policy drifted");
 const policy = JSON.parse(policyBytes);
+const manifestBytes = await readFile(
+  path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
+);
+assertSafePolicyBoundPlan({
+  plan,
+  policy,
+  manifest: JSON.parse(manifestBytes),
+  sourceManifestSha256: `0x${createHash("sha256")
+    .update(manifestBytes)
+    .digest("hex")}`,
+});
 
 const privateKey = process.env.REGISTRY_SAFE_DEPLOYER_PRIVATE_KEY;
 if (!privateKey || !/^0x[0-9a-fA-F]{64}$/u.test(privateKey))
@@ -148,10 +160,21 @@ const live = await Promise.all(
         functionName: "proxyCreationCode",
       }),
     ]);
-    const controllerCode = await Promise.all(
-      plan.controllers.map(({ predictedAddress }) =>
-        client.getCode({ address: predictedAddress, blockTag: "latest" }),
-      ),
+    const controllerState = await Promise.all(
+      plan.controllers.map(async ({ predictedAddress }) => {
+        const [code, nonce, balance] = await Promise.all([
+          client.getCode({ address: predictedAddress, blockTag: "latest" }),
+          client.getTransactionCount({
+            address: predictedAddress,
+            blockTag: "latest",
+          }),
+          client.getBalance({
+            address: predictedAddress,
+            blockTag: "latest",
+          }),
+        ]);
+        return { code, nonce, balance };
+      }),
     );
     return {
       finalized,
@@ -163,7 +186,7 @@ const live = await Promise.all(
       version,
       factoryCode,
       proxyCreationCode,
-      controllerCode,
+      controllerState,
     };
   }),
 );
@@ -185,8 +208,14 @@ if (
   keccak256(b.factoryCode) !== plan.proxyFactory.runtimeCodeKeccak256 ||
   keccak256(a.proxyCreationCode) !==
     plan.proxyFactory.proxyCreationCodeKeccak256 ||
-  a.controllerCode.some((code) => code && code !== "0x") ||
-  b.controllerCode.some((code) => code && code !== "0x")
+  a.controllerState.some(
+    ({ code, nonce, balance }) =>
+      (code && code !== "0x") || nonce !== 0 || balance !== 0n,
+  ) ||
+  b.controllerState.some(
+    ({ code, nonce, balance }) =>
+      (code && code !== "0x") || nonce !== 0 || balance !== 0n,
+  )
 )
   throw new Error("live Safe broadcast state drifted from reviewed plan");
 
@@ -272,13 +301,25 @@ for (const controller of plan.controllers) {
         address: controller.predictedAddress,
         blockTag: "latest",
       }),
+      targetNonce: await client.getTransactionCount({
+        address: controller.predictedAddress,
+        blockTag: "latest",
+      }),
+      targetBalance: await client.getBalance({
+        address: controller.predictedAddress,
+        blockTag: "latest",
+      }),
     })),
   );
   if (
     immediate[0].nonce !== immediate[1].nonce ||
     immediate[0].nonce !== controller.expectedTransactionNonce ||
     (immediate[0].code !== undefined && immediate[0].code !== "0x") ||
-    (immediate[1].code !== undefined && immediate[1].code !== "0x")
+    (immediate[1].code !== undefined && immediate[1].code !== "0x") ||
+    immediate[0].targetNonce !== 0 ||
+    immediate[1].targetNonce !== 0 ||
+    immediate[0].targetBalance !== 0n ||
+    immediate[1].targetBalance !== 0n
   )
     throw new Error(
       `${controller.role} Safe transaction nonce or address drifted`,

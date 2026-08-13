@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   SAFE_CUSTODY_PROOF_SCHEMA,
   SAFE_AUTHORIZATION_SCHEMA,
@@ -7,6 +11,7 @@ import {
   assertProxyCreationLog,
   assertSafeCostReviewEnvelope,
   assertSafeCustodyProof,
+  assertSafePolicyBoundPlan,
   assertSafePreflightEnvelope,
   assertSafeReviewedAuthorization,
   assertDistinctControllerOwners,
@@ -16,10 +21,14 @@ import {
   safeInitializer,
   safeTransactionInput,
 } from "../custom-registry-v2-safe-controller-guards.mjs";
-import { encodeEventTopics, encodeAbiParameters } from "viem";
+import { encodeEventTopics, encodeAbiParameters, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 const setup = {
   threshold: 1,
   to: ZERO,
@@ -122,6 +131,8 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     signingAllowed: false,
     broadcastAllowed: false,
     fundingSufficient: true,
+    createdAtTimestamp: 100,
+    validitySeconds: 100,
     expiresAtTimestamp: 200,
     controllers: [{}, {}, {}, {}],
     policySha256: `0x${"22".repeat(32)}`,
@@ -183,6 +194,156 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
         nowTimestamp: 180,
       }),
     /authorization/u,
+  );
+});
+
+test("binds every Safe plan transaction to official policy and CREATE2 provenance", () => {
+  const policyBytes = readFileSync(
+    path.join(root, "config/custom-registry-v2-safe-controller-policy.json"),
+  );
+  const policy = JSON.parse(policyBytes);
+  const policySha256 = `0x${createHash("sha256")
+    .update(policyBytes)
+    .digest("hex")}`;
+  const roles = ["approver", "registrar", "finalizer", "revoker"];
+  const accounts = Array.from({ length: 7 }, (_, index) =>
+    privateKeyToAccount(
+      `0x${(index + 1).toString(16).padStart(2, "0").repeat(32)}`,
+    ),
+  );
+  const [deployer, admin, releaseOwner, ...owners] = accounts;
+  const gasEstimates = ["100000", "110000"];
+  const gasLimit = "132000";
+  const controllers = roles.map((role, index) => {
+    const owner = owners[index].address;
+    const saltNonce = policy.roles[role].saltNonce;
+    const initializer = safeInitializer(owner, policy.setup);
+    return {
+      role,
+      owner,
+      saltNonce,
+      initializer,
+      initializerKeccak256: keccak256(initializer),
+      predictedAddress: predictSafeProxyAddress({
+        factory: policy.proxyFactory.address,
+        singleton: policy.singleton.address,
+        proxyCreationCode: policy.proxyFactory.proxyCreationCode,
+        initializer,
+        saltNonce,
+      }),
+      expectedTransactionNonce: index,
+      expectedTransaction: {
+        chainId: 1,
+        from: deployer.address,
+        to: policy.proxyFactory.address,
+        input: safeTransactionInput({
+          singleton: policy.singleton.address,
+          initializer,
+          saltNonce,
+        }),
+        valueWei: "0",
+        nonce: index,
+        gasLimit,
+        maxFeePerGas: "5",
+        maxPriorityFeePerGas: "1",
+      },
+      gasEstimates,
+      predictedAddressNonces: [0, 0],
+      predictedAddressBalancesWei: ["0", "0"],
+      gasLimit,
+    };
+  });
+  const manifest = {
+    status: "SOURCE_ONLY_NOT_DEPLOYED",
+    activationAllowed: false,
+    sourceDigests: {
+      "config/custom-registry-v2-safe-controller-policy.json": policySha256,
+    },
+    releaseAuthorization: {
+      owner: releaseOwner.address,
+      maximumValiditySeconds: 300,
+    },
+  };
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest)}\n`);
+  const sourceManifestSha256 = `0x${createHash("sha256")
+    .update(manifestBytes)
+    .digest("hex")}`;
+  const custodyRoles = ["deployer", "admin", ...roles];
+  const custodyAddresses = [
+    deployer.address,
+    admin.address,
+    ...owners.map(({ address }) => address),
+  ];
+  const plan = {
+    schemaVersion: SAFE_PLAN_SCHEMA,
+    status: "PREFLIGHT_ONLY_NO_TRANSACTION",
+    chainId: 1,
+    source: { commit: "a".repeat(40), tree: "b".repeat(40) },
+    sourceManifestSha256,
+    policySha256,
+    custodyProofSha256: `0x${"44".repeat(32)}`,
+    custody: {
+      inventorySha256: `0x${"55".repeat(32)}`,
+      roles: custodyRoles.map((role, index) => ({
+        role,
+        publicAddress: custodyAddresses[index],
+        service: `programmable.custom-registry.v2.production-custody.20260813.${role}`,
+        readbackSha256: `0x${(index + 10)
+          .toString(16)
+          .padStart(2, "0")
+          .repeat(32)}`,
+      })),
+    },
+    safeVersion: policy.safeVersion,
+    singleton: policy.singleton,
+    proxyFactory: policy.proxyFactory,
+    storageSlots: policy.storageSlots,
+    commonFinalizedAnchor: {
+      blockNumber: "1",
+      blockHash: `0x${"66".repeat(32)}`,
+    },
+    deployer: deployer.address,
+    releaseAuthorization: {
+      owner: releaseOwner.address,
+      maximumValiditySeconds: 300,
+    },
+    exactPendingNonce: 0,
+    deployerBalanceWei: "2640000",
+    controllers,
+    totalGasLimit: "528000",
+    observedFeePerGas: "4",
+    reviewedMaxFeePerGas: "5",
+    reviewedMaxTotalCostWei: "3000000",
+    maximumTotalCostWei: "2640000",
+    fundingSufficient: true,
+    createdAtTimestamp: 100,
+    validitySeconds: 100,
+    expiresAtTimestamp: 200,
+    signingAllowed: false,
+    broadcastAllowed: false,
+  };
+  assertSafePolicyBoundPlan({
+    plan,
+    policy,
+    manifest,
+    sourceManifestSha256,
+  });
+  assert.throws(
+    () =>
+      assertSafePolicyBoundPlan({
+        plan: {
+          ...plan,
+          controllers: plan.controllers.map((controller, index) =>
+            index === 0
+              ? { ...controller, predictedAddress: accounts[6].address }
+              : controller,
+          ),
+        },
+        policy,
+        manifest,
+        sourceManifestSha256,
+      }),
+    /transaction binding/u,
   );
 });
 

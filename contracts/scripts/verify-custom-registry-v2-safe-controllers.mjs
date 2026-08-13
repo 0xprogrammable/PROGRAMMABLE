@@ -19,6 +19,7 @@ import {
   SAFE_VERIFICATION_SCHEMA,
   assertProxyCreationLog,
   assertSafePreflightEnvelope,
+  assertSafePolicyBoundPlan,
   assertSafeReviewedAuthorization,
   assertSafeRuntimeState,
   safeTransactionInput,
@@ -115,6 +116,17 @@ if (
   plan.policySha256
 )
   throw new Error("Safe controller policy drifted");
+const manifestBytes = await readFile(
+  path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
+);
+assertSafePolicyBoundPlan({
+  plan,
+  policy: JSON.parse(policyBytes),
+  manifest: JSON.parse(manifestBytes),
+  sourceManifestSha256: `0x${createHash("sha256")
+    .update(manifestBytes)
+    .digest("hex")}`,
+});
 
 const rpcA = process.env.REGISTRY_PREFLIGHT_RPC_URL_A;
 const rpcB = process.env.REGISTRY_PREFLIGHT_RPC_URL_B;

@@ -7,6 +7,7 @@ import { getAddress } from "viem";
 
 import {
   SAFE_AUTHORIZATION_SCHEMA,
+  assertSafePolicyBoundPlan,
   assertSafePreflightEnvelope,
   computeSafeReviewedPlanDigest,
   safeReviewedAuthorizationMessage,
@@ -41,6 +42,27 @@ if (preflightSha256 !== process.env.REGISTRY_SAFE_REVIEWED_PLAN_SHA256)
 const plan = JSON.parse(preflightBytes);
 const nowTimestamp = Math.floor(Date.now() / 1000);
 assertSafePreflightEnvelope(plan, nowTimestamp);
+const [policyBytes, manifestBytes] = await Promise.all([
+  readFile(
+    path.join(root, "config/custom-registry-v2-safe-controller-policy.json"),
+  ),
+  readFile(
+    path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
+  ),
+]);
+if (
+  `0x${createHash("sha256").update(policyBytes).digest("hex")}` !==
+  plan.policySha256
+)
+  throw new Error("Safe controller policy drifted");
+assertSafePolicyBoundPlan({
+  plan,
+  policy: JSON.parse(policyBytes),
+  manifest: JSON.parse(manifestBytes),
+  sourceManifestSha256: `0x${createHash("sha256")
+    .update(manifestBytes)
+    .digest("hex")}`,
+});
 
 const ownerAuthorizationAddress = getAddress(
   process.env.REGISTRY_RELEASE_OWNER ?? "",
