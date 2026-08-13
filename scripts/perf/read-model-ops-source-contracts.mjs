@@ -125,7 +125,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     }),
     store: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-postgres-v2.ts",
-      sha256: "a35d911098359f970c4f49007760c8081fc0cbb94c45bdaa73a7884968c907c5",
+      sha256: "042bce5970388dfcde25ee8d5d70a04ef9072e8168e3efc83890e1c418a11c0c",
     }),
     registryReader: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",

@@ -222,6 +222,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
           SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
         `, [launchId]);
         await assertMonotonicObservation(client, {
+          approvalId,
           launchId,
           observationCommonHead: head,
           observationCommonHeadHash: headHash,
@@ -304,6 +305,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
           SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
         `, [launchId]);
         await assertMonotonicObservation(client, {
+          approvalId,
           launchId,
           observationCommonHead,
           observationCommonHeadHash,
@@ -393,6 +395,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
 async function assertMonotonicObservation(
   client: ProjectionTargetPostgresClientV1,
   input: Readonly<{
+    approvalId: `0x${string}`;
     launchId: `0x${string}`;
     observationCommonHead: string;
     observationCommonHeadHash: `0x${string}`;
@@ -405,8 +408,9 @@ async function assertMonotonicObservation(
     SELECT observation_common_head::text, observation_common_head_hash
       FROM programmable_website_projection_v1.generic_launch_reconciliations_v2
      WHERE launch_id = $1
+       AND approval_id = $2
      LIMIT 1
-  `, [input.launchId]);
+  `, [input.launchId, input.approvalId]);
   const row = result.rows[0];
   if (row === undefined) return;
   const storedHead = decimal(
@@ -774,6 +778,7 @@ async function assertGenericLaunchMaterializationStorageV2(
          AND trigger.tgname = 'projection_records_approval_v3_capacity_v1'
          AND trigger.tgenabled = 'O'
          AND trigger.tgtype = 7
+         AND trigger.tgqual IS NULL
          AND function_schema.nspname = 'programmable_website_projection_v1'
          AND function.proname = 'enforce_approval_v3_capacity_v1'
          AND pg_get_function_identity_arguments(function.oid) = ''
@@ -784,6 +789,7 @@ async function assertGenericLaunchMaterializationStorageV2(
       SELECT count(*)::text
         FROM pg_proc function
         JOIN pg_namespace function_schema ON function_schema.oid = function.pronamespace
+        JOIN pg_language function_language ON function_language.oid = function.prolang
         JOIN pg_class owner_table
           ON owner_table.relname = 'generic_launch_materializations_v2'
         JOIN pg_namespace owner_schema ON owner_schema.oid = owner_table.relnamespace
@@ -791,6 +797,7 @@ async function assertGenericLaunchMaterializationStorageV2(
          AND function.proname = 'enforce_approval_v3_capacity_v1'
          AND pg_get_function_identity_arguments(function.oid) = ''
          AND function.prorettype = 'trigger'::regtype
+         AND function_language.lanname = 'plpgsql'
          AND owner_schema.nspname = 'programmable_website_projection_v1'
          AND function.proowner = owner_table.relowner
          AND function.prosecdef = false
