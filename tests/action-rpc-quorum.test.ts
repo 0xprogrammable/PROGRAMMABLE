@@ -154,6 +154,20 @@ describe("action RPC provider identity", () => {
       "publicnode",
     ]);
   });
+
+  it("accepts the fixed independent Mainnet archive witnesses", () => {
+    const providers = createActionRpcQuorum({
+      chainId: 1,
+      primary: "https://rpc.mevblocker.io",
+      secondary: "https://mainnet.gateway.tenderly.co",
+    });
+
+    expectIndependent(providers);
+    expect(providers.map((provider) => provider.vendorGroup)).toEqual([
+      "mevblocker",
+      "tenderly",
+    ]);
+  });
 });
 
 describe("action-route RPC quorums", () => {

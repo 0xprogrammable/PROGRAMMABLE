@@ -18,7 +18,7 @@
         },
         {
           "path": "lib/onchain/historical-read-rpc.server.ts",
-          "sha256": "98ccb2a6471a4e38ef521b1fd7e41d55bb19b904a9c1d5e8d6948976a628d63e"
+          "sha256": "725bde4016b635c77ed996e8b6d574b589f3cccd5778a7ed63ea9afbde4e77b7"
         }
       ],
       "releaseRuntimes": [

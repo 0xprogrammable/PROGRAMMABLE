@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -7,9 +7,6 @@ import {
   historicalReadOnchainDeployment,
 } from "../lib/onchain/historical-read-rpc.server";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
-import { productionMainnetRpcEnvironment } from
-  "../lib/onchain/website-rpc-providers.server";
-
 const DRPC_RPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_RPC_URL =
   "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
@@ -32,49 +29,35 @@ const deployment: ReadyOnchainDeployment = {
   deploymentBlock: 25_000_000n,
 };
 
-function stubProductionPair() {
-  for (const [name, value] of Object.entries(
-    productionMainnetRpcEnvironment(DRPC_RPC_URL, QUICKNODE_RPC_URL),
-  )) vi.stubEnv(name, value);
-}
-
 describe("historical read RPC deployment", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("uses commitment-bound QuickNode plus the fixed archive witness", () => {
-    stubProductionPair();
-
+  it("uses two fixed independent archive witnesses", () => {
     expect(historicalReadOnchainDeployment(deployment)).toMatchObject({
-      rpcUrl: QUICKNODE_RPC_URL,
-      rpcUrlSecondary: "https://rpc.mevblocker.io/",
+      rpcUrl: "https://rpc.mevblocker.io/",
+      rpcUrlSecondary: "https://mainnet.gateway.tenderly.co/",
       rpcProviderIds: undefined,
     });
   });
 
-  it("does not retain the non-archive dRPC reader", () => {
-    stubProductionPair();
-
+  it("does not retain either private current-market reader", () => {
     const historical = historicalReadOnchainDeployment({
       ...deployment,
       rpcUrl: "https://eth.drpc.org",
       rpcUrlSecondary: null,
     });
 
-    expect(historical.rpcUrl).toBe(QUICKNODE_RPC_URL);
-    expect(historical.rpcUrlSecondary).toBe("https://rpc.mevblocker.io/");
+    expect(historical.rpcUrl).toBe("https://rpc.mevblocker.io/");
+    expect(historical.rpcUrlSecondary).toBe(
+      "https://mainnet.gateway.tenderly.co/",
+    );
     expect(historical.rpcUrl).not.toContain("drpc");
+    expect(historical.rpcUrl).not.toContain("quicknode");
   });
 
-  it("fails closed when the private QuickNode commitment is missing", () => {
-    stubProductionPair();
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
-      "",
-    );
-
-    expect(() => historicalReadOnchainDeployment(deployment))
+  it("fails closed outside Ethereum Mainnet", () => {
+    expect(() => historicalReadOnchainDeployment({
+      ...deployment,
+      chainId: 11_155_111,
+    }))
       .toThrow(HistoricalReadRpcBindingError);
   });
 });
