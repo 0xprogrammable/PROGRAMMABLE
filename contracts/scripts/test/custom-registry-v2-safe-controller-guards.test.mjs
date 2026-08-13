@@ -34,6 +34,7 @@ import {
 import {
   assertDefaultUserKeychainIsSoleSearchTarget,
   keychainLookupArguments,
+  normalizeKeychainPasswordOutput,
   verifySafeCustodyRoleReadbacks,
 } from "../custom-registry-v2-keychain-custody.mjs";
 
@@ -103,6 +104,58 @@ test("requires the default user Keychain to be the sole search target", () => {
       }),
     /not the sole search target/u,
   );
+});
+
+test("normalizes direct and canonical hex-wrapped macOS Keychain password output", () => {
+  const direct = Buffer.from(`0x${"11".repeat(32)}\n`, "ascii");
+  const normalizedDirect = normalizeKeychainPasswordOutput(direct);
+  assert.equal(normalizedDirect, direct);
+  assert.equal(normalizedDirect.toString("ascii"), `0x${"11".repeat(32)}\n`);
+
+  const wrapped = Buffer.from(`${direct.toString("hex")}\n`, "ascii");
+  const normalizedWrapped = normalizeKeychainPasswordOutput(wrapped);
+  assert.equal(
+    normalizedWrapped.toString("ascii"),
+    `0x${"11".repeat(32)}\n`,
+  );
+  assert.equal(wrapped.every((value) => value === 0), true);
+  normalizedDirect.fill(0);
+  normalizedWrapped.fill(0);
+});
+
+test("rejects and clears noncanonical Keychain password output", () => {
+  const extraNewline = Buffer.from(`0x${"22".repeat(32)}\n\n`, "ascii");
+  assert.throws(
+    () => normalizeKeychainPasswordOutput(extraNewline),
+    /password output is invalid/u,
+  );
+  assert.equal(extraNewline.every((value) => value === 0), true);
+
+  const malformedWrapped = Buffer.from(`${"00".repeat(67)}\n`, "ascii");
+  assert.throws(
+    () => normalizeKeychainPasswordOutput(malformedWrapped),
+    /password output is invalid/u,
+  );
+  assert.equal(malformedWrapped.every((value) => value === 0), true);
+
+  const highBitDirect = Buffer.from(`0x${"33".repeat(32)}\n`, "ascii");
+  highBitDirect[2] |= 0x80;
+  assert.throws(
+    () => normalizeKeychainPasswordOutput(highBitDirect),
+    /password output is invalid/u,
+  );
+  assert.equal(highBitDirect.every((value) => value === 0), true);
+
+  const canonicalWrapped = Buffer.from(
+    `${Buffer.from(`0x${"44".repeat(32)}\n`, "ascii").toString("hex")}\n`,
+    "ascii",
+  );
+  canonicalWrapped[0] |= 0x80;
+  assert.throws(
+    () => normalizeKeychainPasswordOutput(canonicalWrapped),
+    /password output is invalid/u,
+  );
+  assert.equal(canonicalWrapped.every((value) => value === 0), true);
 });
 
 test("predicts a stable owner-bound Safe CREATE2 address", () => {
