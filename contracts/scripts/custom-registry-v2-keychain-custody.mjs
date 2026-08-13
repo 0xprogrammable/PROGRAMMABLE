@@ -87,7 +87,7 @@ export function assertDefaultUserKeychainIsSoleSearchTarget({
 export function readDefaultUserKeychainItem({ service, account }) {
   assertDefaultUserKeychainIsSoleSearchTarget();
   try {
-    return execFileSync(
+    const output = execFileSync(
       "/usr/bin/security",
       keychainLookupArguments({ service, account }),
       {
@@ -96,9 +96,31 @@ export function readDefaultUserKeychainItem({ service, account }) {
         stdio: ["ignore", "pipe", "ignore"],
       },
     );
+    return normalizeKeychainPasswordOutput(output);
   } catch {
     throw new Error("a required production Keychain custody item is unavailable");
   }
+}
+
+export function normalizeKeychainPasswordOutput(output) {
+  if (!Buffer.isBuffer(output)) {
+    throw new Error("Keychain password output is invalid");
+  }
+  const direct = output.toString("ascii");
+  if (/^0x[0-9a-f]{64}\n$/u.test(direct)) {
+    return output;
+  }
+  if (/^[0-9a-f]{134}\n$/u.test(direct)) {
+    const decoded = Buffer.from(direct.slice(0, -1), "hex");
+    output.fill(0);
+    if (/^0x[0-9a-f]{64}\n$/u.test(decoded.toString("ascii"))) {
+      return decoded;
+    }
+    decoded.fill(0);
+    throw new Error("Keychain password output is invalid");
+  }
+  output.fill(0);
+  throw new Error("Keychain password output is invalid");
 }
 
 export function keychainLookupArguments({ service, account }) {
