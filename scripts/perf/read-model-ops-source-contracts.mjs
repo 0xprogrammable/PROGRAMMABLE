@@ -734,6 +734,23 @@ export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
   "observedTrades !== currentChart.swapCount",
 ]);
 
+export const STAGED_HEALTH_HANDOFF_SOURCE_GUARDS = Object.freeze([
+  'const HEALTH_PATH = "/api/ops/health";',
+  '!target.hostname.endsWith(".vercel.app")',
+  "fetchVercelDeployment({",
+  "idOrUrl: target.hostname",
+  "deployment.id === input.expectedDeploymentId",
+  "deploymentHost === target.hostname",
+  "deployment.projectId === input.projectId ||",
+  'deployment.readyState === "READY"',
+  "deploymentCommit(deployment) === input.expectedGitHead",
+  '"x-vercel-protection-bypass": automationBypassSecret',
+  'redirect: "error"',
+  'response.ok && response.body?.status === "healthy"',
+]);
+const STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 =
+  "b94c538699c23ad0099a177b3323a4bc055410d2c3ddd79b6bee44b84f51c0b1";
+
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
 }
@@ -1521,6 +1538,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const realBlockSlaOperator = source(
     "scripts/perf/read-model-real-block-sla-operator.mjs",
   ) ?? "";
+  const stagedHealth = source(
+    "scripts/perf/read-model-staged-health.mjs",
+  ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const postCurrentEvidenceStart = postPromotion.indexOf(
     "function exactCanonicalClassicNativeToken",
@@ -2146,6 +2166,58 @@ export function evaluateReadModelOperationsSourceContracts(
         "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
       ),
     "the indexed staged capture receives the protected deployment bypass only inside its exact step",
+  );
+  const stagedBindingReverification = deployWorkflow.indexOf(
+    "Reverify staged candidate binding",
+  );
+  const stagedHealthGate = deployWorkflow.indexOf(
+    "Gate exact staged operational health",
+  );
+  const stagedCandidateHandoff = deployWorkflow.indexOf(
+    "Record staged candidate handoff",
+  );
+  const stagedHealthGateBlock =
+    stagedHealthGate >= 0 && stagedCandidateHandoff > stagedHealthGate
+      ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff)
+      : "";
+  check(
+    "ops-staged-health-handoff-gate",
+    packageJson?.scripts?.["perf:read-model:staged-health"] ===
+      "node scripts/perf/read-model-staged-health.mjs" &&
+      sha256(stagedHealth) === STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 &&
+      includesEverySourceFragment(
+        stagedHealth,
+        STAGED_HEALTH_HANDOFF_SOURCE_GUARDS,
+      ) &&
+      stagedBindingReverification >= 0 &&
+      stagedHealthGate > stagedBindingReverification &&
+      stagedCandidateHandoff > stagedHealthGate &&
+      stagedHealthGateBlock.includes(
+        "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+      ) &&
+      stagedHealthGateBlock.includes(
+        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+      ) &&
+      stagedHealthGateBlock.includes(
+        "STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
+      ) &&
+      stagedHealthGateBlock.includes(
+        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+      ) &&
+      stagedHealthGateBlock.includes("EXPECTED_GIT_HEAD: ${{ github.sha }}") &&
+      stagedHealthGateBlock.includes(
+        "npm run perf:read-model:staged-health --",
+      ) &&
+      stagedHealthGateBlock.includes('--target-url "$STAGED_TARGET_URL"') &&
+      stagedHealthGateBlock.includes(
+        '--deployment-id "$STAGED_DEPLOYMENT_ID"',
+      ) &&
+      stagedHealthGateBlock.includes('--git-head "$EXPECTED_GIT_HEAD"') &&
+      !stagedHealthGateBlock.includes("\n        if:") &&
+      !stagedHealthGateBlock.includes(
+        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
+      ),
+    "the exact staged deployment must report healthy immediately before its stage-only handoff",
   );
   const exactVerifyProofGateStart = deployWorkflow.indexOf("  release-gate:");
   const exactVerifyProofGateEnd = deployWorkflow.indexOf("  deploy:");
