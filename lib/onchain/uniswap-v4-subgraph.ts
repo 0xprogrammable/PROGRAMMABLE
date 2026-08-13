@@ -164,8 +164,8 @@ type ParsedResponse = {
   deployment: string;
   indexedBlockNumber: string;
   indexedBlockHash: `0x${string}`;
-  indexedBlockTimestamp: string;
-  indexedBlockTime: string;
+  indexedBlockTimestamp?: string;
+  indexedBlockTime?: string;
   pools: ParsedPool[];
 };
 
@@ -218,6 +218,7 @@ export type OfficialV4LiquidityReferenceHeadV1 = Readonly<{
   chainId: 1;
   blockNumber: string;
   blockHash: `0x${string}`;
+  blockTimestamp?: string;
 }>;
 
 export type OfficialV4LiquiditySnapshotV1 =
@@ -457,7 +458,11 @@ function decimalToWad(value: unknown): string {
 function strictBlockTimestamp(value: unknown): {
   timestamp: string;
   time: string;
-} {
+} | undefined {
+  // graph-node declares `_Block_.timestamp: Int`, not `Int!`. A null value is
+  // preserved here and can only be replaced later by the independently
+  // quorum-verified RPC timestamp of this exact same block number and hash.
+  if (value === null) return undefined;
   let timestamp: bigint;
   try {
     timestamp = strictBlockNumber(
@@ -640,8 +645,12 @@ export function parseOfficialV4SubgraphResponse(
       value.data._meta.block.hash,
       "response-block-hash-schema",
     ),
-    indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
-    indexedBlockTime: indexedBlockTimestamp.time,
+    ...(indexedBlockTimestamp
+      ? {
+          indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
+          indexedBlockTime: indexedBlockTimestamp.time,
+        }
+      : {}),
     pools,
   };
 }
@@ -1014,7 +1023,12 @@ function canonicalReferenceHead(
     value.blockNumber.length > 78 ||
     BigInt(value.blockNumber) > 2_147_483_647n ||
     typeof value.blockHash !== "string" ||
-    !/^0x[0-9a-fA-F]{64}$/.test(value.blockHash)
+    !/^0x[0-9a-fA-F]{64}$/.test(value.blockHash) ||
+    (value.blockTimestamp !== undefined &&
+      (typeof value.blockTimestamp !== "string" ||
+        !/^(0|[1-9]\d*)$/.test(value.blockTimestamp) ||
+        value.blockTimestamp.length > 78 ||
+        BigInt(value.blockTimestamp) > 8_640_000_000_000n))
   ) {
     return undefined;
   }
@@ -1022,6 +1036,9 @@ function canonicalReferenceHead(
     chainId: 1,
     blockNumber: BigInt(value.blockNumber).toString(),
     blockHash: value.blockHash.toLowerCase() as `0x${string}`,
+    ...(value.blockTimestamp === undefined
+      ? {}
+      : { blockTimestamp: BigInt(value.blockTimestamp).toString() }),
   };
 }
 
@@ -1121,9 +1138,41 @@ function responseCoversExactly(
     [...returned].every((poolId) => requested.has(poolId));
 }
 
-function isCurrentIndexedTime(response: ParsedResponse, now: Date) {
+function effectiveIndexedTime(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+) {
+  if (response.indexedBlockTimestamp && response.indexedBlockTime) {
+    return {
+      timestamp: response.indexedBlockTimestamp,
+      time: response.indexedBlockTime,
+    };
+  }
+  if (
+    response.indexedBlockNumber !== referenceHead.blockNumber ||
+    response.indexedBlockHash !== referenceHead.blockHash ||
+    referenceHead.blockTimestamp === undefined
+  ) return undefined;
+  const milliseconds = Number(BigInt(referenceHead.blockTimestamp)) * 1_000;
+  const time = new Date(milliseconds);
+  if (!Number.isFinite(milliseconds) || Number.isNaN(time.getTime())) {
+    return undefined;
+  }
+  return {
+    timestamp: referenceHead.blockTimestamp,
+    time: time.toISOString(),
+  };
+}
+
+function isCurrentIndexedTime(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+  now: Date,
+) {
+  const indexedTime = effectiveIndexedTime(response, referenceHead);
+  if (!indexedTime) return false;
   const nowMs = now.getTime();
-  const indexedMs = Number(BigInt(response.indexedBlockTimestamp)) * 1_000;
+  const indexedMs = Number(BigInt(indexedTime.timestamp)) * 1_000;
   return (
     Number.isFinite(nowMs) &&
     Number.isFinite(indexedMs) &&
@@ -1155,6 +1204,8 @@ function liquidityEvidence(
   const quoteAddress = (
     pool.token0 === tokenAddress ? pool.token1 : pool.token0
   ) as `0x${string}`;
+  const indexedTime = effectiveIndexedTime(response, referenceHead);
+  if (!indexedTime) throw coverageFailure("response-freshness");
   return {
     source: OFFICIAL_V4_LIQUIDITY_EVIDENCE_SOURCE,
     identity: {
@@ -1184,8 +1235,8 @@ function liquidityEvidence(
       deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
       indexedBlockNumber: response.indexedBlockNumber,
       indexedBlockHash: response.indexedBlockHash,
-      indexedBlockTimestamp: response.indexedBlockTimestamp,
-      indexedBlockTime: response.indexedBlockTime,
+      indexedBlockTimestamp: indexedTime.timestamp,
+      indexedBlockTime: indexedTime.time,
       referenceHeadBlockNumber: referenceHead.blockNumber,
       referenceHeadBlockHash: referenceHead.blockHash,
       lagBlocks,
@@ -1307,7 +1358,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
     ) {
       throw coverageFailure(snapshotFailureCategory(response, requestedSnapshot));
     }
-    if (!isCurrentIndexedTime(response, now)) {
+    if (!isCurrentIndexedTime(response, referenceHead, now)) {
       throw coverageFailure("response-freshness");
     }
     return {
@@ -1388,7 +1439,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
     if (!responseCoversExactly(response, requestedPoolIds)) {
       throw coverageFailure("exact-pool-coverage");
     }
-    if (!isCurrentIndexedTime(response, now)) {
+    if (!isCurrentIndexedTime(response, referenceHead, now)) {
       throw coverageFailure("response-freshness");
     }
     liquiditySnapshot = {
@@ -1454,7 +1505,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
     if (!responseMatchesLiquiditySnapshot(response, liquiditySnapshot)) {
       throw coverageFailure(snapshotFailureCategory(response, liquiditySnapshot));
     }
-    if (!isCurrentIndexedTime(response, now)) {
+    if (!isCurrentIndexedTime(response, referenceHead, now)) {
       throw coverageFailure("response-freshness");
     }
     for (const pool of response.pools) {

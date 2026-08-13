@@ -68,7 +68,7 @@ function page(tokens = [canonicalToken()]): ExplorePage {
 
 function officialResponse(
   indexedBlockNumber: number | string = 25_629_999,
-  indexedBlockTimestamp: number | string = 1_786_576_740,
+  indexedBlockTimestamp: number | string | null = 1_786_576_740,
 ) {
   return {
     data: {
@@ -107,7 +107,7 @@ function officialResponse(
 }
 
 function exactOfficialResponse(
-  indexedBlockTimestamp: number | string = 1_786_576_740,
+  indexedBlockTimestamp: number | string | null = 1_786_576_740,
 ) {
   const response = officialResponse(
     REFERENCE_BLOCK_NUMBER,
@@ -818,6 +818,76 @@ describe("official Uniswap v4 subgraph adapter", () => {
       ),
     ).resolves.toEqual([]);
     expect(unsupportedFetcher).not.toHaveBeenCalled();
+  });
+
+  it("uses quorum RPC time only for the exact same Graph block when timestamp is null", async () => {
+    const exactNullTimestamp = exactOfficialResponse(null);
+    exactNullTimestamp.data.pools[0].totalValueLockedUSD = "10000";
+    const referenceHead = {
+      chainId: 1 as const,
+      blockNumber: REFERENCE_BLOCK_NUMBER,
+      blockHash: REFERENCE_BLOCK_HASH,
+      blockTimestamp: "1786576740",
+    };
+    const read = (response: unknown) =>
+      readOfficialV4LiquidityEvidenceSnapshot(
+        {
+          tokens: [canonicalToken()],
+          referenceHead,
+          now: new Date("2026-08-12T23:21:00.000Z"),
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher: async () => jsonResponse(response),
+        },
+      );
+
+    await expect(read(exactNullTimestamp)).resolves.toMatchObject({
+      evidence: [{
+        freshness: "current",
+        provenance: {
+          indexedBlockNumber: REFERENCE_BLOCK_NUMBER,
+          indexedBlockHash: REFERENCE_BLOCK_HASH,
+          indexedBlockTimestamp: "1786576740",
+          indexedBlockTime: "2026-08-12T23:19:00.000Z",
+          referenceHeadBlockNumber: REFERENCE_BLOCK_NUMBER,
+          referenceHeadBlockHash: REFERENCE_BLOCK_HASH,
+          lagBlocks: "0",
+        },
+      }],
+    });
+
+    const laggedNullTimestamp = officialResponse(25_629_999, null);
+    laggedNullTimestamp.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(laggedNullTimestamp)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+      category: "response-freshness",
+    });
+
+    const exactWithoutQuorumTimestamp = exactOfficialResponse(null);
+    exactWithoutQuorumTimestamp.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(
+      readOfficialV4LiquidityEvidenceSnapshot(
+        {
+          tokens: [canonicalToken()],
+          referenceHead: {
+            chainId: 1,
+            blockNumber: REFERENCE_BLOCK_NUMBER,
+            blockHash: REFERENCE_BLOCK_HASH,
+          },
+          now: new Date("2026-08-12T23:21:00.000Z"),
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher: async () => jsonResponse(exactWithoutQuorumTimestamp),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "coverage-incomplete",
+      category: "response-freshness",
+    });
   });
 
   it("emits fixed secret-free diagnostic categories for official liquidity failures", async () => {
