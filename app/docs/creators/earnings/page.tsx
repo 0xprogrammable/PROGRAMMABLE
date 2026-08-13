@@ -12,7 +12,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Creator earnings · Programmable",
   description:
-    "Compare creator rewards, public template shares and partner template shares.",
+    "Compare creator rewards and public template shares.",
   alternates: { canonical: "/docs/creators/earnings" },
 };
 
@@ -20,7 +20,6 @@ const sections = [
   { id: "paths", label: "Earning paths" },
   { id: "classic", label: "Classic rewards" },
   { id: "public-template", label: "Public templates" },
-  { id: "partner", label: "Partnership templates" },
   { id: "claims", label: "Accrual and claims" },
   { id: "limits", label: "Limits" },
 ] as const;
@@ -28,7 +27,6 @@ const sections = [
 export default function CreatorEarningsDocsPage() {
   const classic = PROGRAMMABLE_FEE_TABLE.classic;
   const publicTemplate = PROGRAMMABLE_FEE_TABLE.publicTemplate;
-  const partner = PROGRAMMABLE_FEE_TABLE.partnerTemplate;
 
   return (
     <DocsShell
@@ -67,12 +65,6 @@ export default function CreatorEarningsDocsPage() {
                   {formatBps(publicTemplate.creatorBps)}
                 </td>
               </tr>
-              <tr>
-                <th scope="row">Partner template</th>
-                <td data-label="Creator or partner share">
-                  {formatBps(partner.partnerBps)}
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -106,19 +98,6 @@ export default function CreatorEarningsDocsPage() {
           The current template repository does not accept public applications. A
           share accrues only when the matching template registry and payout path
           are active for the launch.
-        </p>
-      </section>
-
-      <section id="partner">
-        <h2>Partnership templates</h2>
-        <p>
-          A partner template uses 20 bps in total. The partner receives 15 bps
-          and Programmable receives 5 bps. The normal 10 bps Native Custom fee
-          is not added on top of that partner total.
-        </p>
-        <p>
-          No partner version is assumed active; the exact version and official
-          payout path must be activated before a share can accrue.
         </p>
       </section>
 

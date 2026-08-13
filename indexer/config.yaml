@@ -100,14 +100,6 @@ contracts:
     events:
       - event: "PayoutAddressUpdated(address indexed beneficiary, address indexed previousPayoutAddress, address indexed newPayoutAddress)"
       - event: "BeneficiaryFeesClaimed(address indexed beneficiary, address indexed payoutAddress, address indexed quoteAsset, uint256 amount, uint256 beneficiaryTotalClaimed, uint256 vaultTotalReceived)"
-  - name: CustomPartnerFactoryRegistryV1
-    events:
-      - event: "CustomPartnerFactoryAuthorizedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)"
-      - event: "CustomPartnerFactorySourceBoundV1(bytes32 indexed configurationHash, bytes32 indexed modelRepositoryId, bytes32 indexed modelSourceCommitId, bytes32 factorySourceRepositoryId, bytes32 factorySourceCommitId, bytes32 factoryRuntimeCodeHash, bytes32 launchRuntimeCodeSetHash, bytes32 permissionsHash, bytes32 feePolicyHash)"
-      - event: "CustomPartnerFactoryRevokedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 reasonCode, bytes32 evidenceHash)"
-  - name: CustomAtomicRegistrarV1
-    events:
-      - event: "AtomicCustomLaunchExecutedV1(bytes32 indexed launchId, address indexed primaryContract, bytes32 indexed salt, bytes32 creationCodeHash, bytes32 initializationResultHash)"
 chains:
   - id: 1
     start_block: 25624130

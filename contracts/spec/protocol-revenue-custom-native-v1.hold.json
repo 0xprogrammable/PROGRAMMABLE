@@ -59,8 +59,8 @@
       "registered and not quarantined at execution"
     ],
     "productionCustomRegistryV1": {
-      "address": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
-      "classification": "launch-provenance-only",
+      "address": null,
+      "classification": "retired-not-authoritative",
       "usableAsExecutableRevenueSourceRegistry": false
     }
   },

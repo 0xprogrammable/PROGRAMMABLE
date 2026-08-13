@@ -11,7 +11,7 @@ import {
 } from "../components/docs-public-policy";
 
 describe("Public documentation policy", () => {
-  it("keeps the four fee paths distinct", () => {
+  it("keeps active and planned fee paths distinct", () => {
     expect(PROGRAMMABLE_FEE_TABLE.classic).toMatchObject({
       programmableBps: 10,
       status: "Live",
@@ -25,12 +25,6 @@ describe("Public documentation policy", () => {
       creatorBps: 10,
       programmableBps: 10,
       status: "Planned",
-      totalBps: 20,
-    });
-    expect(PROGRAMMABLE_FEE_TABLE.partnerTemplate).toMatchObject({
-      partnerBps: 15,
-      programmableBps: 5,
-      status: "Preview",
       totalBps: 20,
     });
     expect(formatBps(10)).toBe("10 bps (0.10%)");
@@ -76,9 +70,6 @@ describe("Public documentation policy", () => {
     expect(PROGRAMMABLE_PRODUCT_STATES.publicTemplates).toMatchObject({
       availability: "Unavailable",
       lifecycle: "Planned",
-    });
-    expect(PROGRAMMABLE_PRODUCT_STATES.partnerTemplates).toMatchObject({
-      availability: "Unavailable",
     });
   });
 });

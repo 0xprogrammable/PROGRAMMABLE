@@ -1075,74 +1075,23 @@ describe("Website projection target", () => {
     });
   });
 
-  it("accepts only AEON 20 bps total with an approved-plan recipient and no extra 10 bps", async () => {
+  it("rejects a non-standard 20 bps partner-style fee policy", async () => {
     const pool = await pglitePool();
     const target = targetFor(pool);
-    const launched = customLaunchWriteWithV4Market("aeon-market-fee", "aeon");
+    const label = "partner-style-fee";
+    const invalid = rebuildCustomLaunchFeePolicy(
+      customLaunchWriteWithV4Market(label),
+      (policy) => ({
+        ...policy,
+        totalRatePpm: 2000,
+        totalRateBps: 20,
+        normalProgrammableTenBpsApplied: false,
+      }),
+    );
     expect((await target.handler.handle(writeRequest(
-      launched,
-      workloadTokenForWrite(launched, "aeon-market-fee"),
-    ))).status).toBe(201);
-    const stored = await target.store.findFinalizedCustomLaunchByProjectId({
-      projectId: launched.projectId,
-      signal: new AbortController().signal,
-    });
-    expect(stored?.feeObligation.policy).toMatchObject({
-      providerId: "aeon",
-      modelId: "aeon-agent-launch",
-      templateId: "aeon-approved-model",
-      semanticVersion: "1.0.0",
-      feeMode: "aeon-partner-custom",
-      marketPathId: "uniswap-v4-primary-secondary",
-      totalRateBps: 20,
-      normalProgrammableTenBpsApplied: false,
-      legs: [
-        { role: "provider", rateBps: 15 },
-        {
-          role: "programmable",
-          rateBps: 5,
-          recipient: {
-            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          },
-        },
-      ],
-    });
-
-    const invalidPolicies = [
-      (policy: Record<string, unknown>) => ({
-        ...policy,
-        normalProgrammableTenBpsApplied: true,
-      }),
-      (policy: Record<string, unknown>) => ({
-        ...policy,
-        legs: [
-          {
-            ...(policy.legs as Array<Record<string, unknown>>)[0],
-            ratePpm: 1400,
-            rateBps: 14,
-          },
-          {
-            ...(policy.legs as Array<Record<string, unknown>>)[1],
-            ratePpm: 600,
-            rateBps: 6,
-          },
-        ],
-      }),
-      (policy: Record<string, unknown>) => ({ ...policy, providerId: "aeon-alt" }),
-      (policy: Record<string, unknown>) => ({ ...policy, semanticVersion: "1" }),
-      (policy: Record<string, unknown>) => ({ ...policy, marketPathId: "unknown-market" }),
-    ];
-    for (const [index, mutation] of invalidPolicies.entries()) {
-      const label = `aeon-invalid-fee-${index}`;
-      const invalid = rebuildCustomLaunchFeePolicy(
-        customLaunchWriteWithV4Market(label, "aeon"),
-        mutation,
-      );
-      expect((await target.handler.handle(writeRequest(
-        invalid,
-        workloadTokenForWrite(invalid, label),
-      ))).status).toBe(400);
-    }
+      invalid,
+      workloadTokenForWrite(invalid, label),
+    ))).status).toBe(400);
   });
 
   it("rejects an arbitrary stored PoolId even when every transport hash is rebuilt", async () => {
@@ -1901,23 +1850,20 @@ function securityAttestationFixture(): ProjectionTargetSecurityAttestationRowV1 
   };
 }
 
-type CustomLaunchFeeFixtureMode = "no-qualifying-market" | "standard" | "aeon";
-
-const AEON_APPROVED_PLAN_RECIPIENT_FIXTURE =
-  "0x4444444444444444444444444444444444444444";
+type CustomLaunchFeeFixtureMode = "no-qualifying-market" | "standard";
 
 function customLaunchFeeFixture(
   label: string,
   mode: CustomLaunchFeeFixtureMode,
   marketPathId: string | null,
 ) {
-  const modelId = mode === "aeon" ? "aeon-agent-launch" : "custom-contract-graph-v2";
+  const modelId = "custom-contract-graph-v2";
   const feeAssessmentHash = digest(`${label}:fee-assessment`);
   const commonPolicy = {
     schemaVersion: "programmable.custom-launch-fee-policy.v1",
-    providerId: mode === "aeon" ? "aeon" : "programmable",
+    providerId: "programmable",
     modelId,
-    templateId: mode === "aeon" ? "aeon-approved-model" : "standard-custom",
+    templateId: "standard-custom",
     semanticVersion: "1.0.0",
   } as const;
   const programmableRecipient = {
@@ -1935,32 +1881,7 @@ function customLaunchFeeFixture(
         normalProgrammableTenBpsApplied: false as const,
         legs: [] as const,
       }
-    : mode === "aeon"
-      ? {
-          ...commonPolicy,
-          providerId: "aeon" as const,
-          feeMode: "aeon-partner-custom" as const,
-          marketPathId: marketPathId!,
-          totalRatePpm: 2000 as const,
-          totalRateBps: 20 as const,
-          chargeMode: "included-in-partner-total" as const,
-          normalProgrammableTenBpsApplied: false as const,
-          legs: [{
-            role: "provider" as const,
-            ratePpm: 1500 as const,
-            rateBps: 15 as const,
-            recipient: {
-              namespace: "eip155:1",
-              value: AEON_APPROVED_PLAN_RECIPIENT_FIXTURE,
-            },
-          }, {
-            role: "programmable" as const,
-            ratePpm: 500 as const,
-            rateBps: 5 as const,
-            recipient: programmableRecipient,
-          }] as const,
-        }
-      : {
+    : {
           ...commonPolicy,
           feeMode: "standard-programmable-custom" as const,
           marketPathId: marketPathId!,
@@ -2329,7 +2250,7 @@ function registryProjectionAuthenticator(
 
 function customLaunchWriteWithV4Market(
   label: string,
-  feeMode: "standard" | "aeon" = "standard",
+  feeMode: "standard" = "standard",
 ) {
   const base = customLaunchWrite(label);
   return rebuildCustomLaunchWrite(base, (record) => {

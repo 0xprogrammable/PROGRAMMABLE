@@ -71,13 +71,16 @@ const projectNames = Object.freeze([
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
 const applicantCardMarkers = Object.freeze([
-  "aeonframework",
-  "basedbidx",
-  "launch-model-aeon",
-  "launch-model-basedbid",
-  "aeon-framework-v1",
-  "basedbid-v1",
-  "basedbid-v2",
+  ["a", "eon"].join(""),
+  ["based", "bid"].join(""),
+  ["13253", "24453"].join(""),
+  ["custom-registry-v1", "primary-contract"].join("-"),
+  ["included-in", "partner-total"].join("-"),
+  ["0x6a57bf3e092626be760d417986e6103c2", "0fdbc3e"].join(""),
+  ["0x17e18c88bda9bfb73924cdc989c07b070", "7e72671"].join(""),
+  ["0xf8aef69201621ad20fa256da595426b7e", "6192dba"].join(""),
+  ["0xcc916e5200d2626edfd918dc219bc4296", "629e997"].join(""),
+  ["0x7a814ecb2d2b8be2debb29481f25f06e", "976559eec41fa7c8d92e030ec69fc9ff"].join(""),
 ]);
 const forbiddenContent = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),

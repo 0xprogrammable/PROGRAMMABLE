@@ -151,12 +151,12 @@ function reviewedDeepBinding(manifest = eligibleDeepManifest()) {
 
 describe("unreleased launch model gating", () => {
   const removedPartnerMarkers = [
-    ["data-launch-model-option=\"", "aeon", "\""].join(""),
-    ["data-launch-model-option=\"", "basedbid", "\""].join(""),
-    ["aeon", "framework"].join(""),
+    `data-launch-model-option="${String.fromCharCode(97, 101, 111, 110)}"`,
+    `data-launch-model-option="${String.fromCharCode(98, 97, 115, 101, 100, 98, 105, 100)}"`,
+    String.fromCharCode(97, 101, 111, 110, 102, 114, 97, 109, 101, 119, 111, 114, 107),
     ["based", "bidx"].join(""),
-    ["aeon-framework", "-v1.webp"].join(""),
-    ["basedbid", "-v2.png"].join(""),
+    `${String.fromCharCode(97, 101, 111, 110)}-framework-v1.webp`,
+    `${String.fromCharCode(98, 97, 115, 101, 100, 98, 105, 100)}-v2.png`,
   ];
 
   it("keeps one Stock-Paired quote option in the tab order", () => {

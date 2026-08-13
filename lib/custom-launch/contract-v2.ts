@@ -56,21 +56,6 @@ export type CustomLaunchFeePolicyV1 = Readonly<
  * reviewed launch fee policy has no qualifying market and therefore no
  * Programmable fee leg.
  */
-export type CustomLaunchManualClaimPolicyV1 = Readonly<{
-  readonly schemaVersion: "programmable.custom-manual-claim-policy.v1";
-  readonly discoveryMode: "custom-registry-v1-primary-contract";
-  readonly sourceRole: "primary-contract";
-  readonly asset: "0x0000000000000000000000000000000000000000";
-  readonly recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
-  readonly claimSelector: "0xb9d2fad0";
-  readonly accruedSelector: "0x3129853d";
-  readonly totalClaimedSelector: "0x4a383b32";
-  readonly recipientSelector: "0x424ff2a5";
-  readonly feeBpsSelector: "0x32c0314d";
-  readonly sourceInterfaceId: "0x808cb67a";
-  readonly expectedProgrammableFeeBps: 10;
-}>;
-
 export interface TrustedLaunchPermitSignerV2 {
   readonly keyId: string;
   readonly signerEpoch: string;
@@ -295,7 +280,7 @@ export interface LaunchDescriptorV2 {
       valueWei: string;
     }>;
     feePolicy: CustomLaunchFeePolicyV1;
-    manualClaimPolicy: CustomLaunchManualClaimPolicyV1 | null;
+    manualClaimPolicy: null;
   }>[];
   readonly defaultChoiceId: string;
 }

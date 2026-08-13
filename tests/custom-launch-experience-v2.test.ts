@@ -58,20 +58,6 @@ const APPLICATION_HANDLE = `github-${"a".repeat(64)}` as const;
 const GITHUB_PRINCIPAL_HASH = digest("f");
 const APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE =
   "0x1111111111111111111111111111111111111111";
-const manualClaimPolicy = {
-  schemaVersion: "programmable.custom-manual-claim-policy.v1",
-  discoveryMode: "custom-registry-v1-primary-contract",
-  sourceRole: "primary-contract",
-  asset: "0x0000000000000000000000000000000000000000",
-  recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-  claimSelector: "0xb9d2fad0",
-  accruedSelector: "0x3129853d",
-  totalClaimedSelector: "0x4a383b32",
-  recipientSelector: "0x424ff2a5",
-  feeBpsSelector: "0x32c0314d",
-  sourceInterfaceId: "0x808cb67a",
-  expectedProgrammableFeeBps: 10,
-} as const;
 
 function createPermitSignerFixture(keyId: string): Readonly<{
   privateKey: KeyObject;
@@ -145,7 +131,7 @@ function descriptor(): LaunchDescriptorV2 {
           },
         }],
       },
-      manualClaimPolicy,
+      manualClaimPolicy: null,
     }],
     defaultChoiceId: "canonical",
   };

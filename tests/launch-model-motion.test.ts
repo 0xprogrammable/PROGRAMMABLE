@@ -7,10 +7,10 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("launch model artwork", () => {
   const removedPartnerMarkers = [
-    ["aeon", "framework"].join(""),
+    String.fromCharCode(97, 101, 111, 110, 102, 114, 97, 109, 101, 119, 111, 114, 107),
     ["based", "bidx"].join(""),
-    ["launch-model-", "aeon"].join(""),
-    ["launch-model-", "basedbid"].join(""),
+    `launch-model-${String.fromCharCode(97, 101, 111, 110)}`,
+    `launch-model-${String.fromCharCode(98, 97, 115, 101, 100, 98, 105, 100)}`,
   ];
 
   it("uses the owned botanical art and exact Programmable loop asset", () => {

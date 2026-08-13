@@ -698,8 +698,10 @@ function validateLaunchRoute(value) {
     || !UINT256.test(value.transactionValuePolicy.valueWei)
     || BigInt(value.transactionValuePolicy.valueWei) >= (1n << 256n)
   ) throw new TypeError("Authenticated canary transaction value policy is invalid");
-  const feeMode = validateLaunchFeePolicy(value.feePolicy);
-  validateManualClaimPolicy(value.manualClaimPolicy, feeMode);
+  validateLaunchFeePolicy(value.feePolicy);
+  if (value.manualClaimPolicy !== null) {
+    throw new TypeError("Authenticated canary manual claim policy is retired");
+  }
 }
 
 function validateLaunchFeePolicy(value) {
@@ -772,36 +774,6 @@ function validateLaunchFeeLeg(value) {
     || !EVM_ADDRESS.test(value.recipient.value)
     || value.recipient.value === "0x0000000000000000000000000000000000000000"
   ) throw new TypeError("Authenticated canary launch fee leg is invalid");
-}
-
-function validateManualClaimPolicy(value, feeMode) {
-  if (feeMode === "no-qualifying-market") {
-    if (value !== null) {
-      throw new TypeError("Authenticated canary manual claim policy is invalid");
-    }
-    return;
-  }
-  assertRecord(value, "Authenticated canary manual claim policy");
-  assertExactKeys(value, [
-    "accruedSelector", "asset", "claimSelector", "discoveryMode",
-    "expectedProgrammableFeeBps", "feeBpsSelector", "recipient", "recipientSelector",
-    "schemaVersion", "sourceInterfaceId", "sourceRole", "totalClaimedSelector",
-  ]);
-  if (
-    value.schemaVersion !== "programmable.custom-manual-claim-policy.v1"
-    || value.discoveryMode !== "custom-registry-v1-primary-contract"
-    || value.sourceRole !== "primary-contract"
-    || value.asset !== "0x0000000000000000000000000000000000000000"
-    || value.recipient !== PROGRAMMABLE_FEE_RECIPIENT
-    || value.claimSelector !== "0xb9d2fad0"
-    || value.accruedSelector !== "0x3129853d"
-    || value.totalClaimedSelector !== "0x4a383b32"
-    || value.recipientSelector !== "0x424ff2a5"
-    || value.feeBpsSelector !== "0x32c0314d"
-    || value.sourceInterfaceId !== "0x808cb67a"
-    || value.expectedProgrammableFeeBps
-      !== (feeMode === "standard-programmable-custom" ? 10 : 5)
-  ) throw new TypeError("Authenticated canary manual claim policy is invalid");
 }
 
 function validateForeignApplicationDenial(value) {

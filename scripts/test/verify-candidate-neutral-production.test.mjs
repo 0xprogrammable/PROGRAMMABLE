@@ -70,9 +70,11 @@ test("rejects a candidate identity in the compiled production bundle", async () 
 });
 
 test("rejects applicant cards in source and emitted production bundles", async () => {
+  const applicant = ["a", "eon"].join("");
+  const secondApplicant = ["based", "bid"].join("");
   const sourceRoot = await fixture({
     "components/launch-console.tsx":
-      'export const card = "launch-model-aeon";\n',
+      `export const card = "launch-model-${applicant}";\n`,
   });
   const sourceResult = verify(sourceRoot);
   assert.equal(sourceResult.status, 1);
@@ -80,11 +82,28 @@ test("rejects applicant cards in source and emitted production bundles", async (
 
   const buildRoot = await fixture({
     ".next/static/chunks/launch.js":
-      'export const profile = "https://x.com/basedbidx";\n',
+      `export const profile = "https://x.com/${secondApplicant}x";\n`,
   });
   const buildResult = verify(buildRoot, "--include-build");
   assert.equal(buildResult.status, 1);
   assert.match(buildResult.stderr, /.next\/static\/chunks\/launch\.js/u);
+});
+
+test("rejects retired applicant fee and Registry V1 bindings", async () => {
+  const retiredMode = ["custom-registry-v1", "primary-contract"].join("-");
+  const oldRegistry = [
+    "0x17e18c88bda9bfb73924cdc989c07b070",
+    "7e72671",
+  ].join("");
+  for (const [path, source] of [
+    ["lib/custom-launch/route.ts", `export const mode = "${retiredMode}";\n`],
+    ["config/release.json", JSON.stringify({ registry: oldRegistry })],
+  ]) {
+    const root = await fixture({ [path]: source });
+    const result = verify(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, new RegExp(path.replaceAll("/", "\\/"), "u"));
+  }
 });
 
 test("rejects a candidate identity in contract source", async () => {
