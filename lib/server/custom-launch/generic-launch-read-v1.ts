@@ -1,5 +1,10 @@
 import "server-only";
 
+import {
+  createHash,
+  createPublicKey,
+  verify as verifySignature,
+} from "node:crypto";
 import descriptorSource from
   "@/config/generic-launch-foundation.prelaunch.v1.json";
 import {
@@ -18,10 +23,10 @@ import {
 } from "./generic-launch-contract-v1";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
+const BASE64URL_SIGNATURE = /^[A-Za-z0-9_-]{86}$/u;
 const CURSOR = /^[A-Za-z0-9_-]{1,1024}$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]{0,15})$/u;
-const AUTHENTICATOR_MINT = Symbol("generic-launch-read-authenticator-v1");
-const AUTHENTICATED_STORE_MINT = Symbol("authenticated-generic-launch-read-store-v1");
+const MAX_SIGNED_MESSAGE_BYTES = 2_097_152;
 
 export interface GenericLaunchReadModelContractV1 {
   readonly schemaVersion: "programmable.generic-launch-read-model-contract.v1";
@@ -37,175 +42,42 @@ export interface GenericLaunchReadPageV1 {
   readonly total: string;
 }
 
+export interface SignedGenericLaunchReadEnvelopeV1 {
+  readonly schemaVersion: "programmable.signed-generic-launch-read-envelope.v1";
+  readonly activationBindingHash: Sha256Digest;
+  readonly readModelBindingHash: Sha256Digest;
+  readonly requestBindingHash: Sha256Digest;
+  readonly payload: unknown;
+  readonly signatureBase64Url: string;
+}
+
 export interface GenericLaunchReadStoreV1 {
   readonly sourceLane: "generic.finalized-launch";
   readonly readModelContract: GenericLaunchReadModelContractV1;
   findFinalizedLaunches(input: Readonly<{
     limit: number;
     cursor?: string;
+    requestBindingHash: Sha256Digest;
     signal: AbortSignal;
-  }>): Promise<GenericLaunchReadPageV1>;
+  }>): Promise<SignedGenericLaunchReadEnvelopeV1>;
   findFinalizedLaunchByRecordHash(input: Readonly<{
     recordHash: Sha256Digest;
+    requestBindingHash: Sha256Digest;
     signal: AbortSignal;
-  }>): Promise<GenericLaunchRecordV1 | null>;
-}
-
-interface ReadAuthenticatorEntryV1 {
-  readonly verifierBindingHash: Sha256Digest;
-  readonly verifyCanonicalReadModel: (input: Readonly<{
-    activationBindingHash: Sha256Digest;
-    subjectSourceBindingHash: Sha256Digest;
-    executionResultSourceBindingHash: Sha256Digest;
-    readModelBindingHash: Sha256Digest;
-    verifierBindingHash: Sha256Digest;
-    canonicalReadModelContract: string;
-    signal: AbortSignal;
-  }>) => Promise<boolean>;
-}
-
-const AUTHENTICATORS = new WeakMap<
-  GenericLaunchReadStoreAuthenticatorV1,
-  Readonly<ReadAuthenticatorEntryV1>
->();
-const AUTHENTICATED_STORES = new WeakMap<
-  AuthenticatedGenericLaunchReadStoreV1,
-  Readonly<{
-    store: GenericLaunchReadStoreV1;
-    activationBindingHash: Sha256Digest;
-    verifierBindingHash: Sha256Digest;
-  }>
->();
-
-export class GenericLaunchReadStoreAuthenticatorV1 {
-  constructor(
-    mint: typeof AUTHENTICATOR_MINT,
-    entry: Readonly<ReadAuthenticatorEntryV1>,
-  ) {
-    if (mint !== AUTHENTICATOR_MINT) {
-      throw new TypeError("generic launch read authenticator mint is invalid");
-    }
-    AUTHENTICATORS.set(this, entry);
-    Object.freeze(this);
-  }
-}
-
-export function createGenericLaunchReadStoreAuthenticatorV1(
-  input: Readonly<ReadAuthenticatorEntryV1>,
-): GenericLaunchReadStoreAuthenticatorV1 {
-  if (!DIGEST.test(input.verifierBindingHash)
-    || typeof input.verifyCanonicalReadModel !== "function") {
-    throw new TypeError("generic launch read authenticator is invalid");
-  }
-  return new GenericLaunchReadStoreAuthenticatorV1(
-    AUTHENTICATOR_MINT,
-    Object.freeze({ ...input }),
-  );
-}
-
-export class AuthenticatedGenericLaunchReadStoreV1 {
-  constructor(
-    mint: typeof AUTHENTICATED_STORE_MINT,
-    entry: Readonly<{
-      store: GenericLaunchReadStoreV1;
-      activationBindingHash: Sha256Digest;
-      verifierBindingHash: Sha256Digest;
-    }>,
-  ) {
-    if (mint !== AUTHENTICATED_STORE_MINT) {
-      throw new TypeError("authenticated generic launch store mint is invalid");
-    }
-    AUTHENTICATED_STORES.set(this, entry);
-    Object.freeze(this);
-  }
-}
-
-export async function authenticateGenericLaunchReadStoreV1(
-  input: Readonly<{
-    descriptor: GenericLaunchFoundationDescriptorV1;
-    store: GenericLaunchReadStoreV1;
-    authenticator: GenericLaunchReadStoreAuthenticatorV1;
-    signal: AbortSignal;
-  }>,
-): Promise<AuthenticatedGenericLaunchReadStoreV1> {
-  input.signal.throwIfAborted();
-  const descriptor = parseGenericLaunchFoundationDescriptorV1(input.descriptor);
-  if (descriptor.activation !== true
-    || descriptor.activationBindingHash === null
-    || descriptor.subjectSourceBindingHash === null
-    || descriptor.executionResultSourceBindingHash === null
-    || descriptor.readModelBindingHash === null
-    || descriptor.readModelVerifierBindingHash === null) {
-    throw new TypeError("generic launch foundation is not active");
-  }
-  const authenticator = AUTHENTICATORS.get(input.authenticator);
-  if (authenticator === undefined
-    || authenticator.verifierBindingHash
-      !== descriptor.readModelVerifierBindingHash) {
-    throw new TypeError("generic launch read authenticator is not descriptor-bound");
-  }
-  assertStore(input.store);
-  const readModelContract = parseGenericLaunchReadModelContractV1(
-    input.store.readModelContract,
-  );
-  const boundStore: GenericLaunchReadStoreV1 = Object.freeze({
-    sourceLane: "generic.finalized-launch" as const,
-    readModelContract,
-    findFinalizedLaunches: input.store.findFinalizedLaunches.bind(input.store),
-    findFinalizedLaunchByRecordHash:
-      input.store.findFinalizedLaunchByRecordHash.bind(input.store),
-  });
-  const readModelBindingHash = canonicalSha256(
-    readModelContract.schemaVersion,
-    readModelContract,
-  );
-  if (readModelBindingHash !== descriptor.readModelBindingHash) {
-    throw new TypeError("generic launch read model contract is not descriptor-bound");
-  }
-  const verified = await authenticator.verifyCanonicalReadModel(Object.freeze({
-    activationBindingHash: descriptor.activationBindingHash,
-    subjectSourceBindingHash: descriptor.subjectSourceBindingHash,
-    executionResultSourceBindingHash:
-      descriptor.executionResultSourceBindingHash,
-    readModelBindingHash,
-    verifierBindingHash: authenticator.verifierBindingHash,
-    canonicalReadModelContract: canonicalizeJson(
-      readModelContract as unknown as JsonValue,
-    ),
-    signal: input.signal,
-  }));
-  input.signal.throwIfAborted();
-  if (verified !== true) {
-    throw new TypeError("generic launch read model authentication failed");
-  }
-  return new AuthenticatedGenericLaunchReadStoreV1(
-    AUTHENTICATED_STORE_MINT,
-    Object.freeze({
-      store: boundStore,
-      activationBindingHash: descriptor.activationBindingHash,
-      verifierBindingHash: authenticator.verifierBindingHash,
-    }),
-  );
+  }>): Promise<SignedGenericLaunchReadEnvelopeV1>;
 }
 
 export function createGenericLaunchReadHandlersV1(
   input: Readonly<{
     descriptor: GenericLaunchFoundationDescriptorV1;
-    authenticatedStore: AuthenticatedGenericLaunchReadStoreV1 | null;
+    store: GenericLaunchReadStoreV1 | null;
   }>,
 ) {
   const descriptor = parseGenericLaunchFoundationDescriptorV1(input.descriptor);
-  const authenticated = input.authenticatedStore === null
-    ? null
-    : AUTHENTICATED_STORES.get(input.authenticatedStore);
-  if (descriptor.activation === true) {
-    if (authenticated === undefined || authenticated === null
-      || authenticated.activationBindingHash !== descriptor.activationBindingHash
-      || authenticated.verifierBindingHash
-        !== descriptor.readModelVerifierBindingHash) {
-      throw new TypeError("active generic launch store capability is invalid");
-    }
-  } else if (input.authenticatedStore !== null) {
+  const readModel = descriptor.activation === true
+    ? prepareActiveReadModel(descriptor, input.store)
+    : null;
+  if (descriptor.activation === false && input.store !== null) {
     throw new TypeError("disabled generic launch foundation cannot bind a read store");
   }
 
@@ -215,17 +87,35 @@ export function createGenericLaunchReadHandlersV1(
       if (query === null) {
         return errorResponse(400, "invalid_generic_launch_feed_request");
       }
-      if (descriptor.activation === false || authenticated === null
-        || authenticated === undefined) {
+      if (descriptor.activation === false || readModel === null) {
         return errorResponse(503, "generic_launch_foundation_not_active");
       }
+      const requestBindingHash = canonicalSha256(
+        "programmable.generic-launch-feed-request.v1",
+        Object.freeze({
+          limit: query.limit,
+          cursor: query.cursor ?? null,
+        }),
+      );
       try {
-        const page = await authenticated.store.findFinalizedLaunches({
+        const envelope = await readModel.store.findFinalizedLaunches({
           limit: query.limit,
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+          requestBindingHash,
           signal: request.signal,
         });
-        const verified = assertPage(descriptor, page, query.limit);
+        const payload = verifySignedEnvelope(
+          descriptor,
+          readModel,
+          envelope,
+          requestBindingHash,
+        );
+        const verified = assertPage(
+          descriptor,
+          payload,
+          query.limit,
+          query.cursor ?? null,
+        );
         return jsonResponse(200, {
           schemaVersion: "programmable.generic-launch-feed.v1",
           records: verified.records,
@@ -242,19 +132,29 @@ export function createGenericLaunchReadHandlersV1(
         || !DIGEST.test(recordHash)) {
         return errorResponse(400, "invalid_generic_launch_detail_request");
       }
-      if (descriptor.activation === false || authenticated === null
-        || authenticated === undefined) {
+      if (descriptor.activation === false || readModel === null) {
         return errorResponse(503, "generic_launch_foundation_not_active");
       }
+      const requestBindingHash = canonicalSha256(
+        "programmable.generic-launch-detail-request.v1",
+        Object.freeze({ recordHash }),
+      );
       try {
-        const record = await authenticated.store.findFinalizedLaunchByRecordHash({
+        const envelope = await readModel.store.findFinalizedLaunchByRecordHash({
           recordHash: recordHash as Sha256Digest,
+          requestBindingHash,
           signal: request.signal,
         });
-        if (record === null) {
+        const payload = verifySignedEnvelope(
+          descriptor,
+          readModel,
+          envelope,
+          requestBindingHash,
+        );
+        if (payload === null) {
           return errorResponse(404, "generic_launch_not_found");
         }
-        const verified = assertDescriptorBoundRecord(descriptor, record);
+        const verified = assertDescriptorBoundRecord(descriptor, payload);
         if (verified.recordHash !== recordHash) {
           throw new TypeError("generic launch read-model key does not match record");
         }
@@ -274,7 +174,7 @@ export const PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1 =
 
 const prelaunchHandlers = createGenericLaunchReadHandlersV1({
   descriptor: PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1,
-  authenticatedStore: null,
+  store: null,
 });
 
 export function handleProductionGenericLaunchFeedV1(
@@ -288,6 +188,158 @@ export function handleProductionGenericLaunchDetailV1(
   recordHash: string,
 ): Promise<Response> {
   return prelaunchHandlers.detail(request, recordHash);
+}
+
+function prepareActiveReadModel(
+  descriptor: GenericLaunchFoundationDescriptorV1,
+  store: GenericLaunchReadStoreV1 | null,
+): Readonly<{
+  store: GenericLaunchReadStoreV1;
+  readModelBindingHash: Sha256Digest;
+  publicKey: ReturnType<typeof createPublicKey>;
+}> {
+  if (descriptor.activation !== true || descriptor.readModelBindingHash === null
+    || descriptor.readModelVerifier === null) {
+    throw new TypeError("active generic launch read model is invalid");
+  }
+  const capturedStore = captureReadStore(store);
+  const contract = parseGenericLaunchReadModelContractV1(
+    capturedStore.readModelContract,
+  );
+  const readModelBindingHash = canonicalSha256(contract.schemaVersion, contract);
+  if (readModelBindingHash !== descriptor.readModelBindingHash) {
+    throw new TypeError("generic launch read model contract is not descriptor-bound");
+  }
+  const spki = Buffer.from(
+    descriptor.readModelVerifier.publicKeySpkiBase64Url,
+    "base64url",
+  );
+  const publicKeySha256 = `sha256:${createHash("sha256").update(spki).digest("hex")}`;
+  if (publicKeySha256 !== descriptor.readModelVerifier.publicKeySha256) {
+    throw new TypeError("generic launch read model public key hash is invalid");
+  }
+  const publicKey = createPublicKey({ key: spki, format: "der", type: "spki" });
+  if (publicKey.asymmetricKeyType !== "ed25519") {
+    throw new TypeError("generic launch read model public key is not Ed25519");
+  }
+  return Object.freeze({
+    store: Object.freeze({
+      sourceLane: "generic.finalized-launch" as const,
+      readModelContract: contract,
+      findFinalizedLaunches: capturedStore.findFinalizedLaunches,
+      findFinalizedLaunchByRecordHash:
+        capturedStore.findFinalizedLaunchByRecordHash,
+    }),
+    readModelBindingHash,
+    publicKey,
+  });
+}
+
+function verifySignedEnvelope(
+  descriptor: GenericLaunchFoundationDescriptorV1,
+  readModel: Readonly<{
+    readModelBindingHash: Sha256Digest;
+    publicKey: ReturnType<typeof createPublicKey>;
+  }>,
+  raw: unknown,
+  requestBindingHash: Sha256Digest,
+): unknown {
+  if (descriptor.activation !== true || descriptor.activationBindingHash === null) {
+    throw new TypeError("generic launch foundation is not active");
+  }
+  const value = exactObject(raw, [
+    "activationBindingHash", "payload", "readModelBindingHash",
+    "requestBindingHash", "schemaVersion", "signatureBase64Url",
+  ], "signed generic launch read envelope");
+  if (value.schemaVersion !== "programmable.signed-generic-launch-read-envelope.v1"
+    || value.activationBindingHash !== descriptor.activationBindingHash
+    || value.readModelBindingHash !== readModel.readModelBindingHash
+    || value.requestBindingHash !== requestBindingHash
+    || typeof value.signatureBase64Url !== "string"
+    || !BASE64URL_SIGNATURE.test(value.signatureBase64Url)) {
+    throw new TypeError("signed generic launch read envelope is invalid");
+  }
+  const signed = Object.freeze({
+    schemaVersion: "programmable.generic-launch-read-signature-message.v1" as const,
+    activationBindingHash: descriptor.activationBindingHash,
+    readModelBindingHash: readModel.readModelBindingHash,
+    requestBindingHash,
+    payload: value.payload,
+  });
+  const canonicalMessage = canonicalizeJson(signed as unknown as JsonValue);
+  if (Buffer.byteLength(canonicalMessage, "utf8") > MAX_SIGNED_MESSAGE_BYTES) {
+    throw new TypeError("signed generic launch read envelope exceeds its bound");
+  }
+  const valid = verifySignature(
+    null,
+    Buffer.from(canonicalMessage, "utf8"),
+    readModel.publicKey,
+    Buffer.from(value.signatureBase64Url, "base64url"),
+  );
+  if (!valid) throw new TypeError("generic launch read signature is invalid");
+  return value.payload;
+}
+
+function captureReadStore(
+  raw: GenericLaunchReadStoreV1 | null,
+): GenericLaunchReadStoreV1 {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError("active generic launch read model is invalid");
+  }
+  const prototype = Object.getPrototypeOf(raw) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("active generic launch read model must be a plain object");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(raw);
+  const keys = Reflect.ownKeys(descriptors);
+  const expected = [
+    "findFinalizedLaunchByRecordHash",
+    "findFinalizedLaunches",
+    "readModelContract",
+    "sourceLane",
+  ];
+  if (keys.some((key) => typeof key !== "string")) {
+    throw new TypeError("active generic launch read model contains symbols");
+  }
+  const sortedKeys = (keys as string[]).sort();
+  if (sortedKeys.length !== expected.length
+    || sortedKeys.some((key, index) => key !== expected[index])) {
+    throw new TypeError("active generic launch read model has unexpected properties");
+  }
+  const captured: Record<string, unknown> = Object.create(null);
+  for (const key of sortedKeys) {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || descriptor.get !== undefined
+      || descriptor.set !== undefined || !descriptor.enumerable
+      || !("value" in descriptor)) {
+      throw new TypeError("active generic launch read model contains non-data properties");
+    }
+    captured[key] = descriptor.value;
+  }
+  if (captured.sourceLane !== "generic.finalized-launch"
+    || typeof captured.findFinalizedLaunches !== "function"
+    || typeof captured.findFinalizedLaunchByRecordHash !== "function") {
+    throw new TypeError("active generic launch read model is invalid");
+  }
+  const findFinalizedLaunches = captured.findFinalizedLaunches as
+    GenericLaunchReadStoreV1["findFinalizedLaunches"];
+  const findFinalizedLaunchByRecordHash =
+    captured.findFinalizedLaunchByRecordHash as
+      GenericLaunchReadStoreV1["findFinalizedLaunchByRecordHash"];
+  return Object.freeze({
+    sourceLane: "generic.finalized-launch" as const,
+    readModelContract:
+      captured.readModelContract as GenericLaunchReadModelContractV1,
+    findFinalizedLaunches: (
+      input: Parameters<GenericLaunchReadStoreV1["findFinalizedLaunches"]>[0],
+    ) => findFinalizedLaunches(input),
+    findFinalizedLaunchByRecordHash: (
+      input: Parameters<
+        GenericLaunchReadStoreV1["findFinalizedLaunchByRecordHash"]
+      >[0],
+    ) =>
+      findFinalizedLaunchByRecordHash(input),
+  });
 }
 
 function parseGenericLaunchReadModelContractV1(
@@ -323,6 +375,7 @@ function assertPage(
   descriptor: GenericLaunchFoundationDescriptorV1,
   raw: unknown,
   limit: number,
+  currentCursor: string | null,
 ): GenericLaunchReadPageV1 {
   const value = exactObject(raw, ["nextCursor", "records", "total"],
     "generic launch page");
@@ -337,8 +390,9 @@ function assertPage(
   const nextCursor = value.nextCursor === null
     ? null
     : cursor(value.nextCursor, "generic launch next cursor");
-  if (nextCursor !== null && records.length === 0) {
-    throw new TypeError("empty generic launch page cannot advance a cursor");
+  if (nextCursor !== null
+    && (records.length === 0 || nextCursor === currentCursor)) {
+    throw new TypeError("generic launch page cannot advance its cursor");
   }
   const total = decimal(value.total, "generic launch total");
   if (BigInt(total) < BigInt(records.length)) {
@@ -363,21 +417,12 @@ function assertDescriptorBoundRecord(
     || record.executionResult.executionResultSourceBindingHash
       !== descriptor.executionResultSourceBindingHash
     || record.readModelBindingHash !== descriptor.readModelBindingHash
-    || !descriptor.routeAdapterReleases.some(
-      ({ releaseHash }) => releaseHash === record.routeAdapterRelease.releaseHash,
-    )) {
+    || descriptor.routeAdapterReleases[
+      `${record.routeAdapterRelease.adapterId}@${record.routeAdapterRelease.releaseVersion}`
+    ]?.releaseHash !== record.routeAdapterRelease.releaseHash) {
     throw new TypeError("generic launch record is not descriptor-bound");
   }
   return record;
-}
-
-function assertStore(store: GenericLaunchReadStoreV1): void {
-  if (store === null || typeof store !== "object"
-    || store.sourceLane !== "generic.finalized-launch"
-    || typeof store.findFinalizedLaunches !== "function"
-    || typeof store.findFinalizedLaunchByRecordHash !== "function") {
-    throw new TypeError("generic launch read store is invalid");
-  }
 }
 
 function parseFeedRequest(

@@ -96,7 +96,7 @@
         "releaseVersion": {
           "type": "string",
           "maxLength": 128,
-          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
         },
         "sourceRepository": { "$ref": "#/$defs/githubRepository" },
         "sourceRevision": { "$ref": "#/$defs/gitRevision" },
@@ -233,6 +233,53 @@
         "queryContractBindingHash": { "$ref": "#/$defs/digest" }
       }
     },
+    "genericLaunchReadSignatureMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activationBindingHash",
+        "readModelBindingHash",
+        "requestBindingHash",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-read-signature-message.v1"
+        },
+        "activationBindingHash": { "$ref": "#/$defs/digest" },
+        "readModelBindingHash": { "$ref": "#/$defs/digest" },
+        "requestBindingHash": { "$ref": "#/$defs/digest" },
+        "payload": {}
+      }
+    },
+    "signedGenericLaunchReadEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activationBindingHash",
+        "readModelBindingHash",
+        "requestBindingHash",
+        "payload",
+        "signatureBase64Url"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.signed-generic-launch-read-envelope.v1"
+        },
+        "activationBindingHash": { "$ref": "#/$defs/digest" },
+        "readModelBindingHash": { "$ref": "#/$defs/digest" },
+        "requestBindingHash": { "$ref": "#/$defs/digest" },
+        "payload": {},
+        "signatureBase64Url": {
+          "type": "string",
+          "minLength": 86,
+          "maxLength": 86,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      }
+    },
     "genericLaunchFoundationDescriptor": {
       "type": "object",
       "additionalProperties": false,
@@ -244,6 +291,7 @@
         "subjectSourceBindingHash",
         "executionResultSourceBindingHash",
         "readModelBindingHash",
+        "readModelVerifier",
         "readModelVerifierBindingHash",
         "routeAdapterReleases",
         "api"
@@ -278,14 +326,41 @@
         "readModelVerifierBindingHash": {
           "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
         },
+        "readModelVerifier": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "algorithm",
+                "publicKeySpkiBase64Url",
+                "publicKeySha256"
+              ],
+              "properties": {
+                "algorithm": { "const": "ed25519" },
+                "publicKeySpkiBase64Url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[A-Za-z0-9_-]+$"
+                },
+                "publicKeySha256": { "$ref": "#/$defs/digest" }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
         "routeAdapterReleases": {
           "oneOf": [
             {
-              "type": "array",
-              "minItems": 1,
-              "maxItems": 256,
-              "uniqueItems": true,
-              "items": { "$ref": "#/$defs/routeAdapterRelease" }
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 256,
+              "propertyNames": {
+                "maxLength": 193,
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?@(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+              },
+              "additionalProperties": { "$ref": "#/$defs/routeAdapterRelease" }
             },
             { "type": "null" }
           ]
@@ -312,6 +387,7 @@
               "subjectSourceBindingHash": { "type": "null" },
               "executionResultSourceBindingHash": { "type": "null" },
               "readModelBindingHash": { "type": "null" },
+              "readModelVerifier": { "type": "null" },
               "readModelVerifierBindingHash": { "type": "null" },
               "routeAdapterReleases": { "type": "null" }
             }
@@ -327,13 +403,35 @@
               "subjectSourceBindingHash": { "$ref": "#/$defs/digest" },
               "executionResultSourceBindingHash": { "$ref": "#/$defs/digest" },
               "readModelBindingHash": { "$ref": "#/$defs/digest" },
+              "readModelVerifier": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "algorithm",
+                  "publicKeySpkiBase64Url",
+                  "publicKeySha256"
+                ],
+                "properties": {
+                  "algorithm": { "const": "ed25519" },
+                  "publicKeySpkiBase64Url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "publicKeySha256": { "$ref": "#/$defs/digest" }
+                }
+              },
               "readModelVerifierBindingHash": { "$ref": "#/$defs/digest" },
               "routeAdapterReleases": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 256,
-                "uniqueItems": true,
-                "items": { "$ref": "#/$defs/routeAdapterRelease" }
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 256,
+                "propertyNames": {
+                  "maxLength": 193,
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?@(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+                },
+                "additionalProperties": { "$ref": "#/$defs/routeAdapterRelease" }
               }
             }
           }

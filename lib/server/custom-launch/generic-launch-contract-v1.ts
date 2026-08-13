@@ -9,10 +9,11 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const NUMERIC_ID = /^[1-9][0-9]{0,31}$/u;
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const ADAPTER_ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
-const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
+const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const CAIP2 = /^[a-z0-9][a-z0-9-]{2,7}:[A-Za-z0-9][A-Za-z0-9-]{0,31}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]{0,77})$/u;
+const BASE64URL = /^[A-Za-z0-9_-]{1,1024}$/u;
 
 export const GENERIC_LAUNCH_FEED_PATH_V1 =
   "/api/custom-launch/generic/v1/launches" as const;
@@ -111,7 +112,13 @@ export interface GenericLaunchFoundationDescriptorV1 {
   readonly executionResultSourceBindingHash: Sha256Digest | null;
   readonly readModelBindingHash: Sha256Digest | null;
   readonly readModelVerifierBindingHash: Sha256Digest | null;
-  readonly routeAdapterReleases: readonly RouteAdapterReleaseV1[] | null;
+  readonly readModelVerifier: Readonly<{
+    algorithm: "ed25519";
+    publicKeySpkiBase64Url: string;
+    publicKeySha256: Sha256Digest;
+  }> | null;
+  readonly routeAdapterReleases:
+    Readonly<Record<string, RouteAdapterReleaseV1>> | null;
   readonly api: Readonly<{
     feedPath: typeof GENERIC_LAUNCH_FEED_PATH_V1;
     detailPathTemplate: typeof GENERIC_LAUNCH_DETAIL_PATH_TEMPLATE_V1;
@@ -424,7 +431,7 @@ export function parseGenericLaunchFoundationDescriptorV1(
   const value = exactObject(raw, [
     "activatedAt", "activation", "activationBindingHash", "api",
     "executionResultSourceBindingHash", "readModelBindingHash",
-    "readModelVerifierBindingHash",
+    "readModelVerifier", "readModelVerifierBindingHash",
     "routeAdapterReleases", "schemaVersion", "subjectSourceBindingHash",
   ], "generic launch foundation descriptor");
   literal(
@@ -455,6 +462,7 @@ export function parseGenericLaunchFoundationDescriptorV1(
       || value.executionResultSourceBindingHash !== null
       || value.readModelBindingHash !== null
       || value.readModelVerifierBindingHash !== null
+      || value.readModelVerifier !== null
       || value.routeAdapterReleases !== null
     ) {
       throw new TypeError("disabled generic launch foundation must retain null bindings");
@@ -468,40 +476,31 @@ export function parseGenericLaunchFoundationDescriptorV1(
       executionResultSourceBindingHash: null,
       readModelBindingHash: null,
       readModelVerifierBindingHash: null,
+      readModelVerifier: null,
       routeAdapterReleases: null,
       api,
     });
   }
-  if (!Array.isArray(value.routeAdapterReleases)
-    || value.routeAdapterReleases.length < 1
-    || value.routeAdapterReleases.length > 256) {
-    throw new TypeError("active generic launch adapter release set is invalid");
-  }
-  const routeAdapterReleases = Object.freeze(
-    value.routeAdapterReleases.map(parseRouteAdapterReleaseV1).sort(
-      (left, right) => left.releaseHash.localeCompare(right.releaseHash),
-    ),
+  const routeAdapterReleases = parseRouteAdapterReleaseMapV1(
+    value.routeAdapterReleases,
   );
-  const releaseHashes = routeAdapterReleases.map(({ releaseHash }) => releaseHash);
-  const releaseIdentities = routeAdapterReleases.map(
-    ({ adapterId, releaseVersion }) => `${adapterId}\0${releaseVersion}`,
-  );
-  if (new Set(releaseHashes).size !== releaseHashes.length
-    || new Set(releaseIdentities).size !== releaseIdentities.length) {
-    throw new TypeError("generic launch adapter release identities must be unique");
-  }
   const descriptor = createActiveGenericLaunchFoundationDescriptorV1({
     activatedAt: value.activatedAt as string,
     subjectSourceBindingHash: value.subjectSourceBindingHash as Sha256Digest,
     executionResultSourceBindingHash:
       value.executionResultSourceBindingHash as Sha256Digest,
     readModelBindingHash: value.readModelBindingHash as Sha256Digest,
-    readModelVerifierBindingHash:
-      value.readModelVerifierBindingHash as Sha256Digest,
+    readModelVerifier: value.readModelVerifier as Readonly<{
+      algorithm: "ed25519";
+      publicKeySpkiBase64Url: string;
+      publicKeySha256: Sha256Digest;
+    }>,
     routeAdapterReleases,
     api,
   });
-  if (descriptor.activationBindingHash !== value.activationBindingHash) {
+  if (descriptor.activationBindingHash !== value.activationBindingHash
+    || descriptor.readModelVerifierBindingHash
+      !== value.readModelVerifierBindingHash) {
     throw new TypeError("generic launch activation binding is invalid");
   }
   return descriptor;
@@ -513,35 +512,24 @@ export function createActiveGenericLaunchFoundationDescriptorV1(
     subjectSourceBindingHash: Sha256Digest;
     executionResultSourceBindingHash: Sha256Digest;
     readModelBindingHash: Sha256Digest;
-    readModelVerifierBindingHash: Sha256Digest;
-    routeAdapterReleases: readonly RouteAdapterReleaseV1[];
+    readModelVerifier: Readonly<{
+      algorithm: "ed25519";
+      publicKeySpkiBase64Url: string;
+      publicKeySha256: Sha256Digest;
+    }>;
+    routeAdapterReleases: Readonly<Record<string, RouteAdapterReleaseV1>>;
     api: Readonly<{
       feedPath: typeof GENERIC_LAUNCH_FEED_PATH_V1;
       detailPathTemplate: typeof GENERIC_LAUNCH_DETAIL_PATH_TEMPLATE_V1;
     }>;
   }>,
 ): GenericLaunchFoundationDescriptorV1 {
-  if (!Array.isArray(input.routeAdapterReleases)
-    || input.routeAdapterReleases.length < 1
-    || input.routeAdapterReleases.length > 256) {
-    throw new TypeError("active generic launch adapter release set is invalid");
-  }
-  const routeAdapterReleases = Object.freeze(
-    input.routeAdapterReleases.map(parseRouteAdapterReleaseV1).sort(
-      (left, right) => left.releaseHash.localeCompare(right.releaseHash),
-    ),
+  const routeAdapterReleases = parseRouteAdapterReleaseMapV1(
+    input.routeAdapterReleases,
   );
-  const routeAdapterReleaseHashes = routeAdapterReleases.map(
+  const routeAdapterReleaseHashes = Object.values(routeAdapterReleases).map(
     ({ releaseHash }) => releaseHash,
   );
-  const routeAdapterReleaseIdentities = routeAdapterReleases.map(
-    ({ adapterId, releaseVersion }) => `${adapterId}\0${releaseVersion}`,
-  );
-  if (new Set(routeAdapterReleaseHashes).size !== routeAdapterReleaseHashes.length
-    || new Set(routeAdapterReleaseIdentities).size
-      !== routeAdapterReleaseIdentities.length) {
-    throw new TypeError("generic launch adapter release identities must be unique");
-  }
   const apiValue = exactObject(input.api, ["detailPathTemplate", "feedPath"],
     "generic launch API paths");
   literal(apiValue.feedPath, GENERIC_LAUNCH_FEED_PATH_V1, "generic launch feed path");
@@ -567,9 +555,25 @@ export function createActiveGenericLaunchFoundationDescriptorV1(
     input.readModelBindingHash,
     "generic launch read model",
   );
-  const readModelVerifierBindingHash = digest(
-    input.readModelVerifierBindingHash,
-    "generic launch read model verifier",
+  const verifierValue = exactObject(input.readModelVerifier, [
+    "algorithm", "publicKeySha256", "publicKeySpkiBase64Url",
+  ], "generic launch read model verifier");
+  literal(verifierValue.algorithm, "ed25519", "read model verifier algorithm");
+  const readModelVerifier = Object.freeze({
+    algorithm: "ed25519" as const,
+    publicKeySpkiBase64Url: patternedString(
+      verifierValue.publicKeySpkiBase64Url,
+      BASE64URL,
+      "read model verifier public key",
+    ),
+    publicKeySha256: digest(
+      verifierValue.publicKeySha256,
+      "read model verifier public key hash",
+    ),
+  });
+  const readModelVerifierBindingHash = canonicalSha256(
+    "programmable.generic-launch-read-model-verifier.v1",
+    readModelVerifier,
   );
   const activationCore = Object.freeze({
     schemaVersion: "programmable.generic-launch-foundation-activation.v1" as const,
@@ -578,6 +582,7 @@ export function createActiveGenericLaunchFoundationDescriptorV1(
     executionResultSourceBindingHash,
     readModelBindingHash,
     readModelVerifierBindingHash,
+    readModelVerifier,
     routeAdapterReleaseHashes: Object.freeze(routeAdapterReleaseHashes),
     api,
   });
@@ -593,9 +598,50 @@ export function createActiveGenericLaunchFoundationDescriptorV1(
     executionResultSourceBindingHash,
     readModelBindingHash,
     readModelVerifierBindingHash,
+    readModelVerifier,
     routeAdapterReleases,
     api,
   });
+}
+
+function parseRouteAdapterReleaseMapV1(
+  raw: unknown,
+): Readonly<Record<string, RouteAdapterReleaseV1>> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError("active generic launch adapter release set is invalid");
+  }
+  const prototype = Object.getPrototypeOf(raw) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("active generic launch adapter release set is invalid");
+  }
+  const ownKeys = Reflect.ownKeys(raw);
+  if (ownKeys.some((key) => typeof key !== "string")
+    || ownKeys.length < 1 || ownKeys.length > 256) {
+    throw new TypeError("active generic launch adapter release set is invalid");
+  }
+  const result: Record<string, RouteAdapterReleaseV1> = Object.create(null);
+  const releaseHashes = new Set<Sha256Digest>();
+  for (const identity of (ownKeys as string[]).sort()) {
+    const descriptor = Object.getOwnPropertyDescriptor(raw, identity);
+    if (descriptor === undefined || descriptor.get !== undefined
+      || descriptor.set !== undefined || !descriptor.enumerable
+      || !("value" in descriptor)) {
+      throw new TypeError("active generic launch adapter release set is invalid");
+    }
+    const release = parseRouteAdapterReleaseV1(descriptor.value);
+    if (identity !== `${release.adapterId}@${release.releaseVersion}`
+      || releaseHashes.has(release.releaseHash)) {
+      throw new TypeError("generic launch adapter release identity is invalid");
+    }
+    releaseHashes.add(release.releaseHash);
+    Object.defineProperty(result, identity, {
+      value: release,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return Object.freeze(result);
 }
 
 function githubRepository(raw: unknown): ApplicantLaunchSubjectV1["sourceRepository"] {

@@ -1,3 +1,9 @@
+import {
+  createHash,
+  generateKeyPairSync,
+  sign,
+  type KeyObject,
+} from "node:crypto";
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import { describe, expect, it, vi } from "vitest";
@@ -9,6 +15,10 @@ import descriptorSource from
 
 vi.mock("server-only", () => ({}));
 
+import {
+  canonicalizeJson,
+  type JsonValue,
+} from "../lib/server/projection-target/canonical-json";
 import { canonicalSha256 } from
   "../lib/server/projection-target/hashing";
 import {
@@ -22,24 +32,23 @@ import {
   parseGenericLaunchFoundationDescriptorV1,
   parseGenericLaunchRecordV1,
   parseRouteAdapterReleaseV1,
+  type GenericLaunchFoundationDescriptorV1,
   type GenericLaunchRecordV1,
   type RouteAdapterReleaseV1,
   type Sha256Digest,
 } from "../lib/server/custom-launch/generic-launch-contract-v1";
 import {
-  authenticateGenericLaunchReadStoreV1,
   createGenericLaunchReadHandlersV1,
-  createGenericLaunchReadStoreAuthenticatorV1,
   PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1,
   type GenericLaunchReadModelContractV1,
   type GenericLaunchReadStoreV1,
+  type SignedGenericLaunchReadEnvelopeV1,
 } from "../lib/server/custom-launch/generic-launch-read-v1";
 
 const digest = (character: string): Sha256Digest =>
   `sha256:${character.repeat(64)}` as Sha256Digest;
 const SUBJECT_SOURCE = digest("d");
 const EXECUTION_SOURCE = digest("e");
-const VERIFIER_BINDING = digest("f");
 
 const READ_MODEL_CONTRACT = Object.freeze({
   schemaVersion: "programmable.generic-launch-read-model-contract.v1" as const,
@@ -53,7 +62,23 @@ const READ_MODEL_BINDING = canonicalSha256(
   READ_MODEL_CONTRACT,
 );
 
-function subject(subjectSourceBindingHash = SUBJECT_SOURCE) {
+const signingKeys = generateKeyPairSync("ed25519");
+const signingPublicKeySpki = signingKeys.publicKey.export({
+  format: "der",
+  type: "spki",
+}) as Buffer;
+const READ_MODEL_VERIFIER = Object.freeze({
+  algorithm: "ed25519" as const,
+  publicKeySpkiBase64Url: signingPublicKeySpki.toString("base64url"),
+  publicKeySha256: (
+    `sha256:${createHash("sha256").update(signingPublicKeySpki).digest("hex")}`
+  ) as Sha256Digest,
+});
+
+function subject(
+  subjectSourceBindingHash = SUBJECT_SOURCE,
+  sourceByte = "b",
+) {
   return createApplicantLaunchSubjectV1({
     subjectSourceBindingHash,
     sourceRepository: { forge: "github", repositoryId: "1000000001" },
@@ -63,7 +88,7 @@ function subject(subjectSourceBindingHash = SUBJECT_SOURCE) {
       approvalBindingHash: digest("a"),
     },
     sourceRevision: {
-      commitObjectId: "b".repeat(40),
+      commitObjectId: sourceByte.repeat(40),
       treeObjectId: "c".repeat(40),
     },
     principalBindingHash: digest("4"),
@@ -137,6 +162,13 @@ function launchRecord(
   });
 }
 
+function releaseMap(releases: readonly RouteAdapterReleaseV1[]) {
+  return Object.fromEntries(releases.map((release) => [
+    `${release.adapterId}@${release.releaseVersion}`,
+    release,
+  ]));
+}
+
 function activeDescriptor(releases: readonly RouteAdapterReleaseV1[]) {
   return createActiveGenericLaunchFoundationDescriptorV1(
     activeDescriptorInput(releases),
@@ -149,9 +181,8 @@ function activeDescriptorInput(releases: readonly RouteAdapterReleaseV1[]) {
     subjectSourceBindingHash: SUBJECT_SOURCE,
     executionResultSourceBindingHash: EXECUTION_SOURCE,
     readModelBindingHash: READ_MODEL_BINDING,
-    readModelVerifierBindingHash: VERIFIER_BINDING,
-    routeAdapterReleases: [...releases].sort((left, right) =>
-      left.releaseHash.localeCompare(right.releaseHash)),
+    readModelVerifier: READ_MODEL_VERIFIER,
+    routeAdapterReleases: releaseMap(releases),
     api: {
       feedPath: "/api/custom-launch/generic/v1/launches",
       detailPathTemplate:
@@ -160,62 +191,78 @@ function activeDescriptorInput(releases: readonly RouteAdapterReleaseV1[]) {
   } as const;
 }
 
+function signedEnvelope(
+  descriptor: GenericLaunchFoundationDescriptorV1,
+  requestBindingHash: Sha256Digest,
+  payload: unknown,
+  privateKey: KeyObject = signingKeys.privateKey,
+): SignedGenericLaunchReadEnvelopeV1 {
+  if (descriptor.activationBindingHash === null
+    || descriptor.readModelBindingHash === null) {
+    throw new TypeError("test descriptor must be active");
+  }
+  const message = Object.freeze({
+    schemaVersion: "programmable.generic-launch-read-signature-message.v1" as const,
+    activationBindingHash: descriptor.activationBindingHash,
+    readModelBindingHash: descriptor.readModelBindingHash,
+    requestBindingHash,
+    payload,
+  });
+  return Object.freeze({
+    schemaVersion: "programmable.signed-generic-launch-read-envelope.v1" as const,
+    activationBindingHash: descriptor.activationBindingHash,
+    readModelBindingHash: descriptor.readModelBindingHash,
+    requestBindingHash,
+    payload,
+    signatureBase64Url: sign(
+      null,
+      Buffer.from(canonicalizeJson(message as unknown as JsonValue), "utf8"),
+      privateKey,
+    ).toString("base64url"),
+  });
+}
+
 function store(
+  descriptor: GenericLaunchFoundationDescriptorV1,
   records: readonly GenericLaunchRecordV1[],
   readModelContract: GenericLaunchReadModelContractV1 = READ_MODEL_CONTRACT,
+  privateKey: KeyObject = signingKeys.privateKey,
 ): GenericLaunchReadStoreV1 {
   return {
     sourceLane: "generic.finalized-launch",
     readModelContract,
-    async findFinalizedLaunches({ limit, cursor }) {
+    async findFinalizedLaunches({ limit, cursor, requestBindingHash }) {
       const offset = cursor === undefined ? 0 : Number(cursor.slice(1));
       const page = records.slice(offset, offset + limit);
       const nextOffset = offset + page.length;
-      return {
+      return signedEnvelope(descriptor, requestBindingHash, {
         records: page,
         nextCursor: nextOffset < records.length ? `c${nextOffset}` : null,
         total: String(records.length),
-      };
+      }, privateKey);
     },
-    async findFinalizedLaunchByRecordHash({ recordHash }) {
-      return records.find((record) => record.recordHash === recordHash) ?? null;
+    async findFinalizedLaunchByRecordHash({
+      recordHash,
+      requestBindingHash,
+    }) {
+      return signedEnvelope(
+        descriptor,
+        requestBindingHash,
+        records.find((record) => record.recordHash === recordHash) ?? null,
+        privateKey,
+      );
     },
   };
 }
 
-async function authenticatedStore(
-  descriptor: ReturnType<typeof activeDescriptor>,
-  readStore: GenericLaunchReadStoreV1,
-) {
-  const authenticator = createGenericLaunchReadStoreAuthenticatorV1({
-    verifierBindingHash: VERIFIER_BINDING,
-    async verifyCanonicalReadModel(evidence) {
-      return evidence.activationBindingHash === descriptor.activationBindingHash
-        && evidence.subjectSourceBindingHash === SUBJECT_SOURCE
-        && evidence.executionResultSourceBindingHash === EXECUTION_SOURCE
-        && evidence.readModelBindingHash === READ_MODEL_BINDING
-        && evidence.verifierBindingHash === VERIFIER_BINDING
-        && evidence.canonicalReadModelContract.includes(
-          "programmable.generic-launch-read-model-contract.v1",
-        );
-    },
-  });
-  return authenticateGenericLaunchReadStoreV1({
-    descriptor,
-    store: readStore,
-    authenticator,
-    signal: new AbortController().signal,
-  });
-}
-
-function request(path: string): Request {
+function request(path: string, accept = "application/json"): Request {
   return new Request(`https://programmable.family${path}`, {
-    headers: { accept: "application/json" },
+    headers: { accept },
   });
 }
 
 describe("generic launch V1 canonical contracts", () => {
-  it("content-addresses Applicant, adapter, execution and public record bytes", () => {
+  it("content-addresses applicant, adapter, execution and public record bytes", () => {
     const launchSubject = subject();
     const release = adapter();
     const result = executionResult(launchSubject, release);
@@ -244,7 +291,7 @@ describe("generic launch V1 canonical contracts", () => {
     })).toThrow(/record hash/u);
   });
 
-  it("rejects cross-subject, cross-adapter, failed and non-final records", () => {
+  it("rejects cross-bindings, failed results, non-finality and invalid versions", () => {
     const launchSubject = subject();
     const release = adapter();
     const result = executionResult(launchSubject, release);
@@ -267,32 +314,32 @@ describe("generic launch V1 canonical contracts", () => {
       executionResult: failedResult,
       readModelBindingHash: READ_MODEL_BINDING,
       publicProjectionHash: digest("7"),
-    })).toThrow();
+    })).toThrow(/bindings are inconsistent/u);
     expect(() => createCandidateExecutionResultV1({
       ...result,
       finality: { ...result.finality, observedConfirmations: 1 },
     })).toThrow(/not final/u);
+    for (const version of ["1.0.0-..", "1.0.0-01", "01.0.0", "1.0.0-"]) {
+      expect(() => adapter("adapter-a", "e", version)).toThrow(/version/u);
+    }
+    expect(adapter("adapter-a", "e", "1.0.0-01a").releaseVersion)
+      .toBe("1.0.0-01a");
   });
 
-  it("binds an N-valued adapter set without release identity equivocation", () => {
-    const releases = [adapter("adapter-a", "e"), adapter("adapter-b", "0")];
-    const sorted = [...releases].sort((left, right) =>
-      left.releaseHash.localeCompare(right.releaseHash));
+  it("binds an N-valued adapter map without release identity equivocation", () => {
+    const releases = [adapter("adapter-b", "0"), adapter("adapter-a", "e")];
     const descriptor = activeDescriptor(releases);
     expect(parseGenericLaunchFoundationDescriptorV1(descriptor)).toEqual(descriptor);
-    expect(descriptor.routeAdapterReleases?.map(({ releaseHash }) => releaseHash))
-      .toEqual(sorted.map(({ releaseHash }) => releaseHash));
-    expect(createActiveGenericLaunchFoundationDescriptorV1({
-      ...activeDescriptorInput(releases),
-      routeAdapterReleases: [...sorted].reverse(),
-    }).routeAdapterReleases).toEqual(sorted);
-
-    const sameIdentity = adapter("adapter-a", "0");
+    expect(Object.keys(descriptor.routeAdapterReleases ?? {})).toEqual([
+      "adapter-a@1.0.0",
+      "adapter-b@1.0.0",
+    ]);
     expect(() => createActiveGenericLaunchFoundationDescriptorV1({
       ...activeDescriptorInput(releases),
-      routeAdapterReleases: [adapter(), sameIdentity].sort((left, right) =>
-        left.releaseHash.localeCompare(right.releaseHash)),
-    })).toThrow(/identities must be unique/u);
+      routeAdapterReleases: {
+        "adapter-a@1.0.0": adapter("adapter-b", "0"),
+      },
+    })).toThrow(/identity/u);
   });
 
   it("derives activation from every source, verifier, adapter and API binding", () => {
@@ -303,6 +350,12 @@ describe("generic launch V1 canonical contracts", () => {
       { readModelBindingHash: digest("0") },
       { readModelVerifierBindingHash: digest("0") },
       { activatedAt: "2026-08-13T00:00:01.000Z" },
+      {
+        readModelVerifier: {
+          ...descriptor.readModelVerifier,
+          publicKeySha256: digest("0"),
+        },
+      },
     ]) {
       expect(() => parseGenericLaunchFoundationDescriptorV1({
         ...descriptor,
@@ -313,7 +366,7 @@ describe("generic launch V1 canonical contracts", () => {
 });
 
 describe("generic launch V1 schema and dark API", () => {
-  it("keeps schema/runtime parity for the checked-in descriptor and contracts", () => {
+  it("keeps schema/runtime parity for checked-in and active contracts", () => {
     expect(PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1).toEqual(
       descriptorSource,
     );
@@ -323,6 +376,7 @@ describe("generic launch V1 schema and dark API", () => {
       subjectSourceBindingHash: null,
       executionResultSourceBindingHash: null,
       readModelBindingHash: null,
+      readModelVerifier: null,
       readModelVerifierBindingHash: null,
       routeAdapterReleases: null,
     });
@@ -330,11 +384,18 @@ describe("generic launch V1 schema and dark API", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     addFormats(ajv);
     const validate = ajv.compile(descriptorSchema);
+    const release = adapter();
+    const descriptor = activeDescriptor([release]);
     expect(validate(descriptorSource), JSON.stringify(validate.errors)).toBe(true);
+    expect(validate(descriptor), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ ...descriptorSource, routeAdapterReleases: [] })).toBe(false);
+    expect(validate({ ...descriptor, routeAdapterReleases: [release] })).toBe(false);
+    expect(validate({
+      ...descriptor,
+      activatedAt: "2026-08-13T00:00:00Z",
+    })).toBe(false);
 
     const launchSubject = subject();
-    const release = adapter();
     const result = executionResult(launchSubject, release);
     const record = launchRecord(launchSubject, release);
     for (const [definition, value] of [
@@ -349,21 +410,30 @@ describe("generic launch V1 schema and dark API", () => {
       });
       expect(component(value), JSON.stringify(component.errors)).toBe(true);
     }
-
-    expect(validate({
-      ...activeDescriptor([release]),
-      activatedAt: "2026-08-13T00:00:00Z",
-    })).toBe(false);
-    expect(validate({
-      ...activeDescriptor([release]),
-      routeAdapterReleases: [release, release],
-    })).toBe(false);
+    const releaseComponent = ajv.compile({
+      $ref: `${descriptorSchema.$id}#/$defs/routeAdapterRelease`,
+    });
+    for (const version of ["1.0.0-..", "1.0.0-01", "01.0.0", "1.0.0-"]) {
+      expect(releaseComponent({ ...release, releaseVersion: version })).toBe(false);
+    }
+    expect(releaseComponent({
+      ...release,
+      releaseVersion: "1.0.0-01a",
+    })).toBe(true);
+    const envelopeComponent = ajv.compile({
+      $ref: `${descriptorSchema.$id}#/$defs/signedGenericLaunchReadEnvelope`,
+    });
+    expect(envelopeComponent(signedEnvelope(
+      descriptor,
+      digest("0"),
+      { records: [], nextCursor: null, total: "0" },
+    )), JSON.stringify(envelopeComponent.errors)).toBe(true);
   });
 
-  it("returns fail-closed responses before an authenticated store can be bound", async () => {
+  it("returns canonical fail-closed responses while activation is absent", async () => {
     const handlers = createGenericLaunchReadHandlersV1({
       descriptor: PRELAUNCH_GENERIC_LAUNCH_FOUNDATION_DESCRIPTOR_V1,
-      authenticatedStore: null,
+      store: null,
     });
     const feed = await handlers.feed(request(
       "/api/custom-launch/generic/v1/launches",
@@ -372,156 +442,223 @@ describe("generic launch V1 schema and dark API", () => {
       request(`/api/custom-launch/generic/v1/launches/${digest("1")}`),
       digest("1"),
     );
+    const invalid = await handlers.feed(request(
+      "/api/custom-launch/generic/v1/launches",
+      "*/*",
+    ));
     expect(feed.status).toBe(503);
     expect(detail.status).toBe(503);
+    expect(invalid.status).toBe(400);
+    expect(feed.headers.get("cache-control")).toBe("no-store");
+    expect(feed.headers.get("x-content-type-options")).toBe("nosniff");
     await expect(feed.json()).resolves.toMatchObject({
       code: "generic_launch_foundation_not_active",
     });
   });
+});
 
-  it("authenticates the exact read-model contract and rejects substitution", async () => {
-    const descriptor = activeDescriptor([adapter()]);
-    const readStore = store([launchRecord()]);
-    await expect(authenticatedStore(descriptor, readStore)).resolves.toBeDefined();
-
-    const substituted = store([launchRecord()], {
-      ...READ_MODEL_CONTRACT,
-      persistenceBindingHash: digest("0"),
-    });
-    await expect(authenticatedStore(descriptor, substituted)).rejects.toThrow(
-      /not descriptor-bound/u,
-    );
-
-    const rejectingAuthenticator = createGenericLaunchReadStoreAuthenticatorV1({
-      verifierBindingHash: VERIFIER_BINDING,
-      async verifyCanonicalReadModel() {
-        return false;
-      },
-    });
-    await expect(authenticateGenericLaunchReadStoreV1({
-      descriptor,
-      store: readStore,
-      authenticator: rejectingAuthenticator,
-      signal: new AbortController().signal,
-    })).rejects.toThrow(/authentication failed/u);
-
-    const mutableStore = store([launchRecord()]);
-    const capability = await authenticatedStore(descriptor, mutableStore);
-    mutableStore.findFinalizedLaunches = async () => ({
-      records: [], nextCursor: null, total: "0",
-    });
-    const handlers = createGenericLaunchReadHandlersV1({
-      descriptor,
-      authenticatedStore: capability,
-    });
-    const response = await handlers.feed(request(
-      "/api/custom-launch/generic/v1/launches",
-    ));
-    await expect(response.json()).resolves.toMatchObject({ total: "1" });
-  });
-
-  it("serves paginated descriptor-bound records and rejects source substitution", async () => {
+describe("generic launch V1 signed read boundary", () => {
+  it("serves signed paginated and detail records bound to exact requests", async () => {
     const release = adapter();
     const descriptor = activeDescriptor([release]);
-    const record = launchRecord(subject(), release);
-    const readStore = store([record]);
-    const capability = await authenticatedStore(descriptor, readStore);
+    const records = [
+      launchRecord(subject(SUBJECT_SOURCE, "a"), release),
+      launchRecord(subject(SUBJECT_SOURCE, "b"), release),
+    ];
     const handlers = createGenericLaunchReadHandlersV1({
       descriptor,
-      authenticatedStore: capability,
+      store: store(descriptor, records),
     });
-    const feed = await handlers.feed(request(
+    const first = await handlers.feed(request(
       "/api/custom-launch/generic/v1/launches?limit=1",
     ));
+    const second = await handlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1&cursor=c1",
+    ));
     const detail = await handlers.detail(
-      request(`/api/custom-launch/generic/v1/launches/${record.recordHash}`),
-      record.recordHash,
+      request(`/api/custom-launch/generic/v1/launches/${records[1].recordHash}`),
+      records[1].recordHash,
     );
-    expect(feed.status).toBe(200);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
     expect(detail.status).toBe(200);
-    await expect(feed.json()).resolves.toMatchObject({
-      records: [record], nextCursor: null, total: "1",
+    await expect(first.json()).resolves.toMatchObject({
+      records: [records[0]], nextCursor: "c1", total: "2",
     });
-
-    const wrongSource = launchRecord(subject(digest("0")), release);
-    const wrongStore = store([wrongSource]);
-    const wrongCapability = await authenticatedStore(descriptor, wrongStore);
-    const wrongHandlers = createGenericLaunchReadHandlersV1({
-      descriptor,
-      authenticatedStore: wrongCapability,
+    await expect(second.json()).resolves.toMatchObject({
+      records: [records[1]], nextCursor: null, total: "2",
     });
-    expect((await wrongHandlers.feed(request(
-      "/api/custom-launch/generic/v1/launches",
-    ))).status).toBe(503);
-
-    const wrongExecutionSource = launchRecord(
-      subject(), release, digest("0"),
-    );
-    const executionStore = store([wrongExecutionSource]);
-    const executionCapability = await authenticatedStore(
-      descriptor,
-      executionStore,
-    );
-    expect((await createGenericLaunchReadHandlersV1({
-      descriptor,
-      authenticatedStore: executionCapability,
-    }).feed(request("/api/custom-launch/generic/v1/launches"))).status).toBe(503);
-
-    const unboundRelease = adapter("adapter-b", "0");
-    const unboundStore = store([launchRecord(subject(), unboundRelease)]);
-    const unboundCapability = await authenticatedStore(descriptor, unboundStore);
-    expect((await createGenericLaunchReadHandlersV1({
-      descriptor,
-      authenticatedStore: unboundCapability,
-    }).feed(request("/api/custom-launch/generic/v1/launches"))).status).toBe(503);
+    await expect(detail.json()).resolves.toMatchObject({ record: records[1] });
   });
 
-  it("rejects duplicate/oversized pages, noncanonical cursors and detail key mismatch", async () => {
+  it("rejects forged signatures, request replay and post-signature mutation", async () => {
     const release = adapter();
     const descriptor = activeDescriptor([release]);
     const record = launchRecord(subject(), release);
-    const duplicateStore: GenericLaunchReadStoreV1 = {
-      ...store([record]),
-      async findFinalizedLaunches() {
-        return { records: [record, record], nextCursor: null, total: "2" };
-      },
-      async findFinalizedLaunchByRecordHash() {
-        return record;
-      },
-    };
-    const capability = await authenticatedStore(descriptor, duplicateStore);
-    const handlers = createGenericLaunchReadHandlersV1({
+    const attacker = generateKeyPairSync("ed25519");
+    const forgedHandlers = createGenericLaunchReadHandlersV1({
       descriptor,
-      authenticatedStore: capability,
+      store: store(descriptor, [record], READ_MODEL_CONTRACT, attacker.privateKey),
     });
-    expect((await handlers.feed(request(
+    expect((await forgedHandlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1",
+    ))).status).toBe(503);
+
+    const initialRequestBindingHash = canonicalSha256(
+      "programmable.generic-launch-feed-request.v1",
+      Object.freeze({ limit: 1, cursor: null }),
+    );
+    const replayed = signedEnvelope(descriptor, initialRequestBindingHash, {
+      records: [record], nextCursor: null, total: "1",
+    });
+    const replayStore = store(descriptor, [record]);
+    replayStore.findFinalizedLaunches = async () => replayed;
+    const replayHandlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: replayStore,
+    });
+    expect((await replayHandlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1&cursor=c1",
+    ))).status).toBe(503);
+
+    const mutationStore = store(descriptor, [record]);
+    mutationStore.findFinalizedLaunches = async ({ requestBindingHash }) => {
+      const envelope = signedEnvelope(descriptor, requestBindingHash, {
+        records: [record], nextCursor: null, total: "1",
+      });
+      return { ...envelope, payload: { records: [], nextCursor: null, total: "0" } };
+    };
+    const mutationHandlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: mutationStore,
+    });
+    expect((await mutationHandlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1",
+    ))).status).toBe(503);
+  });
+
+  it("rejects descriptor, source, adapter, cursor and detail substitution", async () => {
+    const release = adapter();
+    const descriptor = activeDescriptor([release]);
+    const validRecord = launchRecord(subject(), release);
+
+    expect(() => createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: store(descriptor, [validRecord], {
+        ...READ_MODEL_CONTRACT,
+        persistenceBindingHash: digest("0"),
+      }),
+    })).toThrow(/not descriptor-bound/u);
+    const invalidVerifierDescriptor =
+      createActiveGenericLaunchFoundationDescriptorV1({
+        ...activeDescriptorInput([release]),
+        readModelVerifier: {
+          ...READ_MODEL_VERIFIER,
+          publicKeySha256: digest("0"),
+        },
+      });
+    expect(() => createGenericLaunchReadHandlersV1({
+      descriptor: invalidVerifierDescriptor,
+      store: store(invalidVerifierDescriptor, [validRecord]),
+    })).toThrow(/public key hash/u);
+
+    for (const invalidRecord of [
+      launchRecord(subject(digest("0")), release),
+      launchRecord(subject(), release, digest("0")),
+      launchRecord(subject(), adapter("adapter-b", "0")),
+    ]) {
+      const handlers = createGenericLaunchReadHandlersV1({
+        descriptor,
+        store: store(descriptor, [invalidRecord]),
+      });
+      expect((await handlers.feed(request(
+        "/api/custom-launch/generic/v1/launches?limit=1",
+      ))).status).toBe(503);
+    }
+
+    const cursorStore = store(descriptor, [validRecord]);
+    cursorStore.findFinalizedLaunches = async ({ requestBindingHash }) =>
+      signedEnvelope(descriptor, requestBindingHash, {
+        records: [validRecord], nextCursor: "c1", total: "1",
+      });
+    const cursorHandlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: cursorStore,
+    });
+    expect((await cursorHandlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1&cursor=c1",
+    ))).status).toBe(503);
+
+    for (const invalidPage of [
+      { records: [validRecord, validRecord], nextCursor: "c2", total: "2" },
+      { records: [validRecord], nextCursor: null, total: "0" },
+      { records: [], nextCursor: "c2", total: "0" },
+    ]) {
+      const invalidPageStore = store(descriptor, [validRecord]);
+      invalidPageStore.findFinalizedLaunches = async ({
+        requestBindingHash,
+      }) => signedEnvelope(descriptor, requestBindingHash, invalidPage);
+      const invalidPageHandlers = createGenericLaunchReadHandlersV1({
+        descriptor,
+        store: invalidPageStore,
+      });
+      expect((await invalidPageHandlers.feed(request(
+        "/api/custom-launch/generic/v1/launches?limit=1",
+      ))).status).toBe(503);
+    }
+    const duplicateStore = store(descriptor, [validRecord]);
+    duplicateStore.findFinalizedLaunches = async ({ requestBindingHash }) =>
+      signedEnvelope(descriptor, requestBindingHash, {
+        records: [validRecord, validRecord], nextCursor: null, total: "2",
+      });
+    const duplicateHandlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: duplicateStore,
+    });
+    expect((await duplicateHandlers.feed(request(
       "/api/custom-launch/generic/v1/launches?limit=2",
     ))).status).toBe(503);
-    expect((await handlers.feed(request(
-      "/api/custom-launch/generic/v1/launches?cursor=x&limit=1",
-    ))).status).toBe(400);
-    expect((await handlers.detail(
+
+    const detailStore = store(descriptor, [validRecord]);
+    detailStore.findFinalizedLaunchByRecordHash = async ({
+      requestBindingHash,
+    }) => signedEnvelope(descriptor, requestBindingHash, validRecord);
+    const detailHandlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: detailStore,
+    });
+    expect((await detailHandlers.detail(
       request(`/api/custom-launch/generic/v1/launches/${digest("0")}`),
       digest("0"),
     )).status).toBe(503);
+  });
 
-    const oversizedStore: GenericLaunchReadStoreV1 = {
-      ...store([record]),
-      async findFinalizedLaunches() {
-        return {
-          records: Array.from({ length: 101 }, () => record),
-          nextCursor: "c101",
-          total: "101",
-        };
-      },
+  it("captures exact own data methods once and rejects accessor stores", async () => {
+    const release = adapter();
+    const descriptor = activeDescriptor([release]);
+    const record = launchRecord(subject(), release);
+    const mutableStore = store(descriptor, [record]);
+    const handlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: mutableStore,
+    });
+    mutableStore.findFinalizedLaunches = async () => {
+      throw new TypeError("substituted after capture");
     };
-    const oversizedCapability = await authenticatedStore(
+    expect((await handlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1",
+    ))).status).toBe(200);
+
+    const getterStore = store(descriptor, [record]);
+    const getter = getterStore.findFinalizedLaunches;
+    Object.defineProperty(getterStore, "findFinalizedLaunches", {
+      get: () => getter,
+      enumerable: true,
+      configurable: true,
+    });
+    expect(() => createGenericLaunchReadHandlersV1({
       descriptor,
-      oversizedStore,
-    );
-    expect((await createGenericLaunchReadHandlersV1({
-      descriptor,
-      authenticatedStore: oversizedCapability,
-    }).feed(request("/api/custom-launch/generic/v1/launches"))).status).toBe(503);
+      store: getterStore,
+    })).toThrow(/non-data properties/u);
   });
 });
