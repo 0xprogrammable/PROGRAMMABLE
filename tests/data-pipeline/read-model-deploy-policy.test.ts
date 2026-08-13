@@ -659,7 +659,10 @@ describe("read-model production deploy policy", () => {
       "Capture sensitive production environment metadata",
     );
     expect(workflow).toContain(
-      'vercel env ls production --format json --token="$VERCEL_TOKEN"',
+      'vercel env ls production --format json --token="$VERCEL_TOKEN" | node scripts/bind-vercel-sensitive-production-metadata.mjs',
+    );
+    expect(workflow).not.toContain(
+      'vercel env ls production --format json --token="$VERCEL_TOKEN" >',
     );
     expect(workflow).toContain(
       'vercel env ls production --format json --token="$VERCEL_TOKEN" |',

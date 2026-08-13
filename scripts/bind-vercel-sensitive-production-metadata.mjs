@@ -6,38 +6,25 @@ import { pathToFileURL } from "node:url";
 export const VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA =
   "programmable.vercel-sensitive-production-metadata.v1";
 
-const MAXIMUM_INPUT_BYTES = 8 * 1024 * 1024;
-const VERCEL_ENVIRONMENT_TARGETS = new Set([
-  "development",
-  "preview",
-  "production",
-]);
-
-function normalizeVercelEnvironmentEntry(entry) {
+export function omitVercelEnvironmentValues(metadata) {
   if (
-    entry === null
-    || typeof entry !== "object"
-    || Array.isArray(entry)
-    || typeof entry.key !== "string"
-    || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(entry.key)
-    || typeof entry.type !== "string"
-    || !/^[a-z][a-z-]{0,31}$/u.test(entry.type)
-    || !Array.isArray(entry.target)
-    || entry.target.length < 1
-    || entry.target.length > VERCEL_ENVIRONMENT_TARGETS.size
-    || entry.target.some(
-      (target) =>
-        typeof target !== "string"
-        || !VERCEL_ENVIRONMENT_TARGETS.has(target),
-    )
-    || new Set(entry.target).size !== entry.target.length
+    metadata === null
+    || typeof metadata !== "object"
+    || Array.isArray(metadata)
+    || Object.keys(metadata).sort().join("\0") !== "envs"
+    || !Array.isArray(metadata.envs)
   ) {
     throw new Error("Vercel environment metadata is invalid");
   }
   return Object.freeze({
-    key: entry.key,
-    type: entry.type,
-    target: Object.freeze([...entry.target]),
+    envs: metadata.envs.map((entry) => {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new Error("Vercel environment metadata is invalid");
+      }
+      const valueFreeEntry = { ...entry };
+      delete valueFreeEntry.value;
+      return Object.freeze(valueFreeEntry);
+    }),
   });
 }
 
@@ -57,14 +44,21 @@ export function bindVercelSensitiveProductionMetadata({
   ) {
     throw new Error("Vercel environment metadata is invalid");
   }
-  const envs = Object.freeze(
-    metadata.envs.map(normalizeVercelEnvironmentEntry),
-  );
+  for (const entry of metadata.envs) {
+    if (
+      entry === null
+      || typeof entry !== "object"
+      || Array.isArray(entry)
+      || Object.hasOwn(entry, "value")
+    ) {
+      throw new Error("Vercel environment metadata must not contain values");
+    }
+  }
   return Object.freeze({
     schemaVersion: VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA,
     vercelProjectId,
     target: "production",
-    envs,
+    envs: metadata.envs,
   });
 }
 
@@ -78,7 +72,7 @@ function argumentsFrom(argv) {
     }
     result[name.slice(2)] = value;
   }
-  for (const name of ["output-file", "vercel-project-id"]) {
+  for (const name of ["metadata-file", "vercel-project-id"]) {
     if (!result[name]) throw new Error(`--${name} is required`);
   }
   return result;
@@ -86,30 +80,18 @@ function argumentsFrom(argv) {
 
 async function readStandardInput() {
   const chunks = [];
-  let totalBytes = 0;
-  for await (const chunk of process.stdin) {
-    totalBytes += chunk.byteLength;
-    if (totalBytes > MAXIMUM_INPUT_BYTES) {
-      throw new Error("Vercel environment metadata is invalid");
-    }
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks, totalBytes).toString("utf8");
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 async function main(argv) {
   const args = argumentsFrom(argv);
-  let source;
-  try {
-    source = JSON.parse(await readStandardInput());
-  } catch {
-    throw new Error("Vercel environment metadata is invalid");
-  }
+  const source = JSON.parse(await readStandardInput());
   const bound = bindVercelSensitiveProductionMetadata({
-    metadata: source,
+    metadata: omitVercelEnvironmentValues(source),
     vercelProjectId: args["vercel-project-id"],
   });
-  await writeFile(args["output-file"], `${JSON.stringify(bound)}\n`, {
+  await writeFile(args["metadata-file"], `${JSON.stringify(bound)}\n`, {
     encoding: "utf8",
     flag: "wx",
     mode: 0o600,
@@ -124,9 +106,7 @@ async function main(argv) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(
-      `${error instanceof Error
-        ? error.message
-        : "Vercel environment metadata binding failed"}\n`,
+      `${error instanceof Error ? error.message : "metadata binding failed"}\n`,
     );
     process.exitCode = 1;
   });
