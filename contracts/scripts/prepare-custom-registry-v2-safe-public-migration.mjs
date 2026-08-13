@@ -4,7 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createPublicClient, getAddress, keccak256 } from "viem";
+import { createPublicClient, getAddress, hexToBigInt, keccak256 } from "viem";
 import { mainnet } from "viem/chains";
 
 import {
@@ -13,7 +13,6 @@ import {
 } from "./custom-registry-v2-release-evidence.mjs";
 import {
   assertRpcProviderBindings,
-  assertSettledDeployerNonce,
   createRpcProviderBindings,
   releaseRpcTransport,
   requireDistinctRpcOrigins,
@@ -24,16 +23,25 @@ import {
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import {
   SAFE_PUBLIC_MIGRATION_ABI,
+  SAFE_PUBLIC_MIGRATION_CONTINUATION_SCHEMA,
   SAFE_PUBLIC_MIGRATION_PLAN_SCHEMA,
   assertHardwareMigrationInventory,
+  assertSafePublicMigrationReleaseAuthorization,
+  assertSafePublicMigrationContinuationEvidence,
   assertSafePublicMigrationPolicy,
+  assertSafePublicMigrationReceiptLogs,
+  assertSafePublicMigrationReceiptTime,
+  classifySafePublicMigrationState,
   safePublicMigrationTransaction,
   safeTransactionHash,
 } from "./custom-registry-v2-safe-public-migration-guards.mjs";
+import { commonFinalizedBlock } from "./custom-registry-v2-live-verification.mjs";
 import {
-  assertSafeControllersAtBlock,
-  commonFinalizedBlock,
-} from "./custom-registry-v2-live-verification.mjs";
+  assertSafeMigrationContinuationExecutionBinding,
+  assertSafeMigrationReceiptFollowsDispatchIntent,
+  assertSafeMigrationSignerNonceAvailable,
+  readSafeMigrationExecutionBundleContext,
+} from "./custom-registry-v2-safe-public-migration-execution.mjs";
 import { trustedNetworkTime } from "./custom-registry-v2-transaction-journal.mjs";
 
 const root = path.resolve(
@@ -94,6 +102,23 @@ const hardware = await readEvidence(
   "REGISTRY_HARDWARE_OWNER_INVENTORY_SHA256",
   "hardware owner inventory",
 );
+const continuationPathValue =
+  process.env.REGISTRY_SAFE_MIGRATION_CONTINUATION_PATH?.trim();
+const continuationDigestValue =
+  process.env.REGISTRY_SAFE_MIGRATION_CONTINUATION_SHA256?.trim();
+if (Boolean(continuationPathValue) !== Boolean(continuationDigestValue)) {
+  throw new Error("continuation path and digest must be supplied together");
+}
+let continuation = null;
+if (continuationPathValue) {
+  const continuationPath = assertReleaseEvidencePath(continuationPathValue);
+  const bytes = await readFile(continuationPath);
+  const digest = sha256(bytes);
+  if (digest !== continuationDigestValue) {
+    throw new Error("hardware migration continuation digest mismatch");
+  }
+  continuation = { bytes, digest, value: JSON.parse(bytes) };
+}
 const policyPath = path.join(
   root,
   "config/custom-registry-v2-safe-public-migration-policy.json",
@@ -149,6 +174,11 @@ if (
 ) {
   throw new Error("public migration requires activation-disabled release policy");
 }
+assertSafePublicMigrationReleaseAuthorization({
+  actual: predeployment.releaseAuthorization,
+  expected: predeployment.releaseAuthorization,
+  releaseOwner: dark.value.releaseOwner,
+});
 const forbiddenAddresses = [
   dark.value.deployer,
   dark.value.admin,
@@ -178,12 +208,6 @@ if ((await Promise.all(clients.map((client) => client.getChainId()))).some((id) 
   throw new Error("hardware migration RPC is not Ethereum mainnet");
 }
 const finalized = await commonFinalizedBlock(clients);
-await assertSafeControllersAtBlock({
-  clients,
-  blockNumber: finalized.number,
-  safeVerification: dark.value,
-  safePolicy,
-});
 const multiSendCodes = await Promise.all(
   clients.map((client) =>
     client.getCode({
@@ -251,12 +275,14 @@ if (
   throw new Error("migration fee ceilings are below current two-provider fees");
 }
 
+const roleStates = [];
 const transactions = [];
 for (const [index, roleEntry] of inventory.intentRoles.entries()) {
   const darkController = dark.value.controllers[index];
   const safe = getAddress(roleEntry.safe);
   const legacyOwner = getAddress(roleEntry.legacyOwner);
   const [
+    safeStates,
     safeNonces,
     ownerPendingNonces,
     ownerFinalizedNonces,
@@ -265,6 +291,43 @@ for (const [index, roleEntry] of inventory.intentRoles.entries()) {
     currentOwnerCodes,
   ] =
     await Promise.all([
+      Promise.all(
+        clients.map(async (client) => {
+          const [
+            code,
+            version,
+            masterCopy,
+            owners,
+            threshold,
+            safeNonce,
+            modulesPage,
+            fallbackStorage,
+            guardStorage,
+          ] = await Promise.all([
+            client.getCode({ address: safe, blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "VERSION", blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "masterCopy", blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "getOwners", blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "getThreshold", blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "nonce", blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "getModulesPaginated", args: ["0x0000000000000000000000000000000000000001", 10n], blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "getStorageAt", args: [hexToBigInt(safePolicy.storageSlots.fallbackHandler), 1n], blockNumber: finalized.number }),
+            client.readContract({ address: safe, abi: SAFE_READ_ABI, functionName: "getStorageAt", args: [hexToBigInt(safePolicy.storageSlots.guard), 1n], blockNumber: finalized.number }),
+          ]);
+          return {
+            runtimeCodeKeccak256: keccak256(code ?? "0x"),
+            version,
+            masterCopy,
+            owners,
+            threshold,
+            safeNonce,
+            modules: modulesPage[0],
+            nextModule: modulesPage[1],
+            fallbackStorage,
+            guardStorage,
+          };
+        }),
+      ),
       Promise.all(
         clients.map((client) =>
           client.readContract({
@@ -307,10 +370,52 @@ for (const [index, roleEntry] of inventory.intentRoles.entries()) {
         ),
       ),
     ]);
-  if (safeNonces[0] !== safeNonces[1] || safeNonces[0] !== 0n) {
-    throw new Error(`${roleEntry.role} Safe nonce is not migration-ready`);
+  const classifications = safeStates.map((actual) =>
+    classifySafePublicMigrationState({
+      actual,
+      expected: {
+        safe,
+        legacyOwner,
+        hardwareOwners: roleEntry.hardwareOwners,
+        proxyRuntimeCodeKeccak256:
+          dark.value.proxyFactory.proxyRuntimeCodeKeccak256,
+        safeVersion: safePolicy.safeVersion,
+        singleton: dark.value.singleton.address,
+      },
+    }),
+  );
+  if (
+    classifications[0] !== classifications[1] ||
+    safeNonces[0] !== safeNonces[1]
+  ) {
+    throw new Error(`${roleEntry.role} Safe migration state disagrees across RPCs`);
   }
-  const ownerNonce = assertSettledDeployerNonce({
+  const migration = safePublicMigrationTransaction({
+    safe,
+    legacyOwner,
+    hardwareOwners: roleEntry.hardwareOwners,
+    safeNonce: 0n,
+    multiSendCallOnly: policy.multiSendCallOnly.address,
+  });
+  const localSafeTxHash = safeTransactionHash({
+    safe,
+    transaction: migration.safeTransaction,
+  });
+  roleStates.push({
+    role: roleEntry.role,
+    safe,
+    legacyOwner,
+    hardwareOwners: roleEntry.hardwareOwners,
+    expectedOwners: migration.expectedOwners,
+    classification: classifications[0],
+    expectedSafeTransactionHash: localSafeTxHash,
+    completedMigration: null,
+  });
+  if (classifications[0] === "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED") {
+    continue;
+  }
+  const ownerNonce = assertSafeMigrationSignerNonceAvailable({
+    signer: legacyOwner,
     pendingNonces: ownerPendingNonces,
     finalizedNonces: ownerFinalizedNonces,
   });
@@ -323,17 +428,6 @@ for (const [index, roleEntry] of inventory.intentRoles.entries()) {
   ) {
     throw new Error(`${roleEntry.role} current owner must be a code-free EOA`);
   }
-  const migration = safePublicMigrationTransaction({
-    safe,
-    legacyOwner,
-    hardwareOwners: roleEntry.hardwareOwners,
-    safeNonce: safeNonces[0],
-    multiSendCallOnly: policy.multiSendCallOnly.address,
-  });
-  const localSafeTxHash = safeTransactionHash({
-    safe,
-    transaction: migration.safeTransaction,
-  });
   const remoteSafeTxHashes = await Promise.all(
     clients.map((client) =>
       client.readContract({
@@ -422,6 +516,155 @@ for (const [index, roleEntry] of inventory.intentRoles.entries()) {
   });
 }
 
+const migratedRoles = roleStates
+  .filter(
+    ({ classification }) =>
+      classification === "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED",
+  )
+  .map(({ role }) => role);
+if ((migratedRoles.length === 0) !== (continuation === null)) {
+  throw new Error(
+    "continuation evidence is required exactly when finalized migrations exist",
+  );
+}
+let completedMigrations = [];
+if (continuation) {
+  const completedByRole = assertSafePublicMigrationContinuationEvidence({
+    evidence: continuation.value.continuation ?? continuation.value,
+    migrationPlanDigest: inventory.migrationPlanDigest,
+    migratedRoles,
+  });
+  for (const state of roleStates.filter(({ role }) => migratedRoles.includes(role))) {
+    const completed = completedByRole.get(state.role);
+    const execution = await readSafeMigrationExecutionBundleContext({
+      bundlePath: completed.executionBundlePath,
+      bundleSha256: completed.executionBundleSha256,
+      nowTimestamp,
+      allowExpired: true,
+    });
+    assertSafeMigrationContinuationExecutionBinding({
+      entry: completed,
+      execution,
+      executionBundlePath: completed.executionBundlePath,
+      executionBundleSha256: completed.executionBundleSha256,
+      migrationPlanDigest: inventory.migrationPlanDigest,
+      source: dark.value.source,
+      policySha256: sha256(policyBytes),
+      hardwareInventorySha256: hardware.digest,
+    });
+    const journalReceipt = execution.journalRecords.find(
+      ({ event }) => event === "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+    );
+    if (
+      JSON.stringify(execution.plannedRole.outerTransaction) !==
+      JSON.stringify({
+        type: "eip1559",
+        chainId: 1,
+        from: state.legacyOwner,
+        to: state.safe,
+        input: completed.reviewedTransaction.input,
+        valueWei: "0",
+        nonce: completed.reviewedTransaction.nonce,
+        gasLimit: completed.reviewedTransaction.gasLimit,
+        maxFeePerGas: completed.reviewedTransaction.maxFeePerGas,
+        maxPriorityFeePerGas:
+          completed.reviewedTransaction.maxPriorityFeePerGas,
+      })
+    ) {
+      throw new Error(`${state.role} completed execution plan is invalid`);
+    }
+    const observations = await Promise.all(
+      clients.map(async (client) => {
+        const [transaction, receipt] = await Promise.all([
+          client.getTransaction({ hash: completed.transactionHash }),
+          client.getTransactionReceipt({ hash: completed.transactionHash }),
+        ]);
+        const receiptBlock = await client.getBlock({ blockNumber: receipt.blockNumber });
+        if (
+          transaction.hash !== completed.transactionHash ||
+          receipt.transactionHash !== completed.transactionHash ||
+          transaction.type !== "eip1559" ||
+          transaction.chainId !== 1 ||
+          getAddress(transaction.from) !== getAddress(state.legacyOwner) ||
+          getAddress(transaction.to) !== getAddress(state.safe) ||
+          transaction.input !== completed.reviewedTransaction.input ||
+          transaction.input !==
+            safePublicMigrationTransaction({
+              safe: state.safe,
+              legacyOwner: state.legacyOwner,
+              hardwareOwners: state.hardwareOwners,
+              safeNonce: 0n,
+              multiSendCallOnly: policy.multiSendCallOnly.address,
+            }).execTransactionData ||
+          transaction.value !== 0n ||
+          transaction.nonce !== completed.reviewedTransaction.nonce ||
+          transaction.gas !== BigInt(completed.reviewedTransaction.gasLimit) ||
+          transaction.maxFeePerGas !==
+            BigInt(completed.reviewedTransaction.maxFeePerGas) ||
+          transaction.maxPriorityFeePerGas !==
+            BigInt(completed.reviewedTransaction.maxPriorityFeePerGas) ||
+          receipt.status !== "success" ||
+          receipt.blockHash !== completed.blockHash ||
+          receipt.blockNumber.toString() !== completed.blockNumber ||
+          receipt.blockNumber > finalized.number ||
+          journalReceipt?.blockNumber !== receipt.blockNumber.toString() ||
+          journalReceipt?.blockHash !== receipt.blockHash ||
+          receiptBlock.hash !== receipt.blockHash ||
+          receiptBlock.number !== receipt.blockNumber ||
+          receipt.logs.some(
+            (log) =>
+              log.transactionHash !== completed.transactionHash ||
+              log.blockHash !== receipt.blockHash ||
+              log.blockNumber !== receipt.blockNumber ||
+              log.removed === true,
+          )
+        ) {
+          throw new Error(`${state.role} completed migration evidence is invalid`);
+        }
+        assertSafePublicMigrationReceiptLogs({
+          logs: receipt.logs,
+          safe: state.safe,
+          legacyOwner: state.legacyOwner,
+          hardwareOwners: state.hardwareOwners,
+          safeTransactionHash: state.expectedSafeTransactionHash,
+        });
+        assertSafePublicMigrationReceiptTime({
+          receiptBlockTimestamp: receiptBlock.timestamp,
+          plan: {
+            createdAtTimestamp:
+              completed.sourcePlanWindow.createdAtTimestamp,
+            expiresAtTimestamp:
+              completed.sourcePlanWindow.expiresAtTimestamp,
+            createdAtTrustedTime:
+              completed.sourcePlanWindow.createdAtTrustedTime,
+            hardwareProofWindow: inventory.proofWindow,
+          },
+        });
+        assertSafeMigrationReceiptFollowsDispatchIntent({
+          receiptBlockTimestamp: receiptBlock.timestamp,
+          execution,
+        });
+        if (Number(receiptBlock.timestamp) !== completed.receiptBlockTimestamp) {
+          throw new Error(`${state.role} completed receipt timestamp is invalid`);
+        }
+        return {
+          transactionHash: transaction.hash,
+          blockHash: receipt.blockHash,
+          blockNumber: receipt.blockNumber.toString(),
+          transactionIndex: receipt.transactionIndex,
+          gasUsed: receipt.gasUsed.toString(),
+          effectiveGasPrice: receipt.effectiveGasPrice.toString(),
+        };
+      }),
+    );
+    if (JSON.stringify(observations[0]) !== JSON.stringify(observations[1])) {
+      throw new Error(`${state.role} completed migration RPC evidence disagrees`);
+    }
+    state.completedMigration = completed;
+    completedMigrations.push(completed);
+  }
+}
+
 const aggregateMaximumCostWei = transactions.reduce(
   (total, transaction) => total + BigInt(transaction.maximumCostWei),
   0n,
@@ -448,7 +691,25 @@ const plan = {
   releasePolicySha256: sha256(releasePolicyBytes),
   predeploymentManifestSha256: sha256(predeploymentBytes),
   migrationPlanDigest: inventory.migrationPlanDigest,
+  releaseAuthorization: {
+    owner: getAddress(predeployment.releaseAuthorization.owner),
+    maximumDispatchIntentAuthorizationValiditySeconds:
+      predeployment.releaseAuthorization
+        .maximumDispatchIntentAuthorizationValiditySeconds,
+    authorizationSemantics:
+      predeployment.releaseAuthorization.authorizationSemantics,
+    stagedRawTransactionTrustBoundary:
+      predeployment.releaseAuthorization.stagedRawTransactionTrustBoundary,
+    dispatchIntentFinalConfirmation:
+      predeployment.releaseAuthorization.dispatchIntentFinalConfirmation,
+    nonceScopedJournalExclusivity:
+      predeployment.releaseAuthorization.nonceScopedJournalExclusivity,
+  },
   hardwareProofWindow: inventory.proofWindow,
+  continuationEvidenceSha256: continuation?.digest ?? null,
+  roleStates,
+  completedMigrations,
+  remainingRoles: transactions.map(({ role }) => role),
   rpcProviders: providerIds,
   rpcProviderBindings,
   finalizedAnchor: {

@@ -8,6 +8,8 @@ import {
   SAFE_CUSTODY_PROOF_SCHEMA,
   SAFE_AUTHORIZATION_SCHEMA,
   SAFE_PLAN_SCHEMA,
+  SAFE_APPROVAL_POLICY_COMMITMENT,
+  SAFE_PRODUCTION_POLICY_SHA256,
   assertAtomicProxyCreationLogs,
   assertProxyCreationLog,
   assertSafeCostReviewEnvelope,
@@ -148,6 +150,8 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     expiresAtTimestamp: 200,
     controllers: [{}, {}, {}, {}],
     policySha256: `0x${"22".repeat(32)}`,
+    productionPolicySha256: SAFE_PRODUCTION_POLICY_SHA256,
+    approvalPolicyCommitment: SAFE_APPROVAL_POLICY_COMMITMENT,
     custodyProofSha256: `0x${"33".repeat(32)}`,
     source: { commit: "a", tree: "b" },
     releaseAuthorization: {
@@ -277,6 +281,8 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     activationAllowed: false,
     sourceDigests: {
       "config/custom-registry-v2-safe-controller-policy.json": policySha256,
+      "config/custom-registry-v2-production-policy.json":
+        SAFE_PRODUCTION_POLICY_SHA256,
     },
     releaseAuthorization: {
       owner: releaseOwner.address,
@@ -312,6 +318,8 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     source: { commit: "a".repeat(40), tree: "b".repeat(40) },
     sourceManifestSha256,
     policySha256,
+    productionPolicySha256: SAFE_PRODUCTION_POLICY_SHA256,
+    approvalPolicyCommitment: SAFE_APPROVAL_POLICY_COMMITMENT,
     custodyProofSha256: `0x${"44".repeat(32)}`,
     predictionInputsSha256: `0x${"45".repeat(32)}`,
     privateSubmission: {
@@ -408,6 +416,19 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
         sourceManifestSha256,
       }),
     /transaction binding/u,
+  );
+  assert.throws(
+    () =>
+      assertSafePolicyBoundPlan({
+        plan: {
+          ...plan,
+          approvalPolicyCommitment: `0x${"99".repeat(32)}`,
+        },
+        policy,
+        manifest,
+        sourceManifestSha256,
+      }),
+    /committed policy/u,
   );
 });
 

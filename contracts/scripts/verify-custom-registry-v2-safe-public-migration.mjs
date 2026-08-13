@@ -28,19 +28,30 @@ import {
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import {
   SAFE_PUBLIC_MIGRATION_ABI,
+  SAFE_PUBLIC_MIGRATION_CONTINUATION_SCHEMA,
   SAFE_PUBLIC_MIGRATION_PLAN_SCHEMA,
+  SAFE_PUBLIC_MIGRATION_PROGRESS_SCHEMA,
   SAFE_PUBLIC_MIGRATION_RECEIPTS_SCHEMA,
   SAFE_PUBLIC_MIGRATION_ROLES,
   SAFE_PUBLIC_MIGRATION_VERIFICATION_SCHEMA,
   assertHardwareMigrationInventory,
   assertHardwareThresholdControlProof,
   assertSafePublicMigrationPolicy,
+  assertSafePublicMigrationReleaseAuthorization,
+  assertSafePublicMigrationReceiptTime,
   assertSafePublicMigrationReceiptLogs,
+  classifySafePublicMigrationState,
   safePublicMigrationTransaction,
   safeTransactionHash,
   sortedSafeSignatures,
 } from "./custom-registry-v2-safe-public-migration-guards.mjs";
 import { commonFinalizedBlock } from "./custom-registry-v2-live-verification.mjs";
+import {
+  assertSafeMigrationContinuationExecutionBinding,
+  assertSafeMigrationReceiptFollowsDispatchIntent,
+  readSafeMigrationExecutionBundle,
+  readSafeMigrationExecutionBundleContext,
+} from "./custom-registry-v2-safe-public-migration-execution.mjs";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -153,11 +164,21 @@ if (
 ) {
   throw new Error("hardware migration source, evidence, or activation policy drifted");
 }
+assertSafePublicMigrationReleaseAuthorization({
+  actual: plan.releaseAuthorization,
+  expected: predeployment.releaseAuthorization,
+  releaseOwner: dark.value.releaseOwner,
+});
 if (
   plan.schemaVersion !== SAFE_PUBLIC_MIGRATION_PLAN_SCHEMA ||
   plan.status !== "PREFLIGHT_ONLY_TWELVE_HARDWARE_KEYS_NO_SIGNING_NO_BROADCAST" ||
   plan.chainId !== 1 ||
-  plan.transactions?.length !== 4 ||
+  plan.roleStates?.length !== 4 ||
+  !Array.isArray(plan.transactions) ||
+  !Array.isArray(plan.completedMigrations) ||
+  !Array.isArray(plan.remainingRoles) ||
+  plan.transactions.length !== plan.remainingRoles.length ||
+  plan.completedMigrations.length + plan.transactions.length !== 4 ||
   plan.aggregateFinalizedVerificationRequired !== true ||
   plan.activationAllowed !== false ||
   plan.signingAllowed !== false ||
@@ -165,10 +186,41 @@ if (
   receipts.schemaVersion !== SAFE_PUBLIC_MIGRATION_RECEIPTS_SCHEMA ||
   receipts.chainId !== 1 ||
   receipts.planSha256 !== planEvidence.digest ||
-  receipts.transactions?.length !== 4 ||
-  receipts.status !== "FOUR_DIRECT_LEGACY_OWNER_MIGRATIONS_SUBMITTED"
+  !Array.isArray(receipts.transactions) ||
+  receipts.transactions.length > plan.transactions.length ||
+  receipts.status !== "SUBSET_OF_REMAINING_DIRECT_LEGACY_OWNER_MIGRATIONS_SUBMITTED"
 ) {
   throw new Error("hardware migration plan or receipt schema is invalid");
+}
+const plannedByRole = new Map(plan.transactions.map((entry) => [entry.role, entry]));
+const completedByRole = new Map(
+  plan.completedMigrations.map((entry) => [entry.role, entry]),
+);
+const submittedByRole = new Map(
+  receipts.transactions.map((entry) => [entry.role, entry]),
+);
+if (
+  plannedByRole.size !== plan.transactions.length ||
+  completedByRole.size !== plan.completedMigrations.length ||
+  submittedByRole.size !== receipts.transactions.length ||
+  plan.roleStates.some(
+    (entry, index) =>
+      entry.role !== SAFE_PUBLIC_MIGRATION_ROLES[index] ||
+      ![
+        "LEGACY_ONE_OF_ONE_PENDING",
+        "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED",
+      ].includes(entry.classification) ||
+      (entry.classification === "LEGACY_ONE_OF_ONE_PENDING") !==
+        plannedByRole.has(entry.role) ||
+      (entry.classification === "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED") !==
+        completedByRole.has(entry.role),
+  ) ||
+  plan.remainingRoles.some(
+    (role, index) => role !== plan.transactions[index]?.role,
+  ) ||
+  receipts.transactions.some(({ role }) => !plannedByRole.has(role))
+) {
+  throw new Error("hardware migration mixed-state role partition is invalid");
 }
 assertRpcProviderBindings({ plan, providerIds, rpcUrls });
 const inventory = await assertHardwareMigrationInventory({
@@ -224,15 +276,174 @@ if (
 }
 
 const verifiedTransactions = [];
-for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
-  const planned = plan.transactions[index];
-  const submitted = receipts.transactions[index];
+const verifiedCompletedTransactions = [];
+for (const completed of plan.completedMigrations) {
+  const role = completed.role;
+  const index = SAFE_PUBLIC_MIGRATION_ROLES.indexOf(role);
+  const planned = plan.roleStates[index];
   const inventoryRole = inventory.intentRoles[index];
+  const execution = await readSafeMigrationExecutionBundleContext({
+    bundlePath: completed.executionBundlePath,
+    bundleSha256: completed.executionBundleSha256,
+    nowTimestamp: plan.createdAtTimestamp,
+    allowExpired: true,
+  });
+  assertSafeMigrationContinuationExecutionBinding({
+    entry: completed,
+    execution,
+    executionBundlePath: completed.executionBundlePath,
+    executionBundleSha256: completed.executionBundleSha256,
+    migrationPlanDigest: plan.migrationPlanDigest,
+    source: plan.source,
+    policySha256: plan.policySha256,
+    hardwareInventorySha256: plan.hardwareInventorySha256,
+  });
+  const journalReceipt = execution.journalRecords.find(
+    ({ event }) => event === "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+  );
+  if (
+    index === -1 ||
+    planned?.role !== role ||
+    inventoryRole?.role !== role ||
+    !/^0x[0-9a-fA-F]{64}$/u.test(completed.transactionHash ?? "") ||
+    getAddress(planned.safe) !== getAddress(inventoryRole.safe) ||
+    getAddress(planned.legacyOwner) !== getAddress(inventoryRole.legacyOwner)
+  ) {
+    throw new Error(`${role} completed migration plan binding is invalid`);
+  }
+  const migration = safePublicMigrationTransaction({
+    safe: planned.safe,
+    legacyOwner: planned.legacyOwner,
+    hardwareOwners: planned.hardwareOwners,
+    safeNonce: 0n,
+    multiSendCallOnly: policy.multiSendCallOnly.address,
+  });
+  const expectedSafeTransactionHash = safeTransactionHash({
+    safe: planned.safe,
+    transaction: migration.safeTransaction,
+  });
+  if (
+    completed.reviewedTransaction.input !== migration.execTransactionData ||
+    JSON.stringify(execution.plannedRole.outerTransaction) !==
+      JSON.stringify({
+        type: "eip1559",
+        chainId: 1,
+        from: planned.legacyOwner,
+        to: planned.safe,
+        input: completed.reviewedTransaction.input,
+        valueWei: "0",
+        nonce: completed.reviewedTransaction.nonce,
+        gasLimit: completed.reviewedTransaction.gasLimit,
+        maxFeePerGas: completed.reviewedTransaction.maxFeePerGas,
+        maxPriorityFeePerGas:
+          completed.reviewedTransaction.maxPriorityFeePerGas,
+      }) ||
+    planned.expectedSafeTransactionHash !== expectedSafeTransactionHash
+  ) {
+    throw new Error(`${role} completed reviewed transaction is invalid`);
+  }
+  const observations = await Promise.all(
+    clients.map(async (client) => {
+      const [transaction, receipt] = await Promise.all([
+        client.getTransaction({ hash: completed.transactionHash }),
+        client.getTransactionReceipt({ hash: completed.transactionHash }),
+      ]);
+      const receiptBlock = await client.getBlock({ blockNumber: receipt.blockNumber });
+      if (
+        transaction.hash !== completed.transactionHash ||
+        receipt.transactionHash !== completed.transactionHash ||
+        transaction.type !== "eip1559" ||
+        transaction.chainId !== 1 ||
+        getAddress(transaction.from) !== getAddress(planned.legacyOwner) ||
+        getAddress(transaction.to) !== getAddress(planned.safe) ||
+        transaction.input !== completed.reviewedTransaction.input ||
+        transaction.value !== 0n ||
+        transaction.nonce !== completed.reviewedTransaction.nonce ||
+        transaction.gas !== BigInt(completed.reviewedTransaction.gasLimit) ||
+        transaction.maxFeePerGas !==
+          BigInt(completed.reviewedTransaction.maxFeePerGas) ||
+        transaction.maxPriorityFeePerGas !==
+          BigInt(completed.reviewedTransaction.maxPriorityFeePerGas) ||
+        receipt.status !== "success" ||
+        receipt.blockHash !== completed.blockHash ||
+        receipt.blockNumber.toString() !== completed.blockNumber ||
+        receipt.blockNumber > finalized.number ||
+        journalReceipt?.blockNumber !== receipt.blockNumber.toString() ||
+        journalReceipt?.blockHash !== receipt.blockHash ||
+        receiptBlock.hash !== receipt.blockHash ||
+        receiptBlock.number !== receipt.blockNumber ||
+        Number(receiptBlock.timestamp) !== completed.receiptBlockTimestamp ||
+        receipt.gasUsed > BigInt(completed.reviewedTransaction.gasLimit) ||
+        receipt.effectiveGasPrice >
+          BigInt(completed.reviewedTransaction.maxFeePerGas) ||
+        receipt.logs.some(
+          (log) =>
+            log.transactionHash !== completed.transactionHash ||
+            log.blockHash !== receipt.blockHash ||
+            log.blockNumber !== receipt.blockNumber ||
+            log.removed === true,
+        )
+      ) {
+        throw new Error(`${role} completed migration transaction is invalid`);
+      }
+      assertSafePublicMigrationReceiptTime({
+        receiptBlockTimestamp: receiptBlock.timestamp,
+        plan: {
+          createdAtTimestamp: completed.sourcePlanWindow.createdAtTimestamp,
+          expiresAtTimestamp: completed.sourcePlanWindow.expiresAtTimestamp,
+          createdAtTrustedTime:
+            completed.sourcePlanWindow.createdAtTrustedTime,
+          hardwareProofWindow: plan.hardwareProofWindow,
+        },
+      });
+      assertSafeMigrationReceiptFollowsDispatchIntent({
+        receiptBlockTimestamp: receiptBlock.timestamp,
+        execution,
+      });
+      assertSafePublicMigrationReceiptLogs({
+        logs: receipt.logs,
+        safe: planned.safe,
+        legacyOwner: planned.legacyOwner,
+        hardwareOwners: planned.hardwareOwners,
+        safeTransactionHash: expectedSafeTransactionHash,
+      });
+      return {
+        transactionHash: transaction.hash,
+        blockHash: receipt.blockHash,
+        blockNumber: receipt.blockNumber.toString(),
+        transactionIndex: receipt.transactionIndex,
+        gasUsed: receipt.gasUsed.toString(),
+        effectiveGasPrice: receipt.effectiveGasPrice.toString(),
+        blockTimestamp: receiptBlock.timestamp.toString(),
+      };
+    }),
+  );
+  if (JSON.stringify(observations[0]) !== JSON.stringify(observations[1])) {
+    throw new Error(`independent ${role} completed migration evidence disagrees`);
+  }
+  verifiedCompletedTransactions.push(completed);
+}
+for (const submitted of receipts.transactions) {
+  const role = submitted.role;
+  const index = SAFE_PUBLIC_MIGRATION_ROLES.indexOf(role);
+  const planned = plannedByRole.get(role);
+  const inventoryRole = inventory.intentRoles[index];
+  const execution = await readSafeMigrationExecutionBundle({
+    bundlePath: submitted.executionBundlePath,
+    bundleSha256: submitted.executionBundleSha256,
+    plan,
+    plannedRole: planned,
+    nowTimestamp: plan.expiresAtTimestamp,
+    allowExpired: true,
+  });
+  const journalReceipt = execution.journalRecords.find(
+    ({ event }) => event === "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+  );
   if (
     planned.role !== role ||
-    submitted.role !== role ||
     inventoryRole.role !== role ||
     !/^0x[0-9a-fA-F]{64}$/u.test(submitted.transactionHash ?? "") ||
+    execution.transactionHash !== submitted.transactionHash ||
     getAddress(planned.safe) !== getAddress(inventoryRole.safe) ||
     getAddress(planned.legacyOwner) !== getAddress(inventoryRole.legacyOwner) ||
     JSON.stringify(planned.hardwareOwners.map((value) => getAddress(value))) !==
@@ -255,7 +466,12 @@ for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
   });
   if (
     planned.safeTransactionHash !== expectedSafeTransactionHash ||
+    planned.outerTransaction.type !== "eip1559" ||
+    planned.outerTransaction.chainId !== 1 ||
+    getAddress(planned.outerTransaction.from) !== getAddress(planned.legacyOwner) ||
+    getAddress(planned.outerTransaction.to) !== getAddress(planned.safe) ||
     planned.outerTransaction.input !== migration.execTransactionData ||
+    planned.outerTransaction.valueWei !== "0" ||
     planned.expectedSafeNonceBefore !== "0" ||
     planned.expectedSafeNonceAfter !== "1" ||
     planned.expectedThreshold !== 2 ||
@@ -276,6 +492,7 @@ for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
         receipt.transactionHash !== submitted.transactionHash ||
         receipt.status !== "success" ||
         receipt.contractAddress !== null ||
+        transaction.type !== "eip1559" ||
         transaction.chainId !== 1 ||
         getAddress(transaction.from) !== getAddress(planned.outerTransaction.from) ||
         getAddress(transaction.to) !== getAddress(planned.outerTransaction.to) ||
@@ -289,14 +506,13 @@ for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
         transaction.blockHash !== receipt.blockHash ||
         transaction.blockNumber !== receipt.blockNumber ||
         receipt.blockNumber > finalized.number ||
+        journalReceipt?.blockNumber !== receipt.blockNumber.toString() ||
+        journalReceipt?.blockHash !== receipt.blockHash ||
         receiptBlock.hash !== receipt.blockHash ||
         receiptBlock.number !== receipt.blockNumber ||
-        receiptBlock.timestamp * 1000n <=
-          BigInt(
-            plan.createdAtTrustedTime.adjustedTimeMilliseconds +
-              plan.createdAtTrustedTime.uncertaintyMilliseconds,
-          ) ||
-        receiptBlock.timestamp >= BigInt(plan.hardwareProofWindow.expiresAtTimestamp) ||
+        receipt.gasUsed > BigInt(planned.outerTransaction.gasLimit) ||
+        receipt.effectiveGasPrice >
+          BigInt(planned.outerTransaction.maxFeePerGas) ||
         receipt.logs.some(
           (log) =>
             log.transactionHash !== submitted.transactionHash ||
@@ -307,6 +523,14 @@ for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
       ) {
         throw new Error(`${role} finalized migration transaction differs from plan`);
       }
+      assertSafePublicMigrationReceiptTime({
+        receiptBlockTimestamp: receiptBlock.timestamp,
+        plan,
+      });
+      assertSafeMigrationReceiptFollowsDispatchIntent({
+        receiptBlockTimestamp: receiptBlock.timestamp,
+        execution,
+      });
       assertSafePublicMigrationReceiptLogs({
         logs: receipt.logs,
         safe: planned.safe,
@@ -342,12 +566,34 @@ for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
     blockNumber: observations[0].receipt.blockNumber.toString(),
     blockHash: observations[0].receipt.blockHash,
     safeTransactionHash: expectedSafeTransactionHash,
+    sourcePlanSha256: planEvidence.digest,
+    ownerAuthorizationSha256:
+      execution.bundle.artifacts.ownerAuthorization.sha256,
+    transactionJournalSha256:
+      execution.bundle.artifacts.transactionJournal.sha256,
+    receiptEvidenceSha256: receiptsEvidence.digest,
+    executionBundlePath: submitted.executionBundlePath,
+    executionBundleSha256: submitted.executionBundleSha256,
+    receiptBlockTimestamp: Number(observations[0].receiptBlock.timestamp),
+    sourcePlanWindow: {
+      createdAtTimestamp: plan.createdAtTimestamp,
+      expiresAtTimestamp: plan.expiresAtTimestamp,
+      createdAtTrustedTime: plan.createdAtTrustedTime,
+    },
+    reviewedTransaction: {
+      input: planned.outerTransaction.input,
+      nonce: planned.outerTransaction.nonce,
+      gasLimit: planned.outerTransaction.gasLimit,
+      maxFeePerGas: planned.outerTransaction.maxFeePerGas,
+      maxPriorityFeePerGas: planned.outerTransaction.maxPriorityFeePerGas,
+    },
   });
 }
 
 const migratedControllers = [];
+const finalRoleStates = [];
 for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
-  const planned = plan.transactions[index];
+  const planned = plan.roleStates[index];
   const inventoryRole = hardware.value.roles[index];
   const states = await Promise.all(
     clients.map(async (client) => {
@@ -388,25 +634,53 @@ for (const [index, role] of SAFE_PUBLIC_MIGRATION_ROLES.entries()) {
     fallbackStorage: state.fallbackStorage,
     guardStorage: state.guardStorage,
   });
-  for (const state of states) {
-    if (
-      state.code === "0x" ||
-      keccak256(state.code) !== dark.value.proxyFactory.proxyRuntimeCodeKeccak256 ||
-      state.version !== safePolicy.safeVersion ||
-      getAddress(state.masterCopy) !== getAddress(dark.value.singleton.address) ||
-      JSON.stringify(state.owners.map((value) => getAddress(value))) !== JSON.stringify(expectedOwners) ||
-      state.threshold !== 2n ||
-      state.safeNonce !== 1n ||
-      state.modulesPage[0].length !== 0 ||
-      getAddress(state.modulesPage[1]) !== SENTINEL_MODULE ||
-      !/^0x0{64}$/u.test(state.fallbackStorage) ||
-      !/^0x0{64}$/u.test(state.guardStorage)
-    ) {
-      throw new Error(`${role} final hardware Safe state is invalid`);
-    }
-  }
+  const classifications = states.map((state) =>
+    classifySafePublicMigrationState({
+      actual: {
+        runtimeCodeKeccak256: keccak256(state.code),
+        version: state.version,
+        masterCopy: state.masterCopy,
+        owners: state.owners,
+        threshold: state.threshold,
+        safeNonce: state.safeNonce,
+        modules: state.modulesPage[0],
+        nextModule: state.modulesPage[1],
+        fallbackStorage: state.fallbackStorage,
+        guardStorage: state.guardStorage,
+      },
+      expected: {
+        safe: planned.safe,
+        legacyOwner: planned.legacyOwner,
+        hardwareOwners: planned.hardwareOwners,
+        proxyRuntimeCodeKeccak256:
+          dark.value.proxyFactory.proxyRuntimeCodeKeccak256,
+        safeVersion: safePolicy.safeVersion,
+        singleton: dark.value.singleton.address,
+      },
+    }),
+  );
   if (JSON.stringify(comparableState(states[0])) !== JSON.stringify(comparableState(states[1]))) {
     throw new Error(`independent ${role} final Safe state disagrees`);
+  }
+  if (
+    classifications[0] !== classifications[1] ||
+    (submittedByRole.has(role) &&
+      classifications[0] !== "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED") ||
+    (completedByRole.has(role) &&
+      classifications[0] !== "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED") ||
+    (classifications[0] === "MIGRATED_HARDWARE_TWO_OF_THREE_FINALIZED" &&
+      !submittedByRole.has(role) &&
+      !completedByRole.has(role))
+  ) {
+    throw new Error(`${role} final Safe state does not match migration evidence`);
+  }
+  finalRoleStates.push({
+    role,
+    address: getAddress(planned.safe),
+    classification: classifications[0],
+  });
+  if (classifications[0] === "LEGACY_ONE_OF_ONE_PENDING") {
+    continue;
   }
   const thresholdProof = await assertHardwareThresholdControlProof({
     proof: inventoryRole.thresholdControlProof,
@@ -474,10 +748,37 @@ if (closingBlocks.some(({ hash }) => hash !== finalized.hash)) {
   throw new Error("hardware migration finalized anchor drifted during verification");
 }
 
+const completedTransactionsByRole = new Map(
+  [...verifiedCompletedTransactions, ...verifiedTransactions].map((entry) => [
+    entry.role,
+    entry,
+  ]),
+);
+if (
+  completedTransactionsByRole.size !==
+  verifiedCompletedTransactions.length + verifiedTransactions.length
+) {
+  throw new Error("hardware migration continuation contains duplicate roles");
+}
+const completedTransactions = SAFE_PUBLIC_MIGRATION_ROLES.filter((role) =>
+  completedTransactionsByRole.has(role),
+).map((role) => completedTransactionsByRole.get(role));
+const aggregateComplete = completedTransactions.length === 4;
+const continuation = {
+  schemaVersion: SAFE_PUBLIC_MIGRATION_CONTINUATION_SCHEMA,
+  chainId: 1,
+  migrationPlanDigest: plan.migrationPlanDigest,
+  status: "FINALIZED_PARTIAL_MIGRATIONS_BOUND_FOR_CONTINUATION",
+  transactions: completedTransactions,
+};
+
 const verification = {
-  schemaVersion: SAFE_PUBLIC_MIGRATION_VERIFICATION_SCHEMA,
-  status:
-    "VERIFIED_FINALIZED_HARDWARE_TWO_OF_THREE_MIGRATION_ACTIVATION_NOT_PERFORMED",
+  schemaVersion: aggregateComplete
+    ? SAFE_PUBLIC_MIGRATION_VERIFICATION_SCHEMA
+    : SAFE_PUBLIC_MIGRATION_PROGRESS_SCHEMA,
+  status: aggregateComplete
+    ? "VERIFIED_FINALIZED_HARDWARE_TWO_OF_THREE_MIGRATION_ACTIVATION_NOT_PERFORMED"
+    : "VERIFIED_MIXED_STATE_SAFE_CONTINUATION_REQUIRED_ACTIVATION_BLOCKED",
   chainId: 1,
   source: plan.source,
   planSha256: planEvidence.digest,
@@ -492,12 +793,15 @@ const verification = {
     blockHash: finalized.hash,
   },
   transactions: verifiedTransactions,
+  cumulativeCompletedTransactions: completedTransactions,
+  continuation,
+  roleStates: finalRoleStates,
   controllers: migratedControllers,
-  migrationGateSatisfied: true,
-  aggregateFinalizedVerificationComplete: true,
+  migrationGateSatisfied: aggregateComplete,
+  aggregateFinalizedVerificationComplete: aggregateComplete,
   activationAllowed: false,
   activationPerformed: false,
-  verified: true,
+  verified: aggregateComplete,
 };
 await writeFile(outputPath, `${JSON.stringify(verification, null, 2)}\n`, {
   flag: "wx",

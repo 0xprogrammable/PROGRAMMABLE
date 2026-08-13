@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "programmable.custom-registry-v2-safe-public-migration-policy.v1",
+  "schemaVersion": "programmable.custom-registry-v2-safe-public-migration-policy.v2",
   "chainId": "1",
   "safeVersion": "1.4.1",
   "source": {
@@ -28,6 +28,9 @@
     "atomicPerSafe": true,
     "crossSafeAtomicityRequired": false,
     "partialProgressFailClosedUntilAggregateVerification": true,
+    "partialProgressClassification": "EXACT_LEGACY_ONE_OF_ONE_OR_EXACT_MIGRATED_HARDWARE_TWO_OF_THREE_OTHERWISE_INVALID",
+    "continuation": "FRESH_PLAN_AUTHORIZES_ONLY_REMAINING_LEGACY_SAFES_AND_BINDS_FINALIZED_COMPLETED_RECEIPTS_AUTHORIZATIONS_AND_JOURNALS",
+    "expiredPlanBehavior": "STOP_WITH_COMPLETED_SAFES_SAFE_AND_RESUME_ONLY_REMAINING_SAFES_UNDER_FRESH_AUTHORIZATION",
     "safeTxGas": "0",
     "baseGas": "0",
     "gasPrice": "0",

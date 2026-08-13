@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
 import {
   concatHex,
   decodeEventLog,
@@ -15,6 +18,58 @@ import {
   FLASHBOTS_PRIVATE_SUBMISSION,
   ZERO_ADDRESS,
 } from "./custom-registry-v2-deployment-guards.mjs";
+
+const productionPolicyBytes = readFileSync(
+  new URL("../../config/custom-registry-v2-production-policy.json", import.meta.url),
+);
+
+export function assertProductionPolicyApprovalBinding({
+  bytes,
+  configuredApprovalPolicyCommitment,
+}) {
+  if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+    throw new Error("Custom Registry V2 production policy bytes are required");
+  }
+  let productionPolicy;
+  try {
+    productionPolicy = JSON.parse(Buffer.from(bytes));
+  } catch {
+    throw new Error("Custom Registry V2 production policy is invalid JSON");
+  }
+  const approvalPolicyCommitment =
+    productionPolicy?.approvalDescriptorBinding?.approvalPolicyCommitment;
+  if (
+    productionPolicy?.schemaVersion !==
+      "programmable.custom-registry-v2-production-policy.v2" ||
+    !/^0x[0-9a-f]{64}$/u.test(approvalPolicyCommitment ?? "")
+  ) {
+    throw new Error(
+      "Custom Registry V2 production Approval policy binding is invalid",
+    );
+  }
+  if (
+    configuredApprovalPolicyCommitment !== undefined &&
+    configuredApprovalPolicyCommitment !== approvalPolicyCommitment
+  ) {
+    throw new Error(
+      "REGISTRY_APPROVAL_POLICY_COMMITMENT does not match the production policy",
+    );
+  }
+  return {
+    approvalPolicyCommitment,
+    productionPolicySha256: `0x${createHash("sha256")
+      .update(bytes)
+      .digest("hex")}`,
+  };
+}
+
+const productionPolicyApprovalBinding = assertProductionPolicyApprovalBinding({
+  bytes: productionPolicyBytes,
+});
+export const SAFE_APPROVAL_POLICY_COMMITMENT =
+  productionPolicyApprovalBinding.approvalPolicyCommitment;
+export const SAFE_PRODUCTION_POLICY_SHA256 =
+  productionPolicyApprovalBinding.productionPolicySha256;
 
 export const SAFE_SETUP_ABI = [
   {
@@ -89,7 +144,7 @@ export const SAFE_SETUP_EVENT_ABI = [
 ];
 
 export const SAFE_PLAN_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-preflight.v5";
+  "programmable.custom-registry-v2-safe-controller-preflight.v6";
 export const SAFE_AUTHORIZATION_SCHEMA =
   "programmable.custom-registry-v2-safe-controller-authorization.v4";
 export const SAFE_RECEIPTS_SCHEMA =
@@ -248,6 +303,8 @@ export function assertSafePreflightEnvelope(
     plan.rpcProviderBindings[0].rpcOrigin ===
       plan.rpcProviderBindings[1].rpcOrigin ||
     !/^0x[0-9a-f]{64}$/u.test(plan.policySha256 ?? "") ||
+    plan.productionPolicySha256 !== SAFE_PRODUCTION_POLICY_SHA256 ||
+    plan.approvalPolicyCommitment !== SAFE_APPROVAL_POLICY_COMMITMENT ||
     !/^0x[0-9a-f]{64}$/u.test(plan.custodyProofSha256 ?? "")
   ) {
     throw new Error("Safe preflight plan is stale or invalid");
@@ -285,6 +342,8 @@ export function assertSafeCostReviewEnvelope(plan) {
     plan.rpcProviderBindings[0].rpcOrigin ===
       plan.rpcProviderBindings[1].rpcOrigin ||
     !/^0x[0-9a-f]{64}$/u.test(plan.policySha256 ?? "") ||
+    plan.productionPolicySha256 !== SAFE_PRODUCTION_POLICY_SHA256 ||
+    plan.approvalPolicyCommitment !== SAFE_APPROVAL_POLICY_COMMITMENT ||
     !/^0x[0-9a-f]{64}$/u.test(plan.custodyProofSha256 ?? "")
   ) {
     throw new Error("Safe unfunded cost-review plan is invalid");
@@ -375,6 +434,11 @@ export function assertSafePolicyBoundPlan({
     manifest.sourceDigests?.[
       "config/custom-registry-v2-safe-controller-policy.json"
     ] !== plan.policySha256 ||
+    manifest.sourceDigests?.[
+      "config/custom-registry-v2-production-policy.json"
+    ] !== SAFE_PRODUCTION_POLICY_SHA256 ||
+    plan.productionPolicySha256 !== SAFE_PRODUCTION_POLICY_SHA256 ||
+    plan.approvalPolicyCommitment !== SAFE_APPROVAL_POLICY_COMMITMENT ||
     getAddress(manifest.releaseAuthorization?.owner) !==
       getAddress(plan.releaseAuthorization?.owner) ||
     manifest.releaseAuthorization

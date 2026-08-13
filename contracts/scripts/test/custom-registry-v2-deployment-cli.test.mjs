@@ -93,6 +93,8 @@ test("Safe prediction input generator binds each owner and produces fresh distin
   assert.match(source, /randomBytesFunction\s*=\s*randomBytes/u);
   assert.match(source, /REGISTRY_RETIRED_SAFE_SALT_COMMITMENTS/u);
   assert.match(source, /generatedAfterPublicSourceAndApprovalPolicyFreeze/u);
+  assert.match(source, /custom-registry-v2-production-policy\.json/u);
+  assert.match(source, /productionPolicySha256/u);
   assert.doesNotMatch(source, /Math\.random/u);
   assert.equal(REQUIRED_RETIRED_SAFE_SALT_COMMITMENTS.length, 4);
   assert.throws(
@@ -121,6 +123,24 @@ test("Safe prediction input generator binds each owner and produces fresh distin
     })),
   );
   assert.equal(new Set(entries.map(({ saltNonce }) => saltNonce)).size, 4);
+});
+
+test("Safe prediction input generator rejects a wrong Approval policy environment commitment", () => {
+  const result = run(
+    "generate-custom-registry-v2-safe-prediction-inputs.mjs",
+    [
+      "--generate-fresh-prediction-inputs",
+      "--output",
+      path.join(os.tmpdir(), "must-not-write-safe-prediction-inputs.json"),
+    ],
+    {
+      REGISTRY_SOURCE_COMMIT: "a".repeat(40),
+      REGISTRY_SOURCE_TREE: "b".repeat(40),
+      REGISTRY_APPROVAL_POLICY_COMMITMENT: `0x${"00".repeat(32)}`,
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /does not match the production policy/u);
 });
 
 test("persistent release evidence lock excludes concurrent writers and recovers after process death", async () => {
