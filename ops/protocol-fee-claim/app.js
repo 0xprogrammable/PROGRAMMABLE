@@ -3,6 +3,9 @@ import {
   CLAIMS,
   CUSTOM_EVENT_TOPICS,
   CUSTOM_REGISTRY,
+  CUSTOM_V2_POLICY,
+  CUSTOM_V2_RELEASE_PATH,
+  CUSTOM_V2_SELECTORS,
   HOOKS,
   MAINNET_CHAIN_ID,
   SELECTORS,
@@ -13,15 +16,23 @@ import {
   buildWalletSendCalls,
   customLaunchClassification,
   customLaunchStateData,
+  customV2Bytes32ReadData,
+  customV2IndexedReadData,
+  customV2SourceClassification,
   decodeAbiString,
   decodeAddress,
+  decodeBool,
+  decodeBytes4,
+  decodeBytes32,
   decodeCustomLaunchState,
+  decodeCustomV2SourceState,
   decodeUint256,
   formatEth,
   formatUnits,
   isTreasury,
   keccak256Hex,
   normalizeBatchId,
+  parseCustomV2Release,
   readAccruedData,
   reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
@@ -40,6 +51,12 @@ const state = {
     status: "idle",
     registryVerified: false,
     launches: [],
+    error: null,
+  },
+  customV2: {
+    status: "idle",
+    release: null,
+    sources: [],
     error: null,
   },
   classic: {
@@ -93,6 +110,7 @@ function disclosureIndicator() {
 }
 
 function hookVerified(claim) {
+  if (claim.kind === "custom") return claim.bindingVerified === true;
   return state.hooks.get(claim.hookId)?.verified === true;
 }
 
@@ -167,6 +185,47 @@ function buildCustomRow(launch) {
   return row;
 }
 
+function customV2StatusLabel(source) {
+  if (source.status === "claiming") return "In MetaMask bestätigen";
+  if (source.status === "pending") return "Wird bestätigt";
+  if (source.status === "claimed") return "Geclaimt";
+  if (source.status === "failed") return "Nicht verfügbar";
+  const classification = customV2SourceClassification(source);
+  if (classification === "ready") return "Bereit";
+  if (classification === "empty") return "Nichts offen";
+  if (classification === "quarantined") return "Nicht ausführbar";
+  return "Onchain-Bindung unvollständig";
+}
+
+function buildCustomV2Row(source) {
+  const current = state.claims.get(source.id) ?? source;
+  const rendered = { ...source, ...current };
+  const row = document.createElement("li");
+  row.className = "claim-row custom-row";
+  row.dataset.state =
+    ["claiming", "pending", "claimed", "failed"].includes(rendered.status)
+      ? rendered.status
+      : customV2SourceClassification(rendered);
+
+  const identity = document.createElement("div");
+  identity.className = "claim-identity";
+  const name = document.createElement("strong");
+  name.textContent = `Custom Launch ${source.index + 1}`;
+  const detail = document.createElement("span");
+  detail.textContent = `${shortAddress(source.launchId)} · ${shortAddress(source.address)}`;
+  identity.append(name, detail);
+
+  const value = document.createElement("div");
+  value.className = "claim-value";
+  const amount = document.createElement("strong");
+  amount.textContent = `${formatEth(rendered.amount)} ETH`;
+  const status = document.createElement("span");
+  status.textContent = customV2StatusLabel(rendered);
+  value.append(amount, status);
+  row.append(identity, value);
+  return row;
+}
+
 function buildCustomGroup() {
   const group = document.createElement("li");
   group.className = "asset-group custom-group";
@@ -187,7 +246,10 @@ function buildCustomGroup() {
   if (state.account === null) {
     count.textContent = "Registry";
     hint.textContent = "Nach Verbindung";
-  } else if (state.custom.status === "loading") {
+  } else if (
+    state.custom.status === "loading" ||
+    state.customV2.status === "loading"
+  ) {
     count.textContent = "Wird gelesen";
     hint.textContent = "Finalisierte Launches";
   } else if (state.custom.error) {
@@ -197,20 +259,31 @@ function buildCustomGroup() {
     const feeBearing = state.custom.launches.filter(
       (launch) => customLaunchClassification(launch) === "adapter-required",
     ).length;
-    count.textContent = `${state.custom.launches.length} erkannt`;
-    hint.textContent =
-      feeBearing > 0
-        ? `${feeBearing} Feequelle${feeBearing === 1 ? "" : "n"}`
-        : "Keine Custom-Fees offen";
+    const sourceCount = state.customV2.sources.length;
+    const readyCount = state.customV2.sources.filter(
+      (source) => customV2SourceClassification(source) === "ready",
+    ).length;
+    count.textContent = `${state.custom.launches.length + sourceCount} erkannt`;
+    if (state.customV2.error) hint.textContent = "V2-Release gesperrt";
+    else if (readyCount > 0)
+      hint.textContent = `${readyCount} Custom-Claim${readyCount === 1 ? "" : "s"} offen`;
+    else if (feeBearing > 0)
+      hint.textContent = `${feeBearing} Legacy-Quelle${feeBearing === 1 ? "" : "n"} gesperrt`;
+    else if (state.customV2.status === "hold")
+      hint.textContent = "V2 wartet auf Mainnet-Release";
+    else hint.textContent = "Keine Custom-Fees offen";
   }
   value.append(count, hint);
   summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
-  if (state.custom.launches.length > 0) {
+  if (state.custom.launches.length > 0 || state.customV2.sources.length > 0) {
     const list = document.createElement("ul");
     list.className = "asset-list";
-    list.replaceChildren(...state.custom.launches.map(buildCustomRow));
+    list.replaceChildren(
+      ...state.customV2.sources.map(buildCustomV2Row),
+      ...state.custom.launches.map(buildCustomRow),
+    );
     details.append(list);
   }
   group.append(details);
@@ -352,9 +425,18 @@ function renderRows() {
   );
 }
 
+function allClaimDefinitions() {
+  return [...CLAIMS, ...state.customV2.sources];
+}
+
 function claimableClaims() {
-  return CLAIMS.filter((claim) => {
+  return allClaimDefinitions().filter((claim) => {
     const current = state.claims.get(claim.id);
+    if (
+      claim.kind === "custom" &&
+      customV2SourceClassification({ ...claim, ...current }) !== "ready"
+    )
+      return false;
     return (
       hookVerified(claim) &&
       current?.recipientMatches === true &&
@@ -363,10 +445,37 @@ function claimableClaims() {
   });
 }
 
+function claimSafetyError() {
+  if (
+    state.custom.status !== "ready" ||
+    state.custom.registryVerified !== true
+  )
+    return "Die Custom Registry ist nicht vollständig verifiziert";
+  if (!["ready", "hold"].includes(state.customV2.status))
+    return "Das Custom-V2-Release ist nicht vollständig verifiziert";
+  if (
+    state.custom.launches.some((launch) =>
+      ["adapter-required", "blocked"].includes(
+        customLaunchClassification(launch),
+      ),
+    )
+  )
+    return "Mindestens eine Custom-V1-Feequelle ist nicht sicher claimbar";
+  if (
+    state.customV2.sources.some(
+      (source) => customV2SourceClassification(source) === "blocked",
+    )
+  )
+    return "Mindestens eine Custom-V2-Source-Bindung stimmt nicht";
+  if (HOOKS.some(({ id }) => state.hooks.get(id)?.verified !== true))
+    return "Mindestens eine Classic- oder Stock-Bindung stimmt nicht";
+  return null;
+}
+
 function renderSummary() {
   const claimable = claimableClaims();
   const nativeTotal = claimable
-    .filter(({ kind }) => kind === "native")
+    .filter(({ kind }) => kind === "native" || kind === "custom")
     .reduce(
       (sum, claim) => sum + (state.claims.get(claim.id)?.amount ?? 0n),
       0n,
@@ -380,6 +489,9 @@ function renderSummary() {
   );
   const customBindingBlockers = state.custom.launches.filter(
     (launch) => customLaunchClassification(launch) === "blocked",
+  );
+  const customV2BindingBlockers = state.customV2.sources.filter(
+    (source) => customV2SourceClassification(source) === "blocked",
   );
 
   elements.total.textContent = `${formatEth(nativeTotal)} ETH${assetCount > 0 ? ` + ${assetCount} Assets` : ""}`;
@@ -422,9 +534,17 @@ function renderSummary() {
     elements.actionLabel.textContent = "Custom Registry nicht verifiziert";
     elements.actionDetail.textContent = "Neu laden oder RPC-Verbindung prüfen";
     elements.action.disabled = true;
+  } else if (state.customV2.status === "failed") {
+    elements.actionLabel.textContent = "Custom V2 nicht verifiziert";
+    elements.actionDetail.textContent = "Release-Bindung oder RPC-Verbindung prüfen";
+    elements.action.disabled = true;
   } else if (customBindingBlockers.length > 0) {
     elements.actionLabel.textContent = "Custom-Quelle nicht verifiziert";
     elements.actionDetail.textContent = `${customBindingBlockers.length} Onchain-Bindung${customBindingBlockers.length === 1 ? "" : "en"} gesperrt`;
+    elements.action.disabled = true;
+  } else if (customV2BindingBlockers.length > 0) {
+    elements.actionLabel.textContent = "Custom-V2-Quelle nicht verifiziert";
+    elements.actionDetail.textContent = `${customV2BindingBlockers.length} Source-Bindung${customV2BindingBlockers.length === 1 ? "" : "en"} gesperrt`;
     elements.action.disabled = true;
   } else if (customAdapterBlockers.length > 0) {
     elements.actionLabel.textContent = "Custom-Claimadapter fehlt";
@@ -647,6 +767,356 @@ async function readCustomRegistry(blockTag) {
   }
 }
 
+async function readContractWord(address, data, blockTag) {
+  const value = await request("eth_call", [{ to: address, data }, blockTag]);
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
+    throw new Error(`Ungültige Contract-Antwort von ${shortAddress(address)}`);
+  return value;
+}
+
+async function verifyCustomV2Infrastructure(release, blockTag) {
+  if (release.startBlock > BigInt(blockTag))
+    throw new Error("Custom-V2-Deployment-Block liegt in der Zukunft");
+  const contractEntries = Object.values(release.contracts);
+  const runtimeResults = await Promise.all(
+    contractEntries.map(async (contract) => ({
+      contract,
+      actual: keccak256Hex(
+        await request("eth_getCode", [contract.address, blockTag]),
+      ).toLowerCase(),
+    })),
+  );
+  if (
+    runtimeResults.some(
+      ({ contract, actual }) =>
+        actual !== contract.runtimeCodeHash.toLowerCase(),
+    )
+  )
+    throw new Error("Custom-V2-Contract-Runtime stimmt nicht");
+
+  const { sourceRegistry, customRegistryV2, customRegistrar, launchStampRouter } =
+    release.contracts;
+  const [
+    registrarChain,
+    registrarSourceRegistry,
+    registrarCustomRegistry,
+    registrarLaunchStampRouter,
+    registryChain,
+    registryGeneration,
+    registryFinality,
+    registrySourceRegistry,
+    launchStampChain,
+    sourceChain,
+    sourceDelay,
+    sourceRewardWallet,
+    sourceClaimSelector,
+    sourceInterfaceId,
+  ] = await Promise.all([
+    readContractWord(
+      customRegistrar.address,
+      CUSTOM_V2_SELECTORS.supportedChainId,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistrar.address,
+      CUSTOM_V2_SELECTORS.sourceRegistry,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistrar.address,
+      CUSTOM_V2_SELECTORS.customRegistryV2,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistrar.address,
+      CUSTOM_V2_SELECTORS.launchStampRouter,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistryV2.address,
+      CUSTOM_V2_SELECTORS.chainId,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistryV2.address,
+      CUSTOM_V2_SELECTORS.registryGeneration,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistryV2.address,
+      CUSTOM_V2_SELECTORS.minimumFinalityBlocks,
+      blockTag,
+    ),
+    readContractWord(
+      customRegistryV2.address,
+      CUSTOM_V2_SELECTORS.sourceRegistry,
+      blockTag,
+    ),
+    readContractWord(
+      launchStampRouter.address,
+      CUSTOM_V2_SELECTORS.chainId,
+      blockTag,
+    ),
+    readContractWord(
+      sourceRegistry.address,
+      CUSTOM_V2_SELECTORS.chainId,
+      blockTag,
+    ),
+    readContractWord(
+      sourceRegistry.address,
+      CUSTOM_V2_SELECTORS.minimumActivationDelayBlocks,
+      blockTag,
+    ),
+    readContractWord(
+      sourceRegistry.address,
+      CUSTOM_V2_SELECTORS.rewardWallet,
+      blockTag,
+    ),
+    readContractWord(
+      sourceRegistry.address,
+      CUSTOM_V2_SELECTORS.claimSelector,
+      blockTag,
+    ),
+    readContractWord(
+      sourceRegistry.address,
+      CUSTOM_V2_SELECTORS.sourceInterfaceId,
+      blockTag,
+    ),
+  ]);
+
+  if (
+    decodeUint256(registrarChain) !== CUSTOM_V2_POLICY.chainId ||
+    decodeAddress(registrarSourceRegistry).toLowerCase() !==
+      sourceRegistry.address.toLowerCase() ||
+    decodeAddress(registrarCustomRegistry).toLowerCase() !==
+      customRegistryV2.address.toLowerCase() ||
+    decodeAddress(registrarLaunchStampRouter).toLowerCase() !==
+      launchStampRouter.address.toLowerCase() ||
+    decodeUint256(registryChain) !== CUSTOM_V2_POLICY.chainId ||
+    decodeUint256(registryGeneration) <
+      CUSTOM_V2_POLICY.minimumRegistryGeneration ||
+    decodeUint256(registryFinality) < CUSTOM_V2_POLICY.minimumFinalityBlocks ||
+    decodeAddress(registrySourceRegistry).toLowerCase() !==
+      sourceRegistry.address.toLowerCase() ||
+    decodeUint256(launchStampChain) !== CUSTOM_V2_POLICY.chainId ||
+    decodeUint256(sourceChain) !== CUSTOM_V2_POLICY.chainId ||
+    decodeUint256(sourceDelay) < CUSTOM_V2_POLICY.minimumFinalityBlocks ||
+    !isTreasury(decodeAddress(sourceRewardWallet)) ||
+    decodeBytes4(sourceClaimSelector) !== CUSTOM_V2_POLICY.claimSelector ||
+    decodeBytes4(sourceInterfaceId) !== CUSTOM_V2_POLICY.sourceInterfaceId
+  )
+    throw new Error("Custom-V2-Infrastruktur-Bindung stimmt nicht");
+}
+
+async function mapWithConcurrency(values, concurrency, mapper) {
+  const output = new Array(values.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (cursor < values.length) {
+        const index = cursor;
+        cursor += 1;
+        output[index] = await mapper(values[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return output;
+}
+
+async function readCustomV2Source(release, indexed, blockTag) {
+  const sourceRegistry = release.contracts.sourceRegistry.address;
+  const registrar = release.contracts.customRegistrar.address;
+  const stateWord = await request("eth_call", [
+    {
+      to: sourceRegistry,
+      data: customV2Bytes32ReadData(
+        CUSTOM_V2_SELECTORS.sourceState,
+        indexed.sourceId,
+      ),
+    },
+    blockTag,
+  ]);
+  const source = decodeCustomV2SourceState(stateWord);
+  const [
+    executableWord,
+    indexedLaunchWord,
+    runtimeCode,
+    recipientWord,
+    accruedWord,
+    totalClaimedWord,
+    feeBpsWord,
+  ] = await Promise.all([
+    readContractWord(
+      registrar,
+      customV2Bytes32ReadData(
+        CUSTOM_V2_SELECTORS.isFinalizedExecutable,
+        indexed.launchId,
+      ),
+      blockTag,
+    ),
+    readContractWord(
+      registrar,
+      customV2Bytes32ReadData(
+        CUSTOM_V2_SELECTORS.launchIdForSource,
+        indexed.sourceId,
+      ),
+      blockTag,
+    ),
+    request("eth_getCode", [source.source, blockTag]),
+    readContractWord(
+      source.source,
+      CUSTOM_V2_SELECTORS.programmableFeeRecipient,
+      blockTag,
+    ),
+    readContractWord(source.source, readAccruedData({ kind: "custom" }), blockTag),
+    readContractWord(
+      source.source,
+      `${CUSTOM_V2_SELECTORS.totalProgrammableFeesClaimed}${"0".repeat(64)}`,
+      blockTag,
+    ),
+    readContractWord(
+      source.source,
+      `${CUSTOM_V2_SELECTORS.programmableFeeBps}${"0".repeat(64)}`,
+      blockTag,
+    ),
+  ]);
+
+  const executable = decodeBool(executableWord);
+  const amount = decodeUint256(accruedWord);
+  const bindingVerified =
+    source.sourceId === indexed.sourceId &&
+    decodeBytes32(indexedLaunchWord) === indexed.launchId &&
+    source.registered &&
+    source.asset.toLowerCase() === CUSTOM_V2_POLICY.nativeAsset &&
+    source.claimSelector === CUSTOM_V2_POLICY.claimSelector &&
+    isTreasury(source.recipient) &&
+    source.activationBlock <= BigInt(blockTag) &&
+    keccak256Hex(runtimeCode).toLowerCase() === source.runtimeCodeHash &&
+    isTreasury(decodeAddress(recipientWord)) &&
+    decodeUint256(feeBpsWord) === CUSTOM_V2_POLICY.programmableFeeBps;
+
+  return Object.freeze({
+    id: `custom-v2:${indexed.sourceId}`,
+    hookId: "custom-v2",
+    index: indexed.index,
+    launchId: indexed.launchId,
+    sourceId: indexed.sourceId,
+    name: "Custom V2",
+    detail: shortAddress(source.source),
+    unit: "ETH",
+    decimals: 18,
+    kind: "custom",
+    address: source.source,
+    asset: CUSTOM_V2_POLICY.nativeAsset,
+    runtimeCodeHash: source.runtimeCodeHash,
+    activationBlock: source.activationBlock,
+    registered: source.registered,
+    quarantined: source.quarantined,
+    executable,
+    bindingVerified,
+    amount,
+    totalClaimed: decodeUint256(totalClaimedWord),
+    recipientMatches: bindingVerified,
+    status: bindingVerified ? "ready" : "failed",
+  });
+}
+
+async function readCustomV2(blockTag) {
+  state.customV2 = {
+    status: "loading",
+    release: null,
+    sources: [],
+    error: null,
+  };
+  renderSummary();
+  try {
+    const response = await fetch(
+      `${CUSTOM_V2_RELEASE_PATH}?block=${BigInt(blockTag).toString()}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) throw new Error("Custom-V2-Release-Datei fehlt");
+    const release = parseCustomV2Release(await response.json());
+    if (!release.active) {
+      state.customV2 = {
+        status: "hold",
+        release,
+        sources: [],
+        error: null,
+      };
+      return;
+    }
+
+    await verifyCustomV2Infrastructure(release, blockTag);
+    const count = decodeUint256(
+      await readContractWord(
+        release.contracts.customRegistrar.address,
+        CUSTOM_V2_SELECTORS.finalizedSourceCount,
+        blockTag,
+      ),
+    );
+    if (count > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new Error("Custom-V2-Source-Liste ist zu groß");
+    const indices = Array.from({ length: Number(count) }, (_, index) => index);
+    const indexed = await mapWithConcurrency(indices, 24, async (index) => {
+      const [sourceIdWord, launchIdWord] = await Promise.all([
+        readContractWord(
+          release.contracts.customRegistrar.address,
+          customV2IndexedReadData(
+            CUSTOM_V2_SELECTORS.finalizedSourceIdAt,
+            BigInt(index),
+          ),
+          blockTag,
+        ),
+        readContractWord(
+          release.contracts.customRegistrar.address,
+          customV2IndexedReadData(
+            CUSTOM_V2_SELECTORS.finalizedLaunchIdAt,
+            BigInt(index),
+          ),
+          blockTag,
+        ),
+      ]);
+      return {
+        index,
+        sourceId: decodeBytes32(sourceIdWord),
+        launchId: decodeBytes32(launchIdWord),
+      };
+    });
+    if (
+      new Set(indexed.map(({ sourceId }) => sourceId)).size !== indexed.length ||
+      new Set(indexed.map(({ launchId }) => launchId)).size !== indexed.length
+    )
+      throw new Error("Custom-V2-Registrar enthält doppelte Einträge");
+    const sources = await mapWithConcurrency(indexed, 12, (entry) =>
+      readCustomV2Source(release, entry, blockTag),
+    );
+    for (const source of sources)
+      state.claims.set(source.id, {
+        amount: source.amount,
+        recipientMatches: source.recipientMatches,
+        status: source.status,
+      });
+    state.customV2 = {
+      status: "ready",
+      release,
+      sources,
+      error: null,
+    };
+  } catch (error) {
+    state.customV2 = {
+      status: "failed",
+      release: null,
+      sources: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Custom V2 konnte nicht gelesen werden",
+    };
+  }
+}
+
 async function readHook(hook, blockTag) {
   const [code, recipientWord] = await Promise.all([
     request("eth_getCode", [hook.address, blockTag]),
@@ -705,6 +1175,7 @@ async function refreshClaims() {
 
   await Promise.all([
     readCustomRegistry(blockTag),
+    readCustomV2(blockTag),
     readClassicLaunches(blockTag),
   ]);
 
@@ -740,23 +1211,29 @@ async function refreshClaims() {
   const failedClaims = claimResults.filter(
     ({ status }) => status === "rejected",
   ).length;
+  const errors = [];
   if (verified !== HOOKS.length)
-    setError(
+    errors.push(
       "Mindestens eine Contract-Bindung stimmt nicht. Claims bleiben gesperrt.",
     );
   if (state.custom.error)
-    setError(
+    errors.push(
       "Die Custom Registry konnte nicht vollständig verifiziert werden. Claims bleiben gesperrt.",
     );
+  if (state.customV2.error)
+    errors.push(
+      "Das aktive Custom-V2-Release konnte nicht vollständig verifiziert werden. Claims bleiben gesperrt.",
+    );
   if (state.classic.error)
-    setError(
+    errors.push(
       "Die Classic-Launchliste konnte nicht vollständig gelesen werden. Der verifizierte gemeinsame Hook-Claim bleibt verfügbar.",
     );
+  setError(errors.join(" "));
   setStatus(
-    state.custom.error
+    state.custom.error || state.customV2.error
       ? "Custom Registry konnte nicht vollständig gelesen werden"
       : failedClaims === 0
-        ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length} Classic · ${state.custom.launches.length} Custom`
+        ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length} Classic · ${state.custom.launches.length + state.customV2.sources.length} Custom`
         : `${failedClaims} Guthaben konnten nicht gelesen werden`,
   );
   renderSummary();
@@ -845,6 +1322,8 @@ async function claimOne(claim) {
 
 async function claimAll() {
   await refreshClaims();
+  const safetyError = claimSafetyError();
+  if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
   const claims = claimableClaims();
   if (claims.length === 0) return;
   state.busy = true;

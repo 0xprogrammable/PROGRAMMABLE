@@ -235,11 +235,16 @@ h1 {
 .custom-row[data-state="no-market"] .claim-value span {
   color: var(--success);
 }
+.custom-row[data-state="ready"] .claim-value span,
+.custom-row[data-state="empty"] .claim-value span {
+  color: var(--success);
+}
 .classic-launch-row[data-state="covered"] .claim-value span {
   color: var(--success);
 }
 .custom-row[data-state="adapter-required"] .claim-value span,
-.custom-row[data-state="pending"] .claim-value span {
+.custom-row[data-state="pending"] .claim-value span,
+.custom-row[data-state="quarantined"] .claim-value span {
   color: var(--warning);
 }
 .custom-row[data-state="blocked"] .claim-value span,

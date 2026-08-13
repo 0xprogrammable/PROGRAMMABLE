@@ -6,6 +6,8 @@ import {
   CUSTOM_EVENT_TOPICS,
   CUSTOM_FEE_POLICY_KIND,
   CUSTOM_REGISTRY,
+  CUSTOM_V2_POLICY,
+  CUSTOM_V2_SELECTORS,
   HOOKS,
   MAINNET_CHAIN_ID,
   SELECTORS,
@@ -17,9 +19,13 @@ import {
   claimData,
   customLaunchClassification,
   customLaunchStateData,
+  customV2Bytes32ReadData,
+  customV2IndexedReadData,
+  customV2SourceClassification,
   decodeAbiString,
   decodeClassicLaunchLog,
   decodeCustomLaunchState,
+  decodeCustomV2SourceState,
   decodeCustomRegistryLog,
   decodeAddress,
   decodeUint256,
@@ -29,6 +35,7 @@ import {
   isTreasury,
   keccak256Hex,
   normalizeBatchId,
+  parseCustomV2Release,
   readAccruedData,
   reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
@@ -460,4 +467,201 @@ test("normalizes MetaMask batch identifiers", () => {
   assert.equal(normalizeBatchId({ id: "0x1234" }), "0x1234");
   assert.equal(normalizeBatchId("0xabcd"), "0xabcd");
   assert.throws(() => normalizeBatchId({}), /Batch-ID/);
+});
+
+function activeCustomV2Release() {
+  const contract = (suffix) => ({
+    address: `0x${suffix.repeat(40)}`,
+    runtimeCodeHash: `0x${suffix.repeat(64)}`,
+  });
+  return {
+    schemaVersion: CUSTOM_V2_POLICY.schemaVersion,
+    status: "READY_FOR_MANUAL_CLAIM",
+    activationAllowed: true,
+    sourceRevision: {
+      repository: "https://github.com/0xprogrammable/programmable",
+      commit: "1".repeat(40),
+      tree: "2".repeat(40),
+    },
+    deployment: { chainId: "1", startBlock: "25750000" },
+    contracts: {
+      sourceRegistry: contract("1"),
+      customRegistryV2: contract("2"),
+      customRegistrar: contract("3"),
+      launchStampRouter: contract("4"),
+    },
+    policy: {
+      asset: CUSTOM_V2_POLICY.nativeAsset,
+      recipient: TREASURY,
+      programmableFeeBps: "10",
+      claimSelector: CUSTOM_V2_POLICY.claimSelector,
+      sourceInterfaceId: CUSTOM_V2_POLICY.sourceInterfaceId,
+      minimumActivationDelayBlocks: "64",
+      minimumLaunchFinalityBlocks: "64",
+    },
+  };
+}
+
+test("keeps Custom V2 disabled until an exact deployed release is bound", () => {
+  assert.deepEqual(
+    parseCustomV2Release({
+      schemaVersion: CUSTOM_V2_POLICY.schemaVersion,
+      status: "HOLD",
+      activationAllowed: false,
+    }),
+    { active: false, status: "HOLD" },
+  );
+  const release = parseCustomV2Release(activeCustomV2Release());
+  assert.equal(release.active, true);
+  assert.equal(release.startBlock, 25_750_000n);
+  assert.equal(
+    release.contracts.customRegistrar.address,
+    `0x${"3".repeat(40)}`,
+  );
+
+  assert.throws(
+    () =>
+      parseCustomV2Release({
+        ...activeCustomV2Release(),
+        policy: {
+          ...activeCustomV2Release().policy,
+          recipient: "0x0000000000000000000000000000000000000001",
+        },
+      }),
+    /Fee-Policy/,
+  );
+  assert.throws(
+    () =>
+      parseCustomV2Release({
+        ...activeCustomV2Release(),
+        contracts: {
+          ...activeCustomV2Release().contracts,
+          customRegistrar: {
+            address: `0x${"3".repeat(40)}`,
+            runtimeCodeHash: null,
+          },
+        },
+      }),
+    /Runtime/,
+  );
+  assert.throws(
+    () =>
+      parseCustomV2Release({
+        ...activeCustomV2Release(),
+        contracts: {
+          ...activeCustomV2Release().contracts,
+          launchStampRouter: activeCustomV2Release().contracts.customRegistrar,
+        },
+      }),
+    /eindeutig/,
+  );
+});
+
+test("binds the exact Custom V2 selectors and decodes one source record", () => {
+  assert.deepEqual(CUSTOM_V2_SELECTORS, {
+    finalizedSourceCount: "0xf8ec37a7",
+    finalizedLaunchIdAt: "0xcb2235c0",
+    finalizedSourceIdAt: "0xf5f62028",
+    isFinalizedExecutable: "0xcb2b7132",
+    launchIdForSource: "0x3eeacd13",
+    sourceState: "0x447c24c0",
+    sourceRegistry: "0xee9ab677",
+    customRegistryV2: "0xab0adbf2",
+    launchStampRouter: "0xa87eb510",
+    supportedChainId: "0x356c6567",
+    chainId: "0x85e1f4d0",
+    registryGeneration: "0x8ca2d907",
+    minimumFinalityBlocks: "0x03580b1c",
+    minimumActivationDelayBlocks: "0x92636c45",
+    rewardWallet: "0xb66ceef6",
+    claimSelector: "0x7011b80b",
+    sourceInterfaceId: "0x1b11e61b",
+    programmableFeeRecipient: "0x424ff2a5",
+    accruedProgrammableFees: "0x3129853d",
+    totalProgrammableFeesClaimed: "0x4a383b32",
+    programmableFeeBps: "0x32c0314d",
+    claimProgrammableFees: "0xb9d2fad0",
+  });
+  const sourceId = `0x${"ab".repeat(32)}`;
+  const source = "0x1234567890123456789012345678901234567890";
+  const runtime = `0x${"cd".repeat(32)}`;
+  const stateData = `0x${[
+    sourceId.slice(2),
+    addressWord(source),
+    runtime.slice(2),
+    addressWord(CUSTOM_V2_POLICY.nativeAsset),
+    `${CUSTOM_V2_POLICY.claimSelector.slice(2)}${"0".repeat(56)}`,
+    addressWord(TREASURY),
+    word(25_750_064),
+    word(1),
+    word(0),
+  ].join("")}`;
+  assert.deepEqual(decodeCustomV2SourceState(stateData), {
+    sourceId,
+    source,
+    runtimeCodeHash: runtime,
+    asset: CUSTOM_V2_POLICY.nativeAsset,
+    claimSelector: CUSTOM_V2_POLICY.claimSelector,
+    recipient: TREASURY.toLowerCase(),
+    activationBlock: 25_750_064n,
+    registered: true,
+    quarantined: false,
+  });
+  assert.equal(
+    customV2IndexedReadData(CUSTOM_V2_SELECTORS.finalizedSourceIdAt, 7n),
+    `${CUSTOM_V2_SELECTORS.finalizedSourceIdAt}${word(7)}`,
+  );
+  assert.equal(
+    customV2Bytes32ReadData(CUSTOM_V2_SELECTORS.sourceState, sourceId),
+    `${CUSTOM_V2_SELECTORS.sourceState}${sourceId.slice(2)}`,
+  );
+});
+
+test("builds direct permissionless Custom claims into the same wallet batch", () => {
+  const custom = {
+    id: "custom-v2:source",
+    hookId: "custom-v2",
+    name: "Custom V2",
+    detail: "Launch 1",
+    kind: "custom",
+    address: "0x1234567890123456789012345678901234567890",
+    asset: CUSTOM_V2_POLICY.nativeAsset,
+    unit: "ETH",
+    decimals: 18,
+    bindingVerified: true,
+  };
+  assert.equal(
+    readAccruedData(custom),
+    `${CUSTOM_V2_SELECTORS.accruedProgrammableFees}${"0".repeat(64)}`,
+  );
+  assert.equal(
+    claimData(custom),
+    `${CUSTOM_V2_SELECTORS.claimProgrammableFees}${"0".repeat(64)}`,
+  );
+  const batch = buildWalletSendCalls(TREASURY, [CLAIMS[0], custom]);
+  assert.deepEqual(batch.calls[1], {
+    to: custom.address,
+    data: `${CUSTOM_V2_SELECTORS.claimProgrammableFees}${"0".repeat(64)}`,
+    value: "0x0",
+  });
+  assert.equal(
+    customV2SourceClassification({
+      ...custom,
+      amount: 1n,
+      registered: true,
+      quarantined: false,
+      executable: true,
+    }),
+    "ready",
+  );
+  assert.equal(
+    customV2SourceClassification({
+      ...custom,
+      amount: 0n,
+      registered: true,
+      quarantined: false,
+      executable: true,
+    }),
+    "empty",
+  );
 });

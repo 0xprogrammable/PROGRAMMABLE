@@ -12,6 +12,45 @@ export const SELECTORS = Object.freeze({
   customLaunchState: "0x2b76b49c",
 });
 
+export const CUSTOM_V2_SELECTORS = Object.freeze({
+  finalizedSourceCount: "0xf8ec37a7",
+  finalizedLaunchIdAt: "0xcb2235c0",
+  finalizedSourceIdAt: "0xf5f62028",
+  isFinalizedExecutable: "0xcb2b7132",
+  launchIdForSource: "0x3eeacd13",
+  sourceState: "0x447c24c0",
+  sourceRegistry: "0xee9ab677",
+  customRegistryV2: "0xab0adbf2",
+  launchStampRouter: "0xa87eb510",
+  supportedChainId: "0x356c6567",
+  chainId: "0x85e1f4d0",
+  registryGeneration: "0x8ca2d907",
+  minimumFinalityBlocks: "0x03580b1c",
+  minimumActivationDelayBlocks: "0x92636c45",
+  rewardWallet: "0xb66ceef6",
+  claimSelector: "0x7011b80b",
+  sourceInterfaceId: "0x1b11e61b",
+  programmableFeeRecipient: "0x424ff2a5",
+  accruedProgrammableFees: "0x3129853d",
+  totalProgrammableFeesClaimed: "0x4a383b32",
+  programmableFeeBps: "0x32c0314d",
+  claimProgrammableFees: "0xb9d2fad0",
+});
+
+export const CUSTOM_V2_POLICY = Object.freeze({
+  schemaVersion: "programmable.custom-claim-console.release.v1",
+  chainId: 1n,
+  minimumRegistryGeneration: 2n,
+  minimumFinalityBlocks: 64n,
+  nativeAsset: "0x0000000000000000000000000000000000000000",
+  recipient: TREASURY,
+  programmableFeeBps: 10n,
+  claimSelector: CUSTOM_V2_SELECTORS.claimProgrammableFees,
+  sourceInterfaceId: "0x808cb67a",
+});
+
+export const CUSTOM_V2_RELEASE_PATH = "./custom-v2-release.json";
+
 export const CUSTOM_REGISTRY = Object.freeze({
   address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
   startBlock: 25_701_139n,
@@ -305,6 +344,25 @@ export function decodeUint256(value) {
   return BigInt(value);
 }
 
+export function decodeBool(value) {
+  const decoded = decodeUint256(value);
+  if (decoded !== 0n && decoded !== 1n)
+    throw new Error("Ungültiger Boolean-Wert");
+  return decoded === 1n;
+}
+
+export function decodeBytes4(value) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
+    throw new Error("Ungültiger Selector");
+  return `0x${value.slice(2, 10).toLowerCase()}`;
+}
+
+export function decodeBytes32(value) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
+    throw new Error("Ungültiger bytes32-Wert");
+  return value.toLowerCase();
+}
+
 function abiWord(data, index) {
   if (typeof data !== "string" || !/^0x(?:[0-9a-fA-F]{64})+$/.test(data))
     throw new Error("Ungültige Custom-Eventdaten");
@@ -312,6 +370,15 @@ function abiWord(data, index) {
   const word = data.slice(start, start + 64);
   if (word.length !== 64) throw new Error("Custom-Event ist unvollständig");
   return `0x${word}`;
+}
+
+function requireAbiWords(data, count, label) {
+  if (
+    typeof data !== "string" ||
+    !/^0x[0-9a-fA-F]*$/.test(data) ||
+    data.length !== 2 + count * 64
+  )
+    throw new Error(`${label} hat eine ungültige ABI-Länge`);
 }
 
 export function decodeAbiString(value) {
@@ -553,6 +620,121 @@ export function customLaunchClassification(launch) {
   return "adapter-required";
 }
 
+function exactAddress(value, label) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value))
+    throw new Error(`${label} fehlt oder ist keine Ethereum-Adresse`);
+  if (/^0x0{40}$/i.test(value)) throw new Error(`${label} ist die Nulladresse`);
+  return value;
+}
+
+function exactHash(value, label) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
+    throw new Error(`${label} fehlt oder ist kein bytes32-Wert`);
+  if (/^0x0{64}$/i.test(value)) throw new Error(`${label} ist null`);
+  return value.toLowerCase();
+}
+
+function exactGitObject(value, label) {
+  if (typeof value !== "string" || !/^[0-9a-f]{40}$/.test(value))
+    throw new Error(`${label} ist kein exaktes Git-Objekt`);
+  return value;
+}
+
+export function parseCustomV2Release(value) {
+  if (!value || value.schemaVersion !== CUSTOM_V2_POLICY.schemaVersion)
+    throw new Error("Custom-V2-Release-Schema stimmt nicht");
+  if (value.activationAllowed !== true) {
+    if (value.status !== "HOLD")
+      throw new Error("Inaktives Custom-V2-Release muss HOLD sein");
+    return Object.freeze({ active: false, status: "HOLD" });
+  }
+  if (value.status !== "READY_FOR_MANUAL_CLAIM")
+    throw new Error("Custom-V2-Release ist nicht für manuelle Claims freigegeben");
+  if (
+    value.deployment?.chainId !== CUSTOM_V2_POLICY.chainId.toString() ||
+    !/^[1-9][0-9]*$/.test(value.deployment?.startBlock ?? "")
+  )
+    throw new Error("Custom-V2-Deployment-Scope stimmt nicht");
+
+  const policy = value.policy;
+  if (
+    normalizeAddress(policy?.asset) !==
+      normalizeAddress(CUSTOM_V2_POLICY.nativeAsset) ||
+    !isTreasury(policy?.recipient) ||
+    policy?.programmableFeeBps !==
+      CUSTOM_V2_POLICY.programmableFeeBps.toString() ||
+    policy?.claimSelector?.toLowerCase() !== CUSTOM_V2_POLICY.claimSelector ||
+    policy?.sourceInterfaceId?.toLowerCase() !==
+      CUSTOM_V2_POLICY.sourceInterfaceId ||
+    policy?.minimumActivationDelayBlocks !==
+      CUSTOM_V2_POLICY.minimumFinalityBlocks.toString() ||
+    policy?.minimumLaunchFinalityBlocks !==
+      CUSTOM_V2_POLICY.minimumFinalityBlocks.toString()
+  )
+    throw new Error("Custom-V2-Fee-Policy stimmt nicht");
+
+  const contracts = {};
+  for (const key of [
+    "sourceRegistry",
+    "customRegistryV2",
+    "customRegistrar",
+    "launchStampRouter",
+  ]) {
+    contracts[key] = Object.freeze({
+      address: exactAddress(value.contracts?.[key]?.address, `${key} Adresse`),
+      runtimeCodeHash: exactHash(
+        value.contracts?.[key]?.runtimeCodeHash,
+        `${key} Runtime`,
+      ),
+    });
+  }
+  const contractAddresses = Object.values(contracts).map(({ address }) =>
+    normalizeAddress(address),
+  );
+  if (new Set(contractAddresses).size !== contractAddresses.length)
+    throw new Error("Custom-V2-Contract-Adressen müssen eindeutig sein");
+  if (
+    value.sourceRevision?.repository !==
+    "https://github.com/0xprogrammable/programmable"
+  )
+    throw new Error("Custom-V2-Source-Repository stimmt nicht");
+
+  return Object.freeze({
+    active: true,
+    status: value.status,
+    startBlock: BigInt(value.deployment.startBlock),
+    sourceRevision: Object.freeze({
+      repository: value.sourceRevision.repository,
+      commit: exactGitObject(value.sourceRevision?.commit, "Source Commit"),
+      tree: exactGitObject(value.sourceRevision?.tree, "Source Tree"),
+    }),
+    contracts: Object.freeze(contracts),
+  });
+}
+
+export function decodeCustomV2SourceState(value) {
+  requireAbiWords(value, 9, "Custom-V2-Source-State");
+  return Object.freeze({
+    sourceId: decodeBytes32(abiWord(value, 0)),
+    source: wordAddress(abiWord(value, 1)),
+    runtimeCodeHash: decodeBytes32(abiWord(value, 2)),
+    asset: wordAddress(abiWord(value, 3)),
+    claimSelector: decodeBytes4(abiWord(value, 4)),
+    recipient: wordAddress(abiWord(value, 5)),
+    activationBlock: decodeUint256(abiWord(value, 6)),
+    registered: decodeBool(abiWord(value, 7)),
+    quarantined: decodeBool(abiWord(value, 8)),
+  });
+}
+
+export function customV2SourceClassification(source) {
+  if (!source || source.bindingVerified !== true) return "blocked";
+  if (!source.registered || source.quarantined || !source.executable)
+    return "quarantined";
+  if (source.amount === 0n) return "empty";
+  return "ready";
+}
+
 export function formatEth(value, maximumFractionDigits = 6) {
   return formatUnits(value, 18, maximumFractionDigits);
 }
@@ -577,13 +759,35 @@ export function encodeAddressArgument(address) {
   return address.slice(2).toLowerCase().padStart(64, "0");
 }
 
+export function encodeUint256Argument(value) {
+  if (typeof value !== "bigint" || value < 0n || value >= 1n << 256n)
+    throw new Error("uint256 erwartet");
+  return value.toString(16).padStart(64, "0");
+}
+
+export function encodeBytes32Argument(value) {
+  return decodeBytes32(value).slice(2);
+}
+
+export function customV2IndexedReadData(selector, index) {
+  return `${selector}${encodeUint256Argument(index)}`;
+}
+
+export function customV2Bytes32ReadData(selector, value) {
+  return `${selector}${encodeBytes32Argument(value)}`;
+}
+
 export function readAccruedData(claim) {
+  if (claim.kind === "custom")
+    return `${CUSTOM_V2_SELECTORS.accruedProgrammableFees}${encodeAddressArgument(CUSTOM_V2_POLICY.nativeAsset)}`;
   return claim.kind === "asset"
     ? `${SELECTORS.launcherAssetFeesAccrued}${encodeAddressArgument(claim.asset)}`
     : SELECTORS.launcherFeesAccrued;
 }
 
 export function claimData(claim) {
+  if (claim.kind === "custom")
+    return `${CUSTOM_V2_SELECTORS.claimProgrammableFees}${encodeAddressArgument(CUSTOM_V2_POLICY.nativeAsset)}`;
   return claim.kind === "asset"
     ? `${SELECTORS.claimLauncherAssetFees}${encodeAddressArgument(claim.asset)}`
     : SELECTORS.claimLauncherFees;
