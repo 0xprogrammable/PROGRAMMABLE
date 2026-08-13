@@ -64,7 +64,7 @@ library ProgrammableTokenIdentityPolicyV1 {
     }
 
     function _isValidDisplayUtf8(bytes calldata value, uint256 maximumCharacters) private pure returns (bool) {
-        uint256 index;
+        uint256 index = 0;
         uint256 characters;
         while (index < value.length) {
             uint8 first = uint8(value[index]);

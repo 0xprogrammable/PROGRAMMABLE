@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { canonicalJson, sha256 } from "./hookemon-reusable-profile-v2-core.mjs";
+import {
+  canonicalJson,
+  deriveProductionSourceClosure,
+  readJson,
+  requireNoScopedHighOrMedium,
+  scopeSlitherDetectors,
+  sha256
+} from "./hookemon-reusable-profile-v2-core.mjs";
 
 const reportPath = process.argv[2];
 if (!reportPath) throw new Error("usage: generate-hookemon-reusable-profile-v2-slither-evidence.mjs <raw-report.json>");
@@ -10,22 +17,24 @@ const raw = await readFile(reportPath);
 const report = JSON.parse(raw);
 if (report.success !== true || !Array.isArray(report.results?.detectors)) throw new Error("invalid Slither report");
 
-const sourcePattern = /^src\/router_vnext\/(ProgrammableExactHookemonReusableNormalCreateProfileV2|ProgrammableExactHookemonReusablePlanModuleV2|ProgrammableExactHookemonNormalCreateExecutorV2|ProgrammableHookemonLaunchRegistryV1|ProgrammableExactHookemonPostconditionVerifierV1)\.sol$/;
-const scoped = report.results.detectors.filter((detector) =>
-  detector.elements?.some((element) => sourcePattern.test(element.source_mapping?.filename_relative ?? ""))
-);
+const descriptor = await readJson(path.join(root, "spec/router-vnext/hookemon-reusable-profile-v2-reviewed-input.json"));
+const productionSourceClosure = await deriveProductionSourceClosure(root, descriptor);
+const analyzedFirstPartyPaths = productionSourceClosure.files
+  .filter((file) => file.classification === "first-party-production")
+  .map((file) => file.path);
+const analyzedPathSet = new Set(analyzedFirstPartyPaths);
+const scoped = scopeSlitherDetectors(report.results.detectors, analyzedFirstPartyPaths);
 const byImpact = (detectors) => Object.fromEntries(
-  ["High", "Medium", "Low", "Informational"].map((impact) => [impact, detectors.filter((item) => item.impact === impact).length])
+  ["High", "Medium", "Low", "Informational"].map(
+    (impact) => [impact, detectors.filter((item) => item.impact === impact).length]
+  )
 );
-const untriagedHighOrMedium = scoped.filter((item) => item.impact === "High" || item.impact === "Medium");
-if (untriagedHighOrMedium.length !== 0) {
-  throw new Error(`scoped High/Medium requires source fix or explicit reviewed triage: ${untriagedHighOrMedium.map((item) => item.check).join(",")}`);
-}
+requireNoScopedHighOrMedium(scoped);
 
 const lowTriage = scoped.filter((item) => item.impact === "Low").map((item, index) => {
   const mappings = item.elements
     .map((element) => element.source_mapping)
-    .filter((mapping) => sourcePattern.test(mapping?.filename_relative ?? ""))
+    .filter((mapping) => analyzedPathSet.has(mapping?.filename_relative))
     .map((mapping) => ({
       path: mapping.filename_relative,
       lines: mapping.lines,
@@ -51,6 +60,7 @@ const lowTriage = scoped.filter((item) => item.impact === "Low").map((item, inde
   }
   return {
     id: `hookemon-v2-low-${String(index + 1).padStart(2, "0")}`,
+    detectorId: item.id,
     check: item.check,
     impact: item.impact,
     confidence: item.confidence,
@@ -62,12 +72,13 @@ const lowTriage = scoped.filter((item) => item.impact === "Low").map((item, inde
   };
 });
 
+const scopedDetectorIds = scoped.map((detector) => detector.id).sort();
 const evidence = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   product: "Hookemon exact reusable NORMAL_CREATE profile V2",
   status: "STATIC_ANALYSIS_TRIAGED_NOT_AN_AUDIT",
   activationAllowed: false,
-  command: "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-slither-final2.json",
+  command: `slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json ${reportPath}`,
   cwd: root,
   tool: { slither: "0.11.5", solc: "0.8.26", foundryProfile: "default" },
   rawReport: {
@@ -80,7 +91,11 @@ const evidence = {
     byImpact: byImpact(report.results.detectors)
   },
   scope: {
-    sourcePattern: sourcePattern.source,
+    derivation: "all first-party-production files in solc metadata source union",
+    productionSourceClosureCommitmentSha256: productionSourceClosure.commitmentSha256,
+    analyzedFirstPartyPaths,
+    scopedDetectorIds,
+    scopedDetectorSetCommitmentSha256: sha256(canonicalJson(scopedDetectorIds)),
     detectorInstances: scoped.length,
     byImpact: byImpact(scoped),
     actionableHighFindings: 0,
@@ -90,9 +105,10 @@ const evidence = {
     lowTriage
   },
   limitations: [
-    "The whole-repository report contains findings in contracts outside the exact Hookemon V2 scope; this evidence makes no claim about those contracts.",
+    "Scope is the complete first-party production closure derived from the seven reviewed compiler artifacts; frozen Shards implementation fixtures remain a separately pinned dependency bundle and are not claimed as covered by this filtered Slither report.",
+    "The whole-repository report contains findings outside the exact Hookemon V2 first-party production closure; this evidence makes no claim about those contracts.",
     "Slither output and manual classification are not an independent audit or live deployment evidence.",
-    "Low and informational results remain visible; only exact scoped High/Medium absence is a fail-closed release input."
+    "Low and informational results remain visible; exact scoped High/Medium absence is fail closed."
   ],
   deploymentAddresses: null,
   releaseActivationTransaction: null

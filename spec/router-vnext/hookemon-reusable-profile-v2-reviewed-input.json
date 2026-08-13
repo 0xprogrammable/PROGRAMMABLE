@@ -16,9 +16,12 @@
       "tree": "2667ff1bee70dd082596d5f65b3ed4cb2c1ce387"
     },
     "sharedShardsAuthority": {
-      "repository": "https://github.com/0xprogrammable/programmable.git",
-      "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
-      "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
+      "claimedCanonicalRemote": "https://github.com/0xprogrammable/programmable.git",
+      "remoteReachabilityProven": false,
+      "localFrozenSourceBundle": {
+        "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+        "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+      },
       "provenancePath": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json"
     }
   },
@@ -94,21 +97,25 @@
     { "sourcePath": "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol", "contractName": "ProgrammableExactHookemonEconomicVerifierModuleV1", "eip170Required": true }
   ],
   "evidenceRequirements": {
+    "actualV2EndToEndTests": "3 passed; 0 failed; 0 skipped",
+    "reproducibleCleanBuilds": 2,
+    "artifactBindingsCanonicalSha256": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
     "focusedLifecycleTests": "7 passed; 0 failed; 0 skipped",
     "focusedPostconditionTests": "5 passed; 0 failed; 0 skipped",
     "measuredKernelRegistrationGas": 8136327,
     "kernelRegistrationGasRegressionMaximum": 8200000,
     "profileRuntimeByteRegressionMaximum": 22000,
-    "fullForgeSuite": "235 passed; 0 failed; 3 skipped; 238 total",
+    "fullForgeSuite": "238 passed; 0 failed; 3 skipped; 241 total",
     "slitherVersion": "0.11.5",
-    "slitherReportPath": "/tmp/hookemon-v2-slither-final2.json",
-    "slitherReportSha256": "36f1768f50bab6cfecc216fff14cae299610b079af3371c42d0cdc3b22bb98a9",
-    "slitherReportByteLength": 12152193,
-    "slitherTotalDetectorInstances": 315,
+    "slitherReportPath": "/tmp/hookemon-v2-slither-freeze.json",
+    "slitherReportSha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
+    "slitherReportByteLength": 12143814,
+    "slitherTotalDetectorInstances": 314,
     "slitherScopedTriagePath": "security/hookemon-reusable-profile-v2-slither-triage.json",
     "testEvidencePath": "security/hookemon-reusable-profile-v2-test-evidence.json"
   },
   "externalActivationGates": {
+    "sharedAuthorityCanonicalPublicationEvidence": null,
     "deploymentAddresses": null,
     "verifiedRuntimeCodeHashes": null,
     "roleTransactions": null,

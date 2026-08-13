@@ -26,6 +26,31 @@ import {
     ProgrammableExactHookemonPostconditionVerifierV1,
     ProgrammableExactHookemonPostconditionVerifierV2
 } from "../../src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol";
+import {
+    ProgrammableLaunchPermitAuthorityV1
+} from "../../dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/ProgrammableLaunchPermitAuthorityV1.sol";
+import {
+    ProgrammableLaunchPermitVerifierV1
+} from "../../dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/ProgrammableLaunchPermitVerifierV1.sol";
+import {
+    IProgrammableLaunchPermitAuthorityV1
+} from "../../dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/interfaces/IProgrammableLaunchPermitAuthorityV1.sol";
+import {
+    IProgrammableExactHookemonReusableNormalCreateProfileV2
+} from "../../src/router_vnext/IProgrammableExactHookemonReusableNormalCreateProfileV2.sol";
+import {
+    IProgrammableHookemonLaunchRegistryV1
+} from "../../src/router_vnext/IProgrammableHookemonLaunchRegistryV1.sol";
+import { ProgrammableHookemonLaunchRegistryV1 } from "../../src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol";
+import {
+    ProgrammableExactHookemonReusablePlanModuleV2
+} from "../../src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol";
+import {
+    ProgrammableExactHookemonReusableNormalCreateProfileV2
+} from "../../src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol";
+import {
+    ProgrammableExactHookemonNormalCreateExecutorV2
+} from "../../src/router_vnext/ProgrammableExactHookemonNormalCreateExecutorV2.sol";
 
 contract HookemonNormalCreateProfileHarnessV1 is ProgrammableExactHookemonNormalCreateProfileBaseV1 {
     constructor(
@@ -108,6 +133,14 @@ contract HookemonApplicantWalletV1 {
                 currentness: currentness, currentnessSignature: hex"01", walletIntent: intent, walletSignature: hex"02"
             });
         return profile.launchExactHookemonV1(grantDigest, plan, transport);
+    }
+
+    function launchV2(
+        IProgrammableExactHookemonReusableNormalCreateProfileV2 profile,
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2 calldata plan,
+        bytes calldata encodedTransport
+    ) external returns (bytes32 receiptCoreHash) {
+        return profile.launchExactHookemonV2(plan, encodedTransport);
     }
 }
 
@@ -929,6 +962,26 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
     uint256 private constant CYCLE_BOOTSTRAP_USDC = 75e6;
     uint256 private constant EXACT_APPROVAL = LIQUIDITY_USDC + CYCLE_BOOTSTRAP_USDC;
     uint256 private constant REVIEWED_EXACT_LAUNCHER_GAS_GATE = 29_400_000;
+    uint256 private constant V2_SIGNER_KEY = 0xA11CE;
+    address private constant V2_SIGNER_GOVERNOR = address(0x2101);
+    address private constant V2_RELEASE_GOVERNOR = address(0x2102);
+    address private constant V2_PAUSER = address(0x2103);
+    address private constant V2_CANCELLER = address(0x2104);
+    bytes32 private constant V2_PROFILE_KEY = keccak256("HOOKEMON:EXACT_REUSABLE_NORMAL_CREATE:v2");
+    bytes32 private constant V2_ROUTE_ID =
+        keccak256("PROGRAMMABLE_ROUTE:HOOKEMON:EXACT_REUSABLE_NORMAL_CREATE:v2");
+    bytes20 private constant V2_SOURCE_COMMIT = bytes20(hex"9943c158998147f4fea9049fb42b8c4a5d044c1d");
+    bytes20 private constant V2_SOURCE_TREE = bytes20(hex"99a6984362a86e49ae8f2318b170da6d916dc519");
+    bytes20 private constant SHARED_AUTHORITY_COMMIT = bytes20(hex"8afe4548553b406bd0374b3a8958f1a186104b11");
+    bytes20 private constant SHARED_AUTHORITY_TREE = bytes20(hex"19393b3a1010db11de4b45d686580ee8b52f79f5");
+    bytes32 private constant SHARED_AUTHORITY_INTERFACE_SHA256 =
+        0x3aaae1dcf9f04b4ee38aa30ebd518d18f946a945f37142c1d0d02dcd8bec4169;
+    bytes20 private constant SHARED_AUTHORITY_INTERFACE_BLOB =
+        bytes20(hex"c6f5f199997958561a2238968bb284ca253e1837");
+    bytes32 private constant V2_CHAIN_PROFILE_HASH = keccak256("hookemon-chain-profile-v1");
+    bytes32 private constant V2_EXECUTOR_SALT_TYPEHASH = keccak256(
+        "ExactHookemonExecutorSaltV2(bytes32 repositoryKey,bytes32 sourceLaunchId,address applicantWallet)"
+    );
 
     struct Fixture {
         ProgrammableUniversalLaunchKernelV1 kernel;
@@ -951,6 +1004,132 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         bytes32 grantDigest;
         IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1 currentness;
         IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1 intent;
+    }
+
+    struct V2Fixture {
+        Fixture base;
+        ProgrammableLaunchPermitAuthorityV1 authority;
+        ProgrammableExactHookemonReusablePlanModuleV2 planModule;
+        ProgrammableExactHookemonPostconditionVerifierV2 postconditionVerifier;
+        ProgrammableHookemonLaunchRegistryV1 launchRegistry;
+        ProgrammableExactHookemonReusableNormalCreateProfileV2 profile;
+        IProgrammableLaunchPermitAuthorityV1.ReleaseBindingV1 releaseBinding;
+        IProgrammableExactHookemonNormalCreateProfileV1.SharedComponentsV1 shared;
+    }
+
+    struct V2PreparedLaunch {
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2 plan;
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.PlanCommitmentsV2 commitments;
+        IProgrammableUniversalLaunchKernelV1.LaunchGrantV1 grant;
+        bytes32 grantDigest;
+        IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1 currentness;
+        IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1 intent;
+        IProgrammableLaunchPermitAuthorityV1.LaunchPermitV1 permit;
+        bytes32 permitDigest;
+        bytes encodedTransport;
+    }
+
+    function testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel() external {
+        (V2Fixture memory fixture, V2PreparedLaunch memory prepared) = _v2Fixture(30_000);
+
+        bytes32 receiptCoreHash = _launchV2(fixture, prepared);
+
+        assertTrue(receiptCoreHash != bytes32(0), "V2 receipt");
+        assertEq(fixture.profile.executorByGrantDigest(prepared.grantDigest), prepared.plan.expectedExecutor);
+        assertEq(
+            fixture.profile.launcherByGrantDigest(prepared.grantDigest), prepared.plan.hookemon.exclusive.accounts[0]
+        );
+        assertEq(prepared.plan.expectedExecutor.codehash, keccak256(type(ProgrammableExactHookemonNormalCreateExecutorV2).runtimeCode));
+        assertEq(
+            prepared.plan.hookemon.exclusive.accounts[0].codehash,
+            prepared.plan.hookemon.exclusive.runtimeCodeHashes[0]
+        );
+        assertTrue(fixture.authority.repositoryConsumed(prepared.plan.hookemon.repositoryKey));
+        assertEq(fixture.authority.nextNonce(prepared.plan.hookemon.repositoryKey), 1);
+        assertEq(
+            uint8(fixture.authority.permitStatus(prepared.permitDigest).state),
+            uint8(IProgrammableLaunchPermitAuthorityV1.PermitStateV1.CONSUMED)
+        );
+        IProgrammableHookemonLaunchRegistryV1.LaunchStateV1 memory launch =
+            fixture.launchRegistry.launchState(prepared.grant.stampLaunchId);
+        assertTrue(launch.registered, "Registry launch");
+        assertEq(launch.permitDigest, prepared.permitDigest);
+        assertEq(launch.repositoryKey, prepared.plan.hookemon.repositoryKey);
+        IProgrammableHookemonLaunchRegistryV1.HookemonGraphV1 memory registeredGraph =
+            fixture.launchRegistry.hookemonGraphState(prepared.grant.stampLaunchId);
+        assertEq(registeredGraph.executor, prepared.plan.expectedExecutor);
+        assertEq(registeredGraph.launcher, prepared.plan.hookemon.exclusive.accounts[0]);
+        assertEq(registeredGraph.componentGraphHash, prepared.commitments.componentGraphHash);
+        assertEq(registeredGraph.componentRuntimeSetHash, prepared.commitments.componentRuntimeSetHash);
+        assertEq(registeredGraph.revenueBindingHash, fixture.profile.REVENUE_POLICY_HASH());
+        assertEq(
+            uint8(fixture.base.kernel.canonicalLaunchReceiptV1(prepared.grantDigest).status),
+            uint8(IProgrammableUniversalLaunchKernelV1.ReceiptStatus.Executed)
+        );
+        assertEq(
+            fixture.base.usdc.allowance(
+                address(fixture.base.applicant), prepared.plan.hookemon.exclusive.accounts[0]
+            ),
+            0,
+            "exact allowance consumed"
+        );
+    }
+
+    function testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries() external {
+        (V2Fixture memory fixture, V2PreparedLaunch memory prepared) = _v2Fixture(31_000);
+
+        (bool firstAttempt, bytes memory firstReason) = _tryLaunchV2(fixture, prepared);
+        assertFalse(firstAttempt, "wrong fee accepted");
+        assertEq(firstReason, abi.encodeWithSelector(ProgrammableExactHookemonReusablePlanModuleV2.VerifierCallFailed.selector));
+        assertFalse(fixture.authority.repositoryConsumed(prepared.plan.hookemon.repositoryKey));
+        assertEq(fixture.authority.nextNonce(prepared.plan.hookemon.repositoryKey), 0);
+        assertEq(
+            uint8(fixture.authority.permitStatus(prepared.permitDigest).state),
+            uint8(IProgrammableLaunchPermitAuthorityV1.PermitStateV1.UNSEEN)
+        );
+        assertFalse(fixture.launchRegistry.launchState(prepared.grant.stampLaunchId).registered);
+        assertEq(
+            uint8(fixture.base.kernel.launchGrantStateHeadV1(prepared.grantDigest).status),
+            uint8(IProgrammableUniversalLaunchKernelV1.LaunchGrantStatus.None)
+        );
+        assertEq(prepared.plan.expectedExecutor.code.length, 0, "executor survived rollback");
+        assertEq(prepared.plan.hookemon.exclusive.accounts[0].code.length, 0, "launcher survived rollback");
+        assertEq(
+            fixture.base.usdc.allowance(
+                address(fixture.base.applicant), prepared.plan.hookemon.exclusive.accounts[0]
+            ),
+            EXACT_APPROVAL,
+            "allowance changed on rollback"
+        );
+
+        fixture.base.hookFactory.setSelectedTotalFee(30_000);
+        assertTrue(_launchV2(fixture, prepared) != bytes32(0), "same signed permit retry failed");
+        assertTrue(fixture.authority.repositoryConsumed(prepared.plan.hookemon.repositoryKey));
+        assertTrue(fixture.launchRegistry.launchState(prepared.grant.stampLaunchId).registered);
+    }
+
+    function testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute() external {
+        (V2Fixture memory first, V2PreparedLaunch memory firstPrepared) = _v2Fixture(30_000);
+        (V2Fixture memory second, V2PreparedLaunch memory secondPrepared) =
+            _v2FixtureWithAuthority(30_000, first.authority, 2, 2);
+
+        _launchV2(first, firstPrepared);
+        (bool secondAttempt, bytes memory secondReason) = _tryLaunchV2(second, secondPrepared);
+        assertFalse(secondAttempt, "later real V2 route reused repository");
+        assertEq(
+            secondReason,
+            abi.encodeWithSelector(ProgrammableExactHookemonReusablePlanModuleV2.InvalidField.selector, uint256(7))
+        );
+        assertEq(secondPrepared.plan.expectedExecutor.code.length, 0);
+        assertEq(
+            uint8(second.base.kernel.launchGrantStateHeadV1(secondPrepared.grantDigest).status),
+            uint8(IProgrammableUniversalLaunchKernelV1.LaunchGrantStatus.None)
+        );
+        IProgrammableLaunchPermitAuthorityV1.RepositoryConsumptionV1 memory consumption =
+            first.authority.repositoryConsumption(firstPrepared.plan.hookemon.repositoryKey);
+        assertEq(consumption.route, address(first.profile), "permanent first route changed");
+        assertEq(consumption.launchId, firstPrepared.grant.stampLaunchId);
+        assertEq(first.authority.consumptionCount(), 1);
     }
 
     function testAtomicLifecycleUsesNonceOneAndFinalizesExactTwentyFourComponentGraph() external {
@@ -1209,6 +1388,433 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         prepared.plan.tokenSymbolHash = keccak256(bytes(prepared.plan.config.tokenSymbol));
         (bool invalidSymbol,) = _tryLaunch(fixture, prepared);
         assertFalse(invalidSymbol, "invalid symbol class accepted");
+    }
+
+    function _v2Fixture(uint32 selectedTotalFee)
+        private
+        returns (V2Fixture memory fixture, V2PreparedLaunch memory prepared)
+    {
+        vm.warp(1_000_000);
+        vm.roll(1000);
+        ProgrammableLaunchPermitVerifierV1 permitVerifier = new ProgrammableLaunchPermitVerifierV1();
+        ProgrammableLaunchPermitAuthorityV1 authority = new ProgrammableLaunchPermitAuthorityV1(
+            1,
+            address(this),
+            V2_SIGNER_GOVERNOR,
+            V2_RELEASE_GOVERNOR,
+            V2_PAUSER,
+            V2_CANCELLER,
+            vm.addr(V2_SIGNER_KEY),
+            900,
+            permitVerifier,
+            address(permitVerifier).codehash
+        );
+        return _v2FixtureWithAuthority(selectedTotalFee, authority, 1, 1);
+    }
+
+    function _v2FixtureWithAuthority(
+        uint32 selectedTotalFee,
+        ProgrammableLaunchPermitAuthorityV1 authority,
+        uint64 registryGeneration,
+        uint64 releaseGeneration
+    ) private returns (V2Fixture memory fixture, V2PreparedLaunch memory prepared) {
+        IProgrammableExactHookemonNormalCreateProfileV1.SharedComponentsV1 memory shared;
+        (fixture.base, shared) =
+            _baseFixture(selectedTotalFee, new HookemonGithubRepositoryLineageRegistryMockV1());
+        fixture.shared = shared;
+        fixture.authority = authority;
+        fixture.postconditionVerifier = new ProgrammableExactHookemonPostconditionVerifierV2();
+        fixture.planModule = new ProgrammableExactHookemonReusablePlanModuleV2();
+
+        uint256 nextNonce = vm.getNonce(address(this));
+        address predictedProfile = vm.computeCreateAddress(address(this), nextNonce + 1);
+        fixture.launchRegistry = new ProgrammableHookemonLaunchRegistryV1(
+            ProgrammableHookemonLaunchRegistryV1.DeploymentConfigV1({
+                initialAdminDelay: 1,
+                initialAdmin: address(this),
+                launchPermitAuthority: authority,
+                launchPermitAuthorityRuntimeCodeHash: address(authority).codehash,
+                registryGeneration: registryGeneration,
+                chainProfileHash: V2_CHAIN_PROFILE_HASH,
+                route: predictedProfile,
+                routeId: V2_ROUTE_ID,
+                profileId: V2_PROFILE_KEY,
+                hookemonRevenueBindingHash: keccak256(
+                    "HookemonInclusiveQuoteFeeV1(totalHundredthsOfBip=30000,projectHundredthsOfBip=29000,programmableHundredthsOfBip=1000,programmableFeeOwner=0x4957f49620AFf3Adbbe8195a4f633E49cc93376c,lpFeePips=3000,lpFeeSeparate=true,externalAdditiveFee=false)"
+                )
+            })
+        );
+        fixture.profile = new ProgrammableExactHookemonReusableNormalCreateProfileV2(
+            ProgrammableExactHookemonReusableNormalCreateProfileV2.DeploymentConfigV2({
+                kernel: fixture.base.kernel,
+                kernelRuntimeCodeHash: address(fixture.base.kernel).codehash,
+                codeStore: fixture.base.codeStore,
+                codeStoreRuntimeCodeHash: address(fixture.base.codeStore).codehash,
+                codeStoreBindingHash: fixture.base.codeStore.runtimeBindingHashV1(),
+                postconditionVerifier: fixture.postconditionVerifier,
+                postconditionVerifierRuntimeCodeHash: address(fixture.postconditionVerifier).codehash,
+                verifierBindingHash: fixture.postconditionVerifier.runtimeBindingHashV1(),
+                planModule: fixture.planModule,
+                planModuleRuntimeCodeHash: address(fixture.planModule).codehash,
+                planModuleBindingHash: fixture.planModule.MODULE_BINDING_HASH(),
+                permitAuthority: authority,
+                permitAuthorityRuntimeCodeHash: address(authority).codehash,
+                launchRegistry: fixture.launchRegistry,
+                launchRegistryRuntimeCodeHash: address(fixture.launchRegistry).codehash,
+                launchRegistryBindingHash: fixture.launchRegistry.runtimeBindingHashV1(),
+                expectedLauncherCreationCodeHash: fixture.base.codeStore.creationCodeHashV1(),
+                expectedLauncherCreationCodeLength: fixture.base.codeStore.creationCodeLengthV1(),
+                verifierGasLimit: 2_000_000
+            })
+        );
+        assertEq(address(fixture.profile), predictedProfile, "V2 profile prediction");
+        authority.grantRole(authority.CONSUMER_ROLE(), address(fixture.profile));
+        fixture.releaseBinding = _v2ReleaseBinding(fixture, registryGeneration, releaseGeneration);
+        vm.prank(V2_RELEASE_GOVERNOR);
+        authority.activateReleaseBinding(fixture.releaseBinding);
+        fixture.base.governance.registerProfile(fixture.base.kernel, _v2Descriptor(fixture));
+
+        prepared = _prepareV2Launch(fixture);
+    }
+
+    function _prepareV2Launch(V2Fixture memory fixture)
+        private
+        returns (V2PreparedLaunch memory prepared)
+    {
+        prepared.plan = _v2Plan(fixture);
+        prepared.commitments = fixture.planModule.computePlanCommitmentsV2(prepared.plan);
+        prepared.grant = _v2Grant(fixture, prepared.plan, prepared.commitments);
+        prepared.grant.stampLaunchId = fixture.base.kernel.computeStampLaunchIdV1(prepared.grant);
+        prepared.grantDigest = fixture.base.kernel.computeLaunchGrantDigestV1(prepared.grant);
+        fixture.base.applicant.approve(
+            fixture.base.usdc, prepared.plan.hookemon.exclusive.accounts[0], EXACT_APPROVAL
+        );
+        prepared.currentness = _prepareV2Currentness(fixture, prepared);
+        prepared.intent = IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1({
+            grantDigest: prepared.grantDigest,
+            stampLaunchId: prepared.grant.stampLaunchId,
+            antiReplayNonce: prepared.grant.antiReplayNonce,
+            profileModule: address(fixture.profile),
+            intentNonce: keccak256(abi.encode(prepared.grantDigest, "V2 wallet intent")),
+            validAfter: uint64(block.timestamp),
+            deadline: uint64(block.timestamp + 300)
+        });
+        prepared = _v2PermitAndTransport(fixture, prepared);
+    }
+
+    function _v2Plan(V2Fixture memory fixture)
+        private
+        returns (IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2 memory plan)
+    {
+        bytes32 repositoryKey = fixture.authority.computeRepositoryKey(1_324_982_531);
+        bytes32 executorSalt = keccak256(
+            abi.encode(V2_EXECUTOR_SALT_TYPEHASH, repositoryKey, SOURCE_LAUNCH_ID, address(fixture.base.applicant))
+        );
+        address executor = fixture.planModule.predictedExecutorV2(address(fixture.profile), executorSalt);
+        address launcher = fixture.planModule.predictedLauncherV2(address(fixture.profile), executorSalt);
+        HookemonExpectedStateCalculatorV1 calculator = new HookemonExpectedStateCalculatorV1();
+        IProgrammableExactHookemonNormalCreateProfileV1.LaunchConfigV1 memory config =
+            _fixtureConfig(fixture.base, fixture.shared);
+        plan = IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2({
+            schemaVersion: 2,
+            executorSalt: executorSalt,
+            expectedExecutor: executor,
+            hookemon: _plan(
+                fixture.shared,
+                fixture.base.hookFactory,
+                fixture.base.registry,
+                calculator,
+                launcher,
+                config
+            )
+        });
+        plan.hookemon.repositoryLineageRegistry = address(fixture.authority);
+    }
+
+    function _prepareV2Currentness(V2Fixture memory fixture, V2PreparedLaunch memory prepared)
+        private
+        returns (IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1 memory currentness)
+    {
+        IProgrammableUniversalLaunchKernelV1.ReservationV1[] memory reservations =
+            _v2Reservations(fixture, prepared.plan);
+        bytes32 kernelPreflightHash = _simulatedActivatedKernelPreflight(fixture, prepared, reservations);
+        bytes32 profilePreflightHash = fixture.planModule.computeProfilePreflightHashV2(
+            prepared.plan,
+            prepared.commitments,
+            ProgrammableExactHookemonReusablePlanModuleV2.ProfilePreflightBindingsV2({
+                profile: address(fixture.profile),
+                codeStoreBindingHash: fixture.base.codeStore.runtimeBindingHashV1(),
+                verifierBindingHash: fixture.postconditionVerifier.runtimeBindingHashV1(),
+                planModuleBindingHash: fixture.planModule.MODULE_BINDING_HASH(),
+                permitAuthority: address(fixture.authority),
+                permitAuthorityRuntimeCodeHash: address(fixture.authority).codehash,
+                launchRegistryBindingHash: fixture.launchRegistry.runtimeBindingHashV1()
+            })
+        );
+        currentness = _v2Currentness(
+            prepared.grantDigest, prepared.commitments.planHash, kernelPreflightHash, profilePreflightHash
+        );
+    }
+
+    function _v2PermitAndTransport(V2Fixture memory fixture, V2PreparedLaunch memory prepared)
+        private
+        view
+        returns (V2PreparedLaunch memory)
+    {
+        IProgrammableLaunchPermitAuthorityV1.KernelExecutionEnvelopeV1 memory kernelEnvelope =
+            IProgrammableLaunchPermitAuthorityV1.KernelExecutionEnvelopeV1({
+                kernelGrantDigest: prepared.grantDigest,
+                reviewerCurrentnessDigest: fixture.base.kernel.computeExecutionCurrentnessDigestV1(prepared.currentness),
+                applicantWalletIntentDigest: fixture.base.kernel.computeWalletIntentDigestV1(prepared.intent)
+            });
+        bytes memory initCode = bytes.concat(
+            fixture.base.codeStore.readCreationCodeV1(),
+            abi.encode(prepared.plan.hookemon.shared.accounts[0], prepared.plan.hookemon.shared.accounts[1], prepared.plan.hookemon.config)
+        );
+        prepared.permit.githubRepositoryId = prepared.plan.hookemon.githubRepositoryId;
+        prepared.permit.approvalGeneration = 1;
+        prepared.permit.permitGeneration = 1;
+        prepared.permit.notBefore = uint64(block.timestamp);
+        prepared.permit.deadline = uint64(block.timestamp + 300);
+        prepared.permit.signerEpoch = fixture.authority.currentSignerEpoch();
+        prepared.permit.nonce = fixture.authority.nextNonce(prepared.plan.hookemon.repositoryKey);
+        prepared.permit.chainId = block.chainid;
+        prepared.permit.repositoryKey = prepared.plan.hookemon.repositoryKey;
+        prepared.permit.route = address(fixture.profile);
+        prepared.permit.routeId = V2_ROUTE_ID;
+        prepared.permit.applicantWallet = address(fixture.base.applicant);
+        prepared.permit.launchId = prepared.grant.stampLaunchId;
+        prepared.permit.approvalId = keccak256(abi.encode("Hookemon V2 technical approval", prepared.permit.repositoryKey));
+        prepared.permit.technicalApprovalHash = prepared.grant.reviewerAttestationHash;
+        prepared.permit.descriptorHash = keccak256(abi.encode("Hookemon V2 descriptor", prepared.permit.launchId));
+        prepared.permit.presentationBindingHash = prepared.plan.hookemon.presentationBindingHash;
+        prepared.permit.configurationHash = prepared.commitments.configurationHash;
+        prepared.permit.walletOwnershipBindingHash =
+            keccak256(abi.encode("Hookemon V2 applicant wallet", address(fixture.base.applicant)));
+        prepared.permit.executionPlanHash = prepared.commitments.planHash;
+        prepared.permit.executionCoreHash = fixture.planModule.computeExecutionCoreHashV2(prepared.plan);
+        prepared.permit.executionCalldataKeccak256 = keccak256(
+            abi.encodeCall(
+                ProgrammableExactHookemonNormalCreateExecutorV2.executeExactNormalCreateV2,
+                (
+                    initCode,
+                    prepared.plan.hookemon.completeInitCodeHash,
+                    prepared.plan.hookemon.exclusive.accounts[0],
+                    prepared.plan.hookemon.exclusive.runtimeCodeHashes[0]
+                )
+            )
+        );
+        prepared.permit.executionValue = 0;
+        prepared.permit.releaseBindingHash = fixture.authority.computeReleaseBindingHash(fixture.releaseBinding);
+        prepared.permit.kernelExecutionEnvelopeHash =
+            fixture.authority.computeKernelExecutionEnvelopeHash(kernelEnvelope);
+        prepared.permit.generationBindingHash = fixture.authority.computeGenerationBindingHash(prepared.permit);
+        prepared.permitDigest = fixture.authority.hashPermit(prepared.permit);
+        bytes memory permitSignature = _signV2Permit(prepared.permitDigest);
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.KernelTransportV2 memory kernelTransport =
+            IProgrammableExactHookemonReusableNormalCreateProfileV2.KernelTransportV2({
+                grant: prepared.grant,
+                reviewerGrantSignature: hex"01",
+                currentness: prepared.currentness,
+                currentnessSignature: hex"02",
+                walletIntent: prepared.intent,
+                walletSignature: hex"03"
+            });
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.PermitTransportV2 memory permitTransport =
+            IProgrammableExactHookemonReusableNormalCreateProfileV2.PermitTransportV2({
+                permit: prepared.permit,
+                releaseBinding: fixture.releaseBinding,
+                kernelEnvelope: kernelEnvelope,
+                permitSignature: permitSignature
+            });
+        prepared.encodedTransport = abi.encode(
+            IProgrammableExactHookemonReusableNormalCreateProfileV2.LaunchTransportV2({
+                encodedKernelTransport: abi.encode(kernelTransport),
+                encodedPermitTransport: abi.encode(permitTransport)
+            })
+        );
+        return prepared;
+    }
+
+    function _v2Grant(
+        V2Fixture memory fixture,
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2 memory plan,
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.PlanCommitmentsV2 memory commitments
+    ) private view returns (IProgrammableUniversalLaunchKernelV1.LaunchGrantV1 memory grant) {
+        grant = IProgrammableUniversalLaunchKernelV1.LaunchGrantV1({
+            schemaVersion: 1,
+            applicantWallet: address(fixture.base.applicant),
+            applicantIdHash: keccak256(abi.encode(address(fixture.base.applicant), "Hookemon V2 applicant")),
+            profileKey: V2_PROFILE_KEY,
+            planHash: commitments.planHash,
+            sourceRepoHash: plan.hookemon.repositoryKey,
+            sourceCommit: V2_SOURCE_COMMIT,
+            sourceTree: V2_SOURCE_TREE,
+            sourceLaunchId: plan.hookemon.sourceLaunchId,
+            stampLaunchId: bytes32(uint256(1)),
+            antiReplayNonce: keccak256(abi.encode(address(fixture.base.applicant), commitments.planHash, "V2 replay")),
+            componentGraphHash: commitments.componentGraphHash,
+            componentRuntimeSetHash: commitments.componentRuntimeSetHash,
+            configurationHash: commitments.configurationHash,
+            builderEvidenceHash: keccak256("Hookemon V2 exact builder evidence"),
+            reviewerAttestationHash: keccak256("Hookemon V2 technical approval"),
+            exactContractBindingHash: fixture.profile.EXACT_CONTRACT_BINDING_HASH(),
+            providerBindingHash: fixture.profile.PROVIDER_BINDING_HASH(),
+            revenueBindingHash: fixture.profile.REVENUE_POLICY_HASH(),
+            securityControlHeadHash: SECURITY_HEAD,
+            securityEpoch: 1,
+            securityEpochHash: SECURITY_EPOCH_HASH,
+            policyEpoch: 1,
+            policyEpochHash: POLICY_EPOCH_HASH,
+            reviewGeneration: 1,
+            reviewGenerationHash: REVIEW_GENERATION_HASH
+        });
+    }
+
+    function _v2Reservations(
+        V2Fixture memory fixture,
+        IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2 memory plan
+    ) private view returns (IProgrammableUniversalLaunchKernelV1.ReservationV1[] memory reservations) {
+        ProgrammableExactHookemonReusablePlanModuleV2.ReservationDependenciesV2 memory dependencies;
+        dependencies.codeStore = address(fixture.base.codeStore);
+        dependencies.codeStoreRuntimeCodeHash = address(fixture.base.codeStore).codehash;
+        dependencies.codeStoreBindingHash = fixture.base.codeStore.runtimeBindingHashV1();
+        for (uint256 i; i < 2; ++i) {
+            (dependencies.codeParts[i], dependencies.codePartRuntimeCodeHashes[i],) = fixture.base.codeStore.partV1(i);
+        }
+        dependencies.postconditionVerifier = address(fixture.postconditionVerifier);
+        dependencies.postconditionVerifierRuntimeCodeHash = address(fixture.postconditionVerifier).codehash;
+        dependencies.verifierBindingHash = fixture.postconditionVerifier.runtimeBindingHashV1();
+        dependencies.planModule = address(fixture.planModule);
+        dependencies.planModuleRuntimeCodeHash = address(fixture.planModule).codehash;
+        dependencies.planModuleBindingHash = fixture.planModule.MODULE_BINDING_HASH();
+        dependencies.permitAuthority = address(fixture.authority);
+        dependencies.permitAuthorityRuntimeCodeHash = address(fixture.authority).codehash;
+        dependencies.permitAuthorityBindingHash = keccak256(
+            abi.encode(
+                SHARED_AUTHORITY_COMMIT,
+                SHARED_AUTHORITY_TREE,
+                SHARED_AUTHORITY_INTERFACE_SHA256,
+                SHARED_AUTHORITY_INTERFACE_BLOB
+            )
+        );
+        reservations = fixture.planModule.buildReservationsV2(plan, dependencies);
+    }
+
+    function _simulatedActivatedKernelPreflight(
+        V2Fixture memory fixture,
+        V2PreparedLaunch memory prepared,
+        IProgrammableUniversalLaunchKernelV1.ReservationV1[] memory reservations
+    ) private returns (bytes32 kernelPreflightHash) {
+        uint256 snapshot = vm.snapshotState();
+        assertEq(fixture.base.kernel.activateLaunchGrantV1(prepared.grant, hex"01"), prepared.grantDigest);
+        kernelPreflightHash = fixture.base.preflight.atomicPreflightHashV1(
+            address(fixture.base.kernel), address(fixture.base.kernel).codehash, prepared.grantDigest, reservations
+        );
+        assertTrue(vm.revertToStateAndDelete(snapshot), "preflight simulation rollback");
+    }
+
+    function _v2Currentness(
+        bytes32 grantDigest,
+        bytes32 planHash,
+        bytes32 kernelPreflightHash,
+        bytes32 profilePreflightHash
+    ) private view returns (IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1 memory currentness) {
+        currentness = IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1({
+            grantDigest: grantDigest,
+            profileKey: V2_PROFILE_KEY,
+            planHash: planHash,
+            executionMode: IProgrammableUniversalLaunchKernelV1.CapabilitySemantics.Execute,
+            kernelPreflightReadbackHash: kernelPreflightHash,
+            profilePreflightReadbackHash: profilePreflightHash,
+            dualProviderQuorumEvidenceHash: keccak256(abi.encode(grantDigest, "V2 dual provider")),
+            simulationEvidenceHash: keccak256(abi.encode(grantDigest, "V2 simulation")),
+            serviceDeploymentBindingHash: keccak256(abi.encode(grantDigest, "V2 service")),
+            currentnessNonce: keccak256(abi.encode(grantDigest, "V2 currentness")),
+            securityControlHeadHash: SECURITY_HEAD,
+            securityEpoch: 1,
+            securityEpochHash: SECURITY_EPOCH_HASH,
+            policyEpoch: 1,
+            policyEpochHash: POLICY_EPOCH_HASH,
+            reviewGeneration: 1,
+            reviewGenerationHash: REVIEW_GENERATION_HASH,
+            validAfter: uint64(block.timestamp),
+            deadline: uint64(block.timestamp + 300)
+        });
+    }
+
+    function _v2ReleaseBinding(V2Fixture memory fixture, uint64 registryGeneration, uint64 releaseGeneration)
+        private
+        view
+        returns (IProgrammableLaunchPermitAuthorityV1.ReleaseBindingV1 memory binding)
+    {
+        binding = IProgrammableLaunchPermitAuthorityV1.ReleaseBindingV1({
+            authorityGeneration: fixture.authority.AUTHORITY_GENERATION(),
+            releaseGeneration: releaseGeneration,
+            permitAuthority: address(fixture.authority),
+            permitAuthorityRuntimeCodeHash: address(fixture.authority).codehash,
+            launchRegistry: address(fixture.launchRegistry),
+            launchRegistryGeneration: registryGeneration,
+            launchRegistryRuntimeCodeHash: address(fixture.launchRegistry).codehash,
+            chainProfileHash: V2_CHAIN_PROFILE_HASH,
+            profile: address(fixture.profile),
+            profileId: V2_PROFILE_KEY,
+            profileRuntimeCodeHash: address(fixture.profile).codehash,
+            profileBindingHash: fixture.profile.permitProfileBindingHash(),
+            route: address(fixture.profile),
+            routeId: V2_ROUTE_ID,
+            routeRuntimeCodeHash: address(fixture.profile).codehash,
+            executionAuthorityHash: fixture.profile.permitExecutionAuthorityHash(),
+            kernelEnvelopeMode: IProgrammableLaunchPermitAuthorityV1.KernelEnvelopeModeV1.REQUIRED
+        });
+    }
+
+    function _v2Descriptor(V2Fixture memory fixture)
+        private
+        view
+        returns (IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1 memory descriptor)
+    {
+        descriptor = IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1({
+            profileKey: V2_PROFILE_KEY,
+            schemaId: keccak256("EXACT_HOOKEMON_REUSABLE_NORMAL_CREATE_SCHEMA_V2"),
+            profileVersion: 2,
+            capabilitySemantics: IProgrammableUniversalLaunchKernelV1.CapabilitySemantics.Execute,
+            module: address(fixture.profile),
+            moduleRuntimeCodeHash: address(fixture.profile).codehash,
+            actionTypeHash: fixture.profile.PLAN_TYPEHASH(),
+            exactContractBindingHash: fixture.profile.EXACT_CONTRACT_BINDING_HASH(),
+            providerBindingHash: fixture.profile.PROVIDER_BINDING_HASH(),
+            revenuePolicyHash: fixture.profile.REVENUE_POLICY_HASH(),
+            securityControlHeadHash: SECURITY_HEAD,
+            securityEpoch: 1,
+            securityEpochHash: SECURITY_EPOCH_HASH,
+            policyEpoch: 1,
+            policyEpochHash: POLICY_EPOCH_HASH,
+            reviewGeneration: 1,
+            reviewGenerationHash: REVIEW_GENERATION_HASH,
+            status: IProgrammableUniversalLaunchKernelV1.ProfileStatus.Active
+        });
+    }
+
+    function _launchV2(V2Fixture memory fixture, V2PreparedLaunch memory prepared)
+        private
+        returns (bytes32 receiptCoreHash)
+    {
+        receiptCoreHash = fixture.base.applicant.launchV2(fixture.profile, prepared.plan, prepared.encodedTransport);
+    }
+
+    function _tryLaunchV2(V2Fixture memory fixture, V2PreparedLaunch memory prepared)
+        private
+        returns (bool success, bytes memory reason)
+    {
+        (success, reason) = address(fixture.base.applicant).call(
+            abi.encodeCall(HookemonApplicantWalletV1.launchV2, (fixture.profile, prepared.plan, prepared.encodedTransport))
+        );
+    }
+
+    function _signV2Permit(bytes32 digest) private pure returns (bytes memory signature) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(V2_SIGNER_KEY, digest);
+        signature = abi.encodePacked(r, s, v);
     }
 
     function _fixture(uint32 selectedTotalFee)

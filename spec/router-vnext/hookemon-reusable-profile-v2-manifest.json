@@ -64,14 +64,14 @@
     {
       "abiCanonicalSha256": "19cb163d06a1bb1ab13770b1d947f33b001a420c326a4e10a281359d02d2ecbd",
       "contractName": "ProgrammableExactHookemonPostconditionVerifierV2",
-      "creationCodeKeccak256": "0x00c614a0f0421e8dcd075d27485727589579b786ccd4020c3b62fd9ca78e9700",
+      "creationCodeKeccak256": "0x58503c694e870e6954d00a657e2c0cc3dcb5f281e4ee59f0f6614fe7d284526c",
       "creationCodeLength": 25314,
       "eip170Margin": 20798,
       "eip170Required": true,
       "eip3860Margin": 23838,
       "immutableReferenceGroups": 6,
       "note": "Runtime hash is the canonical unpatched compiler runtime template. Deployment evidence must separately bind the immutable-patched onchain extcodehash.",
-      "runtimeCodeKeccak256": "0x4f1f22c8690312af042f26b50e5a7dae5a5527f034088c381df2639089d6068f",
+      "runtimeCodeKeccak256": "0xb59fef0720b5df0e5313d1566fa9d27f2aa13cc2c7f81deb20d870674cc6a839",
       "runtimeCodeLength": 3778,
       "sourcePath": "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol",
       "sourceSha256": "455494efe3eea8f539482e1d3c6f48d073418b02019c1739de02a323ace9511a"
@@ -107,82 +107,290 @@
       "sourceSha256": "455494efe3eea8f539482e1d3c6f48d073418b02019c1739de02a323ace9511a"
     }
   ],
-  "contentCommitmentSha256": "056562f8625986568c27d3caddb4429b07bb1165d3fd7ba9eb6c5f4327a43ec4",
+  "contentCommitmentSha256": "8cd6ee493722ad0ff6f2edd6a8ed63e0abb2cdbbe9aa56c1d115e1b2bef79aea",
   "deploymentAddresses": null,
   "evidenceBindings": {
+    "frozenSharedAuthoritySourceBundle": {
+      "files": [
+        {
+          "claimedCanonicalRemotePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+          "gitBlob": "97c9a2e5ce2f9a5a89d58202b59b6e8e5f7add0f",
+          "path": "ProgrammableLaunchPermitAuthorityV1.sol",
+          "sha256": "d64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1"
+        },
+        {
+          "claimedCanonicalRemotePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+          "gitBlob": "2d5eb3d065d384d352c4d162e5a15c1bd83aeee2",
+          "path": "ProgrammableLaunchPermitVerifierV1.sol",
+          "sha256": "240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201"
+        },
+        {
+          "claimedCanonicalRemotePath": "contracts/src/interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+          "gitBlob": "c6f5f199997958561a2238968bb284ca253e1837",
+          "path": "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+          "sha256": "3aaae1dcf9f04b4ee38aa30ebd518d18f946a945f37142c1d0d02dcd8bec4169"
+        },
+        {
+          "claimedCanonicalRemotePath": "contracts/src/interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+          "gitBlob": "2fa9f1f2f999de10f05cee7c0b5a0d62deebf1e4",
+          "path": "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+          "sha256": "eafa31f8b84900b16412d68694fad4a8aae81881a81297572449aab8722bee6e"
+        },
+        {
+          "claimedCanonicalRemotePath": "contracts/src/interfaces/IProgrammablePermitBoundRouteV1.sol",
+          "gitBlob": "398d7fb095f4719c1e77e449eed1e11f20061343",
+          "path": "interfaces/IProgrammablePermitBoundRouteV1.sol",
+          "sha256": "c049d50669ac8591051677276cd401c0edff30f687dc9e215473987b52c83395"
+        }
+      ],
+      "identity": {
+        "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+        "committedAt": "2026-08-13T01:42:18+02:00",
+        "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+      },
+      "licenseEvidence": {
+        "note": "Each copied Solidity file carries the exact MIT SPDX header. The local frozen source bundle contains no standalone LICENSE, COPYING or NOTICE file.",
+        "perFileSpdxIdentifier": "MIT",
+        "repositoryLicenseFileAtPinnedCommit": null
+      },
+      "productionImports": [
+        "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+        "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+        "interfaces/IProgrammablePermitBoundRouteV1.sol"
+      ],
+      "testFixtureOnly": [
+        "ProgrammableLaunchPermitAuthorityV1.sol",
+        "ProgrammableLaunchPermitVerifierV1.sol"
+      ]
+    },
+    "productionSourceClosure": {
+      "artifactSet": [
+        "src/router_vnext/ProgrammableExactHookemonNormalCreateExecutorV2.sol:ProgrammableExactHookemonNormalCreateExecutorV2",
+        "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol:ProgrammableExactHookemonArchitectureVerifierModuleV2",
+        "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol:ProgrammableExactHookemonEconomicVerifierModuleV1",
+        "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol:ProgrammableExactHookemonPostconditionVerifierV2",
+        "src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol:ProgrammableExactHookemonReusableNormalCreateProfileV2",
+        "src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol:ProgrammableExactHookemonReusablePlanModuleV2",
+        "src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol:ProgrammableHookemonLaunchRegistryV1"
+      ],
+      "commitmentSha256": "871642d2a7c236adb6d8931c0699709812ec29fd2d879d0de79f2f68d1fcbf14",
+      "derivation": "solc-metadata-sources-union-v1",
+      "files": [
+        {
+          "classification": "frozen-interface-dependency",
+          "path": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+          "sha256": "3aaae1dcf9f04b4ee38aa30ebd518d18f946a945f37142c1d0d02dcd8bec4169",
+          "solcKeccak256": "0xfa903b499e3c6540e45384e02df0b2efcc096766d26f4cddc1df65757e49d926"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/access/AccessControl.sol",
+          "sha256": "2a6209420909ff3f892bd461db4e96c98937f0a78987c3b6c5b24990830d034d",
+          "solcKeccak256": "0xc1bebdee8943bd5e9ef1e0f2e63296aa1dd4171a66b9e74d0286220e891e1458"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/access/extensions/AccessControlDefaultAdminRules.sol",
+          "sha256": "fefdd334836d2fd96871284d4cc3877d95f081bbc54fc179a8572a5f2d50f7ad",
+          "solcKeccak256": "0xd5e43578dce2678fbd458e1221dc37b20e983ecce4a314b422704f07d6015c5b"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/access/extensions/IAccessControlDefaultAdminRules.sol",
+          "sha256": "c7bbf8bc9e68a131951d23f099b50e8d2737d07a0307dfcb26be0595f3efcfa6",
+          "solcKeccak256": "0x094d9bafd5008e2e3b53e40b0ca75173cec4e2c81cf2572ddbef07d375976580"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/access/IAccessControl.sol",
+          "sha256": "e3c0885d437bb495ca88d12a04cadaa89db7288f4f0400f728a7634025a24536",
+          "solcKeccak256": "0x4d9a2b261b56a1e4a37bb038151dec98b952fed16de2bdfdda27e38e2b12b530"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/interfaces/IERC5313.sol",
+          "sha256": "8bc20fb9e53bdb556386519448975a15afa3794230a90b6e3050fe00cbb48d50",
+          "solcKeccak256": "0x22412c268e74cc3cbf550aecc2f7456f6ac40783058e219cfe09f26f4d396621"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/utils/Context.sol",
+          "sha256": "847fda5460fee70f56f4200f59b82ae622bb03c79c77e67af010e31b7e2cc5b6",
+          "solcKeccak256": "0x493033a8d1b176a037b2cc6a04dad01a5c157722049bbecf632ca876224dd4b2"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/utils/introspection/ERC165.sol",
+          "sha256": "7fdc4dc9e3872f6a4c1ec9cfa9583a1fc18ccd7a416397a6e698bd5bbf92f32b",
+          "solcKeccak256": "0xddce8e17e3d3f9ed818b4f4c4478a8262aab8b11ed322f1bf5ed705bb4bd97fa"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol",
+          "sha256": "7c5c3f98ab876991e7dd34b84d41137e836306eb9f36f6386a631f5be3f5d6d4",
+          "solcKeccak256": "0x79796192ec90263f21b464d5bc90b777a525971d3de8232be80d9c4f9fb353b8"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/utils/math/Math.sol",
+          "sha256": "92fee281fd46a1b058b190cf21d6b1a528f0433a907850ae1c9bcf36c5c0cd98",
+          "solcKeccak256": "0x1225214420c83ebcca88f2ae2b50f053aaa7df7bd684c3e878d334627f2edfc6"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/utils/math/SafeCast.sol",
+          "sha256": "9769274bf53f26a7c7896c526ea1980dc9bea5bf5c2a5fd04870008c4afc1de9",
+          "solcKeccak256": "0x195533c86d0ef72bcc06456a4f66a9b941f38eb403739b00f21fd7c1abd1ae54"
+        },
+        {
+          "classification": "openzeppelin-library-dependency",
+          "path": "lib/openzeppelin-contracts/contracts/utils/Panic.sol",
+          "sha256": "270fc8401c1a13fae6a7a4a2dd6e381b95d658896701e51f0d3e2688acab3dec",
+          "solcKeccak256": "0xf7fe324703a64fc51702311dc51562d5cb1497734f074e4f483bfb6717572d7a"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/IProgrammableExactHookemonNormalCreateProfileV1.sol",
+          "sha256": "63a2c452131c44b4fc6757776ab724c10d747167c1b8a7c5e0b8248ce0324db8",
+          "solcKeccak256": "0xf209b362425234edcaad2359d87f6009ce3e95b2f6cc51a8fea03e543f3b7ded"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/IProgrammableExactHookemonReusableNormalCreateProfileV2.sol",
+          "sha256": "d236cf490580bf736751d266ec5ab530546a726a2aa03ca958cfedc7aa14c093",
+          "solcKeccak256": "0xcca05ec1ca9b82eab258449e19a91de2f448e6aef194d23c7fe013ac8ddb12f6"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/IProgrammableHookemonLaunchRegistryV1.sol",
+          "sha256": "7a6e8c89be3907c595b515ec37a981eee08449db9b622f62bac055f7fd6698b9",
+          "solcKeccak256": "0xcaa577c30f3c7f9e504bd91fa319e317dfb198a52ffe3258ef8ed5e34b8a708c"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol",
+          "sha256": "44575d288d3fef6c8c7318f9802e0524f3b16de5679f185efabf644884aace82",
+          "solcKeccak256": "0x549a76863c987caedc12a10b3c98cfcf02426fc9276f93499f76256d1fdef6aa"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/ProgrammableExactHookemonNormalCreateExecutorV2.sol",
+          "sha256": "907d2dc434e81ace94ab44496beb4efed1eae6a8bb4d9fbeb63c76c2bd6f87c2",
+          "solcKeccak256": "0x471d35456a60328b9e2f09a9577c9edaa9004e8cc2ec60e021c2033bb1faa90d"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol",
+          "sha256": "455494efe3eea8f539482e1d3c6f48d073418b02019c1739de02a323ace9511a",
+          "solcKeccak256": "0x1bfc3f993dac252e97aa0c8c6e3f8f21b61ab1658874619af05245759b806731"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol",
+          "sha256": "637336ee03f220cacba40eed37cb2ebe07f3496d1452561a99cbd0748330a4a7",
+          "solcKeccak256": "0xcf44d4b02b3e54aa549c8e610d2f4e45d9ce04b7754ad0d1ddc37722258a4b49"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol",
+          "sha256": "e92ef6b8626d870729de948966bed85fae4f55f5991ec3b1950495a1807b8ae4",
+          "solcKeccak256": "0x066e44c0f78df21b222db5fa125749558e1676d5223b85d5bb5699a8711a1492"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol",
+          "sha256": "682c4fb30df8c745f92516225deb5195614197f97d368f227a1edfe1ece37ad9",
+          "solcKeccak256": "0xa22bf22dd2ec6720f9d01855821e669e3836c3d2e36ad6cfed12b07a591e0368"
+        },
+        {
+          "classification": "first-party-production",
+          "path": "src/router_vnext/ProgrammableTokenIdentityPolicyV1.sol",
+          "sha256": "b07065e130e1260b5ca55b29d1832e7d147fc760268552262f466cd60acdfa70",
+          "solcKeccak256": "0xa9f96980b4915d43841d911fe57c2f1fd391bf1dd71c886b3486dabd4565fb5c"
+        }
+      ]
+    },
     "sharedAuthorityProvenance": {
       "content": {
         "activationAllowed": false,
+        "claimedCanonicalRemote": "https://github.com/0xprogrammable/programmable.git",
         "deploymentAddresses": null,
-        "files": [
-          {
-            "gitBlob": "97c9a2e5ce2f9a5a89d58202b59b6e8e5f7add0f",
-            "path": "ProgrammableLaunchPermitAuthorityV1.sol",
-            "sha256": "d64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1",
-            "upstreamPath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol"
-          },
-          {
-            "gitBlob": "2d5eb3d065d384d352c4d162e5a15c1bd83aeee2",
-            "path": "ProgrammableLaunchPermitVerifierV1.sol",
-            "sha256": "240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201",
-            "upstreamPath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol"
-          },
-          {
-            "gitBlob": "c6f5f199997958561a2238968bb284ca253e1837",
-            "path": "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
-            "sha256": "3aaae1dcf9f04b4ee38aa30ebd518d18f946a945f37142c1d0d02dcd8bec4169",
-            "upstreamPath": "contracts/src/interfaces/IProgrammableLaunchPermitAuthorityV1.sol"
-          },
-          {
-            "gitBlob": "2fa9f1f2f999de10f05cee7c0b5a0d62deebf1e4",
-            "path": "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
-            "sha256": "eafa31f8b84900b16412d68694fad4a8aae81881a81297572449aab8722bee6e",
-            "upstreamPath": "contracts/src/interfaces/IProgrammableLaunchPermitVerifierV1.sol"
-          },
-          {
-            "gitBlob": "398d7fb095f4719c1e77e449eed1e11f20061343",
-            "path": "interfaces/IProgrammablePermitBoundRouteV1.sol",
-            "sha256": "c049d50669ac8591051677276cd401c0edff30f687dc9e215473987b52c83395",
-            "upstreamPath": "contracts/src/interfaces/IProgrammablePermitBoundRouteV1.sol"
-          }
-        ],
-        "licenseEvidence": {
-          "note": "Each copied Solidity file carries the exact upstream SPDX-License-Identifier: MIT header. The pinned repository tree contains no standalone LICENSE, COPYING or NOTICE file.",
-          "perFileSpdxIdentifier": "MIT",
-          "repositoryLicenseFileAtPinnedCommit": null
+        "purpose": "Exact local frozen shared launch-permit source bundle used by Hookemon V2; remote publication is an unsatisfied external release gate",
+        "releasePublicationGate": {
+          "requirement": "The identical commit must be reachable from the claimed canonical remote, or this exact five-file source bundle must be published through an authorized immutable content-addressed channel.",
+          "satisfied": false
         },
-        "productionImports": [
-          "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
-          "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
-          "interfaces/IProgrammablePermitBoundRouteV1.sol"
-        ],
-        "purpose": "Exact frozen shared launch-permit interfaces used by Hookemon V2 plus exact implementation fixtures used only for compatibility tests",
-        "schemaVersion": 1,
-        "testFixtureOnly": [
-          "ProgrammableLaunchPermitAuthorityV1.sol",
-          "ProgrammableLaunchPermitVerifierV1.sol"
-        ],
-        "upstream": {
-          "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
-          "committedAt": "2026-08-13T01:42:18+02:00",
-          "repository": "https://github.com/0xprogrammable/programmable.git",
-          "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+        "remoteReachabilityProven": false,
+        "schemaVersion": 2,
+        "sourceBundle": {
+          "files": [
+            {
+              "claimedCanonicalRemotePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+              "gitBlob": "97c9a2e5ce2f9a5a89d58202b59b6e8e5f7add0f",
+              "path": "ProgrammableLaunchPermitAuthorityV1.sol",
+              "sha256": "d64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1"
+            },
+            {
+              "claimedCanonicalRemotePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+              "gitBlob": "2d5eb3d065d384d352c4d162e5a15c1bd83aeee2",
+              "path": "ProgrammableLaunchPermitVerifierV1.sol",
+              "sha256": "240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201"
+            },
+            {
+              "claimedCanonicalRemotePath": "contracts/src/interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+              "gitBlob": "c6f5f199997958561a2238968bb284ca253e1837",
+              "path": "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+              "sha256": "3aaae1dcf9f04b4ee38aa30ebd518d18f946a945f37142c1d0d02dcd8bec4169"
+            },
+            {
+              "claimedCanonicalRemotePath": "contracts/src/interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+              "gitBlob": "2fa9f1f2f999de10f05cee7c0b5a0d62deebf1e4",
+              "path": "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+              "sha256": "eafa31f8b84900b16412d68694fad4a8aae81881a81297572449aab8722bee6e"
+            },
+            {
+              "claimedCanonicalRemotePath": "contracts/src/interfaces/IProgrammablePermitBoundRouteV1.sol",
+              "gitBlob": "398d7fb095f4719c1e77e449eed1e11f20061343",
+              "path": "interfaces/IProgrammablePermitBoundRouteV1.sol",
+              "sha256": "c049d50669ac8591051677276cd401c0edff30f687dc9e215473987b52c83395"
+            }
+          ],
+          "identity": {
+            "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+            "committedAt": "2026-08-13T01:42:18+02:00",
+            "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+          },
+          "licenseEvidence": {
+            "note": "Each copied Solidity file carries the exact MIT SPDX header. The local frozen source bundle contains no standalone LICENSE, COPYING or NOTICE file.",
+            "perFileSpdxIdentifier": "MIT",
+            "repositoryLicenseFileAtPinnedCommit": null
+          },
+          "productionImports": [
+            "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+            "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+            "interfaces/IProgrammablePermitBoundRouteV1.sol"
+          ],
+          "testFixtureOnly": [
+            "ProgrammableLaunchPermitAuthorityV1.sol",
+            "ProgrammableLaunchPermitVerifierV1.sol"
+          ]
         }
       },
       "path": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json",
-      "sha256": "af2c926ea32ad1c56c30f51859aa901be503b9d626d44af4ce12c919fcfad3ce"
+      "sha256": "36b03b43d03855c5105ae62d4f315560f9d7a3d77fa5d623a5a81300672e1ec7"
     },
     "slitherTriage": {
       "content": {
         "activationAllowed": false,
-        "command": "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-slither-final2.json",
-        "contentCommitmentSha256": "8002fad15bd4b42697457fab14207ea0dbdc025ea0bdff7279f12b584a07ed7d",
+        "command": "slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|dependencies/' --json /tmp/hookemon-v2-slither-freeze.json",
+        "contentCommitmentSha256": "a39917521885a3cd05db1e18eca7f8d79ea644c2b3d8456c689c6326ad8c6b36",
         "cwd": "/Users/hazar/Documents/Codex/2026-08-12/bernimm-den-launch-end-to-end/work/hookemon-reusable-profile-v2-20260812",
         "deploymentAddresses": null,
         "limitations": [
-          "The whole-repository report contains findings in contracts outside the exact Hookemon V2 scope; this evidence makes no claim about those contracts.",
+          "Scope is the complete first-party production closure derived from the seven reviewed compiler artifacts; frozen Shards implementation fixtures remain a separately pinned dependency bundle and are not claimed as covered by this filtered Slither report.",
+          "The whole-repository report contains findings outside the exact Hookemon V2 first-party production closure; this evidence makes no claim about those contracts.",
           "Slither output and manual classification are not an independent audit or live deployment evidence.",
-          "Low and informational results remain visible; only exact scoped High/Medium absence is a fail-closed release input."
+          "Low and informational results remain visible; exact scoped High/Medium absence is fail closed."
         ],
         "product": "Hookemon exact reusable NORMAL_CREATE profile V2",
         "rawReport": {
@@ -190,27 +398,40 @@
             "High": 4,
             "Informational": 208,
             "Low": 44,
-            "Medium": 59
+            "Medium": 58
           },
-          "byteLength": 12152193,
+          "byteLength": 12143814,
           "committed": false,
-          "detectorInstances": 315,
-          "pathAtReview": "/tmp/hookemon-v2-slither-final2.json",
-          "sha256": "36f1768f50bab6cfecc216fff14cae299610b079af3371c42d0cdc3b22bb98a9",
+          "detectorInstances": 314,
+          "pathAtReview": "/tmp/hookemon-v2-slither-freeze.json",
+          "sha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
           "success": true
         },
         "releaseActivationTransaction": null,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "scope": {
           "actionableHighFindings": 0,
           "actionableMediumFindings": 0,
+          "analyzedFirstPartyPaths": [
+            "src/router_vnext/IProgrammableExactHookemonNormalCreateProfileV1.sol",
+            "src/router_vnext/IProgrammableExactHookemonReusableNormalCreateProfileV2.sol",
+            "src/router_vnext/IProgrammableHookemonLaunchRegistryV1.sol",
+            "src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol",
+            "src/router_vnext/ProgrammableExactHookemonNormalCreateExecutorV2.sol",
+            "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol",
+            "src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol",
+            "src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol",
+            "src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol",
+            "src/router_vnext/ProgrammableTokenIdentityPolicyV1.sol"
+          ],
           "byImpact": {
             "High": 0,
-            "Informational": 63,
+            "Informational": 72,
             "Low": 13,
             "Medium": 0
           },
-          "detectorInstances": 76,
+          "derivation": "all first-party-production files in solc metadata source union",
+          "detectorInstances": 85,
           "lowDetectorInstances": 13,
           "lowTriage": [
             {
@@ -219,6 +440,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: factory.kind() != kind || factory.creationCodeHash() == bytes32(0) || factory.runtimeCodeHash() != child.codehash || chunks.length != 1 || chunks[0].code.length == 0 || factory.deploymentConfigHash(child) != context.launchConfigHash || factory.predictChild(context.launchId,context.launcher,context.launchConfigHash) != child (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#322-325)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1.verifyArchitectureStateV1(address)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "022556d753c51f93ece6a0e17f88b34ddda7432970dafd9b3c6b7574657ac64b",
               "id": "hookemon-v2-low-01",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -278,6 +500,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: activatedChild.bootstrapFactory() != factoryAddress || activatedChild.bootstrapLauncher() != context.launcher || activatedChild.launchId() != context.launchId || activatedChild.launchConfigHash() != context.launchConfigHash || ! activatedChild.activated() (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#329-332)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1.verifyArchitectureStateV1(address)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "1c0ebc31dd8bbe99d7270347aac0af9ce567ea14cba942b817a9a19f4e029186",
               "id": "hookemon-v2-low-02",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -337,6 +560,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#295-310) has external calls inside a loop: factoryAddress = registry.factory(kind) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#303)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1.verifyArchitectureStateV1(address)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n",
+              "detectorId": "6953e6357d28e0daaceaa2b52df51af0464e961eab24678c9d75f907d26fd272",
               "id": "hookemon-v2-low-03",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -380,6 +604,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: factoryLeaf = keccak256(bytes)(abi.encode(factoryAddress,factory.creationCodeHash(),factory.runtimeCodeHash(),chunk,chunk.codehash,child)) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#335-339)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1.verifyArchitectureStateV1(address)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "6fe7aa7c82613ebb00aba3d861a53cf00ec705f093b21112c01006551cdd7478",
               "id": "hookemon-v2-low-04",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -440,6 +665,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: chunks = factory.chunkAddresses() (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#320)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1.verifyArchitectureStateV1(address)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "775ef0321207a62edefb979b25d30ef00e516c809285e9a8e97606c9319bebb1",
               "id": "hookemon-v2-low-05",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -496,6 +722,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: activatedChild.bootstrapFactory() != factoryAddress || activatedChild.bootstrapLauncher() != context.launcher || activatedChild.launchId() != context.launchId || activatedChild.launchConfigHash() != context.launchConfigHash || ! activatedChild.activated() (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#329-332)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV2.verifyArchitectureStateV2(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "93682cadcc09a4642df939473bb8ea849240458349d734dfb6fdde0bb402c978",
               "id": "hookemon-v2-low-06",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -555,6 +782,7 @@
               "classification": "intentional-fixed-two-part-code-store-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonReusableNormalCreateProfileV2._buildReservations(IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2) (src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol#634-672) has external calls inside a loop: (part,runtimeHash,partLength) = CODE_STORE.partV1(i) (src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol#664)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonReusableNormalCreateProfileV2.launchExactHookemonV2(IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2,bytes)\n\t\tProgrammableExactHookemonReusableNormalCreateProfileV2._prepareExecution(IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2,IProgrammableExactHookemonReusableNormalCreateProfileV2.KernelTransportV2,bytes)\n",
+              "detectorId": "9fd5080517f293eda5a82ead1e928bb58e6e52dd48824037c53faaeed24c4d01",
               "id": "hookemon-v2-low-07",
               "impact": "Low",
               "rationale": "The loop bound is the literal two and each CodeStore part address, runtime hash and nonzero length is bound before reservations are built.",
@@ -621,6 +849,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: factory.kind() != kind || factory.creationCodeHash() == bytes32(0) || factory.runtimeCodeHash() != child.codehash || chunks.length != 1 || chunks[0].code.length == 0 || factory.deploymentConfigHash(child) != context.launchConfigHash || factory.predictChild(context.launchId,context.launcher,context.launchConfigHash) != child (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#322-325)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV2.verifyArchitectureStateV2(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "beb2748cb5b88837482575d737b3aadc34e390773fd31a1c492d7e273d83d8b9",
               "id": "hookemon-v2-low-08",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -680,6 +909,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: factoryLeaf = keccak256(bytes)(abi.encode(factoryAddress,factory.creationCodeHash(),factory.runtimeCodeHash(),chunk,chunk.codehash,child)) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#335-339)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV2.verifyArchitectureStateV2(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "c3137d5212d7e643c0a9d7873ed12ae981f6f0fd5da37bdf77bc1735717e9c88",
               "id": "hookemon-v2-low-09",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -740,6 +970,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#295-310) has external calls inside a loop: factoryAddress = registry.factory(kind) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#303)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV2.verifyArchitectureStateV2(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n",
+              "detectorId": "c3cc3fec6d7aba2ce1f1b223f3e65bf080fec2b156164b59c4b7f0fe687b2dec",
               "id": "hookemon-v2-low-10",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -783,6 +1014,7 @@
               "classification": "intentional-bounded-read-only-postcondition-loop",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonArchitectureVerifierModuleV1._factoryStateLeaf(uint8,address,address,ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1) (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#312-340) has external calls inside a loop: chunks = factory.chunkAddresses() (src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol#320)\n\tCalls stack containing the loop:\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV2.verifyArchitectureStateV2(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._architectureStateHash(address,bytes32,bytes32)\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._sharedAndFactoryHeads(IExactHookemonAtomicLauncherViewV1,address,address[9])\n\t\tProgrammableExactHookemonArchitectureVerifierModuleV1._factoryHeads(address,address[9],ProgrammableExactHookemonArchitectureVerifierModuleV1.FactoryVerificationContextV1)\n",
+              "detectorId": "f57219f084c7d21e40348eab63b4ca5c2d56e4bb5ddff125e0cc42e2ef8e7ded",
               "id": "hookemon-v2-low-11",
               "impact": "Low",
               "rationale": "The exact reviewed graph has nine fixed factory kinds. Every read is post-deployment verification, every mismatch or failed ABI read reverts, and the Profile caps the verifier call gas.",
@@ -839,6 +1071,7 @@
               "classification": "intentional-permit-expiry-boundary",
               "confidence": "Medium",
               "description": "ProgrammableExactHookemonReusablePlanModuleV2.validatePermitV2(IProgrammableExactHookemonReusableNormalCreateProfileV2.ExactHookemonReusablePlanV2,IProgrammableExactHookemonReusableNormalCreateProfileV2.PermitTransportV2,IProgrammableExactHookemonReusableNormalCreateProfileV2.PlanCommitmentsV2,bytes,ProgrammableExactHookemonReusablePlanModuleV2.PermitValidationContextV2) (src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol#272-327) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- permit.releaseBindingHash != context.permitAuthority.computeReleaseBindingHash(transport.releaseBinding) || permit.generationBindingHash != context.permitAuthority.computeGenerationBindingHash(permit) || transport.kernelEnvelope.kernelGrantDigest != context.grantDigest || transport.kernelEnvelope.reviewerCurrentnessDigest != context.currentnessDigest || transport.kernelEnvelope.applicantWalletIntentDigest != context.walletIntentDigest || permit.kernelExecutionEnvelopeHash != context.permitAuthority.computeKernelExecutionEnvelopeHash(transport.kernelEnvelope) || permit.executionValue != 0 || permit.deadline <= block.timestamp || transport.permitSignature.length == 0 || context.grantDigest == bytes32(0) || context.currentnessDigest == bytes32(0) || context.walletIntentDigest == bytes32(0) (src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol#304-313)\n",
+              "detectorId": "a44cb4e36f994871ca01ba233e3288cd4c7216026cb64f79096da27e575ca2c5",
               "id": "hookemon-v2-low-12",
               "impact": "Low",
               "rationale": "The comparison rejects expired short-lived permits. The frozen shared Verifier independently enforces the signed notBefore/deadline window during consumption.",
@@ -931,6 +1164,7 @@
               "classification": "false-positive-role-equality",
               "confidence": "Medium",
               "description": "ProgrammableHookemonLaunchRegistryV1._grantRole(bytes32,address) (src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol#359-364) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- role == WRITER_ROLE && LAUNCH_ROUTE != address(0) && account != LAUNCH_ROUTE (src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol#360)\n",
+              "detectorId": "ff94ea12e7b7c5d407626f707523c042815de8f8bfe1d46b9bcdf2cde8230530",
               "id": "hookemon-v2-low-13",
               "impact": "Low",
               "rationale": "The detector misclassifies role/address equality as timestamp logic; the function reads no timestamp and only rejects WRITER_ROLE grants to accounts other than immutable LAUNCH_ROUTE.",
@@ -959,7 +1193,95 @@
               ]
             }
           ],
-          "sourcePattern": "^src\\/router_vnext\\/(ProgrammableExactHookemonReusableNormalCreateProfileV2|ProgrammableExactHookemonReusablePlanModuleV2|ProgrammableExactHookemonNormalCreateExecutorV2|ProgrammableHookemonLaunchRegistryV1|ProgrammableExactHookemonPostconditionVerifierV1)\\.sol$",
+          "productionSourceClosureCommitmentSha256": "871642d2a7c236adb6d8931c0699709812ec29fd2d879d0de79f2f68d1fcbf14",
+          "scopedDetectorIds": [
+            "00138a3e7d00de779c9503480d2068a91c6199109ff43a3a26aea0912c1fb997",
+            "022556d753c51f93ece6a0e17f88b34ddda7432970dafd9b3c6b7574657ac64b",
+            "049808e61e1950ba92e6827418299682f10f8a8a0cdccb0d33e1366b9bcfca8f",
+            "10649c46004a3c11bcc660d1630522f96348362fd4f0cd169b524cecc906b605",
+            "1255a75d06b4352fc737d083d0d4ced69b009f06f8845e67321fadbd39ca5965",
+            "165cb9d377fc89ee335bd3558e59e0ef31f2d755aa38e516360c1dc10f057333",
+            "16a4d0276274207739a144756a41bfa3797b0b5899dd59cba15bd5a07279db28",
+            "1c0ebc31dd8bbe99d7270347aac0af9ce567ea14cba942b817a9a19f4e029186",
+            "1d0ba6a757c87ec209351e7186b9bc3d47865cc4f4b4591dc7280597b26bf800",
+            "237916d9ee65f58522f1ff7bc94746a8a426ca156b94e53c44bacf389321acd1",
+            "26a53f1538dc65f938b756be3730f58af4145fa1387b91459fcc44b777405272",
+            "3122e72fc82ccd655dd249a2815960e6d3ab7ffbae30c8027d61eb9acefca6ff",
+            "3706ddad3763af8ea859357a06a7b124b650c66de6d6cce39afacc6b4946d6b9",
+            "37b828b5795b1cc7d6e0add8d26a83f643b29b9506cb946d15cd57369fd1d1bc",
+            "3b743a3f0c82eeb9a4a7b955135de1fe5e2b9079170dbd687c277667713ba610",
+            "3dcc5e043a472ccd115200428963b47edd4b338f4e38a419a96760f1d7919276",
+            "402e213128bdf3bfcb1616b7e317904a474378a4f34a1920f6cc0811ee4245e6",
+            "41d592e8d92b2c7a27cc539ddae498c76e04dc45eafb163a8910ca19f95f643f",
+            "431337e9efd5f53d25f4f4f109c2a71f3c7fadf0c75aeccf25b349a52dbe2d7b",
+            "46d8f35ed44237788a4833effe2f66585d033e26f61b1c920199e566016c3983",
+            "47e251fee3a46a8ec6eb63ac21317c4183e1725d5b8a0083706225dfb6dc1984",
+            "5bb2c702b97046ef4e429422e1bcd83ac13ace417ac18402d4fb9caf0d4839ff",
+            "5e985c9a583ec2af8cc7bde5b1840f3f35fd89ff0c7114f5c31efd337e9260c4",
+            "5fc1d7762a68c970d92962992179d979b85498bc3ea90dc5267d3f30a73cd107",
+            "6025daeb3bd798940c06cf1bb4e93d84f521341395f449ea6cfdf8aebfef4137",
+            "6026d74f79787ca904b6f0c82121832b3cef3035990b4c9b6449ec75b9f75333",
+            "631ea1bb4aab295bf0ee34512d7a1b1d39c721a9050bb6e83c14cf6833df313f",
+            "6331800b8fcd30a409757f09b8fa689f942551c2c9f03732235be20e3a104e0c",
+            "68ca3276d9f8a0a0462b488e3d8cea58c57792c75a33504dd86ade84b9660edf",
+            "6953e6357d28e0daaceaa2b52df51af0464e961eab24678c9d75f907d26fd272",
+            "699fdb749b51f8f6897534c34315281275dbfa32e758e447bf460b772794dac0",
+            "6ba2ba38fc80e5916d39c1ad5acd61f86fb482ad45beae0ac874665578447495",
+            "6da9de0024dbba549f9f82d1537cfc44dbb2f7159c36ef028ca85801202c35d1",
+            "6f505f3677f050a3245d6612bdb5e73f8953740a9a0b831c084e750bc27ff9c4",
+            "6fe7aa7c82613ebb00aba3d861a53cf00ec705f093b21112c01006551cdd7478",
+            "725d5c6693c0a4b8c2e7bc7f265e3d75afcb8152430b347764f5ebd96718572f",
+            "72f3fd48aaa84fd09dd91b4e80d6955178dcbf26f94c2f8e289c972936486388",
+            "775ef0321207a62edefb979b25d30ef00e516c809285e9a8e97606c9319bebb1",
+            "7c1a7e437de4ae669cfed574b057428a261741539b8df2c7b3b0a51531337f08",
+            "812bce42dfab8944200ed288d8dfd7f352e99b6fb9054728e63c0604d9740504",
+            "814824b0cef0b94c91fc6a771f0de1316d0862e0810d96d18047951e1cdd1fb8",
+            "82cc88a3750dea61206b82c05e145b117e9365c4b9212a97302c64768ac4f0d1",
+            "85c58e64a1cc7653c22070d9aa2032f3edadc297a741558061df6312a62624d1",
+            "8621b612f73823d48ec966d705358e989cdfe0faecd51aa3eaf8629c4d19b3e0",
+            "8664fec5ed40be8808a1ffc8912683e6f716c7dfb729a26c41f2b5bef579db0c",
+            "911bd6e20698184d2d1a513800d1ee6f98aff87b8c5aa9eb7d19c70709633951",
+            "92798b8855364629f04fbbe6d7009b642a0a08652085eb8f83b87d11bbab8c8f",
+            "93682cadcc09a4642df939473bb8ea849240458349d734dfb6fdde0bb402c978",
+            "96dd2684749430de7eabea7116a04fbaba577786024edfc34e6ca72d334c004c",
+            "99f1c27641ac2a292420f2ec4f3cf20b9a75216d2fa8c9db3423e382a6668245",
+            "9dcd389593dde027ac62d0c5b1f313cef40a0d6c0914029d6ab6125a6791b916",
+            "9fd5080517f293eda5a82ead1e928bb58e6e52dd48824037c53faaeed24c4d01",
+            "a44cb4e36f994871ca01ba233e3288cd4c7216026cb64f79096da27e575ca2c5",
+            "a74a353f4326cb994ad50a8e8f96f6676d079607b5112ba9d0b451df36c17e93",
+            "a84f10e7214e1a47abcafd4c1019ebda10a72e863712d47d1c767604415ef4ca",
+            "ae1ece1123267f55aa8a8ffd7f3318b6a5efe45791ce2d0eb46cc32ec3517712",
+            "b059a0aa7f13d075f4a9e2f444702dc635828c60317c62128178f4c7f45e3c8c",
+            "b4bfe3477f7f280a9cc6e91b0cf42ba20501a5cdca9597bc9c2b0a8b480ce7b4",
+            "b59e2a784a2a9e8a15e8e43d744e89f32ef06eb265e8555da760d95e704d1a62",
+            "b5f1e99683316bf4e1447de7e502e285e76e11f682763e69681e5dec4f7f73d9",
+            "b696ab905b28e8bf3cf174116240193d186e9f65324400b173d676213a749e94",
+            "b6df89a812f10e8ae98aafe9a5f3591c511e41833a966cf0a4b78b1dca06249a",
+            "b963b907dfa525940620beaecc3fbe7a55ff86dcaab8eddd794044e0c1ecddf3",
+            "beb2748cb5b88837482575d737b3aadc34e390773fd31a1c492d7e273d83d8b9",
+            "bf25abb5da2b6adedf5f630e82540e8a91b7e7826aaa22ef4b788b710bd5c3a9",
+            "c05fefe66dabd9fe42886ef48fbae3f2ff50f96bb4aadca22e37df56f378f2b4",
+            "c3137d5212d7e643c0a9d7873ed12ae981f6f0fd5da37bdf77bc1735717e9c88",
+            "c3177aac553ab67785cab417d5240bbc4a01a22981f27c73b866f80022fe69fd",
+            "c3cc3fec6d7aba2ce1f1b223f3e65bf080fec2b156164b59c4b7f0fe687b2dec",
+            "c420228c3faed664090d71c64ea9867b2f2c6fc7ce4cba8d3128a8519182543d",
+            "c7570a50c345591777b8e920f41acd73abe3ba9cdfa77300675bc37ecfa2271d",
+            "c91824a74348ad1a5c2bf20c03b0da2a759277129cb6f3738a69ba6d4c77224a",
+            "cf14d62fa4a7e8f9ab38ff8cfbd809faedfeebc30e77d6102aab5719357b7363",
+            "d0202605c8d47c93a7236bfcbd229116d957d660cadd630c2bdb7b6827ee364f",
+            "d03985ce6cafad60b566047b232e038cc385990c80169db0e1ceb1b858719c07",
+            "d1f8ec6d04931323063c46a3d5d5312f62b4e594fb9a419b9b4d7e4acdf15863",
+            "d34f872c25a402292d4558b3031659e45e5447295360e2303e118a6a99add22c",
+            "d89f25326987a9625ca4ad666fdcab435f71929b20be82f89f6dd9e3af514226",
+            "da182ecbce6170900c97d22e9601c0f6615b8756794ca2375f5c62062697f021",
+            "de211f98c6601f4137f1394893bc5d1524a5707630dff6f8ed51c4a18d259330",
+            "deb851b8d9fa6507971ea638b0b7dacecad56138d60c331aa68f70e3945b9c76",
+            "e83ae25396d6edac6bb4155441626f9655514974f68e033df374c857ebbed5e3",
+            "edd99985faae5d5336a2d2cdb27192dbc7998bde1ccada7677a14aef9e38f120",
+            "f57219f084c7d21e40348eab63b4ca5c2d56e4bb5ddff125e0cc42e2ef8e7ded",
+            "ff94ea12e7b7c5d407626f707523c042815de8f8bfe1d46b9bcdf2cde8230530"
+          ],
+          "scopedDetectorSetCommitmentSha256": "e6b149cc8f418ec314cd920346bc5a6ba397ac9a06e8c01543eb8f8e17a43770",
           "untriagedHighOrMediumFindings": 0
         },
         "status": "STATIC_ANALYSIS_TRIAGED_NOT_AN_AUDIT",
@@ -970,11 +1292,35 @@
         }
       },
       "path": "security/hookemon-reusable-profile-v2-slither-triage.json",
-      "sha256": "3db5cdc9d73a6dcbfeacfe88d53a34f2ec3065b477c5ba9bad844b06d2e06303"
+      "sha256": "7ea40aa31258d4bfc2de4e889ab248afd018fe6b7c95591f738f54d014534f51"
     },
     "tests": {
       "content": {
         "activationAllowed": false,
+        "actualV2EntrypointEndToEnd": {
+          "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test '^testV2ActualEntrypoint' -vv",
+          "coverage": [
+            "actual Applicant wallet to V2 Profile launchExactHookemonV2 entrypoint",
+            "PlanModule validateAndCommitPlanV2, buildReservationsV2, validatePermitV2, verifyPostconditionsV2 and buildLaunchRegistrationV2",
+            "Kernel activate and begin, frozen shared Authority consume, CREATE2 Executor, nonce-one Launcher, real Registry registration and Kernel finalize",
+            "exact downstream verifier failure rollback of Kernel, Authority, Registry, Executor, Launcher and allowance followed by identical signed-permit retry",
+            "permanent repository-once rejection through a second actual V2 release route"
+          ],
+          "entrypoint": "launchExactHookemonV2",
+          "rawLogByteLength": 694,
+          "rawLogCommitted": false,
+          "rawLogPathAtReview": "/tmp/hookemon-v2-actual-e2e-freeze.log",
+          "rawLogSha256": "d0fe3faddf7d58d70bbd4c79276b6c9bbbff454c9e11fe361b10003f86230b68",
+          "result": "3 passed; 0 failed; 0 skipped",
+          "testContract": "ProgrammableExactHookemonNormalCreateProfileV1Test",
+          "testNames": [
+            "testV2ActualEntrypointExecutesAuthorityPlanVerifierRegistryAndKernel",
+            "testV2ActualEntrypointDownstreamFailureRollsBackAndSamePermitRetries",
+            "testV2ActualEntrypointRepositoryOnceBlocksLaterReleaseRoute"
+          ],
+          "testSourcePath": "test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol",
+          "testSourceSha256": "6acf3ade4c6f3559275252316ff668846788c51640dc7b29f2a5c1b8b798cfd3"
+        },
         "deploymentAddresses": null,
         "focusedHookemonPostconditions": {
           "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test 'testAtomicLifecycleUsesNonceOneAndFinalizesExactTwentyFourComponentGraph|testReusableVerifierReadsDynamicIdentityAndExactGraphWithoutPerLaunchDeployment|testWrongPlanCodeBlobAndFeeRollbackWithoutConsumingRetry|testWebsiteSelectedTokenIdentityAndPresentationHashBinding|testTokenIdentityTamperAndWebsitePolicyViolationsFailClosed' -vv",
@@ -987,8 +1333,8 @@
           ],
           "rawLogByteLength": 826,
           "rawLogCommitted": false,
-          "rawLogPathAtReview": "/tmp/hookemon-postconditions-frozen.log",
-          "rawLogSha256": "34c5a02075301484f45f1d7b65b652c7e4d92e78e2d296f309ad5b5837687e92",
+          "rawLogPathAtReview": "/tmp/hookemon-postconditions-freeze2.log",
+          "rawLogSha256": "afba5f8f53663c3c07c5494b76b6e75b622cc02ce251ef62897db1635f7d81ab",
           "result": "5 passed; 0 failed; 0 skipped"
         },
         "focusedSharedAuthorityRegistryLifecycle": {
@@ -1005,27 +1351,37 @@
           "kernelRegistrationGasRegressionMaximum": 8200000,
           "kernelRegistrationGasUsed": 8136327,
           "profileRuntimeByteRegressionMaximum": 22000,
-          "rawLogByteLength": 1044,
+          "rawLogByteLength": 1096,
           "rawLogCommitted": false,
-          "rawLogPathAtReview": "/tmp/hookemon-authority-registry-frozen.log",
-          "rawLogSha256": "2e3d15527182f44d5a61b6adb90dae2b4ed521d9dd48a163ad710a5842f9ff47",
+          "rawLogPathAtReview": "/tmp/hookemon-authority-registry-freeze2.log",
+          "rawLogSha256": "272473866b15f63d45c368df4dd19293641375b79113d3c068f7c4688bd928c3",
           "result": "7 passed; 0 failed; 0 skipped"
         },
         "fullForgeSuite": {
           "command": "forge test -vv",
-          "rawLogByteLength": 41726,
+          "rawLogByteLength": 42041,
           "rawLogCommitted": false,
-          "rawLogPathAtReview": "/tmp/hookemon-full-test-frozen.log",
-          "rawLogSha256": "9fc057f049d4d3ab3c27d1cd5c3ebb2183250f0b228212eb8b6b07592296e86f",
-          "result": "235 passed; 0 failed; 3 skipped; 238 total",
+          "rawLogPathAtReview": "/tmp/hookemon-full-test-freeze2.log",
+          "rawLogSha256": "59acae7629daf97c1a7f92cd73b40ccf83853c144211cc9ede5fc16e80a666dc",
+          "result": "238 passed; 0 failed; 3 skipped; 241 total",
           "skipNote": "Three pre-existing fork-dependent suites are explicitly skipped when their external fork configuration is absent; no focused Hookemon V2 test is skipped."
         },
         "normalSolc": "0.8.26",
         "releaseActivationTransaction": null,
+        "reproducibleNormalBuilds": {
+          "artifactBindingsCanonicalSha256Build1": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
+          "artifactBindingsCanonicalSha256Build2": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
+          "build2RawLogByteLength": 169359,
+          "build2RawLogCommitted": false,
+          "build2RawLogPathAtReview": "/tmp/hookemon-v2-build-freeze2.log",
+          "build2RawLogSha256": "b0f3f62aefd9e2f679358b08efc793ad54b127afba4ab1bcc50bd9f385f0dec6",
+          "cleanBuildsCompared": 2,
+          "command": "forge clean && forge build --sizes && node scripts/generate-hookemon-reusable-profile-v2.mjs"
+        },
         "schemaVersion": 1
       },
       "path": "security/hookemon-reusable-profile-v2-test-evidence.json",
-      "sha256": "0b200379209969b57435e0306a2f2456429abdbe96b8e5bc6c17e8f8a3d4dc41"
+      "sha256": "8bcde204e1e2adcd59ead9214df811ae25041e0f99732a5c0bdcc76384defca5"
     }
   },
   "releaseActivationTransaction": null,
@@ -1079,17 +1435,20 @@
       }
     ],
     "evidenceRequirements": {
+      "actualV2EndToEndTests": "3 passed; 0 failed; 0 skipped",
+      "artifactBindingsCanonicalSha256": "2ff44712682384eca2e92c392dcd4a731bc6a5f3bc4a21ca3d84617b11358372",
       "focusedLifecycleTests": "7 passed; 0 failed; 0 skipped",
       "focusedPostconditionTests": "5 passed; 0 failed; 0 skipped",
-      "fullForgeSuite": "235 passed; 0 failed; 3 skipped; 238 total",
+      "fullForgeSuite": "238 passed; 0 failed; 3 skipped; 241 total",
       "kernelRegistrationGasRegressionMaximum": 8200000,
       "measuredKernelRegistrationGas": 8136327,
       "profileRuntimeByteRegressionMaximum": 22000,
-      "slitherReportByteLength": 12152193,
-      "slitherReportPath": "/tmp/hookemon-v2-slither-final2.json",
-      "slitherReportSha256": "36f1768f50bab6cfecc216fff14cae299610b079af3371c42d0cdc3b22bb98a9",
+      "reproducibleCleanBuilds": 2,
+      "slitherReportByteLength": 12143814,
+      "slitherReportPath": "/tmp/hookemon-v2-slither-freeze.json",
+      "slitherReportSha256": "7b3be6171d6f6322d7d99b8b01e2f41f77127c63222e7b9aa07033e40b49de25",
       "slitherScopedTriagePath": "security/hookemon-reusable-profile-v2-slither-triage.json",
-      "slitherTotalDetectorInstances": 315,
+      "slitherTotalDetectorInstances": 314,
       "slitherVersion": "0.11.5",
       "testEvidencePath": "security/hookemon-reusable-profile-v2-test-evidence.json"
     },
@@ -1099,6 +1458,7 @@
       "realEndToEndLaunchEvidence": null,
       "releaseActivationTransaction": null,
       "roleTransactions": null,
+      "sharedAuthorityCanonicalPublicationEvidence": null,
       "verifiedRuntimeCodeHashes": null,
       "websiteAndIndexerDiscoveryEvidence": null
     },
@@ -1155,10 +1515,13 @@
         "tree": "2667ff1bee70dd082596d5f65b3ed4cb2c1ce387"
       },
       "sharedShardsAuthority": {
-        "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+        "claimedCanonicalRemote": "https://github.com/0xprogrammable/programmable.git",
+        "localFrozenSourceBundle": {
+          "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+          "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+        },
         "provenancePath": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json",
-        "repository": "https://github.com/0xprogrammable/programmable.git",
-        "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+        "remoteReachabilityProven": false
       }
     },
     "walletUx": {
