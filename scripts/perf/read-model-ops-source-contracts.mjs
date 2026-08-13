@@ -148,7 +148,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
-          sha256: "58cc558607aa45fb5e6cc2f10d7a9d1d43ba3ca166b178e4d5bf291cd8e80aa6",
+          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -180,7 +180,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
-          sha256: "58cc558607aa45fb5e6cc2f10d7a9d1d43ba3ca166b178e4d5bf291cd8e80aa6",
+          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -247,7 +247,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
-          sha256: "58cc558607aa45fb5e6cc2f10d7a9d1d43ba3ca166b178e4d5bf291cd8e80aa6",
+          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -1823,6 +1823,15 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       stagedBitquerySmokeBlock.includes(
         '"./scripts/perf/read-model-provider-binding.mjs"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
+      ) &&
+      !stagedBitquerySmokeBlock.includes(
+        "node --env-file=.vercel/.env.production.local",
       ) &&
       stagedBitquerySmokeBlock.includes(
         "runtimeProductionProviderEndpoints(process.env)",

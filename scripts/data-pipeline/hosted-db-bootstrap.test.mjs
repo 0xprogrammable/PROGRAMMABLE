@@ -1,17 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { keccak256, toBytes } from "viem";
+
 import { createBootstrapPlan } from "./hosted-db-bootstrap-runtime.mjs";
 import { validateReviewedBootstrapPlan } from "./bootstrap-evidence.mjs";
 import { canonicalJson, sha256 } from "./hosted-db-operator-core.mjs";
 
 const repositoryCommit = "561abe6a36caa0e9b5bc4ea20d10edca0f5401bc";
 const createdAt = "2026-08-01T09:00:00.000Z";
+const DRPC = "https://lb.drpc.live/ethereum/drpc-bootstrap-test-key";
+const QUICKNODE =
+  "https://bootstrap.ethereum-mainnet.quiknode.pro/quicknode-bootstrap-test-key";
+const endpointCommitment = (url) =>
+  keccak256(toBytes(`programmable:data-pipeline:rpc-endpoint:v1\0${url}`));
 const environment = Object.freeze({
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-    "https://eth-mainnet.g.alchemy.com/v2/abcdefgh",
-  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-    "https://example.ethereum-mainnet.quiknode.pro/abcdefgh",
+  PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER: "drpc",
+  PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL: DRPC,
+  PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT:
+    endpointCommitment(DRPC),
+  PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER: "quicknode",
+  PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL: QUICKNODE,
+  PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT:
+    endpointCommitment(QUICKNODE),
 });
 
 test("builds a complete deterministic candidate-only bootstrap plan", async () => {
@@ -29,6 +40,16 @@ test("builds a complete deterministic candidate-only bootstrap plan", async () =
   assert.equal(validateReviewedBootstrapPlan(left), left);
   assert.equal(left.execution.ready, true);
   assert.equal(left.execution.targetDatabaseMode, "candidate-only");
+  assert.deepEqual(
+    left.providerBindings.slice(1, 3).map(({ vendor, redactedIdentity }) => ({
+      vendor,
+      redactedIdentity,
+    })),
+    [
+      { vendor: "drpc", redactedIdentity: "rpc:1:drpc" },
+      { vendor: "quicknode", redactedIdentity: "rpc:1:quicknode" },
+    ],
+  );
   assert.equal(
     left.providerBindings[0].redactedIdentity,
     "envio:production-7f24e63",
@@ -183,6 +204,21 @@ test("rejects dynamic lineage, RPC endpoint and activation input drift", async (
   assert.throws(
     () => validateReviewedBootstrapPlan(recommit(activation)),
     /activation input drifted/u,
+  );
+});
+
+test("rejects recommitted legacy Alchemy provider evidence", async () => {
+  const plan = await createBootstrapPlan({
+    repositoryCommit,
+    environment,
+    createdAt,
+  });
+  const legacy = structuredClone(plan);
+  legacy.providerBindings[1].vendor = "alchemy";
+  legacy.providerBindings[1].redactedIdentity = "rpc:1:alchemy";
+  assert.throws(
+    () => validateReviewedBootstrapPlan(recommit(legacy)),
+    /reviewed provider set is invalid/u,
   );
 });
 

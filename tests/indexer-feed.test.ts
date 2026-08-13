@@ -90,13 +90,13 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function expectAlchemyRpcHeaders(response: Response) {
+function expectProductionRpcHeaders(response: Response) {
   expect(response.headers.get("x-programmable-launch-source")).toBe(
-    "alchemy",
+    "durable-read-model",
   );
   expect(response.headers.get("x-programmable-read-source")).toBe("blob");
   expect(response.headers.get("x-programmable-rpc-provider")).toBe(
-    "alchemy",
+    "drpc+quicknode",
   );
   expect(
     response.headers
@@ -587,7 +587,7 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "*",
     );
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(routeMocks.getAlchemyOnchainDeployment).toHaveBeenCalledTimes(1);
     expect(routeMocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
     expect(await response.json()).toMatchObject({
@@ -615,7 +615,7 @@ describe("public indexer fee disclosure", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(await response.json()).toEqual({
       error: "Indexer data is temporarily unavailable",
     });
@@ -631,7 +631,7 @@ describe("public indexer fee disclosure", () => {
     );
 
     expect(response.status).toBe(200);
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(await response.json()).toMatchObject({
       schemaVersion: "programmable-token-v1",
       address: token.tokenAddress,
@@ -795,7 +795,7 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("cache-control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(await response.json()).toEqual({
       error: "Programmable token not found",
     });
@@ -812,7 +812,7 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "*",
     );
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(routeMocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
     expect(routeMocks.readAlchemyExploreModel).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({
@@ -831,7 +831,7 @@ describe("public indexer fee disclosure", () => {
       "*",
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(await response.json()).toEqual({
       error: "Token list is temporarily unavailable",
     });
@@ -850,7 +850,7 @@ describe("public indexer fee disclosure", () => {
       "public, max-age=0, s-maxage=5",
     );
     expect(response.headers.get("retry-after")).toBe("60");
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(await response.json()).toEqual({
       status: "ready",
       error:
@@ -865,7 +865,7 @@ describe("public indexer fee disclosure", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expectAlchemyRpcHeaders(response);
+    expectProductionRpcHeaders(response);
     expect(Number.isNaN(Date.parse(body.timestamp))).toBe(false);
     expect(body.tokens).toHaveLength(1);
     expect(body.tokens[0]).toMatchObject({

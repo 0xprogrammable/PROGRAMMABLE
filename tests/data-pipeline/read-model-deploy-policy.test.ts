@@ -839,6 +839,15 @@ describe("read-model production deploy policy", () => {
       workflow.indexOf("Smoke staged public market APIs"),
       workflow.indexOf("Record registry identity and combined market path"),
     );
+    expect(bitquerySmoke).toContain(
+      'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
+    );
+    expect(bitquerySmoke).toContain(
+      "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+    );
+    expect(bitquerySmoke).not.toContain(
+      "node --env-file=.vercel/.env.production.local",
+    );
     expect(bitquerySmoke).toContain("runtimeProductionProviderEndpoints");
     expect(bitquerySmoke).not.toContain("ethereum-rpc.publicnode.com");
     expect(bitquerySmoke).not.toContain("rpc.mevblocker.io");

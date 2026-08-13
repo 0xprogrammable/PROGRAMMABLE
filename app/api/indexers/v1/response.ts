@@ -24,9 +24,9 @@ export function alchemyFeedHeaders(
     "Access-Control-Expose-Headers":
       "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
     "Cache-Control": cacheControl,
-    "X-Programmable-Launch-Source": "alchemy",
+    "X-Programmable-Launch-Source": "durable-read-model",
     "X-Programmable-Read-Source": "blob",
-    "X-Programmable-Rpc-Provider": "alchemy",
+    "X-Programmable-Rpc-Provider": "drpc+quicknode",
   });
 }
 
@@ -35,7 +35,7 @@ export const ALCHEMY_NO_STORE_HEADERS = Object.freeze({
   "Access-Control-Expose-Headers":
     "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
   "Cache-Control": "no-store",
-  "X-Programmable-Launch-Source": "alchemy",
+  "X-Programmable-Launch-Source": "durable-read-model",
   "X-Programmable-Read-Source": "blob",
-  "X-Programmable-Rpc-Provider": "alchemy",
+  "X-Programmable-Rpc-Provider": "drpc+quicknode",
 });

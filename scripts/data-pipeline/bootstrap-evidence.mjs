@@ -475,7 +475,7 @@ function validateProviderSet(providers, candidateEnvioEvidence) {
     ) !==
       canonicalJson([
         { providerType: "envio_deployment", vendor: null },
-        { providerType: "rpc_provider", vendor: "alchemy" },
+        { providerType: "rpc_provider", vendor: "drpc" },
         { providerType: "rpc_provider", vendor: "quicknode" },
         { providerType: "uniswap_subgraph", vendor: null },
       ])
@@ -525,7 +525,7 @@ function validateProviderSet(providers, candidateEnvioEvidence) {
     "Uniswap subgraph provider",
   );
   const vendors = rpc.map(({ vendor }) => vendor).sort();
-  if (canonicalJson(vendors) !== canonicalJson(["alchemy", "quicknode"])) {
+  if (canonicalJson(vendors) !== canonicalJson(["drpc", "quicknode"])) {
     throw new Error("bootstrap RPC vendors are not the canonical independent pair");
   }
   for (const provider of rpc) {
@@ -2111,7 +2111,7 @@ export function validateReviewedBootstrapPlan(plan) {
     canonicalJson(providerTypes) !==
       canonicalJson([
         { providerType: "envio_deployment", vendor: null },
-        { providerType: "rpc_provider", vendor: "alchemy" },
+        { providerType: "rpc_provider", vendor: "drpc" },
         { providerType: "rpc_provider", vendor: "quicknode" },
         { providerType: "uniswap_subgraph", vendor: null },
       ]) ||
@@ -2121,19 +2121,19 @@ export function validateReviewedBootstrapPlan(plan) {
   ) {
     throw new Error("reviewed provider set is invalid");
   }
-  const [candidate, alchemy, quicknode, graph] = plan.providerBindings;
+  const [candidate, drpc, quicknode, graph] = plan.providerBindings;
   if (
     candidate.redactedIdentity !==
       plan.candidateIsolation.candidateEnvioIdentity ||
     candidate.providerDeploymentId !==
       plan.candidateIsolation.candidateEnvioProviderDeploymentId ||
-    alchemy.chainId !== 1 ||
+    drpc.chainId !== 1 ||
     quicknode.chainId !== 1 ||
-    alchemy.redactedIdentity !== "rpc:1:alchemy" ||
+    drpc.redactedIdentity !== "rpc:1:drpc" ||
     quicknode.redactedIdentity !== "rpc:1:quicknode" ||
-    alchemy.constructorVersion !== "rpc-provider-v1" ||
+    drpc.constructorVersion !== "rpc-provider-v1" ||
     quicknode.constructorVersion !== "rpc-provider-v1" ||
-    alchemy.endpointEvidenceDomain !== "rpc-endpoint-commitments-v1" ||
+    drpc.endpointEvidenceDomain !== "rpc-endpoint-commitments-v1" ||
     quicknode.endpointEvidenceDomain !== "rpc-endpoint-commitments-v1" ||
     graph.redactedIdentity !==
       `uniswap-v4:ethereum:${graph.deployment}`

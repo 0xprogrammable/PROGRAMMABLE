@@ -119,7 +119,7 @@ alter table programmable_wake_private.optimistic_sla_bundle_receipts_v1
       provider_b_endpoint_url_commitment
   ) not valid;
 
--- Recompile only the nine exact provider-bound routines. Each precondition
+-- Recompile only the ten exact provider-bound routines. Each precondition
 -- asserts the expected legacy token count so source drift fails the migration
 -- instead of silently rewriting a different function body.
 do $migration$

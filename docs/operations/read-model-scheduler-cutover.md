@@ -47,7 +47,7 @@ The QuickNode stream is an authenticated latency trigger, not a third source of
 truth. Its payload never enters the read model. A valid delivery returns `202`
 immediately and uses Next.js background work to run the existing source
 projector followed by the market projector. Envio remains the event source;
-the independent Alchemy and QuickNode RPC reads, atomic publication fences and
+the independent private dRPC and QuickNode RPC reads, atomic publication fences and
 singleton database leases remain mandatory. Duplicate deliveries are safe, and
 the per-minute crons remain the watchdog if a webhook is delayed or lost.
 
@@ -171,7 +171,7 @@ bundle receipt and before canonical catch-up. The later protected operator POST
 only creates a one-time challenge-bound export; it never re-fetches or replaces
 the original DB-timestamped observations. The document binds the exact repository commit, unaliased Vercel deployment,
 QuickNode delivery and nonce digest, queue row committed before the deliberately
-staged `503`, the provider's authentic retry and its final `202`, independent Alchemy and QuickNode observations, optimistic database
+staged `503`, the provider's authentic retry and its final `202`, independent dRPC and QuickNode observations, optimistic database
 block/event/market commitments, and the first no-store API response exposing
 the same block. The API proof is exactly one Classic token-detail response and
 the corresponding Classic chart response for the same token and release; other

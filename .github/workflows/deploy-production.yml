@@ -570,8 +570,12 @@ jobs:
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          node --env-file=.vercel/.env.production.local --input-type=module <<'NODE'
+          # Vercel Sensitive values are intentionally blank in env pull output.
+          # Load them only into this subprocess; never persist or print the URLs.
+          vercel env run --environment=production --token="$VERCEL_TOKEN" -- \
+            node --input-type=module <<'NODE'
           const { verifyCurrentPublicOnchainEvidenceV1 } = await import(
             "./scripts/perf/read-model-post-promotion.mjs"
           );

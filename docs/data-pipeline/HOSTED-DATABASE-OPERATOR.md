@@ -105,8 +105,9 @@ projector run, parity result or public activation.
 
 ## Separate bootstrap plan
 
-With the reviewed Alchemy and QuickNode URLs loaded only in their server-side
-environment variables, generate the data-pipeline bootstrap plan separately:
+With the reviewed private dRPC-primary and QuickNode-secondary URLs plus their
+exact role/provider/commitment fields loaded only in server-side environment
+variables, generate the data-pipeline bootstrap plan separately:
 
 ```sh
 node scripts/data-pipeline/hosted-db-operator.mjs bootstrap-plan \

@@ -876,6 +876,10 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
+      "secret-only Vercel environment handoff",
+      'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
+    ],
+    [
       "private production witness resolver",
       "runtimeProductionProviderEndpoints(process.env)",
     ],
