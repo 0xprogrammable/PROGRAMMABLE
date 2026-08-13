@@ -1680,8 +1680,14 @@ function contentLength(headers: Readonly<{ get(name: string): string | null }>) 
   return parsed;
 }
 
-function normalizedBlobEtag(value: string) {
-  return value.trim().replace(/^W\//u, "");
+const VERCEL_BLOB_STRONG_ETAG = /^"[0-9a-f]{32}"$/iu;
+
+export function normalizePersistentRpcBlobEtag(value: string) {
+  const normalized = value.trim().replace(/^W\//u, "");
+  if (!VERCEL_BLOB_STRONG_ETAG.test(normalized)) {
+    fail("Persistent RPC Blob ETag is invalid");
+  }
+  return normalized;
 }
 
 export function bindPrivateBlobReadMetadata(input: Readonly<{
@@ -1689,8 +1695,8 @@ export function bindPrivateBlobReadMetadata(input: Readonly<{
   headEtag: string;
   headSize: number;
 }>) {
-  const responseEtag = normalizedBlobEtag(input.responseEtag);
-  const headEtag = normalizedBlobEtag(input.headEtag);
+  const responseEtag = normalizePersistentRpcBlobEtag(input.responseEtag);
+  const headEtag = normalizePersistentRpcBlobEtag(input.headEtag);
   if (
     responseEtag.length < 1 ||
     headEtag.length < 1 ||
@@ -1702,7 +1708,7 @@ export function bindPrivateBlobReadMetadata(input: Readonly<{
     fail("Persistent RPC Blob HEAD size is invalid");
   }
   return {
-    etag: input.headEtag,
+    etag: headEtag,
     declaredSize: input.headSize,
   } as const;
 }
@@ -1785,10 +1791,63 @@ export async function readBoundedBlobJson(input: Readonly<{
   }
 }
 
-function blobStore(token: string): PersistentRpcCacheStore {
+type PersistentRpcBlobGetResult =
+  | Readonly<{
+      statusCode: 200;
+      stream: ReadableStream<Uint8Array>;
+      headers: Readonly<{ get(name: string): string | null }>;
+      blob: Readonly<{ etag: string; size: number }>;
+    }>
+  | Readonly<{
+      statusCode: 304;
+      stream: null;
+      headers: Readonly<{ get(name: string): string | null }>;
+      blob: Readonly<{ etag: string; size: null }>;
+    }>
+  | null;
+
+type PersistentRpcBlobClient = Readonly<{
+  get(
+    path: string,
+    options: Readonly<{
+      access: "private";
+      token: string;
+      useCache: false;
+    }>,
+  ): Promise<PersistentRpcBlobGetResult>;
+  head(
+    path: string,
+    options: Readonly<{ token: string }>,
+  ): Promise<Readonly<{ etag: string; size: number }>>;
+  put(
+    path: string,
+    value: string,
+    options: Readonly<{
+      access: "private";
+      contentType: "application/json";
+      addRandomSuffix: false;
+      allowOverwrite: boolean;
+      cacheControlMaxAge: 60;
+      ifMatch?: string;
+      token: string;
+    }>,
+  ): Promise<unknown>;
+}>;
+
+type PersistentRpcBlobClientLoader = () => Promise<PersistentRpcBlobClient>;
+
+async function loadPersistentRpcBlobClient(): Promise<PersistentRpcBlobClient> {
+  const { get, head, put } = await import("@vercel/blob");
+  return { get, head, put };
+}
+
+export function createVercelBlobPersistentRpcCacheStore(
+  token: string,
+  loadClient: PersistentRpcBlobClientLoader = loadPersistentRpcBlobClient,
+): PersistentRpcCacheStore {
   return {
     async read(path) {
-      const { get, head } = await import("@vercel/blob");
+      const { get, head } = await loadClient();
       const result = await get(path, {
         access: "private",
         token,
@@ -1823,7 +1882,7 @@ function blobStore(token: string): PersistentRpcCacheStore {
       };
     },
     async create(path, value) {
-      const { get, put } = await import("@vercel/blob");
+      const { get, put } = await loadClient();
       try {
         await put(path, JSON.stringify(value), {
           access: "private",
@@ -1845,7 +1904,7 @@ function blobStore(token: string): PersistentRpcCacheStore {
       }
     },
     async replace(path, value, expectedEtag) {
-      const { get, put } = await import("@vercel/blob");
+      const { get, put } = await loadClient();
       try {
         await put(path, JSON.stringify(value), {
           access: "private",
@@ -1863,7 +1922,10 @@ function blobStore(token: string): PersistentRpcCacheStore {
           token,
           useCache: false,
         });
-        if (current?.statusCode === 200 && current.blob.etag !== expectedEtag) {
+        if (
+          current?.statusCode === 200 &&
+          normalizePersistentRpcBlobEtag(current.blob.etag) !== expectedEtag
+        ) {
           return "conflict";
         }
         throw error;
@@ -1920,7 +1982,7 @@ export function persistentRpcHttp(
         immutableCodeBindings: input.immutableCodeBindings,
         store: input.store === undefined
           ? token
-            ? blobStore(token)
+            ? createVercelBlobPersistentRpcCacheStore(token)
             : null
           : input.store,
       }),
