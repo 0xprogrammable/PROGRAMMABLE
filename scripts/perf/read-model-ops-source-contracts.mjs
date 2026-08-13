@@ -1980,7 +1980,10 @@ export function evaluateReadModelOperationsSourceContracts(
       "Capture sensitive production environment metadata",
     ) &&
       deployWorkflow.includes(
-        'vercel env ls production --format json --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+        'test ! -e "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+      ) &&
+      deployWorkflow.includes(
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" | node scripts/bind-vercel-sensitive-production-metadata.mjs',
       ) &&
       (deployWorkflow.match(/--sensitive-env-metadata/gu) ?? []).length === 2 &&
       deployPolicy.includes(
