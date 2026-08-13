@@ -241,7 +241,6 @@ const materialCompilerSettings = (settings) => ({
   metadata: settings?.metadata,
   remappings: settings?.remappings ?? [],
   libraries: settings?.libraries ?? {},
-  compilationTarget: settings?.compilationTarget,
 });
 const assertExactSourceClosure = (remote, label) => {
   if (
@@ -299,7 +298,10 @@ if (
   sourcifyPayload?.match !== "match" ||
   sourcifyMetadata?.compiler?.version !== compilerVersion ||
   JSON.stringify(materialCompilerSettings(sourcifyMetadata?.settings)) !==
-    JSON.stringify(materialCompilerSettings(localStandardJson.settings))
+    JSON.stringify(materialCompilerSettings(localStandardJson.settings)) ||
+  sourcifyMetadata?.settings?.compilationTarget?.[
+    "src/ProgrammableCustomRegistryV2.sol"
+  ] !== contractName
 ) {
   throw new Error("Sourcify exact source metadata does not match");
 }

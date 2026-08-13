@@ -29,7 +29,7 @@
     "contracts/scripts/custom-registry-v2-live-verification.mjs": "0x8b01fdeb8c0448f8f47baa6a0d53f3bd61fbc62fb41c3eb92ce3288b1d097a99",
     "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0xb879a428f036178eb4a6cfaf4971810a2d30f0ad17c548e90338ef1ea2db2321",
     "contracts/scripts/verify-custom-registry-v2-deployment.mjs": "0x101c7c5297e30cb1b0ac52dd5fe7eac5cb107704089a7d8639d6813167895854",
-    "contracts/scripts/verify-custom-registry-v2-source.mjs": "0x67d67e79e1333756d7b00f0fd474c92750dcb3663ee930964f611172b04e0174",
+    "contracts/scripts/verify-custom-registry-v2-source.mjs": "0x5b02da49283d995a4aab000832a5233572cd007e12165482aebab7dd379b355a",
     "contracts/scripts/custom-registry-v2-production-policy.mjs": "0x7063de0db5e2f44b8367e9bb8acc8ff256c43255c4ba5a3864bc506247406f3c",
     "contracts/scripts/custom-registry-v2-safe-controller-guards.mjs": "0xc81e9e631c7ac39aa34f1244ce543e6a991252194704449a9c9380c97835e8ee",
     "contracts/scripts/prepare-custom-registry-v2-safe-controllers.mjs": "0x95ef3b070fb074c99174683b7d092bbfaef3e922aa9f80611e3e640b8aba731e",
