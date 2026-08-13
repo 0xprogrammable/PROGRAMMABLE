@@ -18,6 +18,18 @@ import {
 } from "../hookemon-reusable-profile-v2-core.mjs";
 
 function fixture() {
+  const sharedCommit = "8afe4548553b406bd0374b3a8958f1a186104b11";
+  const sharedTree = "19393b3a1010db11de4b45d686580ee8b52f79f5";
+  const publicationEvidence = {
+    repository: "0xprogrammable/programmable",
+    branch: "codex/shards-registry-gen2-freeze-8afe454-20260813",
+    commit: sharedCommit,
+    tree: sharedTree,
+    commitUrl: `https://github.com/0xprogrammable/programmable/commit/${sharedCommit}`,
+    authenticatedGitHubApiResolvedExactCommitAndTree: true,
+    anonymousGitHubApiResolvedExactCommitAndTree: true,
+    authenticatedGitHubApiResolvedExactBranchHead: true
+  };
   const value = {
     activationAllowed: false,
     deploymentAddresses: null,
@@ -42,8 +54,8 @@ function fixture() {
       },
       sourceRevisions: {
         sharedShardsAuthority: {
-          remoteReachabilityProven: false,
-          localFrozenSourceBundle: { commit: "8afe4548", tree: "19393b3a" }
+          remoteReachabilityProven: true,
+          localFrozenSourceBundle: { commit: sharedCommit, tree: sharedTree }
         },
         foundryDependencyLock: {
           path: "dependencies/foundry-dependencies-v1.json",
@@ -53,7 +65,7 @@ function fixture() {
         },
         testedCandidateSourceRevision: { commit: "3a7ce454", tree: "5db55cca" }
       },
-      externalActivationGates: { sharedAuthorityCanonicalPublicationEvidence: null },
+      externalActivationGates: { sharedAuthorityCanonicalPublicationEvidence: publicationEvidence },
       evidenceRequirements: {
         measuredKernelRegistrationGas: 8_100_000,
         kernelRegistrationGasRegressionMaximum: 8_200_000,
@@ -74,8 +86,21 @@ function fixture() {
     evidenceBindings: {
       sharedAuthorityProvenance: {
         content: {
-          remoteReachabilityProven: false,
-          releasePublicationGate: { satisfied: false },
+          claimedCanonicalRemote: "https://github.com/0xprogrammable/programmable.git",
+          remoteReachabilityProven: true,
+          releasePublicationGate: {
+            satisfied: true,
+            repository: publicationEvidence.repository,
+            branch: publicationEvidence.branch,
+            commit: publicationEvidence.commit,
+            tree: publicationEvidence.tree,
+            commitUrl: publicationEvidence.commitUrl,
+            verification: {
+              authenticatedGitHubApiResolvedExactCommitAndTree: true,
+              anonymousGitHubApiResolvedExactCommitAndTree: true,
+              authenticatedGitHubApiResolvedExactBranchHead: true
+            }
+          },
           sourceBundle: { files: [{}, {}, {}, {}, {}] }
         }
       },
@@ -169,8 +194,9 @@ test("activation, provenance, source closure, Slither, revenue and size mutation
     (value) => { value.reviewedInput.productBoundary.hiddenManualPerLaunchTransition = true; },
     (value) => { value.reviewedInput.securitySemantics.repositoryOnce = "same route only"; },
     (value) => { value.reviewedInput.productBoundary.durableTechnicalApproval.splice(1, 1); },
-    (value) => { value.reviewedInput.sourceRevisions.sharedShardsAuthority.remoteReachabilityProven = true; },
-    (value) => { value.evidenceBindings.sharedAuthorityProvenance.content.remoteReachabilityProven = true; },
+    (value) => { value.reviewedInput.sourceRevisions.sharedShardsAuthority.remoteReachabilityProven = false; },
+    (value) => { value.evidenceBindings.sharedAuthorityProvenance.content.remoteReachabilityProven = false; },
+    (value) => { value.evidenceBindings.sharedAuthorityProvenance.content.releasePublicationGate.branch = "unbound"; },
     (value) => { value.evidenceBindings.sharedAuthorityProvenance.content.sourceBundle.files.pop(); },
     (value) => { delete value.evidenceBindings.foundryDependencyLock; },
     (value) => { value.evidenceBindings.foundryDependencyLock.content.dependencies.pop(); },
@@ -182,7 +208,7 @@ test("activation, provenance, source closure, Slither, revenue and size mutation
     (value) => { value.evidenceBindings.actualV2Receipt.content.testNames.pop(); },
     (value) => { value.evidenceBindings.actualV2RawLog.sha256 = "changed"; },
     (value) => { value.evidenceBindings.actualV2RawLog.path = "security/receipts/unbound.log"; },
-    (value) => { value.reviewedInput.externalActivationGates.sharedAuthorityCanonicalPublicationEvidence = { transaction: "invented" }; },
+    (value) => { value.reviewedInput.externalActivationGates.sharedAuthorityCanonicalPublicationEvidence.commit = "invented"; },
     (value) => { delete value.evidenceBindings.slitherTriage; },
     (value) => { value.evidenceBindings.slitherTriage.content.scope.analyzedFirstPartyPaths.pop(); },
     (value) => { value.evidenceBindings.productionSourceClosure.files[1].sha256 = "changed"; value.evidenceBindings.productionSourceClosure.commitmentSha256 = "changed"; },

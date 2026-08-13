@@ -107,7 +107,7 @@
       "sourceSha256": "455494efe3eea8f539482e1d3c6f48d073418b02019c1739de02a323ace9511a"
     }
   ],
-  "contentCommitmentSha256": "02ede51cc2ef3b54f8c8430263391b77c79a3b86cc3ffb865607cb3e24c705fa",
+  "contentCommitmentSha256": "5b8931b89b06dc4a32b1fd100292eb4ec88f50b7305e122d892bb747ce0113de",
   "deploymentAddresses": null,
   "evidenceBindings": {
     "actualV2RawLog": {
@@ -464,12 +464,21 @@
         "activationAllowed": false,
         "claimedCanonicalRemote": "https://github.com/0xprogrammable/programmable.git",
         "deploymentAddresses": null,
-        "purpose": "Exact local frozen shared launch-permit source bundle used by Hookemon V2; remote publication is an unsatisfied external release gate",
+        "purpose": "Exact frozen shared launch-permit source bundle used by Hookemon V2 with independently resolved canonical GitHub commit and tree evidence",
         "releasePublicationGate": {
-          "requirement": "The identical commit must be reachable from the claimed canonical remote, or this exact five-file source bundle must be published through an authorized immutable content-addressed channel.",
-          "satisfied": false
+          "branch": "codex/shards-registry-gen2-freeze-8afe454-20260813",
+          "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+          "commitUrl": "https://github.com/0xprogrammable/programmable/commit/8afe4548553b406bd0374b3a8958f1a186104b11",
+          "repository": "0xprogrammable/programmable",
+          "satisfied": true,
+          "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
+          "verification": {
+            "anonymousGitHubApiResolvedExactCommitAndTree": true,
+            "authenticatedGitHubApiResolvedExactBranchHead": true,
+            "authenticatedGitHubApiResolvedExactCommitAndTree": true
+          }
         },
-        "remoteReachabilityProven": false,
+        "remoteReachabilityProven": true,
         "schemaVersion": 2,
         "sourceBundle": {
           "files": [
@@ -526,7 +535,7 @@
         }
       },
       "path": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json",
-      "sha256": "36b03b43d03855c5105ae62d4f315560f9d7a3d77fa5d623a5a81300672e1ec7"
+      "sha256": "6bf7e4bf559040bdedca366f82c4b0cc92569d7f4ca475af954a4ddf3b24b7b3"
     },
     "slitherTriage": {
       "content": {
@@ -1611,7 +1620,16 @@
       "realEndToEndLaunchEvidence": null,
       "releaseActivationTransaction": null,
       "roleTransactions": null,
-      "sharedAuthorityCanonicalPublicationEvidence": null,
+      "sharedAuthorityCanonicalPublicationEvidence": {
+        "anonymousGitHubApiResolvedExactCommitAndTree": true,
+        "authenticatedGitHubApiResolvedExactBranchHead": true,
+        "authenticatedGitHubApiResolvedExactCommitAndTree": true,
+        "branch": "codex/shards-registry-gen2-freeze-8afe454-20260813",
+        "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+        "commitUrl": "https://github.com/0xprogrammable/programmable/commit/8afe4548553b406bd0374b3a8958f1a186104b11",
+        "repository": "0xprogrammable/programmable",
+        "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
+      },
       "verifiedRuntimeCodeHashes": null,
       "websiteAndIndexerDiscoveryEvidence": null
     },
@@ -1680,7 +1698,7 @@
           "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
         },
         "provenancePath": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json",
-        "remoteReachabilityProven": false
+        "remoteReachabilityProven": true
       },
       "testedCandidateSourceRevision": {
         "commit": "3a7ce4546bc2c5a5ca574254fc7cb491a9c4073c",

@@ -17,7 +17,7 @@
     },
     "sharedShardsAuthority": {
       "claimedCanonicalRemote": "https://github.com/0xprogrammable/programmable.git",
-      "remoteReachabilityProven": false,
+      "remoteReachabilityProven": true,
       "localFrozenSourceBundle": {
         "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
         "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5"
@@ -126,7 +126,16 @@
     "testEvidencePath": "security/hookemon-reusable-profile-v2-test-evidence.json"
   },
   "externalActivationGates": {
-    "sharedAuthorityCanonicalPublicationEvidence": null,
+    "sharedAuthorityCanonicalPublicationEvidence": {
+      "repository": "0xprogrammable/programmable",
+      "branch": "codex/shards-registry-gen2-freeze-8afe454-20260813",
+      "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+      "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
+      "commitUrl": "https://github.com/0xprogrammable/programmable/commit/8afe4548553b406bd0374b3a8958f1a186104b11",
+      "authenticatedGitHubApiResolvedExactCommitAndTree": true,
+      "anonymousGitHubApiResolvedExactCommitAndTree": true,
+      "authenticatedGitHubApiResolvedExactBranchHead": true
+    },
     "deploymentAddresses": null,
     "verifiedRuntimeCodeHashes": null,
     "roleTransactions": null,

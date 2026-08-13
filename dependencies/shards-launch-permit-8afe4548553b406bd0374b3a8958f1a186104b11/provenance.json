@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "purpose": "Exact local frozen shared launch-permit source bundle used by Hookemon V2; remote publication is an unsatisfied external release gate",
+  "purpose": "Exact frozen shared launch-permit source bundle used by Hookemon V2 with independently resolved canonical GitHub commit and tree evidence",
   "claimedCanonicalRemote": "https://github.com/0xprogrammable/programmable.git",
-  "remoteReachabilityProven": false,
+  "remoteReachabilityProven": true,
   "sourceBundle": {
     "identity": {
       "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
@@ -57,8 +57,17 @@
     ]
   },
   "releasePublicationGate": {
-    "satisfied": false,
-    "requirement": "The identical commit must be reachable from the claimed canonical remote, or this exact five-file source bundle must be published through an authorized immutable content-addressed channel."
+    "satisfied": true,
+    "repository": "0xprogrammable/programmable",
+    "branch": "codex/shards-registry-gen2-freeze-8afe454-20260813",
+    "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+    "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
+    "commitUrl": "https://github.com/0xprogrammable/programmable/commit/8afe4548553b406bd0374b3a8958f1a186104b11",
+    "verification": {
+      "authenticatedGitHubApiResolvedExactCommitAndTree": true,
+      "anonymousGitHubApiResolvedExactCommitAndTree": true,
+      "authenticatedGitHubApiResolvedExactBranchHead": true
+    }
   },
   "activationAllowed": false,
   "deploymentAddresses": null

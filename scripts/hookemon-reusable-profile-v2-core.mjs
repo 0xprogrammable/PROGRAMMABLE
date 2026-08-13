@@ -128,6 +128,42 @@ export function actualV2ReceiptErrors(receipt, rawLogBytes, expected) {
   return errors;
 }
 
+export function canonicalPublicationErrors(sharedRevision, provenance, descriptorEvidence) {
+  const errors = [];
+  const identity = sharedRevision?.localFrozenSourceBundle;
+  const gate = provenance?.releasePublicationGate;
+  const expectedRepository = "0xprogrammable/programmable";
+  const expectedBranch = "codex/shards-registry-gen2-freeze-8afe454-20260813";
+  const expectedCommitUrl = identity?.commit
+    ? `https://github.com/${expectedRepository}/commit/${identity.commit}`
+    : null;
+  if (
+    provenance?.claimedCanonicalRemote !== `https://github.com/${expectedRepository}.git`
+      || provenance?.remoteReachabilityProven !== true
+      || sharedRevision?.remoteReachabilityProven !== true
+      || gate?.satisfied !== true
+      || gate?.repository !== expectedRepository
+      || gate?.branch !== expectedBranch
+      || gate?.commit !== identity?.commit
+      || gate?.tree !== identity?.tree
+      || gate?.commitUrl !== expectedCommitUrl
+      || gate?.verification?.authenticatedGitHubApiResolvedExactCommitAndTree !== true
+      || gate?.verification?.anonymousGitHubApiResolvedExactCommitAndTree !== true
+      || gate?.verification?.authenticatedGitHubApiResolvedExactBranchHead !== true
+  ) errors.push("canonical provenance publication");
+  if (
+    descriptorEvidence?.repository !== expectedRepository
+      || descriptorEvidence?.branch !== expectedBranch
+      || descriptorEvidence?.commit !== identity?.commit
+      || descriptorEvidence?.tree !== identity?.tree
+      || descriptorEvidence?.commitUrl !== expectedCommitUrl
+      || descriptorEvidence?.authenticatedGitHubApiResolvedExactCommitAndTree !== true
+      || descriptorEvidence?.anonymousGitHubApiResolvedExactCommitAndTree !== true
+      || descriptorEvidence?.authenticatedGitHubApiResolvedExactBranchHead !== true
+  ) errors.push("descriptor publication evidence");
+  return errors;
+}
+
 export async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
 }
@@ -260,14 +296,15 @@ export async function buildManifest(root, descriptor) {
   const sharedRevision = descriptor.sourceRevisions.sharedShardsAuthority;
   const sourceBundle = provenance.sourceBundle;
   if (
-    provenance.remoteReachabilityProven !== false
-      || sharedRevision.remoteReachabilityProven !== false
+    canonicalPublicationErrors(
+      sharedRevision,
+      provenance,
+      descriptor.externalActivationGates?.sharedAuthorityCanonicalPublicationEvidence
+    ).length !== 0
       || sourceBundle?.identity?.commit !== sharedRevision.localFrozenSourceBundle?.commit
       || sourceBundle?.identity?.tree !== sharedRevision.localFrozenSourceBundle?.tree
       || !Array.isArray(sourceBundle?.files) || sourceBundle.files.length !== 5
       || provenance.activationAllowed !== false
-      || provenance.releasePublicationGate?.satisfied !== false
-      || descriptor.externalActivationGates?.sharedAuthorityCanonicalPublicationEvidence !== null
   ) throw new Error("shared Authority local source bundle or remote publication gate mismatch");
   const sourceBundlePaths = new Set();
   for (const file of sourceBundle.files) {
@@ -310,7 +347,6 @@ export async function buildManifest(root, descriptor) {
     "foundry.toml",
     "remappings.txt",
     dependencyLockPath,
-    provenancePath,
     ACTUAL_V2_TEST_SOURCE,
     ...productionSourceClosure.files
       .filter((file) => !file.path.startsWith("lib/"))
@@ -324,6 +360,15 @@ export async function buildManifest(root, descriptor) {
     ["show", `${testedSourceCommit}:spec/router-vnext/hookemon-reusable-profile-v2-manifest.json`],
     { cwd: root, encoding: "utf8" }
   ));
+  const testedProvenanceBytes = Buffer.from(execFileSync(
+    "git",
+    ["show", `${testedSourceCommit}:${provenancePath}`],
+    { cwd: root }
+  ));
+  const testedProvenance = JSON.parse(testedProvenanceBytes);
+  if (canonicalJson(testedProvenance.sourceBundle) !== canonicalJson(sourceBundle)) {
+    throw new Error("tested frozen shared Authority source bundle drift");
+  }
   const receiptErrors = actualV2ReceiptErrors(actualV2Receipt, actualV2RawLogBytes, {
     rawLogPath: actualV2RawLogPath,
     testedSourceCommit,
@@ -334,7 +379,7 @@ export async function buildManifest(root, descriptor) {
     dependencyLockSha256: sha256(dependencyLockBytes),
     foundryConfigSha256: sha256(foundryConfigBytes),
     remappingsSha256: sha256(remappingsBytes),
-    provenanceSha256: sha256(provenanceBytes)
+    provenanceSha256: sha256(testedProvenanceBytes)
   });
   if (
     testEvidence.activationAllowed !== false
@@ -408,13 +453,14 @@ export function verifySemanticAssertions(manifest) {
   const provenance = manifest.evidenceBindings?.sharedAuthorityProvenance?.content;
   const dependencyLock = manifest.evidenceBindings?.foundryDependencyLock;
   if (
-    sharedRevision?.remoteReachabilityProven !== false
+    canonicalPublicationErrors(
+      sharedRevision,
+      provenance,
+      descriptor?.externalActivationGates?.sharedAuthorityCanonicalPublicationEvidence
+    ).length !== 0
       || !sharedRevision?.localFrozenSourceBundle?.commit
       || !sharedRevision?.localFrozenSourceBundle?.tree
-      || provenance?.remoteReachabilityProven !== false
-      || provenance?.releasePublicationGate?.satisfied !== false
       || provenance?.sourceBundle?.files?.length !== 5
-      || descriptor?.externalActivationGates?.sharedAuthorityCanonicalPublicationEvidence !== null
   ) errors.push("shared Authority external publication gate");
   if (
     dependencyLock?.content?.activationAllowed !== false
