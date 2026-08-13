@@ -55,6 +55,7 @@ import {
   parsePreparedTransactionForAccount,
   type PreparedTransaction,
 } from "../lib/prepared-transaction";
+import { runWithBrowserWalletRequestLock } from "../lib/wallet-request-lock";
 
 type WalletState = {
   account: `0x${string}`;
@@ -820,6 +821,18 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       chainId: normalizeChainId(connectedWalletChainId),
     };
   }, [connectedWalletAddress, connectedWalletChainId]);
+  const walletRequestSessionRef = useRef({
+    authenticated: activeAuthenticated,
+    privyUserId: user?.id ?? null,
+    account: wallet?.account ?? null,
+  });
+  useEffect(() => {
+    walletRequestSessionRef.current = {
+      authenticated: activeAuthenticated,
+      privyUserId: user?.id ?? null,
+      account: wallet?.account ?? null,
+    };
+  }, [activeAuthenticated, user?.id, wallet?.account]);
   const providerSettled = isWalletProviderSettled(
     ready,
     walletsReady,
@@ -1130,26 +1143,57 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       const isEmbeddedWallet =
         connectedWallet.walletClientType === "privy" ||
         connectedWallet.walletClientType === "privy-v2";
+      const sessionSubject = user?.id ?? null;
+      const expectedAccount = wallet.account.toLowerCase();
+      if (sessionSubject === null) {
+        throw new Error("Your wallet session expired. Reconnect and try again");
+      }
+      const assertCurrentSession = () => {
+        const current = walletRequestSessionRef.current;
+        if (
+          !current.authenticated ||
+          current.privyUserId !== sessionSubject ||
+          current.account?.toLowerCase() !== expectedAccount
+        ) {
+          throw new Error("The wallet session changed. Reconnect and try again");
+        }
+      };
 
       try {
         if (wallet.chainId !== appChainHex) {
           await connectedWallet.switchChain(appChain.id);
+          assertCurrentSession();
         }
 
+        const sendLocked = (execute: () => Promise<Hex>) =>
+          runWithBrowserWalletRequestLock({
+            sessionSubject,
+            account: wallet.account,
+            chainId: String(prepared.chainId),
+            requestSubject: JSON.stringify([
+              "prepared-transaction-v1",
+              prepared,
+              expectedAccount,
+            ]),
+            assertCurrentSession,
+            execute,
+          });
         if (isEmbeddedWallet) {
-          const review = getPreparedTransactionReview(prepared.kind);
-          const result = await sendPrivyTransaction(
-            buildPrivyTransactionRequest(prepared),
-            {
-              address: wallet.account,
-              uiOptions: {
-                description: review.description,
-                buttonText: review.buttonText,
-                successHeader: review.successHeader,
+          return await sendLocked(async () => {
+            const review = getPreparedTransactionReview(prepared.kind);
+            const result = await sendPrivyTransaction(
+              buildPrivyTransactionRequest(prepared),
+              {
+                address: wallet.account,
+                uiOptions: {
+                  description: review.description,
+                  buttonText: review.buttonText,
+                  successHeader: review.successHeader,
+                },
               },
-            },
-          );
-          return parseSubmittedTransactionHash(result.hash);
+            );
+            return parseSubmittedTransactionHash(result.hash);
+          });
         }
 
         const provider = await connectedWallet.getEthereumProvider();
@@ -1162,17 +1206,19 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         ) {
           throw new Error(`The wallet is not connected to ${appNetworkName}`);
         }
-
-        const hash = await provider.request({
-          method: "eth_sendTransaction",
-          params: [buildEip1193TransactionRequest(prepared, wallet.account)],
+        assertCurrentSession();
+        return await sendLocked(async () => {
+          const hash = await provider.request({
+            method: "eth_sendTransaction",
+            params: [buildEip1193TransactionRequest(prepared, wallet.account)],
+          });
+          return parseSubmittedTransactionHash(hash);
         });
-        return parseSubmittedTransactionHash(hash);
       } catch (caught) {
         throw new Error(getWalletTransactionErrorMessage(caught));
       }
     },
-    [connectedWallet, sendPrivyTransaction, wallet],
+    [connectedWallet, sendPrivyTransaction, user?.id, wallet],
   );
 
   const signLaunchMessage = useCallback(async (
@@ -1252,25 +1298,55 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     const isEmbeddedWallet =
       connectedWallet.walletClientType === "privy" ||
       connectedWallet.walletClientType === "privy-v2";
+    const sessionSubject = user?.id ?? null;
+    const expectedAccount = wallet.account.toLowerCase();
+    if (sessionSubject === null) {
+      throw new Error("Your wallet session expired. Reconnect and try again");
+    }
+    const assertCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      if (
+        !current.authenticated ||
+        current.privyUserId !== sessionSubject ||
+        current.account?.toLowerCase() !== expectedAccount
+      ) {
+        throw new Error("The wallet session changed. Reconnect and try again");
+      }
+    };
     try {
       if (wallet.chainId !== appChainHex) {
         await connectedWallet.switchChain(appChain.id);
+        assertCurrentSession();
       }
-      if (isEmbeddedWallet) {
-        const result = await sendPrivyTransaction({
-          to: input.to,
-          data: input.data,
-          value: BigInt(input.value),
-          chainId: appChain.id,
-        }, {
-          address: wallet.account,
-          uiOptions: {
-            description: "Submit the approved Custom launch on Ethereum",
-            buttonText: "Launch token",
-            successHeader: "Launch submitted",
-          },
+      const sendLocked = (execute: () => Promise<Hex>) =>
+        runWithBrowserWalletRequestLock({
+          sessionSubject,
+          account: wallet.account,
+          chainId: input.chainId,
+          requestSubject: JSON.stringify(["browser-wallet-action-v1", input]),
+          assertCurrentSession,
+          execute,
         });
-        return parseSubmittedTransactionHash(result.hash);
+      if (isEmbeddedWallet) {
+        return await sendLocked(async () => {
+          const result = await sendPrivyTransaction(
+            {
+              to: input.to,
+              data: input.data,
+              value: BigInt(input.value),
+              chainId: appChain.id,
+            },
+            {
+              address: wallet.account,
+              uiOptions: {
+                description: "Submit the approved Custom launch on Ethereum",
+                buttonText: "Launch token",
+                successHeader: "Launch submitted",
+              },
+            },
+          );
+          return parseSubmittedTransactionHash(result.hash);
+        });
       }
       const provider = await connectedWallet.getEthereumProvider();
       await assertExternalWalletAuthorityCurrent({
@@ -1279,20 +1355,25 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         networkName: appNetworkName,
         request: (method) => provider.request({ method }),
       });
-      const hash = await provider.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: wallet.account,
-          to: input.to,
-          data: input.data,
-          value: input.value,
-        }],
+      assertCurrentSession();
+      return await sendLocked(async () => {
+        const hash = await provider.request({
+          method: "eth_sendTransaction",
+          params: [
+            {
+              from: wallet.account,
+              to: input.to,
+              data: input.data,
+              value: input.value,
+            },
+          ],
+        });
+        return parseSubmittedTransactionHash(hash);
       });
-      return parseSubmittedTransactionHash(hash);
     } catch (caught) {
       throw new Error(getWalletTransactionErrorMessage(caught));
     }
-  }, [connectedWallet, sendPrivyTransaction, wallet]);
+  }, [connectedWallet, sendPrivyTransaction, user?.id, wallet]);
 
   const readTradeBalances = useCallback(
     async (token: `0x${string}`) => {

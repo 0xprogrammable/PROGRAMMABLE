@@ -186,6 +186,10 @@ jobs:
         if: needs.scope.outputs.interface == 'true'
         run: npm ci
 
+      - name: Install pinned Chromium for wallet interaction tests
+        if: needs.scope.outputs.interface == 'true'
+        run: npx playwright install --with-deps chromium
+
       - name: Audit production dependencies
         if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
         run: npm run audit:prod

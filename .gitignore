@@ -31,6 +31,7 @@
 /.superpowers/
 /.worktrees/
 *.tsbuildinfo
+/test-results/
 **/.cre_build_tmp.*
 **/binary.wasm
 
