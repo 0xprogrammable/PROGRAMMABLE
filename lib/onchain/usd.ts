@@ -26,6 +26,7 @@ const priceFeedAbi = parseAbi([
 
 type EthUsdQuote = {
   roundId: bigint;
+  answeredInRound: bigint;
   answer: bigint;
   decimals: number;
   updatedAt: bigint;
@@ -47,12 +48,14 @@ export function assertValidEthUsdSnapshot(input: {
   actualBlockHash: `0x${string}` | null;
   blockTimestamp: bigint;
   roundId: bigint;
+  answeredInRound: bigint;
   answer: bigint;
   updatedAt: bigint;
 }) {
   if (
     input.actualBlockHash !== input.expectedBlockHash ||
     input.roundId === 0n ||
+    input.answeredInRound < input.roundId ||
     input.answer <= 0n ||
     input.updatedAt <= 0n ||
     input.updatedAt > input.blockTimestamp ||
@@ -93,19 +96,21 @@ async function readQuoteSnapshot(
     }),
     client.getBlock({ blockNumber }),
   ]);
-  const [roundId, answer, , updatedAt] = roundData;
+  const [roundId, answer, , updatedAt, answeredInRound] = roundData;
 
   assertValidEthUsdSnapshot({
     expectedBlockHash,
     actualBlockHash: block.hash,
     blockTimestamp: block.timestamp,
     roundId,
+    answeredInRound,
     answer,
     updatedAt,
   });
 
   return {
     roundId,
+    answeredInRound,
     answer,
     decimals,
     updatedAt,
@@ -146,6 +151,7 @@ async function readEthUsdQuote(
       snapshots.some(
         (snapshot) =>
           snapshot.roundId !== reference.roundId ||
+          snapshot.answeredInRound !== reference.answeredInRound ||
           snapshot.answer !== reference.answer ||
           snapshot.decimals !== reference.decimals ||
           snapshot.updatedAt !== reference.updatedAt ||
@@ -159,6 +165,7 @@ async function readEthUsdQuote(
 
     return {
       roundId: reference.roundId,
+      answeredInRound: reference.answeredInRound,
       answer: reference.answer,
       decimals: reference.decimals,
       updatedAt: reference.updatedAt,
@@ -234,6 +241,7 @@ export async function enrichExploreModelWithUsd(
       ethUsdQuote: {
         feedAddress: ETH_USD_FEED_ADDRESS,
         roundId: quote.roundId.toString(),
+        answeredInRound: quote.answeredInRound.toString(),
         answer: quote.answer.toString(),
         decimals: quote.decimals,
         updatedAt: quote.updatedAt.toString(),

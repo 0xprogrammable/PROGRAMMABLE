@@ -442,6 +442,47 @@ export type LauncherToken = {
   creatorFeesAccruedQuote?: string;
   creatorFeesAccruedQuoteRaw?: string;
   fdvUsdWad?: string;
+  liveMarketStateEvidence?: Readonly<{
+    source: "uniswap-v4-stateview-v1";
+    blockNumber: string;
+    blockHash: `0x${string}`;
+    sqrtPriceX96: string;
+    activeLiquidity: string;
+  }>;
+  liveMarketPriceEvidence?: Readonly<{
+    schemaVersion: "programmable.stateview-chainlink-price-evidence.v1";
+    source: "uniswap-v4-stateview-chainlink-v1";
+    chainId: "1";
+    poolId: `0x${string}`;
+    tokenAddress: `0x${string}`;
+    quoteAddress: `0x${string}`;
+    stateViewAddress: `0x${string}`;
+    stateViewRuntimeCodeHash: `0x${string}`;
+    blockNumber: string;
+    blockHash: `0x${string}`;
+    blockTimestamp: string;
+    blockTime: string;
+    sqrtPriceX96: string;
+    activeLiquidity: string;
+    activeVirtualToken0Wei: string;
+    activeVirtualLiquidityUsdWad: string;
+    activeVirtualLiquidityValueBasis:
+      "stateview-active-liquidity-virtual-depth-usd";
+    tokenPriceEthWei: string;
+    tokenPriceUsdWad: string;
+    totalSupplyRaw: string;
+    tokenDecimals: number;
+    fdvUsdWad: string;
+    ethUsdQuote: Readonly<{
+      feedAddress: `0x${string}`;
+      roundId: string;
+      answeredInRound: string;
+      answer: string;
+      decimals: number;
+      updatedAt: string;
+      updatedAtTime: string;
+    }>;
+  }>;
   grossVolumeEth?: string;
   grossVolumeWei?: string;
   creatorFeesGeneratedEth?: string;

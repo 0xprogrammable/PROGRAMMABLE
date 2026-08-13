@@ -32,7 +32,9 @@ async function enrichOrReturn(
   try {
     return await dependencies.enrichWithUsd(model, config);
   } catch (cause) {
-    dependencies.error("ETH/USD enrichment failed", cause);
+    dependencies.error("ETH/USD enrichment failed", {
+      name: cause instanceof Error ? cause.name : "UnknownError",
+    });
     return model;
   }
 }

@@ -22,39 +22,15 @@ import styles from "./token-price-chart.module.css";
 export type TokenChartPoint = {
   blockNumber: string;
   time?: string;
+  bucketStart?: string;
+  bucketEnd?: string;
+  observedAt?: string;
+  valueSemantics?: "period-median";
   priceEth?: string;
   priceUsd?: string;
   priceQuote?: string;
   quoteSymbol?: string;
 };
-
-export type TokenChartDataQuality = Readonly<{
-  schemaVersion: "programmable.explore-chart-data-quality.v1";
-  status: "current" | "partial";
-  asOfBlock: string;
-  blockHash: `0x${string}`;
-  finality: "confirmed" | "latest";
-  history: Readonly<{ status: "current"; throughBlock: string }>;
-  price: Readonly<{
-    status: "current" | "stale";
-    asOfBlock: string;
-    lagBlocks: string;
-  }>;
-  valuation:
-    | Readonly<{
-        status: "current";
-        metric: "fdv";
-        asOfBlock: string;
-        lagBlocks: "0";
-      }>
-    | Readonly<{
-        status: "stale";
-        metric: "fdv";
-        asOfBlock: string;
-        lagBlocks: string;
-      }>
-    | Readonly<{ status: "unavailable"; metric: "fdv" }>;
-}>;
 
 export type TokenChartPayload = {
   status:
@@ -67,11 +43,6 @@ export type TokenChartPayload = {
   volumeWei?: string;
   volumeEth?: string;
   volumeUsdWad?: string;
-  fdvEthWei?: string;
-  fdvEth?: string;
-  fdvUsdWad?: string;
-  valuationMetric?: "market-cap" | "fdv";
-  dataQuality?: TokenChartDataQuality;
   marketData?: MarketChartV1;
 };
 type ChartPayload = TokenChartPayload;
@@ -94,142 +65,6 @@ export type TokenChartVolume = {
   volumeEth?: string;
   volumeUsdWad?: string;
 };
-export type TokenChartFdv = {
-  fdvEthWei?: string;
-  fdvEth?: string;
-  fdvUsdWad?: string;
-};
-
-type PositiveDecimal = {
-  coefficient: bigint;
-  scale: bigint;
-};
-
-function parsePositiveDecimal(value?: string): PositiveDecimal | null {
-  if (!value) return null;
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
-  if (!match) return null;
-  const fraction = match[2] ?? "";
-  const coefficient = BigInt(`${match[1]}${fraction}`);
-  if (coefficient <= 0n) return null;
-  return {
-    coefficient,
-    scale: 10n ** BigInt(fraction.length),
-  };
-}
-
-function scaleIntegerByPriceRatio(
-  value: string | undefined,
-  inspectedPrice: string | undefined,
-  latestPrice: string | undefined,
-) {
-  if (!value || !/^\d+$/.test(value)) return undefined;
-  const inspected = parsePositiveDecimal(inspectedPrice);
-  const latest = parsePositiveDecimal(latestPrice);
-  if (!inspected || !latest) return undefined;
-  const scaled =
-    (BigInt(value) * inspected.coefficient * latest.scale) /
-    (latest.coefficient * inspected.scale);
-  return scaled > 0n ? scaled.toString() : undefined;
-}
-
-function formatFixedInteger(value: bigint, decimals: number) {
-  const raw = value.toString().padStart(decimals + 1, "0");
-  const whole = raw.slice(0, -decimals);
-  const fraction = raw.slice(-decimals).replace(/0+$/, "");
-  return fraction ? `${whole}.${fraction}` : whole;
-}
-
-function scaleDecimalByPriceRatio(
-  value: string | undefined,
-  inspectedPrice: string | undefined,
-  latestPrice: string | undefined,
-) {
-  const source = parsePositiveDecimal(value);
-  const inspected = parsePositiveDecimal(inspectedPrice);
-  const latest = parsePositiveDecimal(latestPrice);
-  if (!source || !inspected || !latest) return undefined;
-  const precision = 18;
-  const numerator =
-    source.coefficient *
-    inspected.coefficient *
-    latest.scale *
-    10n ** BigInt(precision);
-  const denominator =
-    source.scale * inspected.scale * latest.coefficient;
-  const scaled = numerator / denominator;
-  return scaled > 0n ? formatFixedInteger(scaled, precision) : undefined;
-}
-
-export function getChartFdvAtPoint(
-  payload: TokenChartPayload,
-  inspectedPoint?: TokenChartPoint,
-  latestPoint?: TokenChartPoint,
-): TokenChartFdv {
-  if (!inspectedPoint || !latestPoint || inspectedPoint === latestPoint) {
-    return {
-      fdvEthWei: payload.fdvEthWei,
-      fdvEth: payload.fdvEth,
-      fdvUsdWad: payload.fdvUsdWad,
-    };
-  }
-
-  const ethPrice = exactEthChartPricePair(inspectedPoint, latestPoint);
-  const usdPrice = exactChartPricePair(
-    inspectedPoint.priceUsd,
-    latestPoint.priceUsd,
-  );
-
-  const fdvEthWei = scaleIntegerByPriceRatio(
-    payload.fdvEthWei,
-    ethPrice?.inspected,
-    ethPrice?.latest,
-  );
-  const fdvEth = fdvEthWei
-    ? formatFixedInteger(BigInt(fdvEthWei), 18)
-    : scaleDecimalByPriceRatio(
-        payload.fdvEth,
-        ethPrice?.inspected,
-        ethPrice?.latest,
-      );
-  const fdvUsdWad = scaleIntegerByPriceRatio(
-    payload.fdvUsdWad,
-    usdPrice?.inspected,
-    usdPrice?.latest,
-  );
-
-  return {
-    ...(fdvEthWei === undefined ? {} : { fdvEthWei }),
-    ...(fdvEth === undefined ? {} : { fdvEth }),
-    ...(fdvUsdWad === undefined ? {} : { fdvUsdWad }),
-  };
-}
-
-function exactChartPricePair(
-  inspected: string | undefined,
-  latest: string | undefined,
-): Readonly<{ inspected: string; latest: string }> | null {
-  return inspected && latest ? { inspected, latest } : null;
-}
-
-function exactEthChartPricePair(
-  inspected: TokenChartPoint,
-  latest: TokenChartPoint,
-): Readonly<{ inspected: string; latest: string }> | null {
-  const direct = exactChartPricePair(inspected.priceEth, latest.priceEth);
-  if (direct) return direct;
-  const inspectedQuote = inspected.quoteSymbol?.trim().toUpperCase();
-  const latestQuote = latest.quoteSymbol?.trim().toUpperCase();
-  if (
-    inspectedQuote &&
-    latestQuote &&
-    ["ETH", "WETH"].includes(inspectedQuote) &&
-    ["ETH", "WETH"].includes(latestQuote)
-  ) {
-    return exactChartPricePair(inspected.priceQuote, latest.priceQuote);
-  }
-  return null;
-}
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
 
 const chartPayloadCache = new Map<
@@ -258,256 +93,26 @@ export function isAuthoritativeChartPayloadStatus(status: unknown) {
   );
 }
 
-function isUnsignedIntegerString(value: unknown): value is string {
-  return typeof value === "string" && /^\d+$/.test(value);
-}
-
-function isCanonicalUnsignedIntegerString(value: unknown): value is string {
-  return typeof value === "string" && /^(?:0|[1-9]\d*)$/.test(value);
-}
-
-function isUnsignedDecimalString(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
-  );
-}
-
-function isPositiveDecimalString(value: unknown): value is string {
-  if (!isUnsignedDecimalString(value)) return false;
-  const [whole, fraction = ""] = value.split(".");
-  return BigInt(`${whole}${fraction}`) > 0n;
-}
-
-function hasOptionalUnsignedInteger(value: unknown) {
-  return value === undefined || isUnsignedIntegerString(value);
-}
-
-function hasOptionalPositiveUnsignedInteger(value: unknown) {
-  return (
-    value === undefined ||
-    (isUnsignedIntegerString(value) && BigInt(value) > 0n)
-  );
-}
-
-function hasOptionalPositiveDecimal(value: unknown) {
-  return value === undefined || isPositiveDecimalString(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isBytes32(value: unknown): value is `0x${string}` {
-  return typeof value === "string" && /^0x[0-9a-f]{64}$/iu.test(value);
-}
-
-function parseChartDataQuality(value: unknown): TokenChartDataQuality | null {
-  if (!isRecord(value)) return null;
-  if (
-    value.schemaVersion !== "programmable.explore-chart-data-quality.v1" ||
-    (value.status !== "current" && value.status !== "partial") ||
-    !isCanonicalUnsignedIntegerString(value.asOfBlock) ||
-    !isBytes32(value.blockHash) ||
-    BigInt(value.blockHash) === 0n ||
-    (value.finality !== "confirmed" && value.finality !== "latest") ||
-    !isRecord(value.history) ||
-    value.history.status !== "current" ||
-    value.history.throughBlock !== value.asOfBlock ||
-    !isRecord(value.price) ||
-    !isCanonicalUnsignedIntegerString(value.price.asOfBlock) ||
-    !isCanonicalUnsignedIntegerString(value.price.lagBlocks) ||
-    !isRecord(value.valuation) ||
-    value.valuation.metric !== "fdv"
-  ) {
-    return null;
-  }
-
-  const snapshotBlock = BigInt(value.asOfBlock);
-  const priceBlock = BigInt(value.price.asOfBlock);
-  const priceLag = BigInt(value.price.lagBlocks);
-  if (value.price.status === "current") {
-    if (priceBlock !== snapshotBlock || priceLag !== 0n) return null;
-  } else if (value.price.status === "stale") {
-    if (
-      value.status !== "partial" ||
-      priceBlock >= snapshotBlock ||
-      priceLag === 0n ||
-      snapshotBlock - priceBlock !== priceLag
-    ) {
-      return null;
-    }
-  } else {
-    return null;
-  }
-
-  if (value.valuation.status === "current") {
-    if (
-      value.status !== "current" ||
-      value.valuation.asOfBlock !== value.asOfBlock ||
-      value.valuation.lagBlocks !== "0"
-    ) {
-      return null;
-    }
-  } else if (value.valuation.status === "stale") {
-    if (
-      value.status !== "partial" ||
-      !isCanonicalUnsignedIntegerString(value.valuation.asOfBlock) ||
-      !isCanonicalUnsignedIntegerString(value.valuation.lagBlocks)
-    ) {
-      return null;
-    }
-    const asOfBlock = BigInt(value.asOfBlock);
-    const valuationBlock = BigInt(value.valuation.asOfBlock);
-    const lagBlocks = BigInt(value.valuation.lagBlocks);
-    if (
-      valuationBlock >= asOfBlock ||
-      lagBlocks === 0n ||
-      asOfBlock - valuationBlock !== lagBlocks
-    ) {
-      return null;
-    }
-  } else if (
-    value.valuation.status !== "unavailable" ||
-    value.status !== "partial"
-  ) {
-    return null;
-  }
-
-  return value as TokenChartDataQuality;
-}
-
-function hasValidChartCardinality(
-  status: TokenChartPayload["status"],
-  pointCount: number,
-) {
-  return status === "ready"
-    ? pointCount >= 2
-    : status === "insufficient-history"
-      ? pointCount === 1
-      : status === "partial"
-        ? pointCount >= 1
-        : status === "waiting-for-first-trade" && pointCount === 0;
-}
-
-function hasValidChartPointBlocks(
-  points: TokenChartPoint[],
-  asOfBlock: string,
-  priceAsOfBlock: string,
-) {
-  const snapshotBlock = BigInt(asOfBlock);
-  let previousBlock: bigint | null = null;
-  for (const point of points) {
-    const currentBlock = BigInt(point.blockNumber);
-    if (
-      currentBlock > snapshotBlock ||
-      (previousBlock !== null && currentBlock <= previousBlock)
-    ) {
-      return false;
-    }
-    previousBlock = currentBlock;
-  }
-  return previousBlock === BigInt(priceAsOfBlock);
-}
-
-function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
-  if (
-    payload.marketData?.valuation.status === "available" &&
-    payload.marketData.valuation.freshness === "current"
-  ) return payload;
-  if (payload.dataQuality?.valuation.status === "current") return payload;
-  const sanitized = { ...payload };
-  delete sanitized.fdvEthWei;
-  delete sanitized.fdvEth;
-  delete sanitized.fdvUsdWad;
-  return sanitized;
-}
-
 export function parseAuthoritativeChartPayload(
   value: unknown,
 ): ChartPayload | null {
-  if (isMarketChartV1(value)) {
-    if (value.status === "unavailable") return null;
-    const fdvUsdWad = value.valuation.status === "available"
-      ? value.valuation.fdvUsdWad
-      : undefined;
-    return withoutNonCurrentFdv({
-      status: value.status,
-      points: [...value.points],
-      swapCount: value.swapCount,
-      ...(value.volumeUsdWad ? { volumeUsdWad: value.volumeUsdWad } : {}),
-      ...(fdvUsdWad ? { fdvUsdWad } : {}),
-      ...(value.valuation.status === "available"
-        ? { valuationMetric: value.valuation.metric }
-        : {}),
-      marketData: value,
-    });
-  }
-  if (!isRecord(value)) return null;
   if (
-    "marketCapEthWei" in value ||
-    "marketCapEth" in value ||
-    "marketCapUsdWad" in value ||
-    value.valuationMetric !== "fdv"
-  ) {
-    return null;
-  }
-  const dataQuality = parseChartDataQuality(value.dataQuality);
-  if (dataQuality === null) return null;
-  const payload = value as Partial<ChartPayload>;
-  if (
-    !isAuthoritativeChartPayloadStatus(payload.status) ||
-    !Array.isArray(payload.points) ||
-    !hasValidChartCardinality(payload.status, payload.points.length) ||
-    !Number.isSafeInteger(payload.swapCount) ||
-    (payload.swapCount ?? -1) < 0 ||
-    !isUnsignedIntegerString(payload.volumeWei) ||
-    !isUnsignedDecimalString(payload.volumeEth) ||
-    !hasOptionalUnsignedInteger(payload.volumeUsdWad) ||
-    !hasOptionalPositiveUnsignedInteger(payload.fdvEthWei) ||
-    !hasOptionalPositiveDecimal(payload.fdvEth) ||
-    !hasOptionalPositiveUnsignedInteger(payload.fdvUsdWad) ||
-    !payload.points.every(
-      (point) =>
-        isRecord(point) &&
-        isCanonicalUnsignedIntegerString(point.blockNumber) &&
-        (point.priceEth === undefined ||
-          isPositiveDecimalString(point.priceEth)) &&
-        (point.priceUsd === undefined ||
-          isPositiveDecimalString(point.priceUsd)) &&
-        (point.priceQuote === undefined ||
-          isPositiveDecimalString(point.priceQuote)) &&
-        (isPositiveDecimalString(point.priceUsd) ||
-          isPositiveDecimalString(point.priceEth) ||
-          isPositiveDecimalString(point.priceQuote)),
-    )
-  ) {
-    return null;
-  }
-  const points = payload.points as TokenChartPoint[];
-  if (
-    !hasValidChartPointBlocks(
-      points,
-      dataQuality.asOfBlock,
-      dataQuality.price.asOfBlock,
-    )
+    !isMarketChartV1(value) ||
+    value.status === "unavailable" ||
+    value.valuation.status !== "unavailable" ||
+    value.valuation.reason !== "source-unavailable" ||
+    "fdvEthWei" in value ||
+    "fdvEth" in value ||
+    "fdvUsdWad" in value ||
+    "valuationMetric" in value
   ) return null;
-
-  return withoutNonCurrentFdv({
-    status: payload.status,
-    points,
-    swapCount: payload.swapCount as number,
-    volumeWei: payload.volumeWei as string,
-    volumeEth: payload.volumeEth as string,
-    ...(payload.volumeUsdWad === undefined
-      ? {}
-      : { volumeUsdWad: payload.volumeUsdWad }),
-    ...(payload.fdvEthWei === undefined ? {} : { fdvEthWei: payload.fdvEthWei }),
-    ...(payload.fdvEth === undefined ? {} : { fdvEth: payload.fdvEth }),
-    ...(payload.fdvUsdWad === undefined ? {} : { fdvUsdWad: payload.fdvUsdWad }),
-    valuationMetric: "fdv",
-    dataQuality,
-  });
+  return {
+    status: value.status,
+    points: [...value.points],
+    swapCount: value.swapCount,
+    ...(value.volumeUsdWad ? { volumeUsdWad: value.volumeUsdWad } : {}),
+    marketData: value,
+  };
 }
 
 export function isAuthoritativeChartPayload(
@@ -534,7 +139,7 @@ export function acceptChartPayload(
   key: string,
   payload: ChartPayload,
 ): ChartRequestState {
-  return { key, payload: withoutNonCurrentFdv(payload), failed: false };
+  return { key, payload, failed: false };
 }
 
 async function requestTokenChartPayload(
@@ -697,6 +302,23 @@ function formatPrice(value: number, unit: string) {
 }
 
 function chartPointContext(point: TokenChartPoint): string {
+  if (
+    point.valueSemantics === "period-median" &&
+    point.bucketStart &&
+    point.bucketEnd &&
+    Number.isFinite(Date.parse(point.bucketStart)) &&
+    Number.isFinite(Date.parse(point.bucketEnd))
+  ) {
+    const formatter = new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+    });
+    return `Period median, ${formatter.format(new Date(point.bucketStart))} to ${formatter.format(new Date(point.bucketEnd))}`;
+  }
   if (point.time && Number.isFinite(Date.parse(point.time))) {
     return new Intl.DateTimeFormat("en", {
       month: "short",
@@ -775,7 +397,7 @@ export function createChartGeometry(points: readonly TokenChartPoint[]) {
         (PLOT_BOTTOM - PLOT_TOP),
   }));
   const path = singlePoint ? "" : linePath(plottedPoints);
-  const last = plottedPoints.at(-1)?.value ?? plottedPoints[0].value;
+  const latestValue = plottedPoints.at(-1)?.value ?? plottedPoints[0].value;
 
   return {
     unit,
@@ -784,7 +406,7 @@ export function createChartGeometry(points: readonly TokenChartPoint[]) {
     areaPath: path
       ? `${path} L${PLOT_RIGHT},${VIEWBOX_HEIGHT} L${PLOT_LEFT},${VIEWBOX_HEIGHT} Z`
       : "",
-    current: last,
+    latestValue,
   } as const;
 }
 
@@ -847,14 +469,12 @@ export function TokenPriceChart({
   launchModel,
   preview = false,
   onVolumeChange,
-  onFdvChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   launchModel?: ChartLaunchModel;
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
-  onFdvChange?: (fdv: TokenChartFdv | null) => void;
 }) {
   const [request, setRequest] = useState<ChartRequestState | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
@@ -945,11 +565,7 @@ export function TokenPriceChart({
   const chart = useMemo(() => {
     return payload ? createChartGeometry(payload.points) : null;
   }, [payload]);
-  const hasLimitedHistory =
-    payload?.status === "partial" && (
-      payload.marketData !== undefined ||
-      payload.dataQuality?.price.status === "stale"
-    );
+  const hasLimitedHistory = payload?.status === "partial";
 
   const emptyMessage = getPriceHistoryEmptyMessage(
     launchModel,
@@ -960,25 +576,23 @@ export function TokenPriceChart({
     chart && activePointIndex !== null
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
-  const displayedPrice = activePoint?.value ?? chart?.current;
-  const inspectedFdv = useMemo(() => {
-    if (!payload) return null;
-    const latestPoint = chart?.points.at(-1);
-    return getChartFdvAtPoint(
-      payload,
-      activePoint ?? latestPoint,
-      latestPoint,
-    );
-  }, [activePoint, chart, payload]);
+  const usesPeriodMedians = chart?.points.every(
+    (point) => point.valueSemantics === "period-median",
+  ) ?? false;
+  const displayedPrice = activePoint?.value ?? chart?.latestValue;
   const chartStatus =
     !payload && !failed
       ? "Loading price history"
       : chart
         ? chart.points.length === 1
-          ? hasLimitedHistory
-            ? "Last verified price loaded from 1 point"
-            : "Current price loaded from 1 point"
-          : `Price history loaded with ${chart.points.length} points`
+          ? usesPeriodMedians
+            ? "One period median loaded"
+            : hasLimitedHistory
+              ? "Last verified price loaded from 1 point"
+              : "Current price loaded from 1 point"
+          : usesPeriodMedians
+            ? `Price history loaded with ${chart.points.length} period medians`
+            : `Price history loaded with ${chart.points.length} points`
         : emptyMessage;
 
   useEffect(() => {
@@ -1002,10 +616,6 @@ export function TokenPriceChart({
       volumeUsdWad: payload.volumeUsdWad,
     });
   }, [failed, launchModel, onVolumeChange, payload, range]);
-
-  useEffect(() => {
-    onFdvChange?.(inspectedFdv);
-  }, [inspectedFdv, onFdvChange]);
 
   function inspectPointer(event: PointerEvent<HTMLDivElement>) {
     if (!chart) return;
@@ -1058,14 +668,17 @@ export function TokenPriceChart({
         {chartStatus}
       </span>
       <span className="sr-only" id={instructionId}>
-        Use the left and right arrow keys to inspect each recorded price. Press
-        Home or End for the first or latest point, and Escape to return to the
-        latest price.
+        Use the left and right arrow keys to inspect each chart value. Press
+        Home or End for the first or last value, and Escape to stop inspecting.
       </span>
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>
-            {hasLimitedHistory ? "Last verified price" : "Price"}
+            {usesPeriodMedians
+              ? "Median price"
+              : hasLimitedHistory
+                ? "Last verified price"
+                : "Price"}
           </p>
           <p className={styles.value}>
             {chart && displayedPrice !== undefined
@@ -1108,7 +721,7 @@ export function TokenPriceChart({
           className={styles.plot}
           role="group"
           tabIndex={0}
-          aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
+          aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect chart values.`}
           aria-describedby={`${instructionId} ${activeValueId}`}
           onBlur={() => setActivePointIndex(null)}
           onFocus={(event) => {

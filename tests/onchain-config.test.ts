@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
 import {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
@@ -7,6 +9,24 @@ import {
   getWebsiteChartOnchainDeployment,
   getWebsiteReadOnchainDeployment,
 } from "../lib/onchain/config";
+
+const ALCHEMY_RPC_URL =
+  "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
+const QUICKNODE_RPC_URL =
+  "https://programmable-mainnet.quiknode.pro/quicknode-test-key/";
+
+function stubWebsiteRpcBindings() {
+  vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", ALCHEMY_RPC_URL);
+  vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", QUICKNODE_RPC_URL);
+  vi.stubEnv(
+    "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+    rpcProviderCommitment("endpoint", ALCHEMY_RPC_URL),
+  );
+  vi.stubEnv(
+    "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+    rpcProviderCommitment("endpoint", QUICKNODE_RPC_URL),
+  );
+}
 
 describe("onchain deployment manifest boundary", () => {
   afterEach(() => {
@@ -94,22 +114,23 @@ describe("onchain deployment manifest boundary", () => {
     });
   });
 
-  it("uses the fixed independent Website read quorum without changing the operational bindings", () => {
+  it("uses the commitment-bound Alchemy and QuickNode Website pair without changing the operational bindings", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "https://operational-primary.example");
     vi.stubEnv(
       "ETHEREUM_RPC_URL_B",
       "https://operational-secondary.example",
     );
+    stubWebsiteRpcBindings();
 
     expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
       status: "ready",
-      rpcUrl: "https://ethereum-rpc.publicnode.com",
-      rpcUrlSecondary: "https://eth.drpc.org",
+      rpcUrl: ALCHEMY_RPC_URL,
+      rpcUrlSecondary: QUICKNODE_RPC_URL,
     });
     expect(getWebsiteChartOnchainDeployment("production")).toMatchObject({
       status: "ready",
-      rpcUrl: "https://ethereum-rpc.publicnode.com",
-      rpcUrlSecondary: "https://rpc.mevblocker.io",
+      rpcUrl: ALCHEMY_RPC_URL,
+      rpcUrlSecondary: QUICKNODE_RPC_URL,
     });
     expect(getOperationalOnchainDeployment("production")).toMatchObject({
       rpcUrl: "https://operational-primary.example",
@@ -120,6 +141,7 @@ describe("onchain deployment manifest boundary", () => {
   it("rejects production operations without an independent RPC", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-a.example");
+    stubWebsiteRpcBindings();
 
     expect(() =>
       getOperationalOnchainDeployment("production"),
@@ -128,12 +150,12 @@ describe("onchain deployment manifest boundary", () => {
     );
     expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
       status: "ready",
-      rpcUrl: "https://ethereum-rpc.publicnode.com",
-      rpcUrlSecondary: "https://eth.drpc.org",
+      rpcUrl: ALCHEMY_RPC_URL,
+      rpcUrlSecondary: QUICKNODE_RPC_URL,
     });
   });
 
-  it("rejects an implicit public fallback for production operations", () => {
+  it("rejects an implicit public fallback for production operations and Website reads", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-b.example");
     vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", "");
@@ -144,11 +166,65 @@ describe("onchain deployment manifest boundary", () => {
     ).toThrow(
       "Production operations require two distinct authenticated RPC URLs",
     );
+    expect(() =>
+      getWebsiteReadOnchainDeployment("production"),
+    ).toThrow("Website Alchemy RPC binding is unavailable");
+  });
+
+  it("accepts only the bounded legacy aliases when they match both provider commitments", () => {
+    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", "");
+    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", "");
+    vi.stubEnv("ETHEREUM_RPC_URL", ALCHEMY_RPC_URL);
+    vi.stubEnv("ETHEREUM_RPC_URL_B", QUICKNODE_RPC_URL);
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", ALCHEMY_RPC_URL),
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", QUICKNODE_RPC_URL),
+    );
+
     expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
-      status: "ready",
-      rpcUrl: "https://ethereum-rpc.publicnode.com",
-      rpcUrlSecondary: "https://eth.drpc.org",
+      rpcUrl: ALCHEMY_RPC_URL,
+      rpcUrlSecondary: QUICKNODE_RPC_URL,
     });
+  });
+
+  it("does not bypass an invalid provider-specific binding with a valid legacy alias", () => {
+    stubWebsiteRpcBindings();
+    vi.stubEnv("ETHEREUM_RPC_URL", ALCHEMY_RPC_URL);
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+      "https://ethereum-rpc.publicnode.com",
+    );
+
+    expect(() =>
+      getWebsiteReadOnchainDeployment("production"),
+    ).toThrow("Website Alchemy RPC binding is invalid");
+  });
+
+  it("fails closed on a mismatched commitment without retaining endpoint secrets", () => {
+    stubWebsiteRpcBindings();
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      `0x${"ab".repeat(32)}`,
+    );
+
+    const error = (() => {
+      try {
+        getWebsiteReadOnchainDeployment("production");
+      } catch (candidate) {
+        return candidate;
+      }
+      return null;
+    })();
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "Website RPC endpoint commitment mismatch",
+    );
+    expect(JSON.stringify(error)).not.toContain("alchemy-test-key");
+    expect(JSON.stringify(error)).not.toContain("quicknode-test-key");
   });
 
   it("keeps public reads fail-closed when the dual-RPC environment is absent", () => {

@@ -2,17 +2,28 @@ import "server-only";
 
 import { formatUnits } from "viem";
 
+import {
+  MARKET_DATA_CURRENT_MAX_AGE_MS,
+  MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD,
+} from "../market-data/market-data-v1";
 import type { LauncherToken } from "../tokens";
 import { computeOfficialV4PoolId } from "../uniswap/liquidity-launcher-sdk";
 import { marketCapNativeWadFromSqrtPriceX96 } from "./math";
 import type { ExplorePage } from "./types";
 import { usdValueFromWei } from "./usd";
 
+export const OFFICIAL_MAINNET_V4_SUBGRAPH_ID =
+  "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
 const OFFICIAL_MAINNET_V4_SUBGRAPH_URL =
-  "https://gateway.thegraph.com/api/subgraphs/id/DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
-const OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT =
+  `https://gateway.thegraph.com/api/subgraphs/id/${OFFICIAL_MAINNET_V4_SUBGRAPH_ID}`;
+export const OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT =
   "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
+export const OFFICIAL_V4_LIQUIDITY_EVIDENCE_SOURCE =
+  "official-uniswap-v4-subgraph" as const;
+export const OFFICIAL_V4_POOL_TVL_ELIGIBILITY_MINIMUM_USD_WAD =
+  MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD;
 export const OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS = 24;
+export const OFFICIAL_V4_LIQUIDITY_MAXIMUM_POOL_IDS_PER_READ = 384;
 const MAXIMUM_RESPONSE_BYTES = 128 * 1024;
 const DEFAULT_TIMEOUT_MS = 2_500;
 const SERVER_CACHE_TTL_MS = 15_000;
@@ -32,6 +43,7 @@ const POOL_ANALYTICS_QUERY = `
       block {
         number
         hash
+        timestamp
       }
       hasIndexingErrors
     }
@@ -42,8 +54,8 @@ const POOL_ANALYTICS_QUERY = `
       orderDirection: asc
     ) {
       id
-      token0 { id }
-      token1 { id }
+      token0 { id decimals }
+      token1 { id decimals }
       hooks
       feeTier
       tickSpacing
@@ -52,6 +64,8 @@ const POOL_ANALYTICS_QUERY = `
       tick
       txCount
       volumeUSD
+      totalValueLockedToken0
+      totalValueLockedToken1
       totalValueLockedUSD
     }
   }
@@ -62,7 +76,9 @@ type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 type ParsedPool = {
   id: `0x${string}`;
   token0: `0x${string}`;
+  token0Decimals: number;
   token1: `0x${string}`;
+  token1Decimals: number;
   hooks: `0x${string}`;
   feeTierPips: string;
   tickSpacing: number;
@@ -71,6 +87,8 @@ type ParsedPool = {
   tick?: number;
   transactionCount: string;
   volumeUsdWad: string;
+  totalValueLockedToken0: string;
+  totalValueLockedToken1: string;
   tvlUsdWad: string;
 };
 
@@ -78,15 +96,73 @@ type ParsedResponse = {
   deployment: string;
   indexedBlockNumber: string;
   indexedBlockHash: `0x${string}`;
+  indexedBlockTimestamp: string;
+  indexedBlockTime: string;
   pools: ParsedPool[];
 };
 
-type EnrichmentOptions = {
+export type OfficialV4SubgraphOptions = {
   apiKey?: string;
   endpoint?: string;
   timeoutMs?: number;
   fetcher?: Fetcher;
 };
+
+export type OfficialV4LiquidityEvidenceV1 = Readonly<{
+  source: typeof OFFICIAL_V4_LIQUIDITY_EVIDENCE_SOURCE;
+  identity: Readonly<{
+    chainId: "1";
+    protocol: "uniswap_v4";
+    poolId: `0x${string}`;
+    tokenAddress: `0x${string}`;
+    quoteAddress: `0x${string}`;
+  }>;
+  valueBasis: "official-subgraph-pool-tvl-usd";
+  tvlUsdWad: string;
+  reportedPoolBalances: Readonly<{
+    token0: Readonly<{
+      address: `0x${string}`;
+      decimals: number;
+      amountDecimal: string;
+    }>;
+    token1: Readonly<{
+      address: `0x${string}`;
+      decimals: number;
+      amountDecimal: string;
+    }>;
+  }>;
+  freshness: "current";
+  provenance: Readonly<{
+    subgraphId: typeof OFFICIAL_MAINNET_V4_SUBGRAPH_ID;
+    deployment: typeof OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT;
+    indexedBlockNumber: string;
+    indexedBlockHash: `0x${string}`;
+    indexedBlockTimestamp: string;
+    indexedBlockTime: string;
+    referenceHeadBlockNumber: string;
+    referenceHeadBlockHash: `0x${string}`;
+    lagBlocks: string;
+  }>;
+}>;
+
+export type OfficialV4LiquidityReferenceHeadV1 = Readonly<{
+  chainId: 1;
+  blockNumber: string;
+  blockHash: `0x${string}`;
+}>;
+
+export class OfficialV4LiquidityEvidenceReadError extends Error {
+  readonly code:
+    | "invalid-input"
+    | "invalid-config"
+    | "coverage-incomplete";
+
+  constructor(code: OfficialV4LiquidityEvidenceReadError["code"]) {
+    super(`Official Uniswap v4 liquidity evidence read failed: ${code}`);
+    this.name = "OfficialV4LiquidityEvidenceReadError";
+    this.code = code;
+  }
+}
 
 type FetcherState = {
   cache: Map<string, { expiresAt: number; response: ParsedResponse }>;
@@ -189,7 +265,20 @@ function strictTickSpacing(value: unknown): number {
   return parsed;
 }
 
-function decimalToWad(value: unknown): string {
+function strictDecimals(value: unknown): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^(0|[1-9]\d*)$/.test(value)
+        ? Number(value)
+        : Number.NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 255) {
+    return invalidResponse();
+  }
+  return parsed;
+}
+
+function strictUnsignedDecimal(value: unknown): string {
   if (
     typeof value !== "string" ||
     value.length > 160 ||
@@ -201,11 +290,31 @@ function decimalToWad(value: unknown): string {
   if (integerPart.length > 78 || fractionalPart.length > 78) {
     return invalidResponse();
   }
+  return value;
+}
+
+function decimalToWad(value: unknown): string {
+  const decimal = strictUnsignedDecimal(value);
+  const [integerPart, fractionalPart = ""] = decimal.split(".");
   const fraction = `${fractionalPart}000000000000000000`.slice(0, 18);
   return (
     BigInt(integerPart) * 10n ** 18n +
     BigInt(fraction || "0")
   ).toString();
+}
+
+function strictBlockTimestamp(value: unknown): {
+  timestamp: string;
+  time: string;
+} {
+  const timestamp = strictBlockNumber(value);
+  if (timestamp > 8_640_000_000_000n) return invalidResponse();
+  const milliseconds = Number(timestamp) * 1_000;
+  const date = new Date(milliseconds);
+  if (!Number.isFinite(milliseconds) || Number.isNaN(date.getTime())) {
+    return invalidResponse();
+  }
+  return { timestamp: timestamp.toString(), time: date.toISOString() };
 }
 
 function parsePool(value: unknown): ParsedPool {
@@ -223,12 +332,14 @@ function parsePool(value: unknown): ParsedPool {
       "tick",
       "txCount",
       "volumeUSD",
+      "totalValueLockedToken0",
+      "totalValueLockedToken1",
       "totalValueLockedUSD",
     ]) ||
     !isRecord(value.token0) ||
-    !hasOnlyKeys(value.token0, ["id"]) ||
+    !hasOnlyKeys(value.token0, ["id", "decimals"]) ||
     !isRecord(value.token1) ||
-    !hasOnlyKeys(value.token1, ["id"])
+    !hasOnlyKeys(value.token1, ["id", "decimals"])
   ) {
     return invalidResponse();
   }
@@ -263,7 +374,9 @@ function parsePool(value: unknown): ParsedPool {
   return {
     id,
     token0,
+    token0Decimals: strictDecimals(value.token0.decimals),
     token1,
+    token1Decimals: strictDecimals(value.token1.decimals),
     hooks,
     feeTierPips,
     tickSpacing,
@@ -272,6 +385,12 @@ function parsePool(value: unknown): ParsedPool {
     tick: strictTick(value.tick),
     transactionCount: strictUnsignedInteger(value.txCount),
     volumeUsdWad: decimalToWad(value.volumeUSD),
+    totalValueLockedToken0: strictUnsignedDecimal(
+      value.totalValueLockedToken0,
+    ),
+    totalValueLockedToken1: strictUnsignedDecimal(
+      value.totalValueLockedToken1,
+    ),
     tvlUsdWad: decimalToWad(value.totalValueLockedUSD),
   };
 }
@@ -293,7 +412,7 @@ export function parseOfficialV4SubgraphResponse(
     value.data._meta.deployment !== OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT ||
     value.data._meta.hasIndexingErrors !== false ||
     !isRecord(value.data._meta.block) ||
-    !hasOnlyKeys(value.data._meta.block, ["number", "hash"]) ||
+    !hasOnlyKeys(value.data._meta.block, ["number", "hash", "timestamp"]) ||
     !Array.isArray(value.data.pools) ||
     value.data.pools.length > OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS
   ) {
@@ -301,6 +420,9 @@ export function parseOfficialV4SubgraphResponse(
   }
 
   const indexedBlockNumber = strictBlockNumber(value.data._meta.block.number);
+  const indexedBlockTimestamp = strictBlockTimestamp(
+    value.data._meta.block.timestamp,
+  );
   const pools = value.data.pools.map(parsePool);
   const uniquePoolIds = new Set(pools.map((pool) => pool.id));
   if (uniquePoolIds.size !== pools.length) {
@@ -311,6 +433,8 @@ export function parseOfficialV4SubgraphResponse(
     deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
     indexedBlockNumber: indexedBlockNumber.toString(),
     indexedBlockHash: strictBytes32(value.data._meta.block.hash),
+    indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
+    indexedBlockTime: indexedBlockTimestamp.time,
     pools,
   };
 }
@@ -345,7 +469,10 @@ function boundedTimeout(value: number | undefined) {
     : DEFAULT_TIMEOUT_MS;
 }
 
-function canonicalPoolIds(tokens: readonly LauncherToken[]) {
+function canonicalPoolIds(
+  tokens: readonly LauncherToken[],
+  maximum = OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS,
+) {
   const poolIds: string[] = [];
   const seen = new Set<string>();
   for (const token of tokens) {
@@ -353,7 +480,7 @@ function canonicalPoolIds(tokens: readonly LauncherToken[]) {
     if (!/^0x[0-9a-f]{64}$/.test(poolId) || seen.has(poolId)) continue;
     seen.add(poolId);
     poolIds.push(poolId);
-    if (poolIds.length === OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS) break;
+    if (poolIds.length === maximum) break;
   }
   return poolIds;
 }
@@ -533,6 +660,42 @@ function matchesCanonicalToken(pool: ParsedPool, token: LauncherToken) {
   );
 }
 
+function matchesCanonicalLiquidityEvidence(
+  pool: ParsedPool,
+  token: LauncherToken,
+) {
+  if (
+    !matchesCanonicalToken(pool, token) ||
+    typeof token.tokenDecimals !== "number" ||
+    !Number.isInteger(token.tokenDecimals) ||
+    token.tokenDecimals < 0 ||
+    token.tokenDecimals > 255
+  ) {
+    return false;
+  }
+
+  const tokenAddress = token.tokenAddress.toLowerCase();
+  const tokenIsCurrency0 = pool.token0 === tokenAddress;
+  const tokenDecimals = tokenIsCurrency0
+    ? pool.token0Decimals
+    : pool.token1Decimals;
+  const counterCurrencyDecimals = tokenIsCurrency0
+    ? pool.token1Decimals
+    : pool.token0Decimals;
+  if (
+    tokenDecimals !== token.tokenDecimals ||
+    counterCurrencyDecimals !== 18
+  ) {
+    return false;
+  }
+
+  if (token.launchModel !== "stock-paired") return true;
+  return (
+    typeof token.quoteIsCurrency0 === "boolean" &&
+    token.quoteIsCurrency0 === !tokenIsCurrency0
+  );
+}
+
 function snapshotIsCompatible(
   indexedBlockNumber: string,
   indexedBlockHash: `0x${string}`,
@@ -555,6 +718,272 @@ function snapshotIsCompatible(
     (indexed !== canonical ||
       indexedBlockHash.toLowerCase() === canonicalBlockHash.toLowerCase())
   );
+}
+
+function canonicalReferenceHead(
+  value: unknown,
+): OfficialV4LiquidityReferenceHeadV1 | undefined {
+  if (
+    !isRecord(value) ||
+    value.chainId !== 1 ||
+    typeof value.blockNumber !== "string" ||
+    !/^(0|[1-9]\d*)$/.test(value.blockNumber) ||
+    value.blockNumber.length > 78 ||
+    typeof value.blockHash !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(value.blockHash)
+  ) {
+    return undefined;
+  }
+  return {
+    chainId: 1,
+    blockNumber: BigInt(value.blockNumber).toString(),
+    blockHash: value.blockHash.toLowerCase() as `0x${string}`,
+  };
+}
+
+function positiveDecimal(value: string) {
+  const [integerPart, fractionalPart = ""] = value.split(".");
+  return BigInt(integerPart) > 0n || /[1-9]/.test(fractionalPart);
+}
+
+function supportsOfficialPoolTvlEvidence(token: LauncherToken) {
+  return (
+    token.launchModel === "classic" ||
+    token.launchModel === "adaptive" ||
+    token.launchModel === "deep" ||
+    token.launchModel === "stock-paired"
+  );
+}
+
+function referenceHeadLag(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+): string | undefined {
+  const indexed = BigInt(response.indexedBlockNumber);
+  const reference = BigInt(referenceHead.blockNumber);
+  if (indexed > reference) return undefined;
+  const lag = reference - indexed;
+  if (
+    lag > MAXIMUM_SUBGRAPH_LAG_BLOCKS ||
+    (lag === 0n &&
+      response.indexedBlockHash !== referenceHead.blockHash.toLowerCase())
+  ) {
+    return undefined;
+  }
+  return lag.toString();
+}
+
+function isCurrentIndexedTime(response: ParsedResponse, now: Date) {
+  const nowMs = now.getTime();
+  const indexedMs = Number(BigInt(response.indexedBlockTimestamp)) * 1_000;
+  return (
+    Number.isFinite(nowMs) &&
+    Number.isFinite(indexedMs) &&
+    indexedMs <= nowMs &&
+    nowMs - indexedMs <= MARKET_DATA_CURRENT_MAX_AGE_MS
+  );
+}
+
+function liquidityEvidence(
+  token: LauncherToken,
+  pool: ParsedPool,
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+  lagBlocks: string,
+): OfficialV4LiquidityEvidenceV1 | undefined {
+  if (
+    BigInt(pool.tvlUsdWad) <
+    BigInt(OFFICIAL_V4_POOL_TVL_ELIGIBILITY_MINIMUM_USD_WAD)
+  ) {
+    return undefined;
+  }
+  if (
+    !positiveDecimal(pool.totalValueLockedToken0) &&
+    !positiveDecimal(pool.totalValueLockedToken1)
+  ) {
+    throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+  }
+  const tokenAddress = token.tokenAddress.toLowerCase() as `0x${string}`;
+  const quoteAddress = (
+    pool.token0 === tokenAddress ? pool.token1 : pool.token0
+  ) as `0x${string}`;
+  return {
+    source: OFFICIAL_V4_LIQUIDITY_EVIDENCE_SOURCE,
+    identity: {
+      chainId: "1",
+      protocol: "uniswap_v4",
+      poolId: pool.id,
+      tokenAddress,
+      quoteAddress,
+    },
+    valueBasis: "official-subgraph-pool-tvl-usd",
+    tvlUsdWad: pool.tvlUsdWad,
+    reportedPoolBalances: {
+      token0: {
+        address: pool.token0,
+        decimals: pool.token0Decimals,
+        amountDecimal: pool.totalValueLockedToken0,
+      },
+      token1: {
+        address: pool.token1,
+        decimals: pool.token1Decimals,
+        amountDecimal: pool.totalValueLockedToken1,
+      },
+    },
+    freshness: "current",
+    provenance: {
+      subgraphId: OFFICIAL_MAINNET_V4_SUBGRAPH_ID,
+      deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
+      indexedBlockNumber: response.indexedBlockNumber,
+      indexedBlockHash: response.indexedBlockHash,
+      indexedBlockTimestamp: response.indexedBlockTimestamp,
+      indexedBlockTime: response.indexedBlockTime,
+      referenceHeadBlockNumber: referenceHead.blockNumber,
+      referenceHeadBlockHash: referenceHead.blockHash,
+      lagBlocks,
+    },
+  };
+}
+
+/**
+ * Reads independently attributable official Uniswap v4 subgraph pool TVL.
+ *
+ * Evidence is returned only for a canonical PoolKey, a fresh indexed block at
+ * or behind the supplied reference head, and at least the public pool-TVL
+ * eligibility floor. This aggregate TVL does not prove current-tick USD depth
+ * or manipulation resistance. StateView's active-liquidity scalar is
+ * deliberately not interpreted as reserves or TVL, and a missing or rejected
+ * entry must stay unavailable.
+ * An empty result means every eligible requested pool was covered but none
+ * qualified. Invalid configuration or any failed batch rejects the whole read
+ * so global ordering can never mistake partial coverage for complete coverage.
+ */
+export async function readOfficialV4LiquidityEvidence(
+  input: {
+    tokens: readonly LauncherToken[];
+    referenceHead: OfficialV4LiquidityReferenceHeadV1;
+    now?: Date;
+  },
+  options: OfficialV4SubgraphOptions = {},
+): Promise<readonly OfficialV4LiquidityEvidenceV1[]> {
+  const eligibleTokens = input.tokens.filter(supportsOfficialPoolTvlEvidence);
+  if (eligibleTokens.length === 0) return [];
+
+  const referenceHead = canonicalReferenceHead(input.referenceHead);
+  const now = input.now ?? new Date();
+  if (!referenceHead || !Number.isFinite(now.getTime())) {
+    throw new OfficialV4LiquidityEvidenceReadError("invalid-input");
+  }
+
+  const apiKey =
+    options.apiKey ?? process.env.UNISWAP_V4_SUBGRAPH_API_KEY ?? "";
+  const endpoint =
+    options.endpoint ??
+    process.env.UNISWAP_V4_SUBGRAPH_URL ??
+    OFFICIAL_MAINNET_V4_SUBGRAPH_URL;
+  if (!validApiKey(apiKey) || !validEndpoint(endpoint)) {
+    throw new OfficialV4LiquidityEvidenceReadError("invalid-config");
+  }
+
+  const poolIds = canonicalPoolIds(
+    eligibleTokens,
+    OFFICIAL_V4_LIQUIDITY_MAXIMUM_POOL_IDS_PER_READ + 1,
+  );
+  if (poolIds.length === 0) return [];
+  if (poolIds.length > OFFICIAL_V4_LIQUIDITY_MAXIMUM_POOL_IDS_PER_READ) {
+    throw new OfficialV4LiquidityEvidenceReadError("invalid-input");
+  }
+
+  const fetcher = options.fetcher ?? fetch;
+  const requests: string[][] = [];
+  for (
+    let index = 0;
+    index < poolIds.length;
+    index += OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS
+  ) {
+    requests.push(
+      poolIds.slice(index, index + OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS),
+    );
+  }
+
+  const responses: ParsedResponse[] = [];
+  for (
+    let index = 0;
+    index < requests.length;
+    index += MAXIMUM_IN_FLIGHT_REQUESTS
+  ) {
+    let completed: {
+      response: ParsedResponse;
+      requestedPoolIds: string[];
+    }[];
+    try {
+      completed = await Promise.all(
+        requests
+          .slice(index, index + MAXIMUM_IN_FLIGHT_REQUESTS)
+          .map((requestedPoolIds) =>
+            fetchPoolAnalyticsCached({
+              endpoint,
+              apiKey,
+              poolIds: requestedPoolIds,
+              timeoutMs: boundedTimeout(options.timeoutMs),
+              fetcher,
+            }).then((response) => ({ response, requestedPoolIds })),
+          ),
+      );
+    } catch {
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    for (const result of completed) {
+      const requested = new Set<string>(result.requestedPoolIds);
+      const returned = new Set<string>(
+        result.response.pools.map((pool) => pool.id),
+      );
+      if (
+        returned.size !== requested.size ||
+        [...requested].some((poolId) => !returned.has(poolId)) ||
+        [...returned].some((poolId) => !requested.has(poolId))
+      ) {
+        throw new OfficialV4LiquidityEvidenceReadError(
+          "coverage-incomplete",
+        );
+      }
+      responses.push(result.response);
+    }
+  }
+
+  const responseByPoolId = new Map<
+    string,
+    { pool: ParsedPool; response: ParsedResponse; lagBlocks: string }
+  >();
+  for (const response of responses) {
+    const lagBlocks = referenceHeadLag(response, referenceHead);
+    if (lagBlocks === undefined || !isCurrentIndexedTime(response, now)) {
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    for (const pool of response.pools) {
+      responseByPoolId.set(pool.id, { pool, response, lagBlocks });
+    }
+  }
+
+  const evidence: OfficialV4LiquidityEvidenceV1[] = [];
+  for (const token of eligibleTokens) {
+    const matched = responseByPoolId.get(token.poolId.toLowerCase());
+    if (
+      !matched ||
+      !matchesCanonicalLiquidityEvidence(matched.pool, token)
+    ) {
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    const item = liquidityEvidence(
+      token,
+      matched.pool,
+      matched.response,
+      referenceHead,
+      matched.lagBlocks,
+    );
+    if (item) evidence.push(item);
+  }
+  return evidence;
 }
 
 function indexedMarketCap(
@@ -615,7 +1044,7 @@ function indexedMarketCap(
  */
 export async function enrichExplorePageWithOfficialV4Subgraph(
   page: ExplorePage,
-  options: EnrichmentOptions = {},
+  options: OfficialV4SubgraphOptions = {},
 ): Promise<ExplorePage> {
   if (
     page.status !== "ready" ||

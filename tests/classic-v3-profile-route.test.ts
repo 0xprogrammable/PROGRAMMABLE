@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpRequestError } from "viem";
 
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
+
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => {
@@ -67,13 +70,27 @@ import {
 
 const account = "0x1111111111111111111111111111111111111111";
 const vault = "0x2222222222222222222222222222222222222222";
+const alchemyRpcUrl =
+  "https://eth-mainnet.g.alchemy.com/v2/alchemy-classic-key";
+const quickNodeRpcUrl =
+  "https://classic-mainnet.quiknode.pro/quicknode-classic-key/";
 
 describe("Classic profile release gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createPublicClient.mockReturnValue(mocks.client);
-    vi.stubEnv("ETHEREUM_RPC_URL", "https://primary.example/rpc-key");
-    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://secondary.example/rpc-key");
+    vi.stubEnv("ETHEREUM_RPC_URL", alchemyRpcUrl);
+    vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
+    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", alchemyRpcUrl);
+    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", quickNodeRpcUrl);
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", alchemyRpcUrl),
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", quickNodeRpcUrl),
+    );
   });
 
   afterEach(() => {

@@ -6,6 +6,32 @@
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
     "sha256": "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
+    "schedulerWatchdog": {
+      "provider": "github-actions",
+      "workflow": {
+        "path": ".github/workflows/refresh-production-read-model.yml",
+        "sha256": "e4dd949194ef4046382e9930fe66bd3f63195578b63ed970b0e9ae2a421d2a9d"
+      },
+      "schedule": "2-57/5 * * * *",
+      "targetOrigin": "https://programmable.market",
+      "environment": "production",
+      "secretEnvironment": "CRON_SECRET",
+      "concurrencyGroup": "production-read-model-refresh",
+      "freshnessMaximumAgeSeconds": 600,
+      "rpcProof": {
+        "confirmedBlockRequired": true,
+        "providerPairRequired": true,
+        "maximumHeadAgeSeconds": 300,
+        "healthRoute": {
+          "path": "app/api/ops/health/route.ts",
+          "sha256": "fda037f55c3c633a860c11eb65a160eaffc77e66489f803e9933ad3b02926f3f"
+        },
+        "rpcRuntime": {
+          "path": "lib/onchain/rpc-health.ts",
+          "sha256": "4c8e5fb0f879ef72f2e8d742886b61b004de55fc59a440ef34893b352c33f865"
+        }
+      }
+    },
     "closedAlias": {
       "path": "/api/ops/index",
       "route": "app/api/ops/index/route.ts",

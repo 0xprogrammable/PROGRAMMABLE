@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 import { getAddress, type Address, type Hex } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
+
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
@@ -27,6 +30,10 @@ const factory = getAddress("0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a");
 const poolId = `0x${"44".repeat(32)}` as Hex;
 const blockHash = `0x${"55".repeat(32)}` as Hex;
 const launchTransactionHash = `0x${"66".repeat(32)}` as Hex;
+const alchemyRpcUrl =
+  "https://eth-mainnet.g.alchemy.com/v2/alchemy-classic-key";
+const quickNodeRpcUrl =
+  "https://classic-mainnet.quiknode.pro/quicknode-classic-key/";
 
 const indexedToken = {
   chainId: 1 as const,
@@ -215,13 +222,17 @@ function request() {
 describe("Classic V3 action identity activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("ETHEREUM_RPC_URL", alchemyRpcUrl);
+    vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
+    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", alchemyRpcUrl);
+    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", quickNodeRpcUrl);
     vi.stubEnv(
-      "ETHEREUM_RPC_URL",
-      "https://mainnet.infura.io/v3/infura-classic-key",
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", alchemyRpcUrl),
     );
     vi.stubEnv(
-      "ETHEREUM_RPC_URL_B",
-      "https://classic-node.quiknode.pro/quicknode-classic-key/",
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", quickNodeRpcUrl),
     );
     mocks.lookup.mockResolvedValue(actionReward);
     const legacyClient = identityClient();
@@ -270,7 +281,7 @@ describe("Classic V3 action identity activation", () => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
         "ETHEREUM_RPC_URL_B",
-        "https://mainnet.infura.io/v3/second-classic-secret",
+        "https://eth-mainnet.g.alchemy.com/v2/second-classic-secret",
       );
 
       const response = await POST(request());
@@ -280,7 +291,7 @@ describe("Classic V3 action identity activation", () => {
       expect(mocks.createPublicClient).toHaveBeenCalledTimes(
         indexedEnabled ? 0 : 1,
       );
-      expect(serialized).not.toContain("infura-classic-key");
+      expect(serialized).not.toContain("alchemy-classic-key");
       expect(serialized).not.toContain("second-classic-secret");
     },
   );

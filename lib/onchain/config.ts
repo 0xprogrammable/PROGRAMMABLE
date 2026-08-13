@@ -3,6 +3,8 @@ import { getAddress, isAddress, isHex, type Address, type Hex } from "viem";
 import appDeploymentsJson from "../../contracts/config/app-deployments.v1.json";
 import mainnetDependencies from "../../contracts/dependencies/ethereum-mainnet.json";
 import sepoliaDependencies from "../../contracts/dependencies/ethereum-sepolia.json";
+import { rpcProviderCommitment } from
+  "../data-pipeline/rpc-provider-commitments";
 
 import type {
   DeploymentEnvironment,
@@ -79,10 +81,108 @@ function productionSecondaryRpc() {
   );
 }
 
-const WEBSITE_MAINNET_RPC_PRIMARY =
-  "https://ethereum-rpc.publicnode.com";
-const WEBSITE_MAINNET_RPC_SECONDARY = "https://eth.drpc.org";
-const WEBSITE_MAINNET_CHART_RPC_SECONDARY = "https://rpc.mevblocker.io";
+const ALCHEMY_MAINNET_RPC_HOST = "eth-mainnet.g.alchemy.com";
+const ALCHEMY_MAINNET_RPC_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
+const QUICKNODE_MAINNET_RPC_HOST =
+  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u;
+const QUICKNODE_MAINNET_RPC_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
+const RPC_ENDPOINT_COMMITMENT = /^0x[0-9a-f]{64}$/u;
+
+type WebsiteRpcProvider = "Alchemy" | "QuickNode";
+
+function selectedWebsiteRpcValue(
+  preferred: string | undefined,
+  legacy: string | undefined,
+) {
+  return preferred === undefined || preferred === ""
+    ? legacy
+    : preferred;
+}
+
+function strictWebsiteRpcUrl(
+  value: string | undefined,
+  provider: WebsiteRpcProvider,
+) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 1_024 ||
+    value !== value.trim()
+  ) {
+    throw new Error(`Website ${provider} RPC binding is unavailable`);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`Website ${provider} RPC binding is invalid`);
+  }
+  const validProvider = provider === "Alchemy"
+    ? parsed.hostname === ALCHEMY_MAINNET_RPC_HOST &&
+      ALCHEMY_MAINNET_RPC_PATH.test(parsed.pathname)
+    : QUICKNODE_MAINNET_RPC_HOST.test(parsed.hostname) &&
+      QUICKNODE_MAINNET_RPC_PATH.test(parsed.pathname);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== "" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    !validProvider
+  ) {
+    throw new Error(`Website ${provider} RPC binding is invalid`);
+  }
+  return parsed.href;
+}
+
+function requiredWebsiteRpcCommitment(
+  value: string | undefined,
+  provider: WebsiteRpcProvider,
+) {
+  if (!value || !RPC_ENDPOINT_COMMITMENT.test(value)) {
+    throw new Error(
+      `Website ${provider} RPC endpoint commitment is unavailable`,
+    );
+  }
+  return value;
+}
+
+function websiteMainnetRpcPair() {
+  const alchemyUrl = strictWebsiteRpcUrl(
+    selectedWebsiteRpcValue(
+      process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
+      process.env.ETHEREUM_RPC_URL,
+    ),
+    "Alchemy",
+  );
+  const quickNodeUrl = strictWebsiteRpcUrl(
+    selectedWebsiteRpcValue(
+      process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+      process.env.ETHEREUM_RPC_URL_B,
+    ),
+    "QuickNode",
+  );
+  const alchemyCommitment = requiredWebsiteRpcCommitment(
+    process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT,
+    "Alchemy",
+  );
+  const quickNodeCommitment = requiredWebsiteRpcCommitment(
+    process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT,
+    "QuickNode",
+  );
+  if (
+    alchemyCommitment === quickNodeCommitment ||
+    rpcProviderCommitment("endpoint", alchemyUrl) !==
+      alchemyCommitment ||
+    rpcProviderCommitment("endpoint", quickNodeUrl) !==
+      quickNodeCommitment
+  ) {
+    throw new Error("Website RPC endpoint commitment mismatch");
+  }
+  return { alchemyUrl, quickNodeUrl } as const;
+}
 
 export function selectedDeploymentEnvironment(
   value = process.env.PROGRAMMABLE_ONCHAIN_NETWORK,
@@ -247,29 +347,24 @@ export function getWebsiteReadOnchainDeployment(
 ): OnchainDeployment {
   const deployment = resolveOnchainDeployment(environment, true);
   if (deployment.environment !== "production") return deployment;
+  const rpc = websiteMainnetRpcPair();
 
   return {
     ...deployment,
-    rpcUrl: WEBSITE_MAINNET_RPC_PRIMARY,
-    rpcUrlSecondary: WEBSITE_MAINNET_RPC_SECONDARY,
+    rpcUrl: rpc.alchemyUrl,
+    rpcUrlSecondary: rpc.quickNodeUrl,
   };
 }
 
 /**
- * Historical log reads need one fixed archive-capable fallback. Current
- * Website reads use the independently verified PublicNode + dRPC pair above;
- * charts keep MEV Blocker as their narrow, fixed archive secondary.
+ * Historical reads use the same commitment-bound pair. The shared failover
+ * runner permits one complete QuickNode attempt only after an eligible
+ * Alchemy transport, capacity or archive failure.
  */
 export function getWebsiteChartOnchainDeployment(
   environment = selectedDeploymentEnvironment(),
 ): OnchainDeployment {
-  const deployment = getWebsiteReadOnchainDeployment(environment);
-  if (deployment.environment !== "production") return deployment;
-
-  return {
-    ...deployment,
-    rpcUrlSecondary: WEBSITE_MAINNET_CHART_RPC_SECONDARY,
-  };
+  return getWebsiteReadOnchainDeployment(environment);
 }
 
 export function getPublicOnchainDeployment(
