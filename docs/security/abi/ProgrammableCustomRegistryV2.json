@@ -1,0 +1,1943 @@
+{
+  "schemaVersion": "programmable.custom-registry-abi.v2",
+  "contractName": "ProgrammableCustomRegistryV2",
+  "abi": [
+    {
+      "type": "constructor",
+      "inputs": [
+        {
+          "name": "config",
+          "type": "tuple",
+          "internalType": "struct ProgrammableCustomRegistryV2.RegistryConfigV2",
+          "components": [
+            {
+              "name": "initialAdminDelay",
+              "type": "uint48",
+              "internalType": "uint48"
+            },
+            {
+              "name": "initialAdmin",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "initialApprover",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "initialRegistrar",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "initialFinalizer",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "initialRevoker",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "minimumFinalityBlocks",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "registryPolicyCommitment",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "APPROVER_ROLE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "CATEGORY",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "string",
+          "internalType": "string"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "CHAIN_ID",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "DEFAULT_ADMIN_ROLE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "DESCRIPTOR_TYPEHASH",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "FINALIZER_ROLE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "LAUNCH_ID_DOMAIN",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "MINIMUM_FINALITY_BLOCKS",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "NO_MARKET0_POLICY_ID",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "NO_MARKET0_PROTOCOL_FEE_BPS",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint16",
+          "internalType": "uint16"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "PLATFORM_ID",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "string",
+          "internalType": "string"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "REGISTRAR_ROLE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "REGISTRY_GENERATION",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "REGISTRY_POLICY_COMMITMENT",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "REGISTRY_SCHEMA_ID",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "REVOKER_ROLE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "STANDARD10_POLICY_ID",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "STANDARD10_PROTOCOL_FEE_BPS",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint16",
+          "internalType": "uint16"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptDefaultAdminTransfer",
+      "inputs": [],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "approvalCount",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "approvalState",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.ApprovalStateV2",
+          "components": [
+            {
+              "name": "descriptorHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "validAfterBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "expiresAtBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "approvalEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "consumed",
+              "type": "bool",
+              "internalType": "bool"
+            }
+          ]
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "authorizeApproval",
+      "inputs": [
+        {
+          "name": "authorization",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.ApprovalAuthorizationV2",
+          "components": [
+            {
+              "name": "approvalId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "descriptorHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "validAfterBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "expiresAtBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "approvalEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "beginDefaultAdminTransfer",
+      "inputs": [
+        {
+          "name": "newAdmin",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "cancelDefaultAdminTransfer",
+      "inputs": [],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "changeDefaultAdminDelay",
+      "inputs": [
+        {
+          "name": "newDelay",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "computeDescriptorHash",
+      "inputs": [
+        {
+          "name": "descriptor",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.LaunchDescriptorV2",
+          "components": [
+            {
+              "name": "chainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "launchWallet",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "primaryContract",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "primaryRuntimeCodeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "componentSetHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "sourceArtifactHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "configurationHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "launchPlanHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "projectCommitment",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "marketMode",
+              "type": "uint8",
+              "internalType": "enum IProgrammableCustomRegistryV2.MarketMode"
+            },
+            {
+              "name": "protocolFeeBps",
+              "type": "uint16",
+              "internalType": "uint16"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "computeLaunchId",
+      "inputs": [
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "defaultAdmin",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "defaultAdminDelay",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "defaultAdminDelayIncreaseWait",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "descriptorRegistered",
+      "inputs": [
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "evidenceConsumed",
+      "inputs": [
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "finalizeLaunch",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "evidence",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.FinalityEvidenceV2",
+          "components": [
+            {
+              "name": "observedBlockHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "confirmedHeadBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "confirmedHeadBlockHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "finalityEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "getRoleAdmin",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "grantRole",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "hasRole",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "launchDescriptor",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.LaunchDescriptorV2",
+          "components": [
+            {
+              "name": "chainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "launchWallet",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "primaryContract",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "primaryRuntimeCodeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "componentSetHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "sourceArtifactHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "configurationHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "launchPlanHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "projectCommitment",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "marketMode",
+              "type": "uint8",
+              "internalType": "enum IProgrammableCustomRegistryV2.MarketMode"
+            },
+            {
+              "name": "protocolFeeBps",
+              "type": "uint16",
+              "internalType": "uint16"
+            }
+          ]
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "launchState",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.LaunchStateV2",
+          "components": [
+            {
+              "name": "status",
+              "type": "uint8",
+              "internalType": "enum IProgrammableCustomRegistryV2.LaunchStatus"
+            },
+            {
+              "name": "observedAtBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "finalizedAtBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "revokedAtBlock",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "transitionSequence",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "descriptorHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "approvalId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "approvalEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "registrationEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "finalityEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "revocationEvidenceHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "owner",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingDefaultAdmin",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "newAdmin",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "schedule",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingDefaultAdminDelay",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "newDelay",
+          "type": "uint48",
+          "internalType": "uint48"
+        },
+        {
+          "name": "schedule",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "primaryContractRegistered",
+      "inputs": [
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "registerLaunch",
+      "inputs": [
+        {
+          "name": "descriptor",
+          "type": "tuple",
+          "internalType": "struct IProgrammableCustomRegistryV2.LaunchDescriptorV2",
+          "components": [
+            {
+              "name": "chainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "launchWallet",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "primaryContract",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "primaryRuntimeCodeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "componentSetHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "sourceArtifactHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "configurationHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "launchPlanHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "projectCommitment",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "marketMode",
+              "type": "uint8",
+              "internalType": "enum IProgrammableCustomRegistryV2.MarketMode"
+            },
+            {
+              "name": "protocolFeeBps",
+              "type": "uint16",
+              "internalType": "uint16"
+            }
+          ]
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "registrationEvidenceHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "registrationCount",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "renounceRole",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "revokeLaunch",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "revocationEvidenceHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "reasonHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "revokeRole",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "rollbackDefaultAdminDelay",
+      "inputs": [],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "supportsInterface",
+      "inputs": [
+        {
+          "name": "interfaceId",
+          "type": "bytes4",
+          "internalType": "bytes4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "transitionCount",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "event",
+      "name": "CustomLaunchApprovalAuthorizedV2",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "validAfterBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "expiresAtBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "approvalEvidenceHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "CustomLaunchDescriptorCommittedV2",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "launchWallet",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        },
+        {
+          "name": "primaryRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "componentSetHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "projectCommitment",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "marketMode",
+          "type": "uint8",
+          "indexed": false,
+          "internalType": "uint8"
+        },
+        {
+          "name": "protocolFeeBps",
+          "type": "uint16",
+          "indexed": false,
+          "internalType": "uint16"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "CustomLaunchDescriptorEvidenceCommittedV2",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "sourceArtifactHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "launchPlanHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "CustomLaunchFinalizedV2",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "finalityEvidenceHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "observedAtBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "observedBlockHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "confirmedHeadBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "confirmedHeadBlockHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "finalizedAtBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "CustomLaunchRegisteredV2",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "approvalEvidenceHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "registrationEvidenceHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "observedAtBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "CustomLaunchRevokedV2",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "revocationEvidenceHash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "reasonHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "revokedAtBlock",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false,
+          "internalType": "uint64"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "DefaultAdminDelayChangeCanceled",
+      "inputs": [],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "DefaultAdminDelayChangeScheduled",
+      "inputs": [
+        {
+          "name": "newDelay",
+          "type": "uint48",
+          "indexed": false,
+          "internalType": "uint48"
+        },
+        {
+          "name": "effectSchedule",
+          "type": "uint48",
+          "indexed": false,
+          "internalType": "uint48"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "DefaultAdminTransferCanceled",
+      "inputs": [],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "DefaultAdminTransferScheduled",
+      "inputs": [
+        {
+          "name": "newAdmin",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "acceptSchedule",
+          "type": "uint48",
+          "indexed": false,
+          "internalType": "uint48"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RoleAdminChanged",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "previousAdminRole",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "newAdminRole",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RoleGranted",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "account",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "sender",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RoleRevoked",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "account",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "sender",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "error",
+      "name": "AccessControlBadConfirmation",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "AccessControlEnforcedDefaultAdminDelay",
+      "inputs": [
+        {
+          "name": "schedule",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "AccessControlEnforcedDefaultAdminRules",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "AccessControlInvalidDefaultAdmin",
+      "inputs": [
+        {
+          "name": "defaultAdmin",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "AccessControlUnauthorizedAccount",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "neededRole",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ApprovalAlreadyAuthorized",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ApprovalAlreadyConsumed",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ApprovalExpired",
+      "inputs": [
+        {
+          "name": "expiresAtBlock",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "currentBlock",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ApprovalNotAuthorized",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ApprovalNotYetValid",
+      "inputs": [
+        {
+          "name": "validAfterBlock",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "currentBlock",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "BlockHashMismatch",
+      "inputs": [
+        {
+          "name": "blockNumber",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "supplied",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "canonical",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "DescriptorAlreadyRegistered",
+      "inputs": [
+        {
+          "name": "descriptorHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "DescriptorHashMismatch",
+      "inputs": [
+        {
+          "name": "supplied",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "expected",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "EvidenceAlreadyConsumed",
+      "inputs": [
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "FinalityDepthInsufficient",
+      "inputs": [
+        {
+          "name": "observedBlock",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "confirmedHeadBlock",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "minimumBlocks",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "HistoricalBlockOutsideNativeWindow",
+      "inputs": [
+        {
+          "name": "blockNumber",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "currentBlock",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "IncompatibleOperationalRoles",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "InvalidBinding",
+      "inputs": [
+        {
+          "name": "field",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "InvalidLaunchState",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "supplied",
+          "type": "uint8",
+          "internalType": "enum IProgrammableCustomRegistryV2.LaunchStatus"
+        },
+        {
+          "name": "required",
+          "type": "uint8",
+          "internalType": "enum IProgrammableCustomRegistryV2.LaunchStatus"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "InvalidPolicy",
+      "inputs": [
+        {
+          "name": "marketMode",
+          "type": "uint8",
+          "internalType": "enum IProgrammableCustomRegistryV2.MarketMode"
+        },
+        {
+          "name": "protocolFeeBps",
+          "type": "uint16",
+          "internalType": "uint16"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "InvalidWindow",
+      "inputs": [
+        {
+          "name": "validAfterBlock",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "expiresAtBlock",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "LaunchAlreadyRegistered",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "NoncanonicalBlock",
+      "inputs": [
+        {
+          "name": "blockNumber",
+          "type": "uint64",
+          "internalType": "uint64"
+        },
+        {
+          "name": "currentBlock",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "PrimaryContractAlreadyRegistered",
+      "inputs": [
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "PrimaryContractHasNoCode",
+      "inputs": [
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "RegistryConfigurationInvalid",
+      "inputs": [
+        {
+          "name": "field",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "RuntimeCodeHashMismatch",
+      "inputs": [
+        {
+          "name": "target",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "supplied",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "actual",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SafeCastOverflowedUintDowncast",
+      "inputs": [
+        {
+          "name": "bits",
+          "type": "uint8",
+          "internalType": "uint8"
+        },
+        {
+          "name": "value",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ScopeMismatch",
+      "inputs": [
+        {
+          "name": "suppliedChainId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "expectedChainId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    }
+  ]
+}

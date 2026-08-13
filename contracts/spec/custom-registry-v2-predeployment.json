@@ -1,0 +1,401 @@
+{
+  "schemaVersion": "programmable.custom-registry-predeployment.v2",
+  "status": "SOURCE_ONLY_NOT_DEPLOYED",
+  "chainId": "1",
+  "registryGeneration": 2,
+  "policy": {
+    "market": {
+      "id": "standard10",
+      "protocolFeeBps": 10
+    },
+    "noMarket": {
+      "id": "no-market0",
+      "protocolFeeBps": 0
+    }
+  },
+  "sourceDigests": {
+    "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol": "0x0edb7785b12181f9039c478261c5bcb2db4f689611687f3df30924ca6bd719ad",
+    "contracts/src/ProgrammableCustomRegistryV2.sol": "0xfb8705aae8210d9e348eb05e98de810865c412de36a5499049a0c28099b8662d",
+    "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0xee64bedde47f93d083d5c6ff14eac3317612706b5a48ca91578ed8a8deef9674"
+  },
+  "compiler": {
+    "version": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "bytecodeHash": "none",
+    "cborMetadata": false
+  },
+  "artifact": {
+    "creationBytecodeKeccak256": "0x3a000a89fe06d9c154f789efeb6377c3ceacf09b3c88ea67ea4f4482afe61651",
+    "runtimeTemplateKeccak256": "0x8a2aac0e04e27a9c7beb51d5b1b231ab40979b14282b38df08c5721730ecc663",
+    "runtimeImmutableReferences": {
+      "40031": [
+        {
+          "start": 1725,
+          "length": 32
+        },
+        {
+          "start": 8171,
+          "length": 32
+        },
+        {
+          "start": 9058,
+          "length": 32
+        },
+        {
+          "start": 9141,
+          "length": 32
+        }
+      ],
+      "40033": [
+        {
+          "start": 882,
+          "length": 32
+        },
+        {
+          "start": 4628,
+          "length": 32
+        },
+        {
+          "start": 4820,
+          "length": 32
+        }
+      ],
+      "40035": [
+        {
+          "start": 1341,
+          "length": 32
+        }
+      ]
+    },
+    "functions": [
+      {
+        "name": "acceptDefaultAdminTransfer",
+        "signature": "acceptDefaultAdminTransfer()",
+        "selector": "0xcefc1429"
+      },
+      {
+        "name": "approvalCount",
+        "signature": "approvalCount()",
+        "selector": "0x6884d0a6"
+      },
+      {
+        "name": "approvalState",
+        "signature": "approvalState(bytes32)",
+        "selector": "0xda06088a"
+      },
+      {
+        "name": "APPROVER_ROLE",
+        "signature": "APPROVER_ROLE()",
+        "selector": "0x4245962b"
+      },
+      {
+        "name": "authorizeApproval",
+        "signature": "authorizeApproval(tuple)",
+        "selector": "0x3886f7d2"
+      },
+      {
+        "name": "beginDefaultAdminTransfer",
+        "signature": "beginDefaultAdminTransfer(address)",
+        "selector": "0x634e93da"
+      },
+      {
+        "name": "cancelDefaultAdminTransfer",
+        "signature": "cancelDefaultAdminTransfer()",
+        "selector": "0xd602b9fd"
+      },
+      {
+        "name": "CATEGORY",
+        "signature": "CATEGORY()",
+        "selector": "0x7c510eb4"
+      },
+      {
+        "name": "CHAIN_ID",
+        "signature": "CHAIN_ID()",
+        "selector": "0x85e1f4d0"
+      },
+      {
+        "name": "changeDefaultAdminDelay",
+        "signature": "changeDefaultAdminDelay(uint48)",
+        "selector": "0x649a5ec7"
+      },
+      {
+        "name": "computeDescriptorHash",
+        "signature": "computeDescriptorHash(tuple)",
+        "selector": "0xa9086c12"
+      },
+      {
+        "name": "computeLaunchId",
+        "signature": "computeLaunchId(bytes32)",
+        "selector": "0x1811b57c"
+      },
+      {
+        "name": "DEFAULT_ADMIN_ROLE",
+        "signature": "DEFAULT_ADMIN_ROLE()",
+        "selector": "0xa217fddf"
+      },
+      {
+        "name": "defaultAdmin",
+        "signature": "defaultAdmin()",
+        "selector": "0x84ef8ffc"
+      },
+      {
+        "name": "defaultAdminDelay",
+        "signature": "defaultAdminDelay()",
+        "selector": "0xcc8463c8"
+      },
+      {
+        "name": "defaultAdminDelayIncreaseWait",
+        "signature": "defaultAdminDelayIncreaseWait()",
+        "selector": "0x022d63fb"
+      },
+      {
+        "name": "DESCRIPTOR_TYPEHASH",
+        "signature": "DESCRIPTOR_TYPEHASH()",
+        "selector": "0xe7b790bc"
+      },
+      {
+        "name": "descriptorRegistered",
+        "signature": "descriptorRegistered(bytes32)",
+        "selector": "0xc0822f92"
+      },
+      {
+        "name": "evidenceConsumed",
+        "signature": "evidenceConsumed(bytes32)",
+        "selector": "0x08efb027"
+      },
+      {
+        "name": "finalizeLaunch",
+        "signature": "finalizeLaunch(bytes32,tuple)",
+        "selector": "0x4a0f9bb7"
+      },
+      {
+        "name": "FINALIZER_ROLE",
+        "signature": "FINALIZER_ROLE()",
+        "selector": "0x3df55efd"
+      },
+      {
+        "name": "getRoleAdmin",
+        "signature": "getRoleAdmin(bytes32)",
+        "selector": "0x248a9ca3"
+      },
+      {
+        "name": "grantRole",
+        "signature": "grantRole(bytes32,address)",
+        "selector": "0x2f2ff15d"
+      },
+      {
+        "name": "hasRole",
+        "signature": "hasRole(bytes32,address)",
+        "selector": "0x91d14854"
+      },
+      {
+        "name": "LAUNCH_ID_DOMAIN",
+        "signature": "LAUNCH_ID_DOMAIN()",
+        "selector": "0x3071895d"
+      },
+      {
+        "name": "launchDescriptor",
+        "signature": "launchDescriptor(bytes32)",
+        "selector": "0x531c4f70"
+      },
+      {
+        "name": "launchState",
+        "signature": "launchState(bytes32)",
+        "selector": "0x2b76b49c"
+      },
+      {
+        "name": "MINIMUM_FINALITY_BLOCKS",
+        "signature": "MINIMUM_FINALITY_BLOCKS()",
+        "selector": "0x03580b1c"
+      },
+      {
+        "name": "NO_MARKET0_POLICY_ID",
+        "signature": "NO_MARKET0_POLICY_ID()",
+        "selector": "0x9ee4a97e"
+      },
+      {
+        "name": "NO_MARKET0_PROTOCOL_FEE_BPS",
+        "signature": "NO_MARKET0_PROTOCOL_FEE_BPS()",
+        "selector": "0xdbe09cc4"
+      },
+      {
+        "name": "owner",
+        "signature": "owner()",
+        "selector": "0x8da5cb5b"
+      },
+      {
+        "name": "pendingDefaultAdmin",
+        "signature": "pendingDefaultAdmin()",
+        "selector": "0xcf6eefb7"
+      },
+      {
+        "name": "pendingDefaultAdminDelay",
+        "signature": "pendingDefaultAdminDelay()",
+        "selector": "0xa1eda53c"
+      },
+      {
+        "name": "PLATFORM_ID",
+        "signature": "PLATFORM_ID()",
+        "selector": "0xdc7056dc"
+      },
+      {
+        "name": "primaryContractRegistered",
+        "signature": "primaryContractRegistered(address)",
+        "selector": "0xe63a2c98"
+      },
+      {
+        "name": "registerLaunch",
+        "signature": "registerLaunch(tuple,bytes32,bytes32)",
+        "selector": "0x6d3733aa"
+      },
+      {
+        "name": "REGISTRAR_ROLE",
+        "signature": "REGISTRAR_ROLE()",
+        "selector": "0xf68e9553"
+      },
+      {
+        "name": "registrationCount",
+        "signature": "registrationCount()",
+        "selector": "0x0d3eafd6"
+      },
+      {
+        "name": "REGISTRY_GENERATION",
+        "signature": "REGISTRY_GENERATION()",
+        "selector": "0x8ca2d907"
+      },
+      {
+        "name": "REGISTRY_POLICY_COMMITMENT",
+        "signature": "REGISTRY_POLICY_COMMITMENT()",
+        "selector": "0x4f532fe0"
+      },
+      {
+        "name": "REGISTRY_SCHEMA_ID",
+        "signature": "REGISTRY_SCHEMA_ID()",
+        "selector": "0xba5cee71"
+      },
+      {
+        "name": "renounceRole",
+        "signature": "renounceRole(bytes32,address)",
+        "selector": "0x36568abe"
+      },
+      {
+        "name": "revokeLaunch",
+        "signature": "revokeLaunch(bytes32,bytes32,bytes32)",
+        "selector": "0xd045f447"
+      },
+      {
+        "name": "REVOKER_ROLE",
+        "signature": "REVOKER_ROLE()",
+        "selector": "0x7c4acabf"
+      },
+      {
+        "name": "revokeRole",
+        "signature": "revokeRole(bytes32,address)",
+        "selector": "0xd547741f"
+      },
+      {
+        "name": "rollbackDefaultAdminDelay",
+        "signature": "rollbackDefaultAdminDelay()",
+        "selector": "0x0aa6220b"
+      },
+      {
+        "name": "STANDARD10_POLICY_ID",
+        "signature": "STANDARD10_POLICY_ID()",
+        "selector": "0x823204e6"
+      },
+      {
+        "name": "STANDARD10_PROTOCOL_FEE_BPS",
+        "signature": "STANDARD10_PROTOCOL_FEE_BPS()",
+        "selector": "0x4487ee72"
+      },
+      {
+        "name": "supportsInterface",
+        "signature": "supportsInterface(bytes4)",
+        "selector": "0x01ffc9a7"
+      },
+      {
+        "name": "transitionCount",
+        "signature": "transitionCount()",
+        "selector": "0x80eb5f20"
+      }
+    ],
+    "events": [
+      {
+        "name": "CustomLaunchApprovalAuthorizedV2",
+        "signature": "CustomLaunchApprovalAuthorizedV2(bytes32,bytes32,uint64,uint64,bytes32,uint64)",
+        "topic0": "0x0e874040f763d3e3bb5113ce92972ed6be8ea07733a7784bdbe0ecb7109d98dc"
+      },
+      {
+        "name": "CustomLaunchDescriptorCommittedV2",
+        "signature": "CustomLaunchDescriptorCommittedV2(bytes32,bytes32,address,address,bytes32,bytes32,bytes32,uint8,uint16)",
+        "topic0": "0xeea1cf15f2ba8d37da12a479ae76d8ad73fdbbb6858a8b65e14f48223acb2710"
+      },
+      {
+        "name": "CustomLaunchDescriptorEvidenceCommittedV2",
+        "signature": "CustomLaunchDescriptorEvidenceCommittedV2(bytes32,bytes32,bytes32,bytes32)",
+        "topic0": "0x34595c5180d763f5b2c10aca1da959831338e796fc59a61126fecae7c1892bc5"
+      },
+      {
+        "name": "CustomLaunchFinalizedV2",
+        "signature": "CustomLaunchFinalizedV2(bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64)",
+        "topic0": "0xf802938990e789d45e6da3d5b2279e331046f46c620b9a1b29142cda4742194b"
+      },
+      {
+        "name": "CustomLaunchRegisteredV2",
+        "signature": "CustomLaunchRegisteredV2(bytes32,bytes32,address,bytes32,bytes32,bytes32,uint64,uint64)",
+        "topic0": "0x3fb8dc12d1d86f1e54d35567d484ab5d659773c3cacaaa440682e8ad7312c93b"
+      },
+      {
+        "name": "CustomLaunchRevokedV2",
+        "signature": "CustomLaunchRevokedV2(bytes32,bytes32,bytes32,bytes32,uint64,uint64)",
+        "topic0": "0x6e186da7fa5669e16c95d0c70f89700d5b3cfb31dd0e13d82b799424102b0195"
+      },
+      {
+        "name": "DefaultAdminDelayChangeCanceled",
+        "signature": "DefaultAdminDelayChangeCanceled()",
+        "topic0": "0x2b1fa2edafe6f7b9e97c1a9e0c3660e645beb2dcaa2d45bdbf9beaf5472e1ec5"
+      },
+      {
+        "name": "DefaultAdminDelayChangeScheduled",
+        "signature": "DefaultAdminDelayChangeScheduled(uint48,uint48)",
+        "topic0": "0xf1038c18cf84a56e432fdbfaf746924b7ea511dfe03a6506a0ceba4888788d9b"
+      },
+      {
+        "name": "DefaultAdminTransferCanceled",
+        "signature": "DefaultAdminTransferCanceled()",
+        "topic0": "0x8886ebfc4259abdbc16601dd8fb5678e54878f47b3c34836cfc51154a9605109"
+      },
+      {
+        "name": "DefaultAdminTransferScheduled",
+        "signature": "DefaultAdminTransferScheduled(address,uint48)",
+        "topic0": "0x3377dc44241e779dd06afab5b788a35ca5f3b778836e2990bdb26a2a4b2e5ed6"
+      },
+      {
+        "name": "RoleAdminChanged",
+        "signature": "RoleAdminChanged(bytes32,bytes32,bytes32)",
+        "topic0": "0xbd79b86ffe0ab8e8776151514217cd7cacd52c909f66475c3af44e129f0b00ff"
+      },
+      {
+        "name": "RoleGranted",
+        "signature": "RoleGranted(bytes32,address,address)",
+        "topic0": "0x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d"
+      },
+      {
+        "name": "RoleRevoked",
+        "signature": "RoleRevoked(bytes32,address,address)",
+        "topic0": "0xf6391f5c32d9c69d2a47ea670b442974b53935d1edc7fd64eb21e047a839171b"
+      }
+    ]
+  },
+  "deployment": {
+    "address": null,
+    "transactionHash": null,
+    "blockNumber": null,
+    "blockHash": null,
+    "runtimeCodeHash": null,
+    "sourceVerification": null
+  },
+  "activationAllowed": false
+}
