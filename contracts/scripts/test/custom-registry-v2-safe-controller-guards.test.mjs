@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  SAFE_CUSTODY_PROOF_SCHEMA,
   SAFE_AUTHORIZATION_SCHEMA,
   SAFE_PLAN_SCHEMA,
   assertProxyCreationLog,
@@ -199,20 +200,31 @@ test("binds per-role Keychain readback custody proof", () => {
   );
   addresses[1] = "0xd60858E400460aE6EDEe06504FC4eb7BB94d3De6";
   const proof = {
-    schemaVersion: "programmable.custom-registry-v2-keychain-custody-proof.v1",
+    schemaVersion: SAFE_CUSTODY_PROOF_SCHEMA,
     chainId: "1",
+    keychain: "current-user-default-login-keychain",
     allReadbacksVerified: true,
+    allEvmAddressesRecovered: true,
+    roleIsolationBasis:
+      "SIX_DISTINCT_GENERIC_PASSWORD_ITEMS_WITH_DISTINCT_PRIVATE_KEY_HASHES_AND_PUBLIC_ADDRESSES",
     secretValuesPrinted: false,
+    inventorySha256: `0x${"99".repeat(32)}`,
     plaintextRetention:
       "0400_TEMP_ORIGINALS_PRESERVED_PENDING_EXPLICIT_RETENTION_DECISION",
     roles: roles.map((role, index) => ({
       role,
       publicAddress: addresses[index],
+      recoveredPublicAddress: addresses[index],
+      evmAddressRecoveryVerified: true,
+      addressRecoveryBasis:
+        "KEYCHAIN_READBACK_SHA256_EQUALS_SOURCE_KEY_SHA256_AND_SOURCE_KEY_DERIVES_ADDRESS",
       account: addresses[index],
       service: `programmable.custom-registry.v2.production-custody.20260813.${role}`,
       sourceKeyFileSha256: `0x${(index + 1).toString(16).repeat(64)}`,
       readbackSha256: `0x${(index + 1).toString(16).repeat(64)}`,
       readbackByteLength: 67,
+      persistentRefSha256: `0x${(index + 7).toString(16).repeat(64)}`,
+      sourcePrivateKeyFileMode: "0400",
       accessibility: "when-unlocked-this-device-only",
       synchronizable: false,
       result: "IMPORTED_AND_READBACK_VERIFIED",
@@ -238,6 +250,27 @@ test("binds per-role Keychain readback custody proof", () => {
         owners: addresses.slice(2),
       }),
     /approver/u,
+  );
+  assert.throws(
+    () =>
+      assertSafeCustodyProof({
+        proof: {
+          ...proof,
+          roles: proof.roles.map((entry, index) =>
+            index === 5
+              ? {
+                  ...entry,
+                  readbackSha256: proof.roles[4].readbackSha256,
+                  sourceKeyFileSha256: proof.roles[4].sourceKeyFileSha256,
+                }
+              : entry,
+          ),
+        },
+        deployer: addresses[0],
+        admin: addresses[1],
+        owners: addresses.slice(2),
+      }),
+    /isolate/u,
   );
 });
 

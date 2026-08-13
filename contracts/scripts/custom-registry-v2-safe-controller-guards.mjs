@@ -67,6 +67,8 @@ export const SAFE_RECEIPTS_SCHEMA =
   "programmable.custom-registry-v2-safe-controller-receipts.v2";
 export const SAFE_VERIFICATION_SCHEMA =
   "programmable.custom-registry-v2-safe-controller-verification.v2";
+export const SAFE_CUSTODY_PROOF_SCHEMA =
+  "programmable.custom-registry-v2-keychain-custody-proof.v2";
 
 export function safeTransactionInput({ singleton, initializer, saltNonce }) {
   return encodeFunctionData({
@@ -229,34 +231,57 @@ export function assertSafeCustodyProof({ proof, owners, deployer, admin }) {
     getAddress(value),
   );
   if (
-    proof?.schemaVersion !==
-      "programmable.custom-registry-v2-keychain-custody-proof.v1" ||
+    proof?.schemaVersion !== SAFE_CUSTODY_PROOF_SCHEMA ||
     proof.chainId !== "1" ||
+    proof.keychain !== "current-user-default-login-keychain" ||
     proof.allReadbacksVerified !== true ||
+    proof.allEvmAddressesRecovered !== true ||
+    proof.roleIsolationBasis !==
+      "SIX_DISTINCT_GENERIC_PASSWORD_ITEMS_WITH_DISTINCT_PRIVATE_KEY_HASHES_AND_PUBLIC_ADDRESSES" ||
     proof.secretValuesPrinted !== false ||
     proof.plaintextRetention !==
       "0400_TEMP_ORIGINALS_PRESERVED_PENDING_EXPLICIT_RETENTION_DECISION" ||
+    !/^0x[0-9a-f]{64}$/u.test(proof.inventorySha256 ?? "") ||
     proof.roles?.length !== expectedRoles.length
   ) {
     throw new Error("Safe custody proof is invalid");
   }
+  const publicAddresses = new Set();
+  const privateKeyHashes = new Set();
+  const persistentReferences = new Set();
   for (const [index, role] of expectedRoles.entries()) {
     const entry = proof.roles.find((candidate) => candidate.role === role);
     if (
       !entry ||
       getAddress(entry.publicAddress) !== expectedAddresses[index] ||
+      getAddress(entry.recoveredPublicAddress) !== expectedAddresses[index] ||
+      entry.evmAddressRecoveryVerified !== true ||
+      entry.addressRecoveryBasis !==
+        "KEYCHAIN_READBACK_SHA256_EQUALS_SOURCE_KEY_SHA256_AND_SOURCE_KEY_DERIVES_ADDRESS" ||
       entry.account !== entry.publicAddress ||
       entry.service !==
         `programmable.custom-registry.v2.production-custody.20260813.${role}` ||
       entry.sourceKeyFileSha256 !== entry.readbackSha256 ||
       !/^0x[0-9a-f]{64}$/u.test(entry.readbackSha256 ?? "") ||
+      !/^0x[0-9a-f]{64}$/u.test(entry.persistentRefSha256 ?? "") ||
       entry.readbackByteLength !== 67 ||
+      entry.sourcePrivateKeyFileMode !== "0400" ||
       entry.accessibility !== "when-unlocked-this-device-only" ||
       entry.synchronizable !== false ||
       !String(entry.result).endsWith("READBACK_VERIFIED")
     ) {
       throw new Error(`Safe custody proof is invalid for ${role}`);
     }
+    publicAddresses.add(getAddress(entry.publicAddress).toLowerCase());
+    privateKeyHashes.add(entry.readbackSha256);
+    persistentReferences.add(entry.persistentRefSha256);
+  }
+  if (
+    publicAddresses.size !== expectedRoles.length ||
+    privateKeyHashes.size !== expectedRoles.length ||
+    persistentReferences.size !== expectedRoles.length
+  ) {
+    throw new Error("Safe custody proof does not isolate every role");
   }
 }
 
