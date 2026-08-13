@@ -54,6 +54,8 @@ export async function loadCustomRegistryV2ProductionPolicy(root) {
       "8661c0a6655f7009b9f4b4a81af2cb0104b8e728" ||
     JSON.stringify(policy.descriptorBinding?.fields) !==
       JSON.stringify(EXPECTED_DESCRIPTOR_FIELDS) ||
+    policy.descriptorBinding?.launchId !==
+      "keccak256(abi.encode(LAUNCH_ID_DOMAIN,chainId,registryGeneration,descriptorHash))" ||
     policy.approval?.approvalEvidenceSingleUse !== true ||
     policy.registration?.registrationEvidenceSingleUse !== true ||
     policy.finality?.minimumFinalityBlocks !== 12 ||

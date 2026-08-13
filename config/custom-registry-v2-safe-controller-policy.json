@@ -19,7 +19,9 @@
   "proxyFactory": {
     "address": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
     "runtimeCodeKeccak256": "0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317",
-    "proxyCreationCodeKeccak256": "0x1856e0ee08399d74e0ea0b03adca210aeade6f748969ac023cdcb4dd62dcaf5f"
+    "proxyCreationCodeKeccak256": "0x1856e0ee08399d74e0ea0b03adca210aeade6f748969ac023cdcb4dd62dcaf5f",
+    "proxyRuntimeCodeKeccak256": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+    "proxyCreationEvent": "ProxyCreation(address,address)"
   },
   "setup": {
     "threshold": 1,

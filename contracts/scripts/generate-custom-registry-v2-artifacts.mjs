@@ -4,9 +4,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { keccak256, toEventSelector, toFunctionSelector } from "viem";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const write = process.argv.includes("--write");
-const artifactPath = path.join(root, "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json");
+const artifactPath = path.join(
+  root,
+  "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json",
+);
 const sourcePaths = [
   "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol",
   "contracts/src/ProgrammableCustomRegistryV2.sol",
@@ -18,6 +24,8 @@ const sourcePaths = [
   "contracts/scripts/custom-registry-v2-production-policy.mjs",
   "contracts/scripts/custom-registry-v2-safe-controller-guards.mjs",
   "contracts/scripts/prepare-custom-registry-v2-safe-controllers.mjs",
+  "contracts/scripts/authorize-custom-registry-v2-safe-controllers.mjs",
+  "contracts/scripts/broadcast-custom-registry-v2-safe-controllers.mjs",
   "contracts/scripts/verify-custom-registry-v2-safe-controllers.mjs",
   "contracts/scripts/test/custom-registry-v2-deployment-guards.test.mjs",
   "contracts/scripts/test/custom-registry-v2-deployment-cli.test.mjs",
@@ -29,36 +37,61 @@ const sourcePaths = [
   "config/custom-registry-v2-safe-controller-policy.json",
 ];
 const outputs = {
-  manifest: path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
+  manifest: path.join(
+    root,
+    "contracts/spec/custom-registry-v2-predeployment.json",
+  ),
   abi: path.join(root, "docs/security/abi/ProgrammableCustomRegistryV2.json"),
   events: path.join(root, "docs/security/CUSTOM_REGISTRY_EVENT_SET_V2.json"),
 };
 
-const sha256 = (value) => `0x${createHash("sha256").update(value).digest("hex")}`;
+const sha256 = (value) =>
+  `0x${createHash("sha256").update(value).digest("hex")}`;
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
-const releasePolicy = JSON.parse(await readFile(path.join(root, "config/custom-registry-v2-release-policy.json"), "utf8"));
+const releasePolicy = JSON.parse(
+  await readFile(
+    path.join(root, "config/custom-registry-v2-release-policy.json"),
+    "utf8",
+  ),
+);
 if (
-  releasePolicy.schemaVersion !== "programmable.custom-registry-release-policy.v2"
-  || releasePolicy.maximumAuthorizationValiditySeconds !== 300
-  || releasePolicy.activationAllowed !== false
-  || (releasePolicy.releaseOwner !== null && !/^0x[0-9a-fA-F]{40}$/.test(releasePolicy.releaseOwner))
-) throw new Error("release policy is invalid");
+  releasePolicy.schemaVersion !==
+    "programmable.custom-registry-release-policy.v2" ||
+  releasePolicy.maximumAuthorizationValiditySeconds !== 300 ||
+  releasePolicy.activationAllowed !== false ||
+  (releasePolicy.releaseOwner !== null &&
+    !/^0x[0-9a-fA-F]{40}$/.test(releasePolicy.releaseOwner))
+)
+  throw new Error("release policy is invalid");
 const abi = artifact.abi;
 const sourceDigests = Object.fromEntries(
-  await Promise.all(sourcePaths.map(async (relative) => [relative, sha256(await readFile(path.join(root, relative)))])),
+  await Promise.all(
+    sourcePaths.map(async (relative) => [
+      relative,
+      sha256(await readFile(path.join(root, relative))),
+    ]),
+  ),
 );
-const events = abi.filter((entry) => entry.type === "event").map((entry) => ({
-  name: entry.name,
-  signature: `${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`,
-  topic0: toEventSelector(entry),
-})).sort((a, b) => a.name.localeCompare(b.name));
-const functions = abi.filter((entry) => entry.type === "function").map((entry) => ({
-  name: entry.name,
-  signature: `${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`,
-  selector: toFunctionSelector(entry),
-})).sort((a, b) => a.signature.localeCompare(b.signature));
-const runtimeImmutableReferences = Object.values(artifact.deployedBytecode.immutableReferences)
+const events = abi
+  .filter((entry) => entry.type === "event")
+  .map((entry) => ({
+    name: entry.name,
+    signature: `${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`,
+    topic0: toEventSelector(entry),
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+const functions = abi
+  .filter((entry) => entry.type === "function")
+  .map((entry) => ({
+    name: entry.name,
+    signature: `${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`,
+    selector: toFunctionSelector(entry),
+  }))
+  .sort((a, b) => a.signature.localeCompare(b.signature));
+const runtimeImmutableReferences = Object.values(
+  artifact.deployedBytecode.immutableReferences,
+)
   .flat()
   .map(({ start, length }) => ({ start, length }))
   .sort((a, b) => a.start - b.start || a.length - b.length);
@@ -113,7 +146,10 @@ const manifest = {
 const rendered = {
   manifest: json(manifest),
   abi: abiDocument,
-  events: json({ schemaVersion: "programmable.custom-registry-events.v2", events }),
+  events: json({
+    schemaVersion: "programmable.custom-registry-events.v2",
+    events,
+  }),
 };
 
 for (const [name, destination] of Object.entries(outputs)) {
@@ -122,8 +158,11 @@ for (const [name, destination] of Object.entries(outputs)) {
     await writeFile(destination, rendered[name], { flag: "w", mode: 0o644 });
   } else {
     const actual = await readFile(destination, "utf8");
-    if (actual !== rendered[name]) throw new Error(`${path.relative(root, destination)} is stale`);
+    if (actual !== rendered[name])
+      throw new Error(`${path.relative(root, destination)} is stale`);
   }
 }
 
-process.stdout.write(`CUSTOM_REGISTRY_V2_ARTIFACTS_${write ? "WRITTEN" : "VERIFIED"}\n`);
+process.stdout.write(
+  `CUSTOM_REGISTRY_V2_ARTIFACTS_${write ? "WRITTEN" : "VERIFIED"}\n`,
+);

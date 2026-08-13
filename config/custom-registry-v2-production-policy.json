@@ -23,7 +23,7 @@
       "marketMode",
       "protocolFeeBps"
     ],
-    "launchId": "keccak256(abi.encode(LAUNCH_ID_DOMAIN,chainId,descriptorHash))",
+    "launchId": "keccak256(abi.encode(LAUNCH_ID_DOMAIN,chainId,registryGeneration,descriptorHash))",
     "runtimeCodeRequired": true,
     "primaryContractSingleUse": true,
     "descriptorSingleUse": true

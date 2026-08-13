@@ -7,10 +7,13 @@ import { createPublicClient, getAddress, http, keccak256 } from "viem";
 import { mainnet } from "viem/chains";
 import {
   SAFE_FACTORY_ABI,
+  SAFE_PLAN_SCHEMA,
   SAFE_READ_ABI,
+  assertSafeCustodyProof,
   assertDistinctControllerOwners,
   predictSafeProxyAddress,
   safeInitializer,
+  safeTransactionInput,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import {
   assessDeploymentCost,
@@ -52,9 +55,25 @@ const owners = roles.map((role) =>
 );
 assertDistinctControllerOwners({ deployer, admin, releaseOwner, owners });
 
+const custodyProofPath = path.resolve(required("REGISTRY_CUSTODY_PROOF_PATH"));
+if (!custodyProofPath.startsWith("/tmp/"))
+  throw new Error("custody proof must be under /tmp");
+const custodyProofBytes = await readFile(custodyProofPath);
+const custodyProofSha256 = `0x${createHash("sha256")
+  .update(custodyProofBytes)
+  .digest("hex")}`;
+if (custodyProofSha256 !== required("REGISTRY_CUSTODY_PROOF_SHA256"))
+  throw new Error("custody proof digest mismatch");
+const custodyProof = JSON.parse(custodyProofBytes);
+assertSafeCustodyProof({ proof: custodyProof, owners, deployer, admin });
+
 const maxFeePerGas = positive(
   "REGISTRY_SAFE_MAX_FEE_PER_GAS_WEI",
   (1n << 256n) - 1n,
+);
+const maxPriorityFeePerGas = positive(
+  "REGISTRY_SAFE_MAX_PRIORITY_FEE_PER_GAS_WEI",
+  maxFeePerGas,
 );
 const maxTotalCostWei = positive(
   "REGISTRY_SAFE_MAX_TOTAL_COST_WEI",
@@ -68,11 +87,27 @@ const policyBytes = await readFile(
   path.join(root, "config/custom-registry-v2-safe-controller-policy.json"),
 );
 const policy = JSON.parse(policyBytes);
+const policySha256 = `0x${createHash("sha256").update(policyBytes).digest("hex")}`;
 if (
   policy.schemaVersion !==
     "programmable.custom-registry-v2-safe-controller-policy.v1" ||
   policy.chainId !== "1" ||
   policy.safeVersion !== "1.4.1" ||
+  policy.source?.repository !== "safe-fndn/safe-smart-account" ||
+  policy.source?.tag !== "v1.4.1" ||
+  policy.source?.commit !== "bf943f80fec5ac647159d26161446ac5d716a294" ||
+  policy.deploymentInventory?.repository !== "safe-global/safe-deployments" ||
+  policy.deploymentInventory?.commit !==
+    "5bb0ebd7150a777f39bec4733e4d799c4b637b49" ||
+  policy.deploymentInventory?.tree !==
+    "9c48b5f3bd56e47239a15c8da9d2e2c4d9f87679" ||
+  policy.singleton?.address !== "0x41675C099F32341bf84BFc5382aF534df5C7461a" ||
+  policy.proxyFactory?.address !==
+    "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67" ||
+  policy.proxyFactory?.proxyRuntimeCodeKeccak256 !==
+    "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c" ||
+  policy.proxyFactory?.proxyCreationEvent !==
+    "ProxyCreation(address,address)" ||
   policy.setup?.threshold !== 1 ||
   policy.setup?.to !== "0x0000000000000000000000000000000000000000" ||
   policy.setup?.data !== "0x" ||
@@ -82,6 +117,20 @@ if (
   policy.setup?.guard !== "0x0000000000000000000000000000000000000000"
 )
   throw new Error("Safe controller policy is invalid");
+const manifestBytes = await readFile(
+  path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
+);
+const manifest = JSON.parse(manifestBytes);
+if (
+  manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
+  manifest.activationAllowed !== false ||
+  manifest.sourceDigests?.[
+    "config/custom-registry-v2-safe-controller-policy.json"
+  ] !== policySha256 ||
+  getAddress(manifest.releaseAuthorization?.owner) !== releaseOwner ||
+  manifest.releaseAuthorization?.maximumValiditySeconds !== 300
+)
+  throw new Error("Safe policy or release owner is not source-manifest bound");
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: root,
   encoding: "utf8",
@@ -180,6 +229,11 @@ const controllerPlans = await Promise.all(
       initializer,
       saltNonce,
     });
+    const transactionInput = safeTransactionInput({
+      singleton: policy.singleton.address,
+      initializer,
+      saltNonce,
+    });
     const observations = await Promise.all(
       clients.map(async (client) => {
         const [code, gas] = await Promise.all([
@@ -197,6 +251,10 @@ const controllerPlans = await Promise.all(
         return { gas };
       }),
     );
+    const gasLimit =
+      (observations.reduce((max, { gas }) => (gas > max ? gas : max), 0n) *
+        120n) /
+      100n;
     return {
       role,
       owner,
@@ -205,12 +263,19 @@ const controllerPlans = await Promise.all(
       initializerKeccak256: keccak256(initializer),
       predictedAddress,
       expectedTransactionNonce: a.nonce + index,
+      expectedTransaction: {
+        chainId: 1,
+        from: deployer,
+        to: policy.proxyFactory.address,
+        input: transactionInput,
+        valueWei: "0",
+        nonce: a.nonce + index,
+        gasLimit: gasLimit.toString(),
+        maxFeePerGas: maxFeePerGas.toString(),
+        maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
+      },
       gasEstimates: observations.map(({ gas }) => gas.toString()),
-      gasLimit: (
-        (observations.reduce((max, { gas }) => (gas > max ? gas : max), 0n) *
-          120n) /
-        100n
-      ).toString(),
+      gasLimit: gasLimit.toString(),
     };
   }),
 );
@@ -260,13 +325,28 @@ if (!costReviewOnly && !fundingSufficient)
   throw new Error("Safe controller deployer balance is insufficient");
 
 const plan = {
-  schemaVersion: "programmable.custom-registry-v2-safe-controller-preflight.v1",
+  schemaVersion: SAFE_PLAN_SCHEMA,
   status: costReviewOnly
     ? "UNFUNDED_COST_REVIEW_ONLY"
     : "PREFLIGHT_ONLY_NO_TRANSACTION",
   chainId: 1,
   source: { commit: sourceCommit, tree: sourceTree },
-  policySha256: `0x${createHash("sha256").update(policyBytes).digest("hex")}`,
+  sourceManifestSha256: `0x${createHash("sha256")
+    .update(manifestBytes)
+    .digest("hex")}`,
+  policySha256,
+  custodyProofSha256,
+  custody: {
+    inventorySha256: custodyProof.inventorySha256,
+    roles: custodyProof.roles.map(
+      ({ role, publicAddress, service, readbackSha256 }) => ({
+        role,
+        publicAddress,
+        service,
+        readbackSha256,
+      }),
+    ),
+  },
   safeVersion: policy.safeVersion,
   singleton: policy.singleton,
   proxyFactory: policy.proxyFactory,
@@ -276,6 +356,11 @@ const plan = {
     blockHash: a.finalized.hash,
   },
   deployer,
+  releaseAuthorization: {
+    owner: releaseOwner,
+    maximumValiditySeconds:
+      manifest.releaseAuthorization.maximumValiditySeconds,
+  },
   exactPendingNonce: a.nonce,
   deployerBalanceWei: a.balance.toString(),
   controllers: controllerPlans,
