@@ -20,11 +20,14 @@ const sourcePaths = [
   "contracts/scripts/generate-custom-registry-v2-artifacts.mjs",
   "contracts/scripts/verify-custom-registry-v2-neutrality.mjs",
   "contracts/scripts/prepare-custom-registry-v2-deployment.mjs",
+  "contracts/scripts/stage-custom-registry-v2-deployment-transaction.mjs",
   "contracts/scripts/authorize-custom-registry-v2-deployment.mjs",
   "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
   "contracts/scripts/custom-registry-v2-deployment-plan.mjs",
   "contracts/scripts/custom-registry-v2-live-verification.mjs",
   "contracts/scripts/custom-registry-v2-transaction-journal.mjs",
+  "contracts/scripts/custom-registry-v2-release-evidence.mjs",
+  "contracts/scripts/custom-registry-v2-keychain-custody.mjs",
   "contracts/scripts/custom-registry-v2-source-verification-core.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs",
   "contracts/scripts/verify-custom-registry-v2-deployment.mjs",
@@ -32,14 +35,20 @@ const sourcePaths = [
   "contracts/scripts/custom-registry-v2-production-policy.mjs",
   "contracts/scripts/custom-registry-v2-safe-controller-guards.mjs",
   "contracts/scripts/prepare-custom-registry-v2-safe-controllers.mjs",
+  "contracts/scripts/generate-custom-registry-v2-safe-prediction-inputs.mjs",
+  "contracts/scripts/stage-custom-registry-v2-safe-transaction.mjs",
   "contracts/scripts/authorize-custom-registry-v2-safe-controllers.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-safe-controllers.mjs",
   "contracts/scripts/verify-custom-registry-v2-safe-controllers.mjs",
+  "contracts/scripts/custom-registry-v2-safe-public-migration-guards.mjs",
+  "contracts/scripts/prepare-custom-registry-v2-safe-public-migration.mjs",
+  "contracts/scripts/verify-custom-registry-v2-safe-public-migration.mjs",
   "contracts/scripts/test/custom-registry-v2-deployment-guards.test.mjs",
   "contracts/scripts/test/custom-registry-v2-deployment-cli.test.mjs",
   "contracts/scripts/test/custom-registry-v2-live-verification.test.mjs",
   "contracts/scripts/test/custom-registry-v2-production-policy.test.mjs",
   "contracts/scripts/test/custom-registry-v2-safe-controller-guards.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-safe-public-migration.test.mjs",
   "contracts/scripts/test/custom-registry-v2-transaction-journal.test.mjs",
   "contracts/scripts/test/custom-registry-v2-source-verification-core.test.mjs",
   "contracts/test/CustomRegistryV2SafeAtomicBatchMainnetFork.t.sol",
@@ -48,6 +57,7 @@ const sourcePaths = [
   "config/custom-registry-v2-production-policy.json",
   "config/custom-registry-v2-production-constructor.json",
   "config/custom-registry-v2-safe-controller-policy.json",
+  "config/custom-registry-v2-safe-public-migration-policy.json",
 ];
 const outputs = {
   manifest: path.join(
@@ -70,10 +80,16 @@ const releasePolicy = JSON.parse(
 );
 if (
   releasePolicy.schemaVersion !==
-    "programmable.custom-registry-release-policy.v2" ||
-  releasePolicy.maximumSigningAndFirstAttemptValiditySeconds !== 300 ||
+    "programmable.custom-registry-release-policy.v3" ||
+  releasePolicy.maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
   releasePolicy.authorizationSemantics !==
-    "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED" ||
+    "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION" ||
+  releasePolicy.stagedRawTransactionTrustBoundary !==
+    "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
+  releasePolicy.dispatchIntentFinalConfirmation !==
+    "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION" ||
+  releasePolicy.nonceScopedJournalExclusivity !==
+    "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED" ||
   releasePolicy.activationAllowed !== false ||
   (releasePolicy.releaseOwner !== null &&
     !/^0x[0-9a-fA-F]{40}$/.test(releasePolicy.releaseOwner))
@@ -117,7 +133,7 @@ const abiDocument = json({
 });
 
 const manifest = {
-  schemaVersion: "programmable.custom-registry-predeployment.v2",
+  schemaVersion: "programmable.custom-registry-predeployment.v3",
   status: "SOURCE_ONLY_NOT_DEPLOYED",
   chainId: "1",
   registryGeneration: 2,
@@ -127,9 +143,14 @@ const manifest = {
   },
   releaseAuthorization: {
     owner: releasePolicy.releaseOwner,
-    maximumSigningAndFirstAttemptValiditySeconds:
-      releasePolicy.maximumSigningAndFirstAttemptValiditySeconds,
+    maximumDispatchIntentAuthorizationValiditySeconds:
+      releasePolicy.maximumDispatchIntentAuthorizationValiditySeconds,
     authorizationSemantics: releasePolicy.authorizationSemantics,
+    stagedRawTransactionTrustBoundary:
+      releasePolicy.stagedRawTransactionTrustBoundary,
+    dispatchIntentFinalConfirmation:
+      releasePolicy.dispatchIntentFinalConfirmation,
+    nonceScopedJournalExclusivity: releasePolicy.nonceScopedJournalExclusivity,
     status: releasePolicy.status,
   },
   sourceDigests,

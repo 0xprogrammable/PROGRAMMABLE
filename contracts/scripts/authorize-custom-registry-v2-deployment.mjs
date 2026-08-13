@@ -1,21 +1,30 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, http } from "viem";
+import { createPublicClient } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  assertNoExistingTransactionIntent,
+  assertReleaseEvidenceOutput,
+  assertReleaseEvidencePath,
+} from "./custom-registry-v2-release-evidence.mjs";
 
 import {
   REGISTRY_AUTHORIZATION_SCHEMA,
+  REGISTRY_STAGED_TRANSACTION_SCHEMA,
   AUTHORIZATION_SEMANTICS,
   assertReviewedAuthorization,
+  assertRpcProviderBindings,
+  assertDispatchAuthorizationWindow,
   computeReviewedPlanDigest,
   reviewedAuthorizationMessage,
-  requireDistinctRpcOrigins,
+  releaseRpcTransport,
   sha256,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
 import { assertRegistryDeploymentPlan } from "./custom-registry-v2-deployment-plan.mjs";
 import { assertRegistryLivePreflight } from "./custom-registry-v2-live-verification.mjs";
+import { assertStagedTransactionEvidence } from "./custom-registry-v2-transaction-journal.mjs";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -26,28 +35,21 @@ const argument = (name) => {
   if (index === -1 || !process.argv[index + 1]) {
     throw new Error(`${name} is required`);
   }
-  return path.resolve(process.argv[index + 1]);
+  return process.argv[index + 1];
 };
 const required = (name) => {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
 };
-const preflightPath = argument("--preflight");
+const preflightPath = assertReleaseEvidencePath(argument("--preflight"));
 const printMessage = process.argv.includes("--print-message");
-const outputPath = printMessage ? null : argument("--output");
-if (
-  !preflightPath.startsWith("/tmp/") ||
-  (outputPath !== null && !outputPath.startsWith("/tmp/"))
-) {
-  throw new Error("authorization inputs and output must be under /tmp");
-}
-const safeVerificationPath = path.resolve(
+const outputPath = printMessage
+  ? null
+  : assertReleaseEvidenceOutput(argument("--output"));
+const safeVerificationPath = assertReleaseEvidencePath(
   required("REGISTRY_SAFE_VERIFICATION_PATH"),
 );
-if (!safeVerificationPath.startsWith("/tmp/")) {
-  throw new Error("Safe verification must be under /tmp");
-}
 const safeVerificationBytes = await readFile(safeVerificationPath);
 if (
   sha256(safeVerificationBytes) !==
@@ -65,15 +67,40 @@ const planInputs = await assertRegistryDeploymentPlan({
   safeVerificationBytes,
   nowTimestamp,
 });
+const stagedTransactionPath = assertReleaseEvidencePath(
+  required("REGISTRY_STAGED_TRANSACTION_PATH"),
+  { mode: 0o400 },
+);
+const stagedTransactionBytes = await readFile(stagedTransactionPath);
+const stagedTransactionSha256 = sha256(stagedTransactionBytes);
+if (
+  stagedTransactionSha256 !== required("REGISTRY_STAGED_TRANSACTION_SHA256")
+) {
+  throw new Error("staged Registry transaction digest mismatch");
+}
+const stagedTransaction = JSON.parse(stagedTransactionBytes);
+await assertStagedTransactionEvidence({
+  evidence: stagedTransaction,
+  schemaVersion: REGISTRY_STAGED_TRANSACTION_SCHEMA,
+  preflightSha256,
+  expectedTransaction: plan.expectedTransaction,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
+assertNoExistingTransactionIntent({
+  chainId: 1,
+  signer: plan.expectedTransaction.from,
+  nonce: plan.expectedTransaction.nonce,
+});
 const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
 const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
-requireDistinctRpcOrigins(rpcA, rpcB);
 const providerIds = [
   required("REGISTRY_RPC_PROVIDER_ID_A"),
   required("REGISTRY_RPC_PROVIDER_ID_B"),
 ];
+assertRpcProviderBindings({ plan, providerIds, rpcUrls: [rpcA, rpcB] });
 const clients = [rpcA, rpcB].map((url) =>
-  createPublicClient({ chain: mainnet, transport: http(url) }),
+  createPublicClient({ chain: mainnet, transport: releaseRpcTransport(url) }),
 );
 await assertRegistryLivePreflight({
   clients,
@@ -91,36 +118,42 @@ if (
     "REGISTRY_RELEASE_OWNER does not match the reviewed preflight",
   );
 }
-const firstAttemptExpiresAtTimestamp = Number(
-  required("REGISTRY_AUTHORIZATION_EXPIRES_AT"),
+const dispatchIntentExpiresAtTimestamp = Number(
+  required("REGISTRY_DISPATCH_INTENT_EXPIRES_AT"),
 );
-if (
-  !Number.isSafeInteger(firstAttemptExpiresAtTimestamp) ||
-  firstAttemptExpiresAtTimestamp <= nowTimestamp ||
-  firstAttemptExpiresAtTimestamp > nowTimestamp + 300 ||
-  firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp
-) {
-  throw new Error(
-    "REGISTRY_AUTHORIZATION_EXPIRES_AT is stale or outside the preflight window",
-  );
-}
+const notBeforeTimestamp = Number(
+  required("REGISTRY_DISPATCH_INTENT_NOT_BEFORE"),
+);
+assertDispatchAuthorizationWindow({
+  notBeforeTimestamp,
+  dispatchIntentExpiresAtTimestamp,
+  nowTimestamp,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
 const authorization = {
   schemaVersion: REGISTRY_AUTHORIZATION_SCHEMA,
-  status: "REVIEWED_READY_FOR_EXPLICIT_BROADCAST",
+  status: "REVIEWED_READY_FOR_EXPLICIT_DISPATCH_INTENT",
   preflightSha256,
+  stagedTransactionSha256,
+  authorizedTransactionHash: stagedTransaction.transactionHash,
   source: plan.source,
   ownerAuthorizationAddress,
-  notBeforeTimestamp: nowTimestamp,
-  firstAttemptExpiresAtTimestamp,
+  notBeforeTimestamp,
+  dispatchIntentExpiresAtTimestamp,
   authorizationSemantics: AUTHORIZATION_SEMANTICS,
-  signingAllowed: true,
-  broadcastAllowed: true,
+  signingAllowed: false,
+  broadcastAllowed: false,
+  dispatchIntentActivationAllowed: true,
+  broadcastRequiresDurableDispatchIntent: true,
 };
 authorization.reviewedPlanDigest = computeReviewedPlanDigest({
   preflightSha256,
+  stagedTransactionSha256,
+  authorizedTransactionHash: stagedTransaction.transactionHash,
   ownerAuthorizationAddress,
-  notBeforeTimestamp: nowTimestamp,
-  firstAttemptExpiresAtTimestamp,
+  notBeforeTimestamp,
+  dispatchIntentExpiresAtTimestamp,
   sourceCommit: plan.source.commit,
   sourceTree: plan.source.tree,
 });

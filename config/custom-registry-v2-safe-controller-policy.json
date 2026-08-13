@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "programmable.custom-registry-v2-safe-controller-policy.v1",
+  "schemaVersion": "programmable.custom-registry-v2-safe-controller-policy.v2",
   "chainId": "1",
   "safeVersion": "1.4.1",
   "source": {
@@ -51,18 +51,19 @@
     "fallbackHandler": "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5",
     "guard": "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8"
   },
-  "roles": {
-    "approver": {
-      "saltNonce": "17617897239101837117177080654048181435023415572887786950068943254098972935077"
+  "predictionPrivacy": {
+    "ownerGeneration": "FRESH_DISTINCT_KEYCHAIN_CUSTODY_AFTER_PUBLIC_SOURCE_AND_APPROVAL_POLICY_FREEZE",
+    "saltGeneration": "FRESH_CRYPTOGRAPHIC_RANDOM_NONZERO_UINT256_PER_ROLE_AFTER_PUBLIC_SOURCE_AND_APPROVAL_POLICY_FREEZE",
+    "storage": "PROTECTED_NON_REPOSITORY_RELEASE_EVIDENCE",
+    "primarySubmission": "FLASHBOTS_PROTECT_ETH_SEND_RAW_TRANSACTION_EXACT_HINT_HASH_NO_PUBLIC_MEMPOOL",
+    "providerDocumentation": {
+      "repository": "flashbots/flashbots-docs",
+      "commit": "19ed5ca7e1ea49be469145a2dc0d2b0036d2a814",
+      "tree": "016f1aed24d4913b4cae5891912fc1c1c75fd700",
+      "quickStartSha256": "0x096b69482d3eb3318b1130dbc2444c0b2288b3876dbe3c253db451fa23dd7672",
+      "mevRefundsSha256": "0x8f1b1ce0387d6c0b78b5e5c29447181bb8955170ad1b68550252e4b6c9740da2"
     },
-    "registrar": {
-      "saltNonce": "44096841411846234081209696804905865608906419847713637963804828202859581648262"
-    },
-    "finalizer": {
-      "saltNonce": "31357831541499710372809238130690992481015648600276251008730804611193782025375"
-    },
-    "revoker": {
-      "saltNonce": "63478965709317179552987150222061520259145583023848861163898958250560301399397"
-    }
+    "publicPredictionsRetired": true,
+    "leakageFallback": "ABANDON_LEAKED_PREDICTIONS_ROTATE_OWNERS_AND_SALTS_GENERATE_FRESH_PLAN_AND_AUTHORIZATION"
   }
 }

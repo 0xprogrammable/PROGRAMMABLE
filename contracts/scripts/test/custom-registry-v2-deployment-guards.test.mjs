@@ -12,10 +12,13 @@ import {
   REGISTRY_VERIFICATION_SCHEMA,
   ZERO_ADDRESS,
   assessDeploymentCost,
+  assertSettledDeployerNonce,
   assertArtifactBinding,
+  assertDispatchAuthorizationWindow,
   assertDeployerBinding,
   assertExpectedDeploymentTransaction,
   assertFinalizedDeploymentTransaction,
+  assertFinalizedReceiptAfterDispatchIntent,
   assertFinalizedAnchor,
   assertLiveBinding,
   assertPostDeploymentBinding,
@@ -26,6 +29,9 @@ import {
   assertSourceVerificationBinding,
   computeConstructorCommitment,
   computeReviewedPlanDigest,
+  createRpcProviderBinding,
+  createRpcProviderBindings,
+  assertRpcProviderBindings,
   reviewedAuthorizationMessage,
   requireDistinctRpcOrigins,
   verifyReviewedAuthorizationSignature,
@@ -47,6 +53,119 @@ test("requires genuinely distinct RPC origins", () => {
     ),
     ["https://rpc-a.example", "https://rpc-b.example"],
   );
+});
+
+test("blocks a new release while the deployer has an unfinalized nonce", () => {
+  assert.equal(
+    assertSettledDeployerNonce({
+      pendingNonces: [7, 7],
+      finalizedNonces: [7, 7],
+    }),
+    7,
+  );
+  assert.throws(
+    () =>
+      assertSettledDeployerNonce({
+        pendingNonces: [8, 8],
+        finalizedNonces: [7, 7],
+      }),
+    /not settled/u,
+  );
+});
+
+test("finalized inclusion must follow the complete trusted dispatch-intent interval", () => {
+  const dispatchIntentTrustedTime = {
+    adjustedTimeMilliseconds: 188_000,
+    uncertaintyMilliseconds: 999,
+  };
+  assert.throws(
+    () =>
+      assertFinalizedReceiptAfterDispatchIntent({
+        receiptBlockTimestamp: 188n,
+        dispatchIntentTrustedTime,
+      }),
+    /does not follow/u,
+  );
+  assert.doesNotThrow(() =>
+    assertFinalizedReceiptAfterDispatchIntent({
+      receiptBlockTimestamp: 189n,
+      dispatchIntentTrustedTime,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertFinalizedReceiptAfterDispatchIntent({
+        receiptBlockTimestamp: 189n,
+        dispatchIntentTrustedTime: {
+          adjustedTimeMilliseconds: 188_000,
+          uncertaintyMilliseconds: 1_000,
+        },
+      }),
+    /does not follow/u,
+  );
+});
+
+test("binds non-disclosing exact RPC endpoint digests across release phases", () => {
+  const providerIds = ["provider-a", "provider-b"];
+  const reviewedUrls = [
+    "https://rpc-a.example/key-one?network=mainnet",
+    "https://rpc-b.example/key-two?network=mainnet",
+  ];
+  const bindings = createRpcProviderBindings(providerIds, reviewedUrls);
+  assert.equal(bindings[0].rpcOrigin, "https://rpc-a.example");
+  assert.match(bindings[0].rpcEndpointSha256, /^0x[0-9a-f]{64}$/u);
+  assert.doesNotMatch(JSON.stringify(bindings), /key-one|key-two/u);
+  assert.deepEqual(
+    assertRpcProviderBindings({
+      plan: { rpcProviderBindings: bindings },
+      providerIds,
+      rpcUrls: reviewedUrls,
+    }),
+    bindings,
+  );
+  assert.throws(
+    () =>
+      assertRpcProviderBindings({
+        plan: { rpcProviderBindings: bindings },
+        providerIds,
+        rpcUrls: [
+          "https://rpc-a.example/different",
+          "https://rpc-b.example/also-different",
+        ],
+      }),
+    /drifted/u,
+  );
+});
+
+test("binds private Safe submission to exact Flashbots Protect hash-only privacy", () => {
+  assert.deepEqual(
+    createRpcProviderBinding(
+      "flashbots-protect-max-privacy",
+      "https://rpc.flashbots.net/?hint=hash",
+    ),
+    {
+      providerId: "flashbots-protect-max-privacy",
+      sanitizedUrl: "https://rpc.flashbots.net/?hint=hash",
+    },
+  );
+  for (const [providerId, endpoint] of [
+    ["flashbots-protect-max-privacy", "https://rpc.flashbots.net/fast"],
+    [
+      "flashbots-protect-max-privacy",
+      "https://rpc.flashbots.net/?hint=calldata",
+    ],
+    ["flashbots-protect-max-privacy", "https://rpc.flashbots.net/"],
+    ["unreviewed-relay", "https://rpc.flashbots.net/?hint=hash"],
+    [
+      "flashbots-protect-max-privacy",
+      "https://rpc.flashbots.net/?hint=hash&originId=secret",
+    ],
+  ]) {
+    assert.throws(
+      () => createRpcProviderBinding(providerId, endpoint),
+      /exact Flashbots Protect/u,
+    );
+  }
 });
 
 test("fails closed on block gas, fee, priority, cost and balance ceilings", () => {
@@ -93,14 +212,14 @@ const planFixture = () => ({
   source: { commit: "a", tree: "b" },
   releaseAuthorization: {
     owner: privateKeyToAccount(`0x${"22".repeat(32)}`).address,
-    maximumSigningAndFirstAttemptValiditySeconds: 300,
+    maximumDispatchIntentAuthorizationValiditySeconds: 300,
     authorizationSemantics: AUTHORIZATION_SEMANTICS,
   },
   commonFinalizedAnchor: {
     blockNumber: "100",
     blockHash: `0x${"aa".repeat(32)}`,
   },
-  create: { exactPendingNonce: 7 },
+  create: { exactPendingNonce: 7, exactFinalizedNonce: 7 },
 });
 
 test("requires a separate exact reviewed, signed, and unexpired authorization", async () => {
@@ -109,22 +228,28 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
   const account = privateKeyToAccount(`0x${"22".repeat(32)}`);
   const authorization = {
     schemaVersion: REGISTRY_AUTHORIZATION_SCHEMA,
-    status: "REVIEWED_READY_FOR_EXPLICIT_BROADCAST",
-    broadcastAllowed: true,
-    signingAllowed: true,
+    status: "REVIEWED_READY_FOR_EXPLICIT_DISPATCH_INTENT",
+    broadcastAllowed: false,
+    signingAllowed: false,
+    dispatchIntentActivationAllowed: true,
+    broadcastRequiresDurableDispatchIntent: true,
     preflightSha256,
+    stagedTransactionSha256: `0x${"33".repeat(32)}`,
+    authorizedTransactionHash: `0x${"44".repeat(32)}`,
     source: plan.source,
     ownerAuthorizationAddress: account.address,
     notBeforeTimestamp: 180,
-    firstAttemptExpiresAtTimestamp: 190,
+    dispatchIntentExpiresAtTimestamp: 190,
     authorizationSemantics: AUTHORIZATION_SEMANTICS,
   };
   authorization.reviewedPlanDigest = computeReviewedPlanDigest({
     preflightSha256,
+    stagedTransactionSha256: authorization.stagedTransactionSha256,
+    authorizedTransactionHash: authorization.authorizedTransactionHash,
     ownerAuthorizationAddress: account.address,
     notBeforeTimestamp: authorization.notBeforeTimestamp,
-    firstAttemptExpiresAtTimestamp:
-      authorization.firstAttemptExpiresAtTimestamp,
+    dispatchIntentExpiresAtTimestamp:
+      authorization.dispatchIntentExpiresAtTimestamp,
     sourceCommit: plan.source.commit,
     sourceTree: plan.source.tree,
   });
@@ -143,7 +268,7 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
   assert.throws(
     () =>
       assertReviewedAuthorization({
-        authorization: { ...authorization, broadcastAllowed: false },
+        authorization: { ...authorization, broadcastAllowed: true },
         preflightSha256,
         plan,
         nowTimestamp: 180,
@@ -155,7 +280,7 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
       assertReviewedAuthorization({
         authorization: {
           ...authorization,
-          firstAttemptExpiresAtTimestamp: 181,
+          dispatchIntentExpiresAtTimestamp: 181,
           notBeforeTimestamp: 182,
         },
         preflightSha256,
@@ -195,6 +320,36 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
       }),
     /signature mismatch/,
   );
+});
+
+test("owner authorization keeps one explicit not-before across delayed offline signing", () => {
+  const window = {
+    notBeforeTimestamp: 1_000,
+    dispatchIntentExpiresAtTimestamp: 1_300,
+    planCreatedAtTimestamp: 900,
+    planExpiresAtTimestamp: 1_400,
+  };
+  assert.doesNotThrow(() =>
+    assertDispatchAuthorizationWindow({ ...window, nowTimestamp: 1_000 }),
+  );
+  assert.doesNotThrow(() =>
+    assertDispatchAuthorizationWindow({ ...window, nowTimestamp: 1_120 }),
+  );
+  for (const mutation of [
+    { notBeforeTimestamp: 1_121 },
+    { dispatchIntentExpiresAtTimestamp: 1_301 },
+    { dispatchIntentExpiresAtTimestamp: 1_120 },
+  ]) {
+    assert.throws(
+      () =>
+        assertDispatchAuthorizationWindow({
+          ...window,
+          nowTimestamp: 1_120,
+          ...mutation,
+        }),
+      /window is stale or invalid/u,
+    );
+  }
 });
 
 test("binds source, finalized anchor, nonce and live target state without brittle latest equality", () => {
@@ -280,6 +435,7 @@ test("binds exact deployment data, policies, ABI, bytecode and transaction", () 
     create: {
       deployer: "0x0000000000000000000000000000000000000001",
       exactPendingNonce: 7,
+      exactFinalizedNonce: 7,
       gasLimit: "100",
       reviewedMaxFeePerGas: "3",
       reviewedMaxPriorityFeePerGas: "1",
@@ -440,12 +596,18 @@ test("rejects adversarial finalized receipt, nonce, input, fee, and runtime whil
     expectedRuntime: { codeKeccak256: expectedRuntime },
   };
   const authorization = { notBeforeTimestamp: 180 };
+  const dispatchIntentTrustedTime = {
+    adjustedTimeMilliseconds: 188_000,
+    uncertaintyMilliseconds: 999,
+  };
   const actual = {
     hash: transactionHash,
     blockNumber: "100",
     blockHash: `0x${"33".repeat(32)}`,
     receiptBlockNumber: "100",
     receiptBlockHash: `0x${"33".repeat(32)}`,
+    fetchedReceiptBlockNumber: "100",
+    fetchedReceiptBlockHash: `0x${"33".repeat(32)}`,
     receiptTransactionHash: transactionHash,
     from: plan.expectedTransaction.from,
     to: null,
@@ -469,6 +631,7 @@ test("rejects adversarial finalized receipt, nonce, input, fee, and runtime whil
     transactionHash,
     plan,
     authorization,
+    dispatchIntentTrustedTime,
   });
   assert.throws(
     () =>
@@ -477,15 +640,28 @@ test("rejects adversarial finalized receipt, nonce, input, fee, and runtime whil
         transactionHash,
         plan,
         authorization,
+        dispatchIntentTrustedTime,
       }),
-    /exact signed plan/u,
+    /does not follow/u,
   );
   assertFinalizedDeploymentTransaction({
     actual: { ...actual, receiptBlockTimestamp: "9999999999" },
     transactionHash,
     plan,
     authorization,
+    dispatchIntentTrustedTime,
   });
+  assert.throws(
+    () =>
+      assertFinalizedDeploymentTransaction({
+        actual: { ...actual, receiptBlockTimestamp: "188" },
+        transactionHash,
+        plan,
+        authorization,
+        dispatchIntentTrustedTime,
+      }),
+    /does not follow/u,
+  );
   for (const [field, value] of [
     ["nonce", 8],
     ["input", "0x5678"],
@@ -500,6 +676,7 @@ test("rejects adversarial finalized receipt, nonce, input, fee, and runtime whil
           transactionHash,
           plan,
           authorization,
+          dispatchIntentTrustedTime,
         }),
       /exact signed plan/,
     );
@@ -520,7 +697,8 @@ test("requires exact Etherscan and Sourcify evidence bound to finalized onchain 
   };
   const source = {
     schemaVersion: REGISTRY_SOURCE_VERIFICATION_SCHEMA,
-    status: "SELF_COMPILED_ETHERSCAN_EXACT_SOURCIFY_V2_EXACT",
+    status:
+      "SELF_COMPILED_ETHERSCAN_VERIFIED_SOURCE_EXACT_CLOSURE_SOURCIFY_V2_EXACT",
     verified: true,
     chainId: 1,
     source: sourceIdentity,
@@ -544,7 +722,8 @@ test("requires exact Etherscan and Sourcify evidence bound to finalized onchain 
       ]),
     ),
     etherscan: {
-      status: "exact-match",
+      status: "verified-source-exact-closure",
+      similarMatch: null,
       url: `https://etherscan.io/address/${onchain.contractAddress}#code`,
     },
     sourcify: {

@@ -323,7 +323,11 @@ test("accepts only exact semantic Etherscan and Sourcify provider evidence", asy
       plan,
       etherscanApiKey: "sentinel-key",
     });
-    assert.equal(evidence.etherscan.status, "exact-match");
+    assert.equal(
+      evidence.etherscan.status,
+      "verified-source-exact-closure",
+    );
+    assert.equal(evidence.etherscan.similarMatch, null);
     assert.equal(evidence.sourcify.status, "exact-match");
     const responses = [
       evidence.etherscan.sourceResponse,
@@ -354,6 +358,22 @@ test("accepts only exact semantic Etherscan and Sourcify provider evidence", asy
     installProviderMock({
       sourceMutation: (value) => {
         value.result[0].SimilarMatch = address;
+      },
+    });
+    const similarMatchEvidence = await verifyRegistrySourceProviders({
+        compilation,
+        finalized,
+        plan,
+        etherscanApiKey: "sentinel-key",
+      });
+    assert.equal(
+      similarMatchEvidence.etherscan.status,
+      "verified-source-exact-closure",
+    );
+    assert.equal(similarMatchEvidence.etherscan.similarMatch, address);
+    installProviderMock({
+      sourceMutation: (value) => {
+        value.result[0].SimilarMatch = "not-an-address";
       },
     });
     await assert.rejects(

@@ -1,8 +1,11 @@
 {
-  "schemaVersion": "programmable.custom-registry-release-policy.v2",
+  "schemaVersion": "programmable.custom-registry-release-policy.v3",
   "releaseOwner": "0xc7fB6d0d2b78A30D0D3599F7F4BAd5c9b87665AF",
-  "maximumSigningAndFirstAttemptValiditySeconds": 300,
-  "authorizationSemantics": "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED",
+  "maximumDispatchIntentAuthorizationValiditySeconds": 300,
+  "authorizationSemantics": "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION",
+  "stagedRawTransactionTrustBoundary": "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+  "dispatchIntentFinalConfirmation": "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
+  "nonceScopedJournalExclusivity": "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED",
   "activationAllowed": false,
   "status": "SOURCE_BOUND_OWNER_NO_DEPLOYMENT_AUTHORIZATION"
 }

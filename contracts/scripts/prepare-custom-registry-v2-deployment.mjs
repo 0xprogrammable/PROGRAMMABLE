@@ -7,16 +7,23 @@ import {
   encodeDeployData,
   getAddress,
   getContractAddress,
-  http,
   keccak256,
 } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  assertNoExistingTransactionIntent,
+  assertReleaseEvidenceOutput,
+  assertReleaseEvidencePath,
+} from "./custom-registry-v2-release-evidence.mjs";
 
 import {
   REGISTRY_PREFLIGHT_SCHEMA,
   assessDeploymentCost,
+  assertSettledDeployerNonce,
   assertPredictedAddressUnoccupied,
   computeConstructorCommitment,
+  createRpcProviderBindings,
+  releaseRpcTransport,
   requireDistinctRpcOrigins,
   sha256,
 } from "./custom-registry-v2-deployment-guards.mjs";
@@ -26,7 +33,11 @@ import {
   loadRegistryDeploymentInputs,
 } from "./custom-registry-v2-deployment-plan.mjs";
 import { assertCustomRegistryV2ProductionConstructor } from "./custom-registry-v2-production-policy.mjs";
-import { assertDistinctControllerOwners } from "./custom-registry-v2-safe-controller-guards.mjs";
+import {
+  assertDistinctControllerOwners,
+  assertSafeCustodyProof,
+} from "./custom-registry-v2-safe-controller-guards.mjs";
+import { verifySafeCustodyRoleReadbacks } from "./custom-registry-v2-keychain-custody.mjs";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -36,10 +47,7 @@ const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
 }
-const output = path.resolve(process.argv[outputIndex + 1]);
-if (!output.startsWith("/tmp/")) {
-  throw new Error("preflight output must be under /tmp");
-}
+const output = assertReleaseEvidenceOutput(process.argv[outputIndex + 1]);
 
 const required = (name) => {
   const value = process.env[name]?.trim();
@@ -66,6 +74,10 @@ if (
 ) {
   throw new Error("two explicit distinct RPC provider identities are required");
 }
+const rpcProviderBindings = createRpcProviderBindings(providerIds, [
+  rpcA,
+  rpcB,
+]);
 const maxFeePerGas = positiveInteger(
   "REGISTRY_MAX_FEE_PER_GAS_WEI",
   (1n << 256n) - 1n,
@@ -86,12 +98,9 @@ const deployer = getAddress(required("REGISTRY_DEPLOYER"));
 const admin = getAddress(required("REGISTRY_ADMIN"));
 const releaseOwner = getAddress(required("REGISTRY_RELEASE_OWNER"));
 
-const safeVerificationPath = path.resolve(
+const safeVerificationPath = assertReleaseEvidencePath(
   required("REGISTRY_SAFE_VERIFICATION_PATH"),
 );
-if (!safeVerificationPath.startsWith("/tmp/")) {
-  throw new Error("Safe verification must be under /tmp");
-}
 const safeVerificationBytes = await readFile(safeVerificationPath);
 if (
   sha256(safeVerificationBytes) !==
@@ -123,10 +132,10 @@ if (
   getAddress(safeVerification.admin) !== admin ||
   getAddress(safeVerification.releaseOwner) !== releaseOwner ||
   getAddress(manifest.releaseAuthorization.owner) !== releaseOwner ||
-  manifest.releaseAuthorization.maximumSigningAndFirstAttemptValiditySeconds !==
-    300 ||
+  manifest.releaseAuthorization
+    .maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
   manifest.releaseAuthorization.authorizationSemantics !==
-    "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED"
+    "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION"
 ) {
   throw new Error("deployer, admin, or release owner evidence mismatch");
 }
@@ -141,6 +150,24 @@ const controllerEvidence = roleNames.map((role) => {
 const controllers = controllerEvidence.map(({ address }) =>
   getAddress(address),
 );
+const custodyProofPath = assertReleaseEvidencePath(
+  required("REGISTRY_CUSTODY_PROOF_PATH"),
+);
+const custodyProofBytes = await readFile(custodyProofPath);
+if (
+  sha256(custodyProofBytes) !== safeVerification.custodyProofSha256 ||
+  sha256(custodyProofBytes) !== required("REGISTRY_CUSTODY_PROOF_SHA256")
+) {
+  throw new Error("Registry preflight custody proof digest mismatch");
+}
+const custodyProof = JSON.parse(custodyProofBytes);
+assertSafeCustodyProof({
+  proof: custodyProof,
+  deployer,
+  admin,
+  owners: controllerEvidence.map(({ owner }) => owner),
+});
+await verifySafeCustodyRoleReadbacks({ entries: custodyProof.roles });
 const config = {
   initialAdminDelay: BigInt(
     productionPolicy.constructorPolicy.initialAdminDelaySeconds,
@@ -169,7 +196,7 @@ const deploymentData = encodeDeployData({
   args: [config],
 });
 const clients = [rpcA, rpcB].map((url) =>
-  createPublicClient({ chain: mainnet, transport: http(url) }),
+  createPublicClient({ chain: mainnet, transport: releaseRpcTransport(url) }),
 );
 const heads = await Promise.all(
   clients.map(async (client) => {
@@ -196,6 +223,14 @@ const anchors = await Promise.all(
     client.getBlock({ blockNumber: commonFinalizedNumber }),
   ),
 );
+const finalizedNonces = await Promise.all(
+  clients.map((client) =>
+    client.getTransactionCount({
+      address: deployer,
+      blockNumber: commonFinalizedNumber,
+    }),
+  ),
+);
 if (
   anchors[0].hash !== anchors[1].hash ||
   heads[0].nonce !== heads[1].nonce ||
@@ -205,10 +240,15 @@ if (
     "independent preflight chain, nonce, or balance observations disagree",
   );
 }
-const exactPendingNonce = heads[0].nonce;
-if (!Number.isSafeInteger(exactPendingNonce)) {
-  throw new Error("deployer nonce exceeds JSON safe integer range");
-}
+const exactPendingNonce = assertSettledDeployerNonce({
+  pendingNonces: heads.map(({ nonce }) => nonce),
+  finalizedNonces,
+});
+assertNoExistingTransactionIntent({
+  chainId: 1,
+  signer: deployer,
+  nonce: exactPendingNonce,
+});
 const predictedAddress = getContractAddress({
   from: deployer,
   nonce: BigInt(exactPendingNonce),
@@ -325,6 +365,7 @@ const plan = {
   },
   chainId: 1,
   rpcProviders: providerIds,
+  rpcProviderBindings,
   commonFinalizedAnchor: {
     blockNumber: commonFinalizedNumber.toString(),
     blockHash: anchors[0].hash,
@@ -335,6 +376,7 @@ const plan = {
     kind: "CREATE",
     deployer,
     exactPendingNonce,
+    exactFinalizedNonce: finalizedNonces[0],
     predictedAddress,
     gasEstimates: observations.map(({ providerId, estimatedGas }) => ({
       providerId,
@@ -393,9 +435,15 @@ const plan = {
   },
   releaseAuthorization: {
     owner: releaseOwner,
-    maximumSigningAndFirstAttemptValiditySeconds: 300,
+    maximumDispatchIntentAuthorizationValiditySeconds: 300,
     authorizationSemantics:
       manifest.releaseAuthorization.authorizationSemantics,
+    stagedRawTransactionTrustBoundary:
+      manifest.releaseAuthorization.stagedRawTransactionTrustBoundary,
+    dispatchIntentFinalConfirmation:
+      manifest.releaseAuthorization.dispatchIntentFinalConfirmation,
+    nonceScopedJournalExclusivity:
+      manifest.releaseAuthorization.nonceScopedJournalExclusivity,
   },
   broadcastAllowed: false,
   signingAllowed: false,

@@ -4,19 +4,19 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  createPublicClient,
-  getAddress,
-  hexToBigInt,
-  http,
-  keccak256,
-} from "viem";
+import { createPublicClient, getAddress, hexToBigInt, keccak256 } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  assertCanonicalTransactionJournalPath,
+  assertReleaseEvidenceOutput,
+  assertReleaseEvidencePath,
+} from "./custom-registry-v2-release-evidence.mjs";
 
 import {
   SAFE_FACTORY_ABI,
   SAFE_READ_ABI,
   SAFE_RECEIPTS_SCHEMA,
+  SAFE_STAGED_TRANSACTION_SCHEMA,
   SAFE_VERIFICATION_SCHEMA,
   assertAtomicProxyCreationLogs,
   assertSafePolicyBoundPlan,
@@ -25,11 +25,16 @@ import {
   assertSafeRuntimeState,
   verifySafeReviewedAuthorizationSignature,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
-import { requireDistinctRpcOrigins } from "./custom-registry-v2-deployment-guards.mjs";
 import {
+  assertFinalizedReceiptAfterDispatchIntent,
+  assertRpcProviderBindings,
+  createRpcProviderBinding,
+  releaseRpcTransport,
+} from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  assertDispatchAuthorizedJournal,
   assertExactSerializedEip1559Transaction,
-  assertSignedAttemptWindow,
-  assertTrustedTimeEvidence,
+  assertStagedTransactionEvidence,
   loadDurableJsonLines,
 } from "./custom-registry-v2-transaction-journal.mjs";
 
@@ -41,17 +46,11 @@ const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
 }
-const outputPath = path.resolve(process.argv[outputIndex + 1]);
-if (!outputPath.startsWith("/tmp/")) {
-  throw new Error("Safe verification output must be under /tmp");
-}
+const outputPath = assertReleaseEvidenceOutput(process.argv[outputIndex + 1]);
 const sha256 = (bytes) =>
   `0x${createHash("sha256").update(bytes).digest("hex")}`;
 const readReviewed = async (envPath, envDigest, label) => {
-  const filePath = path.resolve(process.env[envPath] ?? "");
-  if (!filePath.startsWith("/tmp/")) {
-    throw new Error(`${label} must be under /tmp`);
-  }
+  const filePath = assertReleaseEvidencePath(process.env[envPath] ?? "");
   const bytes = await readFile(filePath);
   const digest = sha256(bytes);
   if (digest !== process.env[envDigest]) {
@@ -69,12 +68,22 @@ const authorized = await readReviewed(
   "REGISTRY_SAFE_BROADCAST_AUTHORIZATION_SHA256",
   "Safe broadcast authorization",
 );
-const receiptJournalPath = path.resolve(
+const stagedTransactionPath = assertReleaseEvidencePath(
+  process.env.REGISTRY_SAFE_STAGED_TRANSACTION_PATH ?? "",
+  { mode: 0o400 },
+);
+const stagedTransactionBytes = await readFile(stagedTransactionPath);
+const stagedTransactionSha256 = sha256(stagedTransactionBytes);
+if (
+  stagedTransactionSha256 !==
+  process.env.REGISTRY_SAFE_STAGED_TRANSACTION_SHA256
+) {
+  throw new Error("staged Safe transaction digest mismatch");
+}
+const stagedTransaction = JSON.parse(stagedTransactionBytes);
+const receiptJournalPath = assertReleaseEvidencePath(
   process.env.REGISTRY_SAFE_DEPLOYMENT_RECEIPTS_PATH ?? "",
 );
-if (!receiptJournalPath.startsWith("/tmp/")) {
-  throw new Error("Safe deployment receipt journal must be under /tmp");
-}
 const receiptJournalBytes = await readFile(receiptJournalPath);
 const receiptJournalDigest = sha256(receiptJournalBytes);
 if (
@@ -83,17 +92,15 @@ if (
   throw new Error("Safe deployment receipt journal digest mismatch");
 }
 const records = await loadDurableJsonLines(receiptJournalPath);
-const header = records[0];
-const signedRecords = records.filter(
-  ({ event }) => event === "SIGNED_ATOMIC_NOT_CONFIRMED",
-);
-const signed = signedRecords[0];
-const responseRecords = records.filter(
-  ({ event }) => event === "BROADCAST_PROVIDER_RESPONSES",
-);
-const response = responseRecords[0];
 const plan = reviewed.value;
 const authorization = authorized.value;
+assertCanonicalTransactionJournalPath({
+  candidate: receiptJournalPath,
+  chainId: 1,
+  signer: plan.atomicTransaction.from,
+  nonce: plan.atomicTransaction.nonce,
+  mustExist: true,
+});
 assertSafePreflightEnvelope(plan, 0, { allowExpired: true });
 assertSafeReviewedAuthorization({
   authorization,
@@ -103,70 +110,32 @@ assertSafeReviewedAuthorization({
   allowExpired: true,
 });
 await verifySafeReviewedAuthorizationSignature(authorization);
+await assertStagedTransactionEvidence({
+  evidence: stagedTransaction,
+  schemaVersion: SAFE_STAGED_TRANSACTION_SCHEMA,
+  preflightSha256: reviewed.digest,
+  expectedTransaction: plan.atomicTransaction,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
 if (
-  header?.schemaVersion !== SAFE_RECEIPTS_SCHEMA ||
-  header.event !== "JOURNAL_OPEN" ||
-  header.chainId !== 1 ||
-  header.preflightSha256 !== reviewed.digest ||
-  header.authorizationSha256 !== authorized.digest ||
-  header.source?.commit !== plan.source.commit ||
-  header.source?.tree !== plan.source.tree ||
-  header.policySha256 !== plan.policySha256 ||
-  header.custodyProofSha256 !== plan.custodyProofSha256 ||
-  signedRecords.length !== 1 ||
-  records.indexOf(signed) !== 1 ||
-  responseRecords.length !== 1 ||
-  response.transactionHash !== signed.transactionHash ||
-  records.indexOf(response) < 2 ||
-  records.some(
-    (entry) =>
-      entry.transactionHash !== undefined &&
-      entry.transactionHash !== signed.transactionHash,
-  ) ||
-  JSON.stringify(
-    response.providerResponses?.map(({ providerId }) => providerId),
-  ) !== JSON.stringify(plan.rpcProviders) ||
-  response.providerResponses?.some(
-    (entry) =>
-      entry.status === "fulfilled" &&
-      entry.transactionHash !== signed.transactionHash,
-  ) ||
-  !response.providerResponses?.some(
-    (entry) =>
-      entry.status === "fulfilled" &&
-      entry.transactionHash === signed.transactionHash,
-  )
+  authorization.stagedTransactionSha256 !== stagedTransactionSha256 ||
+  authorization.authorizedTransactionHash !== stagedTransaction.transactionHash
 ) {
-  throw new Error("Safe atomic deployment journal is invalid");
+  throw new Error("owner authorization does not bind staged Safe transaction");
 }
-assertTrustedTimeEvidence(signed.trustedTime, signed.signedAtTimestamp);
-assertTrustedTimeEvidence(
-  response.requestStartedTrustedTime,
-  response.requestStartedAtTimestamp,
-);
-await assertExactSerializedEip1559Transaction({
-  serializedTransaction: signed.serializedTransaction,
-  transactionHash: signed.transactionHash,
-  expected: plan.atomicTransaction,
-});
-assertSignedAttemptWindow({
-  authorization,
-  signedAt: signed.signedAtTimestamp,
-  firstAttemptAt: response.requestStartedAtTimestamp,
-});
-
-const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+const commit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
-const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
+const tree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
 if (
   commit !== plan.source.commit ||
   tree !== plan.source.tree ||
-  execFileSync("git", ["status", "--porcelain"], {
+  execFileSync("/usr/bin/git", ["status", "--porcelain"], {
     cwd: root,
     encoding: "utf8",
   }) !== ""
@@ -189,16 +158,60 @@ assertSafePolicyBoundPlan({
 const rpcA = process.env.REGISTRY_PREFLIGHT_RPC_URL_A;
 const rpcB = process.env.REGISTRY_PREFLIGHT_RPC_URL_B;
 if (!rpcA || !rpcB) throw new Error("two RPC endpoints are required");
-requireDistinctRpcOrigins(rpcA, rpcB);
 const providerIds = [
   process.env.REGISTRY_RPC_PROVIDER_ID_A,
   process.env.REGISTRY_RPC_PROVIDER_ID_B,
 ];
-if (JSON.stringify(providerIds) !== JSON.stringify(plan.rpcProviders)) {
-  throw new Error("Safe RPC provider identity drifted from reviewed plan");
+const providerBindings = assertRpcProviderBindings({
+  plan,
+  providerIds,
+  rpcUrls: [rpcA, rpcB],
+});
+const privateSubmissionBinding = createRpcProviderBinding(
+  process.env.REGISTRY_SAFE_PRIVATE_SUBMISSION_PROVIDER_ID,
+  process.env.REGISTRY_SAFE_PRIVATE_SUBMISSION_RPC_URL,
+);
+if (
+  JSON.stringify(privateSubmissionBinding) !==
+  JSON.stringify({
+    providerId: plan.privateSubmission?.providerId,
+    sanitizedUrl: plan.privateSubmission?.sanitizedUrl,
+  })
+) {
+  throw new Error("private Safe submission binding drifted from reviewed plan");
 }
+const { signed, intent } = assertDispatchAuthorizedJournal({
+  records,
+  schemaVersion: SAFE_RECEIPTS_SCHEMA,
+  signedEvent: "SIGNED_ATOMIC_NOT_CONFIRMED",
+  transactionHash: stagedTransaction.transactionHash,
+  stagedTransactionSha256,
+  authorizationSha256: authorized.digest,
+  authorization,
+  broadcastProviderBindings: [privateSubmissionBinding],
+  discoveryProviderBindings: providerBindings,
+  allowedTailEvents: [
+    "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+    "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+  ],
+});
+if (
+  records[0].chainId !== 1 ||
+  records[0].preflightSha256 !== reviewed.digest ||
+  records[0].source?.commit !== plan.source.commit ||
+  records[0].source?.tree !== plan.source.tree ||
+  records[0].policySha256 !== plan.policySha256 ||
+  records[0].custodyProofSha256 !== plan.custodyProofSha256
+) {
+  throw new Error("Safe atomic deployment journal release binding is invalid");
+}
+await assertExactSerializedEip1559Transaction({
+  serializedTransaction: signed.serializedTransaction,
+  transactionHash: signed.transactionHash,
+  expected: plan.atomicTransaction,
+});
 const clients = [rpcA, rpcB].map((url) =>
-  createPublicClient({ chain: mainnet, transport: http(url) }),
+  createPublicClient({ chain: mainnet, transport: releaseRpcTransport(url) }),
 );
 const finalizedHeads = await Promise.all(
   clients.map((client) => client.getBlock({ blockTag: "finalized" })),
@@ -295,12 +308,20 @@ const observations = await Promise.all(
     const receiptBlock = await client.getBlock({
       blockNumber: receipt.blockNumber,
     });
+    assertFinalizedReceiptAfterDispatchIntent({
+      receiptBlockTimestamp: receiptBlock.timestamp,
+      dispatchIntentTrustedTime: intent.activatedTrustedTime,
+    });
     if (
       receipt.status !== "success" ||
+      transaction.hash !== signed.transactionHash ||
+      receipt.transactionHash !== signed.transactionHash ||
       receipt.contractAddress !== null ||
       receipt.blockNumber > commonFinalizedNumber ||
       transaction.blockNumber !== receipt.blockNumber ||
       transaction.blockHash !== receipt.blockHash ||
+      receiptBlock.number !== receipt.blockNumber ||
+      receiptBlock.hash !== receipt.blockHash ||
       getAddress(transaction.from) !==
         getAddress(plan.atomicTransaction.from) ||
       getAddress(transaction.to) !== getAddress(plan.atomicTransaction.to) ||
@@ -323,6 +344,19 @@ const observations = await Promise.all(
       controllers: plan.controllers,
       singleton: plan.singleton.address,
     });
+    if (
+      receipt.logs.some(
+        (log) =>
+          log.transactionHash !== signed.transactionHash ||
+          log.blockHash !== receipt.blockHash ||
+          log.blockNumber !== receipt.blockNumber ||
+          log.removed === true,
+      )
+    ) {
+      throw new Error(
+        "Safe receipt log metadata differs from canonical receipt",
+      );
+    }
     return { transaction, receipt, receiptBlock };
   }),
 );
@@ -416,8 +450,7 @@ for (const controller of plan.controllers) {
         !code ||
         code === "0x" ||
         keccak256(code) !== plan.proxyFactory.proxyRuntimeCodeKeccak256 ||
-        safeNonce !== 0n ||
-        balance !== 0n
+        safeNonce !== 0n
       ) {
         throw new Error(`${controller.role} SafeProxy runtime mismatch`);
       }
@@ -465,6 +498,15 @@ for (const controller of plan.controllers) {
     fallbackHandler: "0x0000000000000000000000000000000000000000",
     guard: "0x0000000000000000000000000000000000000000",
   });
+}
+
+const closingFinalized = await Promise.all(
+  clients.map((client) =>
+    client.getBlock({ blockNumber: commonFinalizedNumber }),
+  ),
+);
+if (closingFinalized.some(({ hash }) => hash !== finalizedA.hash)) {
+  throw new Error("finalized Safe snapshot drifted during verification");
 }
 
 const verification = {

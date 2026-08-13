@@ -4,19 +4,27 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createPublicClient, getAddress, http, keccak256, toHex } from "viem";
+import { createPublicClient, getAddress, keccak256, toHex } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  assertCanonicalTransactionJournalPath,
+  assertReleaseEvidenceOutput,
+  assertReleaseEvidencePath,
+  releaseEvidenceRoot,
+} from "./custom-registry-v2-release-evidence.mjs";
 
 import {
   REGISTRY_RECEIPT_SCHEMA,
+  REGISTRY_STAGED_TRANSACTION_SCHEMA,
   REGISTRY_SOURCE_VERIFICATION_SCHEMA,
   REGISTRY_VERIFICATION_SCHEMA,
   ZERO_ADDRESS,
   assertFinalizedDeploymentTransaction,
   assertPostDeploymentBinding,
+  assertRpcProviderBindings,
+  releaseRpcTransport,
   assertReviewedAuthorization,
   assertSourceVerificationBinding,
-  requireDistinctRpcOrigins,
   sha256,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
@@ -26,9 +34,9 @@ import {
   commonFinalizedBlock,
 } from "./custom-registry-v2-live-verification.mjs";
 import {
+  assertDispatchAuthorizedJournal,
   assertExactSerializedEip1559Transaction,
-  assertSignedAttemptWindow,
-  assertTrustedTimeEvidence,
+  assertStagedTransactionEvidence,
   loadDurableJsonLines,
 } from "./custom-registry-v2-transaction-journal.mjs";
 import {
@@ -45,19 +53,14 @@ const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
 }
-const outputPath = path.resolve(process.argv[outputIndex + 1]);
-if (!outputPath.startsWith("/tmp/")) {
-  throw new Error("Registry verification output must be under /tmp");
-}
+const outputPath = assertReleaseEvidenceOutput(process.argv[outputIndex + 1]);
 const required = (name) => {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
 };
 const readEvidence = async (pathName, digestName, label) => {
-  const filePath = path.resolve(required(pathName));
-  if (!filePath.startsWith("/tmp/"))
-    throw new Error(`${label} must be under /tmp`);
+  const filePath = assertReleaseEvidencePath(required(pathName));
   const bytes = await readFile(filePath);
   const digest = sha256(bytes);
   if (digest !== required(digestName))
@@ -67,98 +70,103 @@ const readEvidence = async (pathName, digestName, label) => {
 
 if (process.argv.includes("--finalize-source")) {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "registry-v2-finalize-"),
+    path.join(releaseEvidenceRoot(), "registry-v2-finalize-"),
   );
-  const freshOnchainPath = path.join(directory, "fresh-onchain.json");
-  const result = spawnSync(
-    process.execPath,
-    [fileURLToPath(import.meta.url), "--output", freshOnchainPath],
-    {
-      cwd: root,
-      env: process.env,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    },
-  );
-  if (result.status !== 0) {
-    await rm(directory, { recursive: true, force: true });
-    throw new Error("fresh full onchain release verification failed");
-  }
-  const freshOnchainBytes = await readFile(freshOnchainPath);
-  const freshOnchain = JSON.parse(freshOnchainBytes);
-  const reviewed = await readEvidence(
-    "REGISTRY_REVIEWED_PLAN_PATH",
-    "REGISTRY_REVIEWED_PLAN_SHA256",
-    "reviewed plan",
-  );
-  const compilation = await compileReviewedRegistry({
-    root,
-    source: freshOnchain.source,
-  });
-  if (
-    freshOnchain.schemaVersion !== REGISTRY_VERIFICATION_SCHEMA ||
-    freshOnchain.status !== "VERIFIED_FINALIZED_ONCHAIN_AWAITING_SOURCE" ||
-    freshOnchain.verified !== false ||
-    freshOnchain.chainId !== 1 ||
-    reviewed.value.source?.commit !== freshOnchain.source?.commit ||
-    reviewed.value.source?.tree !== freshOnchain.source?.tree ||
-    reviewed.value.expectedTransaction?.input !==
-      `${compilation.creationBytecode}${freshOnchain.constructorArguments.slice(2)}`
-  ) {
-    await rm(directory, { recursive: true, force: true });
-    throw new Error(
-      "fresh onchain evidence does not bind self-owned compilation",
+  let final;
+  try {
+    const freshOnchainPath = path.join(directory, "fresh-onchain.json");
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(import.meta.url), "--output", freshOnchainPath],
+      {
+        cwd: root,
+        env: process.env,
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+      },
     );
+    if (result.status !== 0) {
+      throw new Error("fresh full onchain release verification failed");
+    }
+    const freshOnchainBytes = await readFile(freshOnchainPath);
+    const freshOnchain = JSON.parse(freshOnchainBytes);
+    const reviewed = await readEvidence(
+      "REGISTRY_REVIEWED_PLAN_PATH",
+      "REGISTRY_REVIEWED_PLAN_SHA256",
+      "reviewed plan",
+    );
+    const compilation = await compileReviewedRegistry({
+      root,
+      source: freshOnchain.source,
+    });
+    if (
+      freshOnchain.schemaVersion !== REGISTRY_VERIFICATION_SCHEMA ||
+      freshOnchain.status !== "VERIFIED_FINALIZED_ONCHAIN_AWAITING_SOURCE" ||
+      freshOnchain.verified !== false ||
+      freshOnchain.chainId !== 1 ||
+      reviewed.value.source?.commit !== freshOnchain.source?.commit ||
+      reviewed.value.source?.tree !== freshOnchain.source?.tree ||
+      reviewed.value.expectedTransaction?.input !==
+        `${compilation.creationBytecode}${freshOnchain.constructorArguments.slice(2)}`
+    ) {
+      throw new Error(
+        "fresh onchain evidence does not bind self-owned compilation",
+      );
+    }
+    const providers = await verifyRegistrySourceProviders({
+      compilation,
+      finalized: freshOnchain,
+      plan: reviewed.value,
+      etherscanApiKey: required("ETHERSCAN_API_KEY"),
+    });
+    const sourceVerification = {
+      schemaVersion: REGISTRY_SOURCE_VERIFICATION_SCHEMA,
+      status:
+        "FRESH_FULL_ONCHAIN_SELF_COMPILED_ETHERSCAN_VERIFIED_SOURCE_EXACT_CLOSURE_SOURCIFY_V2_EXACT",
+      chainId: 1,
+      source: freshOnchain.source,
+      contractAddress: freshOnchain.contractAddress,
+      transactionHash: freshOnchain.transactionHash,
+      runtimeCodeKeccak256: freshOnchain.runtimeCodeKeccak256,
+      constructorArguments: freshOnchain.constructorArguments,
+      fqcn: REGISTRY_FQCN,
+      onchainVerificationSha256: sha256(freshOnchainBytes),
+      compiler: {
+        version: compilation.compiler.version,
+        platform: compilation.compiler.platform,
+        architecture: compilation.compiler.architecture,
+        binarySha256: compilation.compiler.sha256,
+        standardJsonInputSha256: sha256(compilation.inputBytes),
+        standardJsonOutputSha256: sha256(compilation.outputBytes),
+      },
+      sourceClosure: Object.fromEntries(
+        Object.entries(compilation.input.sources).map(
+          ([sourcePath, source]) => [
+            sourcePath,
+            sha256(Buffer.from(source.content)),
+          ],
+        ),
+      ),
+      ...providers,
+      verified: true,
+    };
+    const sourceVerificationSha256 = sha256(
+      Buffer.from(JSON.stringify(sourceVerification)),
+    );
+    assertSourceVerificationBinding({
+      onchain: freshOnchain,
+      source: sourceVerification,
+    });
+    final = {
+      ...freshOnchain,
+      status: "VERIFIED_FINALIZED_AND_EXACT_SOURCE",
+      sourceVerificationSha256,
+      sourceVerification,
+      verified: true,
+    };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
-  const providers = await verifyRegistrySourceProviders({
-    compilation,
-    finalized: freshOnchain,
-    plan: reviewed.value,
-    etherscanApiKey: required("ETHERSCAN_API_KEY"),
-  });
-  const sourceVerification = {
-    schemaVersion: REGISTRY_SOURCE_VERIFICATION_SCHEMA,
-    status: "FRESH_FULL_ONCHAIN_SELF_COMPILED_DUAL_PROVIDER_EXACT",
-    chainId: 1,
-    source: freshOnchain.source,
-    contractAddress: freshOnchain.contractAddress,
-    transactionHash: freshOnchain.transactionHash,
-    runtimeCodeKeccak256: freshOnchain.runtimeCodeKeccak256,
-    constructorArguments: freshOnchain.constructorArguments,
-    fqcn: REGISTRY_FQCN,
-    onchainVerificationSha256: sha256(freshOnchainBytes),
-    compiler: {
-      version: compilation.compiler.version,
-      platform: compilation.compiler.platform,
-      architecture: compilation.compiler.architecture,
-      binarySha256: compilation.compiler.sha256,
-      standardJsonInputSha256: sha256(compilation.inputBytes),
-      standardJsonOutputSha256: sha256(compilation.outputBytes),
-    },
-    sourceClosure: Object.fromEntries(
-      Object.entries(compilation.input.sources).map(([sourcePath, source]) => [
-        sourcePath,
-        sha256(Buffer.from(source.content)),
-      ]),
-    ),
-    ...providers,
-    verified: true,
-  };
-  const sourceVerificationSha256 = sha256(
-    Buffer.from(JSON.stringify(sourceVerification)),
-  );
-  assertSourceVerificationBinding({
-    onchain: freshOnchain,
-    source: sourceVerification,
-  });
-  const final = {
-    ...freshOnchain,
-    status: "VERIFIED_FINALIZED_AND_EXACT_SOURCE",
-    sourceVerificationSha256,
-    sourceVerification,
-    verified: true,
-  };
-  await rm(directory, { recursive: true, force: true });
   await writeFile(outputPath, `${JSON.stringify(final, null, 2)}\n`, {
     flag: "wx",
     mode: 0o600,
@@ -184,66 +192,35 @@ const safeEvidence = await readEvidence(
   "REGISTRY_SAFE_VERIFICATION_SHA256",
   "Safe verification",
 );
-const journalPath = path.resolve(required("REGISTRY_DEPLOYMENT_JOURNAL_PATH"));
-if (!journalPath.startsWith("/tmp/")) {
-  throw new Error("deployment journal must be under /tmp");
+const stagedTransactionPath = assertReleaseEvidencePath(
+  required("REGISTRY_STAGED_TRANSACTION_PATH"),
+  { mode: 0o400 },
+);
+const stagedTransactionBytes = await readFile(stagedTransactionPath);
+const stagedTransactionSha256 = sha256(stagedTransactionBytes);
+if (
+  stagedTransactionSha256 !== required("REGISTRY_STAGED_TRANSACTION_SHA256")
+) {
+  throw new Error("staged Registry transaction digest mismatch");
 }
+const stagedTransaction = JSON.parse(stagedTransactionBytes);
+const journalPath = assertReleaseEvidencePath(
+  required("REGISTRY_DEPLOYMENT_JOURNAL_PATH"),
+);
 const journalBytes = await readFile(journalPath);
 if (sha256(journalBytes) !== required("REGISTRY_DEPLOYMENT_JOURNAL_SHA256")) {
   throw new Error("deployment journal digest mismatch");
 }
 const journal = await loadDurableJsonLines(journalPath);
-const header = journal[0];
-const signedRecords = journal.filter(
-  (entry) => entry.event === "SIGNED_NOT_CONFIRMED",
-);
-const signed = signedRecords[0];
-const responseRecords = journal.filter(
-  (entry) => entry.event === "BROADCAST_PROVIDER_RESPONSES",
-);
-const responseRecord = responseRecords[0];
-if (
-  header?.schemaVersion !== REGISTRY_RECEIPT_SCHEMA ||
-  header.event !== "JOURNAL_OPEN" ||
-  header.preflightSha256 !== reviewed.digest ||
-  header.authorizationSha256 !== authorized.digest ||
-  header.safeVerificationSha256 !== safeEvidence.digest ||
-  signedRecords.length !== 1 ||
-  journal.indexOf(signed) !== 1 ||
-  !signed?.serializedTransaction ||
-  keccak256(signed.serializedTransaction) !== signed.transactionHash ||
-  responseRecords.length !== 1 ||
-  responseRecord.transactionHash !== signed.transactionHash ||
-  journal.indexOf(responseRecord) < 2 ||
-  JSON.stringify(
-    responseRecord.providerResponses?.map(({ providerId }) => providerId),
-  ) !== JSON.stringify(reviewed.value.rpcProviders) ||
-  responseRecord.providerResponses?.some(
-    (response) =>
-      response.status === "fulfilled" &&
-      response.transactionHash !== signed.transactionHash,
-  ) ||
-  !responseRecord.providerResponses?.some(
-    (response) =>
-      response.status === "fulfilled" &&
-      response.transactionHash === signed.transactionHash,
-  ) ||
-  journal.some(
-    (entry) =>
-      entry.transactionHash !== undefined &&
-      entry.transactionHash !== signed.transactionHash,
-  )
-) {
-  throw new Error("deployment receipt journal is invalid");
-}
-assertTrustedTimeEvidence(signed.trustedTime, signed.signedAtTimestamp);
-assertTrustedTimeEvidence(
-  responseRecord.requestStartedTrustedTime,
-  responseRecord.requestStartedAtTimestamp,
-);
-
 const plan = reviewed.value;
 const authorization = authorized.value;
+assertCanonicalTransactionJournalPath({
+  candidate: journalPath,
+  chainId: 1,
+  signer: plan.expectedTransaction.from,
+  nonce: plan.expectedTransaction.nonce,
+  mustExist: true,
+});
 const planInputs = await assertRegistryDeploymentPlan({
   root,
   plan,
@@ -259,29 +236,61 @@ assertReviewedAuthorization({
   allowExpired: true,
 });
 await verifyReviewedAuthorizationSignature(authorization);
+await assertStagedTransactionEvidence({
+  evidence: stagedTransaction,
+  schemaVersion: REGISTRY_STAGED_TRANSACTION_SCHEMA,
+  preflightSha256: reviewed.digest,
+  expectedTransaction: plan.expectedTransaction,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
+if (
+  authorization.stagedTransactionSha256 !== stagedTransactionSha256 ||
+  authorization.authorizedTransactionHash !== stagedTransaction.transactionHash
+) {
+  throw new Error(
+    "owner authorization does not bind staged Registry transaction",
+  );
+}
+const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
+const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
+const providerIds = [
+  required("REGISTRY_RPC_PROVIDER_ID_A"),
+  required("REGISTRY_RPC_PROVIDER_ID_B"),
+];
+const providerBindings = assertRpcProviderBindings({
+  plan,
+  providerIds,
+  rpcUrls: [rpcA, rpcB],
+});
+const { signed, intent } = assertDispatchAuthorizedJournal({
+  records: journal,
+  schemaVersion: REGISTRY_RECEIPT_SCHEMA,
+  signedEvent: "SIGNED_NOT_CONFIRMED",
+  transactionHash: stagedTransaction.transactionHash,
+  stagedTransactionSha256,
+  authorizationSha256: authorized.digest,
+  authorization,
+  broadcastProviderBindings: providerBindings,
+  discoveryProviderBindings: providerBindings,
+  allowedTailEvents: [
+    "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+    "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+  ],
+});
 await assertExactSerializedEip1559Transaction({
   serializedTransaction: signed.serializedTransaction,
   transactionHash: signed.transactionHash,
   expected: plan.expectedTransaction,
 });
-assertSignedAttemptWindow({
-  authorization,
-  signedAt: signed.signedAtTimestamp,
-  firstAttemptAt: responseRecord.requestStartedAtTimestamp,
-});
-
-const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
-const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
-requireDistinctRpcOrigins(rpcA, rpcB);
-const providerIds = [
-  required("REGISTRY_RPC_PROVIDER_ID_A"),
-  required("REGISTRY_RPC_PROVIDER_ID_B"),
-];
-if (JSON.stringify(providerIds) !== JSON.stringify(plan.rpcProviders)) {
-  throw new Error("RPC provider identity drifted from reviewed plan");
+if (
+  journal[0].preflightSha256 !== reviewed.digest ||
+  journal[0].safeVerificationSha256 !== safeEvidence.digest
+) {
+  throw new Error("deployment receipt journal release binding is invalid");
 }
 const clients = [rpcA, rpcB].map((url) =>
-  createPublicClient({ chain: mainnet, transport: http(url) }),
+  createPublicClient({ chain: mainnet, transport: releaseRpcTransport(url) }),
 );
 const finalized = await commonFinalizedBlock(clients);
 const reviewedAnchor = await Promise.all(
@@ -340,6 +349,8 @@ const normalizedTransaction = ({
   receiptContractAddress: getAddress(receipt.contractAddress),
   receiptBlockNumber: receipt.blockNumber.toString(),
   receiptBlockHash: receipt.blockHash,
+  fetchedReceiptBlockNumber: receiptBlock.number.toString(),
+  fetchedReceiptBlockHash: receiptBlock.hash,
   receiptTransactionHash: receipt.transactionHash,
   receiptTransactionIndex: receipt.transactionIndex,
   receiptGasUsed: receipt.gasUsed.toString(),
@@ -349,6 +360,11 @@ const normalizedTransaction = ({
     topics: log.topics,
     data: log.data,
     logIndex: log.logIndex,
+    transactionHash: log.transactionHash,
+    transactionIndex: log.transactionIndex,
+    blockHash: log.blockHash,
+    blockNumber: log.blockNumber?.toString(),
+    removed: log.removed,
   })),
   receiptBlockTimestamp: receiptBlock.timestamp.toString(),
   runtimeCodeKeccak256: keccak256(runtime),
@@ -365,6 +381,7 @@ assertFinalizedDeploymentTransaction({
   transactionHash: signed.transactionHash,
   plan,
   authorization,
+  dispatchIntentTrustedTime: intent.activatedTrustedTime,
 });
 const runtimeA = chainObservations[0].runtime;
 const runtimeB = chainObservations[1].runtime;
@@ -583,6 +600,12 @@ const safeControllers = await assertSafeControllersAtBlock({
   safeVerification: planInputs.safeVerification,
   safePolicy: JSON.parse(planInputs.safePolicyBytes),
 });
+const closingFinalized = await Promise.all(
+  clients.map((client) => client.getBlock({ blockNumber: finalized.number })),
+);
+if (closingFinalized.some(({ hash }) => hash !== finalized.hash)) {
+  throw new Error("finalized Registry snapshot drifted during verification");
+}
 
 const creationBytecodeLength = planInputs.artifact.bytecode.object.length;
 if (

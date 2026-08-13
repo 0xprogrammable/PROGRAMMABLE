@@ -2,7 +2,6 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 
 import { getAddress } from "viem";
@@ -18,6 +17,11 @@ import {
   compileReviewedRegistry,
   verifyRegistrySourceProviders,
 } from "./custom-registry-v2-source-verification-core.mjs";
+import {
+  assertReleaseEvidenceOutput,
+  assertReleaseEvidencePath,
+  releaseEvidenceRoot,
+} from "./custom-registry-v2-release-evidence.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const submitSourcify = process.argv.includes("--submit-sourcify");
@@ -31,12 +35,9 @@ const required = (name) => {
   if (!value) throw new Error(`${name} is required`);
   return value;
 };
-const onchainPath = path.resolve(
+const onchainPath = assertReleaseEvidencePath(
   required("REGISTRY_ONCHAIN_VERIFICATION_PATH"),
 );
-if (!onchainPath.startsWith("/tmp/")) {
-  throw new Error("onchain verification must be under /tmp");
-}
 let onchainBytes = await readFile(onchainPath);
 if (sha256(onchainBytes) !== required("REGISTRY_ONCHAIN_VERIFICATION_SHA256")) {
   throw new Error("onchain verification digest mismatch");
@@ -53,11 +54,11 @@ if (
 ) {
   throw new Error("onchain verification is invalid or already finalized");
 }
-const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+const commit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
-const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
+const tree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
@@ -65,7 +66,7 @@ if (
   commit !== onchain.source?.commit ||
   tree !== onchain.source?.tree ||
   ((submitSourcify || submitEtherscan || capture) &&
-    execFileSync("git", ["status", "--porcelain"], {
+    execFileSync("/usr/bin/git", ["status", "--porcelain"], {
       cwd: root,
       encoding: "utf8",
     }) !== "")
@@ -76,7 +77,8 @@ if (
 }
 if (submitSourcify || submitEtherscan || capture) {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "registry-v2-source-trust-root-"),
+    path.join(releaseEvidenceRoot(), "registry-v2-source-trust-root-"),
+    { encoding: "utf8" },
   );
   const freshPath = path.join(directory, "fresh-onchain.json");
   try {
@@ -141,10 +143,9 @@ const compilation = await compileReviewedRegistry({
   root,
   source: onchain.source,
 });
-const planPath = path.resolve(required("REGISTRY_REVIEWED_PLAN_PATH"));
-if (!planPath.startsWith("/tmp/")) {
-  throw new Error("reviewed plan must be under /tmp");
-}
+const planPath = assertReleaseEvidencePath(
+  required("REGISTRY_REVIEWED_PLAN_PATH"),
+);
 const planBytes = await readFile(planPath);
 if (sha256(planBytes) !== required("REGISTRY_REVIEWED_PLAN_SHA256")) {
   throw new Error("reviewed plan digest mismatch");
@@ -187,7 +188,7 @@ if (!submitSourcify && !submitEtherscan && !capture) {
       next: [
         "--submit-sourcify",
         "--submit-etherscan",
-        "--capture --output /tmp/...",
+        "--capture --output <protected release evidence root>/...",
       ],
     })}\n`,
   );
@@ -262,10 +263,7 @@ const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required for capture");
 }
-const outputPath = path.resolve(process.argv[outputIndex + 1]);
-if (!outputPath.startsWith("/tmp/")) {
-  throw new Error("source verification output must be under /tmp");
-}
+const outputPath = assertReleaseEvidenceOutput(process.argv[outputIndex + 1]);
 const providers = await verifyRegistrySourceProviders({
   compilation,
   finalized: onchain,
@@ -274,7 +272,8 @@ const providers = await verifyRegistrySourceProviders({
 });
 const evidence = {
   schemaVersion: REGISTRY_SOURCE_VERIFICATION_SCHEMA,
-  status: "SELF_COMPILED_ETHERSCAN_EXACT_SOURCIFY_V2_EXACT",
+  status:
+    "SELF_COMPILED_ETHERSCAN_VERIFIED_SOURCE_EXACT_CLOSURE_SOURCIFY_V2_EXACT",
   chainId: 1,
   source: onchain.source,
   onchainVerificationSha256: sha256(onchainBytes),

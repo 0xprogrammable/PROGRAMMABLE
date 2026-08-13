@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "programmable.custom-registry-v2-production-constructor.v1",
+  "schemaVersion": "programmable.custom-registry-v2-production-constructor.v2",
   "policyDocument": "config/custom-registry-v2-production-policy.json",
   "policyCommitmentAlgorithm": "keccak256-raw-file-bytes",
   "initialAdminDelaySeconds": 172800,

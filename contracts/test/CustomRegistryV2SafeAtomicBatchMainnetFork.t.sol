@@ -33,6 +33,7 @@ interface ISafeV141 {
 }
 
 contract CustomRegistryV2SafeAtomicBatchMainnetForkTest is Test {
+    uint256 internal constant REVIEWED_MAINNET_BLOCK = 25_747_889;
     address internal constant SINGLETON = 0x41675C099F32341bf84BFc5382aF534df5C7461a;
     address internal constant FACTORY = 0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67;
     address internal constant MULTISEND_CALL_ONLY = 0x9641d764fc13c8B624c04430C7356C1C7C8102e2;
@@ -43,25 +44,9 @@ contract CustomRegistryV2SafeAtomicBatchMainnetForkTest is Test {
         0xecd5bd14a08c5d2122379900b2f272bdf107a7e92423c10dd5fe3254386c9939;
     bytes32 internal constant PROXY_RUNTIME_HASH = 0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c;
 
-    address internal constant DEPLOYER = 0x13D457f281444e2C160C36A2Dc02c5A49C271361;
-    address[4] internal owners = [
-        0x519fcD5781C0964BC008D7e75E454301de319756,
-        0xb00D1d0676871a830Db690324aca8A9a090A89fD,
-        0xD4EdB7c736A6Bb9EA47D9606Ea80EF8CF25De0eF,
-        0x4f25905f2622538B6Cd371A5D8bb6b163Bc4B383
-    ];
-    address[4] internal expectedSafes = [
-        0xd8c824888f2f1ED75Ad339a22c816C772F551035,
-        0x19cbc0ca69166bEC68CBfbE00B117a014D6E2B69,
-        0xF77cBD754E8EAF25D83d6287117C0764ec361981,
-        0xA9DD5ECf5c7609d63A3135aF9F8Cd4D821904Ec6
-    ];
-    uint256[4] internal salts = [
-        uint256(17_617_897_239_101_837_117_177_080_654_048_181_435_023_415_572_887_786_950_068_943_254_098_972_935_077),
-        uint256(44_096_841_411_846_234_081_209_696_804_905_865_608_906_419_847_713_637_963_804_828_202_859_581_648_262),
-        uint256(31_357_831_541_499_710_372_809_238_130_690_992_481_015_648_600_276_251_008_730_804_611_193_782_025_375),
-        uint256(63_478_965_709_317_179_552_987_150_222_061_520_259_145_583_023_848_861_163_898_958_250_560_301_399_397)
-    ];
+    address internal constant DEPLOYER = address(0xD001);
+    address[4] internal owners = [address(0xA001), address(0xA002), address(0xA003), address(0xA004)];
+    uint256[4] internal salts = [uint256(101), uint256(102), uint256(103), uint256(104)];
 
     function setUp() public {
         string memory rpcUrl = vm.envOr("ETHEREUM_RPC_URL", string(""));
@@ -69,7 +54,7 @@ contract CustomRegistryV2SafeAtomicBatchMainnetForkTest is Test {
             vm.skip(true, "ETHEREUM_RPC_URL is required for the mainnet fork proof");
             return;
         }
-        vm.createSelectFork(rpcUrl);
+        vm.createSelectFork(rpcUrl, REVIEWED_MAINNET_BLOCK);
         assertEq(SINGLETON.codehash, SINGLETON_RUNTIME_HASH);
         assertEq(FACTORY.codehash, FACTORY_RUNTIME_HASH);
         assertEq(MULTISEND_CALL_ONLY.codehash, MULTISEND_RUNTIME_HASH);
@@ -85,7 +70,6 @@ contract CustomRegistryV2SafeAtomicBatchMainnetForkTest is Test {
         assertEq(MULTISEND_CALL_ONLY.balance, balanceBefore);
         assertEq(logs.length, 8);
         for (uint256 i; i < predicted.length; ++i) {
-            assertEq(predicted[i], expectedSafes[i]);
             assertEq(logs[i * 2].emitter, predicted[i]);
             assertEq(logs[i * 2].topics[0], keccak256("SafeSetup(address,address[],uint256,address,address)"));
             assertEq(address(uint160(uint256(logs[i * 2].topics[1]))), FACTORY);
@@ -109,6 +93,13 @@ contract CustomRegistryV2SafeAtomicBatchMainnetForkTest is Test {
             assertEq(ISafeV141(predicted[i]).nonce(), 0);
             assertEq(predicted[i].balance, 0);
         }
+    }
+
+    function test_currentHeadStillPinsOfficialSafeInfrastructure() public {
+        vm.createSelectFork(vm.envString("ETHEREUM_RPC_URL"));
+        assertEq(SINGLETON.codehash, SINGLETON_RUNTIME_HASH);
+        assertEq(FACTORY.codehash, FACTORY_RUNTIME_HASH);
+        assertEq(MULTISEND_CALL_ONLY.codehash, MULTISEND_RUNTIME_HASH);
     }
 
     function test_eachFailingInnerCallRollsBackEveryProxy() public {

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -29,7 +29,7 @@ export const AUTHORITY_SOURCE_PATHS = [
 ];
 
 const git = (cwd, args, options = {}) =>
-  execFileSync("git", args, {
+  execFileSync("/usr/bin/git", args, {
     cwd,
     encoding: options.encoding ?? "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -236,16 +236,17 @@ export async function resolvePinnedSolc() {
   if (sha256(bytes) !== lock.sha256) {
     throw new Error("downloaded official solc digest mismatch");
   }
-  const downloaded = path.join(
-    os.tmpdir(),
-    `programmable-solc-${process.platform}-${process.arch}-0.8.26`,
+  const downloadDirectory = await mkdtemp(
+    path.join(os.tmpdir(), "programmable-solc-0.8.26-"),
   );
+  const downloaded = path.join(downloadDirectory, "solc");
   await writeFile(downloaded, bytes, { mode: 0o700 });
   await chmod(downloaded, 0o700);
   const version = execFileSync(downloaded, ["--version"], {
     encoding: "utf8",
   });
   if (!version.includes("0.8.26+commit.8a97fa7a")) {
+    await rm(downloadDirectory, { recursive: true, force: true });
     throw new Error("downloaded official solc version mismatch");
   }
   return {
@@ -254,6 +255,7 @@ export async function resolvePinnedSolc() {
     platform: process.platform,
     architecture: process.arch,
     version: REGISTRY_COMPILER_VERSION,
+    cleanupDirectory: downloadDirectory,
   };
 }
 
@@ -265,14 +267,30 @@ export function materialCompilerSettings(settings) {
     evmVersion: settings?.evmVersion,
     viaIR: settings?.viaIR ?? false,
     libraries: settings?.libraries ?? {},
+    debug: settings?.debug ?? {},
   };
 }
+
+const allowedCompilerSettingKeys = new Set([
+  "remappings",
+  "optimizer",
+  "metadata",
+  "evmVersion",
+  "viaIR",
+  "libraries",
+  "debug",
+  "outputSelection",
+  "compilationTarget",
+]);
 
 export function assertExactSourceClosure(remote, local, label) {
   if (
     remote?.language !== local.language ||
     JSON.stringify(materialCompilerSettings(remote.settings)) !==
-      JSON.stringify(materialCompilerSettings(local.settings))
+      JSON.stringify(materialCompilerSettings(local.settings)) ||
+    Object.keys(remote.settings ?? {}).some(
+      (key) => !allowedCompilerSettingKeys.has(key),
+    )
   ) {
     throw new Error(`${label} compiler settings differ from reviewed source`);
   }
@@ -325,10 +343,17 @@ export async function compileReviewedRegistry({ root, source }) {
   const input = buildRegistryStandardJsonInput(sources);
   const inputBytes = Buffer.from(JSON.stringify(input));
   const compiler = await resolvePinnedSolc();
-  const outputBytes = execFileSync(compiler.path, ["--standard-json"], {
-    input: inputBytes,
-    maxBuffer: 128 * 1024 * 1024,
-  });
+  let outputBytes;
+  try {
+    outputBytes = execFileSync(compiler.path, ["--standard-json"], {
+      input: inputBytes,
+      maxBuffer: 128 * 1024 * 1024,
+    });
+  } finally {
+    if (compiler.cleanupDirectory) {
+      await rm(compiler.cleanupDirectory, { recursive: true, force: true });
+    }
+  }
   const output = JSON.parse(outputBytes.toString("utf8"));
   if (output.errors?.some(({ severity }) => severity === "error")) {
     throw new Error("self-owned exact Registry compilation failed");
@@ -573,7 +598,8 @@ export async function verifyRegistrySourceProviders({
     etherscan?.EVMVersion !== "cancun" ||
     etherscan?.Proxy !== "0" ||
     (etherscan?.Implementation ?? "") !== "" ||
-    (etherscan?.SimilarMatch ?? "") !== "" ||
+    ((etherscan?.SimilarMatch ?? "") !== "" &&
+      !/^0x[0-9a-fA-F]{40}$/u.test(etherscan.SimilarMatch)) ||
     (etherscan?.Library ?? "") !== "" ||
     normalizedHex(etherscan?.ConstructorArguments) !==
       normalizedHex(finalized.constructorArguments.slice(2))
@@ -691,7 +717,8 @@ export async function verifyRegistrySourceProviders({
   }
   return {
     etherscan: {
-      status: "exact-match",
+      status: "verified-source-exact-closure",
+      similarMatch: etherscan.SimilarMatch || null,
       sourceResponse: etherscanSourceResult.evidence,
       creationResponse: etherscanCreationResult.evidence,
       url: `https://etherscan.io/address/${address}#code`,

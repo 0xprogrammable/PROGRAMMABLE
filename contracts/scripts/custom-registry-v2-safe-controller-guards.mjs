@@ -12,6 +12,7 @@ import {
 } from "viem";
 import {
   AUTHORIZATION_SEMANTICS,
+  FLASHBOTS_PRIVATE_SUBMISSION,
   ZERO_ADDRESS,
 } from "./custom-registry-v2-deployment-guards.mjs";
 
@@ -88,13 +89,15 @@ export const SAFE_SETUP_EVENT_ABI = [
 ];
 
 export const SAFE_PLAN_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-preflight.v3";
+  "programmable.custom-registry-v2-safe-controller-preflight.v5";
 export const SAFE_AUTHORIZATION_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-authorization.v3";
+  "programmable.custom-registry-v2-safe-controller-authorization.v4";
 export const SAFE_RECEIPTS_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-receipts.v4";
+  "programmable.custom-registry-v2-safe-controller-receipts.v6";
 export const SAFE_VERIFICATION_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-verification.v3";
+  "programmable.custom-registry-v2-safe-controller-verification.v5";
+export const SAFE_STAGED_TRANSACTION_SCHEMA =
+  "programmable.custom-registry-v2-staged-safe-atomic-transaction.v1";
 export const SAFE_CUSTODY_PROOF_SCHEMA =
   "programmable.custom-registry-v2-keychain-custody-proof.v2";
 export const SAFE_CONTROLLER_ROLES = [
@@ -141,9 +144,11 @@ export function safeAtomicBatchInput(calls) {
 
 export function computeSafeReviewedPlanDigest({
   preflightSha256,
+  stagedTransactionSha256,
+  authorizedTransactionHash,
   ownerAuthorizationAddress,
   notBeforeTimestamp,
-  firstAttemptExpiresAtTimestamp,
+  dispatchIntentExpiresAtTimestamp,
   sourceCommit,
   sourceTree,
   policySha256,
@@ -153,6 +158,8 @@ export function computeSafeReviewedPlanDigest({
     encodeAbiParameters(
       [
         { type: "string" },
+        { type: "bytes32" },
+        { type: "bytes32" },
         { type: "bytes32" },
         { type: "address" },
         { type: "uint64" },
@@ -166,9 +173,11 @@ export function computeSafeReviewedPlanDigest({
       [
         SAFE_AUTHORIZATION_SCHEMA,
         preflightSha256,
+        stagedTransactionSha256,
+        authorizedTransactionHash,
         getAddress(ownerAuthorizationAddress),
         BigInt(notBeforeTimestamp),
-        BigInt(firstAttemptExpiresAtTimestamp),
+        BigInt(dispatchIntentExpiresAtTimestamp),
         AUTHORIZATION_SEMANTICS,
         sourceCommit,
         sourceTree,
@@ -229,6 +238,15 @@ export function assertSafePreflightEnvelope(
       (provider) => typeof provider !== "string" || provider.length === 0,
     ) ||
     plan.rpcProviders[0].toLowerCase() === plan.rpcProviders[1].toLowerCase() ||
+    plan.rpcProviderBindings?.length !== 2 ||
+    plan.rpcProviderBindings.some(
+      (binding, index) =>
+        binding?.providerId !== plan.rpcProviders[index] ||
+        typeof binding.rpcOrigin !== "string" ||
+        new URL(binding.rpcOrigin).origin.toLowerCase() !== binding.rpcOrigin,
+    ) ||
+    plan.rpcProviderBindings[0].rpcOrigin ===
+      plan.rpcProviderBindings[1].rpcOrigin ||
     !/^0x[0-9a-f]{64}$/u.test(plan.policySha256 ?? "") ||
     !/^0x[0-9a-f]{64}$/u.test(plan.custodyProofSha256 ?? "")
   ) {
@@ -257,6 +275,15 @@ export function assertSafeCostReviewEnvelope(plan) {
       (provider) => typeof provider !== "string" || provider.length === 0,
     ) ||
     plan.rpcProviders[0].toLowerCase() === plan.rpcProviders[1].toLowerCase() ||
+    plan.rpcProviderBindings?.length !== 2 ||
+    plan.rpcProviderBindings.some(
+      (binding, index) =>
+        binding?.providerId !== plan.rpcProviders[index] ||
+        typeof binding.rpcOrigin !== "string" ||
+        new URL(binding.rpcOrigin).origin.toLowerCase() !== binding.rpcOrigin,
+    ) ||
+    plan.rpcProviderBindings[0].rpcOrigin ===
+      plan.rpcProviderBindings[1].rpcOrigin ||
     !/^0x[0-9a-f]{64}$/u.test(plan.policySha256 ?? "") ||
     !/^0x[0-9a-f]{64}$/u.test(plan.custodyProofSha256 ?? "")
   ) {
@@ -274,7 +301,7 @@ export function assertSafePolicyBoundPlan({
   const canonicalUint = (value) => /^(0|[1-9][0-9]*)$/u.test(value ?? "");
   if (
     policy?.schemaVersion !==
-      "programmable.custom-registry-v2-safe-controller-policy.v1" ||
+      "programmable.custom-registry-v2-safe-controller-policy.v2" ||
     policy.chainId !== "1" ||
     policy.safeVersion !== "1.4.1" ||
     policy.source?.repository !== "safe-fndn/safe-smart-account" ||
@@ -314,10 +341,22 @@ export function assertSafePolicyBoundPlan({
       "ea92e62baa44b5f0df668a9b831fb36d5a025f99" ||
     policy.multiSendCallOnly?.deploymentRecordSha256 !==
       "0x09362344b664a35ea957ac2c13458f1c2019dd4f1d73c0afce10d0b6f5206864" ||
+    policy.predictionPrivacy?.ownerGeneration !==
+      "FRESH_DISTINCT_KEYCHAIN_CUSTODY_AFTER_PUBLIC_SOURCE_AND_APPROVAL_POLICY_FREEZE" ||
+    policy.predictionPrivacy?.saltGeneration !==
+      "FRESH_CRYPTOGRAPHIC_RANDOM_NONZERO_UINT256_PER_ROLE_AFTER_PUBLIC_SOURCE_AND_APPROVAL_POLICY_FREEZE" ||
+    policy.predictionPrivacy?.storage !==
+      "PROTECTED_NON_REPOSITORY_RELEASE_EVIDENCE" ||
+    policy.predictionPrivacy?.primarySubmission !==
+      "FLASHBOTS_PROTECT_ETH_SEND_RAW_TRANSACTION_EXACT_HINT_HASH_NO_PUBLIC_MEMPOOL" ||
+    policy.predictionPrivacy?.publicPredictionsRetired !== true ||
+    policy.predictionPrivacy?.leakageFallback !==
+      "ABANDON_LEAKED_PREDICTIONS_ROTATE_OWNERS_AND_SALTS_GENERATE_FRESH_PLAN_AND_AUTHORIZATION" ||
     !/^[0-9a-f]{40}$/u.test(plan.source?.commit ?? "") ||
     !/^[0-9a-f]{40}$/u.test(plan.source?.tree ?? "") ||
     !Number.isSafeInteger(plan.exactPendingNonce) ||
     plan.exactPendingNonce < 0 ||
+    plan.exactFinalizedNonce !== plan.exactPendingNonce ||
     !canonicalUint(plan.commonFinalizedAnchor?.blockNumber) ||
     BigInt(plan.commonFinalizedAnchor.blockNumber) === 0n ||
     !/^0x[0-9a-f]{64}$/u.test(plan.commonFinalizedAnchor?.blockHash ?? "") ||
@@ -329,7 +368,9 @@ export function assertSafePolicyBoundPlan({
     !canonicalUint(plan.maximumTotalCostWei) ||
     !/^0x[0-9a-f]{64}$/u.test(sourceManifestSha256 ?? "") ||
     plan.sourceManifestSha256 !== sourceManifestSha256 ||
-    manifest?.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
+    manifest?.schemaVersion !==
+      "programmable.custom-registry-predeployment.v3" ||
+    manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
     manifest.activationAllowed !== false ||
     manifest.sourceDigests?.[
       "config/custom-registry-v2-safe-controller-policy.json"
@@ -337,13 +378,25 @@ export function assertSafePolicyBoundPlan({
     getAddress(manifest.releaseAuthorization?.owner) !==
       getAddress(plan.releaseAuthorization?.owner) ||
     manifest.releaseAuthorization
-      ?.maximumSigningAndFirstAttemptValiditySeconds !== 300 ||
-    plan.releaseAuthorization?.maximumSigningAndFirstAttemptValiditySeconds !==
-      300 ||
+      ?.maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
+    plan.releaseAuthorization
+      ?.maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
     manifest.releaseAuthorization?.authorizationSemantics !==
       AUTHORIZATION_SEMANTICS ||
     plan.releaseAuthorization?.authorizationSemantics !==
       AUTHORIZATION_SEMANTICS ||
+    manifest.releaseAuthorization?.stagedRawTransactionTrustBoundary !==
+      "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
+    plan.releaseAuthorization?.stagedRawTransactionTrustBoundary !==
+      manifest.releaseAuthorization.stagedRawTransactionTrustBoundary ||
+    manifest.releaseAuthorization?.dispatchIntentFinalConfirmation !==
+      "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION" ||
+    plan.releaseAuthorization?.dispatchIntentFinalConfirmation !==
+      manifest.releaseAuthorization.dispatchIntentFinalConfirmation ||
+    manifest.releaseAuthorization?.nonceScopedJournalExclusivity !==
+      "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED" ||
+    plan.releaseAuthorization?.nonceScopedJournalExclusivity !==
+      manifest.releaseAuthorization.nonceScopedJournalExclusivity ||
     plan.safeVersion !== policy.safeVersion ||
     getAddress(plan.singleton?.address) !==
       getAddress(policy.singleton?.address) ||
@@ -379,9 +432,47 @@ export function assertSafePolicyBoundPlan({
     getAddress(policy.setup?.paymentReceiver) !== getAddress(zero) ||
     policy.setup?.modules?.length !== 0 ||
     getAddress(policy.setup?.guard) !== getAddress(zero) ||
+    policy.predictionPrivacy?.primarySubmission !==
+      "FLASHBOTS_PROTECT_ETH_SEND_RAW_TRANSACTION_EXACT_HINT_HASH_NO_PUBLIC_MEMPOOL" ||
+    policy.predictionPrivacy?.providerDocumentation?.repository !==
+      FLASHBOTS_PRIVATE_SUBMISSION.documentationRepository ||
+    policy.predictionPrivacy?.providerDocumentation?.commit !==
+      FLASHBOTS_PRIVATE_SUBMISSION.documentationCommit ||
+    policy.predictionPrivacy?.providerDocumentation?.tree !==
+      FLASHBOTS_PRIVATE_SUBMISSION.documentationTree ||
+    policy.predictionPrivacy?.providerDocumentation?.quickStartSha256 !==
+      FLASHBOTS_PRIVATE_SUBMISSION.quickStartSha256 ||
+    policy.predictionPrivacy?.providerDocumentation?.mevRefundsSha256 !==
+      FLASHBOTS_PRIVATE_SUBMISSION.mevRefundsSha256 ||
     plan.controllers?.length !== SAFE_CONTROLLER_ROLES.length ||
     plan.custody?.roles?.length !== SAFE_CUSTODY_ROLES.length ||
-    !/^0x[0-9a-f]{64}$/u.test(plan.custody?.inventorySha256 ?? "")
+    !/^0x[0-9a-f]{64}$/u.test(plan.custody?.inventorySha256 ?? "") ||
+    !/^0x[0-9a-f]{64}$/u.test(plan.predictionInputsSha256 ?? "") ||
+    plan.privateSubmission?.method !== FLASHBOTS_PRIVATE_SUBMISSION.method ||
+    plan.privateSubmission?.privacyMode !==
+      FLASHBOTS_PRIVATE_SUBMISSION.privacyMode ||
+    plan.privateSubmission?.providerId !==
+      FLASHBOTS_PRIVATE_SUBMISSION.providerId ||
+    plan.privateSubmission?.sanitizedUrl !==
+      FLASHBOTS_PRIVATE_SUBMISSION.sanitizedUrl ||
+    plan.privateSubmission?.documentationRepository !==
+      FLASHBOTS_PRIVATE_SUBMISSION.documentationRepository ||
+    plan.privateSubmission?.documentationCommit !==
+      FLASHBOTS_PRIVATE_SUBMISSION.documentationCommit ||
+    plan.privateSubmission?.documentationTree !==
+      FLASHBOTS_PRIVATE_SUBMISSION.documentationTree ||
+    plan.privateSubmission?.quickStartSha256 !==
+      FLASHBOTS_PRIVATE_SUBMISSION.quickStartSha256 ||
+    plan.privateSubmission?.mevRefundsSha256 !==
+      FLASHBOTS_PRIVATE_SUBMISSION.mevRefundsSha256 ||
+    !/^0x[0-9a-f]{64}$/u.test(
+      plan.privateSubmission?.providerContractSha256 ?? "",
+    ) ||
+    plan.privateSubmission?.noPublicFallback !== true ||
+    plan.rpcProviderBindings.some(
+      ({ rpcOrigin }) =>
+        rpcOrigin === new URL(plan.privateSubmission.sanitizedUrl).origin,
+    )
   ) {
     throw new Error("Safe plan is not bound to committed policy and source");
   }
@@ -420,7 +511,8 @@ export function assertSafePolicyBoundPlan({
       custody.service !==
         `programmable.custom-registry.v2.production-custody.20260813.${role}` ||
       !/^0x[0-9a-f]{64}$/u.test(custody.readbackSha256 ?? "") ||
-      controller.saltNonce !== policy.roles?.[role]?.saltNonce
+      !/^[1-9][0-9]*$/u.test(controller.saltNonce ?? "") ||
+      BigInt(controller.saltNonce) >= 1n << 256n
     ) {
       throw new Error(`Safe plan custody or role binding failed for ${role}`);
     }
@@ -444,8 +536,8 @@ export function assertSafePolicyBoundPlan({
       controller.predictedAddressNonces?.length !== 2 ||
       controller.predictedAddressNonces.some((nonce) => nonce !== 0) ||
       controller.predictedAddressBalancesWei?.length !== 2 ||
-      !controller.predictedAddressBalancesWei.every(
-        (balance) => balance === "0",
+      !controller.predictedAddressBalancesWei.every((balance) =>
+        canonicalUint(balance),
       ) ||
       controller.atomicCall?.to !== policy.proxyFactory.address ||
       controller.atomicCall?.valueWei !== "0" ||
@@ -530,32 +622,38 @@ export function assertSafeReviewedAuthorization({
 }) {
   if (
     authorization?.schemaVersion !== SAFE_AUTHORIZATION_SCHEMA ||
-    authorization.status !== "REVIEWED_READY_FOR_EXPLICIT_SAFE_BROADCAST" ||
-    authorization.signingAllowed !== true ||
-    authorization.broadcastAllowed !== true ||
+    authorization.status !== "REVIEWED_READY_FOR_EXPLICIT_DISPATCH_INTENT" ||
+    authorization.signingAllowed !== false ||
+    authorization.broadcastAllowed !== false ||
+    authorization.dispatchIntentActivationAllowed !== true ||
+    authorization.broadcastRequiresDurableDispatchIntent !== true ||
     authorization.preflightSha256 !== preflightSha256 ||
+    !/^0x[0-9a-f]{64}$/u.test(authorization.stagedTransactionSha256 ?? "") ||
+    !/^0x[0-9a-fA-F]{64}$/u.test(
+      authorization.authorizedTransactionHash ?? "",
+    ) ||
     authorization.source?.commit !== plan.source?.commit ||
     authorization.source?.tree !== plan.source?.tree ||
     authorization.policySha256 !== plan.policySha256 ||
     authorization.custodyProofSha256 !== plan.custodyProofSha256 ||
     getAddress(authorization.ownerAuthorizationAddress) !==
       getAddress(plan.releaseAuthorization?.owner) ||
-    plan.releaseAuthorization?.maximumSigningAndFirstAttemptValiditySeconds !==
-      300 ||
+    plan.releaseAuthorization
+      ?.maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
     plan.releaseAuthorization?.authorizationSemantics !==
       AUTHORIZATION_SEMANTICS ||
     authorization.authorizationSemantics !== AUTHORIZATION_SEMANTICS ||
     !Number.isSafeInteger(authorization.notBeforeTimestamp) ||
-    !Number.isSafeInteger(authorization.firstAttemptExpiresAtTimestamp) ||
-    authorization.firstAttemptExpiresAtTimestamp <=
+    !Number.isSafeInteger(authorization.dispatchIntentExpiresAtTimestamp) ||
+    authorization.dispatchIntentExpiresAtTimestamp <=
       authorization.notBeforeTimestamp ||
-    authorization.firstAttemptExpiresAtTimestamp -
+    authorization.dispatchIntentExpiresAtTimestamp -
       authorization.notBeforeTimestamp >
       300 ||
     (!allowExpired && authorization.notBeforeTimestamp > nowTimestamp) ||
     (!allowExpired &&
-      authorization.firstAttemptExpiresAtTimestamp < nowTimestamp) ||
-    authorization.firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp
+      authorization.dispatchIntentExpiresAtTimestamp < nowTimestamp) ||
+    authorization.dispatchIntentExpiresAtTimestamp > plan.expiresAtTimestamp
   ) {
     throw new Error(
       "reviewed Safe broadcast authorization is stale or invalid",
@@ -563,10 +661,12 @@ export function assertSafeReviewedAuthorization({
   }
   const expected = computeSafeReviewedPlanDigest({
     preflightSha256,
+    stagedTransactionSha256: authorization.stagedTransactionSha256,
+    authorizedTransactionHash: authorization.authorizedTransactionHash,
     ownerAuthorizationAddress: authorization.ownerAuthorizationAddress,
     notBeforeTimestamp: authorization.notBeforeTimestamp,
-    firstAttemptExpiresAtTimestamp:
-      authorization.firstAttemptExpiresAtTimestamp,
+    dispatchIntentExpiresAtTimestamp:
+      authorization.dispatchIntentExpiresAtTimestamp,
     sourceCommit: authorization.source.commit,
     sourceTree: authorization.source.tree,
     policySha256: authorization.policySha256,
@@ -586,14 +686,17 @@ export function assertSafeCustodyProof({ proof, owners, deployer, admin }) {
   if (
     proof?.schemaVersion !== SAFE_CUSTODY_PROOF_SCHEMA ||
     proof.chainId !== "1" ||
-    proof.keychain !== "current-user-default-login-keychain" ||
+    proof.keychain !== "current-user-default-keychain" ||
     proof.allReadbacksVerified !== true ||
     proof.allEvmAddressesRecovered !== true ||
     proof.roleIsolationBasis !==
       "SIX_DISTINCT_GENERIC_PASSWORD_ITEMS_WITH_DISTINCT_PRIVATE_KEY_HASHES_AND_PUBLIC_ADDRESSES" ||
     proof.secretValuesPrinted !== false ||
-    proof.plaintextRetention !==
-      "0400_TEMP_ORIGINALS_PRESERVED_PENDING_EXPLICIT_RETENTION_DECISION" ||
+    proof.plaintextRetention !== "NO_DURABLE_PLAINTEXT_FINAL_KEYS" ||
+    proof.restartReadbackVerified !== true ||
+    proof.encryptedBackupStrategyVerified !== true ||
+    proof.temporaryGovernance !==
+      "SAME_HOST_ONE_OF_ONE_DARK_DEPLOYMENT_ONLY_MIGRATE_TO_DISTINCT_HARDWARE_TWO_OF_THREE_BEFORE_PUBLIC_ACTIVATION" ||
     !/^0x[0-9a-f]{64}$/u.test(proof.inventorySha256 ?? "") ||
     proof.roles?.length !== expectedRoles.length
   ) {
@@ -610,15 +713,14 @@ export function assertSafeCustodyProof({ proof, owners, deployer, admin }) {
       getAddress(entry.recoveredPublicAddress) !== expectedAddresses[index] ||
       entry.evmAddressRecoveryVerified !== true ||
       entry.addressRecoveryBasis !==
-        "KEYCHAIN_READBACK_SHA256_EQUALS_SOURCE_KEY_SHA256_AND_SOURCE_KEY_DERIVES_ADDRESS" ||
+        "KEYCHAIN_READBACK_DERIVES_EXPECTED_EVM_ADDRESS" ||
       entry.account !== entry.publicAddress ||
       entry.service !==
         `programmable.custom-registry.v2.production-custody.20260813.${role}` ||
-      entry.sourceKeyFileSha256 !== entry.readbackSha256 ||
       !/^0x[0-9a-f]{64}$/u.test(entry.readbackSha256 ?? "") ||
       !/^0x[0-9a-f]{64}$/u.test(entry.persistentRefSha256 ?? "") ||
       entry.readbackByteLength !== 67 ||
-      entry.sourcePrivateKeyFileMode !== "0400" ||
+      entry.sourcePrivateKeyFilePresent !== false ||
       entry.accessibility !== "when-unlocked-this-device-only" ||
       entry.synchronizable !== false ||
       !String(entry.result).endsWith("READBACK_VERIFIED")

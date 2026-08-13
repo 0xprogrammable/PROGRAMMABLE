@@ -12,13 +12,13 @@ import {
 } from "./custom-registry-v2-deployment-guards.mjs";
 
 export async function commonFinalizedBlock(clients) {
-  if (clients.length !== 2) throw new Error("exactly two RPC clients are required");
+  if (clients.length !== 2)
+    throw new Error("exactly two RPC clients are required");
   const heads = await Promise.all(
     clients.map((client) => client.getBlock({ blockTag: "finalized" })),
   );
-  const number = heads[0].number < heads[1].number
-    ? heads[0].number
-    : heads[1].number;
+  const number =
+    heads[0].number < heads[1].number ? heads[0].number : heads[1].number;
   const blocks = await Promise.all(
     clients.map((client) => client.getBlock({ blockNumber: number })),
   );
@@ -28,12 +28,7 @@ export async function commonFinalizedBlock(clients) {
   return { number, hash: blocks[0].hash, blocks, heads };
 }
 
-async function readSafeAtBlock({
-  client,
-  address,
-  blockNumber,
-  storageSlots,
-}) {
+async function readSafeAtBlock({ client, address, blockNumber, storageSlots }) {
   const [
     code,
     version,
@@ -157,7 +152,10 @@ export async function assertSafeControllersAtBlock({
       fallbackStorage: value.fallbackStorage,
       guardStorage: value.guardStorage,
     });
-    if (JSON.stringify(comparable(observations[0])) !== JSON.stringify(comparable(observations[1]))) {
+    if (
+      JSON.stringify(comparable(observations[0])) !==
+      JSON.stringify(comparable(observations[1]))
+    ) {
       throw new Error(`independent ${controller.role} Safe state disagrees`);
     }
     result.push({
@@ -297,9 +295,7 @@ export async function assertRegistryLivePreflight({
     blockGasLimit: minimumBlockGasLimit,
     observedFeePerGas: maximumObservedFeePerGas,
     maxFeePerGas: BigInt(plan.expectedTransaction.maxFeePerGas),
-    maxPriorityFeePerGas: BigInt(
-      plan.expectedTransaction.maxPriorityFeePerGas,
-    ),
+    maxPriorityFeePerGas: BigInt(plan.expectedTransaction.maxPriorityFeePerGas),
     maxTotalCostWei: BigInt(plan.create.reviewedMaxTotalCostWei),
     deployerBalance: live[0].balance,
   });

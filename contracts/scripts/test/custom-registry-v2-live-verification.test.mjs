@@ -3,9 +3,7 @@ import test from "node:test";
 
 import { getAddress, keccak256 } from "viem";
 
-import {
-  assertRegistryLivePreflight,
-} from "../custom-registry-v2-live-verification.mjs";
+import { assertRegistryLivePreflight } from "../custom-registry-v2-live-verification.mjs";
 
 const address = (suffix) =>
   getAddress(`0x${suffix.toString(16).padStart(40, "0")}`);
@@ -23,10 +21,15 @@ const fixture = () => ({
   providerIds: ["provider-a", "provider-b"],
   plan: {
     rpcProviders: ["provider-a", "provider-b"],
+    rpcProviderBindings: [
+      { providerId: "provider-a", rpcOrigin: "https://rpc-a.example" },
+      { providerId: "provider-b", rpcOrigin: "https://rpc-b.example" },
+    ],
     commonFinalizedAnchor: { blockNumber: "100", blockHash: anchorHash },
     create: {
       deployer,
       exactPendingNonce: 7,
+      exactFinalizedNonce: 7,
       predictedAddress,
       reviewedMaxTotalCostWei: "300",
     },
@@ -52,14 +55,20 @@ const fixture = () => ({
         owner: owners[index],
       })),
     },
-    safePolicyBytes: Buffer.from(JSON.stringify({
-      safeVersion: "1.4.1",
-      storageSlots: { fallbackHandler: "0x01", guard: "0x02" },
-    })),
+    safePolicyBytes: Buffer.from(
+      JSON.stringify({
+        safeVersion: "1.4.1",
+        storageSlots: { fallbackHandler: "0x01", guard: "0x02" },
+      }),
+    ),
   },
 });
 
-const client = ({ nonce = 7, simulatedRuntime = runtime, threshold = 1n } = {}) => ({
+const client = ({
+  nonce = 7,
+  simulatedRuntime = runtime,
+  threshold = 1n,
+} = {}) => ({
   async getBlock(parameters) {
     if (parameters.blockTag === "finalized") {
       return { number: 110n, hash: finalizedHash };

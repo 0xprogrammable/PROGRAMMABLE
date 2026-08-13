@@ -7,13 +7,24 @@ import { getAddress } from "viem";
 
 import {
   SAFE_AUTHORIZATION_SCHEMA,
+  SAFE_STAGED_TRANSACTION_SCHEMA,
   assertSafePolicyBoundPlan,
   assertSafePreflightEnvelope,
+  assertSafeReviewedAuthorization,
   computeSafeReviewedPlanDigest,
   safeReviewedAuthorizationMessage,
   verifySafeReviewedAuthorizationSignature,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
-import { AUTHORIZATION_SEMANTICS } from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  AUTHORIZATION_SEMANTICS,
+  assertDispatchAuthorizationWindow,
+} from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  assertNoExistingTransactionIntent,
+  assertReleaseEvidenceOutput,
+  assertReleaseEvidencePath,
+} from "./custom-registry-v2-release-evidence.mjs";
+import { assertStagedTransactionEvidence } from "./custom-registry-v2-transaction-journal.mjs";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -23,16 +34,13 @@ const argument = (name) => {
   const index = process.argv.indexOf(name);
   if (index === -1 || !process.argv[index + 1])
     throw new Error(`${name} is required`);
-  return path.resolve(process.argv[index + 1]);
+  return process.argv[index + 1];
 };
-const preflightPath = argument("--preflight");
+const preflightPath = assertReleaseEvidencePath(argument("--preflight"));
 const printMessage = process.argv.includes("--print-message");
-const outputPath = printMessage ? null : argument("--output");
-if (
-  !preflightPath.startsWith("/tmp/") ||
-  (outputPath !== null && !outputPath.startsWith("/tmp/"))
-)
-  throw new Error("Safe authorization inputs and output must be under /tmp");
+const outputPath = printMessage
+  ? null
+  : assertReleaseEvidenceOutput(argument("--output"));
 
 const preflightBytes = await readFile(preflightPath);
 const preflightSha256 = `0x${createHash("sha256")
@@ -41,6 +49,34 @@ const preflightSha256 = `0x${createHash("sha256")
 if (preflightSha256 !== process.env.REGISTRY_SAFE_REVIEWED_PLAN_SHA256)
   throw new Error("reviewed Safe preflight digest mismatch");
 const plan = JSON.parse(preflightBytes);
+const stagedTransactionPath = assertReleaseEvidencePath(
+  process.env.REGISTRY_SAFE_STAGED_TRANSACTION_PATH ?? "",
+  { mode: 0o400 },
+);
+const stagedTransactionBytes = await readFile(stagedTransactionPath);
+const stagedTransactionSha256 = `0x${createHash("sha256")
+  .update(stagedTransactionBytes)
+  .digest("hex")}`;
+if (
+  stagedTransactionSha256 !==
+  process.env.REGISTRY_SAFE_STAGED_TRANSACTION_SHA256
+) {
+  throw new Error("staged Safe transaction digest mismatch");
+}
+const stagedTransaction = JSON.parse(stagedTransactionBytes);
+await assertStagedTransactionEvidence({
+  evidence: stagedTransaction,
+  schemaVersion: SAFE_STAGED_TRANSACTION_SCHEMA,
+  preflightSha256,
+  expectedTransaction: plan.atomicTransaction,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
+assertNoExistingTransactionIntent({
+  chainId: 1,
+  signer: plan.atomicTransaction.from,
+  nonce: plan.atomicTransaction.nonce,
+});
 const nowTimestamp = Math.floor(Date.now() / 1000);
 assertSafePreflightEnvelope(plan, nowTimestamp);
 const [policyBytes, manifestBytes] = await Promise.all([
@@ -70,29 +106,32 @@ const ownerAuthorizationAddress = getAddress(
 );
 if (ownerAuthorizationAddress !== getAddress(plan.releaseAuthorization.owner))
   throw new Error("release owner does not match reviewed Safe preflight");
-const firstAttemptExpiresAtTimestamp = Number(
-  process.env.REGISTRY_SAFE_AUTHORIZATION_EXPIRES_AT,
+const dispatchIntentExpiresAtTimestamp = Number(
+  process.env.REGISTRY_SAFE_DISPATCH_INTENT_EXPIRES_AT,
 );
-if (
-  !Number.isSafeInteger(firstAttemptExpiresAtTimestamp) ||
-  firstAttemptExpiresAtTimestamp < nowTimestamp ||
-  firstAttemptExpiresAtTimestamp > nowTimestamp + 300 ||
-  firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp
-)
-  throw new Error("Safe authorization is stale or outside the reviewed window");
+const notBeforeTimestamp = Number(
+  process.env.REGISTRY_SAFE_DISPATCH_INTENT_NOT_BEFORE,
+);
+assertDispatchAuthorizationWindow({
+  notBeforeTimestamp,
+  dispatchIntentExpiresAtTimestamp,
+  nowTimestamp,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
 
-const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+const commit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
-const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
+const tree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
 if (
   commit !== plan.source.commit ||
   tree !== plan.source.tree ||
-  execFileSync("git", ["status", "--porcelain"], {
+  execFileSync("/usr/bin/git", ["status", "--porcelain"], {
     cwd: root,
     encoding: "utf8",
   }) !== ""
@@ -101,27 +140,39 @@ if (
 
 const authorization = {
   schemaVersion: SAFE_AUTHORIZATION_SCHEMA,
-  status: "REVIEWED_READY_FOR_EXPLICIT_SAFE_BROADCAST",
+  status: "REVIEWED_READY_FOR_EXPLICIT_DISPATCH_INTENT",
   preflightSha256,
+  stagedTransactionSha256,
+  authorizedTransactionHash: stagedTransaction.transactionHash,
   source: { commit, tree },
   policySha256: plan.policySha256,
   custodyProofSha256: plan.custodyProofSha256,
   ownerAuthorizationAddress,
-  notBeforeTimestamp: nowTimestamp,
-  firstAttemptExpiresAtTimestamp,
+  notBeforeTimestamp,
+  dispatchIntentExpiresAtTimestamp,
   authorizationSemantics: AUTHORIZATION_SEMANTICS,
-  signingAllowed: true,
-  broadcastAllowed: true,
+  signingAllowed: false,
+  broadcastAllowed: false,
+  dispatchIntentActivationAllowed: true,
+  broadcastRequiresDurableDispatchIntent: true,
 };
 authorization.reviewedPlanDigest = computeSafeReviewedPlanDigest({
   preflightSha256,
+  stagedTransactionSha256,
+  authorizedTransactionHash: stagedTransaction.transactionHash,
   ownerAuthorizationAddress,
-  notBeforeTimestamp: nowTimestamp,
-  firstAttemptExpiresAtTimestamp,
+  notBeforeTimestamp,
+  dispatchIntentExpiresAtTimestamp,
   sourceCommit: commit,
   sourceTree: tree,
   policySha256: plan.policySha256,
   custodyProofSha256: plan.custodyProofSha256,
+});
+assertSafeReviewedAuthorization({
+  authorization,
+  preflightSha256,
+  plan,
+  nowTimestamp,
 });
 
 if (printMessage) {

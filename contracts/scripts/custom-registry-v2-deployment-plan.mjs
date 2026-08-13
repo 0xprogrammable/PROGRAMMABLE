@@ -67,12 +67,12 @@ export async function loadRegistryDeploymentInputs({
 
 export function currentSourceIdentity(root) {
   const run = (args) =>
-    execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+    execFileSync("/usr/bin/git", args, { cwd: root, encoding: "utf8" }).trim();
   return {
     commit: run(["rev-parse", "HEAD"]),
     tree: run(["rev-parse", "HEAD^{tree}"]),
     clean:
-      execFileSync("git", ["status", "--porcelain"], {
+      execFileSync("/usr/bin/git", ["status", "--porcelain"], {
         cwd: root,
         encoding: "utf8",
       }) === "",
@@ -111,6 +111,17 @@ export async function assertRegistryDeploymentPlan({
     !/^0x[0-9a-f]{64}$/u.test(plan.commonFinalizedAnchor?.blockHash ?? "") ||
     plan.rpcProviders?.length !== 2 ||
     plan.rpcProviders[0].toLowerCase() === plan.rpcProviders[1].toLowerCase() ||
+    plan.rpcProviderBindings?.length !== 2 ||
+    plan.rpcProviderBindings.some(
+      (binding, index) =>
+        binding?.providerId !== plan.rpcProviders[index] ||
+        typeof binding.rpcOrigin !== "string" ||
+        new URL(binding.rpcOrigin).origin.toLowerCase() !== binding.rpcOrigin,
+    ) ||
+    plan.rpcProviderBindings[0].rpcOrigin ===
+      plan.rpcProviderBindings[1].rpcOrigin ||
+    manifest.schemaVersion !==
+      "programmable.custom-registry-predeployment.v3" ||
     manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
     manifest.activationAllowed !== false ||
     committedAbiDocument.schemaVersion !==
@@ -308,10 +319,16 @@ export async function assertRegistryDeploymentPlan({
       getAddress(safeVerification.releaseOwner) ||
     getAddress(plan.releaseAuthorization.owner) !==
       getAddress(manifest.releaseAuthorization.owner) ||
-    plan.releaseAuthorization.maximumSigningAndFirstAttemptValiditySeconds !==
-      300 ||
+    plan.releaseAuthorization
+      .maximumDispatchIntentAuthorizationValiditySeconds !== 300 ||
     plan.releaseAuthorization.authorizationSemantics !==
-      "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED"
+      "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION" ||
+    plan.releaseAuthorization.stagedRawTransactionTrustBoundary !==
+      "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
+    plan.releaseAuthorization.dispatchIntentFinalConfirmation !==
+      "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION" ||
+    plan.releaseAuthorization.nonceScopedJournalExclusivity !==
+      "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED"
   ) {
     throw new Error(
       "policy, Safe, deployer, admin, or release binding is invalid",

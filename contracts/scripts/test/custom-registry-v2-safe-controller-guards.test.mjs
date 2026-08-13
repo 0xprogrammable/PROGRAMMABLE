@@ -25,7 +25,11 @@ import {
 } from "../custom-registry-v2-safe-controller-guards.mjs";
 import { encodeEventTopics, encodeAbiParameters, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { AUTHORIZATION_SEMANTICS } from "../custom-registry-v2-deployment-guards.mjs";
+import {
+  AUTHORIZATION_SEMANTICS,
+  FLASHBOTS_PRIVATE_SUBMISSION,
+} from "../custom-registry-v2-deployment-guards.mjs";
+import { verifySafeCustodyRoleReadbacks } from "../custom-registry-v2-keychain-custody.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const root = path.resolve(
@@ -132,6 +136,10 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     status: "PREFLIGHT_ONLY_NO_TRANSACTION",
     chainId: 1,
     rpcProviders: ["provider-a", "provider-b"],
+    rpcProviderBindings: [
+      { providerId: "provider-a", rpcOrigin: "https://rpc-a.example" },
+      { providerId: "provider-b", rpcOrigin: "https://rpc-b.example" },
+    ],
     signingAllowed: false,
     broadcastAllowed: false,
     fundingSufficient: true,
@@ -144,8 +152,14 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     source: { commit: "a", tree: "b" },
     releaseAuthorization: {
       owner: account.address,
-      maximumSigningAndFirstAttemptValiditySeconds: 300,
+      maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics: AUTHORIZATION_SEMANTICS,
+      stagedRawTransactionTrustBoundary:
+        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+      dispatchIntentFinalConfirmation:
+        "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
+      nonceScopedJournalExclusivity:
+        "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED",
     },
   };
   assertSafePreflightEnvelope(plan, 199);
@@ -162,24 +176,30 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
   const preflightSha256 = `0x${"44".repeat(32)}`;
   const authorization = {
     schemaVersion: SAFE_AUTHORIZATION_SCHEMA,
-    status: "REVIEWED_READY_FOR_EXPLICIT_SAFE_BROADCAST",
-    signingAllowed: true,
-    broadcastAllowed: true,
+    status: "REVIEWED_READY_FOR_EXPLICIT_DISPATCH_INTENT",
+    signingAllowed: false,
+    broadcastAllowed: false,
+    dispatchIntentActivationAllowed: true,
+    broadcastRequiresDurableDispatchIntent: true,
     preflightSha256,
+    stagedTransactionSha256: `0x${"66".repeat(32)}`,
+    authorizedTransactionHash: `0x${"77".repeat(32)}`,
     source: plan.source,
     policySha256: plan.policySha256,
     custodyProofSha256: plan.custodyProofSha256,
     ownerAuthorizationAddress: account.address,
     notBeforeTimestamp: 180,
-    firstAttemptExpiresAtTimestamp: 190,
+    dispatchIntentExpiresAtTimestamp: 190,
     authorizationSemantics: AUTHORIZATION_SEMANTICS,
   };
   authorization.reviewedPlanDigest = computeSafeReviewedPlanDigest({
     preflightSha256,
+    stagedTransactionSha256: authorization.stagedTransactionSha256,
+    authorizedTransactionHash: authorization.authorizedTransactionHash,
     ownerAuthorizationAddress: account.address,
     notBeforeTimestamp: authorization.notBeforeTimestamp,
-    firstAttemptExpiresAtTimestamp:
-      authorization.firstAttemptExpiresAtTimestamp,
+    dispatchIntentExpiresAtTimestamp:
+      authorization.dispatchIntentExpiresAtTimestamp,
     sourceCommit: plan.source.commit,
     sourceTree: plan.source.tree,
     policySha256: plan.policySha256,
@@ -223,7 +243,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
   const [deployer, admin, releaseOwner, ...owners] = accounts;
   const controllers = roles.map((role, index) => {
     const owner = owners[index].address;
-    const saltNonce = policy.roles[role].saltNonce;
+    const saltNonce = String(101 + index);
     const initializer = safeInitializer(owner, policy.setup);
     return {
       role,
@@ -252,6 +272,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     };
   });
   const manifest = {
+    schemaVersion: "programmable.custom-registry-predeployment.v3",
     status: "SOURCE_ONLY_NOT_DEPLOYED",
     activationAllowed: false,
     sourceDigests: {
@@ -259,8 +280,14 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     },
     releaseAuthorization: {
       owner: releaseOwner.address,
-      maximumSigningAndFirstAttemptValiditySeconds: 300,
+      maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics: AUTHORIZATION_SEMANTICS,
+      stagedRawTransactionTrustBoundary:
+        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+      dispatchIntentFinalConfirmation:
+        "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
+      nonceScopedJournalExclusivity:
+        "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED",
     },
   };
   const manifestBytes = Buffer.from(`${JSON.stringify(manifest)}\n`);
@@ -278,10 +305,20 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     status: "PREFLIGHT_ONLY_NO_TRANSACTION",
     chainId: 1,
     rpcProviders: ["provider-a", "provider-b"],
+    rpcProviderBindings: [
+      { providerId: "provider-a", rpcOrigin: "https://rpc-a.example" },
+      { providerId: "provider-b", rpcOrigin: "https://rpc-b.example" },
+    ],
     source: { commit: "a".repeat(40), tree: "b".repeat(40) },
     sourceManifestSha256,
     policySha256,
     custodyProofSha256: `0x${"44".repeat(32)}`,
+    predictionInputsSha256: `0x${"45".repeat(32)}`,
+    privateSubmission: {
+      ...FLASHBOTS_PRIVATE_SUBMISSION,
+      providerContractSha256: `0x${"46".repeat(32)}`,
+      noPublicFallback: true,
+    },
     custody: {
       inventorySha256: `0x${"55".repeat(32)}`,
       roles: custodyRoles.map((role, index) => ({
@@ -307,10 +344,17 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     admin: admin.address,
     releaseAuthorization: {
       owner: releaseOwner.address,
-      maximumSigningAndFirstAttemptValiditySeconds: 300,
+      maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics: AUTHORIZATION_SEMANTICS,
+      stagedRawTransactionTrustBoundary:
+        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+      dispatchIntentFinalConfirmation:
+        "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
+      nonceScopedJournalExclusivity:
+        "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED",
     },
     exactPendingNonce: 0,
+    exactFinalizedNonce: 0,
     deployerBalanceWei: "2640000",
     controllers,
     atomicTransaction: {
@@ -383,29 +427,30 @@ test("binds per-role Keychain readback custody proof", () => {
   const proof = {
     schemaVersion: SAFE_CUSTODY_PROOF_SCHEMA,
     chainId: "1",
-    keychain: "current-user-default-login-keychain",
+    keychain: "current-user-default-keychain",
     allReadbacksVerified: true,
     allEvmAddressesRecovered: true,
     roleIsolationBasis:
       "SIX_DISTINCT_GENERIC_PASSWORD_ITEMS_WITH_DISTINCT_PRIVATE_KEY_HASHES_AND_PUBLIC_ADDRESSES",
     secretValuesPrinted: false,
     inventorySha256: `0x${"99".repeat(32)}`,
-    plaintextRetention:
-      "0400_TEMP_ORIGINALS_PRESERVED_PENDING_EXPLICIT_RETENTION_DECISION",
+    plaintextRetention: "NO_DURABLE_PLAINTEXT_FINAL_KEYS",
+    restartReadbackVerified: true,
+    encryptedBackupStrategyVerified: true,
+    temporaryGovernance:
+      "SAME_HOST_ONE_OF_ONE_DARK_DEPLOYMENT_ONLY_MIGRATE_TO_DISTINCT_HARDWARE_TWO_OF_THREE_BEFORE_PUBLIC_ACTIVATION",
     roles: roles.map((role, index) => ({
       role,
       publicAddress: addresses[index],
       recoveredPublicAddress: addresses[index],
       evmAddressRecoveryVerified: true,
-      addressRecoveryBasis:
-        "KEYCHAIN_READBACK_SHA256_EQUALS_SOURCE_KEY_SHA256_AND_SOURCE_KEY_DERIVES_ADDRESS",
+      addressRecoveryBasis: "KEYCHAIN_READBACK_DERIVES_EXPECTED_EVM_ADDRESS",
       account: addresses[index],
       service: `programmable.custom-registry.v2.production-custody.20260813.${role}`,
-      sourceKeyFileSha256: `0x${(index + 1).toString(16).repeat(64)}`,
       readbackSha256: `0x${(index + 1).toString(16).repeat(64)}`,
       readbackByteLength: 67,
       persistentRefSha256: `0x${(index + 7).toString(16).repeat(64)}`,
-      sourcePrivateKeyFileMode: "0400",
+      sourcePrivateKeyFilePresent: false,
       accessibility: "when-unlocked-this-device-only",
       synchronizable: false,
       result: "IMPORTED_AND_READBACK_VERIFIED",
@@ -452,6 +497,48 @@ test("binds per-role Keychain readback custody proof", () => {
         owners: addresses.slice(2),
       }),
     /isolate/u,
+  );
+});
+
+test("re-reads and derives all six production Keychain custody roles without printing secrets", async () => {
+  const roles = [
+    "deployer",
+    "admin",
+    "approver",
+    "registrar",
+    "finalizer",
+    "revoker",
+  ];
+  const privateKeys = roles.map(
+    (_, index) => `0x${(index + 1).toString(16).padStart(64, "0")}`,
+  );
+  const entries = privateKeys.map((privateKey, index) => {
+    const bytes = Buffer.from(`${privateKey}\n`);
+    return {
+      role: roles[index],
+      publicAddress: privateKeyToAccount(privateKey).address,
+      service: `programmable.custom-registry.v2.production-custody.20260813.${roles[index]}`,
+      readbackSha256: `0x${createHash("sha256").update(bytes).digest("hex")}`,
+    };
+  });
+  const verified = await verifySafeCustodyRoleReadbacks({
+    entries,
+    readbackFunction: async ({ role }) =>
+      Buffer.from(`${privateKeys[roles.indexOf(role)]}\n`),
+  });
+  assert.deepEqual(
+    verified.map(({ role, publicAddress }) => ({ role, publicAddress })),
+    entries.map(({ role, publicAddress }) => ({ role, publicAddress })),
+  );
+  await assert.rejects(
+    verifySafeCustodyRoleReadbacks({
+      entries,
+      readbackFunction: async ({ role }) =>
+        Buffer.from(
+          `${privateKeys[role === "revoker" ? 4 : roles.indexOf(role)]}\n`,
+        ),
+    }),
+    /revoker/u,
   );
 });
 
