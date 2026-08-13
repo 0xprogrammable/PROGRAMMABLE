@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/generic-launch-foundation.v1.schema.json",
+  "title": "Programmable generic launch foundation V1",
+  "$ref": "#/$defs/genericLaunchFoundationDescriptor",
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "numericId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "githubRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forge", "repositoryId"],
+      "properties": {
+        "forge": { "const": "github" },
+        "repositoryId": { "$ref": "#/$defs/numericId" }
+      }
+    },
+    "gitRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commitObjectId", "treeObjectId"],
+      "properties": {
+        "commitObjectId": { "$ref": "#/$defs/gitObjectId" },
+        "treeObjectId": { "$ref": "#/$defs/gitObjectId" }
+      }
+    },
+    "applicantLaunchSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sourceRepository",
+        "application",
+        "sourceRevision",
+        "principalBindingHash",
+        "subjectHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.applicant-launch-subject.v1" },
+        "sourceRepository": { "$ref": "#/$defs/githubRepository" },
+        "application": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repositoryId", "pullRequestNumber", "approvalBindingHash"],
+          "properties": {
+            "repositoryId": { "$ref": "#/$defs/numericId" },
+            "pullRequestNumber": { "type": "integer", "minimum": 1 },
+            "approvalBindingHash": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "sourceRevision": { "$ref": "#/$defs/gitRevision" },
+        "principalBindingHash": { "$ref": "#/$defs/digest" },
+        "subjectHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "routeAdapterRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "adapterId",
+        "releaseVersion",
+        "sourceRepository",
+        "sourceRevision",
+        "contractBindings",
+        "artifactManifestHash",
+        "releaseHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.route-adapter-release.v1" },
+        "adapterId": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+        },
+        "releaseVersion": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "sourceRepository": { "$ref": "#/$defs/githubRepository" },
+        "sourceRevision": { "$ref": "#/$defs/gitRevision" },
+        "contractBindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subjectContractHash",
+            "executionContractHash",
+            "indexingContractHash",
+            "presentationContractHash"
+          ],
+          "properties": {
+            "subjectContractHash": { "$ref": "#/$defs/digest" },
+            "executionContractHash": { "$ref": "#/$defs/digest" },
+            "indexingContractHash": { "$ref": "#/$defs/digest" },
+            "presentationContractHash": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "artifactManifestHash": { "$ref": "#/$defs/digest" },
+        "releaseHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "candidateExecutionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "attemptId",
+        "subjectHash",
+        "routeAdapterReleaseHash",
+        "status",
+        "network",
+        "transaction",
+        "finality",
+        "resultPayloadHash",
+        "resultHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.candidate-execution-result.v1" },
+        "attemptId": { "$ref": "#/$defs/digest" },
+        "subjectHash": { "$ref": "#/$defs/digest" },
+        "routeAdapterReleaseHash": { "$ref": "#/$defs/digest" },
+        "status": { "enum": ["succeeded", "failed"] },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["caip2"],
+          "properties": {
+            "caip2": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,7}:[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+            }
+          }
+        },
+        "transaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transactionHash", "blockHash", "blockNumber", "transactionIndex"],
+          "properties": {
+            "transactionHash": { "$ref": "#/$defs/hash32" },
+            "blockHash": { "$ref": "#/$defs/hash32" },
+            "blockNumber": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)$" },
+            "transactionIndex": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "finality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requiredConfirmations",
+            "observedConfirmations",
+            "policyBindingHash",
+            "evidenceBindingHash",
+            "observedAt"
+          ],
+          "properties": {
+            "requiredConfirmations": { "type": "integer", "minimum": 1 },
+            "observedConfirmations": { "type": "integer", "minimum": 1 },
+            "policyBindingHash": { "$ref": "#/$defs/digest" },
+            "evidenceBindingHash": { "$ref": "#/$defs/digest" },
+            "observedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "resultPayloadHash": { "$ref": "#/$defs/digest" },
+        "resultHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "genericLaunchRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "subject",
+        "routeAdapterRelease",
+        "executionResult",
+        "publicProjectionHash",
+        "recordHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.generic-launch-record.v1" },
+        "subject": { "$ref": "#/$defs/applicantLaunchSubject" },
+        "routeAdapterRelease": { "$ref": "#/$defs/routeAdapterRelease" },
+        "executionResult": { "$ref": "#/$defs/candidateExecutionResult" },
+        "publicProjectionHash": { "$ref": "#/$defs/digest" },
+        "recordHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "genericLaunchFoundationDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activation",
+        "activationBindingHash",
+        "activatedAt",
+        "subjectSourceBindingHash",
+        "executionResultSourceBindingHash",
+        "readModelBindingHash",
+        "routeAdapterReleases",
+        "api"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-foundation-descriptor.v1"
+        },
+        "activation": { "type": "boolean" },
+        "activationBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "activatedAt": {
+          "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+        },
+        "subjectSourceBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "executionResultSourceBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "readModelBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "routeAdapterReleases": {
+          "oneOf": [
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/routeAdapterRelease" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "api": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["feedPath", "detailPathTemplate"],
+          "properties": {
+            "feedPath": { "const": "/api/custom-launch/generic/v1/launches" },
+            "detailPathTemplate": {
+              "const": "/api/custom-launch/generic/v1/launches/{recordHash}"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "activation": { "const": false } } },
+          "then": {
+            "properties": {
+              "activationBindingHash": { "type": "null" },
+              "activatedAt": { "type": "null" },
+              "subjectSourceBindingHash": { "type": "null" },
+              "executionResultSourceBindingHash": { "type": "null" },
+              "readModelBindingHash": { "type": "null" },
+              "routeAdapterReleases": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "activationBindingHash": { "$ref": "#/$defs/digest" },
+              "activatedAt": { "type": "string", "format": "date-time" },
+              "subjectSourceBindingHash": { "$ref": "#/$defs/digest" },
+              "executionResultSourceBindingHash": { "$ref": "#/$defs/digest" },
+              "readModelBindingHash": { "$ref": "#/$defs/digest" },
+              "routeAdapterReleases": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 256,
+                "uniqueItems": true,
+                "items": { "$ref": "#/$defs/routeAdapterRelease" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
