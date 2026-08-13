@@ -15,7 +15,6 @@ import {
   assertSafePolicyBoundPlan,
   assertSafePreflightEnvelope,
   assertSafeReviewedAuthorization,
-  safeTransactionInput,
   verifySafeReviewedAuthorizationSignature,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import { requireDistinctRpcOrigins } from "./custom-registry-v2-deployment-guards.mjs";
@@ -74,13 +73,13 @@ const authorized = await readReviewed(
 );
 const plan = reviewed.value;
 const authorization = authorized.value;
-let nowTimestamp = trustedNetworkTime().adjustedTimestamp;
-assertSafePreflightEnvelope(plan, nowTimestamp, { allowExpired: recover });
+const initialNow = recover ? 0 : trustedNetworkTime().adjustedTimestamp;
+assertSafePreflightEnvelope(plan, initialNow, { allowExpired: recover });
 assertSafeReviewedAuthorization({
   authorization,
   preflightSha256: reviewed.digest,
   plan,
-  nowTimestamp,
+  nowTimestamp: initialNow,
   allowExpired: recover,
 });
 await verifySafeReviewedAuthorizationSignature(authorization);
@@ -109,13 +108,12 @@ const policyBytes = await readFile(
 if (sha256(policyBytes) !== plan.policySha256) {
   throw new Error("Safe controller policy drifted");
 }
-const policy = JSON.parse(policyBytes);
 const manifestBytes = await readFile(
   path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
 );
 assertSafePolicyBoundPlan({
   plan,
-  policy,
+  policy: JSON.parse(policyBytes),
   manifest: JSON.parse(manifestBytes),
   sourceManifestSha256: sha256(manifestBytes),
 });
@@ -124,194 +122,162 @@ const rpcA = process.env.REGISTRY_PREFLIGHT_RPC_URL_A;
 const rpcB = process.env.REGISTRY_PREFLIGHT_RPC_URL_B;
 if (!rpcA || !rpcB) throw new Error("two RPC endpoints are required");
 requireDistinctRpcOrigins(rpcA, rpcB);
+const providerIds = [
+  process.env.REGISTRY_RPC_PROVIDER_ID_A,
+  process.env.REGISTRY_RPC_PROVIDER_ID_B,
+];
+if (
+  providerIds.some((value) => !value) ||
+  JSON.stringify(providerIds) !== JSON.stringify(plan.rpcProviders) ||
+  providerIds[0].toLowerCase() === providerIds[1].toLowerCase()
+) {
+  throw new Error("two distinct Safe RPC provider identities are required");
+}
 const clients = [rpcA, rpcB].map((url) =>
   createPublicClient({ chain: mainnet, transport: http(url) }),
 );
 const appendJournal = (entry, create = false) =>
   appendDurableJsonLine(journalPath, entry, { create });
 
-const validateSignedControllers = async (controllers) => {
+const validateSigned = async (signed) => {
   if (
-    controllers?.length !== plan.controllers.length ||
-    new Set(controllers.map(({ role }) => role)).size !==
-      plan.controllers.length ||
-    new Set(controllers.map(({ transactionHash }) => transactionHash)).size !==
-      plan.controllers.length
+    signed?.event !== "SIGNED_ATOMIC_NOT_CONFIRMED" ||
+    !signed.serializedTransaction ||
+    keccak256(signed.serializedTransaction) !== signed.transactionHash
   ) {
-    throw new Error("Safe signed transaction set is incomplete or duplicated");
+    throw new Error("Safe atomic signed evidence is invalid");
   }
-  for (const expectedController of plan.controllers) {
-    const signed = controllers.find(
-      ({ role }) => role === expectedController.role,
-    );
-    if (
-      !signed ||
-      getAddress(signed.address) !==
-        getAddress(expectedController.predictedAddress) ||
-      signed.expectedTransactionNonce !==
-        expectedController.expectedTransactionNonce
-    ) {
-      throw new Error(`${expectedController.role} signed evidence is invalid`);
-    }
-    await assertExactSerializedEip1559Transaction({
-      serializedTransaction: signed.serializedTransaction,
-      transactionHash: signed.transactionHash,
-      expected: expectedController.expectedTransaction,
-    });
-  }
+  await assertExactSerializedEip1559Transaction({
+    serializedTransaction: signed.serializedTransaction,
+    transactionHash: signed.transactionHash,
+    expected: plan.atomicTransaction,
+  });
 };
 
 if (recover) {
-  const records = await loadDurableJsonLines(journalPath);
-  const [header, signedSet] = records;
-  const signedSets = records.filter(
-    ({ event }) => event === "SIGNED_SET_NOT_CONFIRMED",
+  const records = await loadDurableJsonLines(journalPath, {
+    repairTrailingTornRecord: true,
+  });
+  const header = records[0];
+  const signedRecords = records.filter(
+    ({ event }) => event === "SIGNED_ATOMIC_NOT_CONFIRMED",
   );
-  const firstAttemptSets = records.filter(
-    ({ event }) => event === "FIRST_BROADCAST_ATTEMPT_SET",
+  const signed = signedRecords[0];
+  const responseRecords = records.filter(
+    ({ event }) => event === "BROADCAST_PROVIDER_RESPONSES",
+  );
+  const response = responseRecords[0];
+  const completed = records.filter(
+    ({ event }) =>
+      event === "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
   );
   if (
     header?.schemaVersion !== SAFE_RECEIPTS_SCHEMA ||
     header.event !== "JOURNAL_OPEN" ||
     header.preflightSha256 !== reviewed.digest ||
     header.authorizationSha256 !== authorized.digest ||
-    signedSet?.event !== "SIGNED_SET_NOT_CONFIRMED" ||
-    signedSets.length !== 1 ||
-    firstAttemptSets.length !== 1 ||
-    records.indexOf(firstAttemptSets[0]) !== 2
+    signedRecords.length !== 1 ||
+    records.indexOf(signed) !== 1 ||
+    responseRecords.length > 1 ||
+    (response &&
+      (response.transactionHash !== signed.transactionHash ||
+        records.indexOf(response) < 2)) ||
+    completed.length > 1
   ) {
-    throw new Error("Safe recovery journal is invalid");
+    throw new Error("Safe atomic recovery journal is invalid");
   }
-  await validateSignedControllers(signedSet.controllers);
-  const firstAttempt = firstAttemptSets[0];
-  assertSignedAttemptWindow({
-    authorization,
-    signedAt: signedSet.signedAtTimestamp,
-    firstAttemptAt: firstAttempt.firstAttemptAtTimestamp,
-  });
-  if (
-    JSON.stringify(firstAttempt.transactionHashes) !==
-    JSON.stringify(
-      signedSet.controllers.map(({ transactionHash }) => transactionHash),
-    )
-  ) {
-    throw new Error("Safe first-attempt set differs from signed set");
+  await validateSigned(signed);
+  if (completed.length === 1) {
+    process.stdout.write("CUSTOM_REGISTRY_V2_SAFE_RECOVERY_ALREADY_COMPLETE\n");
+    process.exit(0);
   }
   const discovered = await Promise.all(
-    signedSet.controllers.map(async (signed) => {
-      const providers = await Promise.all(
-        clients.map(async (client) => {
-          try {
-            const transaction = await client.getTransaction({
-              hash: signed.transactionHash,
-            });
-            return {
-              found: true,
-              blockNumber: transaction.blockNumber?.toString() ?? null,
-            };
-          } catch {
-            return { found: false, blockNumber: null };
-          }
-        }),
-      );
-      return { role: signed.role, providers };
+    clients.map(async (client) => {
+      try {
+        const transaction = await client.getTransaction({
+          hash: signed.transactionHash,
+        });
+        return { found: true, blockNumber: transaction.blockNumber };
+      } catch {
+        return { found: false, blockNumber: null };
+      }
     }),
   );
-  const missing = signedSet.controllers.filter((signed) => {
-    const observation = discovered.find(({ role }) => role === signed.role);
-    return !observation.providers.some(({ found }) => found);
-  });
-  await appendJournal({
-    event: "RECOVERY_DISCOVERY",
-    observedAtTimestamp: nowTimestamp,
-    controllers: discovered,
-  });
-  if (missing.length === 0) {
-    process.stdout.write("CUSTOM_REGISTRY_V2_SAFE_RECOVERY_FOUND_ALL\n");
+  if (discovered.some(({ found }) => found)) {
+    process.stdout.write(
+      `CUSTOM_REGISTRY_V2_SAFE_RECOVERY_FOUND ${signed.transactionHash}\n`,
+    );
     process.exit(0);
   }
   if (!rebroadcast) {
     process.stdout.write(
-      `CUSTOM_REGISTRY_V2_SAFE_RECOVERY_MISSING ${missing.map(({ role }) => role).join(",")}\n`,
+      `CUSTOM_REGISTRY_V2_SAFE_RECOVERY_NOT_FOUND ${signed.transactionHash}\n`,
     );
     process.exit(2);
   }
-  const responses = await Promise.all(
-    missing.map(async (signed) => ({
-      role: signed.role,
-      results: await Promise.allSettled(
-        clients.map((client) =>
-          client.sendRawTransaction({
-            serializedTransaction: signed.serializedTransaction,
-          }),
-        ),
-      ),
-    })),
+  const recoveryTime = trustedNetworkTime();
+  const timelyAcceptedAttempt = response?.providerResponses?.some(
+    (entry) =>
+      entry.status === "fulfilled" &&
+      entry.transactionHash === signed.transactionHash,
+  );
+  if (
+    recoveryTime.adjustedTimestamp >
+      authorization.firstAttemptExpiresAtTimestamp &&
+    !timelyAcceptedAttempt
+  ) {
+    throw new Error(
+      "expired Safe recovery lacks a durable timely accepted attempt; fresh authorization is required",
+    );
+  }
+  assertSignedAttemptWindow({
+    authorization,
+    signedAt: signed.signedAtTimestamp,
+    firstAttemptAt:
+      response?.requestStartedAtTimestamp ?? recoveryTime.adjustedTimestamp,
+  });
+  const results = await Promise.allSettled(
+    clients.map((client) =>
+      client.sendRawTransaction({
+        serializedTransaction: signed.serializedTransaction,
+      }),
+    ),
   );
   await appendJournal({
-    event: "RECOVERY_EXACT_REBROADCAST",
-    observedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
-    controllers: responses.map(({ role, results }) => ({
-      role,
-      results: results.map((result, index) => ({
-        provider: index,
-        status: result.status,
-        ...(result.status === "fulfilled"
-          ? { transactionHash: result.value }
-          : { errorName: result.reason?.name ?? "Error" }),
-      })),
+    event: response
+      ? "RECOVERY_EXACT_REBROADCAST"
+      : "BROADCAST_PROVIDER_RESPONSES",
+    requestStartedAtTimestamp: recoveryTime.adjustedTimestamp,
+    requestStartedTrustedTime: recoveryTime,
+    responseObservedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
+    transactionHash: signed.transactionHash,
+    providerResponses: results.map((result, index) => ({
+      providerId: providerIds[index],
+      status: result.status,
+      ...(result.status === "fulfilled"
+        ? { transactionHash: result.value }
+        : { errorName: result.reason?.name ?? "Error" }),
     })),
   });
-  for (const { role, results } of responses) {
-    const expectedHash = missing.find(
-      (entry) => entry.role === role,
-    ).transactionHash;
-    if (
-      !results.some(
-        (result) =>
-          result.status === "fulfilled" && result.value === expectedHash,
-      )
-    ) {
-      throw new Error(`${role} exact recovery transaction was not accepted`);
-    }
+  if (
+    !results.some(
+      (result) =>
+        result.status === "fulfilled" &&
+        result.value === signed.transactionHash,
+    )
+  ) {
+    throw new Error("exact Safe atomic recovery transaction was not accepted");
   }
-  process.stdout.write("CUSTOM_REGISTRY_V2_SAFE_RECOVERY_REBROADCAST\n");
+  process.stdout.write(
+    `CUSTOM_REGISTRY_V2_SAFE_RECOVERY_REBROADCAST ${signed.transactionHash}\n`,
+  );
   process.exit(0);
-}
-
-const deployerCustody = plan.custody.roles.find(
-  ({ role }) => role === "deployer",
-);
-if (
-  deployerCustody?.service !==
-    "programmable.custom-registry.v2.production-custody.20260813.deployer" ||
-  getAddress(deployerCustody?.publicAddress) !== getAddress(plan.deployer)
-) {
-  throw new Error("reviewed Safe deployer Keychain custody is invalid");
-}
-const privateKey = execFileSync(
-  "security",
-  [
-    "find-generic-password",
-    "-w",
-    "-s",
-    deployerCustody.service,
-    "-a",
-    getAddress(plan.deployer),
-  ],
-  { encoding: "utf8", maxBuffer: 4096 },
-).trim();
-if (!/^0x[0-9a-fA-F]{64}$/u.test(privateKey)) {
-  throw new Error("Safe deployer Keychain custody item is invalid");
-}
-const account = privateKeyToAccount(privateKey);
-if (getAddress(account.address) !== getAddress(plan.deployer)) {
-  throw new Error("Safe deployer key mismatch");
 }
 
 const live = await Promise.all(
   clients.map(async (client) => {
     const [
+      chainId,
       finalized,
       latest,
       nonce,
@@ -321,14 +287,17 @@ const live = await Promise.all(
       version,
       factoryCode,
       proxyCreationCode,
+      multiSendCode,
+      controllerState,
     ] = await Promise.all([
+      client.getChainId(),
       client.getBlock({ blockTag: "finalized" }),
       client.getBlock({ blockTag: "latest" }),
       client.getTransactionCount({
-        address: account.address,
+        address: plan.deployer,
         blockTag: "pending",
       }),
-      client.getBalance({ address: account.address, blockTag: "latest" }),
+      client.getBalance({ address: plan.deployer, blockTag: "latest" }),
       client.estimateMaxPriorityFeePerGas(),
       client.getCode({ address: plan.singleton.address, blockTag: "latest" }),
       client.readContract({
@@ -345,21 +314,29 @@ const live = await Promise.all(
         abi: SAFE_FACTORY_ABI,
         functionName: "proxyCreationCode",
       }),
-    ]);
-    const controllerState = await Promise.all(
-      plan.controllers.map(async ({ predictedAddress }) => {
-        const [code, targetNonce, targetBalance] = await Promise.all([
-          client.getCode({ address: predictedAddress, blockTag: "latest" }),
-          client.getTransactionCount({
+      client.getCode({
+        address: plan.multiSendCallOnly.address,
+        blockTag: "latest",
+      }),
+      Promise.all(
+        plan.controllers.map(async ({ predictedAddress }) => ({
+          code: await client.getCode({
             address: predictedAddress,
             blockTag: "latest",
           }),
-          client.getBalance({ address: predictedAddress, blockTag: "latest" }),
-        ]);
-        return { code, nonce: targetNonce, balance: targetBalance };
-      }),
-    );
+          nonce: await client.getTransactionCount({
+            address: predictedAddress,
+            blockTag: "latest",
+          }),
+          balance: await client.getBalance({
+            address: predictedAddress,
+            blockTag: "latest",
+          }),
+        })),
+      ),
+    ]);
     return {
+      chainId,
       finalized,
       latest,
       nonce,
@@ -369,6 +346,7 @@ const live = await Promise.all(
       version,
       factoryCode,
       proxyCreationCode,
+      multiSendCode,
       controllerState,
     };
   }),
@@ -378,7 +356,7 @@ const commonFinalizedNumber =
   a.finalized.number < b.finalized.number
     ? a.finalized.number
     : b.finalized.number;
-const [commonA, commonB, anchorA, anchorB] = await Promise.all([
+const [commonA, commonB, reviewedAnchorA, reviewedAnchorB] = await Promise.all([
   clients[0].getBlock({ blockNumber: commonFinalizedNumber }),
   clients[1].getBlock({ blockNumber: commonFinalizedNumber }),
   clients[0].getBlock({
@@ -389,10 +367,11 @@ const [commonA, commonB, anchorA, anchorB] = await Promise.all([
   }),
 ]);
 if (
-  commonFinalizedNumber < BigInt(plan.commonFinalizedAnchor.blockNumber) ||
+  a.chainId !== 1 ||
+  b.chainId !== 1 ||
   commonA.hash !== commonB.hash ||
-  anchorA.hash !== plan.commonFinalizedAnchor.blockHash ||
-  anchorB.hash !== plan.commonFinalizedAnchor.blockHash ||
+  reviewedAnchorA.hash !== plan.commonFinalizedAnchor.blockHash ||
+  reviewedAnchorB.hash !== plan.commonFinalizedAnchor.blockHash ||
   a.nonce !== b.nonce ||
   a.nonce !== plan.exactPendingNonce ||
   a.balance !== b.balance ||
@@ -403,75 +382,79 @@ if (
   b.version !== plan.safeVersion ||
   keccak256(a.factoryCode) !== plan.proxyFactory.runtimeCodeKeccak256 ||
   keccak256(b.factoryCode) !== plan.proxyFactory.runtimeCodeKeccak256 ||
-  keccak256(a.proxyCreationCode) !==
-    plan.proxyFactory.proxyCreationCodeKeccak256 ||
+  keccak256(a.multiSendCode) !== plan.multiSendCallOnly.runtimeCodeKeccak256 ||
+  keccak256(b.multiSendCode) !== plan.multiSendCallOnly.runtimeCodeKeccak256 ||
   [...a.controllerState, ...b.controllerState].some(
     ({ code, nonce, balance }) =>
       (code && code !== "0x") || nonce !== 0 || balance !== 0n,
   )
 ) {
-  throw new Error("live Safe broadcast state drifted from reviewed plan");
+  throw new Error("live atomic Safe broadcast state drifted from plan");
 }
 const observedFeePerGas = live.reduce((maximum, observation) => {
   const observed =
     (observation.latest.baseFeePerGas ?? 0n) * 2n + observation.priorityFee;
   return observed > maximum ? observed : maximum;
 }, 0n);
-const maxFeePerGas = BigInt(plan.reviewedMaxFeePerGas);
-const maxPriorityFeePerGas = BigInt(
-  plan.controllers[0].expectedTransaction.maxPriorityFeePerGas,
-);
 if (
-  observedFeePerGas > maxFeePerGas ||
+  observedFeePerGas > BigInt(plan.reviewedMaxFeePerGas) ||
   a.balance < BigInt(plan.maximumTotalCostWei) ||
-  maxPriorityFeePerGas > maxFeePerGas ||
-  live.some((observation) =>
-    plan.controllers.some(
-      (controller) =>
-        BigInt(controller.gasLimit) >= observation.latest.gasLimit,
-    ),
-  )
+  BigInt(plan.atomicTransaction.gasLimit) >= a.latest.gasLimit ||
+  BigInt(plan.atomicTransaction.gasLimit) >= b.latest.gasLimit
 ) {
-  throw new Error("live Safe broadcast economics exceed the reviewed plan");
+  throw new Error("live Safe atomic broadcast economics exceed plan");
 }
 
+const custody = plan.custody.roles.find(({ role }) => role === "deployer");
+if (
+  custody?.service !==
+    "programmable.custom-registry.v2.production-custody.20260813.deployer" ||
+  getAddress(custody.publicAddress) !== getAddress(plan.deployer)
+) {
+  throw new Error("reviewed Safe deployer custody is invalid");
+}
+const privateKey = execFileSync(
+  "security",
+  [
+    "find-generic-password",
+    "-w",
+    "-s",
+    custody.service,
+    "-a",
+    getAddress(plan.deployer),
+  ],
+  { encoding: "utf8", maxBuffer: 4096 },
+).trim();
+if (!/^0x[0-9a-fA-F]{64}$/u.test(privateKey)) {
+  throw new Error("Safe deployer Keychain custody item is invalid");
+}
+const account = privateKeyToAccount(privateKey);
+if (getAddress(account.address) !== getAddress(plan.deployer)) {
+  throw new Error("Safe deployer key mismatch");
+}
 const signingTime = trustedNetworkTime();
 assertSignedAttemptWindow({
   authorization,
   signedAt: signingTime.adjustedTimestamp,
   firstAttemptAt: signingTime.adjustedTimestamp,
 });
-const signedControllers = [];
-for (const controller of plan.controllers) {
-  const expectedInput = safeTransactionInput({
-    singleton: plan.singleton.address,
-    initializer: controller.initializer,
-    saltNonce: controller.saltNonce,
-  });
-  if (controller.expectedTransaction.input !== expectedInput) {
-    throw new Error(`${controller.role} reviewed Safe transaction is invalid`);
-  }
-  const serializedTransaction = await account.signTransaction({
-    chainId: 1,
-    type: "eip1559",
-    to: plan.proxyFactory.address,
-    data: expectedInput,
-    value: 0n,
-    nonce: controller.expectedTransactionNonce,
-    gas: BigInt(controller.gasLimit),
-    maxFeePerGas,
-    maxPriorityFeePerGas,
-  });
-  const transactionHash = keccak256(serializedTransaction);
-  signedControllers.push({
-    role: controller.role,
-    address: controller.predictedAddress,
-    transactionHash,
-    serializedTransaction,
-    expectedTransactionNonce: controller.expectedTransactionNonce,
-  });
-}
-await validateSignedControllers(signedControllers);
+const serializedTransaction = await account.signTransaction({
+  chainId: 1,
+  type: "eip1559",
+  to: plan.atomicTransaction.to,
+  data: plan.atomicTransaction.input,
+  value: 0n,
+  nonce: plan.atomicTransaction.nonce,
+  gas: BigInt(plan.atomicTransaction.gasLimit),
+  maxFeePerGas: BigInt(plan.atomicTransaction.maxFeePerGas),
+  maxPriorityFeePerGas: BigInt(plan.atomicTransaction.maxPriorityFeePerGas),
+});
+const transactionHash = keccak256(serializedTransaction);
+await assertExactSerializedEip1559Transaction({
+  serializedTransaction,
+  transactionHash,
+  expected: plan.atomicTransaction,
+});
 await appendJournal(
   {
     schemaVersion: SAFE_RECEIPTS_SCHEMA,
@@ -488,94 +471,66 @@ await appendJournal(
   true,
 );
 await appendJournal({
-  event: "SIGNED_SET_NOT_CONFIRMED",
+  event: "SIGNED_ATOMIC_NOT_CONFIRMED",
   signedAtTimestamp: signingTime.adjustedTimestamp,
   trustedTime: signingTime,
-  controllers: signedControllers,
+  transactionHash,
+  serializedTransaction,
 });
-const firstAttemptTime = trustedNetworkTime();
+const requestStarted = trustedNetworkTime();
 assertSignedAttemptWindow({
   authorization,
   signedAt: signingTime.adjustedTimestamp,
-  firstAttemptAt: firstAttemptTime.adjustedTimestamp,
+  firstAttemptAt: requestStarted.adjustedTimestamp,
 });
-await appendJournal({
-  event: "FIRST_BROADCAST_ATTEMPT_SET",
-  firstAttemptAtTimestamp: firstAttemptTime.adjustedTimestamp,
-  trustedTime: firstAttemptTime,
-  transactionHashes: signedControllers.map(
-    ({ transactionHash }) => transactionHash,
-  ),
-});
-const responses = await Promise.all(
-  signedControllers.map(async (signed) => ({
-    role: signed.role,
-    results: await Promise.allSettled(
-      clients.map((client) =>
-        client.sendRawTransaction({
-          serializedTransaction: signed.serializedTransaction,
-        }),
-      ),
-    ),
-  })),
+const responses = await Promise.allSettled(
+  clients.map((client) => client.sendRawTransaction({ serializedTransaction })),
 );
 await appendJournal({
   event: "BROADCAST_PROVIDER_RESPONSES",
-  observedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
-  controllers: responses.map(({ role, results }) => ({
-    role,
-    results: results.map((result, index) => ({
-      provider: index,
-      status: result.status,
-      ...(result.status === "fulfilled"
-        ? { transactionHash: result.value }
-        : { errorName: result.reason?.name ?? "Error" }),
-    })),
+  requestStartedAtTimestamp: requestStarted.adjustedTimestamp,
+  requestStartedTrustedTime: requestStarted,
+  responseObservedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
+  transactionHash,
+  providerResponses: responses.map((result, index) => ({
+    providerId: providerIds[index],
+    status: result.status,
+    ...(result.status === "fulfilled"
+      ? { transactionHash: result.value }
+      : { errorName: result.reason?.name ?? "Error" }),
   })),
 });
-for (const { role, results } of responses) {
-  const expectedHash = signedControllers.find(
-    (entry) => entry.role === role,
-  ).transactionHash;
-  if (
-    !results.some(
-      (result) =>
-        result.status === "fulfilled" && result.value === expectedHash,
-    )
-  ) {
-    throw new Error(`${role} exact Safe transaction was not accepted`);
-  }
+if (
+  !responses.some(
+    (result) =>
+      result.status === "fulfilled" && result.value === transactionHash,
+  )
+) {
+  throw new Error("exact signed atomic Safe transaction was not accepted");
 }
-const receipts = await Promise.all(
-  signedControllers.map(async (signed) => {
-    const receipt = await Promise.any(
-      clients.map((client) =>
-        client.waitForTransactionReceipt({
-          hash: signed.transactionHash,
-          confirmations: 1,
-        }),
-      ),
-    );
-    if (receipt.status !== "success" || receipt.contractAddress !== null) {
-      throw new Error(`${signed.role} Safe factory transaction failed`);
-    }
-    return {
-      role: signed.role,
-      transactionHash: signed.transactionHash,
-      blockNumber: receipt.blockNumber.toString(),
-      blockHash: receipt.blockHash,
-    };
-  }),
+const receipt = await Promise.any(
+  clients.map((client) =>
+    client.waitForTransactionReceipt({
+      hash: transactionHash,
+      confirmations: 1,
+    }),
+  ),
 );
+if (receipt.status !== "success" || receipt.contractAddress !== null) {
+  throw new Error("atomic Safe transaction failed");
+}
 await appendJournal({
-  event: "RECEIPTS_SEEN_AWAITING_FINALIZED_VERIFICATION",
+  event: "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
   observedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
-  controllers: receipts,
+  transactionHash,
+  blockNumber: receipt.blockNumber.toString(),
+  blockHash: receipt.blockHash,
 });
 await appendJournal({
   event: "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
   observedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
+  transactionHash,
 });
 process.stdout.write(
-  `CUSTOM_REGISTRY_V2_SAFE_CONTROLLER_RECEIPTS ${journalPath}\n`,
+  `CUSTOM_REGISTRY_V2_SAFE_ATOMIC_RECEIPT ${transactionHash} ${journalPath}\n`,
 );

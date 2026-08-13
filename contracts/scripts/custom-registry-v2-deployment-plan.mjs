@@ -142,7 +142,7 @@ export async function assertRegistryDeploymentPlan({
   const safePolicySha256 = sha256(safePolicyBytes);
   if (
     safeVerification.schemaVersion !== SAFE_VERIFICATION_SCHEMA ||
-    safeVerification.status !== "VERIFIED_FINALIZED_SAFE_CONTROLLERS" ||
+    safeVerification.status !== "VERIFIED_FINALIZED_ATOMIC_SAFE_CONTROLLERS" ||
     safeVerification.chainId !== 1 ||
     safeVerification.verified !== true ||
     safeVerification.source?.commit !== source.commit ||

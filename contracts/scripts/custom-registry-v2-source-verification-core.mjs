@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -188,13 +188,19 @@ const SOLC_LOCK = {
       ),
       path.join(os.homedir(), ".svm/0.8.26/solc-0.8.26"),
     ],
+    url: "https://binaries.soliditylang.org/macosx-amd64/solc-macosx-amd64-v0.8.26+commit.8a97fa7a",
   },
   linux: {
     sha256:
       "0xd5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef",
     candidates: [path.join(os.homedir(), ".svm/0.8.26/solc-0.8.26")],
+    url: "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.26+commit.8a97fa7a",
   },
 };
+
+export function expectedPinnedSolcDigest() {
+  return SOLC_LOCK[process.platform]?.sha256;
+}
 
 export async function resolvePinnedSolc() {
   const lock = SOLC_LOCK[process.platform];
@@ -222,7 +228,33 @@ export async function resolvePinnedSolc() {
       };
     } catch {}
   }
-  throw new Error("digest-pinned official solc 0.8.26 was not found");
+  const response = await fetch(lock.url, { redirect: "error" });
+  if (!response.ok) {
+    throw new Error("official digest-pinned solc download failed");
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (sha256(bytes) !== lock.sha256) {
+    throw new Error("downloaded official solc digest mismatch");
+  }
+  const downloaded = path.join(
+    os.tmpdir(),
+    `programmable-solc-${process.platform}-${process.arch}-0.8.26`,
+  );
+  await writeFile(downloaded, bytes, { mode: 0o700 });
+  await chmod(downloaded, 0o700);
+  const version = execFileSync(downloaded, ["--version"], {
+    encoding: "utf8",
+  });
+  if (!version.includes("0.8.26+commit.8a97fa7a")) {
+    throw new Error("downloaded official solc version mismatch");
+  }
+  return {
+    path: downloaded,
+    sha256: lock.sha256,
+    platform: process.platform,
+    architecture: process.arch,
+    version: REGISTRY_COMPILER_VERSION,
+  };
 }
 
 export function materialCompilerSettings(settings) {
@@ -445,6 +477,7 @@ export async function fetchJsonEvidence({
       },
       rawResponseSha256: sha256(bytes),
       rawResponseBytes: bytes.length,
+      rawResponseBase64: bytes.toString("base64"),
       semanticSha256: sha256(Buffer.from(JSON.stringify(value))),
     },
   };

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { open, readFile, writeFile } from "node:fs/promises";
+import { open, readFile, truncate, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -112,10 +112,28 @@ export async function appendDurableJsonLine(
   }
 }
 
-export async function loadDurableJsonLines(filePath) {
+export async function loadDurableJsonLines(
+  filePath,
+  { repairTrailingTornRecord = false } = {},
+) {
   const bytes = await readFile(filePath);
   const text = bytes.toString("utf8");
   const hasCompleteFinalRecord = text.endsWith("\n");
+  if (!hasCompleteFinalRecord && repairTrailingTornRecord) {
+    const authoritativeLength = bytes.lastIndexOf(0x0a) + 1;
+    if (authoritativeLength <= 0) {
+      throw new Error("transaction journal has no complete ordered records");
+    }
+    await truncate(filePath, authoritativeLength);
+    const handle = await open(filePath, "r+");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await syncParentDirectory(filePath);
+    return loadDurableJsonLines(filePath);
+  }
   const records = text.split("\n");
   if (hasCompleteFinalRecord) records.pop();
   else records.pop(); // A non-newline-terminated suffix is never authoritative.
@@ -151,5 +169,26 @@ export function assertSignedAttemptWindow({
     throw new Error(
       "signing or first broadcast attempt fell outside authorization",
     );
+  }
+}
+
+export function assertTrustedTimeEvidence(evidence, expectedTimestamp) {
+  if (
+    evidence?.source !== "sntp:time.apple.com" ||
+    !Number.isSafeInteger(evidence.systemTimeMilliseconds) ||
+    !Number.isSafeInteger(evidence.offsetMilliseconds) ||
+    !Number.isSafeInteger(evidence.uncertaintyMilliseconds) ||
+    !Number.isSafeInteger(evidence.adjustedTimeMilliseconds) ||
+    !Number.isSafeInteger(evidence.adjustedTimestamp) ||
+    Math.abs(evidence.offsetMilliseconds) > 5_000 ||
+    evidence.uncertaintyMilliseconds < 0 ||
+    evidence.uncertaintyMilliseconds > 1_000 ||
+    evidence.adjustedTimeMilliseconds !==
+      evidence.systemTimeMilliseconds + evidence.offsetMilliseconds ||
+    evidence.adjustedTimestamp !==
+      Math.floor(evidence.adjustedTimeMilliseconds / 1_000) ||
+    evidence.adjustedTimestamp !== expectedTimestamp
+  ) {
+    throw new Error("trusted time evidence is invalid");
   }
 }

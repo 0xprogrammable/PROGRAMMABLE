@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { getAddress } from "viem";
@@ -36,11 +37,11 @@ const onchainPath = path.resolve(
 if (!onchainPath.startsWith("/tmp/")) {
   throw new Error("onchain verification must be under /tmp");
 }
-const onchainBytes = await readFile(onchainPath);
+let onchainBytes = await readFile(onchainPath);
 if (sha256(onchainBytes) !== required("REGISTRY_ONCHAIN_VERIFICATION_SHA256")) {
   throw new Error("onchain verification digest mismatch");
 }
-const onchain = JSON.parse(onchainBytes);
+let onchain = JSON.parse(onchainBytes);
 if (
   onchain.schemaVersion !== REGISTRY_VERIFICATION_SCHEMA ||
   onchain.status !== "VERIFIED_FINALIZED_ONCHAIN_AWAITING_SOURCE" ||
@@ -72,6 +73,69 @@ if (
   throw new Error(
     "source verification requires the exact clean reviewed source",
   );
+}
+if (submitSourcify || submitEtherscan || capture) {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "registry-v2-source-trust-root-"),
+  );
+  const freshPath = path.join(directory, "fresh-onchain.json");
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(
+          root,
+          "contracts/scripts/verify-custom-registry-v2-deployment.mjs",
+        ),
+        "--output",
+        freshPath,
+      ],
+      {
+        cwd: root,
+        env: process.env,
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    );
+    if (result.status !== 0) {
+      throw new Error(
+        "active source verification requires fresh full onchain release verification",
+      );
+    }
+    const freshBytes = await readFile(freshPath);
+    const fresh = JSON.parse(freshBytes);
+    const stableIdentity = (value) => ({
+      schemaVersion: value.schemaVersion,
+      status: value.status,
+      verified: value.verified,
+      chainId: value.chainId,
+      source: value.source,
+      contractAddress: value.contractAddress,
+      transactionHash: value.transactionHash,
+      deploymentBlockNumber: value.deploymentBlockNumber,
+      deploymentBlockHash: value.deploymentBlockHash,
+      deploymentBlockTimestamp: value.deploymentBlockTimestamp,
+      deploymentTransactionIndex: value.deploymentTransactionIndex,
+      runtimeCodeKeccak256: value.runtimeCodeKeccak256,
+      constructorArguments: value.constructorArguments,
+      constructorCommitment: value.constructorCommitment,
+      registryPolicyCommitment: value.registryPolicyCommitment,
+      minimumFinalityBlocks: value.minimumFinalityBlocks,
+      controllers: value.controllers,
+    });
+    if (
+      JSON.stringify(stableIdentity(fresh)) !==
+      JSON.stringify(stableIdentity(onchain))
+    ) {
+      throw new Error(
+        "fresh full onchain release identity differs from supplied evidence",
+      );
+    }
+    onchain = fresh;
+    onchainBytes = freshBytes;
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 const compilation = await compileReviewedRegistry({
   root,

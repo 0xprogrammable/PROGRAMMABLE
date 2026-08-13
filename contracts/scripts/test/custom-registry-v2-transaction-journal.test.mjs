@@ -9,6 +9,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   assertExactSerializedEip1559Transaction,
   assertSignedAttemptWindow,
+  assertTrustedTimeEvidence,
+  appendDurableJsonLine,
   loadDurableJsonLines,
 } from "../custom-registry-v2-transaction-journal.mjs";
 
@@ -109,6 +111,26 @@ test("authorization binds signing and first attempt, never inclusion", () => {
   }
 });
 
+test("trusted time evidence binds its exact adjusted timestamp", () => {
+  const evidence = {
+    source: "sntp:time.apple.com",
+    systemTimeMilliseconds: 100_000,
+    offsetMilliseconds: 250,
+    uncertaintyMilliseconds: 50,
+    adjustedTimeMilliseconds: 100_250,
+    adjustedTimestamp: 100,
+  };
+  assert.doesNotThrow(() => assertTrustedTimeEvidence(evidence, 100));
+  assert.throws(
+    () =>
+      assertTrustedTimeEvidence(
+        { ...evidence, adjustedTimeMilliseconds: 100_251 },
+        100,
+      ),
+    /trusted time evidence/u,
+  );
+});
+
 test("journal recovery ignores only a torn trailing record", async () => {
   const directory = await mkdtemp("/tmp/registry-v2-journal-test-");
   try {
@@ -120,6 +142,15 @@ test("journal recovery ignores only a torn trailing record", async () => {
     assert.deepEqual(await loadDurableJsonLines(journalPath), [
       { event: "JOURNAL_OPEN" },
       { event: "SIGNED_NOT_CONFIRMED" },
+    ]);
+    await loadDurableJsonLines(journalPath, {
+      repairTrailingTornRecord: true,
+    });
+    await appendDurableJsonLine(journalPath, { event: "RECOVERY_FOUND" });
+    assert.deepEqual(await loadDurableJsonLines(journalPath), [
+      { event: "JOURNAL_OPEN" },
+      { event: "SIGNED_NOT_CONFIRMED" },
+      { event: "RECOVERY_FOUND" },
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });

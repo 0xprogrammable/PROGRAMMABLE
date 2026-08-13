@@ -11,7 +11,7 @@ export const REGISTRY_PREFLIGHT_SCHEMA =
 export const REGISTRY_AUTHORIZATION_SCHEMA =
   "programmable.custom-registry-deployment-authorization.v4";
 export const REGISTRY_RECEIPT_SCHEMA =
-  "programmable.custom-registry-deployment-receipt.v2";
+  "programmable.custom-registry-deployment-receipt.v3";
 export const REGISTRY_VERIFICATION_SCHEMA =
   "programmable.custom-registry-deployment-verification.v1";
 export const REGISTRY_SOURCE_VERIFICATION_SCHEMA =
@@ -334,6 +334,7 @@ export function assertFinalizedDeploymentTransaction({
   actual,
   transactionHash,
   plan,
+  authorization,
 }) {
   if (
     actual.hash !== transactionHash ||
@@ -357,7 +358,9 @@ export function assertFinalizedDeploymentTransaction({
     BigInt(actual.receiptGasUsed) > BigInt(plan.expectedTransaction.gasLimit) ||
     BigInt(actual.receiptEffectiveGasPrice) >
       BigInt(plan.expectedTransaction.maxFeePerGas) ||
-    actual.runtimeCodeKeccak256 !== plan.expectedRuntime.codeKeccak256
+    actual.runtimeCodeKeccak256 !== plan.expectedRuntime.codeKeccak256 ||
+    BigInt(actual.receiptBlockTimestamp) <
+      BigInt(authorization.notBeforeTimestamp)
   ) {
     throw new Error(
       "finalized Registry transaction does not match the exact signed plan",

@@ -115,16 +115,18 @@ const appendJournal = (entry, create = false) =>
   appendDurableJsonLine(journalPath, entry, { create });
 
 if (recover) {
-  const entries = await loadDurableJsonLines(journalPath);
+  const entries = await loadDurableJsonLines(journalPath, {
+    repairTrailingTornRecord: true,
+  });
   const header = entries[0];
   const signedRecords = entries.filter(
     (entry) => entry.event === "SIGNED_NOT_CONFIRMED",
   );
   const signed = signedRecords[0];
-  const firstAttempts = entries.filter(
-    (entry) => entry.event === "FIRST_BROADCAST_ATTEMPT",
+  const responseRecords = entries.filter(
+    (entry) => entry.event === "BROADCAST_PROVIDER_RESPONSES",
   );
-  const firstAttempt = firstAttempts[0];
+  const responseRecord = responseRecords[0];
   if (
     header?.schemaVersion !== REGISTRY_RECEIPT_SCHEMA ||
     header.event !== "JOURNAL_OPEN" ||
@@ -132,13 +134,12 @@ if (recover) {
     header.authorizationSha256 !== authorized.digest ||
     signedRecords.length !== 1 ||
     entries.indexOf(signed) !== 1 ||
-    firstAttempts.length !== 1 ||
-    entries.indexOf(firstAttempt) !== 2 ||
     !signed?.serializedTransaction ||
     keccak256(signed.serializedTransaction) !== signed.transactionHash ||
-    !firstAttempt ||
-    firstAttempt.transactionHash !== signed.transactionHash ||
-    firstAttempt.firstAttemptAtTimestamp !== signed.firstAttemptAtTimestamp
+    responseRecords.length > 1 ||
+    (responseRecord &&
+      (responseRecord.transactionHash !== signed.transactionHash ||
+        entries.indexOf(responseRecord) < 2))
   ) {
     throw new Error("deployment recovery journal is invalid");
   }
@@ -146,11 +147,6 @@ if (recover) {
     serializedTransaction: signed.serializedTransaction,
     transactionHash: signed.transactionHash,
     expected: plan.expectedTransaction,
-  });
-  assertSignedAttemptWindow({
-    authorization,
-    signedAt: signed.signedAtTimestamp,
-    firstAttemptAt: firstAttempt.firstAttemptAtTimestamp,
   });
   const discovered = await Promise.all(
     clients.map(async (client) => {
@@ -182,6 +178,28 @@ if (recover) {
     );
     process.exit(2);
   }
+  const recoveryTime = trustedNetworkTime();
+  const timelyAcceptedAttempt = responseRecord?.providerResponses?.some(
+    (response) =>
+      response.status === "fulfilled" &&
+      response.transactionHash === signed.transactionHash,
+  );
+  if (
+    recoveryTime.adjustedTimestamp >
+      authorization.firstAttemptExpiresAtTimestamp &&
+    !timelyAcceptedAttempt
+  ) {
+    throw new Error(
+      "expired recovery lacks durable proof of a timely accepted broadcast; fresh authorization is required",
+    );
+  }
+  assertSignedAttemptWindow({
+    authorization,
+    signedAt: signed.signedAtTimestamp,
+    firstAttemptAt:
+      responseRecord?.requestStartedAtTimestamp ??
+      recoveryTime.adjustedTimestamp,
+  });
   // After one timely first attempt, only these exact signed bytes may be
   // idempotently rebroadcast. The authorization is not an inclusion deadline.
   const responses = await Promise.allSettled(
@@ -192,8 +210,12 @@ if (recover) {
     ),
   );
   await appendJournal({
-    event: "RECOVERY_REBROADCAST",
-    observedAtTimestamp: nowTimestamp,
+    event: responseRecord
+      ? "RECOVERY_REBROADCAST"
+      : "BROADCAST_PROVIDER_RESPONSES",
+    requestStartedAtTimestamp: recoveryTime.adjustedTimestamp,
+    requestStartedTrustedTime: recoveryTime,
+    responseObservedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
     transactionHash: signed.transactionHash,
     providerResponses: responses.map((result, index) => ({
       providerId: providerIds[index],
@@ -272,12 +294,6 @@ await assertExactSerializedEip1559Transaction({
   transactionHash,
   expected: plan.expectedTransaction,
 });
-const firstAttemptTime = trustedNetworkTime();
-assertSignedAttemptWindow({
-  authorization,
-  signedAt: signingTime.adjustedTimestamp,
-  firstAttemptAt: firstAttemptTime.adjustedTimestamp,
-});
 await appendJournal(
   {
     schemaVersion: REGISTRY_RECEIPT_SCHEMA,
@@ -296,25 +312,25 @@ await appendJournal(
 await appendJournal({
   event: "SIGNED_NOT_CONFIRMED",
   signedAtTimestamp: signingTime.adjustedTimestamp,
-  firstAttemptAtTimestamp: firstAttemptTime.adjustedTimestamp,
   trustedTime: signingTime,
-  firstAttemptTrustedTime: firstAttemptTime,
   firstAttemptExpiresAtTimestamp: authorization.firstAttemptExpiresAtTimestamp,
   transactionHash,
   serializedTransaction,
 });
-await appendJournal({
-  event: "FIRST_BROADCAST_ATTEMPT",
-  firstAttemptAtTimestamp: firstAttemptTime.adjustedTimestamp,
-  transactionHash,
+const firstAttemptTime = trustedNetworkTime();
+assertSignedAttemptWindow({
+  authorization,
+  signedAt: signingTime.adjustedTimestamp,
+  firstAttemptAt: firstAttemptTime.adjustedTimestamp,
 });
-
 const responses = await Promise.allSettled(
   clients.map((client) => client.sendRawTransaction({ serializedTransaction })),
 );
 await appendJournal({
   event: "BROADCAST_PROVIDER_RESPONSES",
-  broadcastAtTimestamp: Math.floor(Date.now() / 1000),
+  requestStartedAtTimestamp: firstAttemptTime.adjustedTimestamp,
+  requestStartedTrustedTime: firstAttemptTime,
+  responseObservedAtTimestamp: trustedNetworkTime().adjustedTimestamp,
   transactionHash,
   providerResponses: responses.map((result, index) => ({
     providerId: providerIds[index],

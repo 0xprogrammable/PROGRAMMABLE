@@ -28,6 +28,7 @@ import {
 import {
   assertExactSerializedEip1559Transaction,
   assertSignedAttemptWindow,
+  assertTrustedTimeEvidence,
   loadDurableJsonLines,
 } from "./custom-registry-v2-transaction-journal.mjs";
 import {
@@ -197,10 +198,10 @@ const signedRecords = journal.filter(
   (entry) => entry.event === "SIGNED_NOT_CONFIRMED",
 );
 const signed = signedRecords[0];
-const firstAttempts = journal.filter(
-  (entry) => entry.event === "FIRST_BROADCAST_ATTEMPT",
+const responseRecords = journal.filter(
+  (entry) => entry.event === "BROADCAST_PROVIDER_RESPONSES",
 );
-const firstAttempt = firstAttempts[0];
+const responseRecord = responseRecords[0];
 if (
   header?.schemaVersion !== REGISTRY_RECEIPT_SCHEMA ||
   header.event !== "JOURNAL_OPEN" ||
@@ -208,13 +209,25 @@ if (
   header.authorizationSha256 !== authorized.digest ||
   header.safeVerificationSha256 !== safeEvidence.digest ||
   signedRecords.length !== 1 ||
-  firstAttempts.length !== 1 ||
   journal.indexOf(signed) !== 1 ||
-  journal.indexOf(firstAttempt) !== 2 ||
   !signed?.serializedTransaction ||
   keccak256(signed.serializedTransaction) !== signed.transactionHash ||
-  firstAttempt.transactionHash !== signed.transactionHash ||
-  firstAttempt.firstAttemptAtTimestamp !== signed.firstAttemptAtTimestamp ||
+  responseRecords.length !== 1 ||
+  responseRecord.transactionHash !== signed.transactionHash ||
+  journal.indexOf(responseRecord) < 2 ||
+  JSON.stringify(
+    responseRecord.providerResponses?.map(({ providerId }) => providerId),
+  ) !== JSON.stringify(reviewed.value.rpcProviders) ||
+  responseRecord.providerResponses?.some(
+    (response) =>
+      response.status === "fulfilled" &&
+      response.transactionHash !== signed.transactionHash,
+  ) ||
+  !responseRecord.providerResponses?.some(
+    (response) =>
+      response.status === "fulfilled" &&
+      response.transactionHash === signed.transactionHash,
+  ) ||
   journal.some(
     (entry) =>
       entry.transactionHash !== undefined &&
@@ -223,6 +236,11 @@ if (
 ) {
   throw new Error("deployment receipt journal is invalid");
 }
+assertTrustedTimeEvidence(signed.trustedTime, signed.signedAtTimestamp);
+assertTrustedTimeEvidence(
+  responseRecord.requestStartedTrustedTime,
+  responseRecord.requestStartedAtTimestamp,
+);
 
 const plan = reviewed.value;
 const authorization = authorized.value;
@@ -249,7 +267,7 @@ await assertExactSerializedEip1559Transaction({
 assertSignedAttemptWindow({
   authorization,
   signedAt: signed.signedAtTimestamp,
-  firstAttemptAt: firstAttempt.firstAttemptAtTimestamp,
+  firstAttemptAt: responseRecord.requestStartedAtTimestamp,
 });
 
 const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
@@ -266,6 +284,20 @@ const clients = [rpcA, rpcB].map((url) =>
   createPublicClient({ chain: mainnet, transport: http(url) }),
 );
 const finalized = await commonFinalizedBlock(clients);
+const reviewedAnchor = await Promise.all(
+  clients.map((client) =>
+    client.getBlock({
+      blockNumber: BigInt(plan.commonFinalizedAnchor.blockNumber),
+    }),
+  ),
+);
+if (
+  reviewedAnchor.some(
+    (block) => block.hash !== plan.commonFinalizedAnchor.blockHash,
+  )
+) {
+  throw new Error("reviewed finalized Registry anchor is no longer canonical");
+}
 const chainObservations = await Promise.all(
   clients.map(async (client) => {
     const [transaction, receipt] = await Promise.all([

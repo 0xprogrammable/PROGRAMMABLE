@@ -191,6 +191,23 @@ test("source verifier review freezes exact standard-json without submitting", as
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /REVIEW_ONLY_NO_EXTERNAL_ACTION/);
     assert.match(result.stdout, /standardJsonSha256/);
+    const activeOutput = path.join(directory, "active-source.json");
+    const active = run(
+      "verify-custom-registry-v2-source.mjs",
+      ["--capture", "--output", activeOutput],
+      {
+        REGISTRY_ONCHAIN_VERIFICATION_PATH: onchainPath,
+        REGISTRY_ONCHAIN_VERIFICATION_SHA256: `0x${createHash("sha256").update(onchainBytes).digest("hex")}`,
+        REGISTRY_REVIEWED_PLAN_PATH: planPath,
+        REGISTRY_REVIEWED_PLAN_SHA256: `0x${createHash("sha256").update(planBytes).digest("hex")}`,
+      },
+    );
+    assert.notEqual(active.status, 0);
+    assert.match(
+      active.stderr,
+      /exact clean reviewed source|fresh full onchain release verification/u,
+    );
+    await assert.rejects(() => readFile(activeOutput), /ENOENT/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

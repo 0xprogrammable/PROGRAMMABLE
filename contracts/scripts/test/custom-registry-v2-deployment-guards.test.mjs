@@ -439,7 +439,7 @@ test("rejects adversarial finalized receipt, nonce, input, fee, and runtime whil
     create: { predictedAddress: "0x0000000000000000000000000000000000000002" },
     expectedRuntime: { codeKeccak256: expectedRuntime },
   };
-  const authorization = {};
+  const authorization = { notBeforeTimestamp: 180 };
   const actual = {
     hash: transactionHash,
     blockNumber: "100",
@@ -470,6 +470,16 @@ test("rejects adversarial finalized receipt, nonce, input, fee, and runtime whil
     plan,
     authorization,
   });
+  assert.throws(
+    () =>
+      assertFinalizedDeploymentTransaction({
+        actual: { ...actual, receiptBlockTimestamp: "179" },
+        transactionHash,
+        plan,
+        authorization,
+      }),
+    /exact signed plan/u,
+  );
   assertFinalizedDeploymentTransaction({
     actual: { ...actual, receiptBlockTimestamp: "9999999999" },
     transactionHash,

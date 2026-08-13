@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import test from "node:test";
 import { keccak256 } from "viem";
@@ -11,7 +12,9 @@ import {
   buildRegistrySourceClosure,
   buildRegistryStandardJsonInput,
   compileReviewedRegistry,
+  expectedPinnedSolcDigest,
   fetchJsonEvidence,
+  verifyRegistrySourceProviders,
 } from "../custom-registry-v2-source-verification-core.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../..");
@@ -55,10 +58,7 @@ test("builds the exact reachable Registry source closure from pinned git objects
 
 test("self-compiles exact git blobs with the digest-pinned official compiler", async () => {
   const compilation = await compileReviewedRegistry({ root, source });
-  assert.equal(
-    compilation.compiler.sha256,
-    "0x0ff016aef2396b12d1fc65429d8ea6cf53c2ee4b041bb8925644615ee1c30ab9",
-  );
+  assert.equal(compilation.compiler.sha256, expectedPinnedSolcDigest());
   assert.equal(
     compilation.manifest.artifact.creationBytecodeKeccak256,
     "0xa2a56d969d2d7e1ee38a7f404ffeadaf2525c1f43020ea4852afec10dd9c30af",
@@ -163,6 +163,223 @@ test("provider HTTP failures never disclose secret query values", async () => {
         assert.doesNotMatch(error.message, /apikey/u);
         return true;
       },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("accepts only exact semantic Etherscan and Sourcify provider evidence", async () => {
+  const compilation = await compileReviewedRegistry({ root, source });
+  const policyCommitment = `0x${"ab".repeat(32)}`;
+  const immutableValues = [
+    "0".repeat(63) + "1",
+    "0".repeat(63) + "c",
+    policyCommitment.slice(2),
+  ];
+  let runtime = compilation.runtimeTemplate.slice(2);
+  Object.values(
+    compilation.compiled.evm.deployedBytecode.immutableReferences,
+  ).forEach((references, index) => {
+    for (const { start, length } of references) {
+      runtime =
+        runtime.slice(0, start * 2) +
+        immutableValues[index] +
+        runtime.slice((start + length) * 2);
+    }
+  });
+  const address = "0x1111111111111111111111111111111111111111";
+  const deployer = "0x2222222222222222222222222222222222222222";
+  const transactionHash = `0x${"33".repeat(32)}`;
+  const constructorArguments = "0x1234";
+  const finalized = {
+    contractAddress: address,
+    transactionHash,
+    deploymentBlockNumber: "123",
+    deploymentBlockTimestamp: "456",
+    deploymentTransactionIndex: "7",
+    constructorArguments,
+    runtimeCode: `0x${runtime}`,
+    runtimeCodeKeccak256: keccak256(`0x${runtime}`),
+    minimumFinalityBlocks: "12",
+    registryPolicyCommitment: policyCommitment,
+  };
+  const plan = {
+    expectedTransaction: {
+      from: deployer,
+      input: `${compilation.creationBytecode}${constructorArguments.slice(2)}`,
+    },
+  };
+  const etherscanInput = structuredClone(compilation.input);
+  etherscanInput.settings.compilationTarget = {
+    "src/ProgrammableCustomRegistryV2.sol": "ProgrammableCustomRegistryV2",
+  };
+  const exactSource = {
+    status: "1",
+    message: "OK",
+    result: [
+      {
+        ContractName: "ProgrammableCustomRegistryV2",
+        ContractFileName: "src/ProgrammableCustomRegistryV2.sol",
+        CompilerType: "solc",
+        CompilerVersion: "v0.8.26+commit.8a97fa7a",
+        OptimizationUsed: "1",
+        Runs: "1000",
+        EVMVersion: "cancun",
+        Proxy: "0",
+        Implementation: "",
+        SimilarMatch: "",
+        Library: "",
+        ConstructorArguments: constructorArguments.slice(2),
+        SourceCode: JSON.stringify(etherscanInput),
+        ABI: JSON.stringify(compilation.compiled.abi),
+      },
+    ],
+  };
+  const exactCreation = {
+    status: "1",
+    message: "OK",
+    result: [
+      {
+        contractAddress: address,
+        contractCreator: deployer,
+        txHash: transactionHash,
+        blockNumber: "123",
+        timestamp: "456",
+        contractFactory: "",
+        creationBytecode: plan.expectedTransaction.input,
+      },
+    ],
+  };
+  const exactSourcify = {
+    match: "exact_match",
+    creationMatch: "exact_match",
+    runtimeMatch: "exact_match",
+    chainId: "1",
+    address,
+    compilation: {
+      language: "Solidity",
+      compiler: "solc",
+      compilerVersion: "0.8.26+commit.8a97fa7a",
+      name: "ProgrammableCustomRegistryV2",
+      fullyQualifiedName:
+        "src/ProgrammableCustomRegistryV2.sol:ProgrammableCustomRegistryV2",
+    },
+    proxyResolution: {
+      isProxy: false,
+      proxyType: null,
+      implementations: [],
+    },
+    stdJsonInput: compilation.input,
+    sources: compilation.input.sources,
+    deployment: {
+      transactionHash,
+      blockNumber: "123",
+      transactionIndex: "7",
+      deployer,
+    },
+    creationBytecode: {
+      onchainBytecode: plan.expectedTransaction.input,
+      recompiledBytecode: compilation.creationBytecode,
+      transformations: [{ reason: "constructorArguments" }],
+      transformationValues: { constructorArguments },
+    },
+    runtimeBytecode: {
+      onchainBytecode: finalized.runtimeCode,
+      recompiledBytecode: compilation.runtimeTemplate,
+      transformations: [{ reason: "immutable" }],
+      immutableReferences:
+        compilation.compiled.evm.deployedBytecode.immutableReferences,
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  const installProviderMock = ({ sourceMutation, sourcifyMutation } = {}) => {
+    globalThis.fetch = async (urlValue) => {
+      const url = new URL(urlValue);
+      let value;
+      if (url.hostname === "api.etherscan.io") {
+        value =
+          url.searchParams.get("action") === "getsourcecode"
+            ? structuredClone(exactSource)
+            : structuredClone(exactCreation);
+        if (url.searchParams.get("action") === "getsourcecode") {
+          sourceMutation?.(value);
+        }
+      } else {
+        value = structuredClone(exactSourcify);
+        sourcifyMutation?.(value);
+      }
+      return new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+  };
+  try {
+    installProviderMock();
+    const evidence = await verifyRegistrySourceProviders({
+      compilation,
+      finalized,
+      plan,
+      etherscanApiKey: "sentinel-key",
+    });
+    assert.equal(evidence.etherscan.status, "exact-match");
+    assert.equal(evidence.sourcify.status, "exact-match");
+    const responses = [
+      evidence.etherscan.sourceResponse,
+      evidence.etherscan.creationResponse,
+      evidence.sourcify.response,
+    ];
+    for (const response of responses) {
+      const raw = Buffer.from(response.rawResponseBase64, "base64");
+      assert.equal(raw.length, response.rawResponseBytes);
+      assert.equal(
+        `0x${createHash("sha256").update(raw).digest("hex")}`,
+        response.rawResponseSha256,
+      );
+    }
+    assert.equal(
+      evidence.etherscan.sourceResponse.request.redactedQueryKeys.includes(
+        "apikey",
+      ),
+      true,
+    );
+    assert.equal(
+      evidence.etherscan.creationResponse.request.redactedQueryKeys.includes(
+        "apikey",
+      ),
+      true,
+    );
+
+    installProviderMock({
+      sourceMutation: (value) => {
+        value.result[0].SimilarMatch = address;
+      },
+    });
+    await assert.rejects(
+      () =>
+        verifyRegistrySourceProviders({
+          compilation,
+          finalized,
+          plan,
+          etherscanApiKey: "sentinel-key",
+        }),
+      /Etherscan exact source metadata/u,
+    );
+    installProviderMock({
+      sourcifyMutation: (value) => {
+        value.match = "match";
+      },
+    });
+    await assert.rejects(
+      () =>
+        verifyRegistrySourceProviders({
+          compilation,
+          finalized,
+          plan,
+          etherscanApiKey: "sentinel-key",
+        }),
+      /Sourcify v2 exact identity/u,
     );
   } finally {
     globalThis.fetch = originalFetch;

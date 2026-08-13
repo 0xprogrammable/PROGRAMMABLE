@@ -15,6 +15,7 @@ import {
   assertSafePreflightEnvelope,
   assertDistinctControllerOwners,
   predictSafeProxyAddress,
+  safeAtomicBatchInput,
   safeInitializer,
   safeTransactionInput,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
@@ -49,6 +50,13 @@ const positive = (name, maximum) => {
 const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
 const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
 requireDistinctRpcOrigins(rpcA, rpcB);
+const rpcProviders = [
+  required("REGISTRY_RPC_PROVIDER_ID_A"),
+  required("REGISTRY_RPC_PROVIDER_ID_B"),
+];
+if (rpcProviders[0].toLowerCase() === rpcProviders[1].toLowerCase()) {
+  throw new Error("two distinct Safe RPC provider identities are required");
+}
 const deployer = getAddress(required("REGISTRY_SAFE_DEPLOYER"));
 const admin = getAddress(required("REGISTRY_ADMIN"));
 const releaseOwner = getAddress(required("REGISTRY_RELEASE_OWNER"));
@@ -99,6 +107,7 @@ if (
   policy.source?.repository !== "safe-fndn/safe-smart-account" ||
   policy.source?.tag !== "v1.4.1" ||
   policy.source?.commit !== "bf943f80fec5ac647159d26161446ac5d716a294" ||
+  policy.source?.tree !== "dbbe8faa94445342975303ff4da1471cac2052d6" ||
   policy.deploymentInventory?.repository !== "safe-global/safe-deployments" ||
   policy.deploymentInventory?.commit !==
     "5bb0ebd7150a777f39bec4733e4d799c4b637b49" ||
@@ -113,6 +122,20 @@ if (
     "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c" ||
   policy.proxyFactory?.proxyCreationEvent !==
     "ProxyCreation(address,address)" ||
+  policy.multiSendCallOnly?.address !==
+    "0x9641d764fc13c8B624c04430C7356C1C7C8102e2" ||
+  policy.multiSendCallOnly?.runtimeCodeKeccak256 !==
+    "0xecd5bd14a08c5d2122379900b2f272bdf107a7e92423c10dd5fe3254386c9939" ||
+  policy.multiSendCallOnly?.execution !==
+    "DIRECT_EOA_CALL_OPERATION_ZERO_ATOMIC_ALL_OR_REVERT" ||
+  policy.multiSendCallOnly?.sourceBlob !==
+    "7399f11911d80b1c46ecab5408aad7cb66c7f43a" ||
+  policy.multiSendCallOnly?.sourceSha256 !==
+    "0x2ff7f7fd09ba1967524d9bd9507cb7528253ea3d401feaf8d0428e20109f8919" ||
+  policy.multiSendCallOnly?.deploymentRecordBlob !==
+    "ea92e62baa44b5f0df668a9b831fb36d5a025f99" ||
+  policy.multiSendCallOnly?.deploymentRecordSha256 !==
+    "0x09362344b664a35ea957ac2c13458f1c2019dd4f1d73c0afce10d0b6f5206864" ||
   policy.setup?.threshold !== 1 ||
   policy.setup?.to !== "0x0000000000000000000000000000000000000000" ||
   policy.setup?.data !== "0x" ||
@@ -172,6 +195,7 @@ const baseObservations = await Promise.all(
       singletonVersion,
       factoryCode,
       proxyCreationCode,
+      multiSendCallOnlyCode,
     ] = await Promise.all([
       client.getChainId(),
       client.getBlock({ blockTag: "finalized" }),
@@ -194,6 +218,10 @@ const baseObservations = await Promise.all(
         abi: SAFE_FACTORY_ABI,
         functionName: "proxyCreationCode",
       }),
+      client.getCode({
+        address: policy.multiSendCallOnly.address,
+        blockTag: "latest",
+      }),
     ]);
     if (
       chainId !== 1 ||
@@ -202,7 +230,9 @@ const baseObservations = await Promise.all(
       keccak256(factoryCode) !== policy.proxyFactory.runtimeCodeKeccak256 ||
       keccak256(proxyCreationCode) !==
         policy.proxyFactory.proxyCreationCodeKeccak256 ||
-      proxyCreationCode !== policy.proxyFactory.proxyCreationCode
+      proxyCreationCode !== policy.proxyFactory.proxyCreationCode ||
+      keccak256(multiSendCallOnlyCode) !==
+        policy.multiSendCallOnly.runtimeCodeKeccak256
     )
       throw new Error("Safe singleton or factory runtime binding failed");
     return {
@@ -213,6 +243,7 @@ const baseObservations = await Promise.all(
       priorityFee,
       proxyCreationCode,
       singletonVersion,
+      multiSendCallOnlyCode,
     };
   }),
 );
@@ -252,7 +283,7 @@ const controllerPlans = await Promise.all(
     });
     const observations = await Promise.all(
       clients.map(async (client) => {
-        const [code, nonce, balance, gas] = await Promise.all([
+        const [code, nonce, balance] = await Promise.all([
           client.getCode({ address: predictedAddress, blockTag: "latest" }),
           client.getTransactionCount({
             address: predictedAddress,
@@ -262,13 +293,6 @@ const controllerPlans = await Promise.all(
             address: predictedAddress,
             blockTag: "latest",
           }),
-          client.estimateContractGas({
-            address: policy.proxyFactory.address,
-            abi: SAFE_FACTORY_ABI,
-            functionName: "createProxyWithNonce",
-            args: [policy.singleton.address, initializer, BigInt(saltNonce)],
-            account: deployer,
-          }),
         ]);
         if (
           (code !== undefined && code !== "0x") ||
@@ -276,13 +300,9 @@ const controllerPlans = await Promise.all(
           balance !== 0n
         )
           throw new Error(`predicted ${role} Safe is occupied or prefunded`);
-        return { gas, nonce, balance };
+        return { nonce, balance };
       }),
     );
-    const gasLimit =
-      (observations.reduce((max, { gas }) => (gas > max ? gas : max), 0n) *
-        120n) /
-      100n;
     return {
       role,
       owner,
@@ -290,24 +310,15 @@ const controllerPlans = await Promise.all(
       initializer,
       initializerKeccak256: keccak256(initializer),
       predictedAddress,
-      expectedTransactionNonce: a.nonce + index,
-      expectedTransaction: {
-        chainId: 1,
-        from: deployer,
+      atomicCall: {
         to: policy.proxyFactory.address,
-        input: transactionInput,
+        data: transactionInput,
         valueWei: "0",
-        nonce: a.nonce + index,
-        gasLimit: gasLimit.toString(),
-        maxFeePerGas: maxFeePerGas.toString(),
-        maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
       },
-      gasEstimates: observations.map(({ gas }) => gas.toString()),
       predictedAddressNonces: observations.map(({ nonce }) => nonce),
       predictedAddressBalancesWei: observations.map(({ balance }) =>
         balance.toString(),
       ),
-      gasLimit: gasLimit.toString(),
     };
   }),
 );
@@ -320,10 +331,26 @@ if (
 ) {
   throw new Error("predicted Safe controller addresses are not distinct");
 }
-const totalGasLimit = controllerPlans.reduce(
-  (sum, controller) => sum + BigInt(controller.gasLimit),
-  0n,
+const atomicInput = safeAtomicBatchInput(
+  controllerPlans.map(({ atomicCall }) => atomicCall),
 );
+const atomicGasEstimates = await Promise.all(
+  clients.map((client) =>
+    client.estimateGas({
+      account: deployer,
+      to: policy.multiSendCallOnly.address,
+      data: atomicInput,
+      value: 0n,
+    }),
+  ),
+);
+const totalGasLimit =
+  (atomicGasEstimates.reduce(
+    (maximum, value) => (value > maximum ? value : maximum),
+    0n,
+  ) *
+    120n) /
+  100n;
 const observedFeePerGas = baseObservations.reduce((max, observation) => {
   const observed =
     (observation.latest.baseFeePerGas ?? 0n) * 2n + observation.priorityFee;
@@ -336,13 +363,8 @@ const minimumBlockGasLimit = baseObservations.reduce(
       : minimum,
   a.latest.gasLimit,
 );
-const maximumSingleGasLimit = controllerPlans.reduce(
-  (max, controller) =>
-    BigInt(controller.gasLimit) > max ? BigInt(controller.gasLimit) : max,
-  0n,
-);
 assessDeploymentCost({
-  gasLimit: maximumSingleGasLimit,
+  gasLimit: totalGasLimit,
   blockGasLimit: minimumBlockGasLimit,
   observedFeePerGas,
   maxFeePerGas,
@@ -363,6 +385,7 @@ const plan = {
     ? "UNFUNDED_COST_REVIEW_ONLY"
     : "PREFLIGHT_ONLY_NO_TRANSACTION",
   chainId: 1,
+  rpcProviders,
   source: { commit: sourceCommit, tree: sourceTree },
   sourceManifestSha256: `0x${createHash("sha256")
     .update(manifestBytes)
@@ -385,6 +408,7 @@ const plan = {
   proxyFactory: {
     ...policy.proxyFactory,
   },
+  multiSendCallOnly: policy.multiSendCallOnly,
   storageSlots: policy.storageSlots,
   commonFinalizedAnchor: {
     blockNumber: commonFinalizedNumber.toString(),
@@ -403,6 +427,19 @@ const plan = {
   exactPendingNonce: a.nonce,
   deployerBalanceWei: a.balance.toString(),
   controllers: controllerPlans,
+  atomicTransaction: {
+    chainId: 1,
+    from: deployer,
+    to: policy.multiSendCallOnly.address,
+    input: atomicInput,
+    valueWei: "0",
+    nonce: a.nonce,
+    gasLimit: totalGasLimit.toString(),
+    maxFeePerGas: maxFeePerGas.toString(),
+    maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
+  },
+  atomicInputKeccak256: keccak256(atomicInput),
+  atomicGasEstimates: atomicGasEstimates.map(String),
   totalGasLimit: totalGasLimit.toString(),
   observedFeePerGas: observedFeePerGas.toString(),
   reviewedMaxFeePerGas: maxFeePerGas.toString(),

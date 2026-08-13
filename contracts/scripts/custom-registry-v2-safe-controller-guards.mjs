@@ -10,7 +10,10 @@ import {
   padHex,
   recoverMessageAddress,
 } from "viem";
-import { AUTHORIZATION_SEMANTICS } from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  AUTHORIZATION_SEMANTICS,
+  ZERO_ADDRESS,
+} from "./custom-registry-v2-deployment-guards.mjs";
 
 export const SAFE_SETUP_ABI = [
   {
@@ -60,14 +63,38 @@ export const SAFE_FACTORY_ABI = [
   },
 ];
 
+export const SAFE_MULTISEND_CALL_ONLY_ABI = [
+  {
+    type: "function",
+    name: "multiSend",
+    stateMutability: "payable",
+    inputs: [{ name: "transactions", type: "bytes" }],
+    outputs: [],
+  },
+];
+
+export const SAFE_SETUP_EVENT_ABI = [
+  {
+    type: "event",
+    name: "SafeSetup",
+    inputs: [
+      { indexed: true, name: "initiator", type: "address" },
+      { indexed: false, name: "owners", type: "address[]" },
+      { indexed: false, name: "threshold", type: "uint256" },
+      { indexed: false, name: "initializer", type: "address" },
+      { indexed: false, name: "fallbackHandler", type: "address" },
+    ],
+  },
+];
+
 export const SAFE_PLAN_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-preflight.v2";
+  "programmable.custom-registry-v2-safe-controller-preflight.v3";
 export const SAFE_AUTHORIZATION_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-authorization.v2";
+  "programmable.custom-registry-v2-safe-controller-authorization.v3";
 export const SAFE_RECEIPTS_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-receipts.v3";
+  "programmable.custom-registry-v2-safe-controller-receipts.v4";
 export const SAFE_VERIFICATION_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-verification.v2";
+  "programmable.custom-registry-v2-safe-controller-verification.v3";
 export const SAFE_CUSTODY_PROOF_SCHEMA =
   "programmable.custom-registry-v2-keychain-custody-proof.v2";
 export const SAFE_CONTROLLER_ROLES = [
@@ -87,6 +114,28 @@ export function safeTransactionInput({ singleton, initializer, saltNonce }) {
     abi: SAFE_FACTORY_ABI,
     functionName: "createProxyWithNonce",
     args: [getAddress(singleton), initializer, BigInt(saltNonce)],
+  });
+}
+
+export function safeAtomicBatchInput(calls) {
+  const transactions = concatHex(
+    calls.map(({ to, valueWei = "0", data }) =>
+      encodePacked(
+        ["uint8", "address", "uint256", "uint256", "bytes"],
+        [
+          0,
+          getAddress(to),
+          BigInt(valueWei),
+          BigInt((data.length - 2) / 2),
+          data,
+        ],
+      ),
+    ),
+  );
+  return encodeFunctionData({
+    abi: SAFE_MULTISEND_CALL_ONLY_ABI,
+    functionName: "multiSend",
+    args: [transactions],
   });
 }
 
@@ -175,6 +224,11 @@ export function assertSafePreflightEnvelope(
     (!allowExpired && plan.createdAtTimestamp > nowTimestamp) ||
     (!allowExpired && plan.expiresAtTimestamp < nowTimestamp) ||
     plan.controllers?.length !== SAFE_CONTROLLER_ROLES.length ||
+    plan.rpcProviders?.length !== 2 ||
+    plan.rpcProviders.some(
+      (provider) => typeof provider !== "string" || provider.length === 0,
+    ) ||
+    plan.rpcProviders[0].toLowerCase() === plan.rpcProviders[1].toLowerCase() ||
     !/^0x[0-9a-f]{64}$/u.test(plan.policySha256 ?? "") ||
     !/^0x[0-9a-f]{64}$/u.test(plan.custodyProofSha256 ?? "")
   ) {
@@ -198,6 +252,11 @@ export function assertSafeCostReviewEnvelope(plan) {
     plan.expiresAtTimestamp !==
       plan.createdAtTimestamp + plan.validitySeconds ||
     plan.controllers?.length !== SAFE_CONTROLLER_ROLES.length ||
+    plan.rpcProviders?.length !== 2 ||
+    plan.rpcProviders.some(
+      (provider) => typeof provider !== "string" || provider.length === 0,
+    ) ||
+    plan.rpcProviders[0].toLowerCase() === plan.rpcProviders[1].toLowerCase() ||
     !/^0x[0-9a-f]{64}$/u.test(plan.policySha256 ?? "") ||
     !/^0x[0-9a-f]{64}$/u.test(plan.custodyProofSha256 ?? "")
   ) {
@@ -221,6 +280,7 @@ export function assertSafePolicyBoundPlan({
     policy.source?.repository !== "safe-fndn/safe-smart-account" ||
     policy.source?.tag !== "v1.4.1" ||
     policy.source?.commit !== "bf943f80fec5ac647159d26161446ac5d716a294" ||
+    policy.source?.tree !== "dbbe8faa94445342975303ff4da1471cac2052d6" ||
     policy.deploymentInventory?.repository !== "safe-global/safe-deployments" ||
     policy.deploymentInventory?.commit !==
       "5bb0ebd7150a777f39bec4733e4d799c4b637b49" ||
@@ -240,6 +300,20 @@ export function assertSafePolicyBoundPlan({
       "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c" ||
     policy.proxyFactory?.proxyCreationEvent !==
       "ProxyCreation(address,address)" ||
+    getAddress(policy.multiSendCallOnly?.address) !==
+      getAddress("0x9641d764fc13c8B624c04430C7356C1C7C8102e2") ||
+    policy.multiSendCallOnly?.runtimeCodeKeccak256 !==
+      "0xecd5bd14a08c5d2122379900b2f272bdf107a7e92423c10dd5fe3254386c9939" ||
+    policy.multiSendCallOnly?.execution !==
+      "DIRECT_EOA_CALL_OPERATION_ZERO_ATOMIC_ALL_OR_REVERT" ||
+    policy.multiSendCallOnly?.sourceBlob !==
+      "7399f11911d80b1c46ecab5408aad7cb66c7f43a" ||
+    policy.multiSendCallOnly?.sourceSha256 !==
+      "0x2ff7f7fd09ba1967524d9bd9507cb7528253ea3d401feaf8d0428e20109f8919" ||
+    policy.multiSendCallOnly?.deploymentRecordBlob !==
+      "ea92e62baa44b5f0df668a9b831fb36d5a025f99" ||
+    policy.multiSendCallOnly?.deploymentRecordSha256 !==
+      "0x09362344b664a35ea957ac2c13458f1c2019dd4f1d73c0afce10d0b6f5206864" ||
     !/^[0-9a-f]{40}$/u.test(plan.source?.commit ?? "") ||
     !/^[0-9a-f]{40}$/u.test(plan.source?.tree ?? "") ||
     !Number.isSafeInteger(plan.exactPendingNonce) ||
@@ -287,6 +361,11 @@ export function assertSafePolicyBoundPlan({
       policy.proxyFactory?.proxyRuntimeCodeKeccak256 ||
     plan.proxyFactory?.proxyCreationEvent !==
       policy.proxyFactory?.proxyCreationEvent ||
+    getAddress(plan.multiSendCallOnly?.address) !==
+      getAddress(policy.multiSendCallOnly?.address) ||
+    plan.multiSendCallOnly?.runtimeCodeKeccak256 !==
+      policy.multiSendCallOnly?.runtimeCodeKeccak256 ||
+    plan.multiSendCallOnly?.execution !== policy.multiSendCallOnly?.execution ||
     !/^0x[0-9a-fA-F]+$/u.test(plan.proxyFactory?.proxyCreationCode ?? "") ||
     keccak256(plan.proxyFactory.proxyCreationCode) !==
       policy.proxyFactory.proxyCreationCodeKeccak256 ||
@@ -325,9 +404,8 @@ export function assertSafePolicyBoundPlan({
     throw new Error("Safe plan custody roles do not match the deployer");
   }
 
-  let totalGasLimit = 0n;
-  let reviewedPriorityFee;
   const predictedAddresses = new Set();
+  const expectedCalls = [];
   const isolatedAddresses = new Set([
     deployer.toLowerCase(),
     releaseOwner.toLowerCase(),
@@ -359,48 +437,27 @@ export function assertSafePolicyBoundPlan({
       initializer: expectedInitializer,
       saltNonce: controller.saltNonce,
     });
-    const estimates = controller.gasEstimates?.map((value) => BigInt(value));
-    const gasLimit = BigInt(controller.gasLimit);
-    const maximumEstimate = estimates?.reduce(
-      (maximum, value) => (value > maximum ? value : maximum),
-      0n,
-    );
-    const transaction = controller.expectedTransaction;
-    const priorityFee = BigInt(transaction?.maxPriorityFeePerGas);
     if (
       controller.initializer !== expectedInitializer ||
       controller.initializerKeccak256 !== keccak256(expectedInitializer) ||
       getAddress(controller.predictedAddress) !== getAddress(expectedAddress) ||
-      controller.expectedTransactionNonce !== plan.exactPendingNonce + index ||
-      estimates?.length !== 2 ||
-      !controller.gasEstimates.every(canonicalUint) ||
       controller.predictedAddressNonces?.length !== 2 ||
       controller.predictedAddressNonces.some((nonce) => nonce !== 0) ||
       controller.predictedAddressBalancesWei?.length !== 2 ||
       !controller.predictedAddressBalancesWei.every(
         (balance) => balance === "0",
       ) ||
-      !canonicalUint(controller.gasLimit) ||
-      maximumEstimate === undefined ||
-      gasLimit !== (maximumEstimate * 120n) / 100n ||
-      transaction?.chainId !== 1 ||
-      getAddress(transaction.from) !== deployer ||
-      getAddress(transaction.to) !== getAddress(policy.proxyFactory.address) ||
-      transaction.input !== expectedInput ||
-      transaction.valueWei !== "0" ||
-      transaction.nonce !== controller.expectedTransactionNonce ||
-      transaction.gasLimit !== controller.gasLimit ||
-      !canonicalUint(transaction.maxFeePerGas) ||
-      !canonicalUint(transaction.maxPriorityFeePerGas) ||
-      transaction.maxFeePerGas !== plan.reviewedMaxFeePerGas ||
-      priorityFee === 0n ||
-      priorityFee > BigInt(plan.reviewedMaxFeePerGas) ||
-      (reviewedPriorityFee !== undefined && priorityFee !== reviewedPriorityFee)
+      controller.atomicCall?.to !== policy.proxyFactory.address ||
+      controller.atomicCall?.valueWei !== "0" ||
+      controller.atomicCall?.data !== expectedInput
     ) {
       throw new Error(`Safe plan transaction binding failed for ${role}`);
     }
-    reviewedPriorityFee = priorityFee;
-    totalGasLimit += gasLimit;
+    expectedCalls.push({
+      to: policy.proxyFactory.address,
+      valueWei: "0",
+      data: expectedInput,
+    });
     predictedAddresses.add(
       getAddress(controller.predictedAddress).toLowerCase(),
     );
@@ -421,16 +478,40 @@ export function assertSafePolicyBoundPlan({
     throw new Error("Safe plan admin or deployer custody binding failed");
   }
   isolatedAddresses.add(admin.toLowerCase());
+  const expectedAtomicInput = safeAtomicBatchInput(expectedCalls);
+  const atomic = plan.atomicTransaction;
+  const gasEstimates = plan.atomicGasEstimates?.map((value) => BigInt(value));
+  const maximumEstimate = gasEstimates?.reduce(
+    (maximum, value) => (value > maximum ? value : maximum),
+    0n,
+  );
+  const gasLimit = BigInt(atomic?.gasLimit ?? 0);
   if (
     predictedAddresses.size !== SAFE_CONTROLLER_ROLES.length ||
     isolatedAddresses.size !==
       SAFE_CUSTODY_ROLES.length + SAFE_CONTROLLER_ROLES.length + 1 ||
-    totalGasLimit === 0n ||
+    gasEstimates?.length !== 2 ||
+    !plan.atomicGasEstimates.every(canonicalUint) ||
+    maximumEstimate === undefined ||
+    gasLimit !== (maximumEstimate * 120n) / 100n ||
+    atomic?.chainId !== 1 ||
+    getAddress(atomic.from) !== deployer ||
+    getAddress(atomic.to) !== getAddress(policy.multiSendCallOnly.address) ||
+    atomic.input !== expectedAtomicInput ||
+    atomic.valueWei !== "0" ||
+    atomic.nonce !== plan.exactPendingNonce ||
+    !canonicalUint(atomic.gasLimit) ||
+    !canonicalUint(atomic.maxFeePerGas) ||
+    !canonicalUint(atomic.maxPriorityFeePerGas) ||
+    atomic.maxFeePerGas !== plan.reviewedMaxFeePerGas ||
+    BigInt(atomic.maxPriorityFeePerGas) === 0n ||
+    BigInt(atomic.maxPriorityFeePerGas) > BigInt(plan.reviewedMaxFeePerGas) ||
+    plan.atomicInputKeccak256 !== keccak256(expectedAtomicInput) ||
     BigInt(plan.reviewedMaxFeePerGas) === 0n ||
     BigInt(plan.reviewedMaxTotalCostWei) === 0n ||
-    totalGasLimit !== BigInt(plan.totalGasLimit) ||
+    gasLimit !== BigInt(plan.totalGasLimit) ||
     BigInt(plan.maximumTotalCostWei) !==
-      totalGasLimit * BigInt(plan.reviewedMaxFeePerGas) ||
+      gasLimit * BigInt(plan.reviewedMaxFeePerGas) ||
     BigInt(plan.maximumTotalCostWei) > BigInt(plan.reviewedMaxTotalCostWei) ||
     BigInt(plan.observedFeePerGas) > BigInt(plan.reviewedMaxFeePerGas) ||
     plan.fundingSufficient !==
@@ -584,7 +665,65 @@ export function assertProxyCreationLog({ logs, factory, proxy, singleton }) {
   }
 }
 
+export function assertAtomicProxyCreationLogs({
+  logs,
+  factory,
+  controllers,
+  singleton,
+}) {
+  if (logs.length !== controllers.length * 2) {
+    throw new Error("atomic Safe receipt must contain exactly eight logs");
+  }
+  for (const [index, controller] of controllers.entries()) {
+    const setupLog = logs[index * 2];
+    const creationLog = logs[index * 2 + 1];
+    let setup;
+    let creation;
+    try {
+      setup = decodeEventLog({
+        abi: SAFE_SETUP_EVENT_ABI,
+        data: setupLog.data,
+        topics: setupLog.topics,
+        eventName: "SafeSetup",
+        strict: true,
+      });
+      creation = decodeEventLog({
+        abi: SAFE_FACTORY_ABI,
+        data: creationLog.data,
+        topics: creationLog.topics,
+        eventName: "ProxyCreation",
+        strict: true,
+      });
+    } catch {
+      throw new Error("atomic Safe ProxyCreation log is invalid");
+    }
+    if (
+      getAddress(setupLog.address) !==
+        getAddress(controller.predictedAddress) ||
+      getAddress(creationLog.address) !== getAddress(factory) ||
+      getAddress(setup.args.initiator) !== getAddress(factory) ||
+      setup.args.owners.length !== 1 ||
+      getAddress(setup.args.owners[0]) !== getAddress(controller.owner) ||
+      setup.args.threshold !== 1n ||
+      getAddress(setup.args.initializer) !== ZERO_ADDRESS ||
+      getAddress(setup.args.fallbackHandler) !== ZERO_ADDRESS ||
+      getAddress(creation.args.proxy) !==
+        getAddress(controller.predictedAddress) ||
+      getAddress(creation.args.singleton) !== getAddress(singleton)
+    ) {
+      throw new Error("atomic Safe setup or creation log differs from plan");
+    }
+  }
+}
+
 export const SAFE_READ_ABI = [
+  {
+    type: "function",
+    name: "nonce",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
   {
     type: "function",
     name: "VERSION",

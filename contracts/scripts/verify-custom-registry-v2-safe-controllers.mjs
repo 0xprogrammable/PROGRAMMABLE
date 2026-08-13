@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import {
   createPublicClient,
   getAddress,
@@ -17,18 +18,18 @@ import {
   SAFE_READ_ABI,
   SAFE_RECEIPTS_SCHEMA,
   SAFE_VERIFICATION_SCHEMA,
-  assertProxyCreationLog,
-  assertSafePreflightEnvelope,
+  assertAtomicProxyCreationLogs,
   assertSafePolicyBoundPlan,
+  assertSafePreflightEnvelope,
   assertSafeReviewedAuthorization,
   assertSafeRuntimeState,
-  safeTransactionInput,
   verifySafeReviewedAuthorizationSignature,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import { requireDistinctRpcOrigins } from "./custom-registry-v2-deployment-guards.mjs";
 import {
   assertExactSerializedEip1559Transaction,
   assertSignedAttemptWindow,
+  assertTrustedTimeEvidence,
   loadDurableJsonLines,
 } from "./custom-registry-v2-transaction-journal.mjs";
 
@@ -37,20 +38,25 @@ const root = path.resolve(
   "../..",
 );
 const outputIndex = process.argv.indexOf("--output");
-if (outputIndex === -1 || !process.argv[outputIndex + 1])
+if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
+}
 const outputPath = path.resolve(process.argv[outputIndex + 1]);
-if (!outputPath.startsWith("/tmp/"))
+if (!outputPath.startsWith("/tmp/")) {
   throw new Error("Safe verification output must be under /tmp");
-
+}
+const sha256 = (bytes) =>
+  `0x${createHash("sha256").update(bytes).digest("hex")}`;
 const readReviewed = async (envPath, envDigest, label) => {
   const filePath = path.resolve(process.env[envPath] ?? "");
-  if (!filePath.startsWith("/tmp/"))
+  if (!filePath.startsWith("/tmp/")) {
     throw new Error(`${label} must be under /tmp`);
+  }
   const bytes = await readFile(filePath);
-  const digest = `0x${createHash("sha256").update(bytes).digest("hex")}`;
-  if (digest !== process.env[envDigest])
+  const digest = sha256(bytes);
+  if (digest !== process.env[envDigest]) {
     throw new Error(`${label} digest mismatch`);
+  }
   return { bytes, digest, value: JSON.parse(bytes) };
 };
 const reviewed = await readReviewed(
@@ -70,52 +76,22 @@ if (!receiptJournalPath.startsWith("/tmp/")) {
   throw new Error("Safe deployment receipt journal must be under /tmp");
 }
 const receiptJournalBytes = await readFile(receiptJournalPath);
-const receiptJournalDigest = `0x${createHash("sha256")
-  .update(receiptJournalBytes)
-  .digest("hex")}`;
+const receiptJournalDigest = sha256(receiptJournalBytes);
 if (
   receiptJournalDigest !== process.env.REGISTRY_SAFE_DEPLOYMENT_RECEIPTS_SHA256
 ) {
   throw new Error("Safe deployment receipt journal digest mismatch");
 }
-const receiptRecords = await loadDurableJsonLines(receiptJournalPath);
-const [receiptHeader, signedSet, firstAttemptSet] = receiptRecords;
-const signedSets = receiptRecords.filter(
-  ({ event }) => event === "SIGNED_SET_NOT_CONFIRMED",
+const records = await loadDurableJsonLines(receiptJournalPath);
+const header = records[0];
+const signedRecords = records.filter(
+  ({ event }) => event === "SIGNED_ATOMIC_NOT_CONFIRMED",
 );
-const firstAttemptSets = receiptRecords.filter(
-  ({ event }) => event === "FIRST_BROADCAST_ATTEMPT_SET",
+const signed = signedRecords[0];
+const responseRecords = records.filter(
+  ({ event }) => event === "BROADCAST_PROVIDER_RESPONSES",
 );
-const receiptSets = receiptRecords.filter(
-  ({ event }) => event === "RECEIPTS_SEEN_AWAITING_FINALIZED_VERIFICATION",
-);
-const receiptSet = receiptSets[0];
-const completed = receiptRecords.filter(
-  ({ event }) => event === "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
-);
-const receipts = {
-  ...receiptHeader,
-  status:
-    completed.length === 1
-      ? "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION"
-      : "INCOMPLETE",
-  controllers: signedSet?.controllers?.map((signed) => {
-    const receipt = receiptSet?.controllers?.find(
-      ({ role }) => role === signed.role,
-    );
-    return {
-      ...signed,
-      transactionStatus: receipt ? "RECEIPT_CONFIRMED_SUCCESS" : "UNKNOWN",
-      blockNumber: receipt?.blockNumber ?? null,
-      blockHash: receipt?.blockHash ?? null,
-    };
-  }),
-};
-const receiptEvidence = {
-  bytes: receiptJournalBytes,
-  digest: receiptJournalDigest,
-  value: receipts,
-};
+const response = responseRecords[0];
 const plan = reviewed.value;
 const authorization = authorized.value;
 assertSafePreflightEnvelope(plan, 0, { allowExpired: true });
@@ -128,40 +104,55 @@ assertSafeReviewedAuthorization({
 });
 await verifySafeReviewedAuthorizationSignature(authorization);
 if (
-  receipts.schemaVersion !== SAFE_RECEIPTS_SCHEMA ||
-  receipts.status !== "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION" ||
-  receipts.chainId !== 1 ||
-  receipts.preflightSha256 !== reviewed.digest ||
-  receipts.authorizationSha256 !== authorized.digest ||
-  receipts.source?.commit !== plan.source.commit ||
-  receipts.source?.tree !== plan.source.tree ||
-  receipts.policySha256 !== plan.policySha256 ||
-  receipts.custodyProofSha256 !== plan.custodyProofSha256 ||
-  receipts.controllers?.length !== 4 ||
-  new Set(receipts.controllers.map(({ transactionHash }) => transactionHash))
-    .size !== 4
-)
-  throw new Error("Safe controller deployment evidence is invalid");
-if (
-  receiptHeader.event !== "JOURNAL_OPEN" ||
-  signedSet?.event !== "SIGNED_SET_NOT_CONFIRMED" ||
-  firstAttemptSet?.event !== "FIRST_BROADCAST_ATTEMPT_SET" ||
-  signedSets.length !== 1 ||
-  firstAttemptSets.length !== 1 ||
-  receiptSets.length !== 1 ||
-  completed.length !== 1 ||
-  receiptRecords.indexOf(completed[0]) !== receiptRecords.length - 1 ||
-  JSON.stringify(firstAttemptSet.transactionHashes) !==
-    JSON.stringify(
-      receipts.controllers.map(({ transactionHash }) => transactionHash),
-    )
+  header?.schemaVersion !== SAFE_RECEIPTS_SCHEMA ||
+  header.event !== "JOURNAL_OPEN" ||
+  header.chainId !== 1 ||
+  header.preflightSha256 !== reviewed.digest ||
+  header.authorizationSha256 !== authorized.digest ||
+  header.source?.commit !== plan.source.commit ||
+  header.source?.tree !== plan.source.tree ||
+  header.policySha256 !== plan.policySha256 ||
+  header.custodyProofSha256 !== plan.custodyProofSha256 ||
+  signedRecords.length !== 1 ||
+  records.indexOf(signed) !== 1 ||
+  responseRecords.length !== 1 ||
+  response.transactionHash !== signed.transactionHash ||
+  records.indexOf(response) < 2 ||
+  records.some(
+    (entry) =>
+      entry.transactionHash !== undefined &&
+      entry.transactionHash !== signed.transactionHash,
+  ) ||
+  JSON.stringify(
+    response.providerResponses?.map(({ providerId }) => providerId),
+  ) !== JSON.stringify(plan.rpcProviders) ||
+  response.providerResponses?.some(
+    (entry) =>
+      entry.status === "fulfilled" &&
+      entry.transactionHash !== signed.transactionHash,
+  ) ||
+  !response.providerResponses?.some(
+    (entry) =>
+      entry.status === "fulfilled" &&
+      entry.transactionHash === signed.transactionHash,
+  )
 ) {
-  throw new Error("Safe controller journal order or attempt set is invalid");
+  throw new Error("Safe atomic deployment journal is invalid");
 }
+assertTrustedTimeEvidence(signed.trustedTime, signed.signedAtTimestamp);
+assertTrustedTimeEvidence(
+  response.requestStartedTrustedTime,
+  response.requestStartedAtTimestamp,
+);
+await assertExactSerializedEip1559Transaction({
+  serializedTransaction: signed.serializedTransaction,
+  transactionHash: signed.transactionHash,
+  expected: plan.atomicTransaction,
+});
 assertSignedAttemptWindow({
   authorization,
-  signedAt: signedSet.signedAtTimestamp,
-  firstAttemptAt: firstAttemptSet.firstAttemptAtTimestamp,
+  signedAt: signed.signedAtTimestamp,
+  firstAttemptAt: response.requestStartedAtTimestamp,
 });
 
 const commit = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -179,16 +170,12 @@ if (
     cwd: root,
     encoding: "utf8",
   }) !== ""
-)
+) {
   throw new Error("Safe verification source identity drifted");
+}
 const policyBytes = await readFile(
   path.join(root, "config/custom-registry-v2-safe-controller-policy.json"),
 );
-if (
-  `0x${createHash("sha256").update(policyBytes).digest("hex")}` !==
-  plan.policySha256
-)
-  throw new Error("Safe controller policy drifted");
 const manifestBytes = await readFile(
   path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
 );
@@ -196,15 +183,20 @@ assertSafePolicyBoundPlan({
   plan,
   policy: JSON.parse(policyBytes),
   manifest: JSON.parse(manifestBytes),
-  sourceManifestSha256: `0x${createHash("sha256")
-    .update(manifestBytes)
-    .digest("hex")}`,
+  sourceManifestSha256: sha256(manifestBytes),
 });
 
 const rpcA = process.env.REGISTRY_PREFLIGHT_RPC_URL_A;
 const rpcB = process.env.REGISTRY_PREFLIGHT_RPC_URL_B;
 if (!rpcA || !rpcB) throw new Error("two RPC endpoints are required");
 requireDistinctRpcOrigins(rpcA, rpcB);
+const providerIds = [
+  process.env.REGISTRY_RPC_PROVIDER_ID_A,
+  process.env.REGISTRY_RPC_PROVIDER_ID_B,
+];
+if (JSON.stringify(providerIds) !== JSON.stringify(plan.rpcProviders)) {
+  throw new Error("Safe RPC provider identity drifted from reviewed plan");
+}
 const clients = [rpcA, rpcB].map((url) =>
   createPublicClient({ chain: mainnet, transport: http(url) }),
 );
@@ -215,202 +207,220 @@ const commonFinalizedNumber =
   finalizedHeads[0].number < finalizedHeads[1].number
     ? finalizedHeads[0].number
     : finalizedHeads[1].number;
-const finalized = await Promise.all(
-  clients.map((client) =>
-    client.getBlock({ blockNumber: commonFinalizedNumber }),
-  ),
-);
-if (finalized[0].hash !== finalized[1].hash)
-  throw new Error("independent finalized anchors disagree");
+const [finalizedA, finalizedB, reviewedAnchorA, reviewedAnchorB] =
+  await Promise.all([
+    clients[0].getBlock({ blockNumber: commonFinalizedNumber }),
+    clients[1].getBlock({ blockNumber: commonFinalizedNumber }),
+    clients[0].getBlock({
+      blockNumber: BigInt(plan.commonFinalizedAnchor.blockNumber),
+    }),
+    clients[1].getBlock({
+      blockNumber: BigInt(plan.commonFinalizedAnchor.blockNumber),
+    }),
+  ]);
+if (
+  finalizedA.hash !== finalizedB.hash ||
+  reviewedAnchorA.hash !== plan.commonFinalizedAnchor.blockHash ||
+  reviewedAnchorB.hash !== plan.commonFinalizedAnchor.blockHash
+) {
+  throw new Error("independent finalized Safe anchors disagree");
+}
 const officialBindings = await Promise.all(
   clients.map(async (client) => {
-    const [singletonCode, singletonVersion, factoryCode, proxyCreationCode] =
-      await Promise.all([
-        client.getCode({
-          address: plan.singleton.address,
-          blockNumber: finalized[0].number,
-        }),
-        client.readContract({
-          address: plan.singleton.address,
-          abi: SAFE_READ_ABI,
-          functionName: "VERSION",
-          blockNumber: finalized[0].number,
-        }),
-        client.getCode({
-          address: plan.proxyFactory.address,
-          blockNumber: finalized[0].number,
-        }),
-        client.readContract({
-          address: plan.proxyFactory.address,
-          abi: SAFE_FACTORY_ABI,
-          functionName: "proxyCreationCode",
-          blockNumber: finalized[0].number,
-        }),
-      ]);
+    const [
+      singletonCode,
+      singletonVersion,
+      factoryCode,
+      proxyCreationCode,
+      multiSendCode,
+    ] = await Promise.all([
+      client.getCode({
+        address: plan.singleton.address,
+        blockNumber: commonFinalizedNumber,
+      }),
+      client.readContract({
+        address: plan.singleton.address,
+        abi: SAFE_READ_ABI,
+        functionName: "VERSION",
+        blockNumber: commonFinalizedNumber,
+      }),
+      client.getCode({
+        address: plan.proxyFactory.address,
+        blockNumber: commonFinalizedNumber,
+      }),
+      client.readContract({
+        address: plan.proxyFactory.address,
+        abi: SAFE_FACTORY_ABI,
+        functionName: "proxyCreationCode",
+        blockNumber: commonFinalizedNumber,
+      }),
+      client.getCode({
+        address: plan.multiSendCallOnly.address,
+        blockNumber: commonFinalizedNumber,
+      }),
+    ]);
     return {
       singletonCode,
       singletonVersion,
       factoryCode,
       proxyCreationCode,
+      multiSendCode,
     };
   }),
 );
 if (
   officialBindings.some(
-    ({ singletonCode, singletonVersion, factoryCode, proxyCreationCode }) =>
-      keccak256(singletonCode) !== plan.singleton.runtimeCodeKeccak256 ||
-      singletonVersion !== plan.safeVersion ||
-      keccak256(factoryCode) !== plan.proxyFactory.runtimeCodeKeccak256 ||
-      keccak256(proxyCreationCode) !==
-        plan.proxyFactory.proxyCreationCodeKeccak256,
+    (binding) =>
+      keccak256(binding.singletonCode) !==
+        plan.singleton.runtimeCodeKeccak256 ||
+      binding.singletonVersion !== plan.safeVersion ||
+      keccak256(binding.factoryCode) !==
+        plan.proxyFactory.runtimeCodeKeccak256 ||
+      keccak256(binding.proxyCreationCode) !==
+        plan.proxyFactory.proxyCreationCodeKeccak256 ||
+      keccak256(binding.multiSendCode) !==
+        plan.multiSendCallOnly.runtimeCodeKeccak256,
   ) ||
-  officialBindings[0].singletonCode !== officialBindings[1].singletonCode ||
-  officialBindings[0].factoryCode !== officialBindings[1].factoryCode ||
-  officialBindings[0].proxyCreationCode !==
-    officialBindings[1].proxyCreationCode
-)
-  throw new Error("official Safe finalized source/runtime binding failed");
+  JSON.stringify(officialBindings[0]) !== JSON.stringify(officialBindings[1])
+) {
+  throw new Error("official atomic Safe runtime binding failed");
+}
+
+const observations = await Promise.all(
+  clients.map(async (client) => {
+    const [transaction, receipt] = await Promise.all([
+      client.getTransaction({ hash: signed.transactionHash }),
+      client.getTransactionReceipt({ hash: signed.transactionHash }),
+    ]);
+    const receiptBlock = await client.getBlock({
+      blockNumber: receipt.blockNumber,
+    });
+    if (
+      receipt.status !== "success" ||
+      receipt.contractAddress !== null ||
+      receipt.blockNumber > commonFinalizedNumber ||
+      transaction.blockNumber !== receipt.blockNumber ||
+      transaction.blockHash !== receipt.blockHash ||
+      getAddress(transaction.from) !==
+        getAddress(plan.atomicTransaction.from) ||
+      getAddress(transaction.to) !== getAddress(plan.atomicTransaction.to) ||
+      transaction.input !== plan.atomicTransaction.input ||
+      transaction.value !== 0n ||
+      transaction.nonce !== plan.atomicTransaction.nonce ||
+      transaction.chainId !== 1 ||
+      transaction.gas !== BigInt(plan.atomicTransaction.gasLimit) ||
+      transaction.maxFeePerGas !==
+        BigInt(plan.atomicTransaction.maxFeePerGas) ||
+      transaction.maxPriorityFeePerGas !==
+        BigInt(plan.atomicTransaction.maxPriorityFeePerGas) ||
+      receiptBlock.timestamp < BigInt(authorization.notBeforeTimestamp)
+    ) {
+      throw new Error("finalized atomic Safe transaction differs from plan");
+    }
+    assertAtomicProxyCreationLogs({
+      logs: receipt.logs,
+      factory: plan.proxyFactory.address,
+      controllers: plan.controllers,
+      singleton: plan.singleton.address,
+    });
+    return { transaction, receipt, receiptBlock };
+  }),
+);
+if (
+  observations[0].transaction.hash !== observations[1].transaction.hash ||
+  observations[0].receipt.blockNumber !== observations[1].receipt.blockNumber ||
+  observations[0].receipt.blockHash !== observations[1].receipt.blockHash ||
+  observations[0].receiptBlock.timestamp !==
+    observations[1].receiptBlock.timestamp
+) {
+  throw new Error("independent atomic Safe transaction evidence disagrees");
+}
 
 const verifiedControllers = [];
 for (const controller of plan.controllers) {
-  const evidence = receipts.controllers.find(
-    ({ role }) => role === controller.role,
-  );
-  const expectedInput = safeTransactionInput({
-    singleton: plan.singleton.address,
-    initializer: controller.initializer,
-    saltNonce: controller.saltNonce,
-  });
-  if (
-    !evidence ||
-    !/^0x[0-9a-f]+$/u.test(evidence.serializedTransaction ?? "") ||
-    keccak256(evidence.serializedTransaction) !== evidence.transactionHash ||
-    getAddress(evidence.address) !== getAddress(controller.predictedAddress) ||
-    evidence.expectedTransactionNonce !== controller.expectedTransactionNonce ||
-    evidence.transactionStatus !== "RECEIPT_CONFIRMED_SUCCESS" ||
-    controller.expectedTransaction.chainId !== 1 ||
-    getAddress(controller.expectedTransaction.from) !==
-      getAddress(plan.deployer) ||
-    getAddress(controller.expectedTransaction.to) !==
-      getAddress(plan.proxyFactory.address) ||
-    controller.expectedTransaction.input !== expectedInput ||
-    controller.expectedTransaction.valueWei !== "0" ||
-    controller.expectedTransaction.nonce !==
-      controller.expectedTransactionNonce ||
-    controller.expectedTransaction.gasLimit !== controller.gasLimit ||
-    controller.expectedTransaction.maxFeePerGas !== plan.reviewedMaxFeePerGas
-  )
-    throw new Error(
-      `reviewed Safe transaction is invalid for ${controller.role}`,
-    );
-  await assertExactSerializedEip1559Transaction({
-    serializedTransaction: evidence.serializedTransaction,
-    transactionHash: evidence.transactionHash,
-    expected: controller.expectedTransaction,
-  });
-
-  const observations = await Promise.all(
+  const states = await Promise.all(
     clients.map(async (client) => {
-      const [transaction, receipt] = await Promise.all([
-        client.getTransaction({ hash: evidence.transactionHash }),
-        client.getTransactionReceipt({ hash: evidence.transactionHash }),
-      ]);
-      if (
-        receipt.status !== "success" ||
-        receipt.contractAddress !== null ||
-        receipt.blockNumber > finalized[0].number ||
-        receipt.blockNumber.toString() !== evidence.blockNumber ||
-        receipt.blockHash !== evidence.blockHash ||
-        transaction.blockNumber !== receipt.blockNumber ||
-        transaction.blockHash !== receipt.blockHash ||
-        getAddress(transaction.from) !== getAddress(plan.deployer) ||
-        transaction.to === null ||
-        getAddress(transaction.to) !== getAddress(plan.proxyFactory.address) ||
-        transaction.input !== expectedInput ||
-        transaction.value !== 0n ||
-        transaction.nonce !== controller.expectedTransactionNonce ||
-        transaction.chainId !== 1 ||
-        transaction.gas !== BigInt(controller.expectedTransaction.gasLimit) ||
-        transaction.maxFeePerGas !==
-          BigInt(controller.expectedTransaction.maxFeePerGas) ||
-        transaction.maxPriorityFeePerGas !==
-          BigInt(controller.expectedTransaction.maxPriorityFeePerGas)
-      )
-        throw new Error(`factory transaction mismatch for ${controller.role}`);
-      assertProxyCreationLog({
-        logs: receipt.logs,
-        factory: plan.proxyFactory.address,
-        proxy: controller.predictedAddress,
-        singleton: plan.singleton.address,
-      });
       const [
         code,
         version,
         masterCopy,
         owners,
         threshold,
+        safeNonce,
+        balance,
         modulesPage,
         fallbackStorage,
         guardStorage,
       ] = await Promise.all([
         client.getCode({
           address: controller.predictedAddress,
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "VERSION",
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "masterCopy",
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "getOwners",
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "getThreshold",
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
+        }),
+        client.readContract({
+          address: controller.predictedAddress,
+          abi: SAFE_READ_ABI,
+          functionName: "nonce",
+          blockNumber: commonFinalizedNumber,
+        }),
+        client.getBalance({
+          address: controller.predictedAddress,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "getModulesPaginated",
           args: ["0x0000000000000000000000000000000000000001", 10n],
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "getStorageAt",
           args: [hexToBigInt(plan.storageSlots.fallbackHandler), 1n],
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
         client.readContract({
           address: controller.predictedAddress,
           abi: SAFE_READ_ABI,
           functionName: "getStorageAt",
           args: [hexToBigInt(plan.storageSlots.guard), 1n],
-          blockNumber: finalized[0].number,
+          blockNumber: commonFinalizedNumber,
         }),
       ]);
       if (
         !code ||
         code === "0x" ||
-        keccak256(code) !== plan.proxyFactory.proxyRuntimeCodeKeccak256
-      )
-        throw new Error(
-          `${controller.role} official SafeProxy runtime mismatch`,
-        );
+        keccak256(code) !== plan.proxyFactory.proxyRuntimeCodeKeccak256 ||
+        safeNonce !== 0n ||
+        balance !== 0n
+      ) {
+        throw new Error(`${controller.role} SafeProxy runtime mismatch`);
+      }
       const [modules, nextModule] = modulesPage;
       assertSafeRuntimeState({
         actual: {
@@ -430,35 +440,25 @@ for (const controller of plan.controllers) {
         },
       });
       return {
-        transactionHash: transaction.hash,
-        blockNumber: receipt.blockNumber,
-        blockHash: receipt.blockHash,
         runtimeCodeKeccak256: keccak256(code),
         owner: getAddress(owners[0]),
-        threshold,
+        threshold: threshold.toString(),
+        safeNonce: safeNonce.toString(),
+        balance: balance.toString(),
       };
     }),
   );
-  const [a, b] = observations;
-  if (
-    a.transactionHash !== b.transactionHash ||
-    a.blockNumber !== b.blockNumber ||
-    a.blockHash !== b.blockHash ||
-    a.runtimeCodeKeccak256 !== b.runtimeCodeKeccak256 ||
-    a.owner !== b.owner ||
-    a.threshold !== b.threshold
-  )
-    throw new Error(
-      `independent ${controller.role} Safe observations disagree`,
-    );
+  if (JSON.stringify(states[0]) !== JSON.stringify(states[1])) {
+    throw new Error(`independent ${controller.role} Safe states disagree`);
+  }
   verifiedControllers.push({
     role: controller.role,
     address: controller.predictedAddress,
     owner: controller.owner,
-    transactionHash: a.transactionHash,
-    blockNumber: a.blockNumber.toString(),
-    blockHash: a.blockHash,
-    runtimeCodeKeccak256: a.runtimeCodeKeccak256,
+    transactionHash: signed.transactionHash,
+    blockNumber: observations[0].receipt.blockNumber.toString(),
+    blockHash: observations[0].receipt.blockHash,
+    runtimeCodeKeccak256: states[0].runtimeCodeKeccak256,
     masterCopy: plan.singleton.address,
     threshold: "1",
     modules: [],
@@ -469,19 +469,21 @@ for (const controller of plan.controllers) {
 
 const verification = {
   schemaVersion: SAFE_VERIFICATION_SCHEMA,
-  status: "VERIFIED_FINALIZED_SAFE_CONTROLLERS",
+  status: "VERIFIED_FINALIZED_ATOMIC_SAFE_CONTROLLERS",
   chainId: 1,
   source: plan.source,
   preflightSha256: reviewed.digest,
   authorizationSha256: authorized.digest,
-  receiptsSha256: receiptEvidence.digest,
+  receiptsSha256: receiptJournalDigest,
   policySha256: plan.policySha256,
   custodyProofSha256: plan.custodyProofSha256,
   proxyFactory: plan.proxyFactory,
   singleton: plan.singleton,
+  multiSendCallOnly: plan.multiSendCallOnly,
+  atomicTransactionHash: signed.transactionHash,
   finalizedAnchor: {
-    blockNumber: finalized[0].number.toString(),
-    blockHash: finalized[0].hash,
+    blockNumber: commonFinalizedNumber.toString(),
+    blockHash: finalizedA.hash,
   },
   deployer: plan.deployer,
   admin: plan.admin,

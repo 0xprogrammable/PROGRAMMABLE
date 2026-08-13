@@ -13,8 +13,10 @@ const chains = [
   {
     name: "Ethereum mainnet",
     environmentKey: "ETHEREUM_RPC_URL",
-    testGlob:
+    testGlobs: [
       "test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeepV3CanaryBatchMainnetFork.t.sol,DeployClassicV3InfrastructureV1Mainnet.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetDeepFullRangeInfrastructureV1.t.sol,DeployMainnetDeepFullRangeInfrastructureV2.t.sol,DeployMainnetDeepFullRangeInfrastructureV2Security.t.sol,DeployMainnetDeepFullRangeInfrastructureV3.t.sol,DeployMainnetDeepFullRangeInfrastructureV3Security.t.sol,DeployMainnetDeepKeeperExecutorV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,DeployMainnetProtocolRevenueV1.t.sol,DeployMainnetStockPairedInfrastructureV1.t.sol,DeployMainnetStockPairedInfrastructureV2.t.sol,DeployMainnetStockPairedInfrastructureV3.t.sol,EthereumDeploymentSnapshot.t.sol,LiquidityGrowthFullRangeMainnetFork.t.sol,LiquidityGrowthFullRangeV2MainnetFork.t.sol,LiquidityGrowthFullRangeV3MainnetFork.t.sol,LiquidityGrowthVaultMainnetFork.t.sol,MainnetMemeLifecycleFork.t.sol,ProtocolRevenueRouterV1MainnetFork.t.sol,StockPairedMainnetFork.t.sol,StockPairedV2DeployedMainnetFork.t.sol,StockPairedV3MainnetFork.t.sol,invariant/ProtocolRevenueRouterV1Invariant.t.sol}",
+      "test/CustomRegistryV2SafeAtomicBatchMainnetFork.t.sol",
+    ],
     publicEndpoints: [
       "https://eth-mainnet.public.blastapi.io",
       "https://rpc.mevblocker.io",
@@ -28,8 +30,9 @@ const chains = [
   {
     name: "Ethereum Sepolia",
     environmentKey: "SEPOLIA_RPC_URL",
-    testGlob:
+    testGlobs: [
       "test/{DeployClassicV3InfrastructureV1Sepolia.t.sol,DeploySepoliaInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV2.t.sol,EthereumSepoliaDeploymentSnapshot.t.sol}",
+    ],
     publicEndpoints: [
       "https://sepolia.gateway.tenderly.co",
       "https://sepolia.drpc.org",
@@ -52,10 +55,9 @@ for (const chain of chains) {
 
     console.log(`Running ${chain.name} fork tests with ${endpointLabel}`);
 
-    const result = spawnSync(
-      "forge",
-      ["test", "--match-path", chain.testGlob],
-      {
+    let result = { status: 0 };
+    for (const testGlob of chain.testGlobs) {
+      result = spawnSync("forge", ["test", "--match-path", testGlob], {
         cwd: contractsDirectory,
         env: {
           ...process.env,
@@ -63,8 +65,9 @@ for (const chain of chains) {
         },
         stdio: "inherit",
         timeout: endpointAttemptTimeoutMs,
-      },
-    );
+      });
+      if (result.status !== 0) break;
+    }
 
     if (result.status === 0) {
       passed = true;

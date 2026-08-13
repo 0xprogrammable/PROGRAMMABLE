@@ -42,6 +42,8 @@ const sourcePaths = [
   "contracts/scripts/test/custom-registry-v2-safe-controller-guards.test.mjs",
   "contracts/scripts/test/custom-registry-v2-transaction-journal.test.mjs",
   "contracts/scripts/test/custom-registry-v2-source-verification-core.test.mjs",
+  "contracts/test/CustomRegistryV2SafeAtomicBatchMainnetFork.t.sol",
+  "contracts/scripts/verify-fork-tests-ci.mjs",
   "config/custom-registry-v2-release-policy.json",
   "config/custom-registry-v2-production-policy.json",
   "config/custom-registry-v2-production-constructor.json",

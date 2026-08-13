@@ -8,6 +8,7 @@ import {
   SAFE_CUSTODY_PROOF_SCHEMA,
   SAFE_AUTHORIZATION_SCHEMA,
   SAFE_PLAN_SCHEMA,
+  assertAtomicProxyCreationLogs,
   assertProxyCreationLog,
   assertSafeCostReviewEnvelope,
   assertSafeCustodyProof,
@@ -18,6 +19,7 @@ import {
   assertSafeRuntimeState,
   computeSafeReviewedPlanDigest,
   predictSafeProxyAddress,
+  safeAtomicBatchInput,
   safeInitializer,
   safeTransactionInput,
 } from "../custom-registry-v2-safe-controller-guards.mjs";
@@ -129,6 +131,7 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     schemaVersion: SAFE_PLAN_SCHEMA,
     status: "PREFLIGHT_ONLY_NO_TRANSACTION",
     chainId: 1,
+    rpcProviders: ["provider-a", "provider-b"],
     signingAllowed: false,
     broadcastAllowed: false,
     fundingSufficient: true,
@@ -218,8 +221,6 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     ),
   );
   const [deployer, admin, releaseOwner, ...owners] = accounts;
-  const gasEstimates = ["100000", "110000"];
-  const gasLimit = "132000";
   const controllers = roles.map((role, index) => {
     const owner = owners[index].address;
     const saltNonce = policy.roles[role].saltNonce;
@@ -237,26 +238,17 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
         initializer,
         saltNonce,
       }),
-      expectedTransactionNonce: index,
-      expectedTransaction: {
-        chainId: 1,
-        from: deployer.address,
+      atomicCall: {
         to: policy.proxyFactory.address,
-        input: safeTransactionInput({
+        data: safeTransactionInput({
           singleton: policy.singleton.address,
           initializer,
           saltNonce,
         }),
         valueWei: "0",
-        nonce: index,
-        gasLimit,
-        maxFeePerGas: "5",
-        maxPriorityFeePerGas: "1",
       },
-      gasEstimates,
       predictedAddressNonces: [0, 0],
       predictedAddressBalancesWei: ["0", "0"],
-      gasLimit,
     };
   });
   const manifest = {
@@ -285,6 +277,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     schemaVersion: SAFE_PLAN_SCHEMA,
     status: "PREFLIGHT_ONLY_NO_TRANSACTION",
     chainId: 1,
+    rpcProviders: ["provider-a", "provider-b"],
     source: { commit: "a".repeat(40), tree: "b".repeat(40) },
     sourceManifestSha256,
     policySha256,
@@ -304,6 +297,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     safeVersion: policy.safeVersion,
     singleton: policy.singleton,
     proxyFactory: policy.proxyFactory,
+    multiSendCallOnly: policy.multiSendCallOnly,
     storageSlots: policy.storageSlots,
     commonFinalizedAnchor: {
       blockNumber: "1",
@@ -319,11 +313,28 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     exactPendingNonce: 0,
     deployerBalanceWei: "2640000",
     controllers,
-    totalGasLimit: "528000",
+    atomicTransaction: {
+      chainId: 1,
+      from: deployer.address,
+      to: policy.multiSendCallOnly.address,
+      input: safeAtomicBatchInput(
+        controllers.map(({ atomicCall }) => atomicCall),
+      ),
+      valueWei: "0",
+      nonce: 0,
+      gasLimit: "492000",
+      maxFeePerGas: "5",
+      maxPriorityFeePerGas: "1",
+    },
+    atomicInputKeccak256: keccak256(
+      safeAtomicBatchInput(controllers.map(({ atomicCall }) => atomicCall)),
+    ),
+    atomicGasEstimates: ["400000", "410000"],
+    totalGasLimit: "492000",
     observedFeePerGas: "4",
     reviewedMaxFeePerGas: "5",
     reviewedMaxTotalCostWei: "3000000",
-    maximumTotalCostWei: "2640000",
+    maximumTotalCostWei: "2460000",
     fundingSufficient: true,
     createdAtTimestamp: 100,
     validitySeconds: 100,
@@ -473,5 +484,92 @@ test("requires one exact factory ProxyCreation event", () => {
   assert.throws(
     () => assertProxyCreationLog({ logs, factory, proxy, singleton: ZERO }),
     /does not match/u,
+  );
+});
+
+test("binds the exact ordered SafeSetup and ProxyCreation event pairs", () => {
+  const factory = "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67";
+  const singleton = "0x41675C099F32341bf84BFc5382aF534df5C7461a";
+  const controllers = ["approver", "registrar", "finalizer", "revoker"].map(
+    (role, index) => ({
+      role,
+      predictedAddress: `0x${(index + 11).toString(16).padStart(40, "0")}`,
+      owner: `0x${(index + 21).toString(16).padStart(40, "0")}`,
+    }),
+  );
+  const setupEvent = [
+    {
+      type: "event",
+      name: "SafeSetup",
+      inputs: [
+        { indexed: true, name: "initiator", type: "address" },
+        { indexed: false, name: "owners", type: "address[]" },
+        { indexed: false, name: "threshold", type: "uint256" },
+        { indexed: false, name: "initializer", type: "address" },
+        { indexed: false, name: "fallbackHandler", type: "address" },
+      ],
+    },
+  ];
+  const creationEvent = [
+    {
+      type: "event",
+      name: "ProxyCreation",
+      inputs: [
+        { indexed: true, name: "proxy", type: "address" },
+        { indexed: false, name: "singleton", type: "address" },
+      ],
+    },
+  ];
+  const logs = controllers.flatMap((controller) => [
+    {
+      address: controller.predictedAddress,
+      topics: encodeEventTopics({
+        abi: setupEvent,
+        eventName: "SafeSetup",
+        args: { initiator: factory },
+      }),
+      data: encodeAbiParameters(
+        [
+          { type: "address[]" },
+          { type: "uint256" },
+          { type: "address" },
+          { type: "address" },
+        ],
+        [[controller.owner], 1n, ZERO, ZERO],
+      ),
+    },
+    {
+      address: factory,
+      topics: encodeEventTopics({
+        abi: creationEvent,
+        eventName: "ProxyCreation",
+        args: { proxy: controller.predictedAddress },
+      }),
+      data: encodeAbiParameters([{ type: "address" }], [singleton]),
+    },
+  ]);
+
+  assertAtomicProxyCreationLogs({ logs, factory, controllers, singleton });
+  const reordered = [...logs];
+  [reordered[0], reordered[2]] = [reordered[2], reordered[0]];
+  assert.throws(
+    () =>
+      assertAtomicProxyCreationLogs({
+        logs: reordered,
+        factory,
+        controllers,
+        singleton,
+      }),
+    /differs from plan/u,
+  );
+  assert.throws(
+    () =>
+      assertAtomicProxyCreationLogs({
+        logs: logs.slice(0, -1),
+        factory,
+        controllers,
+        singleton,
+      }),
+    /exactly eight logs/u,
   );
 });
