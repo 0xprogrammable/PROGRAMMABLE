@@ -3,10 +3,8 @@ import "server-only";
 import { createActionRpcQuorum } from
   "../server/action-rpc-quorum.server";
 import type { ReadyOnchainDeployment } from "./types";
-const ARCHIVE_WITNESSES = Object.freeze([
-  "https://rpc.mevblocker.io/",
-  "https://mainnet.gateway.tenderly.co/",
-] as const);
+import { productionMainnetRpcPair } from
+  "./website-rpc-providers.server";
 
 export class HistoricalReadRpcBindingError extends Error {
   override name = "HistoricalReadRpcBindingError";
@@ -18,29 +16,34 @@ export class HistoricalReadRpcBindingError extends Error {
 
 /**
  * Historical registry reconstruction requires two archive-capable readers.
- * MEV Blocker and Tenderly are fixed independent archive witnesses. Current-
- * market reads keep their separate commitment-bound private dRPC + QuickNode
- * quorum.
+ * It reuses the exact commitment-bound production dRPC + QuickNode pair: this
+ * creates a deliberate correlation with current-market reads, but preserves
+ * independent vendors, exact endpoint commitments and operational capacity.
+ * No public or anonymous fallback may substitute either provider.
  */
 export function historicalReadOnchainDeployment(
   baseDeployment: ReadyOnchainDeployment,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ReadyOnchainDeployment {
   if (baseDeployment.chainId !== 1) {
     throw new HistoricalReadRpcBindingError();
   }
 
   try {
+    const binding = productionMainnetRpcPair(environment);
     const providers = createActionRpcQuorum({
       chainId: 1,
-      primary: ARCHIVE_WITNESSES[0],
-      secondary: ARCHIVE_WITNESSES[1],
+      primary: binding.primary.url,
+      secondary: binding.secondary.url,
       maximumProviders: 2,
     });
     const [primary, secondary] = providers;
     if (
       providers.length !== 2 ||
-      primary?.vendorGroup !== "mevblocker" ||
-      secondary?.vendorGroup !== "tenderly"
+      primary?.vendorGroup !== "drpc" ||
+      secondary?.vendorGroup !== "quicknode" ||
+      primary.endpointCommitment !== binding.primary.endpointCommitment ||
+      secondary.endpointCommitment !== binding.secondary.endpointCommitment
     ) {
       throw new HistoricalReadRpcBindingError();
     }
@@ -49,7 +52,10 @@ export function historicalReadOnchainDeployment(
       ...baseDeployment,
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
-      rpcProviderIds: undefined,
+      rpcProviderIds: {
+        primary: "drpc",
+        secondary: "quicknode",
+      },
     };
   } catch {
     throw new HistoricalReadRpcBindingError();

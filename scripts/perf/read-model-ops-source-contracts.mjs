@@ -14,7 +14,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "73c99640515732c975600b5e9a8cd4ffb7fafbc04536a563126c76ea60b27fe6",
+        sha256: "f787ca685a1168a119137dc42894b86a0843ec339e9e380be2b32070d256c1a8",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -23,20 +23,24 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/onchain/historical-read-rpc.server.ts",
-          sha256: "725bde4016b635c77ed996e8b6d574b589f3cccd5778a7ed63ea9afbde4e77b7",
+          sha256: "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d",
+        }),
+        Object.freeze({
+          path: "lib/onchain/persistent-rpc-cache.server.ts",
+          sha256: "4556161d79d49914f064a4df5ad2eb7f9777dfe1b3d188cf36a1e5b434b38f9b",
         }),
       ]),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "c97c6f5875bf089b8545bfc55bd20f26c1520bdbe0c640e873f70ca08b4cc4a3",
+          sha256: "4921b6869284d405976bc00f9426f1dbf05c5cf02f0354746a57c6ee8631cddd",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "9c9badce8d6dfb000a29fd4abcc013701f5a81736ce9ad9fd1e72816b3a75b2f",
+          sha256: "749399f6b360fdcbebf3d2632d82409aba00dcbb3367538c89941a81532cce67",
           eventFiltersPerRange: 3,
         }),
       ]),
@@ -1498,6 +1502,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
   const parallelReadsSource = source(boundedRefresh?.dependencies?.[0]?.path);
   const historicalRpcSource = source(boundedRefresh?.dependencies?.[1]?.path);
+  const persistentCacheSource = source(boundedRefresh?.dependencies?.[2]?.path);
   const releaseRuntimes = boundedRefresh?.releaseRuntimes;
   const classicV3RefreshSource = source(releaseRuntimes?.[0]?.path);
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
@@ -1524,7 +1529,7 @@ export function evaluateReadModelOperationsSourceContracts(
         boundedRefresh?.runtime,
         expectedSha256Overrides,
       ) &&
-      boundedRefresh?.dependencies?.length === 2 &&
+      boundedRefresh?.dependencies?.length === 3 &&
       sourceBindingMatches(
         source,
         boundedRefresh.dependencies[0],
@@ -1533,6 +1538,11 @@ export function evaluateReadModelOperationsSourceContracts(
       sourceBindingMatches(
         source,
         boundedRefresh.dependencies[1],
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh.dependencies[2],
         expectedSha256Overrides,
       ) &&
       refreshRuntimeSource?.includes(
@@ -1547,23 +1557,56 @@ export function evaluateReadModelOperationsSourceContracts(
         "historicalReadOnchainDeployment(deployment)",
       ) &&
       historicalRpcSource?.includes(
-        '"https://rpc.mevblocker.io/",',
+        "productionMainnetRpcPair(environment)",
       ) &&
       historicalRpcSource?.includes(
-        '"https://mainnet.gateway.tenderly.co/",',
+        "primary: binding.primary.url",
       ) &&
       historicalRpcSource?.includes(
-        "primary: ARCHIVE_WITNESSES[0]",
+        "secondary: binding.secondary.url",
       ) &&
       historicalRpcSource?.includes(
-        "secondary: ARCHIVE_WITNESSES[1]",
+        'primary?.vendorGroup !== "drpc"',
       ) &&
       historicalRpcSource?.includes(
-        'primary?.vendorGroup !== "mevblocker"',
+        'secondary?.vendorGroup !== "quicknode"',
       ) &&
       historicalRpcSource?.includes(
-        'secondary?.vendorGroup !== "tenderly"',
+        "primary.endpointCommitment !== binding.primary.endpointCommitment",
       ) &&
+      persistentCacheSource?.includes(
+        'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";',
+      ) &&
+      !persistentCacheSource?.includes(
+        'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";',
+      ) &&
+      persistentCacheSource?.includes(
+        "Persistent RPC cache path uses a retired namespace",
+      ) &&
+      persistentCacheSource?.includes("previousIntegrityCommitId") &&
+      persistentCacheSource?.includes("pointedMarker.status !== \"committed\"") &&
+      persistentCacheSource?.includes(
+        "Persistent RPC providers do not cover the same event streams",
+      ) &&
+      persistentCacheSource?.includes(
+        "Persistent RPC checkpoint cursors do not share its boundary",
+      ) &&
+      persistentCacheSource?.includes("expectedProviderCount") &&
+      persistentCacheSource?.includes("expectedStreamsPerProvider") &&
+      persistentCacheSource?.includes("requireCheckpointWindow") &&
+      persistentCacheSource?.includes("requiredInitialFromBlock") &&
+      persistentCacheSource?.includes("requireContiguousCheckpointWindow") &&
+      persistentCacheSource?.includes("allowCheckpointWindowExtension") &&
+      persistentCacheSource?.includes(
+        "bindPersistentRpcIntegrityCheckpointWindow",
+      ) &&
+      persistentCacheSource?.indexOf(
+        'scope.commitId,\n          "pending",',
+      ) < persistentCacheSource?.indexOf("const published =") &&
+      persistentCacheSource?.indexOf("const published =") <
+        persistentCacheSource?.indexOf(
+          'scope.commitId,\n          "committed",',
+        ) &&
       Array.isArray(releaseRuntimes) &&
       releaseRuntimes.length === 2 &&
       releaseRuntimes[0]?.release === "classic-v3" &&
@@ -1591,17 +1634,67 @@ export function evaluateReadModelOperationsSourceContracts(
       refreshRuntimeSource?.includes("events: CLASSIC_LAUNCHER_EVENTS") &&
       refreshRuntimeSource?.includes("events: CLASSIC_FEE_HOOK_EVENTS") &&
       refreshRuntimeSource?.includes("assertCanonicalClassicEventSource(") &&
-      refreshRuntimeSource?.includes("clients.map((candidate) =>") &&
+      refreshRuntimeSource?.includes(
+        "clients.map((candidate, providerIndex) =>",
+      ) &&
+      refreshRuntimeSource?.includes(
+        "persistentRpcProviderId(providerEndpoints[providerIndex])",
+      ) &&
+      refreshRuntimeSource?.includes("expectedCursorBindings: 2") &&
       hasAdaptiveCompleteRangeScan(classicV3RefreshSource) &&
       classicV3RefreshSource?.includes(
         "assertCanonicalClassicV3EventSource(",
       ) &&
-      classicV3RefreshSource?.includes("clients.map((client) =>") &&
+      classicV3RefreshSource?.includes("readClassicV3EventsQuorum(") &&
+      classicV3RefreshSource?.includes('"classic-v3-events-v2"') &&
+      classicV3RefreshSource?.includes("clients.length !== 2") &&
+      classicV3RefreshSource?.includes(
+        "createEnvironmentPersistentRpcCacheStore()",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "bindPersistentRpcIntegrityCheckpointWindow({",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "expectedCursorBindings: clients.length * 2",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "expectedProviderCount: clients.length",
+      ) &&
+      classicV3RefreshSource?.includes("expectedStreamsPerProvider: 2") &&
+      classicV3RefreshSource?.includes("requireCheckpointWindow: true") &&
+      classicV3RefreshSource?.includes(
+        "requiredInitialFromBlock: release.startBlock",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "requireContiguousCheckpointWindow: true",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "allowCheckpointWindowExtension: true",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "const MAXIMUM_CHECKPOINT_BLOCK_RANGE = 1_000n",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "config.logBlockRange,\n      MAXIMUM_CHECKPOINT_BLOCK_RANGE",
+      ) &&
+      classicV3RefreshSource?.includes("eventProvenance") &&
+      classicV3RefreshSource?.includes("toEventSelector(launchedEvent)") &&
+      classicV3RefreshSource?.includes("toEventSelector(feeEvent)") &&
+      classicV3RefreshSource?.includes(".map(persistentRpcProviderId).sort()") &&
+      classicV3RefreshSource?.includes(
+        "Independent RPCs disagree on the Classic V3 checkpoint window",
+      ) &&
       hasAdaptiveCompleteRangeScan(stockPairedRefreshSource) &&
       stockPairedRefreshSource?.includes("events: STOCK_LAUNCHER_EVENTS") &&
       stockPairedRefreshSource?.includes("assertCanonicalStockEventSource(") &&
-      stockPairedRefreshSource?.includes("clients.map((candidate) =>"),
-    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two provider passes and settle registry slices in parallel before deterministic merging and the platform deadline",
+      stockPairedRefreshSource?.includes(
+        "clients.map((candidate, providerIndex) =>",
+      ) &&
+      stockPairedRefreshSource?.includes(
+        "persistentRpcProviderId(providerEndpoints[providerIndex])",
+      ) &&
+      stockPairedRefreshSource?.includes("expectedCursorBindings: 3"),
+    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two provider passes, atomically publish Classic V3 provider-stream checkpoints in a fail-closed v4 namespace and settle registry slices in parallel before deterministic merging and the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(

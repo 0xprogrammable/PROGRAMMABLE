@@ -9,7 +9,7 @@
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "73c99640515732c975600b5e9a8cd4ffb7fafbc04536a563126c76ea60b27fe6"
+        "sha256": "f787ca685a1168a119137dc42894b86a0843ec339e9e380be2b32070d256c1a8"
       },
       "dependencies": [
         {
@@ -18,20 +18,24 @@
         },
         {
           "path": "lib/onchain/historical-read-rpc.server.ts",
-          "sha256": "725bde4016b635c77ed996e8b6d574b589f3cccd5778a7ed63ea9afbde4e77b7"
+          "sha256": "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d"
+        },
+        {
+          "path": "lib/onchain/persistent-rpc-cache.server.ts",
+          "sha256": "4556161d79d49914f064a4df5ad2eb7f9777dfe1b3d188cf36a1e5b434b38f9b"
         }
       ],
       "releaseRuntimes": [
         {
           "release": "classic-v3",
           "path": "lib/onchain/classic-v3-read-model.ts",
-          "sha256": "c97c6f5875bf089b8545bfc55bd20f26c1520bdbe0c640e873f70ca08b4cc4a3",
+          "sha256": "4921b6869284d405976bc00f9426f1dbf05c5cf02f0354746a57c6ee8631cddd",
           "eventFiltersPerRange": 2
         },
         {
           "release": "stock-paired-v1-v3",
           "path": "lib/onchain/stock-paired-read-model.ts",
-          "sha256": "9c9badce8d6dfb000a29fd4abcc013701f5a81736ce9ad9fd1e72816b3a75b2f",
+          "sha256": "749399f6b360fdcbebf3d2632d82409aba00dcbb3367538c89941a81532cce67",
           "eventFiltersPerRange": 3
         }
       ],
