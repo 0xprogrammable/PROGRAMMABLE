@@ -144,6 +144,17 @@ async function observeProvider(
 ): Promise<ProviderObservationV2> {
   input.signal.throwIfAborted();
   const address = input.release.registryAddress;
+  if (input.approval.registry.chainId !== "1"
+    || input.approval.registry.generation !== "2"
+    || input.approval.registry.address !== address
+    || input.approval.registry.runtimeCodeKeccak256
+      !== input.release.registryRuntimeCodeKeccak256
+    || input.approval.registry.minimumFinalityBlocks
+      !== input.release.minimumFinalityBlocks
+    || input.approval.registryOnchainPolicyCommitment
+      !== input.release.registryPolicyCommitment) {
+    throw new TypeError("Approval artifact is not bound to the Registry release");
+  }
   const fromBlock = BigInt(input.release.deploymentBlock);
   const [logs, approvalStateRaw, launchStateRaw, descriptorRaw, primaryTx,
     primaryReceipt, primaryBlock, primaryCode] = await Promise.all([
@@ -233,6 +244,28 @@ async function observeProvider(
     throw new TypeError("Registry lifecycle is not finalized and non-revoked");
   }
   assertFinalizedEventJoins(events, input.approval, launchState, approvalState);
+  const finalizedLog = events.finalization!;
+  const finalityArgs = finalizedLog.args;
+  const [observedBlock, confirmedBlock] = await Promise.all([
+    client.getBlock({
+      blockNumber: BigInt(finalityArgs.observedAtBlock),
+      includeTransactions: false,
+    }),
+    client.getBlock({
+      blockNumber: BigInt(finalityArgs.confirmedHeadBlock),
+      includeTransactions: false,
+    }),
+  ]);
+  if (observedBlock.hash?.toLowerCase() !== finalityArgs.observedBlockHash
+    || confirmedBlock.hash?.toLowerCase() !== finalityArgs.confirmedHeadBlockHash
+    || finalityArgs.observedAtBlock !== launchState.observedAtBlock
+    || finalityArgs.finalizedAtBlock !== launchState.finalizedAtBlock
+    || finalityArgs.finalizedAtBlock !== finalizedLog.blockNumber
+    || BigInt(finalityArgs.confirmedHeadBlock)
+      < BigInt(finalityArgs.observedAtBlock)
+        + BigInt(input.release.minimumFinalityBlocks)) {
+    throw new TypeError("Registry finalized block evidence is invalid");
+  }
   const auth = evidence(events.authorization, "CustomLaunchApprovalAuthorizedV2");
   const registered = evidence(events.registration, "CustomLaunchRegisteredV2");
   const descriptor = evidence(events.descriptor, "CustomLaunchDescriptorCommittedV2");
@@ -405,6 +438,8 @@ function assertApprovalState(
 ) {
   if (state.descriptorHash !== approval.descriptorHash
     || state.approvalEvidenceHash !== approval.approvalEvidenceHash
+    || state.validAfterBlock !== approval.authorization.validAfterBlock
+    || state.expiresAtBlock !== approval.authorization.expiresAtBlock
     || state.consumed !== "true") {
     throw new TypeError("Registry approval state does not match Approval artifact");
   }

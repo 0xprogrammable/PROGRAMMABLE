@@ -36,6 +36,11 @@ export interface VerifiedApprovalArtifactV3 {
     treeOid: string;
   }>;
   readonly approvalId: `0x${string}`;
+  readonly authorization: Readonly<{
+    approvalId: `0x${string}`;
+    validAfterBlock: string;
+    expiresAtBlock: string;
+  }>;
   readonly approvalEvidenceHash: `0x${string}`;
   readonly signedReceiptArtifactHash: Sha256Digest;
   readonly descriptorHash: `0x${string}`;
@@ -48,6 +53,14 @@ export interface VerifiedApprovalArtifactV3 {
   readonly descriptor:
     Omit<GenericLaunchSourceProjectionV2["descriptor"], "descriptorHash" | "launchId">
     & Readonly<{ chainId: "1" }>;
+  readonly registry: Readonly<{
+    chainId: "1";
+    generation: "2";
+    address: `0x${string}`;
+    runtimeCodeKeccak256: `0x${string}`;
+    minimumFinalityBlocks: string;
+  }>;
+  readonly registryOnchainPolicyCommitment: `0x${string}`;
 }
 
 export type VerifiedRegistryLifecycleV2 =
@@ -331,6 +344,8 @@ function parseVerifiedApprovalPayload(
   const descriptor = object(payload.descriptor, "Approval descriptor");
   const approvedWallet = object(payload.approvedWallet, "Approval wallet");
   const finality = object(payload.finality, "Approval primary finality");
+  const registry = object(payload.registry, "Approval Registry release");
+  const policies = object(payload.policyCommitments, "Approval policy commitments");
   const approvalId = nonzeroHash32(authorization.approvalId, "Approval ID");
   const descriptorHash = nonzeroHash32(payload.descriptorHash, "descriptor hash");
   const launchId = nonzeroHash32(payload.launchId, "launch ID");
@@ -357,6 +372,17 @@ function parseVerifiedApprovalPayload(
       treeOid: gitObject(source.treeOid, "source tree"),
     }),
     approvalId,
+    authorization: Object.freeze({
+      approvalId,
+      validAfterBlock: decimal(
+        authorization.validAfterBlock,
+        "authorization valid-after block",
+      ),
+      expiresAtBlock: positiveDecimal(
+        authorization.expiresAtBlock,
+        "authorization expiration block",
+      ),
+    }),
     approvalEvidenceHash,
     signedReceiptArtifactHash,
     descriptorHash,
@@ -384,6 +410,25 @@ function parseVerifiedApprovalPayload(
       projectCommitment: nonzeroHash32(descriptor.projectCommitment, "project commitment"),
       ...market,
     }),
+    registry: Object.freeze({
+      chainId: registry.chainId === "1" ? "1" as const
+        : invalidLiteral("Registry chain ID"),
+      generation: registry.generation === "2" ? "2" as const
+        : invalidLiteral("Registry generation"),
+      address: nonzeroAddress(registry.address, "Registry address"),
+      runtimeCodeKeccak256: nonzeroHash32(
+        registry.runtimeCodeKeccak256,
+        "Registry runtime hash",
+      ),
+      minimumFinalityBlocks: positiveDecimal(
+        registry.minimumFinalityBlocks,
+        "Registry minimum finality",
+      ),
+    }),
+    registryOnchainPolicyCommitment: nonzeroHash32(
+      policies.registryOnchainPolicyCommitment,
+      "Registry onchain policy commitment",
+    ),
   });
 }
 
@@ -488,6 +533,10 @@ function timestamp(value: unknown, label: string): number {
 function safeId(value: unknown): value is string {
   return typeof value === "string"
     && /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u.test(value);
+}
+
+function invalidLiteral(label: string): never {
+  throw new TypeError(`${label} is invalid`);
 }
 
 // Keep strict JSON parser in the production bundle; callers use it before this

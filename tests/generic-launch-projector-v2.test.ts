@@ -30,6 +30,9 @@ const approval: VerifiedApprovalArtifactV3 = {
     treeOid: "4".repeat(40),
   },
   approvalId: hash("1"),
+  authorization: {
+    approvalId: hash("1"), validAfterBlock: "80", expiresAtBlock: "120",
+  },
   approvalEvidenceHash: hash("2"),
   signedReceiptArtifactHash: sha("2"),
   descriptorHash: hash("3"),
@@ -51,6 +54,11 @@ const approval: VerifiedApprovalArtifactV3 = {
     marketModeValue: 1,
     protocolFeeBps: 10,
   },
+  registry: {
+    chainId: "1", generation: "2", address: address("6"),
+    runtimeCodeKeccak256: hash("7"), minimumFinalityBlocks: "12",
+  },
+  registryOnchainPolicyCommitment: hash("8"),
 };
 
 const lifecycle: VerifiedRegistryLifecycleV2 = {
@@ -242,7 +250,10 @@ describe("Generic launch V2 Registry projector", () => {
     const keys = generateKeyPairSync("ed25519");
     const spki = keys.publicKey.export({ format: "der", type: "spki" });
     const releaseProjection = {
-      registry: { address: address("6") },
+      registry: {
+        chainId: "1", generation: "2", address: address("6"),
+        runtimeCodeKeccak256: hash("7"), minimumFinalityBlocks: "12",
+      },
       policyCommitments: { registryOnchainPolicyCommitment: hash("8") },
       authority: { keyId: "approval-key", keyEpoch: "7" },
       routeAdapterRelease: { commitOid: "3".repeat(40) },
@@ -255,7 +266,9 @@ describe("Generic launch V2 Registry projector", () => {
         commitOid: "3".repeat(40), treeOid: "4".repeat(40),
       },
       approvedWallet: { chainId: "1", namespace: "eip155:1", value: address("5") },
-      authorization: { approvalId: hash("1") },
+      authorization: {
+        approvalId: hash("1"), validAfterBlock: "80", expiresAtBlock: "120",
+      },
       descriptorHash: hash("3"),
       launchId: hash("4"),
       descriptor: approval.descriptor,
