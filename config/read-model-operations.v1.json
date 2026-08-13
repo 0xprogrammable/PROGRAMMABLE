@@ -10,14 +10,14 @@
       "provider": "github-actions",
       "workflow": {
         "path": ".github/workflows/refresh-production-read-model.yml",
-        "sha256": "3da07d2ec2ae59991aea77da64c0552e8d9fc7ed96a7d6b9130bdc469d7cc9c6"
+        "sha256": "778f68df03c9a66a17c5f58643940e0beb2e4090eacd5f126a5feb9a0ed6b616"
       },
       "nodeRuntime": {
         "setupAction": "actions/setup-node",
         "setupActionSha": "820762786026740c76f36085b0efc47a31fe5020",
         "setupActionRelease": "v7.0.0",
         "version": "24.14.0",
-        "dependencyCache": false
+        "packageManagerCache": false
       },
       "schedule": "2-57/5 * * * *",
       "targetOrigin": "https://programmable.market",

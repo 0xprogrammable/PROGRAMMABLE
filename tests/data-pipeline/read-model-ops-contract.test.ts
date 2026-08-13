@@ -648,7 +648,7 @@ describe("read-model operations source contract", () => {
       "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
     ],
     ["Node 24 runtime", "node-version: 24.14.0"],
-    ["disabled dependency cache", "cache: false"],
+    ["disabled package-manager auto-cache", "package-manager-cache: false"],
     ["fixed public origin", 'targetOrigin !== "https://programmable.market"'],
     ["bounded cron secret", "secretBytes < 32"],
     ["canonical writer route", '"/api/ops/index-v2"'],
