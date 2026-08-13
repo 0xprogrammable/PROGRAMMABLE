@@ -617,6 +617,8 @@ export function customLaunchClassification(launch) {
     !isTreasury(policy.programmableRecipient)
   )
     return "blocked";
+  if (launch.standardClaimBindingVerified === true)
+    return launch.amount === 0n ? "empty" : "ready";
   return "adapter-required";
 }
 
@@ -733,6 +735,13 @@ export function customV2SourceClassification(source) {
     return "quarantined";
   if (source.amount === 0n) return "empty";
   return "ready";
+}
+
+export function customClaimDefinitionClassification(claim, current = {}) {
+  const source = { ...claim, ...current };
+  return claim?.standardClaimBindingVerified === true
+    ? customLaunchClassification(source)
+    : customV2SourceClassification(source);
 }
 
 export function formatEth(value, maximumFractionDigits = 6) {

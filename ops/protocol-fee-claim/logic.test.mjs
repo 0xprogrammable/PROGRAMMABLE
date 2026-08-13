@@ -17,6 +17,7 @@ import {
   buildClaimTransaction,
   buildWalletSendCalls,
   claimData,
+  customClaimDefinitionClassification,
   customLaunchClassification,
   customLaunchStateData,
   customV2Bytes32ReadData,
@@ -333,6 +334,39 @@ test("fails closed on unverified Custom runtime or fee recipient", () => {
       },
     }),
     "blocked",
+  );
+  assert.equal(
+    customLaunchClassification({
+      ...base,
+      standardClaimBindingVerified: true,
+      amount: 123n,
+    }),
+    "ready",
+  );
+  assert.equal(
+    customLaunchClassification({
+      ...base,
+      feePolicy: {
+        ...base.feePolicy,
+        kind: CUSTOM_FEE_POLICY_KIND.partner,
+        programmableShareBps: 5,
+      },
+      standardClaimBindingVerified: true,
+      amount: 0n,
+    }),
+    "empty",
+  );
+  assert.equal(
+    customClaimDefinitionClassification(
+      {
+        ...base,
+        kind: "custom",
+        standardClaimBindingVerified: true,
+        amount: 123n,
+      },
+      { amount: 123n, recipientMatches: true, status: "ready" },
+    ),
+    "ready",
   );
 });
 

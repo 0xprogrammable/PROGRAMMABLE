@@ -14,6 +14,7 @@ import {
   atomicCapabilityStatus,
   buildClaimTransaction,
   buildWalletSendCalls,
+  customClaimDefinitionClassification,
   customLaunchClassification,
   customLaunchStateData,
   customV2Bytes32ReadData,
@@ -153,6 +154,12 @@ function buildRow(claim) {
 
 function customStatusLabel(launch) {
   const classification = customLaunchClassification(launch);
+  if (launch.status === "claiming") return "In MetaMask bestätigen";
+  if (launch.status === "pending") return "Wird bestätigt";
+  if (launch.status === "claimed") return "Geclaimt";
+  if (launch.status === "failed") return "Nicht verfügbar";
+  if (classification === "ready") return "Bereit";
+  if (classification === "empty") return "Nichts offen";
   if (classification === "no-market") return "Kein Fee-Markt";
   if (classification === "pending") return "Noch nicht finalisiert";
   if (classification === "revoked") return "Widerrufen";
@@ -162,9 +169,15 @@ function customStatusLabel(launch) {
 }
 
 function buildCustomRow(launch) {
+  const current = state.claims.get(launch.id) ?? launch;
+  const rendered = { ...launch, ...current };
   const row = document.createElement("li");
   row.className = "claim-row custom-row";
-  row.dataset.state = customLaunchClassification(launch);
+  row.dataset.state = ["claiming", "pending", "claimed", "failed"].includes(
+    rendered.status,
+  )
+    ? rendered.status
+    : customLaunchClassification(rendered);
 
   const identity = document.createElement("div");
   identity.className = "claim-identity";
@@ -177,9 +190,12 @@ function buildCustomRow(launch) {
   const value = document.createElement("div");
   value.className = "claim-value";
   const fee = document.createElement("strong");
-  fee.textContent = `${launch.feePolicy?.programmableShareBps ?? 0} bps`;
+  fee.textContent =
+    launch.standardClaimBindingVerified === true
+      ? `${formatEth(rendered.amount)} ETH`
+      : `${launch.feePolicy?.programmableShareBps ?? 0} bps`;
   const status = document.createElement("span");
-  status.textContent = customStatusLabel(launch);
+  status.textContent = customStatusLabel(rendered);
   value.append(fee, status);
   row.append(identity, value);
   return row;
@@ -259,8 +275,11 @@ function buildCustomGroup() {
     const feeBearing = state.custom.launches.filter(
       (launch) => customLaunchClassification(launch) === "adapter-required",
     ).length;
+    const readyV1Count = state.custom.launches.filter(
+      (launch) => customLaunchClassification(launch) === "ready",
+    ).length;
     const sourceCount = state.customV2.sources.length;
-    const readyCount = state.customV2.sources.filter(
+    const readyCount = readyV1Count + state.customV2.sources.filter(
       (source) => customV2SourceClassification(source) === "ready",
     ).length;
     count.textContent = `${state.custom.launches.length + sourceCount} erkannt`;
@@ -426,17 +445,26 @@ function renderRows() {
 }
 
 function allClaimDefinitions() {
-  return [...CLAIMS, ...state.customV2.sources];
+  return [
+    ...CLAIMS,
+    ...state.custom.launches.filter(
+      ({ standardClaimBindingVerified }) =>
+        standardClaimBindingVerified === true,
+    ),
+    ...state.customV2.sources,
+  ];
 }
 
 function claimableClaims() {
   return allClaimDefinitions().filter((claim) => {
     const current = state.claims.get(claim.id);
-    if (
-      claim.kind === "custom" &&
-      customV2SourceClassification({ ...claim, ...current }) !== "ready"
-    )
-      return false;
+    if (claim.kind === "custom") {
+      const classification = customClaimDefinitionClassification(
+        claim,
+        current,
+      );
+      if (classification !== "ready") return false;
+    }
     return (
       hookVerified(claim) &&
       current?.recipientMatches === true &&
@@ -694,7 +722,7 @@ async function readCustomLaunch(launch, blockTag) {
     ]),
   ]);
   const current = decodeCustomLaunchState(launchStateWord);
-  return {
+  const base = {
     ...launch,
     currentStatus: current.status,
     stateVerified:
@@ -707,9 +735,76 @@ async function readCustomLaunch(launch, blockTag) {
       keccak256Hex(runtimeCode).toLowerCase() ===
         launch.primaryRuntimeCodeHash.toLowerCase(),
   };
+  if (
+    customLaunchClassification(base) === "no-market" ||
+    base.currentStatus !== 2 ||
+    base.stateVerified !== true ||
+    base.runtimeVerified !== true
+  )
+    return base;
+
+  try {
+    const [recipientWord, accruedWord, totalClaimedWord, feeBpsWord] =
+      await Promise.all([
+        readContractWord(
+          launch.primaryContract,
+          CUSTOM_V2_SELECTORS.programmableFeeRecipient,
+          blockTag,
+        ),
+        readContractWord(
+          launch.primaryContract,
+          readAccruedData({ kind: "custom" }),
+          blockTag,
+        ),
+        readContractWord(
+          launch.primaryContract,
+          `${CUSTOM_V2_SELECTORS.totalProgrammableFeesClaimed}${"0".repeat(64)}`,
+          blockTag,
+        ),
+        readContractWord(
+          launch.primaryContract,
+          `${CUSTOM_V2_SELECTORS.programmableFeeBps}${"0".repeat(64)}`,
+          blockTag,
+        ),
+      ]);
+    const amount = decodeUint256(accruedWord);
+    const feeBps = decodeUint256(feeBpsWord);
+    const standardClaimBindingVerified =
+      isTreasury(decodeAddress(recipientWord)) &&
+      isTreasury(launch.feePolicy.programmableRecipient) &&
+      feeBps === BigInt(launch.feePolicy.programmableShareBps);
+    return {
+      ...base,
+      id: `custom-v1-standard:${launch.launchId}`,
+      hookId: "custom-v1-standard",
+      name: `Custom Launch ${launch.registrationSequence.toString()}`,
+      detail: shortAddress(launch.primaryContract),
+      unit: "ETH",
+      decimals: 18,
+      kind: "custom",
+      address: launch.primaryContract,
+      asset: CUSTOM_V2_POLICY.nativeAsset,
+      bindingVerified: standardClaimBindingVerified,
+      standardClaimBindingVerified,
+      registered: true,
+      quarantined: false,
+      executable: true,
+      recipient: decodeAddress(recipientWord),
+      recipientMatches: standardClaimBindingVerified,
+      amount,
+      totalClaimed: decodeUint256(totalClaimedWord),
+      programmableFeeBps: feeBps,
+      status: "ready",
+    };
+  } catch {
+    return { ...base, standardClaimBindingVerified: false };
+  }
 }
 
 async function readCustomRegistry(blockTag) {
+  for (const key of state.claims.keys()) {
+    if (key.startsWith("custom-v1-standard:")) state.claims.delete(key);
+  }
   state.custom = {
     status: "loading",
     registryVerified: false,
@@ -748,6 +843,15 @@ async function readCustomRegistry(blockTag) {
     const verifiedLaunches = await Promise.all(
       launches.map((launch) => readCustomLaunch(launch, blockTag)),
     );
+    for (const launch of verifiedLaunches) {
+      if (launch.standardClaimBindingVerified !== true) continue;
+      state.claims.set(launch.id, {
+        amount: launch.amount,
+        recipient: launch.recipient,
+        recipientMatches: true,
+        status: "ready",
+      });
+    }
     state.custom = {
       status: "ready",
       registryVerified: true,

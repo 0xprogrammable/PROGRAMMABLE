@@ -36,6 +36,29 @@ and recipients together with chain and enforcement evidence. A fee-bearing oblig
 to a discoverable market with the same `marketPathId`. A no-qualifying-market obligation has null
 basis and enforcement fields and `claimSemantics: "not-applicable"`.
 
+## Manual claim requirement
+
+Every fee-bearing route also publishes an exact
+`programmable.custom-manual-claim-policy.v1`. The registered Custom Registry V1
+`primaryContract` is the fee source and must expose the native permissionless claim surface bound by
+these constants:
+
+- native asset `0x0000000000000000000000000000000000000000`;
+- Programmable recipient `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`;
+- `claimProgrammableFees(address)` selector `0xb9d2fad0`;
+- `accruedProgrammableFees(address)` selector `0x3129853d`;
+- `totalProgrammableFeesClaimed(address)` selector `0x4a383b32`;
+- `programmableFeeRecipient()` selector `0x424ff2a5`;
+- `programmableFeeBps(address)` selector `0x32c0314d`;
+- source interface ID `0x808cb67a`.
+
+`expectedProgrammableFeeBps` is 10 for a Standard Programmable Custom and 5 for an AEON partner
+Custom. A no-qualifying-market route must set `manualClaimPolicy` to `null`. The Website response
+contract and deployment canary reject missing, extra, or mismatched fields before wallet launch.
+The local claim window then discovers the finalized source from Registry V1 on every refresh and
+rechecks its current runtime, recipient, rate, and open native accrual before adding it to the wallet
+batch.
+
 ## UI requirement
 
 The review screen reads the policy attached to the selected approved route. It shows the exact

@@ -8,15 +8,31 @@ Privates lokales Fenster für alle aktuell deployten Programmable Launcher-Fees:
   ihrer Version bereits im aggregierten Claim enthalten
 - Stock V1 sowie der gemeinsame Stock-V2/V3-Hook für alle freigegebenen Quote Assets
 - dynamische Erkennung aller Custom-v4-Launches aus der bestehenden Mainnet
-  Registry und aller standardisierten Custom-V2-Feequellen aus dem finalisierten
-  Registrar
+  Registry; zukünftige fee-tragende Primary Contracts mit der standardisierten
+  Claim-Schnittstelle werden direkt in den gemeinsamen Claim aufgenommen
+- vorbereitete Erkennung standardisierter Custom-V2-Feequellen aus dem
+  finalisierten Registrar; dieses zusätzliche Release bleibt bis zu einem
+  exakten Mainnet-Deployment auf `HOLD`
 
 Deep und nicht deployte Modelle sind absichtlich ausgeschlossen.
 
 Die aktuelle Custom-V1-Registry enthält nur den finalisierten Genesis-Canary ohne
-qualifizierenden Fee-Markt. Die V1-Registry allein veröffentlicht keine
-universell sichere Claim-Funktion; eine spätere unbekannte V1-Feequelle sperrt
-deshalb den Gesamtclaim, statt blind aufgerufen zu werden.
+qualifizierenden Fee-Markt. Bei jedem `Neu laden` liest das Fenster die Registry
+erneut. Für jeden zukünftigen fee-tragenden Launch prüft es am registrierten
+`primaryContract` die feste native Claim-Schnittstelle, den unveränderlichen
+Treasury-Empfänger und den im Registry-Event festgeschriebenen Programmable
+Anteil. Standard-Customs müssen exakt 10 bps und AEON-Partner-Customs exakt 5 bps
+melden. Ein No-Market-Launch hat korrekt keinen Claim. Eine ältere oder
+abweichende Feequelle ohne diese Bindung sperrt den Gesamtclaim, statt blind
+aufgerufen zu werden.
+
+Der Website-Response-Contract verlangt für jede zukünftige fee-tragende
+Launch-Route außerdem `programmable.custom-manual-claim-policy.v1`. Darin sind
+Registry-Discovery, Primary-Contract-Rolle, Native Asset, Treasury, alle fünf
+Selectors, Interface-ID und der erwartete 5- bzw. 10-bps-Anteil exakt gebunden.
+No-Market-Routen müssen die Policy auf `null` setzen. Damit kann ein neues
+Custom-Modell nicht still ohne den manuellen Claim-Pfad als gültige Route in die
+Website gelangen.
 
 Für Custom V2 ist die Claim-Schnittstelle fest: jede freigegebene native
 Feequelle implementiert `IProgrammableProtocolFeeSourceV1`, zahlt immer an die
@@ -57,7 +73,11 @@ Oder auf macOS `ops/protocol-fee-claim/Programmable Fees.command` doppelklicken.
   gemeinsamen Fee-Hook. Neue Stock-Assets werden bewusst nicht dynamisch ergänzt.
 - Custom V1 liest die Registry-Historie ab dem Deployment-Block in begrenzten
   Blöcken und gleicht sie mit `registrationCount()`, aktuellem `launchState()`,
-  Fee-Empfänger und dem Runtime-Codehash jeder Quelle ab.
+  Fee-Empfänger und dem Runtime-Codehash jeder Quelle ab. Bei fee-tragenden
+  Quellen werden zusätzlich `programmableFeeRecipient()`,
+  `accruedProgrammableFees(address(0))`,
+  `totalProgrammableFeesClaimed(address(0))` und
+  `programmableFeeBps(address(0))` am selben Block geprüft.
 - Custom V2 akzeptiert nur die exakt release-gebundenen Registry-, Registrar-
   und Launch-Stamp-Contracts. Jede aufgelistete Source muss in beiden Registries
   denselben Source-/Launch-Identifier, nativen Asset-Typ, Claim-Selector,
@@ -67,7 +87,8 @@ Oder auf macOS `ops/protocol-fee-claim/Programmable Fees.command` doppelklicken.
   globalen Claim-Button auch dann, wenn er unmittelbar zuvor noch aktiv war.
 - Der verbundene Account muss die unveränderliche Treasury `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` sein.
 - Unterstützt MetaMask atomare EIP-5792-Batches, werden Classic, bestehende
-  Stocks und alle offenen Custom-V2-Quellen in einer Bestätigung gesendet.
+  Stocks sowie alle offenen standardisierten Custom-V1- und Custom-V2-Quellen
+  in einer Bestätigung gesendet.
   Andernfalls zeigt die Seite die Zahl der notwendigen Einzelbestätigungen vor
   dem Start an; ohne Wallet-Batch-Unterstützung kann eine Webseite keine einzelne
   Wallet-Bestätigung erzwingen.

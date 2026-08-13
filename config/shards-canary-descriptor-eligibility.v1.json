@@ -196,7 +196,8 @@
         "routes[0].launchRouteBindingHash",
         "routes[0].routeAdapterId",
         "routes[0].transactionValuePolicy.valueWei",
-        "routes[0].feePolicy"
+        "routes[0].feePolicy",
+        "routes[0].manualClaimPolicy"
       ],
       "value": null
     },

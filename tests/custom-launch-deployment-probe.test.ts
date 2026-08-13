@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-// @ts-expect-error JavaScript deployment helper has no declaration file.
 import { parseCustomLaunchDeploymentProbeArguments, probeCustomLaunchDeployment } from "../scripts/custom-launch-deployment-probe-core.mjs";
 
 const NOW = new Date("2026-08-05T12:00:00.000Z");
@@ -142,6 +141,42 @@ function launchDescriptor() {
       walletActionKind: "eip1193-send-transaction",
       walletExecutionKind: "eoa-direct",
       transactionValuePolicy: { kind: "exact", valueWei: "0" },
+      feePolicy: {
+        schemaVersion: "programmable.custom-launch-fee-policy.v1",
+        providerId: "programmable",
+        modelId: "custom-contract-graph",
+        templateId: "standard-custom",
+        semanticVersion: "1.0.0",
+        feeMode: "standard-programmable-custom",
+        marketPathId: "official-market-path-v1",
+        totalRatePpm: 1000,
+        totalRateBps: 10,
+        chargeMode: "added-on-top",
+        normalProgrammableTenBpsApplied: true,
+        legs: [{
+          role: "programmable",
+          ratePpm: 1000,
+          rateBps: 10,
+          recipient: {
+            namespace: "eip155:1",
+            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          },
+        }],
+      },
+      manualClaimPolicy: {
+        schemaVersion: "programmable.custom-manual-claim-policy.v1",
+        discoveryMode: "custom-registry-v1-primary-contract",
+        sourceRole: "primary-contract",
+        asset: "0x0000000000000000000000000000000000000000",
+        recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        claimSelector: "0xb9d2fad0",
+        accruedSelector: "0x3129853d",
+        totalClaimedSelector: "0x4a383b32",
+        recipientSelector: "0x424ff2a5",
+        feeBpsSelector: "0x32c0314d",
+        sourceInterfaceId: "0x808cb67a",
+        expectedProgrammableFeeBps: 10,
+      },
     }],
     defaultChoiceId: "canonical",
   };
@@ -388,7 +423,11 @@ describe("custom launch deployment probe", () => {
   });
 
   it("requires the canary's exact commit to be approved and launchable", async () => {
-    const run = (applications: object, eligibility = launchEligibility(), descriptor = launchDescriptor()) =>
+    const run = (
+      applications: object,
+      eligibility: object = launchEligibility(),
+      descriptor: object = launchDescriptor(),
+    ) =>
       probe({
         baseUrl: "https://deployment.example/",
         requireEnabled: true,
@@ -449,6 +488,34 @@ describe("custom launch deployment probe", () => {
       ...launchDescriptor(),
       routes: launchDescriptor().routes.map((route) => ({ ...route, chainId: "8453" })),
     })).rejects.toThrow("launch route is invalid");
+
+    await expect(run(principalList(), launchEligibility(), {
+      ...launchDescriptor(),
+      routes: launchDescriptor().routes.map((route) => {
+        const withoutManualClaimPolicy: Partial<typeof route> = { ...route };
+        delete withoutManualClaimPolicy.manualClaimPolicy;
+        return withoutManualClaimPolicy;
+      }),
+    })).rejects.toThrow("unexpected shape");
+
+    await expect(run(principalList(), launchEligibility(), {
+      ...launchDescriptor(),
+      routes: launchDescriptor().routes.map((route) => ({
+        ...route,
+        manualClaimPolicy: {
+          ...route.manualClaimPolicy,
+          expectedProgrammableFeeBps: 5,
+        },
+      })),
+    })).rejects.toThrow("manual claim policy is invalid");
+
+    await expect(run(principalList(), launchEligibility(), {
+      ...launchDescriptor(),
+      routes: launchDescriptor().routes.map((route) => ({
+        ...route,
+        feePolicy: { ...route.feePolicy, semanticVersion: "1" },
+      })),
+    })).rejects.toThrow("launch fee policy is invalid");
   });
 
   it("retries bounded transient failures but not a permanent client failure", async () => {
