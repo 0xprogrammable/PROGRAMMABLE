@@ -11,6 +11,19 @@ const APPROVED_OPERATIONS = Object.freeze({
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
     sha256: "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
+    schedulerWatchdog: Object.freeze({
+      provider: "github-actions",
+      workflow: Object.freeze({
+        path: ".github/workflows/refresh-production-read-model.yml",
+        sha256: "7fbaef1b69b72a1d75c3fb876b2fb4961a10e177623d2c15f138978c03568355",
+      }),
+      schedule: "2-57/5 * * * *",
+      targetOrigin: "https://programmable.market",
+      environment: "production",
+      secretEnvironment: "CRON_SECRET",
+      concurrencyGroup: "production-read-model-refresh",
+      freshnessMaximumAgeSeconds: 600,
+    }),
     closedAlias: Object.freeze({
       path: "/api/ops/index",
       route: "app/api/ops/index/route.ts",
@@ -754,6 +767,61 @@ function routeIsPermanentlyClosed(source, binding) {
   );
 }
 
+function legacySchedulerWatchdogIsFailClosed(source, binding) {
+  return (
+    typeof source === "string" &&
+    binding?.provider === "github-actions" &&
+    binding.schedule === "2-57/5 * * * *" &&
+    binding.targetOrigin === "https://programmable.market" &&
+    binding.environment === "production" &&
+    binding.secretEnvironment === "CRON_SECRET" &&
+    binding.concurrencyGroup === "production-read-model-refresh" &&
+    binding.freshnessMaximumAgeSeconds === 600 &&
+    source.includes('name: Refresh production read model') &&
+    source.includes('    - cron: "2-57/5 * * * *"') &&
+    source.includes("  workflow_dispatch:") &&
+    source.includes("permissions:\n  contents: read") &&
+    source.includes("  group: production-read-model-refresh") &&
+    source.includes("  cancel-in-progress: false") &&
+    source.includes("github.repository == '0xprogrammable/programmable'") &&
+    source.includes("github.ref == 'refs/heads/production'") &&
+    source.includes("    timeout-minutes: 9") &&
+    source.includes("      name: production") &&
+    source.includes("CRON_SECRET: ${{ secrets.CRON_SECRET }}") &&
+    source.includes("TARGET_ORIGIN: https://programmable.market") &&
+    source.includes('targetOrigin !== "https://programmable.market"') &&
+    source.includes("secretBytes < 32") &&
+    source.includes("secretBytes > 1_024") &&
+    source.includes('/[\\r\\n]/u.test(cronSecret ?? "")') &&
+    source.includes('"/api/ops/index-v2"') &&
+    source.includes("headers.authorization = `Bearer ${cronSecret}`") &&
+    source.includes('redirect: "error"') &&
+    source.includes("signal: AbortSignal.timeout(timeoutMs)") &&
+    source.includes("const MAXIMUM_JSON_BYTES = 64 * 1024") &&
+    source.includes("bytes > MAXIMUM_JSON_BYTES") &&
+    source.includes("refresh.response.status !== 200") &&
+    source.includes('includes("no-store")') &&
+    source.includes("refresh.body?.ok !== true") &&
+    source.includes("refresh.body.portfolioHistory.blockNumber !==") &&
+    source.includes("refresh.body.portfolioHistory.tokenCount !==") &&
+    source.includes('refresh.body.portfolioHistory.status === "empty"') &&
+    source.includes("health.response.status === 200") &&
+    source.includes('health.body?.status === "healthy"') &&
+    source.includes('health.body.indexSource === "durable"') &&
+    source.includes('health.body.indexedReadModel?.status === "disabled"') &&
+    source.includes("healthBlock >= refreshBlock") &&
+    source.includes("index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS") &&
+    source.includes('health.body.rpc?.status === "healthy"') &&
+    source.includes('health.body.rpc?.read?.status === "available"') &&
+    source.includes('health.body.rpc?.quorum?.status === "verified"') &&
+    !source.includes("actions/checkout") &&
+    !source.includes("VERCEL_TOKEN") &&
+    !source.includes("VERCEL_AUTOMATION_BYPASS_SECRET") &&
+    !source.includes("pull_request") &&
+    !source.includes("contents: write")
+  );
+}
+
 function activationIsExplicitAndSafe(source, environmentName) {
   return (
     typeof source === "string" &&
@@ -1138,6 +1206,24 @@ export function evaluateReadModelOperationsSourceContracts(
           expectedSha256Overrides,
         ),
     "the five-minute legacy route remains byte-bound until indexed-read cutover",
+  );
+  const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
+  check(
+    "ops-legacy-scheduler-watchdog",
+    exactJson(
+      schedulerWatchdog,
+      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog,
+    ) &&
+      sourceBindingMatches(
+        source,
+        schedulerWatchdog?.workflow,
+        expectedSha256Overrides,
+      ) &&
+      legacySchedulerWatchdogIsFailClosed(
+        source(APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path),
+        schedulerWatchdog,
+      ),
+    "the generic GitHub watchdog refreshes only the public durable read model and proves freshness plus RPC quorum",
   );
   const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;
   check(

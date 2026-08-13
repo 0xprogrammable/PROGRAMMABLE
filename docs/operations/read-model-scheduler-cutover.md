@@ -13,6 +13,22 @@ during backfill and parity checks.
 | Market projector | `/api/ops/market-projector` | Every minute | `PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE=true` |
 | QuickNode stream wake | `POST /api/ops/projector-wake` | Every delivered block | `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` configured |
 
+The legacy index also has a GitHub Actions watchdog at minutes `2-57/5` on
+the protected `production` branch. It calls the same canonical
+`/api/ops/index-v2` route on `https://programmable.market` with the existing
+`CRON_SECRET`; it is not a second writer implementation. The offset avoids
+deliberately duplicating the nominal Vercel invocation, while the workflow
+concurrency group prevents two watchdog runs from overlapping.
+
+The watchdog succeeds only after the public health route exposes a durable
+snapshot at the same or a newer block, no more than ten minutes old, while the
+Ethereum RPC read and independent quorum are healthy. The target origin is
+fixed in reviewed source, redirects and oversized or non-JSON responses are
+rejected, and no Vercel token or deployment-protection bypass is available to
+the job. This repairs delivery of the existing generic public read model; it
+does not activate the staged Postgres projectors, promote a deployment, or
+publish any third-party submission.
+
 Each projector has its own singleton execution guard. A second invocation
 returns busy instead of overlapping an unfinished run. The market projector
 only reads the last fully committed source checkpoint, never in-flight source

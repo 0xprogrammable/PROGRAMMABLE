@@ -6,6 +6,19 @@
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
     "sha256": "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
+    "schedulerWatchdog": {
+      "provider": "github-actions",
+      "workflow": {
+        "path": ".github/workflows/refresh-production-read-model.yml",
+        "sha256": "7fbaef1b69b72a1d75c3fb876b2fb4961a10e177623d2c15f138978c03568355"
+      },
+      "schedule": "2-57/5 * * * *",
+      "targetOrigin": "https://programmable.market",
+      "environment": "production",
+      "secretEnvironment": "CRON_SECRET",
+      "concurrencyGroup": "production-read-model-refresh",
+      "freshnessMaximumAgeSeconds": 600
+    },
     "closedAlias": {
       "path": "/api/ops/index",
       "route": "app/api/ops/index/route.ts",
