@@ -9,8 +9,14 @@
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "c3207b24610229a044ed886dc20654b57c1121e448e4a18c440b82c8d1d59015"
+        "sha256": "7533f391d67c75a040032c36f5ade5525ee81febabcfb01afe5cebb68e32049a"
       },
+      "dependencies": [
+        {
+          "path": "lib/onchain/parallel-reads.ts",
+          "sha256": "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e"
+        }
+      ],
       "releaseRuntimes": [
         {
           "release": "classic-v3",

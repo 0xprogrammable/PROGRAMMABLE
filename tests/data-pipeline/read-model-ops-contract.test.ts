@@ -656,6 +656,18 @@ describe("read-model operations source contract", () => {
       "const readLogs = () =>\n      Promise.all([",
     ],
     [
+      "parallel registry slices",
+      "lib/onchain/read-model.ts",
+      "await settleParallelReadsInOrder([",
+      "await Promise.all([",
+    ],
+    [
+      "settled registry orchestration",
+      "lib/onchain/parallel-reads.ts",
+      "Promise.allSettled(",
+      "Promise.all(",
+    ],
+    [
       "timeout range bisection",
       "lib/onchain/read-model.ts",
       "error instanceof TimeoutError",

@@ -14,8 +14,14 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "c3207b24610229a044ed886dc20654b57c1121e448e4a18c440b82c8d1d59015",
+        sha256: "7533f391d67c75a040032c36f5ade5525ee81febabcfb01afe5cebb68e32049a",
       }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/onchain/parallel-reads.ts",
+          sha256: "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e",
+        }),
+      ]),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
@@ -1484,6 +1490,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const boundedRefresh = operations?.legacyIndexer?.boundedRefresh;
   const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
   const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
+  const parallelReadsSource = source(boundedRefresh?.dependencies?.[0]?.path);
   const releaseRuntimes = boundedRefresh?.releaseRuntimes;
   const classicV3RefreshSource = source(releaseRuntimes?.[0]?.path);
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
@@ -1510,6 +1517,20 @@ export function evaluateReadModelOperationsSourceContracts(
         boundedRefresh?.runtime,
         expectedSha256Overrides,
       ) &&
+      boundedRefresh?.dependencies?.length === 1 &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh.dependencies[0],
+        expectedSha256Overrides,
+      ) &&
+      refreshRuntimeSource?.includes(
+        'import { settleParallelReadsInOrder } from "./parallel-reads";',
+      ) &&
+      refreshRuntimeSource?.includes(
+        "await settleParallelReadsInOrder([",
+      ) &&
+      parallelReadsSource?.includes("Promise.allSettled(") &&
+      parallelReadsSource?.includes("for (const result of results)") &&
       Array.isArray(releaseRuntimes) &&
       releaseRuntimes.length === 2 &&
       releaseRuntimes[0]?.release === "classic-v3" &&
@@ -1547,7 +1568,7 @@ export function evaluateReadModelOperationsSourceContracts(
       stockPairedRefreshSource?.includes("events: STOCK_LAUNCHER_EVENTS") &&
       stockPairedRefreshSource?.includes("assertCanonicalStockEventSource(") &&
       stockPairedRefreshSource?.includes("clients.map((candidate) =>"),
-    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections and compare two provider passes before the platform deadline",
+    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two provider passes and settle registry slices in parallel before deterministic merging and the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(
