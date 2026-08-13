@@ -432,6 +432,62 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it.each([
+    [
+      "first independent RPC secret",
+      "          MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}\n",
+    ],
+    [
+      "second independent RPC secret",
+      "          MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}\n",
+    ],
+    [
+      "Alchemy commitment",
+      "          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}\n",
+    ],
+    [
+      "QuickNode commitment",
+      "          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}\n",
+    ],
+    [
+      "provider binding",
+      "            runtimeProductionProviderBindingsFromUrls({\n",
+    ],
+    [
+      "commitment comparison",
+      "            if (binding.endpointCommitment !== expectedCommitment) {\n",
+    ],
+    ["independent reader handoff", "                rpcUrls: independentRpcUrls,\n"],
+  ])("fails closed when staged market proof drops the %s", (_label, needle) => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const stepStart = workflow.indexOf(
+      "      - name: Smoke staged public market APIs",
+    );
+    const stepEnd = workflow.indexOf(
+      "      - name: Record registry identity and combined market path",
+    );
+    expect(stepStart).toBeGreaterThanOrEqual(0);
+    expect(stepEnd).toBeGreaterThan(stepStart);
+    const step = workflow.slice(stepStart, stepEnd);
+    expect(step).toContain(needle);
+    const unsafeStep = step.replace(needle, "");
+    const unsafeWorkflow =
+      workflow.slice(0, stepStart) +
+      unsafeStep +
+      workflow.slice(stepEnd);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
   it("fails closed when the Bitquery staged smoke stops proving current FDV order", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");

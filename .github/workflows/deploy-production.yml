@@ -602,10 +602,17 @@ jobs:
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}
+          MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
         run: |
           node --env-file=.vercel/.env.production.local --input-type=module <<'NODE'
           const { verifyCurrentPublicOnchainEvidenceV1 } = await import(
             "./scripts/perf/read-model-post-promotion.mjs"
+          );
+          const { runtimeProductionProviderBindingsFromUrls } = await import(
+            "./scripts/perf/read-model-provider-binding.mjs"
           );
           const { verifyBitqueryGoldenMarketParityV1 } = await import(
             "./scripts/perf/bitquery-golden-market-parity.mjs"
@@ -635,6 +642,26 @@ jobs:
             "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
           const currentPublicMarketSource =
             "stateview-chainlink+official-uniswap-v4-subgraph+bitquery";
+          const independentRpcUrls = Object.freeze([
+            process.env.MAINNET_RPC_URL_A,
+            process.env.MAINNET_RPC_URL_B,
+          ]);
+          const independentRpcBindings =
+            runtimeProductionProviderBindingsFromUrls({
+              ETHEREUM_RPC_URL: independentRpcUrls[0],
+              ETHEREUM_RPC_URL_B: independentRpcUrls[1],
+            });
+          for (const binding of independentRpcBindings) {
+            const expectedCommitment =
+              binding.vendorGroup === "alchemy"
+                ? process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT
+                : process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT;
+            if (binding.endpointCommitment !== expectedCommitment) {
+              throw new Error(
+                "staged independent RPC witness does not match its pinned production commitment",
+              );
+            }
+          }
           const minimumPublicFdvLiquidityUsdWad =
             10_000n * 10n ** 18n;
           const marketCapPageSize = 100;
@@ -1552,10 +1579,7 @@ jobs:
             const independentCurrentProof =
               await verifyCurrentPublicOnchainEvidenceV1({
                 token: currentFdvDetail.token,
-                rpcUrls: [
-                  process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-                  process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
-                ],
+                rpcUrls: independentRpcUrls,
               });
             if (
               independentCurrentProof.schemaVersion !==

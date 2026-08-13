@@ -665,8 +665,8 @@ export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
   "JSON.stringify(currentFdvDetail.token.liquidityEvidence)",
   'for (const range of ["1h", "1d", "1w", "all"])',
   "verifyCurrentPublicOnchainEvidenceV1({",
-  "process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-  "process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+  "process.env.MAINNET_RPC_URL_A",
+  "process.env.MAINNET_RPC_URL_B",
   '"programmable.current-market-independent-proof.v1"',
   "independentCurrentProof.providerCount !== 2",
   'currentChart.readStatus !== "live"',
@@ -1546,6 +1546,37 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
+      stagedBitquerySmokeBlock.includes(
+        "MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"./scripts/perf/read-model-provider-binding.mjs"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "runtimeProductionProviderBindingsFromUrls({",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "ETHEREUM_RPC_URL: independentRpcUrls[0]",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "ETHEREUM_RPC_URL_B: independentRpcUrls[1]",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "binding.endpointCommitment !== expectedCommitment",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "staged independent RPC witness does not match its pinned production commitment",
+      ) &&
+      stagedBitquerySmokeBlock.includes("rpcUrls: independentRpcUrls") &&
       stagedBitquerySmokeBlock.includes(
         "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
       ) &&
