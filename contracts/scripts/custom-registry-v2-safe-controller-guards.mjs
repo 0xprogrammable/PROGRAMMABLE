@@ -38,9 +38,38 @@ export function assertProductionPolicyApprovalBinding({
   }
   const approvalPolicyCommitment =
     productionPolicy?.approvalDescriptorBinding?.approvalPolicyCommitment;
+  const approvalBinding = productionPolicy?.approvalDescriptorBinding;
   if (
     productionPolicy?.schemaVersion !==
-      "programmable.custom-registry-v2-production-policy.v2" ||
+      "programmable.custom-registry-v2-production-policy.v3" ||
+    approvalBinding?.schema !==
+      "programmable.approval-registry-descriptor-binding.v3" ||
+    approvalBinding?.domain !==
+      "programmable.approval-registry-descriptor-binding.v3" ||
+    approvalBinding?.releaseBindingSchema !==
+      "programmable.approval-registry-v2-release-binding.v2" ||
+    approvalBinding?.releaseSupplementType !==
+      "approval-registry-v2-policy-split" ||
+    approvalBinding?.approvalRepository?.pullRequest !== 31 ||
+    approvalBinding?.approvalRepository?.sourceHead !==
+      "69fec69f661d224f7aa78264cbc2fc02ff20ae28" ||
+    approvalBinding?.approvalRepository?.commit !==
+      "3c61bbb77cc7c3efb3fe4c8f9aca841dc55c9db0" ||
+    approvalBinding?.approvalRepository?.tree !==
+      "c989d8697afdadcc151a5f1914b675d22d983258" ||
+    approvalBinding?.artifacts?.schemaSha256 !==
+      "0x1a3449647184822eedb8a291911918880fb048355fda3877654cfc502cd78ca5" ||
+    approvalBinding?.artifacts?.adapterSha256 !==
+      "0x8e74d43c9cb940eeddd5edc9974cca08961318a9512493b989e4ce51c9f854e2" ||
+    approvalBinding?.artifacts?.archiveSha256 !==
+      "0xa88f849a9e128899decacd5da9af1c5cea92954c57f96bf49c5b1807889a0e3d" ||
+    approvalBinding?.artifacts?.workerSha256 !==
+      "0xe5b597879d90ac95b552898279e3f367b8aae41597040af03d8cab972c8c6997" ||
+    JSON.stringify(approvalBinding?.policyCommitmentFields) !==
+      JSON.stringify([
+        "approvalDescriptorSchemaPolicyCommitment",
+        "registryOnchainPolicyCommitment",
+      ]) ||
     !/^0x[0-9a-f]{64}$/u.test(approvalPolicyCommitment ?? "")
   ) {
     throw new Error(
