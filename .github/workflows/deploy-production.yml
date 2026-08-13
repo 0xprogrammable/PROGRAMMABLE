@@ -1458,7 +1458,7 @@ jobs:
             launchCursorBlock < incrementalLaunchBlock ||
             (
               incrementalLaunch.launchDiscoverySource !==
-                "alchemy-launch-overlay" &&
+                "operational-launch-overlay" &&
               durableBlock < incrementalLaunchBlock
             )
           ) {

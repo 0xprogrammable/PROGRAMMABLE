@@ -92,11 +92,11 @@ beforeEach(() => {
 
 function expectProductionRpcHeaders(response: Response) {
   expect(response.headers.get("x-programmable-launch-source")).toBe(
-    "durable-read-model",
+    "operational+durable",
   );
   expect(response.headers.get("x-programmable-read-source")).toBe("blob");
   expect(response.headers.get("x-programmable-rpc-provider")).toBe(
-    "drpc+quicknode",
+    "operational-dual",
   );
   expect(
     response.headers

@@ -177,7 +177,7 @@ describe("Alchemy launch overlay refresh", () => {
       newestToken.tokenAddress,
     ]);
     expect(result.model.tokens[1]).toMatchObject({
-      launchDiscoverySource: "alchemy-launch-overlay",
+      launchDiscoverySource: "operational-launch-overlay",
     });
     expect(result).toMatchObject({
       baseBlockNumber: "100",
@@ -285,7 +285,7 @@ describe("Alchemy launch overlay refresh", () => {
     expect(persisted.tokens).toHaveLength(1);
     expect(persisted.tokens[0]).not.toHaveProperty("launchDiscoverySource");
     expect(result.model.tokens[1]).toMatchObject({
-      launchDiscoverySource: "alchemy-launch-overlay",
+      launchDiscoverySource: "operational-launch-overlay",
     });
   });
 

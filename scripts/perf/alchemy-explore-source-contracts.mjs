@@ -497,10 +497,10 @@ export function evaluateAlchemyExploreSourceContracts(
       ) &&
       responseSource.includes('"X-Programmable-Read-Source": "blob"') &&
       responseSource.includes(
-        '"X-Programmable-Rpc-Provider": "drpc+quicknode"',
+        '"X-Programmable-Rpc-Provider": "operational-dual"',
       ) &&
       responseSource.includes(
-        '"X-Programmable-Launch-Source": "durable-read-model"',
+        '"X-Programmable-Launch-Source": "operational+durable"',
       ) &&
       responseSource.includes(
         '"X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider"',

@@ -197,7 +197,7 @@ function mergeDefinedToken(
       launchDiscoverySource:
         stamped.launchDiscoverySource ??
         existing.launchDiscoverySource ??
-        "alchemy-launch-overlay",
+        "operational-launch-overlay",
     };
   }
   const merged = { ...existing } as LauncherToken & Record<string, unknown>;
@@ -224,7 +224,7 @@ function mergeLaunchOverlay(
     }
     tokens.set(key, {
       ...token,
-      launchDiscoverySource: "alchemy-launch-overlay",
+      launchDiscoverySource: "operational-launch-overlay",
     });
   }
   return { ...base, tokens: [...tokens.values()] } satisfies ReadyExploreModel;
@@ -251,7 +251,7 @@ function mergeLaunchStampRouterOverlay(
         ? mergeDefinedToken(existing, token)
         : {
             ...token,
-            launchDiscoverySource: "alchemy-launch-overlay",
+            launchDiscoverySource: "operational-launch-overlay",
           },
     );
   }

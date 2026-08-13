@@ -52,7 +52,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         currentMarketRpc: Object.freeze({
           path: "lib/market-data/current-market-rpc.server.ts",
-          sha256: "ead586a84aba823c5312607b551f9a5701e18ce52c9b35bfb7882213434a746c",
+          sha256: "ef2e01d5a184839ce8c5bebe4ec8d05b374930be13ff16d65bccee12c7e96085",
         }),
       }),
     }),

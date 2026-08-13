@@ -31,6 +31,7 @@
     "verify:candidate-neutrality:build": "node scripts/verify-candidate-neutral-production.mjs --include-build",
     "test:contract-release:ci": "vitest run tests/classic-v3-deployment-sequence.test.ts && vitest run tests/deep-release-verifier.test.ts && vitest run tests/deep-v2-release-verifier.test.ts",
     "test:database-runtime:ci": "vitest run tests/website-projection-target.test.ts",
+    "test:hosted-db-bootstrap": "node --test scripts/data-pipeline/hosted-db-bootstrap.test.mjs",
     "test:ci-scope": "node --test scripts/ci/classify-verify-paths.test.mjs",
     "contracts:bootstrap": "cd contracts && ./scripts/bootstrap-deps.sh",
     "contracts:fmt": "cd contracts && forge fmt --check",
