@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "programmable.custom-registry-v2-safe-controller-policy.v2",
+  "chainId": "1",
+  "safeVersion": "1.4.1",
+  "source": {
+    "repository": "safe-fndn/safe-smart-account",
+    "tag": "v1.4.1",
+    "commit": "bf943f80fec5ac647159d26161446ac5d716a294",
+    "tree": "dbbe8faa94445342975303ff4da1471cac2052d6"
+  },
+  "deploymentInventory": {
+    "repository": "safe-global/safe-deployments",
+    "commit": "5bb0ebd7150a777f39bec4733e4d799c4b637b49",
+    "tree": "9c48b5f3bd56e47239a15c8da9d2e2c4d9f87679"
+  },
+  "singleton": {
+    "address": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "runtimeCodeKeccak256": "0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4"
+  },
+  "proxyFactory": {
+    "address": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "runtimeCodeKeccak256": "0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317",
+    "proxyCreationCode": "0x608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f31441364736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564",
+    "proxyCreationCodeKeccak256": "0x1856e0ee08399d74e0ea0b03adca210aeade6f748969ac023cdcb4dd62dcaf5f",
+    "proxyRuntimeCodeKeccak256": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+    "proxyCreationEvent": "ProxyCreation(address,address)"
+  },
+  "multiSendCallOnly": {
+    "address": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+    "runtimeCodeKeccak256": "0xecd5bd14a08c5d2122379900b2f272bdf107a7e92423c10dd5fe3254386c9939",
+    "sourcePath": "contracts/libraries/MultiSendCallOnly.sol",
+    "sourceBlob": "7399f11911d80b1c46ecab5408aad7cb66c7f43a",
+    "sourceSha256": "0x2ff7f7fd09ba1967524d9bd9507cb7528253ea3d401feaf8d0428e20109f8919",
+    "deploymentRecordPath": "src/assets/v1.4.1/multi_send_call_only.json",
+    "deploymentRecordBlob": "ea92e62baa44b5f0df668a9b831fb36d5a025f99",
+    "deploymentRecordSha256": "0x09362344b664a35ea957ac2c13458f1c2019dd4f1d73c0afce10d0b6f5206864",
+    "execution": "DIRECT_EOA_CALL_OPERATION_ZERO_ATOMIC_ALL_OR_REVERT"
+  },
+  "setup": {
+    "threshold": 1,
+    "to": "0x0000000000000000000000000000000000000000",
+    "data": "0x",
+    "fallbackHandler": "0x0000000000000000000000000000000000000000",
+    "paymentToken": "0x0000000000000000000000000000000000000000",
+    "payment": "0",
+    "paymentReceiver": "0x0000000000000000000000000000000000000000",
+    "modules": [],
+    "guard": "0x0000000000000000000000000000000000000000"
+  },
+  "storageSlots": {
+    "fallbackHandler": "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5",
+    "guard": "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8"
+  },
+  "predictionPrivacy": {
+    "ownerGeneration": "FRESH_DISTINCT_KEYCHAIN_CUSTODY_AFTER_PUBLIC_SOURCE_AND_APPROVAL_POLICY_FREEZE",
+    "saltGeneration": "FRESH_CRYPTOGRAPHIC_RANDOM_NONZERO_UINT256_PER_ROLE_AFTER_PUBLIC_SOURCE_AND_APPROVAL_POLICY_FREEZE",
+    "storage": "PROTECTED_NON_REPOSITORY_RELEASE_EVIDENCE",
+    "primarySubmission": "FLASHBOTS_PROTECT_ETH_SEND_RAW_TRANSACTION_EXACT_HINT_HASH_NO_PUBLIC_MEMPOOL",
+    "providerDocumentation": {
+      "repository": "flashbots/flashbots-docs",
+      "commit": "19ed5ca7e1ea49be469145a2dc0d2b0036d2a814",
+      "tree": "016f1aed24d4913b4cae5891912fc1c1c75fd700",
+      "quickStartSha256": "0x096b69482d3eb3318b1130dbc2444c0b2288b3876dbe3c253db451fa23dd7672",
+      "mevRefundsSha256": "0x8f1b1ce0387d6c0b78b5e5c29447181bb8955170ad1b68550252e4b6c9740da2"
+    },
+    "publicPredictionsRetired": true,
+    "leakageFallback": "ABANDON_LEAKED_PREDICTIONS_ROTATE_OWNERS_AND_SALTS_GENERATE_FRESH_PLAN_AND_AUTHORIZATION"
+  }
+}

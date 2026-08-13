@@ -1,174 +1,517 @@
-import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  createPublicClient,
-  createWalletClient,
-  getAddress,
-  getContractAddress,
-  http,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+
+import { createPublicClient, getAddress } from "viem";
 import { mainnet } from "viem/chains";
 import {
-  assessDeploymentCost,
-  assertArtifactBinding,
-  assertDeployerBinding,
-  assertLiveBinding,
-  assertPostDeploymentBinding,
-  assertPredictedAddressUnoccupied,
-  assertPreflightEnvelope,
+  acquireReleaseEvidenceLock,
+  assertCanonicalTransactionJournalPath,
+  assertReleaseEvidencePath,
+} from "./custom-registry-v2-release-evidence.mjs";
+
+import {
+  REGISTRY_RECEIPT_SCHEMA,
+  REGISTRY_STAGED_TRANSACTION_SCHEMA,
+  assertRpcProviderBindings,
   assertReviewedAuthorization,
-  assertSourceBinding,
-  computeConstructorCommitment,
-  requireDistinctRpcOrigins,
+  releaseRpcTransport,
+  sha256,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
+import { assertRegistryDeploymentPlan } from "./custom-registry-v2-deployment-plan.mjs";
+import { assertRegistryLivePreflight } from "./custom-registry-v2-live-verification.mjs";
+import { assertSafeCustodyProof } from "./custom-registry-v2-safe-controller-guards.mjs";
+import { verifySafeCustodyRoleReadbacks } from "./custom-registry-v2-keychain-custody.mjs";
+import {
+  appendDurableJsonLine,
+  assertBroadcastObservationEvidence,
+  assertDispatchAuthorizedJournal,
+  assertExactSerializedEip1559Transaction,
+  assertStagedTransactionEvidence,
+  assertTransactionDiscoveryEvidence,
+  createDurableJsonLines,
+  loadDurableJsonLines,
+  latestJournalTrustedTime,
+  trustedNetworkTime,
+  trustedNetworkTimeAfter,
+} from "./custom-registry-v2-transaction-journal.mjs";
 
-if (!process.argv.includes("--broadcast")) throw new Error("explicit --broadcast is required");
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const planPath = path.resolve(process.env.REGISTRY_REVIEWED_PLAN_PATH ?? "");
-if (!planPath.startsWith("/tmp/")) throw new Error("reviewed plan must be under /tmp");
-const planBytes = await readFile(planPath);
-const expectedDigest = process.env.REGISTRY_REVIEWED_PLAN_SHA256;
-const actualDigest = `0x${createHash("sha256").update(planBytes).digest("hex")}`;
-if (actualDigest !== expectedDigest) throw new Error("reviewed plan digest mismatch");
-const plan = JSON.parse(planBytes);
-const nowTimestamp = Math.floor(Date.now() / 1000);
-assertPreflightEnvelope(plan, nowTimestamp);
-const authorizationPath = path.resolve(process.env.REGISTRY_BROADCAST_AUTHORIZATION_PATH ?? "");
-if (!authorizationPath.startsWith("/tmp/")) throw new Error("broadcast authorization must be under /tmp");
-const authorizationBytes = await readFile(authorizationPath);
-const authorizationSha256 = `0x${createHash("sha256").update(authorizationBytes).digest("hex")}`;
-if (authorizationSha256 !== process.env.REGISTRY_BROADCAST_AUTHORIZATION_SHA256) {
-  throw new Error("broadcast authorization digest mismatch");
+const broadcast = process.argv.includes("--broadcast");
+const recover = process.argv.includes("--recover");
+const rebroadcast = process.argv.includes("--rebroadcast");
+const activationIndexes = process.argv.flatMap((value, index) =>
+  value === "--activate-dispatch-intent" ? [index] : [],
+);
+const activationIndex = activationIndexes[0] ?? -1;
+const activationHash =
+  activationIndex === -1 ? null : process.argv[activationIndex + 1];
+if (!recover && !broadcast) throw new Error("explicit --broadcast is required");
+if (rebroadcast && (!recover || !broadcast)) {
+  throw new Error(
+    "recovery rebroadcast requires --recover --rebroadcast --broadcast",
+  );
 }
-const authorization = JSON.parse(authorizationBytes);
-assertReviewedAuthorization({ authorization, preflightSha256: actualDigest, plan, nowTimestamp });
+if (
+  activationIndexes.length !== (recover ? 0 : 1) ||
+  (!recover && !/^0x[0-9a-fA-F]{64}$/u.test(activationHash ?? ""))
+) {
+  throw new Error(
+    "initial broadcast requires exactly one explicit --activate-dispatch-intent transaction hash and recovery forbids it",
+  );
+}
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+const outputIndex = process.argv.indexOf("--output");
+if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
+  throw new Error("--output is required");
+}
+const journalPath = assertReleaseEvidencePath(process.argv[outputIndex + 1], {
+  mustExist: recover,
+});
+const required = (name) => {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+};
+const readReviewed = async (pathName, digestName, label) => {
+  const filePath = assertReleaseEvidencePath(required(pathName));
+  const bytes = await readFile(filePath);
+  const digest = sha256(bytes);
+  if (digest !== required(digestName))
+    throw new Error(`${label} digest mismatch`);
+  return { bytes, digest, value: JSON.parse(bytes) };
+};
+const reviewed = await readReviewed(
+  "REGISTRY_REVIEWED_PLAN_PATH",
+  "REGISTRY_REVIEWED_PLAN_SHA256",
+  "reviewed plan",
+);
+const authorized = await readReviewed(
+  "REGISTRY_BROADCAST_AUTHORIZATION_PATH",
+  "REGISTRY_BROADCAST_AUTHORIZATION_SHA256",
+  "broadcast authorization",
+);
+const safeEvidence = await readReviewed(
+  "REGISTRY_SAFE_VERIFICATION_PATH",
+  "REGISTRY_SAFE_VERIFICATION_SHA256",
+  "Safe verification",
+);
+const stagedTransactionPath = assertReleaseEvidencePath(
+  required("REGISTRY_STAGED_TRANSACTION_PATH"),
+  { mode: 0o400 },
+);
+const stagedTransactionBytes = await readFile(stagedTransactionPath);
+const stagedTransactionSha256 = sha256(stagedTransactionBytes);
+if (
+  stagedTransactionSha256 !== required("REGISTRY_STAGED_TRANSACTION_SHA256")
+) {
+  throw new Error("staged Registry transaction digest mismatch");
+}
+const stagedTransaction = JSON.parse(stagedTransactionBytes);
+const plan = reviewed.value;
+const authorization = authorized.value;
+assertCanonicalTransactionJournalPath({
+  candidate: journalPath,
+  chainId: 1,
+  signer: plan.expectedTransaction.from,
+  nonce: plan.expectedTransaction.nonce,
+  mustExist: recover,
+});
+let nowTimestamp = trustedNetworkTime().adjustedTimestamp;
+const planInputs = await assertRegistryDeploymentPlan({
+  root,
+  plan,
+  safeVerificationBytes: safeEvidence.bytes,
+  nowTimestamp,
+  allowExpired: recover,
+});
+assertReviewedAuthorization({
+  authorization,
+  preflightSha256: reviewed.digest,
+  plan,
+  nowTimestamp,
+  allowExpired: recover,
+});
 await verifyReviewedAuthorizationSignature(authorization);
-if (computeConstructorCommitment(plan.constructor) !== plan.constructorCommitment) {
-  throw new Error("constructor commitment mismatch");
+await assertStagedTransactionEvidence({
+  evidence: stagedTransaction,
+  schemaVersion: REGISTRY_STAGED_TRANSACTION_SCHEMA,
+  preflightSha256: reviewed.digest,
+  expectedTransaction: plan.expectedTransaction,
+  planCreatedAtTimestamp: plan.createdAtTimestamp,
+  planExpiresAtTimestamp: plan.expiresAtTimestamp,
+});
+if (
+  authorization.stagedTransactionSha256 !== stagedTransactionSha256 ||
+  authorization.authorizedTransactionHash !== stagedTransaction.transactionHash
+) {
+  throw new Error("owner authorization does not bind the staged transaction");
+}
+const custodyProofPath = assertReleaseEvidencePath(
+  required("REGISTRY_CUSTODY_PROOF_PATH"),
+);
+const custodyProofBytes = await readFile(custodyProofPath);
+if (
+  sha256(custodyProofBytes) !== plan.safeControllers.custodyProofSha256 ||
+  sha256(custodyProofBytes) !== required("REGISTRY_CUSTODY_PROOF_SHA256")
+) {
+  throw new Error("Registry broadcast custody proof digest mismatch");
+}
+const custodyProof = JSON.parse(custodyProofBytes);
+assertSafeCustodyProof({
+  proof: custodyProof,
+  deployer: plan.create.deployer,
+  admin: plan.constructor.initialAdmin,
+  owners: plan.safeControllers.controllers.map(({ owner }) => owner),
+});
+await verifySafeCustodyRoleReadbacks({ entries: custodyProof.roles });
+
+const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
+const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
+const providerIds = [
+  required("REGISTRY_RPC_PROVIDER_ID_A"),
+  required("REGISTRY_RPC_PROVIDER_ID_B"),
+];
+const providerBindings = assertRpcProviderBindings({
+  plan,
+  providerIds,
+  rpcUrls: [rpcA, rpcB],
+});
+const clients = [rpcA, rpcB].map((url) =>
+  createPublicClient({ chain: mainnet, transport: releaseRpcTransport(url) }),
+);
+
+const appendJournal = (entry, create = false) =>
+  appendDurableJsonLine(journalPath, entry, { create });
+await acquireReleaseEvidenceLock(journalPath);
+
+if (recover) {
+  const entries = await loadDurableJsonLines(journalPath, {
+    repairTrailingTornRecord: true,
+  });
+  const { signed, responseRecords, discoveryRecords, receipt } =
+    assertDispatchAuthorizedJournal({
+      records: entries,
+      schemaVersion: REGISTRY_RECEIPT_SCHEMA,
+      signedEvent: "SIGNED_NOT_CONFIRMED",
+      transactionHash: stagedTransaction.transactionHash,
+      stagedTransactionSha256,
+      authorizationSha256: authorized.digest,
+      authorization,
+      broadcastProviderBindings: providerBindings,
+      discoveryProviderBindings: providerBindings,
+      allowedTailEvents: [
+        "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+        "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+      ],
+    });
+  if (
+    entries[0].preflightSha256 !== reviewed.digest ||
+    entries[0].safeVerificationSha256 !== safeEvidence.digest
+  ) {
+    throw new Error("deployment recovery journal is invalid");
+  }
+  await assertExactSerializedEip1559Transaction({
+    serializedTransaction: signed.serializedTransaction,
+    transactionHash: signed.transactionHash,
+    expected: plan.expectedTransaction,
+  });
+  if (receipt) {
+    process.stdout.write(
+      `CUSTOM_REGISTRY_V2_RECOVERY_RECEIPT_ALREADY_SEEN ${signed.transactionHash}\n`,
+    );
+    process.exit(0);
+  }
+  const discoveryTime = trustedNetworkTimeAfter(
+    latestJournalTrustedTime(entries),
+  );
+  const discovered = await Promise.all(
+    clients.map(async (client, index) => {
+      try {
+        const transaction = await client.getTransaction({
+          hash: signed.transactionHash,
+        });
+        if (transaction.hash !== signed.transactionHash) {
+          throw new Error("RPC returned a different transaction");
+        }
+        return {
+          providerId: providerBindings[index].providerId,
+          rpcOrigin: providerBindings[index].rpcOrigin,
+          rpcEndpointSha256: providerBindings[index].rpcEndpointSha256,
+          found: true,
+          transactionHash: transaction.hash,
+          blockNumber: transaction.blockNumber?.toString() ?? null,
+        };
+      } catch {
+        return {
+          providerId: providerBindings[index].providerId,
+          rpcOrigin: providerBindings[index].rpcOrigin,
+          rpcEndpointSha256: providerBindings[index].rpcEndpointSha256,
+          found: false,
+          transactionHash: null,
+          blockNumber: null,
+        };
+      }
+    }),
+  );
+  if (discovered.every(({ found }) => found)) {
+    if (discoveryRecords.length === 0) {
+      const discoveryEvidence = {
+        event: "RECOVERY_TRANSACTION_DISCOVERY",
+        discoveredAtTimestamp: discoveryTime.adjustedTimestamp,
+        discoveredTrustedTime: discoveryTime,
+        transactionHash: signed.transactionHash,
+        providers: discovered,
+      };
+      assertTransactionDiscoveryEvidence({
+        evidence: discoveryEvidence,
+        transactionHash: signed.transactionHash,
+        providerBindings,
+      });
+      assertDispatchAuthorizedJournal({
+        records: [...entries, discoveryEvidence],
+        schemaVersion: REGISTRY_RECEIPT_SCHEMA,
+        signedEvent: "SIGNED_NOT_CONFIRMED",
+        transactionHash: stagedTransaction.transactionHash,
+        stagedTransactionSha256,
+        authorizationSha256: authorized.digest,
+        authorization,
+        broadcastProviderBindings: providerBindings,
+        discoveryProviderBindings: providerBindings,
+        allowedTailEvents: [
+          "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+          "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+        ],
+      });
+      await appendJournal(discoveryEvidence);
+    }
+    process.stdout.write(
+      `CUSTOM_REGISTRY_V2_RECOVERY_FOUND ${signed.transactionHash}\n`,
+    );
+    process.exit(0);
+  }
+  if (!rebroadcast) {
+    process.stdout.write(
+      `CUSTOM_REGISTRY_V2_RECOVERY_NOT_FOUND ${signed.transactionHash}\n`,
+    );
+    process.exit(2);
+  }
+  const recoveryTime = trustedNetworkTimeAfter(
+    latestJournalTrustedTime(entries),
+  );
+  const responses = await Promise.allSettled(
+    clients.map((client) =>
+      client.sendRawTransaction({
+        serializedTransaction: signed.serializedTransaction,
+      }),
+    ),
+  );
+  const responseObserved = trustedNetworkTimeAfter(recoveryTime);
+  const recoveryEvidence = {
+    event: "RECOVERY_EXACT_REBROADCAST",
+    requestStartedAtTimestamp: recoveryTime.adjustedTimestamp,
+    requestStartedTrustedTime: recoveryTime,
+    responseObservedAtTimestamp: responseObserved.adjustedTimestamp,
+    responseObservedTrustedTime: responseObserved,
+    transactionHash: signed.transactionHash,
+    providerResponses: responses.map((result, index) => ({
+      providerId: providerIds[index],
+      rpcOrigin: providerBindings[index].rpcOrigin,
+      rpcEndpointSha256: providerBindings[index].rpcEndpointSha256,
+      status: result.status,
+      ...(result.status === "fulfilled"
+        ? { transactionHash: result.value }
+        : { errorName: result.reason?.name ?? "Error" }),
+    })),
+  };
+  assertBroadcastObservationEvidence({
+    evidence: recoveryEvidence,
+    event: "RECOVERY_EXACT_REBROADCAST",
+    transactionHash: signed.transactionHash,
+    providerBindings,
+  });
+  assertDispatchAuthorizedJournal({
+    records: [...entries, recoveryEvidence],
+    schemaVersion: REGISTRY_RECEIPT_SCHEMA,
+    signedEvent: "SIGNED_NOT_CONFIRMED",
+    transactionHash: stagedTransaction.transactionHash,
+    stagedTransactionSha256,
+    authorizationSha256: authorized.digest,
+    authorization,
+    broadcastProviderBindings: providerBindings,
+    discoveryProviderBindings: providerBindings,
+    allowedTailEvents: [
+      "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+      "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+    ],
+  });
+  await appendJournal(recoveryEvidence);
+  if (
+    !responses.some(
+      (result) =>
+        result.status === "fulfilled" &&
+        result.value === signed.transactionHash,
+    )
+  ) {
+    throw new Error(
+      "exact recovery transaction was not accepted by either RPC",
+    );
+  }
+  process.stdout.write(
+    `CUSTOM_REGISTRY_V2_RECOVERY_REBROADCAST ${signed.transactionHash}\n`,
+  );
+  process.exit(0);
 }
 
-const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: root, encoding: "utf8" }).trim();
-assertSourceBinding({
-  commit,
-  tree,
-  clean: execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }) === "",
+await assertRegistryLivePreflight({
+  clients,
+  providerIds,
   plan,
+  planInputs,
 });
-const artifact = JSON.parse(await readFile(
-  path.join(root, "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json"),
-));
-const manifestBytes = await readFile(path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"));
-const manifest = JSON.parse(manifestBytes);
-const committedAbiBytes = await readFile(path.join(root, "docs/security/abi/ProgrammableCustomRegistryV2.json"));
-const committedAbiDocument = JSON.parse(committedAbiBytes);
-assertArtifactBinding({
-  artifactBytecode: artifact.bytecode.object,
-  manifestBytes,
-  committedAbiBytes,
-  manifest,
-  plan,
-});
-if (committedAbiDocument.schemaVersion !== "programmable.custom-registry-abi.v2") {
-  throw new Error("committed deployment ABI schema is invalid");
-}
 
-const rpcA = process.env.REGISTRY_PREFLIGHT_RPC_URL_A;
-const rpcB = process.env.REGISTRY_PREFLIGHT_RPC_URL_B;
-if (!rpcA || !rpcB) throw new Error("two RPC endpoints are required");
-requireDistinctRpcOrigins(rpcA, rpcB);
-const privateKey = process.env.REGISTRY_DEPLOYER_PRIVATE_KEY;
-if (!privateKey || !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) throw new Error("deployer key is missing");
-const account = privateKeyToAccount(privateKey);
-assertDeployerBinding(account.address, plan.create.deployer);
-const clients = [rpcA, rpcB].map((url) => createPublicClient({ chain: mainnet, transport: http(url) }));
-const live = await Promise.all(clients.map(async (client) => {
-  const [finalized, latest, nonce, balance, priorityFee, code] = await Promise.all([
-    client.getBlock({ blockTag: "finalized" }),
-    client.getBlock({ blockTag: "latest" }),
-    client.getTransactionCount({ address: account.address, blockTag: "pending" }),
-    client.getBalance({ address: account.address, blockTag: "latest" }),
-    client.estimateMaxPriorityFeePerGas(),
-    client.getCode({ address: plan.create.predictedAddress, blockTag: "latest" }),
-  ]);
-  return { finalized, latest, nonce, balance, priorityFee, code };
-}));
-const [a, b] = live;
-assertLiveBinding({ first: a, second: b, plan });
-assertPredictedAddressUnoccupied(a.code, b.code);
-if (getContractAddress({ from: account.address, nonce: BigInt(a.nonce) }) !== plan.create.predictedAddress) {
-  throw new Error("predicted CREATE address mismatch");
+const signingTime = trustedNetworkTime();
+nowTimestamp = signingTime.adjustedTimestamp;
+if (
+  nowTimestamp > authorization.dispatchIntentExpiresAtTimestamp ||
+  nowTimestamp + 60 > plan.expiresAtTimestamp
+) {
+  throw new Error("authorization or reviewed preflight expired before signing");
 }
-const observedFeePerGas = (a.latest.baseFeePerGas ?? 0n) * 2n + a.priorityFee;
-const gas = BigInt(plan.create.gasLimit);
-const maxFeePerGas = BigInt(plan.create.reviewedMaxFeePerGas);
-assessDeploymentCost({
-  gasLimit: gas,
-  blockGasLimit: a.latest.gasLimit,
-  observedFeePerGas,
-  maxFeePerGas,
-  maxTotalCostWei: BigInt(plan.create.reviewedMaxTotalCostWei),
-  deployerBalance: a.balance,
-});
-const wallet = createWalletClient({ account, chain: mainnet, transport: http(rpcA) });
-const transactionHash = await wallet.deployContract({
-  abi: committedAbiDocument.abi,
-  bytecode: artifact.bytecode.object,
-  args: [plan.constructor],
-  gas,
-  maxFeePerGas,
-  maxPriorityFeePerGas: a.priorityFee,
-});
-const receipt = await clients[0].waitForTransactionReceipt({ hash: transactionHash, confirmations: 1 });
-if (receipt.status !== "success" || receipt.contractAddress !== plan.create.predictedAddress) {
-  throw new Error("deployment receipt does not match reviewed plan");
+if (activationHash !== stagedTransaction.transactionHash) {
+  throw new Error(
+    "explicit --activate-dispatch-intent must equal the owner-authorized transaction hash",
+  );
 }
-const address = receipt.contractAddress;
-const read = (functionName, args = undefined) => clients[0].readContract({
-  address,
-  abi: committedAbiDocument.abi,
-  functionName,
-  ...(args ? { args } : {}),
+const serializedTransaction = stagedTransaction.serializedTransaction;
+const transactionHash = stagedTransaction.transactionHash;
+await assertExactSerializedEip1559Transaction({
+  serializedTransaction,
+  transactionHash,
+  expected: plan.expectedTransaction,
 });
-const roleNames = ["APPROVER_ROLE", "REGISTRAR_ROLE", "FINALIZER_ROLE", "REVOKER_ROLE"];
-const roleValues = await Promise.all(roleNames.map((name) => read(name)));
-const [runtimeA, runtimeB, chainId, adminDelay, admin, minimumFinalityBlocks, policy, ...controllers] = await Promise.all([
-  clients[0].getCode({ address, blockTag: "latest" }),
-  clients[1].getCode({ address, blockTag: "latest" }),
-  read("CHAIN_ID"),
-  read("defaultAdminDelay"),
-  read("defaultAdmin"),
-  read("MINIMUM_FINALITY_BLOCKS"),
-  read("REGISTRY_POLICY_COMMITMENT"),
-  ...roleValues.map((role) => read("operationalController", [role])),
+const journalHeader = {
+  schemaVersion: REGISTRY_RECEIPT_SCHEMA,
+  event: "JOURNAL_OPEN",
+  chainId: 1,
+  preflightSha256: reviewed.digest,
+  authorizationSha256: authorized.digest,
+  stagedTransactionSha256,
+  safeVerificationSha256: safeEvidence.digest,
+  source: plan.source,
+  predictedAddress: plan.create.predictedAddress,
+  openedAtTimestamp: nowTimestamp,
+  authorizationSemantics: authorization.authorizationSemantics,
+};
+const journalSigned = {
+  event: "SIGNED_NOT_CONFIRMED",
+  signedAtTimestamp: stagedTransaction.signedAtTimestamp,
+  trustedTime: stagedTransaction.trustedTime,
+  stagedTransactionSha256,
+  transactionHash,
+  serializedTransaction,
+};
+const dispatchIntentTime = trustedNetworkTime();
+assertSignedDispatchIntentWindow({
+  authorization,
+  dispatchIntentTrustedTime: dispatchIntentTime,
+});
+const journalIntent = {
+  event: "DISPATCH_INTENT_ACTIVATED",
+  authorizationSha256: authorized.digest,
+  authorizationSemantics: authorization.authorizationSemantics,
+  activatedAtTimestamp: dispatchIntentTime.adjustedTimestamp,
+  activatedTrustedTime: dispatchIntentTime,
+  transactionHash,
+  exactSerializedTransactionOnly: true,
+  changedTransactionRequiresFreshAuthorization: true,
+  workflowCancellationAllowed: false,
+};
+await createDurableJsonLines(journalPath, [
+  journalHeader,
+  journalSigned,
+  journalIntent,
 ]);
-const expectedControllers = [
-  plan.constructor.initialApprover,
-  plan.constructor.initialRegistrar,
-  plan.constructor.initialFinalizer,
-  plan.constructor.initialRevoker,
-].map(getAddress);
-const roleAssignments = await Promise.all(roleValues.map((role, index) => read("hasRole", [role, expectedControllers[index]])));
-assertPostDeploymentBinding({
-  actual: {
-    runtimeA,
-    runtimeB,
-    chainId,
-    adminDelay,
-    admin,
-    minimumFinalityBlocks,
-    policy,
-    controllers,
-    roleAssignments,
-  },
-  expected: {
-    ...plan.constructor,
-    controllers: expectedControllers,
-  },
+const activationRecords = [journalHeader, journalSigned, journalIntent];
+const requestStarted = trustedNetworkTimeAfter(dispatchIntentTime);
+const responses = await Promise.allSettled(
+  clients.map((client) => client.sendRawTransaction({ serializedTransaction })),
+);
+const responseObserved = trustedNetworkTimeAfter(requestStarted);
+const responseEvidence = {
+  event: "BROADCAST_PROVIDER_RESPONSES",
+  requestStartedAtTimestamp: requestStarted.adjustedTimestamp,
+  requestStartedTrustedTime: requestStarted,
+  responseObservedAtTimestamp: responseObserved.adjustedTimestamp,
+  responseObservedTrustedTime: responseObserved,
+  transactionHash,
+  providerResponses: responses.map((result, index) => ({
+    providerId: providerIds[index],
+    rpcOrigin: providerBindings[index].rpcOrigin,
+    rpcEndpointSha256: providerBindings[index].rpcEndpointSha256,
+    status: result.status,
+    ...(result.status === "fulfilled"
+      ? { transactionHash: result.value }
+      : { errorName: result.reason?.name ?? "Error" }),
+  })),
+};
+assertBroadcastObservationEvidence({
+  evidence: responseEvidence,
+  event: "BROADCAST_PROVIDER_RESPONSES",
+  transactionHash,
+  providerBindings,
 });
-process.stdout.write(`${JSON.stringify({ transactionHash, contractAddress: receipt.contractAddress })}\n`);
+assertDispatchAuthorizedJournal({
+  records: [...activationRecords, responseEvidence],
+  schemaVersion: REGISTRY_RECEIPT_SCHEMA,
+  signedEvent: "SIGNED_NOT_CONFIRMED",
+  transactionHash,
+  stagedTransactionSha256,
+  authorizationSha256: authorized.digest,
+  authorization,
+  broadcastProviderBindings: providerBindings,
+  discoveryProviderBindings: providerBindings,
+  allowedTailEvents: [
+    "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+    "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+  ],
+});
+await appendJournal(responseEvidence);
+if (
+  !responses.some(
+    (result) =>
+      result.status === "fulfilled" && result.value === transactionHash,
+  )
+) {
+  throw new Error("exact signed Registry transaction was not accepted");
+}
+const receipt = await Promise.any(
+  clients.map((client) =>
+    client.waitForTransactionReceipt({
+      hash: transactionHash,
+      confirmations: 1,
+    }),
+  ),
+);
+await appendJournal({
+  event: "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
+  observedAtTimestamp: Math.floor(Date.now() / 1000),
+  transactionHash,
+  status: receipt.status,
+  contractAddress: receipt.contractAddress,
+  blockNumber: receipt.blockNumber.toString(),
+  blockHash: receipt.blockHash,
+});
+if (
+  receipt.status !== "success" ||
+  getAddress(receipt.contractAddress) !==
+    getAddress(plan.create.predictedAddress)
+) {
+  throw new Error("Registry deployment receipt failed or address mismatched");
+}
+process.stdout.write(
+  `CUSTOM_REGISTRY_V2_BROADCAST_AWAITING_FINALITY ${transactionHash} ${journalPath}\n`,
+);
