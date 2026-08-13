@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 import {
   createMemoryPersistentRpcCacheStore,
   createPersistentRpcRequest,
+  persistentRpcCachePathByteLimit,
   PERSISTENT_RPC_CACHE_LIMITS,
   PersistentRpcCacheError,
   PersistentRpcCacheReorgError,
@@ -878,6 +879,19 @@ describe("persistent RPC log cursor", () => {
     expect(paths.some((path) => path.includes("/rpc-log-cursors/v2/"))).toBe(false);
     expect(paths.some((path) => path.includes("/runtime-v2/"))).toBe(true);
     expect(paths.some((path) => path.includes("/runtime/"))).toBe(false);
+  });
+
+  it("bounds runtime-v2 Blob reads in the current cache generation", () => {
+    expect(
+      persistentRpcCachePathByteLimit(
+        "indexes/rpc-log-cursors/v3/1/provider/runtime-v2/address/release.json",
+      ),
+    ).toBe(PERSISTENT_RPC_CACHE_LIMITS.maxRuntimeBytes);
+    expect(() =>
+      persistentRpcCachePathByteLimit(
+        "indexes/rpc-log-cursors/v2/1/provider/runtime/address/release.json",
+      )
+    ).toThrow(PersistentRpcCacheError);
   });
 
   it("does not persist runtime code across a changing canonical anchor", async () => {
