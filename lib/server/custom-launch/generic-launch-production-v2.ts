@@ -23,6 +23,7 @@ import {
   assertPostgresGenericLaunchReadStoreReadyV2,
   createPostgresGenericLaunchMaterializationStoreV2,
   createPostgresGenericLaunchReadStoreV2,
+  listStaleGenericLaunchApprovalsV2,
 } from "./generic-launch-postgres-v2";
 import {
   createGenericLaunchReadHandlersV2,
@@ -34,6 +35,7 @@ import { createProductionGenericLaunchReadSignerV2 } from
 
 const MAXIMUM_CONFIGURATION_BYTES = 65_536;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
+const GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS = 180_000;
 
 export async function projectProductionGenericLaunchV2(input: Readonly<{
   approvalId: `0x${string}`;
@@ -74,6 +76,26 @@ export async function projectProductionGenericLaunchV2(input: Readonly<{
     readModelBindingHash,
   });
   return await projector.project(input);
+}
+
+export async function reconcileProductionGenericLaunchesV2(input: Readonly<{
+  limit: number;
+  signal?: AbortSignal;
+}>) {
+  const signal = input.signal ?? new AbortController().signal;
+  const pool = getProductionApprovalV3ProjectionPoolV1();
+  await pool.assertProductionReadiness();
+  const approvalIds = await listStaleGenericLaunchApprovalsV2(pool, {
+    maximumLifecycleAgeMs: GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS,
+    limit: input.limit,
+    signal,
+  });
+  const results = [];
+  for (const approvalId of approvalIds) {
+    signal.throwIfAborted();
+    results.push(await projectProductionGenericLaunchV2({ approvalId, signal }));
+  }
+  return Object.freeze({ scanned: approvalIds.length, results: Object.freeze(results) });
 }
 
 export async function handleProductionGenericLaunchFeedV2(
@@ -163,7 +185,10 @@ async function productionReadHandlers() {
   });
   const pool = getProductionApprovalV3ProjectionPoolV1();
   await pool.assertProductionReadiness();
-  await assertPostgresGenericLaunchReadStoreReadyV2(pool);
+  await assertPostgresGenericLaunchReadStoreReadyV2(
+    pool,
+    GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS,
+  );
   const pair = productionMainnetRpcPair();
   await assertCustomRegistryV2DeploymentReadiness({
     deploymentSource,
@@ -176,6 +201,7 @@ async function productionReadHandlers() {
       pool,
       signer,
       readModelContract,
+      maximumLifecycleAgeMs: GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS,
     }),
   });
 }

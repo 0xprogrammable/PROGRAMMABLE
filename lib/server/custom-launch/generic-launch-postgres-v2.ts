@@ -34,10 +34,21 @@ interface LifecycleRow extends Record<string, unknown> {
   record_hash: unknown;
 }
 
+interface ApprovalIdRow extends Record<string, unknown> {
+  approval_id: unknown;
+}
+
 interface ReadRow extends Record<string, unknown> {
   canonical_record: unknown;
   finalization_block: unknown;
   record_hash: unknown;
+}
+
+interface StoragePostureRow extends Record<string, unknown> {
+  relrowsecurity: unknown;
+  relforcerowsecurity: unknown;
+  policies: unknown;
+  privileges: unknown;
 }
 
 export function createPostgresGenericLaunchMaterializationStoreV2(
@@ -191,11 +202,18 @@ export function createPostgresGenericLaunchReadStoreV2(input: Readonly<{
   pool: ProjectionTargetPostgresPoolV1;
   signer: GenericLaunchReadSignerV2;
   readModelContract: GenericLaunchReadModelContractV2;
+  maximumLifecycleAgeMs: number;
 }>): GenericLaunchReadStoreV2 {
+  const maximumLifecycleAgeMs = lifecycleAge(input.maximumLifecycleAgeMs);
   const readModelContract = Object.freeze({ ...input.readModelContract });
   const findFinalizedLaunches: GenericLaunchReadStoreV2["findFinalizedLaunches"] =
     async ({ limit, cursor, requestBindingHash, signal }) => {
       signal.throwIfAborted();
+      await assertFreshGenericLaunchLifecyclesV2(
+        input.pool,
+        maximumLifecycleAgeMs,
+        signal,
+      );
       const after = cursor === undefined ? null : decodeCursor(cursor);
       const rows = await input.pool.query<ReadRow>(`
         WITH latest AS (
@@ -246,6 +264,11 @@ export function createPostgresGenericLaunchReadStoreV2(input: Readonly<{
     GenericLaunchReadStoreV2["findFinalizedLaunchByRecordHash"] =
     async ({ recordHash, requestBindingHash, signal }) => {
       signal.throwIfAborted();
+      await assertFreshGenericLaunchLifecyclesV2(
+        input.pool,
+        maximumLifecycleAgeMs,
+        signal,
+      );
       const result = await input.pool.query<ReadRow>(`
         SELECT candidate.canonical_record, candidate.finalization_block::text,
                candidate.record_hash
@@ -278,7 +301,14 @@ export function createPostgresGenericLaunchReadStoreV2(input: Readonly<{
 
 export async function assertPostgresGenericLaunchReadStoreReadyV2(
   pool: ProjectionTargetPostgresPoolV1,
+  maximumLifecycleAgeMs: number,
 ): Promise<void> {
+  await assertGenericLaunchMaterializationStorageV2(pool);
+  await assertFreshGenericLaunchLifecyclesV2(
+    pool,
+    lifecycleAge(maximumLifecycleAgeMs),
+    new AbortController().signal,
+  );
   const result = await pool.query<{ total: unknown }>(`
     WITH latest AS (
       SELECT DISTINCT ON (launch_id) launch_id, lifecycle_state
@@ -293,9 +323,101 @@ export async function assertPostgresGenericLaunchReadStoreReadyV2(
   }
 }
 
+async function assertGenericLaunchMaterializationStorageV2(
+  pool: ProjectionTargetPostgresPoolV1,
+): Promise<void> {
+  const result = await pool.query<StoragePostureRow>(`
+    SELECT c.relrowsecurity, c.relforcerowsecurity,
+           COALESCE((
+             SELECT string_agg(p.policyname || ':' || p.cmd, ',' ORDER BY p.policyname)
+               FROM pg_policies p
+              WHERE p.schemaname = 'programmable_website_projection_v1'
+                AND p.tablename = 'generic_launch_materializations_v2'
+           ), '') AS policies,
+           COALESCE((
+             SELECT string_agg(g.privilege_type, ',' ORDER BY g.privilege_type)
+               FROM information_schema.role_table_grants g
+              WHERE g.table_schema = 'programmable_website_projection_v1'
+                AND g.table_name = 'generic_launch_materializations_v2'
+                AND g.grantee = 'programmable_website_projection_runtime'
+           ), '') AS privileges
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'programmable_website_projection_v1'
+       AND c.relname = 'generic_launch_materializations_v2'
+       AND c.relkind = 'r'
+  `);
+  const row = result.rows[0];
+  if (result.rows.length !== 1 || row?.relrowsecurity !== true
+    || row.relforcerowsecurity !== true
+    || row.policies !== "generic_launch_materializations_v2_runtime_insert:INSERT,generic_launch_materializations_v2_runtime_select:SELECT"
+    || row.privileges !== "INSERT,SELECT") {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+}
+
+export async function listStaleGenericLaunchApprovalsV2(
+  pool: ProjectionTargetPostgresPoolV1,
+  input: Readonly<{
+    maximumLifecycleAgeMs: number;
+    limit: number;
+    signal: AbortSignal;
+  }>,
+): Promise<readonly `0x${string}`[]> {
+  input.signal.throwIfAborted();
+  const maximumLifecycleAgeMs = lifecycleAge(input.maximumLifecycleAgeMs);
+  if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 32) {
+    throw new TypeError("Generic launch reconciliation limit is invalid");
+  }
+  const result = await pool.query<ApprovalIdRow>(`
+    WITH latest AS (
+      SELECT DISTINCT ON (launch_id)
+             approval_id, launch_id, lifecycle_generation, created_at
+        FROM programmable_website_projection_v1.generic_launch_materializations_v2
+       ORDER BY launch_id, lifecycle_generation DESC
+    )
+    SELECT substring(p.projection_key FROM 10) AS approval_id
+      FROM programmable_website_projection_v1.projection_records p
+      LEFT JOIN latest l
+        ON l.approval_id = substring(p.projection_key FROM 10)
+     WHERE p.lane = 'website.approval-v3'
+       AND (l.approval_id IS NULL OR l.created_at < clock_timestamp()
+         - ($1::bigint * interval '1 millisecond'))
+     ORDER BY l.created_at ASC NULLS FIRST, p.projection_key ASC
+     LIMIT $2
+  `, [maximumLifecycleAgeMs, input.limit]);
+  input.signal.throwIfAborted();
+  return Object.freeze(result.rows.map((row) =>
+    hash32(row.approval_id, "stale Generic launch Approval ID")));
+}
+
+async function assertFreshGenericLaunchLifecyclesV2(
+  pool: ProjectionTargetPostgresPoolV1,
+  maximumLifecycleAgeMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  signal.throwIfAborted();
+  const result = await pool.query<{ stale: unknown }>(`
+    WITH latest AS (
+      SELECT DISTINCT ON (launch_id)
+             launch_id, lifecycle_generation, created_at
+        FROM programmable_website_projection_v1.generic_launch_materializations_v2
+       ORDER BY launch_id, lifecycle_generation DESC
+    )
+    SELECT count(*)::text AS stale
+      FROM latest
+     WHERE created_at < clock_timestamp()
+       - ($1::bigint * interval '1 millisecond')
+  `, [maximumLifecycleAgeMs]);
+  signal.throwIfAborted();
+  if (decimal(result.rows[0]?.stale, "stale Generic launch count") !== "0") {
+    throw new TypeError("Generic launch lifecycle snapshot is stale");
+  }
+}
+
 function lifecycleRow(row: LifecycleRow) {
   const state = row.lifecycle_state;
-  if (state !== "finalized" && state !== "revoked") {
+  if (state !== "finalized" && state !== "revoked" && state !== "invalidated") {
     throw new TypeError("stored lifecycle state is invalid");
   }
   return Object.freeze({
@@ -389,6 +511,13 @@ function digest(value: unknown, label: string): Sha256Digest {
 function decimal(value: unknown, label: string): string {
   if (typeof value !== "string" || !DECIMAL.test(value)) {
     throw new TypeError(`${label} is invalid`);
+  }
+  return value;
+}
+
+function lifecycleAge(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 30_000 || value > 900_000) {
+    throw new TypeError("Generic launch lifecycle maximum age is invalid");
   }
   return value;
 }

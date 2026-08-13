@@ -98,6 +98,33 @@
       "sha256": "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f"
     }
   },
+  "customLaunchReconciler": {
+    "path": "/api/ops/custom-launch/generic-v2-projector",
+    "schedule": "* * * * *",
+    "authEnvironment": "CRON_SECRET",
+    "maximumLifecycleAgeMs": 180000,
+    "batchLimit": 8,
+    "route": {
+      "path": "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+      "sha256": "ccf313d6f324391430d081254e4efa5cf7182ebbb812e2888dfd5d0add9bcc5e"
+    },
+    "runtime": {
+      "path": "lib/server/custom-launch/generic-launch-production-v2.ts",
+      "sha256": "0eafd50e7d224302d8c2202c637c9571b4e3a5e31623a3b36de175f281bc3517"
+    },
+    "store": {
+      "path": "lib/server/custom-launch/generic-launch-postgres-v2.ts",
+      "sha256": "5cbf187e029154dc23f0fcb1002602772494676560e79f596169ca5897718d21"
+    },
+    "registryReader": {
+      "path": "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",
+      "sha256": "fb3cd5afe33795385bdf0c598687b3cea7cc99788275fca06c7b65529d8950a6"
+    },
+    "migration": {
+      "path": "ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
+      "sha256": "65d2fcb192f56ab29f9621a3df19e79fcf9eaea7a5b6ec31d1b856124fc611d1"
+    }
+  },
   "workers": [
     {
       "id": "source-projector",

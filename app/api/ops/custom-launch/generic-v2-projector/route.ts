@@ -5,6 +5,7 @@ import { parseStrictJson } from
 import {
   parseGenericProjectorApprovalId,
   projectProductionGenericLaunchV2,
+  reconcileProductionGenericLaunchesV2,
 } from "@/lib/server/custom-launch/generic-launch-production-v2";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,10 @@ export const runtime = "nodejs";
 const MAXIMUM_BODY_BYTES = 4_096;
 
 export async function POST(request: Request): Promise<Response> {
-  if (!authorized(request.headers)) return response(401, "unauthorized");
+  if (!authorized(
+    request.headers,
+    process.env.PROGRAMMABLE_GENERIC_LAUNCH_PROJECTOR_TOKEN,
+  )) return response(401, "unauthorized");
   try {
     const text = await request.text();
     if (Buffer.byteLength(text, "utf8") > MAXIMUM_BODY_BYTES) {
@@ -45,10 +49,33 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-function authorized(headersValue: Headers): boolean {
-  const expectedValue = process.env.PROGRAMMABLE_GENERIC_LAUNCH_PROJECTOR_TOKEN;
+export async function GET(request: Request): Promise<Response> {
+  if (!authorized(request.headers, process.env.CRON_SECRET)) {
+    return response(401, "unauthorized");
+  }
+  const url = new URL(request.url);
+  if (url.search !== "" || request.body !== null) {
+    return response(400, "invalid_request");
+  }
+  try {
+    const result = await reconcileProductionGenericLaunchesV2({
+      limit: 8,
+      signal: request.signal,
+    });
+    return Response.json({
+      schemaVersion: "programmable.generic-launch-reconciliation-result.v2",
+      status: "ok",
+      ...result,
+    }, { status: 200, headers: headers() });
+  } catch {
+    return response(503, "reconciliation_unavailable");
+  }
+}
+
+function authorized(headersValue: Headers, expectedValue: string | undefined): boolean {
   const authorization = headersValue.get("authorization");
-  if (!expectedValue || expectedValue.length < 32 || expectedValue.length > 4096
+  if (!expectedValue || Buffer.byteLength(expectedValue, "utf8") < 32
+    || Buffer.byteLength(expectedValue, "utf8") > 1_024
     || !authorization?.startsWith("Bearer ")) return false;
   const expected = Buffer.from(expectedValue, "utf8");
   const actual = Buffer.from(authorization.slice("Bearer ".length), "utf8");

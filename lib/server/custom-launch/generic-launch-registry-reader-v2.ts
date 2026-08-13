@@ -2,10 +2,14 @@ import "server-only";
 
 import {
   createPublicClient,
+  BlockNotFoundError,
   decodeEventLog,
   http,
   keccak256,
+  TransactionNotFoundError,
+  TransactionReceiptNotFoundError,
   type Abi,
+  type AbiEvent,
   type Hex,
   type PublicClient,
 } from "viem";
@@ -17,6 +21,7 @@ import { CUSTOM_REGISTRY_V2_EVENT_ABI } from
   "@/lib/data-pipeline/custom-registry-v2-event-manifest";
 import { canonicalizeJson, type JsonValue } from
   "../projection-target/canonical-json";
+import { canonicalSha256 } from "../projection-target/hashing";
 import type {
   VerifiedApprovalArtifactV3,
   VerifiedRegistryLifecycleV2,
@@ -24,6 +29,7 @@ import type {
 
 const ABI = registryAbiArtifact.abi as Abi;
 const ZERO_HASH32 = `0x${"00".repeat(32)}` as const;
+const MAXIMUM_LOG_WINDOW_BLOCKS = 5_000n;
 
 export interface GenericLaunchRegistryReleaseV2 {
   readonly registryAddress: `0x${string}`;
@@ -156,9 +162,8 @@ async function observeProvider(
     throw new TypeError("Approval artifact is not bound to the Registry release");
   }
   const fromBlock = BigInt(input.release.deploymentBlock);
-  const [logs, approvalStateRaw, launchStateRaw, descriptorRaw, primaryTx,
+  const [approvalStateRaw, launchStateRaw, descriptorRaw, primaryTx,
     primaryReceipt, primaryBlock, primaryCode] = await Promise.all([
-    client.getLogs({ address, fromBlock, toBlock: input.commonHead }),
     client.readContract({
       address, abi: ABI, functionName: "approvalState",
       args: [input.approval.approvalId], blockNumber: input.commonHead,
@@ -171,21 +176,49 @@ async function observeProvider(
       address, abi: ABI, functionName: "launchDescriptor",
       args: [input.approval.launchId], blockNumber: input.commonHead,
     }),
-    client.getTransaction({ hash: input.approval.primaryFinality.transactionHash }),
-    client.getTransactionReceipt({
+    missingOnReorg(client.getTransaction({
       hash: input.approval.primaryFinality.transactionHash,
-    }),
-    client.getBlock({
+    })),
+    missingOnReorg(client.getTransactionReceipt({
+      hash: input.approval.primaryFinality.transactionHash,
+    })),
+    missingOnReorg(client.getBlock({
       blockNumber: BigInt(input.approval.primaryFinality.blockNumber),
       includeTransactions: false,
-    }),
+    })),
     client.getBytecode({
       address: input.approval.descriptor.primaryContract,
       blockNumber: input.commonHead,
     }),
   ]);
+  const logs = await readBoundedLifecycleLogs(
+    client,
+    address,
+    BigInt(input.approval.primaryFinality.blockNumber) > fromBlock
+      ? BigInt(input.approval.primaryFinality.blockNumber)
+      : fromBlock,
+    input.commonHead,
+    input.approval,
+    input.signal,
+  );
   input.signal.throwIfAborted();
-  if (primaryReceipt.status !== "success"
+  const approvalState = approvalStateEvidence(approvalStateRaw);
+  const launchState = launchStateEvidence(launchStateRaw);
+  const launchDescriptor = descriptorEvidence(descriptorRaw);
+  const events = decodeLifecycleLogs(logs, input.approval);
+  const primaryObservation = Object.freeze({
+    transactionHash: primaryTx?.hash.toLowerCase() ?? null,
+    sender: primaryTx?.from.toLowerCase() ?? null,
+    receiptTransactionHash: primaryReceipt?.transactionHash.toLowerCase() ?? null,
+    receiptBlockHash: primaryReceipt?.blockHash.toLowerCase() ?? null,
+    receiptBlockNumber: primaryReceipt?.blockNumber.toString() ?? null,
+    receiptContractAddress: primaryReceipt?.contractAddress?.toLowerCase() ?? null,
+    receiptStatus: primaryReceipt?.status ?? null,
+    blockHash: primaryBlock?.hash?.toLowerCase() ?? null,
+    runtimeCodeKeccak256: primaryCode === undefined ? null : keccak256(primaryCode),
+  });
+  if (primaryReceipt === null || primaryTx === null || primaryBlock === null
+    || primaryReceipt.status !== "success"
     || primaryTx.from.toLowerCase() !== input.approval.descriptor.launchWallet
     || primaryReceipt.transactionHash.toLowerCase()
       !== input.approval.primaryFinality.transactionHash
@@ -196,14 +229,14 @@ async function observeProvider(
     || primaryBlock.hash?.toLowerCase() !== input.approval.primaryFinality.blockHash
     || primaryCode === undefined
     || keccak256(primaryCode) !== input.approval.descriptor.primaryRuntimeCodeHash) {
-    throw new TypeError("Primary launch receipt/runtime evidence is invalid");
+    return invalidatedObservation(input, {
+      approvalState,
+      launchState,
+      launchDescriptor,
+      eventArguments: events.arguments,
+      primaryObservation,
+    });
   }
-  const events = decodeLifecycleLogs(logs, input.approval);
-  const approvalState = approvalStateEvidence(approvalStateRaw);
-  const launchState = launchStateEvidence(launchStateRaw);
-  const launchDescriptor = descriptorEvidence(descriptorRaw);
-  assertApprovalState(approvalState, input.approval);
-  assertDescriptor(launchDescriptor, input.approval);
   const primaryLaunch = Object.freeze({
     transactionHash: primaryReceipt.transactionHash.toLowerCase() as `0x${string}`,
     sender: primaryTx.from.toLowerCase() as `0x${string}`,
@@ -213,6 +246,8 @@ async function observeProvider(
     status: "success" as const,
   });
   if (events.revocation !== null || launchState.status === "3") {
+    assertApprovalState(approvalState, input.approval);
+    assertDescriptor(launchDescriptor, input.approval);
     if (events.revocation === null || launchState.status !== "3"
       || launchState.revokedAtBlock === "0"
       || launchState.revocationEvidenceHash === ZERO_HASH32
@@ -241,8 +276,16 @@ async function observeProvider(
     || events.authorization === null || events.registration === null
     || events.descriptor === null || events.descriptorEvidence === null
     || events.finalization === null) {
-    throw new TypeError("Registry lifecycle is not finalized and non-revoked");
+    return invalidatedObservation(input, {
+      approvalState,
+      launchState,
+      launchDescriptor,
+      eventArguments: events.arguments,
+      primaryObservation,
+    });
   }
+  assertApprovalState(approvalState, input.approval);
+  assertDescriptor(launchDescriptor, input.approval);
   assertFinalizedEventJoins(events, input.approval, launchState, approvalState);
   const finalizedLog = events.finalization!;
   const finalityArgs = finalizedLog.args;
@@ -302,6 +345,122 @@ async function observeProvider(
       eventArguments: events.arguments,
     }),
   });
+}
+
+function invalidatedObservation(
+  input: Readonly<{
+    commonHead: bigint;
+    commonHeadHash: `0x${string}`;
+  }>,
+  bindingEvidence: ProviderObservationV2["bindingEvidence"] & Readonly<{
+    primaryObservation?: unknown;
+  }>,
+): ProviderObservationV2 {
+  const invalidationEvidenceHash = canonicalSha256(
+    "programmable.generic-launch-registry-invalidation-evidence.v2",
+    bindingEvidence as unknown as JsonValue,
+  );
+  const launchState = bindingEvidence.launchState as Readonly<{
+    status?: unknown;
+  }>;
+  const registryStatus = typeof launchState.status === "string"
+    ? launchState.status
+    : "0";
+  return Object.freeze({
+    lifecycle: Object.freeze({
+      status: "invalidated" as const,
+      latestCommonHead: input.commonHead.toString(),
+      latestCommonHeadHash: input.commonHeadHash,
+      registryStatus,
+      invalidationEvidenceHash,
+    }),
+    bindingEvidence: Object.freeze(bindingEvidence),
+  });
+}
+
+async function missingOnReorg<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (error instanceof TransactionNotFoundError
+      || error instanceof TransactionReceiptNotFoundError
+      || error instanceof BlockNotFoundError) return null;
+    throw error;
+  }
+}
+
+async function readBoundedLifecycleLogs(
+  client: PublicClient,
+  address: `0x${string}`,
+  fromBlock: bigint,
+  toBlock: bigint,
+  approval: VerifiedApprovalArtifactV3,
+  signal: AbortSignal,
+) {
+  if (fromBlock > toBlock) {
+    throw new TypeError("Registry lifecycle log range is invalid");
+  }
+  const logs: Awaited<ReturnType<PublicClient["getLogs"]>> = [];
+  for (let start = fromBlock; start <= toBlock;) {
+    signal.throwIfAborted();
+    const end = start + MAXIMUM_LOG_WINDOW_BLOCKS - 1n < toBlock
+      ? start + MAXIMUM_LOG_WINDOW_BLOCKS - 1n
+      : toBlock;
+    const filters = [
+      ["CustomLaunchApprovalAuthorizedV2", {
+        approvalId: approval.approvalId,
+        descriptorHash: approval.descriptorHash,
+      }],
+      ["CustomLaunchRegisteredV2", {
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+        primaryContract: approval.descriptor.primaryContract,
+      }],
+      ["CustomLaunchDescriptorCommittedV2", {
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+        primaryContract: approval.descriptor.primaryContract,
+      }],
+      ["CustomLaunchDescriptorEvidenceCommittedV2", {
+        launchId: approval.launchId,
+        sourceArtifactHash: approval.descriptor.sourceArtifactHash,
+        configurationHash: approval.descriptor.configurationHash,
+      }],
+      ["CustomLaunchFinalizedV2", {
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+      }],
+      ["CustomLaunchRevokedV2", {
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+      }],
+    ] as const;
+    for (const [name, args] of filters) {
+      const event = registryEvent(name);
+      const window = await client.getLogs({
+        address,
+        event,
+        args,
+        fromBlock: start,
+        toBlock: end,
+        strict: true,
+      });
+      if (window.length > 1) {
+        throw new TypeError(`Registry ${name} evidence exceeds its bound`);
+      }
+      logs.push(...window);
+    }
+    start = end + 1n;
+  }
+  signal.throwIfAborted();
+  return logs;
+}
+
+function registryEvent(name: string): AbiEvent {
+  const event = CUSTOM_REGISTRY_V2_EVENT_ABI.find((candidate) =>
+    candidate.type === "event" && candidate.name === name);
+  if (event === undefined) throw new TypeError("Registry event ABI is unavailable");
+  return event as AbiEvent;
 }
 
 type DecodedLifecycleLog = Readonly<{

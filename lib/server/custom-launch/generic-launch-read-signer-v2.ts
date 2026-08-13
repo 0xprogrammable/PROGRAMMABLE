@@ -289,9 +289,8 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
       const signal = signingInput.signal === undefined
         ? controller.signal
         : AbortSignal.any([controller.signal, signingInput.signal]);
-      let response: Response;
       try {
-        response = await fetchTransport(new URL(binding.endpoint), {
+        const response = await fetchTransport(new URL(binding.endpoint), {
           method: "POST",
           redirect: "error",
           cache: "no-store",
@@ -307,25 +306,17 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
           },
           body: canonicalizeJson({ ...unsignedRequest, requestDigest }),
         });
-      } catch (error) {
-        if (controller.signal.aborted && !signingInput.signal?.aborted) {
-          throw new TypeError("Generic launch V2 signer deadline exceeded");
+        if (response.redirected || response.status !== 200) {
+          throw new TypeError("Generic launch V2 signer rejected the request");
         }
-        throw error;
-      } finally {
-        clearTimeout(timeout);
-      }
-      if (response.redirected || response.status !== 200) {
-        throw new TypeError("Generic launch V2 signer rejected the request");
-      }
-      const contentType = response.headers.get("content-type")
-        ?.split(";", 1)[0]?.trim().toLowerCase();
-      if (contentType !== "application/json") {
-        throw new TypeError("Generic launch V2 signer response is invalid");
-      }
-      const authenticated = parseAuthenticatedResponse(
-        await readBoundedResponse(response, MAXIMUM_RESPONSE_BYTES),
-      );
+        const contentType = response.headers.get("content-type")
+          ?.split(";", 1)[0]?.trim().toLowerCase();
+        if (contentType !== "application/json") {
+          throw new TypeError("Generic launch V2 signer response is invalid");
+        }
+        const authenticated = parseAuthenticatedResponse(
+          await readBoundedResponse(response, MAXIMUM_RESPONSE_BYTES, signal),
+        );
       const providerReceipt = authenticated.providerReceipt;
       if (
         providerReceipt.audience !== binding.audience
@@ -369,6 +360,14 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
         throw new TypeError("Generic launch V2 signed envelope is too large");
       }
       return envelope;
+      } catch (error) {
+        if (controller.signal.aborted && !signingInput.signal?.aborted) {
+          throw new TypeError("Generic launch V2 signer deadline exceeded");
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   });
 }
@@ -468,6 +467,7 @@ function parseAuthenticatedResponse(bytes: Uint8Array): Readonly<{
 async function readBoundedResponse(
   response: Response,
   maximumBytes: number,
+  signal: AbortSignal,
 ): Promise<Uint8Array> {
   const contentLength = response.headers.get("content-length");
   if (contentLength !== null) {
@@ -487,7 +487,7 @@ async function readBoundedResponse(
   let total = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithAbort(reader, signal);
       if (done) break;
       total += value.byteLength;
       if (total > maximumBytes) {
@@ -496,6 +496,7 @@ async function readBoundedResponse(
       chunks.push(value);
     }
   } finally {
+    if (signal.aborted) await reader.cancel(signal.reason).catch(() => undefined);
     reader.releaseLock();
   }
   const result = new Uint8Array(total);
@@ -505,6 +506,20 @@ async function readBoundedResponse(
     offset += chunk.byteLength;
   }
   return result;
+}
+
+async function readWithAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  signal.throwIfAborted();
+  return await new Promise((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    signal.addEventListener("abort", aborted, { once: true });
+    void reader.read().then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", aborted);
+    });
+  });
 }
 
 function validateProviderWindow(receipt: ProviderReceiptV2, now: Date): void {

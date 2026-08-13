@@ -169,6 +169,30 @@ describe("Generic launch V2 Registry projector", () => {
     expect(store.rows[1]).toMatchObject({ state: "revoked", record: null });
   });
 
+  it("appends an invalidation tombstone when finality disappears after a reorg", async () => {
+    const store = memoryStore();
+    let current: VerifiedRegistryLifecycleV2 = lifecycle;
+    const projector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact: () => approval,
+      readRegistryLifecycle: async () => current,
+      readModelBindingHash: sha("f"),
+    });
+    await projector.project({ approvalId: approval.approvalId });
+    current = {
+      status: "invalidated",
+      latestCommonHead: "121",
+      latestCommonHeadHash: hash("f"),
+      registryStatus: "1",
+      invalidationEvidenceHash: sha("e"),
+    };
+
+    expect((await projector.project({ approvalId: approval.approvalId })).kind)
+      .toBe("created");
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows[1]).toMatchObject({ state: "invalidated", record: null });
+  });
+
   it("fails closed on approval identity or lifecycle drift", async () => {
     const store = memoryStore();
     const mismatch = createGenericLaunchProjectorV2({

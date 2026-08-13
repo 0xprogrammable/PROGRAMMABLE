@@ -34,7 +34,7 @@ CREATE TABLE programmable_website_projection_v1.generic_launch_materializations_
         AND source_projection_hash ~ '^sha256:[0-9a-f]{64}$'
         AND finalization_block IS NOT NULL)
       OR
-      (lifecycle_state = 'revoked'
+      (lifecycle_state IN ('revoked', 'invalidated')
         AND canonical_record IS NULL
         AND record_hash IS NULL
         AND source_projection_hash IS NULL

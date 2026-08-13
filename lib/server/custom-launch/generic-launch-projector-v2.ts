@@ -76,6 +76,13 @@ export type VerifiedRegistryLifecycleV2 =
     latestCommonHeadHash: `0x${string}`;
     revokedAtBlock: string;
     revocationEvidenceHash: `0x${string}`;
+  }>
+  | Readonly<{
+    status: "invalidated";
+    latestCommonHead: string;
+    latestCommonHeadHash: `0x${string}`;
+    registryStatus: string;
+    invalidationEvidenceHash: Sha256Digest;
   }>;
 
 export interface GenericLaunchMaterializationStoreV2 {
@@ -89,7 +96,7 @@ export interface GenericLaunchMaterializationStoreV2 {
   }>): Promise<Readonly<{
     lifecycleGeneration: string;
     lifecycleEvidenceHash: Sha256Digest;
-    state: "finalized" | "revoked";
+    state: "finalized" | "revoked" | "invalidated";
     recordHash: Sha256Digest | null;
   }> | null>;
   putIfNewLifecycle(input: Readonly<{
@@ -97,7 +104,7 @@ export interface GenericLaunchMaterializationStoreV2 {
     launchId: `0x${string}`;
     descriptorHash: `0x${string}`;
     lifecycleEvidenceHash: Sha256Digest;
-    state: "finalized" | "revoked";
+    state: "finalized" | "revoked" | "invalidated";
     record: GenericLaunchRecordV2 | null;
     signal: AbortSignal;
   }>): Promise<Readonly<{ kind: "created" | "existing" }>>;
@@ -109,7 +116,7 @@ export interface GenericLaunchProjectorV2 {
     signal?: AbortSignal;
   }>): Promise<Readonly<{
     kind: "created" | "existing";
-    state: "finalized" | "revoked";
+    state: "finalized" | "revoked" | "invalidated";
     launchId: `0x${string}`;
     recordHash: Sha256Digest | null;
     lifecycleEvidenceHash: Sha256Digest;
@@ -198,11 +205,16 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
           },
           readModelBindingHash,
         });
-      } else {
+      } else if (lifecycle.status === "revoked") {
         nonzeroHash32(lifecycle.revocationEvidenceHash, "revocation evidence");
         positiveDecimal(lifecycle.revokedAtBlock, "revocation block");
         decimal(lifecycle.latestCommonHead, "revocation common head");
         hash32(lifecycle.latestCommonHeadHash, "revocation common head hash");
+      } else {
+        decimal(lifecycle.latestCommonHead, "invalidation common head");
+        hash32(lifecycle.latestCommonHeadHash, "invalidation common head hash");
+        decimal(lifecycle.registryStatus, "invalidated Registry status");
+        digest(lifecycle.invalidationEvidenceHash, "invalidation evidence");
       }
       const persisted = await input.store.putIfNewLifecycle({
         approvalId,

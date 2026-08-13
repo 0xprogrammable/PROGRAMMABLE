@@ -16,8 +16,10 @@ import type {
 import { createGenericLaunchRecordV2 } from
   "../lib/server/custom-launch/generic-launch-contract-v2";
 import {
+  assertPostgresGenericLaunchReadStoreReadyV2,
   createPostgresGenericLaunchMaterializationStoreV2,
   createPostgresGenericLaunchReadStoreV2,
+  listStaleGenericLaunchApprovalsV2,
 } from "../lib/server/custom-launch/generic-launch-postgres-v2";
 
 const sha = (value: string) => `sha256:${value.repeat(64)}` as const;
@@ -58,10 +60,13 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         record,
         signal,
       })).kind).toBe("existing");
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .resolves.toBeUndefined();
 
       const signedPayloads: JsonValue[] = [];
       const readStore = createPostgresGenericLaunchReadStoreV2({
         pool,
+        maximumLifecycleAgeMs: 180_000,
         signer: {
           binding: {} as never,
           async sign({ payload }) {
@@ -104,6 +109,107 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         UPDATE programmable_website_projection_v1.generic_launch_materializations_v2
            SET lifecycle_state = 'finalized'
       `)).rejects.toThrow();
+    } finally {
+      await database.close();
+    }
+  }, 20_000);
+
+  it("rejects hosted RLS, policy or grant drift", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      await insertApproval(pool);
+      const store = createPostgresGenericLaunchMaterializationStoreV2(pool);
+      await store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("a"),
+        state: "finalized",
+        record: launchRecord(),
+        signal: new AbortController().signal,
+      });
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .resolves.toBeUndefined();
+      await database.exec(`
+        RESET ROLE;
+        DROP POLICY generic_launch_materializations_v2_runtime_insert
+          ON programmable_website_projection_v1.generic_launch_materializations_v2;
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .rejects.toThrow(/storage posture/u);
+    } finally {
+      await database.close();
+    }
+  }, 20_000);
+
+  it("fails closed on a stale lifecycle until the approval is reconciled", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      await insertApproval(pool);
+      const store = createPostgresGenericLaunchMaterializationStoreV2(pool);
+      const record = launchRecord();
+      const signal = new AbortController().signal;
+      await store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("a"),
+        state: "finalized",
+        record,
+        signal,
+      });
+      await database.exec(`
+        RESET ROLE;
+        UPDATE programmable_website_projection_v1.generic_launch_materializations_v2
+           SET created_at = clock_timestamp() - interval '4 minutes';
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      const readStore = createPostgresGenericLaunchReadStoreV2({
+        pool,
+        maximumLifecycleAgeMs: 180_000,
+        signer: {
+          binding: {} as never,
+          async sign({ payload }) { return canonicalizeJson(payload); },
+        },
+        readModelContract: readContract(),
+      });
+
+      await expect(readStore.findFinalizedLaunches({
+        limit: 10, requestBindingHash: sha("b"), signal,
+      })).rejects.toThrow(/stale/u);
+      await expect(readStore.findFinalizedLaunchByRecordHash({
+        recordHash: record.recordHash, requestBindingHash: sha("c"), signal,
+      })).rejects.toThrow(/stale/u);
+      expect(await listStaleGenericLaunchApprovalsV2(pool, {
+        maximumLifecycleAgeMs: 180_000,
+        limit: 8,
+        signal,
+      })).toEqual([APPROVAL_ID]);
+
+      await store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("d"),
+        state: "revoked",
+        record: null,
+        signal,
+      });
+      expect(await listStaleGenericLaunchApprovalsV2(pool, {
+        maximumLifecycleAgeMs: 180_000,
+        limit: 8,
+        signal,
+      })).toEqual([]);
+      await expect(readStore.findFinalizedLaunches({
+        limit: 10, requestBindingHash: sha("e"), signal,
+      })).resolves.toBe(canonicalizeJson({
+        records: [], nextCursor: null, total: "0",
+      }));
     } finally {
       await database.close();
     }

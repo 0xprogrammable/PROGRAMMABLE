@@ -259,6 +259,23 @@ describe("Generic launch V2 remote read signer", () => {
       payload: null,
     })).rejects.toThrow("deadline");
 
+    const stalledBody = createRemoteGenericLaunchReadSignerV2({
+      ...common,
+      timeoutMs: 500,
+      fetch: async () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    });
+    await expect(stalledBody.sign({
+      requestBindingHash: REQUEST_HASH,
+      payload: null,
+    })).rejects.toThrow("deadline");
+
     const redirected = createRemoteGenericLaunchReadSignerV2({
       ...common,
       fetch: async () => ({ redirected: true, status: 200 }) as Response,
