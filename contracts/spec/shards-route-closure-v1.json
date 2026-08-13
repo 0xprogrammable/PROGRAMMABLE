@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "programmable.shards-launch-route-closure.v1",
+  "decision": {
+    "option": "B",
+    "status": "BLOCKED_REQUIRED_CONTRACT_DEPLOYMENT",
+    "currentContractsCanLaunch": false,
+    "newShardsRouteContractRequired": false,
+    "newRegistryGenerationRequired": true,
+    "reviewedShardsSemanticsChangeRequired": false,
+    "reasonCodes": [
+      "ROUTER_V4_EXACT_SHARDS_PHASES_NOT_DEPLOYED_OR_ACTIVATED",
+      "CUSTOM_REGISTRY_V1_CANNOT_REPRESENT_OR_VERIFY_EXACT_SHARDS_INCLUDED_100_BPS_THREE_CLAIM_ECONOMICS",
+      "CUSTOM_REGISTRY_V1_FEE_VERIFIER_IS_IMMUTABLE"
+    ]
+  },
+  "reviewedSource": {
+    "repository": "https://github.com/jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "files": [
+      {
+        "path": "src/ShardHookV1.sol",
+        "gitBlob": "9daad5fa6a5cf48de71e7420d1866b9e97cc19bb",
+        "sha256": "0x29065fb2418a681cb9bf5e2b4622ef5e7fa0692efa887ba69f6d4d6e2aa8d663"
+      },
+      {
+        "path": "src/ShardFeeDistributorV1.sol",
+        "gitBlob": "ab8f642dcd6a134c50c344772622177b1b0357b8",
+        "sha256": "0x0073d29ec69c9f2cf9a8b092a0e3941d8bdfc9667ce4c9b1aa9de211567e26fd"
+      },
+      {
+        "path": "src/ShardLaunchFactoryV1.sol",
+        "gitBlob": "dc036527de168bb0505755d3d4cfac98a3cda509",
+        "sha256": "0x22f57deb2bb730b88ab6a1f948675d1cb6fbef0442e982f339e9c716e172e14f"
+      }
+    ]
+  },
+  "economics": {
+    "chargeMode": "INCLUDED_IN_SHARDS_HOOK_FEE",
+    "totalFeeBps": 100,
+    "shareDenominatorBps": 10000,
+    "holderShareOfFeeBps": 8000,
+    "builderShareOfFeeBps": 1000,
+    "programmableShareOfFeeBps": 1000,
+    "holderShareOfGrossSwapVolumeBps": 80,
+    "builderShareOfGrossSwapVolumeBps": 10,
+    "programmableShareOfGrossSwapVolumeBps": 10,
+    "programmableRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "initialBuilderRecipient": "0xceeBB3A6543CeBEB2ED66963897A0abEA52A50cC",
+    "holderClaimSemantics": "CURRENT_SHARD_NFT_HOLDER_SET_VIA_HOOK_ACCUMULATOR",
+    "builderClaimSemantics": "CURRENT_BUILDER_ROLE_RECIPIENT_WITH_SELF_HANDOFF",
+    "programmableClaimSemantics": "IMMUTABLE_LAUNCHER_FEE_RECIPIENT",
+    "revenuePolicyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2",
+    "initialRevenueStateHash": "0xf0bc686422736754322da4ea358a823274df35c35718939d71d339a41b8f9b75"
+  },
+  "reviewedRouteEvidence": {
+    "pullRequest12": {
+      "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+      "headCommit": "d91d8e90af19acd61e9d46eeb652b418f4186f58",
+      "headTree": "070dcbc016fe4c053d64e3b918e5afe728c8d02b",
+      "conclusion": "OLD_DIRECT_ROUTER_GAS_PROFILE_ONLY_NOT_A_ROUTE_OR_FEE_CLOSURE"
+    },
+    "pullRequest13": {
+      "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+      "headCommit": "e413d4f91b41016f5805b053924de4b13702c2b6",
+      "headTree": "bf96aab00ea345fe2a1c285b83293de9dce96faa",
+      "sourcePath": "services/autonomous-approval-v1/src/internal/router-self-service-v1/nested-factory-v2.ts",
+      "routeId": "nested-factory",
+      "routeVersion": "1.0.0",
+      "profileId": "exact-shards-nested-factory",
+      "profileVersion": "1.0.0",
+      "artifact": {
+        "path": "outputs/shards-nested-factory-route-v1.canonical.json",
+        "byteLength": 1287041,
+        "sha256": "0x066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
+        "keccak256": "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3"
+      },
+      "activationAllowed": false,
+      "revenueAttestationSha256": null,
+      "revenueVerifierArtifactSha256": null,
+      "conclusion": "EXACT_ROUTE_EVIDENCE_REUSABLE_BUT_THIS_PRIVATE_CAPABILITY_RELEASE_IS_INTENTIONALLY_DISABLED"
+    }
+  },
+  "routerV4": {
+    "repository": "https://github.com/0xprogrammable/programmable",
+    "sourceCommit": "d6cfb78543b159f9e0ed9f193a5b29637bd817fc",
+    "sourceTree": "cbdad7210dee6fac708d2957e9f5288090bb20f8",
+    "exactProfileSource": {
+      "path": "src/ProgrammableExactShardsProfileV1.sol",
+      "gitBlob": "d802fa387505da47a0ac4d65a6e5b5e4efa7026d"
+    },
+    "nestedAdapterSource": {
+      "path": "deployment/router-v4/src/ProgrammableExactShardsNestedFactoryV1.sol",
+      "gitBlob": "cf2b92f67ec00b0c0a844708dd62ab70a32fdf3a"
+    },
+    "deploymentArtifact": {
+      "path": "artifacts/router-v4-deployment-v1/router-v4-deployment-v1.json",
+      "gitBlob": "9245c906408225c6b988c948077c0ee0171ade4c",
+      "byteLength": 37573,
+      "sha256": "0x870535a7a885d0146223d2c225a00854a92fb4654b332d4d0a412f135a7cbaf0"
+    },
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "liveObservation": {
+      "chainId": 1,
+      "blockNumber": 25739119,
+      "blockHash": "0x1e28a7760146c82196298abb4866331ab4f747fd766d6c688f869dcaf0bd9482",
+      "independentRpcAgreement": [
+        "ethereum-rpc.publicnode.com",
+        "eth.drpc.org"
+      ],
+      "launcherNonce": 242,
+      "controllerSafeNonce": 0,
+      "kernel": {
+        "address": "0x25E9DDEB5de79751dB2156D426893d52C8F14DCF",
+        "runtimeCodeHash": "0x316dcd57dcefd06149e3cb2a78a25d2421312c7431df2bdf3c62ca501341f1cf",
+        "controlGeneration": 1,
+        "globalKilled": true,
+        "exactShardsProfileRegistered": false
+      },
+      "components": [
+        {
+          "name": "ProgrammableExactShardsProfileV1",
+          "address": "0xfeE9dC855228Aa3BB61D3f9E598A516643f9c6D6",
+          "status": "DEPLOYED_RUNTIME_MATCH",
+          "runtimeCodeHash": "0xd0c75719f16ac181d3d1b51725d7a0aff1c61132140f948f321736c6ef14ee49"
+        },
+        {
+          "name": "ProgrammableExactShardsNestedFactoryProviderV1",
+          "address": "0x03385476770CAe102ef673adF9A4631E84258e58",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0xb082161b95cd66ce67157900c7c750f1538dd626f3ebc5409930da57032310e2"
+        },
+        {
+          "name": "ProgrammableExactShardsNestedFactoryVerifierV1",
+          "address": "0xA4867B0d72bCE8C1db040E91454D562239daF923",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0xf2bd06d1ef883820e7c6d6c93dd3e81053448c24e9547cb7fd14a9265b46e5f5"
+        },
+        {
+          "name": "ProgrammableNestedFactoryProfileV1",
+          "address": "0x6d2D661Ab0e462E8047597Adc5bece4BCA157C4C",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0xc0aa4b63df8ba2c21766c89bfe9c88e6379f6fa23659d7895bba18a6aa80340c"
+        },
+        {
+          "name": "ShardLaunchFactoryV1",
+          "address": "0x9442a520e7b31D10177C75A363355C2C29141ac5",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0x134a9e5674f22e62e939c2238693077b8027c553bb26d6a4e9e3d8554e5f85b5"
+        },
+        {
+          "name": "GeometricRendererV1",
+          "address": "0x090DBD2FaB1a467f90ed82a443eFa9AAb658DE14",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf"
+        },
+        {
+          "name": "ShardTokenV1",
+          "address": "0x50d17EAaeB52c66E64b918385AbF6523fDAE57CF",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8"
+        },
+        {
+          "name": "ShardHookV1",
+          "address": "0xbA318baA8649962fD77CC7082d098f2C09Fd60cC",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0x2a2174aff52c3ea9ddf0a6081464c9c6dbc43ddc93609c74d9610f50f486c1e1"
+        },
+        {
+          "name": "ShardNftV1",
+          "address": "0x9fDA98dE1B7061ae02A9Aec7A6f8ed75a8Feb8F3",
+          "status": "VACANT",
+          "expectedRuntimeCodeHash": "0xc3e3ea6cf4d2e13fa07a3b053d57cd7d6a6ecac7633aed86ab971d5e53959bb3"
+        }
+      ]
+    }
+  },
+  "customRegistryV1": {
+    "address": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+    "runtimeCodeHash": "0xa3276868befc509594adea6c5bd81c3c1bd013686f03fd57914fd39c917185f7",
+    "registryGeneration": 1,
+    "minimumFinalityBlocks": 64,
+    "registrationCountAtObservedBlock": 1,
+    "feeVerifier": {
+      "address": "0x6a57bf3e092626BE760D417986e6103C20Fdbc3e",
+      "runtimeCodeHash": "0x2a4182b580725a156c42061dd58b7ed92b4588682ee1b66b356ceff1ddd90882",
+      "immutableOnRegistry": true
+    },
+    "atomicRegistrar": {
+      "address": "0xcc916e5200d2626edfd918dc219bc4296629e997",
+      "runtimeCodeHash": "0xae00412005beb660afba47767240cf771bf3c65306d68c1a7bfcb8fe2c0450f5",
+      "hasWriterRole": true,
+      "canReproduceExactShardsNestedTopology": false
+    },
+    "routerControllerHasWriterRole": false,
+    "acceptedPolicies": [
+      "NATIVE_CUSTOM_10_BPS_PROGRAMMABLE_ADDED_ON_TOP",
+      "AEON_PARTNER_20_BPS_INCLUDED_15_5",
+      "NO_QUALIFYING_MARKET_ZERO_BPS"
+    ],
+    "exactShardsPolicyRepresentable": false,
+    "impossibilityWitnesses": [
+      {
+        "kind": "NativeCustom",
+        "attempt": "100_BPS_INCLUDED_90_NON_PROGRAMMABLE_10_PROGRAMMABLE",
+        "revertReasonCode": "0x3b2203ab3172edb2f0d4219dc788b0505a317cc74fcbdd03c47a735aae9076f0"
+      },
+      {
+        "kind": "PartnerTemplate",
+        "attempt": "100_BPS_INCLUDED_90_NON_PROGRAMMABLE_10_PROGRAMMABLE",
+        "revertReasonCode": "0x994df9fe66780f7aa80c5d3ee2927e4aca0a92e4f63443ead4ea3a6ad8b3f2b4"
+      },
+      {
+        "kind": "NoQualifyingMarket",
+        "attempt": "100_BPS_INCLUDED_NONZERO_MARKET",
+        "revertReasonCode": "0xe689f12258a5e1c2ab465dc1e6eb95710557bff3cd0b6bf9ec07772d1ccea9f3"
+      }
+    ]
+  },
+  "smallestLegitimateClosure": {
+    "orderedRequirements": [
+      {
+        "sequence": 1,
+        "action": "FINISH_EXISTING_ROUTER_V4_SHARDS_ADAPTER_PROFILE_AND_FACTORY_DEPLOYMENT_PHASES",
+        "newShardsExecutionSemantics": false
+      },
+      {
+        "sequence": 2,
+        "action": "ACTIVATE_EXISTING_EXACT_SHARDS_PROFILE_WITH_CURRENT_REVIEW_AND_CONTROL_BINDINGS",
+        "newShardsExecutionSemantics": false
+      },
+      {
+        "sequence": 3,
+        "action": "DEPLOY_NEW_CUSTOM_REGISTRY_GENERATION_WITH_VERSIONED_EXACT_SHARDS_FEE_POLICY_SCHEMA_AND_VERIFIER",
+        "newShardsExecutionSemantics": false
+      },
+      {
+        "sequence": 4,
+        "action": "AUTHORIZE_A_REGISTRY_WRITER_PATH_THAT_BINDS_THE_FINAL_ROUTER_RECEIPT_TO_THE_NEW_REGISTRY_RECORD",
+        "newShardsExecutionSemantics": false
+      },
+      {
+        "sequence": 5,
+        "action": "PUBLISH_AND_INDEX_THE_NEW_REGISTRY_GENERATION_EVENT_AND_MANIFEST_BINDINGS",
+        "newShardsExecutionSemantics": false
+      }
+    ],
+    "requiredFeeSchemaProperties": [
+      "100_BPS_TOTAL_INCLUDED_NOT_AN_ADDITIONAL_SURCHARGE",
+      "8000_BPS_OF_FEE_TO_DYNAMIC_CURRENT_SHARD_NFT_HOLDER_SET",
+      "1000_BPS_OF_FEE_TO_CURRENT_BUILDER_ROLE_RECIPIENT_WITH_SELF_HANDOFF",
+      "1000_BPS_OF_FEE_TO_IMMUTABLE_PROGRAMMABLE_RECIPIENT",
+      "DISTINCT_CLAIM_RIGHTS_AND_ACCOUNTING_SAFETY_EVIDENCE",
+      "EXACT_ROUTE_PROFILE_REVENUE_POLICY_AND_RUNTIME_BINDINGS"
+    ],
+    "registrationCanFollowRouterExecution": true,
+    "replacementAtomicRegistrarRequired": false,
+    "replacementShardsRouterOrFactoryRequired": false
+  },
+  "forbiddenShortcuts": [
+    "REGISTER_AS_NATIVE_CUSTOM_10_BPS_ADDED_ON_TOP",
+    "REGISTER_AS_AEON_PARTNER_TEMPLATE",
+    "REGISTER_AS_NO_QUALIFYING_MARKET",
+    "COLLAPSE_HOLDER_AND_BUILDER_CLAIM_RIGHTS_INTO_ONE_FAKE_FIXED_RECIPIENT",
+    "CLAIM_PUBLIC_LAUNCHABILITY_FROM_PREDICTED_ADDRESSES_OR_PARTIAL_ROUTER_DEPLOYMENT"
+  ],
+  "commitment": {
+    "type": "ProgrammableShardsRouteClosureV1(bytes32 sourceRevisionHash,bytes32 nestedRouteArtifactSha256,bytes32 profileKey,bytes32 revenuePolicyHash,bytes32 initialRevenueStateHash,uint16 totalFeeBps,uint16 holderShareOfFeeBps,uint16 builderShareOfFeeBps,uint16 programmableShareOfFeeBps,address registry,bytes32 registryRuntimeCodeHash,address feeVerifier,bytes32 feeVerifierRuntimeCodeHash,uint64 observedBlock,bytes32 observedBlockHash,bool currentContractsCanLaunch,bool newRouteContractRequired,bool newRegistryGenerationRequired)",
+    "typeHash": "0x3706d438c9a007d6f5a72b6ab4bd75b322c82bf13c5a6cbce5144cbfd054f977",
+    "value": "0xa678a79e712b4e99889a2a08bdfe97177b6d2a290fa85316045e816a15c548ad"
+  }
+}

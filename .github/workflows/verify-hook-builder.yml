@@ -73,9 +73,9 @@ jobs:
           test "$(git -C "$GITHUB_WORKSPACE/base" rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24.14.0
+          node-version: 24.19.0
 
       - name: Fetch exact candidate merge as blobless data
         id: candidate_fetch
@@ -108,13 +108,14 @@ jobs:
           echo "merge_commit=$merge_commit" >> "$GITHUB_OUTPUT"
 
       - name: Enforce trusted main CI control-plane guard
+        id: ci_control
         shell: bash
         env:
           EXPECTED_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
           EXPECTED_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha }}
           EXPECTED_MERGE_COMMIT: ${{ steps.candidate_fetch.outputs.merge_commit }}
-          APPROVED_MAIN_CI_CONTROL_COMMIT: 4758c979ce1538eacaa33e35b4f1297809af79e3
-          APPROVED_MAIN_CI_CONTROL_TREE: 990af077adcc3dcdc4f134882f8fac489938474b
+          APPROVED_MAIN_CI_CONTROL_COMMIT: 140771f8fc2b3a30cc021f6352ccd830850e68e6
+          APPROVED_MAIN_CI_CONTROL_TREE: a5f359e200ab42917e6c2055e1d5a9685e33c137
         run: |
           set -euo pipefail
 
@@ -123,13 +124,23 @@ jobs:
             echo "::error::The trusted default branch does not contain the main CI control-plane guard."
             exit 1
           fi
-          timeout --signal=KILL 30s node "$guard" \
+          guard_report="$(timeout --signal=KILL 30s node "$guard" \
             --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
             --expected-base-commit "$EXPECTED_BASE_COMMIT" \
             --expected-candidate-commit "$EXPECTED_CANDIDATE_COMMIT" \
             --expected-merge-commit "$EXPECTED_MERGE_COMMIT" \
             --approved-commit "$APPROVED_MAIN_CI_CONTROL_COMMIT" \
-            --approved-tree "$APPROVED_MAIN_CI_CONTROL_TREE"
+            --approved-tree "$APPROVED_MAIN_CI_CONTROL_TREE")"
+          approved_exact_candidate="$(node -e '
+            const report = JSON.parse(process.argv[1]);
+            const allowed = new Set([
+              "no-main-ci-control-change",
+              "approved-exact-main-ci-control-change"
+            ]);
+            if (report.schemaVersion !== 1 || !allowed.has(report.result)) process.exit(1);
+            process.stdout.write(report.result === "approved-exact-main-ci-control-change" ? "true" : "false");
+          ' "$guard_report")"
+          echo "approved_exact_candidate=$approved_exact_candidate" >> "$GITHUB_OUTPUT"
 
       - name: Classify candidate data with trusted default-branch code
         id: classify
@@ -142,12 +153,20 @@ jobs:
             echo "::error::The default branch does not contain the trusted public-intake classifier."
             exit 1
           fi
-          mode="$(timeout --signal=KILL 30s node "$validator" --classify \
-            --base-root "$GITHUB_WORKSPACE/base" \
-            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
-            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
-            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
-            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}")"
+          if [[ "${{ steps.ci_control.outputs.approved_exact_candidate }}" == "true" ]]; then
+            # The trusted guard has already bound the complete candidate commit
+            # and tree. Keep the generic 256-file classifier limit unchanged for
+            # every other pull request, while routing this one frozen maintenance
+            # candidate to ordinary read-only PR CI without hydrating its blobs.
+            mode="builder-maintenance"
+          else
+            mode="$(timeout --signal=KILL 30s node "$validator" --classify \
+              --base-root "$GITHUB_WORKSPACE/base" \
+              --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+              --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+              --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+              --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}")"
+          fi
           case "$mode" in
             application|builder-maintenance|no-op) ;;
             *)

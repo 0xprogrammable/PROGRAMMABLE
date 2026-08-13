@@ -24,6 +24,17 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain(': "Onchain"');
   });
 
+  it("preloads the initial chart once per token instead of on every detail refresh", () => {
+    const viewSource = detailSource.slice(
+      detailSource.indexOf("export function TokenDetailView"),
+    );
+
+    expect(viewSource.match(/preloadTokenChart/g)).toHaveLength(1);
+    expect(viewSource).toMatch(
+      /void preloadTokenChart\(normalizedAddress, "1d"\);\s*\}, \[normalizedAddress, preview\]\);/,
+    );
+  });
+
   it("announces the exact inspected chart point without duplicating the visual tooltip", () => {
     const activeValueIdIndex = chartSource.indexOf("id={activeValueId}");
     const liveRegion = chartSource.slice(
@@ -139,8 +150,13 @@ describe("token detail layout", () => {
   });
 
   it("uses only typed chart FDV while labeling total-supply value as FDV", () => {
-    expect(detailSource).toContain(': "FDV",');
+    expect(detailSource).toContain(
+      'const currentLabel = isMarketCap ? "Market cap" : "FDV";',
+    );
     expect(detailSource).toContain('valuation.metric === "market-cap"');
+    expect(detailSource).toContain(
+      'valuation.supplyBasis === "circulating"',
+    );
     expect(detailSource).not.toContain("fdvEthWei={");
     expect(detailSource).not.toContain("fdvUsdWad={");
     expect(chartSource).not.toContain("payload.marketCap");

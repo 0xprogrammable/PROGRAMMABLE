@@ -1,0 +1,300 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://programmable.example/schemas/token-image-upload-receipt-v1.schema.json",
+  "title": "Programmable signed token image upload receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "payload",
+    "payloadSha256",
+    "signature",
+    "signatureSha256",
+    "providerReceipt",
+    "providerReceiptSha256",
+    "providerReceiptSignature",
+    "providerReceiptSignatureSha256"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.signed-token-image-upload-receipt.v1"
+    },
+    "payload": {
+      "$ref": "#/definitions/payload"
+    },
+    "payloadSha256": {
+      "$ref": "#/definitions/sha256"
+    },
+    "signature": {
+      "$ref": "#/definitions/ed25519Signature"
+    },
+    "signatureSha256": {
+      "$ref": "#/definitions/sha256"
+    },
+    "providerReceipt": {
+      "$ref": "#/definitions/providerReceipt"
+    },
+    "providerReceiptSha256": {
+      "$ref": "#/definitions/sha256"
+    },
+    "providerReceiptSignature": {
+      "$ref": "#/definitions/ed25519Signature"
+    },
+    "providerReceiptSignatureSha256": {
+      "$ref": "#/definitions/sha256"
+    }
+  },
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ed25519Signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "audience",
+        "launchScope",
+        "uploadOwner",
+        "blob",
+        "image",
+        "signingAuthority",
+        "issuedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.token-image-upload-receipt.v1"
+        },
+        "audience": {
+          "const": "programmable.launch-presentation-image.v1"
+        },
+        "launchScope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "applicationId",
+            "applicationHandle",
+            "grantId",
+            "grantBindingHash"
+          ],
+          "properties": {
+            "applicationId": {
+              "type": "string",
+              "maxLength": 80,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "applicationHandle": {
+              "type": "string",
+              "pattern": "^github-[0-9a-f]{64}$"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "grantBindingHash": {
+              "$ref": "#/definitions/sha256"
+            }
+          }
+        },
+        "uploadOwner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "privyUserId",
+            "githubUserId",
+            "githubPrincipalHash"
+          ],
+          "properties": {
+            "provider": {
+              "const": "privy-github"
+            },
+            "privyUserId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "githubUserId": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}$"
+            },
+            "githubPrincipalHash": {
+              "$ref": "#/definitions/sha256"
+            }
+          }
+        },
+        "blob": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "storeId",
+            "host",
+            "pathname",
+            "url",
+            "etag"
+          ],
+          "properties": {
+            "storeId": {
+              "const": "store_k2uoiPT9WCHJtz3H"
+            },
+            "host": {
+              "const": "k2uoipt9wchjtz3h.public.blob.vercel-storage.com"
+            },
+            "pathname": {
+              "type": "string",
+              "pattern": "^token-images/[A-Za-z0-9][A-Za-z0-9._-]{0,199}\\.webp$"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^https://k2uoipt9wchjtz3h\\.public\\.blob\\.vercel-storage\\.com/token-images/[A-Za-z0-9][A-Za-z0-9._-]{0,199}\\.webp$"
+            },
+            "etag": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^\\s\\u0000-\\u001f\\u007f\"]+$"
+            }
+          }
+        },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contentSha256",
+            "mediaType",
+            "byteLength",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "contentSha256": {
+              "$ref": "#/definitions/sha256"
+            },
+            "mediaType": {
+              "const": "image/webp"
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "width": {
+              "const": 1000
+            },
+            "height": {
+              "const": 1000
+            }
+          }
+        },
+        "signingAuthority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "providerIdentityHash",
+            "keyId",
+            "keyEpoch",
+            "publicKeySpkiSha256"
+          ],
+          "properties": {
+            "providerIdentityHash": {
+              "$ref": "#/definitions/sha256"
+            },
+            "keyId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "keyEpoch": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "publicKeySpkiSha256": {
+              "$ref": "#/definitions/sha256"
+            }
+          }
+        },
+        "issuedAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/definitions/timestamp"
+        }
+      }
+    },
+    "providerReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "outcome",
+        "audience",
+        "keyId",
+        "keyEpoch",
+        "algorithm",
+        "providerIdentityHash",
+        "idempotencyKey",
+        "messageSha256",
+        "requestDigest",
+        "signature",
+        "observedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.remote-signing-provider-receipt.v2"
+        },
+        "outcome": {
+          "const": "completed"
+        },
+        "audience": {
+          "const": "programmable.launch-presentation-image.v1"
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "keyEpoch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "providerIdentityHash": {
+          "$ref": "#/definitions/sha256"
+        },
+        "idempotencyKey": {
+          "$ref": "#/definitions/sha256"
+        },
+        "messageSha256": {
+          "$ref": "#/definitions/sha256"
+        },
+        "requestDigest": {
+          "$ref": "#/definitions/sha256"
+        },
+        "signature": {
+          "$ref": "#/definitions/ed25519Signature"
+        },
+        "observedAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/definitions/timestamp"
+        }
+      }
+    }
+  }
+}

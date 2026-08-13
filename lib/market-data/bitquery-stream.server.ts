@@ -224,11 +224,21 @@ export const BITQUERY_MARKET_STREAM_QUERY = `
         }
       ) {
         Block { Number Time }
+        Log { Index }
         PoolEvent {
-          Pool { PoolId }
-          Liquidity { AmountCurrencyAInUSD AmountCurrencyBInUSD }
+          Pool {
+            PoolId
+            CurrencyA { SmartContract Symbol }
+            CurrencyB { SmartContract Symbol }
+          }
+          Liquidity {
+            AmountCurrencyA
+            AmountCurrencyAInUSD
+            AmountCurrencyB
+            AmountCurrencyBInUSD
+          }
         }
-        Transaction { Hash }
+        Transaction { Hash Index }
       }
     }
   }

@@ -13,6 +13,7 @@ import {
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { XBrandIcon } from "@/components/brand-icons";
+import { CreateGuide } from "@/components/create-guide";
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
@@ -34,10 +35,6 @@ function loadCustomLaunch() {
   return import("@/components/custom-launch-experience");
 }
 
-function loadManualApplicantLaunch() {
-  return import("@/components/manual-applicant-launch");
-}
-
 const LazyLaunchBuilderForm = lazy(async () => {
   const launchModule = await loadLaunchForm();
   return { default: launchModule.LaunchBuilderForm };
@@ -48,12 +45,13 @@ const LazyCustomLaunchExperience = lazy(async () => {
   return { default: customModule.CustomLaunchExperience };
 });
 
-const LazyManualApplicantLaunch = lazy(async () => {
-  const applicantModule = await loadManualApplicantLaunch();
-  return { default: applicantModule.ManualApplicantLaunch };
-});
-
-function LaunchFormLoading({ onBack }: { onBack: () => void }) {
+function LaunchFormLoading({
+  onBack,
+  title = "Create token",
+}: {
+  onBack: () => void;
+  title?: string;
+}) {
   return (
     <div
       className={`launch-page page-width ${launchExperience.formPage} ${launchExperience.formLoadingPage}`}
@@ -69,7 +67,7 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
           Back
         </button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
-          <h1>Create token</h1>
+          <h1>{title}</h1>
         </div>
       </header>
       <div
@@ -87,32 +85,22 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
 
 export function LaunchExperience({
   customLaunchPublicEnabled,
-  manualApplicantLaunchEnabled = false,
   trustedLaunchPermitSigners = [],
 }: {
   customLaunchPublicEnabled: boolean;
-  manualApplicantLaunchEnabled?: boolean;
   trustedLaunchPermitSigners?: readonly TrustedLaunchPermitSignerV2[];
 }) {
-  const [selectedModel, setSelectedModel] = useState<
-    LaunchModel | "custom" | "manual-applicant" | null
-  >(null);
-  const manualApplicantButtonRef = useRef<HTMLButtonElement>(null);
-  const restoreManualApplicantFocusRef = useRef(false);
+  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
+  const customLaunchButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreCustomLaunchFocusRef = useRef(false);
 
   useEffect(() => {
-    if (selectedModel !== null || !restoreManualApplicantFocusRef.current) return;
-    restoreManualApplicantFocusRef.current = false;
-    manualApplicantButtonRef.current?.focus();
+    if (selectedModel !== null || !restoreCustomLaunchFocusRef.current) return;
+    restoreCustomLaunchFocusRef.current = false;
+    customLaunchButtonRef.current?.focus();
   }, [selectedModel]);
 
-  function chooseModel(candidate: LaunchModel | "custom" | "manual-applicant") {
-    if (candidate === "manual-applicant") {
-      if (!manualApplicantLaunchEnabled) return;
-      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-      setSelectedModel(candidate);
-      return;
-    }
+  function chooseModel(candidate: LaunchModel | "custom") {
     if (candidate === "custom") {
       if (!customLaunchPublicEnabled) return;
       window.scrollTo({ left: 0, top: 0, behavior: "auto" });
@@ -134,7 +122,7 @@ export function LaunchExperience({
   }
 
   function returnToModels() {
-    restoreManualApplicantFocusRef.current = selectedModel === "manual-applicant";
+    restoreCustomLaunchFocusRef.current = selectedModel === "custom";
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(null);
   }
@@ -142,8 +130,8 @@ export function LaunchExperience({
   if (!selectedModel) {
     return (
       <LaunchModelPicker
-        manualApplicantLaunchEnabled={manualApplicantLaunchEnabled}
-        manualApplicantButtonRef={manualApplicantButtonRef}
+        customLaunchPublicEnabled={customLaunchPublicEnabled}
+        customLaunchButtonRef={customLaunchButtonRef}
         onChoose={chooseModel}
       />
     );
@@ -151,19 +139,11 @@ export function LaunchExperience({
 
   if (selectedModel === "custom") {
     return (
-      <Suspense fallback={<LaunchFormLoading onBack={returnToModels} />}>
+      <Suspense fallback={<LaunchFormLoading title="Custom launch" onBack={returnToModels} />}>
         <LazyCustomLaunchExperience
           onBack={returnToModels}
           trustedLaunchPermitSigners={trustedLaunchPermitSigners}
         />
-      </Suspense>
-    );
-  }
-
-  if (selectedModel === "manual-applicant") {
-    return (
-      <Suspense fallback={<LaunchFormLoading onBack={returnToModels} />}>
-        <LazyManualApplicantLaunch onBack={returnToModels} />
       </Suspense>
     );
   }
@@ -180,19 +160,23 @@ export function LaunchExperience({
 }
 
 export function LaunchModelPicker({
-  manualApplicantLaunchEnabled = false,
-  manualApplicantButtonRef,
+  customLaunchPublicEnabled = false,
+  customLaunchButtonRef,
   onChoose,
 }: {
-  manualApplicantLaunchEnabled?: boolean;
-  manualApplicantButtonRef?: RefObject<HTMLButtonElement | null>;
-  onChoose: (model: LaunchModel | "manual-applicant") => void;
+  /**
+   * This is the same closed-world gate used by the generic Custom Launch API.
+   * The picker must never infer launchability from a legacy/manual flag.
+   */
+  customLaunchPublicEnabled?: boolean;
+  customLaunchButtonRef?: RefObject<HTMLButtonElement | null>;
+  onChoose: (model: LaunchModel | "custom") => void;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
   };
-  const preloadManualApplicantLaunch = () => {
-    void loadManualApplicantLaunch();
+  const preloadCustomLaunch = () => {
+    void loadCustomLaunch();
   };
 
   return (
@@ -203,22 +187,23 @@ export function LaunchModelPicker({
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
         <h1>Choose your launch model</h1>
+        <CreateGuide />
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
-        {manualApplicantLaunchEnabled ? (
+        {customLaunchPublicEnabled ? (
           <button
-            ref={manualApplicantButtonRef}
+            ref={customLaunchButtonRef}
             className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-            data-launch-model-option="manual-applicant"
+            data-launch-model-option="custom"
             data-launch-model-available="true"
             data-launch-model-launchable="true"
             type="button"
-            aria-labelledby="launch-model-manual-applicant-title"
-            aria-describedby="launch-model-manual-applicant-description"
-            onPointerEnter={preloadManualApplicantLaunch}
-            onFocus={preloadManualApplicantLaunch}
-            onClick={() => onChoose("manual-applicant")}
+            aria-labelledby="launch-model-custom-title"
+            aria-describedby="launch-model-custom-description"
+            onPointerEnter={preloadCustomLaunch}
+            onFocus={preloadCustomLaunch}
+            onClick={() => onChoose("custom")}
           >
             <span
               className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
@@ -248,22 +233,22 @@ export function LaunchModelPicker({
               <span
                 className={`launch-model-card-heading ${launchExperience.modelHeading}`}
               >
-                <strong id="launch-model-manual-applicant-title">
+                <strong id="launch-model-custom-title">
                   Custom Hook
                 </strong>
-                <small data-status="ready">Ready</small>
+                <small data-status="available">Available</small>
               </span>
               <span
                 className={`launch-model-description ${launchExperience.modelDescription}`}
-                id="launch-model-manual-applicant-description"
+                id="launch-model-custom-description"
               >
-                Sign in with the GitHub account and wallet approved in your
-                Hookbuilder submission. Your exact coin loads automatically.
+                Launch a project only after its exact GitHub revision has been
+                reviewed and approved by Programmable.
               </span>
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Open Custom Hook launch
+                Open approved Custom Hook launch
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             </span>

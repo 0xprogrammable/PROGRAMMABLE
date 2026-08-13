@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { formatUnits, parseUnits, type Hex } from "viem";
 import {
   useCallback,
@@ -3854,7 +3855,7 @@ function ProfileAccountWorkspace({
                     setClaimPage(Math.max(1, claimPageData.currentPage - 1))
                   }
                 >
-                  <span aria-hidden="true">←</span>
+                  <ChevronLeft aria-hidden="true" size={17} strokeWidth={1.8} />
                 </button>
                 <span aria-live="polite" aria-atomic="true">
                   {claimPageData.currentPage} / {claimPageData.totalPages}
@@ -3874,7 +3875,7 @@ function ProfileAccountWorkspace({
                     )
                   }
                 >
-                  <span aria-hidden="true">→</span>
+                  <ChevronRight aria-hidden="true" size={17} strokeWidth={1.8} />
                 </button>
               </nav>
             ) : null}
@@ -4507,7 +4508,7 @@ function ProfileClaimDialog({
             aria-label="Close claim rewards"
             onClick={onClose}
           >
-            <span aria-hidden="true">×</span>
+            <X aria-hidden="true" size={18} strokeWidth={1.8} />
           </button>
         </header>
 

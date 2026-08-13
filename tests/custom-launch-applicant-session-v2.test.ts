@@ -35,6 +35,8 @@ import {
   createCustomLaunchWebsiteClientV2,
   CustomLaunchWebsiteRequestErrorV2,
 } from "../lib/custom-launch/client-v2";
+import { ApplicantRefreshUserUnavailableErrorV1 } from
+  "../lib/custom-launch/applicant-refresh-user-gate-v1";
 import type { PrincipalCustomLaunchApplicationSummaryV2 } from "../lib/custom-launch/contract-v2";
 
 const digest = (digit: string) => `sha256:${digit.repeat(64)}` as const;
@@ -416,6 +418,22 @@ describe("custom launch applicant session currentness", () => {
     });
     expect(refreshApplicantSession).toHaveBeenCalledOnce();
     expect(downstream).not.toHaveBeenCalled();
+  });
+
+  it("preserves refresh rate limits as retryable service capacity", async () => {
+    const request = acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
+      refreshApplicantSession: async () => {
+        throw new ApplicantRefreshUserUnavailableErrorV1();
+      },
+    }));
+
+    await expect(request).rejects.toMatchObject({
+      code: "applicant_session_rate_limited",
+      status: 429,
+    });
+    await request.catch((error: unknown) => {
+      expect(customLaunchApplicantRecoveryV2(error)).toBe("retry");
+    });
   });
 
   it("keeps the production dangerous sequence at zero effects for refresh-null", async () => {

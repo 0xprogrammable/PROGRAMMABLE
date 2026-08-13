@@ -39,10 +39,35 @@ test("CI control guard executes only exact default-branch code over inert candid
 });
 
 test("trusted guard is bound to the exact audited main candidate commit and tree", () => {
-  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_COMMIT: 4758c979ce1538eacaa33e35b4f1297809af79e3/u);
-  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_TREE: 990af077adcc3dcdc4f134882f8fac489938474b/u);
+  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_COMMIT: 140771f8fc2b3a30cc021f6352ccd830850e68e6/u);
+  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_TREE: a5f359e200ab42917e6c2055e1d5a9685e33c137/u);
   assert.match(workflow, /--approved-commit "\$APPROVED_MAIN_CI_CONTROL_COMMIT"/u);
   assert.match(workflow, /--approved-tree "\$APPROVED_MAIN_CI_CONTROL_TREE"/u);
+});
+
+test("only the exact approved control-plane candidate bypasses the generic changed-file classifier", () => {
+  const publicIntake = section(workflow, "  public-intake:");
+  assert.match(publicIntake, /id: ci_control/u);
+  assert.match(publicIntake, /guard_report="\$\(timeout --signal=KILL 30s node "\$guard"/u);
+  assert.match(
+    publicIntake,
+    /report\.result === "approved-exact-main-ci-control-change" \? "true" : "false"/u
+  );
+  assert.match(
+    publicIntake,
+    /if \[\[ "\$\{\{ steps\.ci_control\.outputs\.approved_exact_candidate \}\}" == "true" \]\]; then\s+# [^\n]+\n(?:\s+# [^\n]+\n){3}\s+mode="builder-maintenance"\s+else\s+mode="\$\(timeout --signal=KILL 30s node "\$validator" --classify/u
+  );
+  assert.doesNotMatch(publicIntake, /maximum-changed-files|maximumChangedFiles/u);
+});
+
+test("trusted production intake uses the exact current Node 24 LTS runtime", () => {
+  const publicIntake = section(workflow, "  public-intake:");
+  assert.match(
+    publicIntake,
+    /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7\.0\.0/u
+  );
+  assert.match(publicIntake, /node-version: 24\.19\.0/u);
+  assert.doesNotMatch(publicIntake, /node-version: (?:20|22)(?:\D|$)/u);
 });
 
 function section(source, start, end = null) {

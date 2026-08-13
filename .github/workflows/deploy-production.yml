@@ -8,6 +8,11 @@ on:
         required: true
         default: false
         type: boolean
+      custom_launch_dark_release:
+        description: Require the detached Custom Launch release record and stage a disabled dark candidate
+        required: true
+        default: false
+        type: boolean
       custom_launch_release_record_commit_sha:
         description: Exact commit on command-center-release-records containing the detached record
         required: false
@@ -228,11 +233,13 @@ jobs:
         id: custom-launch-policy
         env:
           CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED: ${{ inputs.custom_launch_public_enablement }}
+          CUSTOM_LAUNCH_DARK_RELEASE_REQUESTED: ${{ inputs.custom_launch_dark_release }}
           CUSTOM_LAUNCH_PRODUCTION_MODE: ${{ vars.CUSTOM_LAUNCH_PRODUCTION_MODE }}
         run: >-
           node scripts/resolve-custom-launch-staging-policy.mjs
           --env-file .vercel/.env.production.local
           --requested "$CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED"
+          --dark-release-requested "$CUSTOM_LAUNCH_DARK_RELEASE_REQUESTED"
           --production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"
           --github-output "$GITHUB_OUTPUT"
 
@@ -279,6 +286,7 @@ jobs:
         if: steps.custom-launch-policy.outputs.release_record_required == 'true'
         env:
           RECORD_COMMIT_SHA: ${{ inputs.custom_launch_release_record_commit_sha }}
+          RECORD_VERIFICATION_LEVEL: ${{ steps.custom-launch-policy.outputs.release_record_verification_level }}
           EXPECTED_RECORD_SHA256: ${{ inputs.custom_launch_release_record_sha256 }}
           EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
           EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA }}
@@ -298,6 +306,13 @@ jobs:
             echo "The detached record must not be stored in its Website subject commit" >&2
             exit 1
           fi
+          case "$RECORD_VERIFICATION_LEVEL" in
+            staging|dark-staging) ;;
+            *)
+              echo "Custom Launch release-record verification level is invalid" >&2
+              exit 1
+              ;;
+          esac
           record_ref="refs/remotes/origin/command-center-release-records"
           record_path="release-records/custom-launch-v1/release-record.json"
           record_file="$RUNNER_TEMP/custom-launch-release-record.json"
@@ -333,7 +348,7 @@ jobs:
           attestation_summary_file="$RUNNER_TEMP/custom-launch-cross-repository-attestation.json"
           test ! -e "$attestation_summary_file"
           node scripts/verify-custom-launch-release-record.mjs "$record_file" \
-            --require staging \
+            --require "$RECORD_VERIFICATION_LEVEL" \
             --verify-cross-repository-attestation \
             --cross-repository-attestation-summary "$attestation_summary_file" \
             --expect-website-commit "$GITHUB_SHA" \
@@ -371,7 +386,8 @@ jobs:
             echo "- Backend cross-repository attestation: \`${{ steps.custom-launch-record.outputs.cross_repository_attestation_commit_sha }}\`"
             echo "- Backend binding document: \`${{ steps.custom-launch-record.outputs.cross_repository_binding_document_sha256 }}\`"
             echo "- Review authority: \`${{ steps.custom-launch-record.outputs.review_authority_mode }}\`"
-            echo "- Gate: verified for staging only"
+            echo "- Gate: \`${{ steps.custom-launch-policy.outputs.release_record_verification_level }}\` only"
+            echo "- Stage mode: \`${{ steps.custom-launch-policy.outputs.staging_mode }}\`"
             echo
             echo "No promotion is authorized by this staging gate."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -421,7 +437,7 @@ jobs:
 
       - name: Gate exact staged Custom Launch candidate
         id: custom-launch-canary
-        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        if: steps.custom-launch-policy.outputs.staging_mode == 'enabled'
         env:
           STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
@@ -456,11 +472,62 @@ jobs:
           echo "evidence_path=$RUNNER_TEMP/custom-launch-candidate-canary-evidence.json" >> "$GITHUB_OUTPUT"
 
       - name: Preserve redacted Custom Launch candidate evidence
-        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        if: steps.custom-launch-policy.outputs.staging_mode == 'enabled'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.custom-launch-canary.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Gate exact staged dark Custom Launch candidate
+        id: custom-launch-dark-release
+        if: steps.custom-launch-policy.outputs.staging_mode == 'dark'
+        env:
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA: ${{ github.sha }}
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: ${{ steps.custom-launch-record.outputs.review_authority_mode }}
+          RELEASE_SUBJECT_SHA256: ${{ steps.custom-launch-record.outputs.release_subject_sha256 }}
+          DETACHED_RECORD_SHA256: ${{ steps.custom-launch-record.outputs.detached_record_sha256 }}
+          CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA: ${{ steps.custom-launch-record.outputs.cross_repository_attestation_commit_sha }}
+          CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256: ${{ steps.custom-launch-record.outputs.cross_repository_binding_document_sha256 }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          deployment_host="$(node --input-type=module -e '
+            const url = new URL(process.env.STAGED_TARGET_URL);
+            if (
+              url.protocol !== "https:" ||
+              url.username !== "" ||
+              url.password !== "" ||
+              url.pathname !== "/" ||
+              url.search !== "" ||
+              url.hash !== "" ||
+              !url.hostname.endsWith(".vercel.app")
+            ) throw new Error("Custom Launch dark target is not an immutable Vercel origin");
+            process.stdout.write(url.host);
+          ')"
+          export PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST="$deployment_host"
+          evidence_path="$RUNNER_TEMP/custom-launch-dark-release-evidence.json"
+          npm run probe:custom-launch -- \
+            "--base-url=$STAGED_TARGET_URL" \
+            "--deployment-id=$STAGED_DEPLOYMENT_ID" \
+            "--dark-release-evidence-output=$evidence_path" \
+            "--release-subject-sha256=$RELEASE_SUBJECT_SHA256" \
+            "--detached-record-sha256=$DETACHED_RECORD_SHA256" \
+            "--cross-repository-attestation-commit-sha=$CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA" \
+            "--cross-repository-binding-document-sha256=$CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256" \
+            --require-disabled
+          echo "evidence_path=$evidence_path" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve redacted Custom Launch dark release evidence
+        if: steps.custom-launch-policy.outputs.staging_mode == 'dark'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-launch-dark-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.custom-launch-dark-release.outputs.evidence_path }}
           if-no-files-found: error
           retention-days: 90
 
@@ -540,6 +607,16 @@ jobs:
           const { verifyBitqueryGoldenMarketParityV1 } = await import(
             "./scripts/perf/bitquery-golden-market-parity.mjs"
           );
+          const {
+            boundedStaleMarketTimeV1,
+            verifyBitqueryHistoricalGoldenReleaseV1,
+          } = await import(
+            "./scripts/perf/bitquery-historical-release-gate.mjs"
+          );
+          const goldenTokenAddress =
+            "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
+          const goldenPoolId =
+            "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
           const origin = new URL(process.env.STAGED_TARGET_URL);
           if (
             origin.protocol !== "https:" ||
@@ -617,9 +694,7 @@ jobs:
           const currentMarketTime = (value) =>
             validMarketTime(value) &&
             Date.now() - Date.parse(value) <= 6 * 60_000;
-          const boundedStaleMarketTime = (value) =>
-            validMarketTime(value) &&
-            Date.now() - Date.parse(value) <= 24 * 60 * 60_000;
+          const boundedStaleMarketTime = boundedStaleMarketTimeV1;
 
           const requestJson = async (path, contract) => {
             let lastError;
@@ -778,18 +853,41 @@ jobs:
                 "staged Bitquery Highest FDV is not monotonically descending",
               );
             }
+            const tokenAddress = token?.tokenAddress?.toLowerCase();
             const primary = token.marketData?.pools?.find(
               (pool) => pool.identity?.poolId === token.marketData?.primaryPoolId,
             );
             if (
+              !/^0x[0-9a-f]{40}$/.test(tokenAddress ?? "") ||
+              tokenAddress === goldenTokenAddress ||
+              token.marketData?.schemaVersion !==
+                "programmable.market-data.v1" ||
+              token.marketData.source !== "bitquery" ||
+              !currentMarketTime(token.marketData.generatedAt) ||
+              !/^0x[0-9a-f]{64}$/.test(
+                token.marketData.primaryPoolId ?? "",
+              ) ||
               !primary ||
+              primary.identity?.chainId !== "1" ||
+              primary.identity?.tokenAddress !== tokenAddress ||
+              primary.identity?.poolId !== token.marketData.primaryPoolId ||
+              primary.identity?.protocol !== "uniswap_v4" ||
+              primary.source !== "bitquery" ||
               primary.status !== "current" ||
               primary.liquidity?.freshness !== "current" ||
               !positiveInteger(primary.liquidity?.valueUsdWad) ||
-              primary.valuation?.asOfTime !== valuation.asOfTime
+              !positiveInteger(primary.liquidity?.asOfBlock) ||
+              primary.liquidity?.asOfTime !== valuation.asOfTime ||
+              !currentMarketTime(primary.liquidity?.asOfTime) ||
+              primary.valuation?.status !== "available" ||
+              primary.valuation.metric !== "fdv" ||
+              primary.valuation.supplyBasis !== "total" ||
+              primary.valuation.freshness !== "current" ||
+              primary.valuation.valueUsdWad !== valuation.valueWad ||
+              primary.valuation.asOfTime !== valuation.asOfTime
             ) {
               throw new Error(
-                "staged Bitquery current FDV lacks current trade and liquidity evidence",
+                "staged Bitquery current public FDV lacks exact primary-pool liquidity evidence",
               );
             }
             previousCurrentFdv = value;
@@ -825,6 +923,11 @@ jobs:
           ) {
             throw new Error(
               "staged Bitquery Explore has inconsistent market provenance",
+            );
+          }
+          if (currentFdvCount < 1) {
+            throw new Error(
+              "staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence",
             );
           }
           const newestPageSize = 100;
@@ -1044,19 +1147,19 @@ jobs:
               );
             }
           }
-          const goldenTokenAddress =
-            "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
-          const goldenPoolId =
-            "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
-          const goldenExplore = await requestJson(
+          const goldenSearch = await requestJson(
             `/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap`,
             bitqueryMarketContract,
           );
-          const goldenExploreToken = goldenExplore.tokens?.find(
-            (token) => token?.tokenAddress?.toLowerCase() === goldenTokenAddress,
-          );
-          if (goldenExplore.status !== "ready" || !goldenExploreToken) {
-            throw new Error("staged Explore did not retain the canonical PCAN identity");
+          if (
+            goldenSearch.status !== "ready" ||
+            !Array.isArray(goldenSearch.tokens) ||
+            goldenSearch.tokens.some(
+              (token) => token?.tokenAddress?.toLowerCase() === goldenTokenAddress,
+            ) ||
+            goldenSearch.total !== 0
+          ) {
+            throw new Error("staged Explore exposed the non-public PCAN release canary");
           }
           const goldenDetail = await requestJson(
             `/api/explore/token?address=${goldenTokenAddress}`,
@@ -1105,27 +1208,19 @@ jobs:
             !validMarketTime(goldenValuation.asOfTime) ||
             (goldenValuation.freshness === "current" &&
               !currentMarketTime(goldenValuation.asOfTime)) ||
-            (goldenValuation.freshness === "stale" &&
-              !boundedStaleMarketTime(goldenValuation.asOfTime)) ||
             goldenPool?.valuation?.metric !== "fdv" ||
             goldenPool?.valuation?.marketCapUsdWad !== undefined ||
             expectedGoldenFdv === null ||
             expectedGoldenFdv <= 0n ||
             goldenPool?.valuation?.fdvUsdWad !== expectedGoldenFdv.toString() ||
             goldenValuation.valueWad !== expectedGoldenFdv.toString() ||
-            goldenExploreToken.valuation?.status !== "available" ||
-            goldenExploreToken.valuation.valueWad !== goldenValuation.valueWad ||
-            goldenExploreToken.valuation.freshness !== goldenValuation.freshness ||
-            goldenExploreToken.valuation.asOfTime !== goldenValuation.asOfTime ||
             goldenDetail.__marketHeaders?.marketAsOf !== goldenValuation.asOfTime ||
             (goldenValuation.freshness === "current"
               ? goldenDetail.__marketHeaders?.priceSource !== "bitquery"
               : goldenDetail.__marketHeaders?.priceSource !== null) ||
             (goldenValuation.freshness === "current"
-              ? goldenDetail.token.fdvUsdWad !== goldenValuation.valueWad ||
-                goldenExploreToken.fdvUsdWad !== goldenValuation.valueWad
-              : goldenDetail.token.fdvUsdWad !== undefined ||
-                goldenExploreToken.fdvUsdWad !== undefined)
+              ? goldenDetail.token.fdvUsdWad !== goldenValuation.valueWad
+              : goldenDetail.token.fdvUsdWad !== undefined)
           ) {
             throw new Error("staged PCAN market valuation is not Bitquery-bound");
           }
@@ -1153,8 +1248,6 @@ jobs:
             !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
             (goldenChart.valuation?.freshness === "current" &&
               !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
-            (goldenChart.valuation?.freshness === "stale" &&
-              !boundedStaleMarketTime(goldenChart.valuation?.asOfTime)) ||
             goldenChart.asOfTime !== goldenChart.points.at(-1)?.time ||
             goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
             goldenChart.__marketHeaders?.dataQuality !== goldenChart.status ||
@@ -1187,23 +1280,28 @@ jobs:
             previousChartTime = time;
             previousChartBlock = block;
           }
+          const historicalGoldenRelease =
+            verifyBitqueryHistoricalGoldenReleaseV1({
+              detailToken: goldenDetail.token,
+              chart: goldenChart,
+              parity: goldenParity,
+            });
           const historicalPaidPathVerified =
-            goldenParity.schemaVersion ===
-              "programmable.bitquery-golden-market-parity.v1" &&
-            goldenParity.tokenAddress === goldenTokenAddress &&
-            goldenParity.poolId === goldenPoolId &&
-            goldenParity.confirmations >= 12 &&
+            historicalGoldenRelease.schemaVersion ===
+              "programmable.bitquery-historical-release.v1" &&
+            historicalGoldenRelease.tokenAddress === goldenTokenAddress &&
+            historicalGoldenRelease.poolId === goldenPoolId &&
+            historicalGoldenRelease.blockNumber ===
+              goldenPool.latestTrade.blockNumber &&
+            historicalGoldenRelease.bitqueryFdvUsdWad ===
+              goldenValuation.valueWad &&
+            historicalGoldenRelease.confirmations >= 12 &&
             goldenChart.points.length >= 1 &&
             goldenChart.readStatus === "live" &&
             currentMarketTime(goldenChart.generatedAt) &&
             goldenChart.__marketHeaders?.dataQuality === goldenChart.status &&
             goldenChart.__marketHeaders?.marketSource === "bitquery" &&
             goldenChart.__marketHeaders?.priceSource === "bitquery";
-          if (currentFdvCount < 1 && !historicalPaidPathVerified) {
-            throw new Error(
-              "staged Bitquery market path has no current or independently verified history",
-            );
-          }
           process.stdout.write(
             `${JSON.stringify({
               status: "verified-bitquery-staged-market-apis",
@@ -1211,6 +1309,7 @@ jobs:
               goldenTokenAddress,
               goldenPoolId,
               goldenParity,
+              historicalGoldenRelease,
               historicalPaidPathVerified,
               currentFdvCount,
               availableFdvCount,

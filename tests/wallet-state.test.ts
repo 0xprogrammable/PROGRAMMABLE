@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { getCreateAddress, keccak256 } from "viem";
 import * as walletProvider from "../components/wallet-provider";
+import { ApplicantRefreshUserUnavailableErrorV1 } from
+  "../lib/custom-launch/applicant-refresh-user-gate-v1";
 import {
   HOOKEMON_APPROVE_SELECTOR,
   HOOKEMON_MAINNET_USDC,
@@ -113,12 +115,14 @@ function applicantAuthority(overrides?: Partial<{
   githubUserId: string | null;
   githubLogin: string | null;
   walletAddress: string | null;
+  linkedAccountsFingerprint: string | null;
 }>) {
   return {
     privyUserId: APPLICANT_PRIVY_USER_ID,
     githubUserId: APPLICANT_GITHUB_USER_ID,
     githubLogin: APPLICANT_GITHUB_LOGIN,
     walletAddress: APPLICANT_WALLET,
+    linkedAccountsFingerprint: "linked-accounts:v1",
     ...overrides,
   };
 }
@@ -382,7 +386,16 @@ describe("wallet recovery state", () => {
       "utf8",
     );
     expect(provider).toContain("const { refreshUser } = useUser();");
-    expect(provider).toContain("getIdentityToken: getPrivyIdentityToken");
+    expect(provider).toContain(
+      "getIdentityToken: async () => applicantIdentityTokenRef.current",
+    );
+    expect(provider).toContain(
+      "changing the callback identity would restart\n  // the discovery effect",
+    );
+    expect(provider).toContain("perform a second `/users/me` read");
+    expect(provider).not.toContain(
+      "getIdentityToken: getPrivyIdentityToken,\n        requirement,",
+    );
     expect(provider).toContain("const { reauthorize } = useOAuthTokens();");
     expect(provider).toContain('await reauthorize({ provider: "github" });');
     expect(provider).not.toContain("onOAuthTokenGrant");
@@ -489,6 +502,24 @@ describe("wallet recovery state", () => {
     }
   });
 
+  it("preserves provider rate limits as retryable capacity state", async () => {
+    const getAccessToken = vi.fn(async () => "unexpected-access");
+    const getIdentityToken = vi.fn(async () => "unexpected-identity");
+
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: applicantAuthority,
+      refreshUser: async () => {
+        throw new ApplicantRefreshUserUnavailableErrorV1();
+      },
+      getAccessToken,
+      getIdentityToken,
+      requirement: applicantRequirement,
+    })).rejects.toBeInstanceOf(ApplicantRefreshUserUnavailableErrorV1);
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(getIdentityToken).not.toHaveBeenCalled();
+  });
+
   it("rejects wrong or missing identity and wallet data before token acquisition", async () => {
     const candidates = [
       { id: APPLICANT_PRIVY_USER_ID, linkedAccounts: [] },
@@ -558,6 +589,25 @@ describe("wallet recovery state", () => {
         return readCount === 1
           ? applicantAuthority()
           : applicantAuthority({ walletAddress: OTHER_WALLET });
+      },
+      refreshUser: async () => applicantUser(),
+      getAccessToken,
+      getIdentityToken,
+      requirement: applicantRequirement,
+    })).resolves.toBeNull();
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(getIdentityToken).not.toHaveBeenCalled();
+
+    readCount = 0;
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: () => {
+        readCount += 1;
+        return readCount === 1
+          ? applicantAuthority()
+          : applicantAuthority({
+            linkedAccountsFingerprint: "linked-accounts:v2",
+          });
       },
       refreshUser: async () => applicantUser(),
       getAccessToken,

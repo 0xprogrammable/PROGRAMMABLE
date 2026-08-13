@@ -18,7 +18,7 @@ export function HookathonPage({ initialNowMs }: HookathonPageProps) {
       className={`${styles.page} hookathon-root`}
       aria-labelledby="hookathon-title"
     >
-      <div className={styles.shell}>
+      <div className={`${styles.shell} liquid-glass-surface`}>
         <header className={styles.hero}>
           <h1 id="hookathon-title">{hookathonConfig.name}</h1>
           <HookathonCountdown
@@ -61,10 +61,7 @@ export function HookathonPage({ initialNowMs }: HookathonPageProps) {
           </p>
         </section>
 
-        <section
-          className={styles.judging}
-          aria-labelledby="hookathon-judging"
-        >
+        <section className={styles.judging} aria-labelledby="hookathon-judging">
           <h2 id="hookathon-judging">Judging</h2>
           <ul aria-label="Judging criteria">
             {hookathonConfig.judging.criteria.map((criterion) => (

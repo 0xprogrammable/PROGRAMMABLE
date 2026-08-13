@@ -1,0 +1,23 @@
+---
+description: Current requirements and status for reusable public Programmable templates
+---
+
+# Public templates
+
+A public template is one versioned product that other creators can configure for their own launches. It can include a hook, factory, application or companion service, but every required component and configurable boundary belongs to the same review target.
+
+The [Submit a Template](https://github.com/0xprogrammable/submit-template) repository publishes the model and requirements. Public applications and template fee share activation are not open yet. This status is intentional and should not be replaced with a launch claim before the repository, contracts, payout path and exact template version are activated.
+
+## Template or project
+
+Submit a Launch is for one concrete project and token. Submit a Template is for reusable behavior that other creators can select. A project that happens to contain reusable code is still a project unless it is reviewed and published through the template path.
+
+## Version binding
+
+Each template version identifies the source repository, commit, artifacts, parameter bounds, deployment path and payout wallet. A change to behavior, dependencies, factory, fees, authority or allowed configuration creates a new version rather than inheriting the previous record.
+
+## Published fee model
+
+The intended public template policy is one 0.2% transaction fee on the supported trading route. The template creator receives 0.1% and Programmable receives 0.1%. This fee is not active until the exact version and payout route are activated. It is one complete fee, not a published rate followed by another unnamed Programmable charge.
+
+Partnership templates use a separate policy and review path. They are not submitted through the public repository.

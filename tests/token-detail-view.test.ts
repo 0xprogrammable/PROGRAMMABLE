@@ -6,6 +6,7 @@ import {
   buildTokenDetailMetrics,
   formatPreparedMinimum,
   formatStockPairedGrossVolume,
+  getValuationMetricLabel,
   parseDetailPayload,
 } from "../components/token-detail-view";
 import type { PreparedTokenTrade } from "../components/token-trade";
@@ -48,9 +49,44 @@ const canonicalToken = {
 } satisfies CanonicalTokenExploreEntry;
 
 describe("token detail metrics", () => {
+  it("reserves market cap for circulating supply and qualifies non-current values", () => {
+    expect(getValuationMetricLabel({
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: "1",
+      freshness: "current",
+    })).toBe("FDV");
+    expect(getValuationMetricLabel({
+      status: "available",
+      metric: "market-cap",
+      supplyBasis: "circulating",
+      currency: "usd",
+      valueWad: "1",
+      freshness: "current",
+    })).toBe("Market cap");
+    expect(getValuationMetricLabel({
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: "1",
+      freshness: "stale",
+    })).toBe("Last verified FDV");
+    expect(getValuationMetricLabel({
+      status: "available",
+      metric: "market-cap",
+      supplyBasis: "circulating",
+      currency: "usd",
+      valueWad: "1",
+      freshness: "unknown",
+    })).toBe("Unverified market cap");
+  });
+
   it("ignores legacy market volume without Bitquery provenance", () => {
     expect(buildTokenDetailMetrics(token)).toEqual([
-      { label: "FDV", value: "$168.56K" },
+      { label: "Unverified FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
       { label: "Swap fee", value: "1%" },
     ]);
@@ -86,14 +122,14 @@ describe("token detail metrics", () => {
 
   it("uses the chart-point FDV while the chart is inspected", () => {
     expect(buildTokenDetailMetrics(token, "$212.4K")[0]).toEqual({
-      label: "FDV",
+      label: "Unverified FDV",
       value: "$212.4K",
     });
   });
 
   it("shows unavailable for a historical point without evidenced USD or ETH FDV", () => {
     expect(buildTokenDetailMetrics(token, "Unavailable")[0]).toEqual({
-      label: "FDV",
+      label: "Unverified FDV",
       value: "Unavailable",
     });
   });
@@ -125,7 +161,7 @@ describe("token detail metrics", () => {
         indexedMarketCapUsdWad: parseEther("43750").toString(),
       })[0],
     ).toEqual({
-      label: "FDV",
+      label: "Unverified FDV",
       value: "$43.75K",
     });
   });
@@ -139,7 +175,7 @@ describe("token detail metrics", () => {
     });
 
     expect(buildTokenDetailMetrics(token, null, volume)).toEqual([
-      { label: "FDV", value: "$168.56K" },
+      { label: "Unverified FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
       { label: "Volume 1H", value: "$43.8K" },
       { label: "Swap fee", value: "1%" },
@@ -195,7 +231,7 @@ describe("token detail metrics", () => {
     } satisfies LauncherToken;
 
     expect(buildTokenDetailMetrics(enriched)).toEqual([
-      { label: "FDV", value: "$168.56K" },
+      { label: "Unverified FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
       { label: "Swap fee", value: "1%" },
     ]);

@@ -3,13 +3,19 @@
   color: var(--brand-ivory);
   min-height: calc(100svh - var(--header-height));
   min-width: 0;
+  padding: clamp(16px, 2.4vw, 30px) 32px 40px;
   position: relative;
 }
 
 .shell {
+  background: var(--liquid-glass-surface-background-strong);
+  border-color: var(--liquid-glass-border);
+  border-radius: 28px;
+  box-shadow: var(--liquid-glass-shadow);
   margin: 0 auto;
-  max-width: var(--page-width);
-  padding: 8px 32px 16px;
+  max-width: 1180px;
+  overflow: hidden;
+  padding: 8px 40px 20px;
   width: 100%;
 }
 
@@ -37,11 +43,17 @@
 .eligibility,
 .judging {
   align-items: center;
-  border-top: 1px solid var(--panel-border-soft);
   display: flex;
   flex-direction: column;
   justify-content: center;
   text-align: center;
+}
+
+/* Let breathing room carry section hierarchy; the page does not need rules
+ * cutting across the night field between each content block. */
+.eligibility,
+.judging {
+  margin-block-start: clamp(20px, 3vw, 32px);
 }
 
 .prizes {
@@ -175,12 +187,17 @@
 }
 
 @media (max-width: 720px) {
+  .page {
+    padding: 12px 16px max(32px, env(safe-area-inset-bottom));
+  }
+
   .shell {
-    padding: 0 20px calc(104px + env(safe-area-inset-bottom));
+    border-radius: 20px;
+    padding: 0 18px 16px;
   }
 
   .hero {
-    min-height: 288px;
+    min-height: 272px;
     padding: 32px 0;
   }
 
@@ -246,8 +263,13 @@
 }
 
 @media (max-width: 360px) {
+  .page {
+    padding-inline: 12px;
+  }
+
   .shell {
-    padding-inline: 16px;
+    border-radius: 18px;
+    padding-inline: 14px;
   }
 
   .prizeSplit {

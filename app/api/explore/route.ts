@@ -16,7 +16,7 @@ import {
   buildExploreDataQuality,
   publicExploreEntryV1,
   valuationSortValue,
-  withBitqueryMarketData,
+  withPublicExploreBitqueryMarketData,
   type ValuedExploreEntry,
 } from "../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
@@ -300,11 +300,14 @@ export function dedupeExploreEntriesV1(
 function valueExploreEntriesWithMarketData(
   entries: readonly ExploreEntry[],
   marketByToken: ReadonlyMap<string, TokenMarketDataV1>,
+  nowMs: number,
 ): ValuedExploreEntry[] {
   return entries.map((entry) => {
     const address = entry.tokenAddress?.toLowerCase();
     const marketData = address ? marketByToken.get(address) : undefined;
-    if (marketData) return withBitqueryMarketData(entry, marketData);
+    if (marketData) {
+      return withPublicExploreBitqueryMarketData(entry, marketData, nowMs);
+    }
     return {
       ...entry,
       valuation: {
@@ -327,6 +330,33 @@ function hasVerifiedBitqueryPrice(entries: readonly ValuedExploreEntry[]): boole
       (primary.latestTrade?.priceUsdWad !== undefined ||
         primary.latestTrade?.priceQuoteWad !== undefined);
   });
+}
+
+function hasTemporaryMarketSourceFailure(
+  entries: readonly ValuedExploreEntry[],
+): boolean {
+  return entries.some((entry) =>
+    entry.valuation.status === "unavailable" &&
+    entry.valuation.reason === "source-unavailable"
+  );
+}
+
+function exploreResponseCacheControl(input: Readonly<{
+  dataQuality: ReturnType<typeof buildExploreDataQuality>;
+  entries: readonly ValuedExploreEntry[];
+  status: "ready" | "not-deployed";
+}>): string {
+  // Do not cache a degraded source read. Known stale or unavailable market
+  // observations remain honest in the payload and are safe to reuse briefly.
+  if (
+    input.dataQuality.launchIdentity.status !== "current" ||
+    hasTemporaryMarketSourceFailure(input.entries)
+  ) {
+    return "no-store";
+  }
+  return input.status === "ready"
+    ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
+    : "public, max-age=0, s-maxage=30";
 }
 
 function paginateEntries(
@@ -372,6 +402,62 @@ export function paginateExploreEntriesV1(
   const newest = sortExploreEntries(filtered, "newest")
     .filter(({ id }) => !topIds.has(id));
   return paginateEntries([...top, ...newest], input);
+}
+
+async function valueExplorePage(input: Readonly<{
+  identityEntries: readonly ExploreEntry[];
+  options: Readonly<{
+    page: number;
+    pageSize: number;
+    query: string;
+    socials: "yes" | "no" | null;
+    sort: ExploreSort;
+  }>;
+  signal: AbortSignal;
+}>) {
+  const requiresGlobalMarketRanking =
+    input.options.sort === "market-cap" ||
+    input.options.sort === "market-cap-asc";
+  const identityPage = requiresGlobalMarketRanking
+    ? null
+    : paginateExploreEntriesV1(input.identityEntries, {
+        ...input.options,
+        query: "",
+        socials: null,
+        topThenNewest: false,
+      });
+  const entriesToValue = identityPage?.tokens ?? input.identityEntries;
+  const [hydratedEntries, marketByToken] = await Promise.all([
+    hydrateMissingCanonicalTokenSupplyV1(entriesToValue),
+    readBitqueryTokenMarketDataV1(
+      exploreEntriesMarketIdentitiesV1(entriesToValue),
+      { signal: input.signal },
+    ),
+  ]);
+  const valuedEntries = valueExploreEntriesWithMarketData(
+    hydratedEntries,
+    marketByToken,
+    Date.now(),
+  );
+  if (identityPage !== null) {
+    return {
+      entries: valuedEntries,
+      paginated: { ...identityPage, tokens: valuedEntries },
+    };
+  }
+  const useTopValuationView =
+    input.options.sort === "market-cap" &&
+    input.options.query.length === 0 &&
+    input.options.socials === null;
+  return {
+    entries: valuedEntries,
+    paginated: paginateExploreEntriesV1(valuedEntries, {
+      ...input.options,
+      query: "",
+      socials: null,
+      topThenNewest: useTopValuationView,
+    }),
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -445,25 +531,16 @@ export async function GET(request: NextRequest) {
         : []),
       ...customProjects,
     ]);
-    const identityEntries = await hydrateMissingCanonicalTokenSupplyV1(
+    assertNoExploreCategoryCollision(unresolvedIdentityEntries);
+    const requestedIdentityEntries = filterExploreEntries(
       unresolvedIdentityEntries,
+      options.query,
+      options.socials,
     );
-    const marketByToken = await readBitqueryTokenMarketDataV1(
-      exploreEntriesMarketIdentitiesV1(identityEntries),
-      { signal: request.signal },
-    );
-    const entries = valueExploreEntriesWithMarketData(
-      identityEntries,
-      marketByToken,
-    );
-    assertNoExploreCategoryCollision(entries);
-    const useTopValuationView =
-      options.sort === "market-cap" &&
-      options.query.length === 0 &&
-      options.socials === null;
-    const paginated = paginateExploreEntriesV1(entries, {
-      ...options,
-      topThenNewest: useTopValuationView,
+    const { entries, paginated } = await valueExplorePage({
+      identityEntries: requestedIdentityEntries,
+      options,
+      signal: request.signal,
     });
     const pageEntries = paginated.tokens as ValuedExploreEntry[];
 
@@ -489,7 +566,7 @@ export async function GET(request: NextRequest) {
         custom: customSource,
       }),
     };
-    if (canonicalSource === null && entries.length === 0) {
+    if (canonicalSource === null && unresolvedIdentityEntries.length === 0) {
       return NextResponse.json(
         {
           status: "unavailable",
@@ -538,11 +615,11 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            customProjects.length > 0 || dataQuality.status !== "complete"
-              ? "no-store"
-              : page.status === "ready"
-              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
-              : "public, max-age=0, s-maxage=30",
+            exploreResponseCacheControl({
+              dataQuality,
+              entries,
+              status: page.status,
+            }),
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Market-Source": "bitquery",
           ...(dataQuality.valuation.asOfTime
