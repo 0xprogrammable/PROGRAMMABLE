@@ -1205,6 +1205,122 @@ describe("Explore refresh state", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("retries one transient market-cap 503 before exposing an error", async () => {
+    const marketPayload = {
+      ...payload,
+      valuationSnapshot: valuationSnapshot(),
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          status: "unavailable",
+          error: "Current market data is temporarily unavailable",
+          retryable: true,
+          tokens: [{ id: "unverified-partial-data" }],
+        }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(marketPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    const search = new URLSearchParams({
+      q: "",
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    await expect(
+      loadExplorePayload("transient-market-cap-retry", search),
+    ).resolves.toEqual(marketPayload);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).toBe(
+      fetchMock.mock.calls[0]?.[1]?.signal,
+    );
+  });
+
+  it.each(["newest", "market-cap-asc"])(
+    "does not retry a 503 for the %s sort",
+    async (sort) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({
+          status: "unavailable",
+          error: "Launch data is temporarily unavailable",
+          retryable: true,
+        }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      await expect(loadExplorePayload(
+        `${sort}-does-not-retry`,
+        new URLSearchParams({ sort, page: "1", limit: "9" }),
+      )).rejects.toThrow("Launch data is temporarily unavailable");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("stops after one market-cap 503 retry", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(JSON.stringify({
+        status: "unavailable",
+        error: "Current market data is temporarily unavailable",
+        retryable: true,
+      }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      "bounded-market-cap-retry",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("Current market data is temporarily unavailable");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the retry inside the original abort deadline", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          status: "unavailable",
+          error: "Current market data is temporarily unavailable",
+          retryable: true,
+        }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockImplementationOnce((_url, init) => {
+        const signal = init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        });
+      });
+    const request = loadExplorePayload(
+      "retry-stalled-content-timeout",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    const rejection = expect(request).rejects.toThrow(
+      "Tokens took too long to respond",
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(12_000);
+    await rejection;
+  });
+
   it("rejects Router provenance on a custom project without a complete stamp", async () => {
     const project = customEntry(91);
     const forged = {

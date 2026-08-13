@@ -12,6 +12,7 @@ import {
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 
+import { readAlchemyExploreModel } from "../../../../../lib/alchemy/explore.server";
 import {
   CreatorClaimInputError,
   CreatorClaimUnavailableError,
@@ -27,6 +28,7 @@ import {
   type ActionTokenLookup,
 } from "../../../../../lib/data-pipeline/action-lookup";
 import { indexedLaunchLookupEnabled } from "../../../../../lib/data-pipeline/route-activation.server";
+import { currentMarketOnchainDeployment } from "../../../../../lib/market-data/current-market-rpc.server";
 import {
   ActionRpcQuorumError,
   creatorClaimRpcProviders,
@@ -96,6 +98,20 @@ function claimRpcUnavailable() {
     "rpc-unavailable",
     CLAIM_RPC_UNAVAILABLE_MESSAGE,
   );
+}
+
+function claimReadDeployment(
+  deployment: Extract<
+    ReturnType<typeof getWebsiteReadOnchainDeployment>,
+    { status: "ready" }
+  >,
+) {
+  if (deployment.chainId !== 1) return deployment;
+  try {
+    return currentMarketOnchainDeployment(deployment);
+  } catch {
+    throw claimRpcUnavailable();
+  }
 }
 
 async function sharedVerifiedBlock(clients: readonly PublicClient[]) {
@@ -393,7 +409,17 @@ async function legacyClaimToken(
   request: ReturnType<typeof parseCreatorClaimRequest>,
   deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>,
 ): Promise<CreatorClaimTokenIdentity> {
-  const model = await readExploreModel(deployment);
+  let model: Awaited<ReturnType<typeof readExploreModel>>;
+  try {
+    model = deployment.chainId === 1
+      ? await readAlchemyExploreModel()
+      : await readExploreModel(deployment);
+  } catch {
+    throw new CreatorClaimUnavailableError(
+      "registry-unavailable",
+      "The verified Programmable launch registry is temporarily unavailable",
+    );
+  }
   if (model.status !== "ready" || model.snapshot.chainId !== deployment.chainId) {
     throw new CreatorClaimUnavailableError(
       "registry-unavailable",
@@ -560,13 +586,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const clients = creatorClaimRpcProviders(deployment).map((provider) =>
-      claimClient(deployment, provider.endpoint),
+    const claimDeployment = claimReadDeployment(deployment);
+    const clients = creatorClaimRpcProviders(claimDeployment).map((provider) =>
+      claimClient(claimDeployment, provider.endpoint),
     );
     const snapshot = await sharedVerifiedBlock(clients);
     const state = await sharedCurrentClaimState({
       clients: snapshot.clients,
-      deployment,
+      deployment: claimDeployment,
       token,
       blockNumber: snapshot.blockNumber,
     });
@@ -660,7 +687,8 @@ export async function POST(request: NextRequest) {
           : error;
       const retryable =
         unavailable.code === "rpc-unavailable" ||
-        unavailable.code === "rpc-disagreement";
+        unavailable.code === "rpc-disagreement" ||
+        unavailable.code === "registry-unavailable";
       return json(
         blockedResponse(
           unavailable.code === "not-deployed" ? "not-deployed" : "blocked",

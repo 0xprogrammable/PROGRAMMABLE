@@ -12,6 +12,8 @@ import {
   actionTokenAsExploreModel,
   lookupActionTokenByAddress,
 } from "../../../../lib/data-pipeline/action-lookup";
+import { readAlchemyExploreModel } from
+  "../../../../lib/alchemy/explore.server";
 import { indexedLaunchLookupEnabled } from "../../../../lib/data-pipeline/route-activation.server";
 import {
   getWebsiteReadOnchainDeployment,
@@ -165,11 +167,11 @@ export async function POST(request: NextRequest) {
             token: tradeRequest.token,
           }),
         )
-      : await readExploreModel(
-          getWebsiteReadOnchainDeployment(
-            tradeRequest.chainId === 1 ? "production" : "rehearsal",
-          ),
-        );
+      : tradeRequest.chainId === 1
+        ? await readAlchemyExploreModel()
+        : await readExploreModel(
+            getWebsiteReadOnchainDeployment("rehearsal"),
+          );
     const indexedToken = registry.tokens.find(
       (candidate) =>
         candidate.tokenAddress.toLowerCase() ===

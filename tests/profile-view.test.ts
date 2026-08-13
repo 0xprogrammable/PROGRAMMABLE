@@ -288,6 +288,15 @@ describe("profile workspace loading state", () => {
     );
   });
 
+  it("keeps verified native ETH totals when only Stock-Paired rewards fail", () => {
+    expect(profileViewSource).toContain(
+      'const nativeRewardSourceStatuses = [\n    data.status,\n    classicV3Rewards.status,\n    deepRewards.status,\n  ] as const;',
+    );
+    expect(profileViewSource).toContain(
+      "getProfileRewardDataQuality(\n    nativeRewardSourceStatuses,",
+    );
+  });
+
   it("uses LKG only for typed temporary creator reads and marks it stale", () => {
     const current = {
       account: firstAddress,
