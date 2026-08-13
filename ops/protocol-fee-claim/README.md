@@ -17,7 +17,7 @@ Privates lokales Fenster für alle aktuell deployten Programmable Launcher-Fees:
 Deep und nicht deployte Modelle sind absichtlich ausgeschlossen.
 
 Die aktuelle Custom-V1-Registry enthält nur den finalisierten Genesis-Canary ohne
-qualifizierenden Fee-Markt. Bei jedem `Neu laden` liest das Fenster die Registry
+qualifizierenden Fee-Markt. Bei jedem `Nur scannen` liest das Fenster die Registry
 erneut. Für jeden zukünftigen fee-tragenden Launch prüft es am registrierten
 `primaryContract` die feste native Claim-Schnittstelle, den unveränderlichen
 Treasury-Empfänger und den im Registry-Event festgeschriebenen Programmable
@@ -37,7 +37,7 @@ Website gelangen.
 Für Custom V2 ist die Claim-Schnittstelle fest: jede freigegebene native
 Feequelle implementiert `IProgrammableProtocolFeeSourceV1`, zahlt immer an die
 unveränderliche Programmable Treasury und wird erst nach Aktivierung und
-Finalisierung vom Registrar aufgelistet. Das Fenster liest bei jedem `Neu laden`
+Finalisierung vom Registrar aufgelistet. Das Fenster liest bei jedem `Nur scannen`
 die komplette Registrar-Liste neu, prüft Runtime, Source-State, Launch-Bindung,
 Empfänger, 10-bps-Policy und aktuellen offenen Betrag am selben Block und fügt
 jede positive, ausführbare Quelle dem gemeinsamen Wallet-Batch hinzu.
@@ -88,8 +88,8 @@ Oder auf macOS `ops/protocol-fee-claim/Programmable Fees.command` doppelklicken.
 - Der verbundene Account muss die unveränderliche Treasury `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` sein.
 - Unterstützt MetaMask atomare EIP-5792-Batches, werden Classic, bestehende
   Stocks sowie alle offenen standardisierten Custom-V1- und Custom-V2-Quellen
-  in einer Bestätigung gesendet.
-  Andernfalls zeigt die Seite die Zahl der notwendigen Einzelbestätigungen vor
-  dem Start an; ohne Wallet-Batch-Unterstützung kann eine Webseite keine einzelne
-  Wallet-Bestätigung erzwingen.
+  über `Scannen & alles claimen` in genau einer Bestätigung gesendet.
+  Ohne atomare Wallet-Batch-Unterstützung bleibt der gemeinsame Claim gesperrt.
+  Die Seite sendet dann nichts und öffnet insbesondere keine Folge einzelner
+  Wallet-Bestätigungen.
 - Es werden nur Beträge größer null gesendet; die Seite hat keine Redirect-, Buyback- oder Split-Funktion.

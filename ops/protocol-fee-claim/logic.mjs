@@ -821,15 +821,13 @@ export function atomicCapabilityStatus(
   return status === "supported" || status === "ready" ? status : null;
 }
 
-export function buildClaimTransaction(account, claim) {
-  if (!isTreasury(account))
-    throw new Error("Die Treasury-Wallet muss verbunden sein");
-  return {
-    from: account,
-    to: claim.address,
-    data: claimData(claim),
-    value: "0x0",
-  };
+export function requireAtomicClaimCapability(capability) {
+  if (capability !== "supported" && capability !== "ready") {
+    throw new Error(
+      "Eine gemeinsame Wallet-Bestätigung ist mit diesem MetaMask-Konto nicht verfügbar. Es wurde nichts gesendet.",
+    );
+  }
+  return capability;
 }
 
 export function buildWalletSendCalls(account, claims) {

@@ -14,7 +14,6 @@ import {
   TREASURY,
   TOKEN_SELECTORS,
   atomicCapabilityStatus,
-  buildClaimTransaction,
   buildWalletSendCalls,
   claimData,
   customClaimDefinitionClassification,
@@ -40,6 +39,7 @@ import {
   readAccruedData,
   reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
+  requireAtomicClaimCapability,
   shortAddress,
   toQuantityHex,
 } from "./logic.mjs";
@@ -479,21 +479,12 @@ test("builds an EIP-5792 atomic claim batch", () => {
   );
 });
 
-test("builds only treasury-origin direct fallback transactions", () => {
-  const transaction = buildClaimTransaction(TREASURY, CLAIMS[0]);
-  assert.deepEqual(transaction, {
-    from: TREASURY,
-    to: CLAIMS[0].address,
-    data: SELECTORS.claimLauncherFees,
-    value: "0x0",
-  });
+test("fails closed instead of opening sequential wallet confirmations", () => {
+  assert.equal(requireAtomicClaimCapability("supported"), "supported");
+  assert.equal(requireAtomicClaimCapability("ready"), "ready");
   assert.throws(
-    () =>
-      buildClaimTransaction(
-        "0x0000000000000000000000000000000000000000",
-        CLAIMS[0],
-      ),
-    /Treasury/,
+    () => requireAtomicClaimCapability(null),
+    /Es wurde nichts gesendet/,
   );
 });
 

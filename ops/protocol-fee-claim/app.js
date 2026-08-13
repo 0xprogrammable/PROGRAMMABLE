@@ -12,7 +12,6 @@ import {
   TOKEN_SELECTORS,
   TREASURY,
   atomicCapabilityStatus,
-  buildClaimTransaction,
   buildWalletSendCalls,
   customClaimDefinitionClassification,
   customLaunchClassification,
@@ -37,6 +36,7 @@ import {
   readAccruedData,
   reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
+  requireAtomicClaimCapability,
   shortAddress,
   toQuantityHex,
 } from "./logic.mjs";
@@ -536,7 +536,7 @@ function renderSummary() {
   elements.batchMode.textContent = state.capability
     ? "Eine MetaMask-Bestätigung"
     : state.account
-      ? "Einzelbestätigungen"
+      ? "Nicht verfügbar"
       : "Batch wird geprüft";
 
   const connected = state.account !== null;
@@ -586,12 +586,15 @@ function renderSummary() {
     elements.actionLabel.textContent = "Alles geclaimt";
     elements.actionDetail.textContent = "Aktuell sind keine Fees offen";
     elements.action.disabled = true;
+  } else if (!state.capability) {
+    elements.actionLabel.textContent = "Gemeinsamer Claim nicht verfügbar";
+    elements.actionDetail.textContent =
+      "MetaMask unterstützt keinen atomaren Batch";
+    elements.action.disabled = true;
   } else {
-    elements.actionLabel.textContent = "Alle Fees claimen";
+    elements.actionLabel.textContent = "Scannen & alles claimen";
     const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
-    elements.actionDetail.textContent = state.capability
-      ? `${claimLabel} · 1 Bestätigung`
-      : `${claimLabel} · einzelne Bestätigungen`;
+    elements.actionDetail.textContent = `${claimLabel} · 1 MetaMask-Bestätigung`;
     elements.action.disabled = state.busy;
   }
 
@@ -1363,22 +1366,6 @@ async function switchToMainnet() {
   await refreshClaims();
 }
 
-async function waitForReceipt(hash) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 5 * 60 * 1000) {
-    const receipt = await request("eth_getTransactionReceipt", [hash]);
-    if (receipt) {
-      if (receipt.status !== "0x1")
-        throw new Error("Eine Claim-Transaktion ist fehlgeschlagen");
-      return receipt;
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 3000));
-  }
-  throw new Error(
-    "Die Transaktion ist noch offen. Vor einem neuen Versuch MetaMask prüfen.",
-  );
-}
-
 async function waitForBatch(id) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 5 * 60 * 1000) {
@@ -1402,55 +1389,25 @@ async function waitForBatch(id) {
   );
 }
 
-async function claimOne(claim) {
-  const current = state.claims.get(claim.id);
-  state.claims.set(claim.id, { ...current, status: "claiming" });
-  renderSummary();
-  const transaction = buildClaimTransaction(state.account, claim);
-  const estimate = decodeUint256(
-    await request("eth_estimateGas", [transaction]),
-  );
-  const hash = await request("eth_sendTransaction", [
-    { ...transaction, gas: toQuantityHex((estimate * 120n) / 100n) },
-  ]);
-  state.claims.set(claim.id, {
-    ...current,
-    status: "pending",
-    transactionHash: hash,
-  });
-  renderSummary();
-  await waitForReceipt(hash);
-  state.claims.set(claim.id, { ...current, amount: 0n, status: "claimed" });
-  renderSummary();
-}
-
 async function claimAll() {
   await refreshClaims();
   const safetyError = claimSafetyError();
   if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
   const claims = claimableClaims();
   if (claims.length === 0) return;
+  requireAtomicClaimCapability(state.capability);
   state.busy = true;
   setError();
   renderSummary();
 
   try {
-    if (state.capability) {
-      setStatus(
-        `${claims.length} Claims werden als ein atomarer MetaMask-Batch vorbereitet`,
-      );
-      const result = await request("wallet_sendCalls", [
-        buildWalletSendCalls(state.account, claims),
-      ]);
-      await waitForBatch(normalizeBatchId(result));
-    } else {
-      for (const [index, claim] of claims.entries()) {
-        setStatus(
-          `Claim ${index + 1} von ${claims.length} · ${claim.name} ${claim.detail}`,
-        );
-        await claimOne(claim);
-      }
-    }
+    setStatus(
+      `${claims.length} Claims werden in einer MetaMask-Bestätigung vorbereitet`,
+    );
+    const result = await request("wallet_sendCalls", [
+      buildWalletSendCalls(state.account, claims),
+    ]);
+    await waitForBatch(normalizeBatchId(result));
     setStatus("Alle verfügbaren Fees wurden geclaimt");
     await refreshClaims();
   } catch (error) {
