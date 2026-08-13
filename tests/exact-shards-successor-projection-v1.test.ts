@@ -322,7 +322,10 @@ function eventLog(
   return { address: source, topics, data, logIndex };
 }
 
-function launchReceipt(claim2Bps = 80): ExactShardsReceiptV1 {
+function launchReceipt(
+  claim2Bps = 80,
+  blockHash: Hex = hash("e"),
+): ExactShardsReceiptV1 {
   const logs = [
     eventLog(exactShardsAuthorityConsumerAbiV1, "LaunchPermitConsumedV1", AUTHORITY, {
       permitKey: hash("b"),
@@ -431,18 +434,21 @@ function launchReceipt(claim2Bps = 80): ExactShardsReceiptV1 {
     transactionHash: hash("d"),
     status: "success",
     blockNumber: 1_000n,
-    blockHash: hash("e"),
+    blockHash,
     transactionIndex: 3,
     logs,
   };
 }
 
-function finalizationReceipt(): ExactShardsReceiptV1 {
+function finalizationReceipt(
+  launchBlockHash: Hex = hash("e"),
+  blockHash: Hex = hash("1"),
+): ExactShardsReceiptV1 {
   return {
     transactionHash: hash("f"),
     status: "success",
     blockNumber: 1_013n,
-    blockHash: hash("1"),
+    blockHash,
     transactionIndex: 1,
     logs: [eventLog(
       exactShardsRegistryConsumerAbiV1,
@@ -454,7 +460,7 @@ function finalizationReceipt(): ExactShardsReceiptV1 {
         finalityEvidenceHash: hash("2"),
         transitionSequence: 10n,
         observedBlockNumber: 1_000n,
-        observedBlockHash: hash("e"),
+        observedBlockHash: launchBlockHash,
         observedTransactionIndex: 3,
         observedLogIndex: 14,
         confirmedHeadBlockNumber: 1_012n,
@@ -472,6 +478,10 @@ function observation(
   providerId: string,
   trustDomain: string,
   claim2Bps = 80,
+  blockHashes: Readonly<{
+    launch: Hex;
+    finalization: Hex;
+  }> = Object.freeze({ launch: hash("e"), finalization: hash("1") }),
 ): ExactShardsAuthenticatedRpcObservationV1 {
   return {
     provider: {
@@ -486,11 +496,14 @@ function observation(
       to: ROUTE,
       input: launchInput(),
     },
-    launchReceipt: launchReceipt(claim2Bps),
-    finalizationReceipt: finalizationReceipt(),
+    launchReceipt: launchReceipt(claim2Bps, blockHashes.launch),
+    finalizationReceipt: finalizationReceipt(
+      blockHashes.launch,
+      blockHashes.finalization,
+    ),
     snapshot: {
       blockNumber: 1_013n,
-      blockHash: hash("1"),
+      blockHash: blockHashes.finalization,
       registryRuntimeCodeHash: descriptor().contracts.registry.runtimeCodeHash,
       routeRuntimeCodeHash: descriptor().contracts.route.runtimeCodeHash,
       permitAuthorityRuntimeCodeHash: descriptor().contracts.permitAuthority.runtimeCodeHash,
@@ -526,6 +539,17 @@ function observations(claim2Bps = 80) {
   return [
     observation("rpc-alpha", "alpha.example", claim2Bps),
     observation("rpc-beta", "beta.example", claim2Bps),
+  ] as const;
+}
+
+function replacementObservations() {
+  const blockHashes = Object.freeze({
+    launch: hash("a"),
+    finalization: hash("b"),
+  });
+  return [
+    observation("rpc-alpha", "alpha.example", 80, blockHashes),
+    observation("rpc-beta", "beta.example", 80, blockHashes),
   ] as const;
 }
 
@@ -633,6 +657,75 @@ class DeterministicConcurrentExactShardsPGlitePool
   }
 }
 
+class DeterministicRollbackFirstExactShardsPGlitePool
+  extends ExactShardsPGlitePool {
+  readonly materializerWaitingBeforeCanonicalLock: Promise<void>;
+  #resolveMaterializerWaiting!: () => void;
+  #releaseMaterializer!: () => void;
+  #materializerRelease: Promise<void>;
+  #owner: symbol | null = null;
+  #waiters: Array<Readonly<{ id: symbol; resolve: () => void }>> = [];
+  #connectionCount = 0;
+
+  constructor(database: PGlite) {
+    super(database);
+    this.materializerWaitingBeforeCanonicalLock = new Promise((resolve) => {
+      this.#resolveMaterializerWaiting = resolve;
+    });
+    this.#materializerRelease = new Promise((resolve) => {
+      this.#releaseMaterializer = resolve;
+    });
+  }
+
+  releaseMaterializer(): void {
+    this.#releaseMaterializer();
+  }
+
+  override async connect(): Promise<ProjectionTargetPostgresClientV1> {
+    const id = Symbol(`pglite-client-${++this.#connectionCount}`);
+    const delayedMaterializer = this.#connectionCount === 1;
+    return Object.freeze({
+      query: async <Row extends Record<string, unknown>>(
+        text: string,
+        values: readonly unknown[] = [],
+      ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> => {
+        if (text === "BEGIN") return Object.freeze({ rows: [], rowCount: 0 });
+        if (text === "COMMIT" || text === "ROLLBACK") {
+          this.#releaseLock(id);
+          return Object.freeze({ rows: [], rowCount: 0 });
+        }
+        if (text.includes("pg_advisory_xact_lock")) {
+          if (values[0] === "registry.exact-shards-v2.canonical-history.v1") {
+            if (delayedMaterializer) {
+              this.#resolveMaterializerWaiting();
+              await this.#materializerRelease;
+            }
+            await this.#acquireLock(id);
+          }
+          return Object.freeze({ rows: [], rowCount: 0 });
+        }
+        return super.query<Row>(text, values);
+      },
+      release: () => this.#releaseLock(id),
+    });
+  }
+
+  async #acquireLock(id: symbol): Promise<void> {
+    if (this.#owner === null) {
+      this.#owner = id;
+      return;
+    }
+    await new Promise<void>((resolve) => this.#waiters.push({ id, resolve }));
+  }
+
+  #releaseLock(id: symbol): void {
+    if (this.#owner !== id) return;
+    const next = this.#waiters.shift();
+    this.#owner = next?.id ?? null;
+    next?.resolve();
+  }
+}
+
 async function exactShardsPGlitePool() {
   const database = new PGlite();
   await database.exec(`
@@ -652,6 +745,12 @@ async function exactShardsPGlitePool() {
   await database.exec(`
     GRANT USAGE ON SCHEMA programmable_website_projection_v1
       TO programmable_website_projection_runtime;
+    GRANT SELECT, UPDATE
+      ON programmable_website_projection_v1.registry_exact_shards_canonical_history
+      TO programmable_website_projection_runtime;
+    GRANT SELECT, INSERT
+      ON programmable_website_projection_v1.registry_exact_shards_orphaned_blocks
+      TO programmable_website_projection_runtime;
     GRANT SELECT, INSERT, UPDATE
       ON programmable_website_projection_v1.registry_exact_shards_events,
          programmable_website_projection_v1.registry_exact_shards_records
@@ -667,6 +766,11 @@ async function exactShardsPGlitePool() {
 async function concurrentExactShardsPGlitePool() {
   const ordinary = await exactShardsPGlitePool();
   return new DeterministicConcurrentExactShardsPGlitePool(ordinary.database);
+}
+
+async function rollbackFirstExactShardsPGlitePool() {
+  const ordinary = await exactShardsPGlitePool();
+  return new DeterministicRollbackFirstExactShardsPGlitePool(ordinary.database);
 }
 
 describe("ExactShards successor projection V1", () => {
@@ -1070,10 +1174,19 @@ describe("ExactShards successor projection V1", () => {
     });
     const signal = new AbortController().signal;
     try {
-      await expect(store.materializeFinalized({ record, signal })).resolves.toEqual({
+      const canonicalProjection = await store.authorizeCanonicalProjection({ signal });
+      await expect(store.materializeFinalized({
+        record,
+        canonicalProjection,
+        signal,
+      })).resolves.toEqual({
         kind: "created",
       });
-      await expect(store.materializeFinalized({ record, signal })).resolves.toEqual({
+      await expect(store.materializeFinalized({
+        record,
+        canonicalProjection,
+        signal,
+      })).resolves.toEqual({
         kind: "existing",
       });
       await expect(store.findPublic({ signal })).resolves.toHaveLength(1);
@@ -1081,10 +1194,18 @@ describe("ExactShards successor projection V1", () => {
         projectId: record.publicIdentity.websiteProjectId,
         signal,
       })).resolves.toMatchObject({ recordBindingSha256: record.recordBindingSha256 });
-      await expect(store.materializeRevocation({ record: revocation, signal }))
+      await expect(store.materializeRevocation({
+        record: revocation,
+        canonicalProjection,
+        signal,
+      }))
         .resolves.toEqual({ kind: "updated" });
       await expect(store.findPublic({ signal })).resolves.toEqual([]);
-      await expect(store.materializeFinalized({ record, signal })).resolves.toEqual({
+      await expect(store.materializeFinalized({
+        record,
+        canonicalProjection,
+        signal,
+      })).resolves.toEqual({
         kind: "conflict",
       });
       await expect(store.rollbackCanonicalBlock({
@@ -1114,7 +1235,12 @@ describe("ExactShards successor projection V1", () => {
     });
     const signal = new AbortController().signal;
     try {
-      const materialization = store.materializeFinalized({ record, signal });
+      const canonicalProjection = await store.authorizeCanonicalProjection({ signal });
+      const materialization = store.materializeFinalized({
+        record,
+        canonicalProjection,
+        signal,
+      });
       await pool.materializerHasCanonicalLock;
       const rollback = store.rollbackCanonicalBlock({
         blockHash: record.finality.finalizedBlockHash,
@@ -1127,6 +1253,69 @@ describe("ExactShards successor projection V1", () => {
       await expect(rollback).resolves.toEqual({ affectedLaunches: 1 });
       expect(pool.rollbackDiscoveryStarted).toBe(true);
       await expect(store.findPublic({ signal })).resolves.toEqual([]);
+    } finally {
+      pool.releaseMaterializer();
+      await pool.database.close();
+    }
+  });
+
+  it("rejects queued stale materialization after rollback and admits only a fresh-generation replacement", async () => {
+    const record = projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: observations(),
+    });
+    const replacement = projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: replacementObservations(),
+    });
+    expect(replacement.launch.blockNumber).toBe(record.launch.blockNumber);
+    expect(replacement.finality.finalizedAtBlock).toBe(record.finality.finalizedAtBlock);
+    expect(replacement.launch.blockHash).not.toBe(record.launch.blockHash);
+    expect(replacement.finality.finalizedBlockHash)
+      .not.toBe(record.finality.finalizedBlockHash);
+
+    const pool = await rollbackFirstExactShardsPGlitePool();
+    const store = new PostgresExactShardsSuccessorStoreV1({
+      pool,
+      descriptor: descriptor(),
+    });
+    const signal = new AbortController().signal;
+    try {
+      const staleProjection = await store.authorizeCanonicalProjection({ signal });
+      expect(staleProjection.canonicalGeneration).toBe("1");
+      const delayedMaterialization = store.materializeFinalized({
+        record,
+        canonicalProjection: staleProjection,
+        signal,
+      });
+      await pool.materializerWaitingBeforeCanonicalLock;
+      await expect(store.rollbackCanonicalBlock({
+        blockHash: record.finality.finalizedBlockHash,
+        signal,
+      })).resolves.toEqual({ affectedLaunches: 0 });
+      pool.releaseMaterializer();
+      await expect(delayedMaterialization).resolves.toEqual({ kind: "conflict" });
+      await expect(store.findPublic({ signal })).resolves.toEqual([]);
+
+      const restartedStore = new PostgresExactShardsSuccessorStoreV1({
+        pool,
+        descriptor: descriptor(),
+      });
+      const freshProjection = await restartedStore.authorizeCanonicalProjection({ signal });
+      expect(freshProjection.canonicalGeneration).toBe("2");
+      await expect(restartedStore.materializeFinalized({
+        record,
+        canonicalProjection: freshProjection,
+        signal,
+      })).resolves.toEqual({ kind: "conflict" });
+      await expect(restartedStore.materializeFinalized({
+        record: replacement,
+        canonicalProjection: freshProjection,
+        signal,
+      })).resolves.toEqual({ kind: "created" });
+      await expect(restartedStore.findPublic({ signal })).resolves.toEqual([
+        replacement,
+      ]);
     } finally {
       pool.releaseMaterializer();
       await pool.database.close();

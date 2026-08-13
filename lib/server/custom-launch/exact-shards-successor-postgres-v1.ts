@@ -6,8 +6,10 @@ import {
   type JsonValue,
 } from "../projection-target/canonical-json";
 import { canonicalSha256 } from "../projection-target/hashing";
-import type { ProjectionTargetPostgresPoolV1 } from
-  "../projection-target/postgres-store";
+import type {
+  ProjectionTargetPostgresClientV1,
+  ProjectionTargetPostgresPoolV1,
+} from "../projection-target/postgres-store";
 import {
   assertProjectedExactShardsRevocationV1,
   assertProjectedFinalizedExactShardsRecordV1,
@@ -40,6 +42,15 @@ interface EventRow extends Record<string, unknown> {
   canonical_public_record: string | null;
 }
 
+interface CanonicalHistoryRow extends Record<string, unknown> {
+  canonical_generation: string | number | bigint;
+}
+
+export type ExactShardsCanonicalProjectionPermitV1 = Readonly<{
+  sourceLane: "registry.exact-shards-v2";
+  canonicalGeneration: string;
+}>;
+
 export type ExactShardsPersistenceResultV1 = Readonly<{
   kind: "created" | "updated" | "existing" | "conflict";
 }>;
@@ -54,6 +65,7 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
   readonly sourceLane = "registry.exact-shards-v2" as const;
   readonly #pool: ProjectionTargetPostgresPoolV1;
   readonly #descriptor: BoundExactShardsSuccessorDescriptorV1;
+  readonly #canonicalProjectionPermits = new WeakSet<object>();
 
   constructor(input: Readonly<{
     pool: ProjectionTargetPostgresPoolV1;
@@ -72,11 +84,42 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     this.#descriptor = descriptor;
   }
 
+  /**
+   * Mint a process-local permit bound to the durable canonical generation.
+   * The caller obtains this before authenticated RPC projection. A rollback
+   * advances the generation, so work projected from the old canonical view
+   * cannot be persisted after the reorg transaction commits.
+   */
+  async authorizeCanonicalProjection(input: Readonly<{
+    signal: AbortSignal;
+  }>): Promise<ExactShardsCanonicalProjectionPermitV1> {
+    input.signal.throwIfAborted();
+    const result = await this.#pool.query<CanonicalHistoryRow>(`
+      SELECT canonical_generation
+        FROM programmable_website_projection_v1.registry_exact_shards_canonical_history
+       WHERE singleton = true
+    `);
+    input.signal.throwIfAborted();
+    if (result.rows.length !== 1) {
+      throw new TypeError("ExactShards canonical history checkpoint is invalid");
+    }
+    const permit = Object.freeze({
+      sourceLane: "registry.exact-shards-v2" as const,
+      canonicalGeneration: canonicalGeneration(
+        result.rows[0]?.canonical_generation,
+      ).toString(),
+    });
+    this.#canonicalProjectionPermits.add(permit);
+    return permit;
+  }
+
   async materializeFinalized(input: Readonly<{
     record: ExactShardsPublicRecordV1;
+    canonicalProjection: ExactShardsCanonicalProjectionPermitV1;
     signal: AbortSignal;
   }>): Promise<ExactShardsPersistenceResultV1> {
     input.signal.throwIfAborted();
+    this.#assertCanonicalProjectionPermit(input.canonicalProjection);
     assertProjectedFinalizedExactShardsRecordV1(input.record);
     validateExactShardsPublicRecordV1(input.record, this.#descriptor);
     const record = input.record;
@@ -99,6 +142,15 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [CANONICAL_HISTORY_LOCK],
       );
+      if (!await this.#canonicalProjectionIsCurrent(
+        client,
+        input.canonicalProjection,
+        [record.launch.blockHash, record.finality.finalizedBlockHash],
+      )) {
+        await client.query("COMMIT");
+        transactionOpen = false;
+        return Object.freeze({ kind: "conflict" as const });
+      }
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [record.publicIdentity.registryLaunchId],
@@ -177,9 +229,11 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
 
   async materializeRevocation(input: Readonly<{
     record: ExactShardsRevocationRecordV1;
+    canonicalProjection: ExactShardsCanonicalProjectionPermitV1;
     signal: AbortSignal;
   }>): Promise<ExactShardsPersistenceResultV1> {
     input.signal.throwIfAborted();
+    this.#assertCanonicalProjectionPermit(input.canonicalProjection);
     assertProjectedExactShardsRevocationV1(input.record);
     const record = input.record;
     const eventBinding = canonicalSha256(
@@ -195,6 +249,15 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [CANONICAL_HISTORY_LOCK],
       );
+      if (!await this.#canonicalProjectionIsCurrent(
+        client,
+        input.canonicalProjection,
+        [record.blockHash, record.blockHash],
+      )) {
+        await client.query("COMMIT");
+        transactionOpen = false;
+        return Object.freeze({ kind: "conflict" as const });
+      }
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [record.launchId],
@@ -286,6 +349,31 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [CANONICAL_HISTORY_LOCK],
       );
+      const alreadyOrphaned = await client.query(`
+        SELECT block_hash
+          FROM programmable_website_projection_v1.registry_exact_shards_orphaned_blocks
+         WHERE block_hash = $1
+      `, [input.blockHash]);
+      if (alreadyOrphaned.rows[0] === undefined) {
+        const advanced = await client.query<CanonicalHistoryRow>(`
+          UPDATE programmable_website_projection_v1.registry_exact_shards_canonical_history
+             SET canonical_generation = canonical_generation + 1,
+                 updated_at = clock_timestamp()
+           WHERE singleton = true
+          RETURNING canonical_generation
+        `);
+        if (advanced.rows.length !== 1) {
+          throw new TypeError("ExactShards canonical history checkpoint is invalid");
+        }
+        const orphanedGeneration = canonicalGeneration(
+          advanced.rows[0]?.canonical_generation,
+        );
+        await client.query(`
+          INSERT INTO programmable_website_projection_v1.registry_exact_shards_orphaned_blocks
+            (block_hash, orphaned_generation)
+          VALUES ($1, $2::bigint)
+        `, [input.blockHash, orphanedGeneration.toString()]);
+      }
       const affected = await client.query<{ launch_id: string }>(`
         SELECT DISTINCT launch_id
           FROM programmable_website_projection_v1.registry_exact_shards_events
@@ -370,6 +458,40 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     }
   }
 
+  #assertCanonicalProjectionPermit(
+    permit: ExactShardsCanonicalProjectionPermitV1,
+  ): void {
+    if (permit === null || typeof permit !== "object"
+      || !this.#canonicalProjectionPermits.has(permit)) {
+      throw new TypeError("ExactShards canonical projection permit is invalid");
+    }
+  }
+
+  async #canonicalProjectionIsCurrent(
+    client: ProjectionTargetPostgresClientV1,
+    permit: ExactShardsCanonicalProjectionPermitV1,
+    blockHashes: readonly [string, string],
+  ): Promise<boolean> {
+    const checkpoint = await client.query<CanonicalHistoryRow>(`
+      SELECT canonical_generation
+        FROM programmable_website_projection_v1.registry_exact_shards_canonical_history
+       WHERE singleton = true
+       FOR UPDATE
+    `);
+    if (checkpoint.rows.length !== 1
+      || canonicalGeneration(checkpoint.rows[0]?.canonical_generation).toString()
+        !== permit.canonicalGeneration) {
+      return false;
+    }
+    const orphaned = await client.query(`
+      SELECT block_hash
+        FROM programmable_website_projection_v1.registry_exact_shards_orphaned_blocks
+       WHERE block_hash = $1 OR block_hash = $2
+       LIMIT 1
+    `, blockHashes);
+    return orphaned.rows[0] === undefined;
+  }
+
   async findByWebsiteProjectId(input: Readonly<{
     projectId: `sha256:${string}`;
     signal: AbortSignal;
@@ -427,6 +549,23 @@ function parseStoredRecord(
   });
   validateExactShardsPublicRecordV1(value, descriptor);
   return freezeDeep(value);
+}
+
+function canonicalGeneration(value: unknown): bigint {
+  if (typeof value !== "string" && typeof value !== "number"
+    && typeof value !== "bigint") {
+    throw new TypeError("ExactShards canonical generation is invalid");
+  }
+  let parsed: bigint;
+  try {
+    parsed = BigInt(value);
+  } catch {
+    throw new TypeError("ExactShards canonical generation is invalid");
+  }
+  if (parsed <= 0n || (typeof value === "number" && !Number.isSafeInteger(value))) {
+    throw new TypeError("ExactShards canonical generation is invalid");
+  }
+  return parsed;
 }
 
 async function rollback(client: Readonly<{
