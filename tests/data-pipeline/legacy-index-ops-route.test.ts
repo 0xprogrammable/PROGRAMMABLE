@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getOperationalOnchainDeployment: vi.fn(),
+  currentMarketOnchainDeployment: vi.fn(),
   readLiveExploreModel: vi.fn(),
   writeDurableExploreModel: vi.fn(),
   writePortfolioHistorySnapshot: vi.fn(),
@@ -11,6 +12,10 @@ vi.mock("../../lib/onchain", () => ({
   getWebsiteReadOnchainDeployment: mocks.getOperationalOnchainDeployment,
   readLiveExploreModel: mocks.readLiveExploreModel,
   writeDurableExploreModel: mocks.writeDurableExploreModel,
+}));
+
+vi.mock("../../lib/market-data/current-market-rpc.server", () => ({
+  currentMarketOnchainDeployment: mocks.currentMarketOnchainDeployment,
 }));
 
 vi.mock("../../lib/profile/portfolio-history-storage.server", () => ({
@@ -30,6 +35,12 @@ const deployment = Object.freeze({
     secondary: "quicknode" as const,
   }),
 });
+const durableRefreshDeployment = Object.freeze({
+  ...deployment,
+  rpcUrl: "https://quicknode.example.invalid/",
+  rpcUrlSecondary: "https://rpc.mevblocker.io/",
+  rpcProviderIds: undefined,
+});
 
 function request(secret = SECRET) {
   return new NextRequest("https://programmable.family/api/ops/index-v2", {
@@ -42,6 +53,9 @@ describe("legacy index operations routes", () => {
     process.env.CRON_SECRET = SECRET;
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.getOperationalOnchainDeployment.mockReturnValue(deployment);
+    mocks.currentMarketOnchainDeployment.mockReturnValue(
+      durableRefreshDeployment,
+    );
     mocks.readLiveExploreModel.mockResolvedValue({ status: "ready" });
     mocks.writeDurableExploreModel.mockResolvedValue({
       blockNumber: "25600000",
@@ -94,7 +108,12 @@ describe("legacy index operations routes", () => {
       tokenCount: 265,
     });
     expect(mocks.readLiveExploreModel).toHaveBeenCalledTimes(1);
-    expect(mocks.readLiveExploreModel).toHaveBeenCalledWith(deployment);
+    expect(mocks.currentMarketOnchainDeployment).toHaveBeenCalledWith(
+      deployment,
+    );
+    expect(mocks.readLiveExploreModel).toHaveBeenCalledWith(
+      durableRefreshDeployment,
+    );
     expect(mocks.writeDurableExploreModel).toHaveBeenCalledTimes(1);
     expect(mocks.writeDurableExploreModel).toHaveBeenCalledWith(
       deployment,
