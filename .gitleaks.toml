@@ -182,6 +182,49 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Exact Shards V2 golden vectors pin the same public deterministic repository key"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''contracts/spec/exact-shards-public-identity-golden\.json''',
+  '''contracts/spec/launch-permit-v1-golden\.json''',
+  '''contracts/test/ProgrammableExactShardsPublicIdentityGolden\.t\.sol''',
+  '''contracts/test/ProgrammableLaunchPermitV1Golden\.t\.sol''',
+]
+regexes = ['''(?i)(?:repositoryKey"?\s*[:=]\s*"?|REPOSITORY_KEY\s*=\s*)0x02ed38e86a7c41d5dea93cf5e3f829420837c4d351d9f4675929c6ce0041e835''']
+
+[[allowlists]]
+description = "Exact Shards V2 manifests and verifier pin the reviewed public Router V4 profile key"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''contracts/spec/shards-fee-policy-verifier-v2\.json''',
+  '''contracts/spec/shards-registry-successor-v2\.json''',
+  '''contracts/spec/shards-successor-manifest-input-v2\.json''',
+  '''contracts/src/ProgrammableExactShardsFeePolicyVerifierV2\.sol''',
+]
+regexes = ['''(?i)(?:profileKey"?\s*:\s*"?|PROFILE_KEY\s*=\s*)0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c''']
+
+[[allowlists]]
+description = "Exact Shards predictor fixtures contain public CREATE2 salts and bytecode hashes"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''contracts/spec/shards-v2-predictor-golden\.json''',
+  '''contracts/test/ProgrammableExactShardsRouteGatedFactoryV2\.t\.sol''',
+]
+regexes = [
+  '''(?:tokenSalt|effectiveTokenSalt|shardToken|tokenInitCodeHash|goldenTokenSalt)"?\s*[:=]\s*"?0x[0-9a-fA-F]{64}''',
+]
+
+[[allowlists]]
+description = "Launch permit authority comment names a public cancellation-key mapping"
+condition = "AND"
+regexTarget = "match"
+paths = ['''contracts/src/ProgrammableLaunchPermitAuthorityV1\.sol''']
+regexes = ['''cancellationKey\s*=>\s*ApprovalGenerationCancellationV1''']
+
+[[allowlists]]
 description = "Router V3 vendored artifacts contain public bytes32 profile and winner bindings"
 condition = "AND"
 regexTarget = "match"
