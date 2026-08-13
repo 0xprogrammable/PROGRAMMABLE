@@ -14,7 +14,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "5f0c5c23582a48fc7995cc4fcba865a9c20199418c0b7a0b7f9b687b2ae8717d",
+        sha256: "d35730c8dd636ae5707cda28c6768ce2853eff36311c80e9dbf4b8ecbce129af",
       }),
       eventFiltersPerRange: 5,
       requestDeadlineMs: 270_000,
