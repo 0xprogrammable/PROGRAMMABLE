@@ -63,7 +63,7 @@
     "contracts/scripts/test/custom-registry-v2-production-policy.test.mjs": "0x7e077e7737bbcb9d2c128aa73372a26fe36e917a03167e649924b0914b401d73",
     "contracts/scripts/test/custom-registry-v2-safe-controller-guards.test.mjs": "0xd1551114962157f68a434721c90d10117b7f1af85f3eb93791cf0aa9720670a0",
     "contracts/scripts/test/custom-registry-v2-safe-public-migration.test.mjs": "0x96d65b1e3830ccfb40feec2d6ecb7a3e8191bbf6bb593b5d6f663c338a42811e",
-    "contracts/scripts/test/custom-registry-v2-safe-public-migration-execution.test.mjs": "0xa888d646958e176cec0957f0152e53c00df3172b98f23004149a5fed102acd9c",
+    "contracts/scripts/test/custom-registry-v2-safe-public-migration-execution.test.mjs": "0xd286cf6912142c775e694faf6d3b07588d8a9656114104191c1164d013ef19a0",
     "contracts/scripts/test/custom-registry-v2-transaction-journal.test.mjs": "0xe6e901d518810fa13c04b587a356014f46f1bf858a80b61cc373042b6b37e225",
     "contracts/scripts/test/custom-registry-v2-source-verification-core.test.mjs": "0x867e66b400e307f6af7c7737298ad4bc51b7df1431003a43617f93851cebe75c",
     "contracts/test/CustomRegistryV2SafeAtomicBatchMainnetFork.t.sol": "0xb6099d9e3934e3ade68abce571126ae7fddcc7bf86baf94f9369d8998c7ac871",

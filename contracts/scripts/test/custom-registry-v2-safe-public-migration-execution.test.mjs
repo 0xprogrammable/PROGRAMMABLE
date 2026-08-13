@@ -721,6 +721,36 @@ test("continuation provenance binds the original authorized execution bundle", a
         /continuation execution provenance|release authorization/u,
       );
     }
+    const historicalExecution = {
+      ...execution,
+      plan: {
+        ...execution.plan,
+        releaseAuthorization: {
+          ...execution.plan.releaseAuthorization,
+          owner: "0x0000000000000000000000000000000000000042",
+        },
+      },
+    };
+    assert.throws(
+      () =>
+        migrationModule.assertSafeMigrationContinuationExecutionBinding({
+          entry,
+          execution: historicalExecution,
+          executionBundlePath: entry.executionBundlePath,
+          executionBundleSha256: entry.executionBundleSha256,
+          migrationPlanDigest: value.plan.migrationPlanDigest,
+          source: value.plan.source,
+          darkSafeVerificationSha256: value.plan.darkSafeVerificationSha256,
+          policySha256: value.plan.policySha256,
+          safeControllerPolicySha256: value.plan.safeControllerPolicySha256,
+          releasePolicySha256: value.plan.releasePolicySha256,
+          predeploymentManifestSha256:
+            value.plan.predeploymentManifestSha256,
+          hardwareInventorySha256: value.plan.hardwareInventorySha256,
+          releaseAuthorization: value.plan.releaseAuthorization,
+        }),
+      /release authorization/u,
+    );
   } finally {
     await rm(value.directory, { recursive: true, force: true });
   }
