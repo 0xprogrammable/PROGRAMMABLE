@@ -17,6 +17,11 @@ import {
 export const EXPLORE_DATA_QUALITY_SCHEMA_VERSION =
   "programmable.explore-data-quality.v1" as const;
 export const EXPLORE_VALUATION_MAX_LAG_BLOCKS = 64n;
+// This mirrors the fail-closed general stale ceiling in the production release
+// gate. The direct token-detail path deliberately keeps its separate exact
+// historical PCAN evidence contract.
+export const PUBLIC_EXPLORE_MAXIMUM_STALE_FDV_AGE_MS =
+  24 * 60 * 60_000;
 
 const UINT_256_MAX = (1n << 256n) - 1n;
 const WAD = 10n ** 18n;
@@ -123,6 +128,11 @@ export type ExploreSourceStatus =
 type ValuationContext = Readonly<{
   referenceBlock?: string | null;
   forceStale?: boolean;
+}>;
+
+type BitqueryValuationContext = Readonly<{
+  maximumStaleAgeMs?: number;
+  nowMs?: number;
 }>;
 
 function uint256(value: unknown): bigint | null {
@@ -302,7 +312,30 @@ export function withBitqueryMarketData<T extends ExploreEntry>(
   entry: T,
   marketData: TokenMarketDataV1,
 ): ValuedExploreEntry<T> {
-  const reconciledMarketData = reconcileBitqueryValuations(entry, marketData);
+  return withReconciledBitqueryMarketData(entry, marketData, {});
+}
+
+export function withPublicExploreBitqueryMarketData<T extends ExploreEntry>(
+  entry: T,
+  marketData: TokenMarketDataV1,
+  nowMs = Date.now(),
+): ValuedExploreEntry<T> {
+  return withReconciledBitqueryMarketData(entry, marketData, {
+    maximumStaleAgeMs: PUBLIC_EXPLORE_MAXIMUM_STALE_FDV_AGE_MS,
+    nowMs,
+  });
+}
+
+function withReconciledBitqueryMarketData<T extends ExploreEntry>(
+  entry: T,
+  marketData: TokenMarketDataV1,
+  context: BitqueryValuationContext,
+): ValuedExploreEntry<T> {
+  const reconciledMarketData = reconcileBitqueryValuations(
+    entry,
+    marketData,
+    context,
+  );
   const primary = reconciledMarketData.pools.find(
     (pool) => pool.identity.poolId === reconciledMarketData.primaryPoolId,
   );
@@ -338,6 +371,7 @@ export function withBitqueryMarketData<T extends ExploreEntry>(
 function reconcileBitqueryValuations<T extends ExploreEntry>(
   entry: T,
   marketData: TokenMarketDataV1,
+  context: BitqueryValuationContext,
 ): TokenMarketDataV1 {
   // Bitquery owns the market price, but Router/Registry owns the token
   // identity and canonical fixed supply. Its third-party circulating-supply
@@ -440,6 +474,13 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
       ? [tradeTime, priceTime]
       : [tradeTime, priceTime, liquidityTime];
     const asOfTime = new Date(Math.min(...evidenceTimes)).toISOString();
+    if (!marketValuationWithinMaximumAge(asOfTime, context)) {
+      return {
+        ...pool,
+        quality: "partial",
+        valuation: { status: "unavailable", reason: "price-unavailable" },
+      };
+    }
     const evidenceIsCurrent = pool.liquidity !== undefined &&
       evidenceTimes.every(
       (time) => generatedTime - time <= MARKET_DATA_CURRENT_MAX_AGE_MS,
@@ -467,6 +508,21 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
     };
   });
   return { ...marketData, pools };
+}
+
+function marketValuationWithinMaximumAge(
+  asOfTime: string,
+  context: BitqueryValuationContext,
+): boolean {
+  if (context.maximumStaleAgeMs === undefined) return true;
+  const nowMs = context.nowMs ?? Date.now();
+  const asOfMs = Date.parse(asOfTime);
+  return Number.isSafeInteger(context.maximumStaleAgeMs) &&
+    context.maximumStaleAgeMs >= 0 &&
+    Number.isSafeInteger(nowMs) &&
+    Number.isFinite(asOfMs) &&
+    asOfMs <= nowMs + MAXIMUM_MARKET_FUTURE_SKEW_MS &&
+    nowMs - asOfMs <= context.maximumStaleAgeMs;
 }
 
 function usdPricesWithinConfidence(rawPrice: bigint, indexedPrice: bigint): boolean {

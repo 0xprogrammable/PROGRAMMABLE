@@ -82,6 +82,7 @@ import {
 
 const HOOK_ADDRESS =
   "0x3333333333333333333333333333333333333333" as const;
+const MARKET_OBSERVATION_TIME = new Date().toISOString();
 
 function token(index: number): LauncherToken {
   const tokenAddress = `0x${index.toString(16).padStart(40, "0")}` as const;
@@ -109,15 +110,21 @@ function token(index: number): LauncherToken {
 
 function bitqueryMarketData(
   identities: readonly MarketDataIdentityV1[],
-  options: Readonly<{ freshness?: "current" | "stale" }> = {},
+  options: Readonly<{
+    freshness?: "current" | "stale";
+    generatedAt?: string;
+    asOfTime?: string;
+  }> = {},
 ): ReadonlyMap<string, TokenMarketDataV1> {
+  const generatedAt = options.generatedAt ?? MARKET_OBSERVATION_TIME;
+  const asOfTime = options.asOfTime ?? MARKET_OBSERVATION_TIME;
   return new Map(identities.map((identity) => {
     const value = (BigInt(identity.tokenAddress) * 10n ** 18n).toString();
     const priceUsdWad = (BigInt(identity.tokenAddress) * 10n ** 9n).toString();
     return [identity.tokenAddress, {
       schemaVersion: "programmable.market-data.v1",
       source: "bitquery",
-      generatedAt: "2026-08-11T14:00:00.000Z",
+      generatedAt,
       status: options.freshness === "stale" ? "stale" : "current",
       primaryPoolId: identity.poolId,
       pools: [{
@@ -125,20 +132,20 @@ function bitqueryMarketData(
         source: "bitquery",
         status: options.freshness === "stale" ? "stale" : "current",
         quality: "complete",
-        asOfTime: "2026-08-11T14:00:00.000Z",
+        asOfTime,
         latestTrade: {
           transactionHash: `0x${"aa".repeat(32)}`,
           logIndex: 1,
           blockNumber: "25740000",
-          time: "2026-08-11T14:00:00.000Z",
+          time: asOfTime,
           tokenSide: "buy",
           priceUsdWad,
-          priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
+          priceUsdAsOfTime: asOfTime,
           priceUsdSource: "bitquery-token-price-index-v1",
           rawPriceUsdWad: priceUsdWad,
         },
         liquidity: {
-          asOfTime: "2026-08-11T14:00:00.000Z",
+          asOfTime,
           asOfBlock: "25740000",
           valueUsdWad: "100000000000000000000000",
           freshness: options.freshness ?? "current",
@@ -150,7 +157,7 @@ function bitqueryMarketData(
           valueUsdWad: value,
           fdvUsdWad: value,
           totalSupply: "1000000",
-          asOfTime: "2026-08-11T14:00:00.000Z",
+          asOfTime,
           freshness: options.freshness ?? "current",
         },
       }],
@@ -570,7 +577,7 @@ describe("Explore API Bitquery market boundary", () => {
           stale: 0,
           unknown: 0,
           asOfBlock: null,
-          asOfTime: "2026-08-11T14:00:00.000Z",
+          asOfTime: MARKET_OBSERVATION_TIME,
         },
       },
     });
@@ -581,7 +588,7 @@ describe("Explore API Bitquery market boundary", () => {
       currency: "usd",
       freshness: "current",
       source: "bitquery",
-      asOfTime: "2026-08-11T14:00:00.000Z",
+      asOfTime: MARKET_OBSERVATION_TIME,
     });
     expect(body.tokens[0].fdvUsdWad).toBe(
       body.tokens[0].valuation.valueWad,
@@ -688,6 +695,50 @@ describe("Explore API Bitquery market boundary", () => {
     );
   });
 
+  it("removes public FDV when a fresh response contains a trade older than 24 hours", async () => {
+    const generatedAt = new Date().toISOString();
+    const asOfTime = new Date(
+      Date.now() - 24 * 60 * 60_000 - 1,
+    ).toISOString();
+    mocks.readBitqueryTokenMarketDataV1.mockImplementation(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        bitqueryMarketData(identities, {
+          freshness: "stale",
+          generatedAt,
+          asOfTime,
+        }),
+    );
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=market-cap&limit=100"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tokens).toHaveLength(30);
+    expect(body.tokens.every((entry: {
+      fdvUsdWad?: string;
+      valuation: { status: string; reason?: string };
+      marketData?: {
+        pools?: Array<{
+          valuation?: { status?: string; reason?: string };
+        }>;
+      };
+    }) => {
+      const poolValuation = entry.marketData?.pools?.[0]?.valuation;
+      return entry.fdvUsdWad === undefined &&
+        entry.valuation.status === "unavailable" &&
+        entry.valuation.reason === "price-unavailable" &&
+        poolValuation?.status === "unavailable" &&
+        poolValuation.reason === "price-unavailable";
+    })).toBe(true);
+    expect(body.dataQuality.valuation).toMatchObject({
+      status: "unavailable",
+      available: 0,
+      unavailable: 30,
+    });
+  });
+
   it("binds current FDV to Bitquery time instead of the lagging identity snapshot", async () => {
     const staleModelSnapshot = {
       ...snapshot,
@@ -746,7 +797,7 @@ describe("Explore API Bitquery market boundary", () => {
       status: "available",
       freshness: "current",
       source: "bitquery",
-      asOfTime: "2026-08-11T14:00:00.000Z",
+      asOfTime: MARKET_OBSERVATION_TIME,
     });
     expect(body.dataQuality).toMatchObject({
       launchIdentity: {
@@ -756,7 +807,7 @@ describe("Explore API Bitquery market boundary", () => {
       valuation: {
         status: "current",
         asOfBlock: null,
-        asOfTime: "2026-08-11T14:00:00.000Z",
+        asOfTime: MARKET_OBSERVATION_TIME,
       },
     });
   });
