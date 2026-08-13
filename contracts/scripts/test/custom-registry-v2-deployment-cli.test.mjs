@@ -325,7 +325,7 @@ test("authorize CLI rejects stale and constructor-spliced preflights", async () 
   const directory = await durableTestDirectory();
   await import("node:fs/promises").then(({ chmod }) => chmod(directory, 0o700));
   try {
-    const owner = "0xc7fB6d0d2b78A30D0D3599F7F4BAd5c9b87665AF";
+    const owner = "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
     const base = {
       schemaVersion: "programmable.custom-registry-deployment-preflight.v4",
       status: "PREFLIGHT_ONLY_NO_TRANSACTION",

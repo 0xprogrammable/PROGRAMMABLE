@@ -436,7 +436,7 @@ test("requires exact completed role evidence for a mixed-state continuation", ()
 
 test("binds migration execution authority to the exact release owner workflow", () => {
   const releaseAuthorization = {
-    owner: "0xc7fB6d0d2b78A30D0D3599F7F4BAd5c9b87665AF",
+    owner: "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     maximumDispatchIntentAuthorizationValiditySeconds: 300,
     authorizationSemantics:
       "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION",
