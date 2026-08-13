@@ -533,9 +533,10 @@ function validatePrincipalApplicationList(value, expectedGithubUserId, ownApplic
   }
   if (
     ownApplication.state !== "approved"
-    || ownApplication.intakeContract !== "aeon-v1"
-    || ownApplication.providerId !== "aeon"
-    || ownApplication.controlRepositoryId !== "1325324453"
+    || ownApplication.intakeContract !== "registry-v3"
+    || (ownApplication.providerId !== undefined
+      && ownApplication.providerId !== "programmable-registry")
+    || ownApplication.controlRepositoryId !== "1320171831"
     || ownApplication.controlRepositoryOwnerId !== "309941960"
     || !SHA256_DIGEST.test(ownApplication.receiptDigest ?? "")
     || !SHA256_DIGEST.test(ownApplication.launchEntitlementBindingHash ?? "")
@@ -715,7 +716,7 @@ function validateLaunchFeePolicy(value) {
     || typeof value.templateId !== "string" || !FEE_ID.test(value.templateId)
     || typeof value.semanticVersion !== "string" || !SEMVER.test(value.semanticVersion)
     || ![
-      "standard-programmable-custom", "aeon-partner-custom", "no-qualifying-market",
+      "standard-programmable-custom", "no-qualifying-market",
     ].includes(value.feeMode)
     || !Array.isArray(value.legs)
   ) throw new TypeError("Authenticated canary launch fee policy is invalid");
@@ -739,8 +740,7 @@ function validateLaunchFeePolicy(value) {
   if (value.feeMode === "standard-programmable-custom") {
     const programmable = value.legs[0];
     if (
-      value.providerId === "aeon"
-      || value.totalRatePpm !== 1000
+      value.totalRatePpm !== 1000
       || value.totalRateBps !== 10
       || value.chargeMode !== "added-on-top"
       || value.normalProgrammableTenBpsApplied !== true
@@ -754,27 +754,7 @@ function validateLaunchFeePolicy(value) {
     return value.feeMode;
   }
 
-  const [provider, programmable] = value.legs;
-  if (
-    value.providerId !== "aeon"
-    || value.totalRatePpm !== 2000
-    || value.totalRateBps !== 20
-    || value.chargeMode !== "included-in-partner-total"
-    || value.normalProgrammableTenBpsApplied !== false
-    || value.legs.length !== 2
-    || provider.role !== "provider"
-    || provider.ratePpm !== 1500
-    || provider.rateBps !== 15
-    || provider.recipient.namespace !== "eip155:1"
-    || provider.recipient.value.toLowerCase()
-      === PROGRAMMABLE_FEE_RECIPIENT.toLowerCase()
-    || programmable.role !== "programmable"
-    || programmable.ratePpm !== 500
-    || programmable.rateBps !== 5
-    || programmable.recipient.namespace !== "eip155:1"
-    || programmable.recipient.value !== PROGRAMMABLE_FEE_RECIPIENT
-  ) throw new TypeError("Authenticated canary launch fee policy is invalid");
-  return value.feeMode;
+  throw new TypeError("Authenticated canary launch fee policy is invalid");
 }
 
 function validateLaunchFeeLeg(value) {
@@ -898,14 +878,6 @@ function validateApplication(value) {
       || value.controlRepositoryId !== undefined
       || value.controlRepositoryOwnerId !== undefined
       || value.grandfatheredAtReleaseBindingDigest !== undefined
-    ) throw new TypeError("Authenticated canary intake identity is invalid");
-  } else if (value.intakeContract === "aeon-v1") {
-    if (
-      value.providerId !== "aeon"
-      || value.controlRepositoryId !== "1325324453"
-      || value.controlRepositoryOwnerId !== "309941960"
-      || (value.grandfatheredAtReleaseBindingDigest !== undefined
-        && value.grandfatheredAtReleaseBindingDigest !== null)
     ) throw new TypeError("Authenticated canary intake identity is invalid");
   } else if (value.intakeContract === "registry-v3") {
     if (

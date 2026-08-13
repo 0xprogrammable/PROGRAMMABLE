@@ -1982,6 +1982,7 @@ export function evaluateReadModelOperationsSourceContracts(
       deployWorkflow.includes(
         'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
       ) &&
+      deployWorkflow.includes("set -o pipefail") &&
       deployWorkflow.includes(
         'node scripts/bind-vercel-sensitive-production-metadata.mjs',
       ) &&

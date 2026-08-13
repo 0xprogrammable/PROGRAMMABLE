@@ -52,10 +52,10 @@ export const CUSTOM_V2_POLICY = Object.freeze({
 export const CUSTOM_V2_RELEASE_PATH = "./custom-v2-release.json";
 
 export const CUSTOM_REGISTRY = Object.freeze({
-  address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
-  startBlock: 25_701_139n,
-  runtimeCodeHash:
-    "0xa3276868befc509594adea6c5bd81c3c1bd013686f03fd57914fd39c917185f7",
+  status: "retired",
+  address: "0x0000000000000000000000000000000000000000",
+  startBlock: 0n,
+  runtimeCodeHash: null,
 });
 
 export const CUSTOM_EVENT_TOPICS = Object.freeze({

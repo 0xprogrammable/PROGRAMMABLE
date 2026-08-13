@@ -628,7 +628,6 @@ function validatedCustomLaunchFeePolicyV1(
   }
   const feeMode = stringField(source.feeMode, "custom launch fee mode");
   if (feeMode !== "standard-programmable-custom"
-    && feeMode !== "aeon-partner-custom"
     && feeMode !== "no-qualifying-market") {
     throw new TypeError("custom launch fee mode is invalid");
   }
@@ -643,7 +642,6 @@ function validatedCustomLaunchFeePolicyV1(
   const totalRateBps = rate(source.totalRateBps, 0, 20, "custom launch total fee bps");
   const chargeMode = stringField(source.chargeMode, "custom launch fee charge mode");
   if (chargeMode !== "added-on-top"
-    && chargeMode !== "included-in-partner-total"
     && chargeMode !== "none") {
     throw new TypeError("custom launch fee charge mode is invalid");
   }
@@ -693,23 +691,12 @@ function validatedCustomLaunchFeePolicyV1(
     throw new TypeError("custom launch Programmable fee recipient is invalid");
   }
   if (feeMode === "standard-programmable-custom") {
-    if (providerId === "aeon" || marketPathId === null || totalRatePpm !== 1000
+    if (marketPathId === null || totalRatePpm !== 1000
       || totalRateBps !== 10 || chargeMode !== "added-on-top"
       || source.normalProgrammableTenBpsApplied !== true || legs.length !== 1
       || providerLeg !== undefined || programmableLeg?.ratePpm !== 1000
       || programmableLeg?.rateBps !== 10) {
       throw new TypeError("standard Custom fee policy is invalid");
-    }
-  } else if (feeMode === "aeon-partner-custom") {
-    if (providerId !== "aeon" || marketPathId === null || totalRatePpm !== 2000
-      || totalRateBps !== 20 || chargeMode !== "included-in-partner-total"
-      || source.normalProgrammableTenBpsApplied !== false || legs.length !== 2
-      || legs[0]?.role !== "provider" || legs[1]?.role !== "programmable"
-      || providerLeg?.ratePpm !== 1500 || providerLeg?.rateBps !== 15
-      || programmableLeg?.ratePpm !== 500 || programmableLeg?.rateBps !== 5
-      || providerLeg?.recipient.value.toLowerCase()
-        === PLATFORM_FEE_RECIPIENT.toLowerCase()) {
-      throw new TypeError("AEON Custom fee policy is invalid");
     }
   } else if (marketPathId !== null || totalRatePpm !== 0 || totalRateBps !== 0
     || chargeMode !== "none" || source.normalProgrammableTenBpsApplied !== false

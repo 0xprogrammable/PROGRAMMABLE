@@ -144,13 +144,6 @@ function validateApplicationSummaryV2(value: unknown): void {
   if (record.intakeContract === undefined) {
     legacyV2ApplicationId(record.applicationId);
     if (hasCompatibilityField) mismatch();
-  } else if (record.intakeContract === "aeon-v1") {
-    applicationV3Id(record.applicationId);
-    if (record.providerId !== "aeon"
-      || record.controlRepositoryId !== "1325324453"
-      || record.controlRepositoryOwnerId !== "309941960"
-      || (record.grandfatheredAtReleaseBindingDigest !== undefined
-        && record.grandfatheredAtReleaseBindingDigest !== null)) mismatch();
   } else if (record.intakeContract === "registry-v3") {
     applicationV3Id(record.applicationId);
     if ((record.providerId !== undefined && record.providerId !== "programmable-registry")
@@ -286,7 +279,7 @@ function validateLaunchRouteV2(value: unknown): void {
 
 function validateCustomLaunchManualClaimPolicyV1(
   value: unknown,
-  feeMode: "standard-programmable-custom" | "aeon-partner-custom" | "no-qualifying-market",
+  feeMode: "standard-programmable-custom" | "no-qualifying-market",
 ): void {
   if (feeMode === "no-qualifying-market") {
     if (value !== null) mismatch();
@@ -308,10 +301,7 @@ function validateCustomLaunchManualClaimPolicyV1(
   literal(policy.recipientSelector, "0x424ff2a5");
   literal(policy.feeBpsSelector, "0x32c0314d");
   literal(policy.sourceInterfaceId, "0x808cb67a");
-  literal(
-    policy.expectedProgrammableFeeBps,
-    feeMode === "standard-programmable-custom" ? 10 : 5,
-  );
+  literal(policy.expectedProgrammableFeeBps, 10);
 }
 
 function validatePresentationResponseV1(value: unknown): void {
@@ -1210,7 +1200,7 @@ function validateCustomLaunchFeePolicyV1(
     modelId?: string;
     marketPathIds?: ReadonlySet<string>;
   }>,
-): "standard-programmable-custom" | "aeon-partner-custom" | "no-qualifying-market" {
+): "standard-programmable-custom" | "no-qualifying-market" {
   const policy = exactRecord(value, [
     "schemaVersion", "providerId", "modelId", "templateId", "semanticVersion",
     "feeMode", "marketPathId", "totalRatePpm", "totalRateBps", "chargeMode",
@@ -1222,11 +1212,11 @@ function validateCustomLaunchFeePolicyV1(
   regexString(policy.templateId, FEE_ID_V1, 128);
   regexString(policy.semanticVersion, SEMVER_V1, 128);
   const feeMode = enumValue(policy.feeMode, [
-    "standard-programmable-custom", "aeon-partner-custom", "no-qualifying-market",
+    "standard-programmable-custom", "no-qualifying-market",
   ]);
-  enumValue(policy.chargeMode, ["added-on-top", "included-in-partner-total", "none"]);
-  safeInteger(policy.totalRatePpm, 0, 2000);
-  safeInteger(policy.totalRateBps, 0, 20);
+  enumValue(policy.chargeMode, ["added-on-top", "none"]);
+  safeInteger(policy.totalRatePpm, 0, 1000);
+  safeInteger(policy.totalRateBps, 0, 10);
   booleanValue(policy.normalProgrammableTenBpsApplied);
   if (policy.marketPathId !== null) regexString(policy.marketPathId, FEE_ID_V1, 128);
   if (context.modelId !== undefined && policy.modelId !== context.modelId) mismatch();
@@ -1258,8 +1248,7 @@ function validateCustomLaunchFeePolicyV1(
 
   if (feeMode === "standard-programmable-custom") {
     if (
-      policy.providerId === "aeon"
-      || policy.marketPathId === null
+      policy.marketPathId === null
       || policy.totalRatePpm !== 1000
       || policy.totalRateBps !== 10
       || policy.chargeMode !== "added-on-top"
@@ -1268,28 +1257,6 @@ function validateCustomLaunchFeePolicyV1(
       || programmableLeg?.ratePpm !== 1000
       || programmableLeg?.rateBps !== 10
       || providerLeg !== undefined
-    ) mismatch();
-  } else if (feeMode === "aeon-partner-custom") {
-    const providerRecipient = providerLeg === undefined
-      ? null
-      : (providerLeg.recipient as JsonRecordV2).value;
-    if (
-      policy.providerId !== "aeon"
-      || policy.marketPathId === null
-      || policy.totalRatePpm !== 2000
-      || policy.totalRateBps !== 20
-      || policy.chargeMode !== "included-in-partner-total"
-      || policy.normalProgrammableTenBpsApplied !== false
-      || legs.length !== 2
-      || legs[0]?.role !== "provider"
-      || legs[1]?.role !== "programmable"
-      || providerLeg?.ratePpm !== 1500
-      || providerLeg?.rateBps !== 15
-      || programmableLeg?.ratePpm !== 500
-      || programmableLeg?.rateBps !== 5
-      || providerRecipient === null
-      || (providerRecipient as string).toLowerCase()
-        === PROGRAMMABLE_FEE_RECIPIENT_V1.toLowerCase()
     ) mismatch();
   } else if (
     policy.marketPathId !== null

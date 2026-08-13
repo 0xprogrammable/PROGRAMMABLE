@@ -226,7 +226,7 @@ describe("custom launch client response contracts", () => {
     });
   });
 
-  it("accepts only the explicit AEON, registry-v3, and legacy compatibility shapes", async () => {
+  it("accepts only the explicit registry-v3 and legacy compatibility shapes", async () => {
     const legacyOmitted = applicationList();
     await expect(clientFor(legacyOmitted).applications()).resolves.toMatchObject({
       applications: [{ applicationId: "application-1" }],
@@ -243,17 +243,6 @@ describe("custom launch client response contracts", () => {
         intakeContract: "registry-v3",
         controlRepositoryId: "1320171831",
       }],
-    });
-
-    const aeonV1 = applicationList();
-    Object.assign(aeonV1.applications[0]!, {
-      intakeContract: "aeon-v1",
-      providerId: "aeon",
-      controlRepositoryId: "1325324453",
-      controlRepositoryOwnerId: "309941960",
-    });
-    await expect(clientFor(aeonV1).applications()).resolves.toMatchObject({
-      applications: [{ intakeContract: "aeon-v1", providerId: "aeon" }],
     });
 
     const legacyV2 = applicationList();
@@ -373,58 +362,20 @@ describe("custom launch client response contracts", () => {
     );
   });
 
-  it("accepts only exact standard, AEON, and no-market route fee policies", async () => {
+  it("accepts only exact standard and no-market route fee policies", async () => {
     await expect(clientFor(launchDescriptor()).launchDescriptor(
       APPLICATION_HANDLE,
     )).resolves.toMatchObject({
       routes: [{ feePolicy: { feeMode: "standard-programmable-custom" } }],
     });
 
-    const aeon = launchDescriptor();
-    Object.assign(aeon.routes[0]!, {
-      feePolicy: {
-        schemaVersion: "programmable.custom-launch-fee-policy.v1",
-        providerId: "aeon",
-        modelId: "aeon-agent-launch",
-        templateId: "aeon-approved-model",
-        semanticVersion: "1.2.3",
-        feeMode: "aeon-partner-custom",
-        marketPathId: "aeon-hook-market-v1",
-        totalRatePpm: 2000,
-        totalRateBps: 20,
-        chargeMode: "included-in-partner-total",
-        normalProgrammableTenBpsApplied: false,
-        legs: [{
-          role: "provider",
-          ratePpm: 1500,
-          rateBps: 15,
-          recipient: {
-            namespace: "eip155:1",
-            value: APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE,
-          },
-        }, {
-          role: "programmable",
-          ratePpm: 500,
-          rateBps: 5,
-          recipient: {
-            namespace: "eip155:1",
-            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          },
-        }],
-      },
-      manualClaimPolicy: manualClaimPolicy(5),
-    });
-    await expect(clientFor(aeon).launchDescriptor(APPLICATION_HANDLE)).resolves.toMatchObject({
-      routes: [{ feePolicy: { providerId: "aeon", totalRateBps: 20 } }],
-    });
-
     const noMarket = launchDescriptor();
     Object.assign(noMarket.routes[0]!, {
       feePolicy: {
         schemaVersion: "programmable.custom-launch-fee-policy.v1",
-        providerId: "aeon",
-        modelId: "aeon-agent-launch",
-        templateId: "aeon-approved-model",
+        providerId: "programmable",
+        modelId: "custom-contract-graph",
+        templateId: "standard-custom",
         semanticVersion: "1.2.3",
         feeMode: "no-qualifying-market",
         marketPathId: null,
@@ -439,18 +390,6 @@ describe("custom launch client response contracts", () => {
     await expect(clientFor(noMarket).launchDescriptor(APPLICATION_HANDLE)).resolves.toMatchObject({
       routes: [{ feePolicy: { feeMode: "no-qualifying-market", totalRateBps: 0 } }],
     });
-
-    const invalidMutations = [
-      { normalProgrammableTenBpsApplied: true },
-      { providerId: "other-provider" },
-      { semanticVersion: "1" },
-      { totalRatePpm: 3000, totalRateBps: 30 },
-    ];
-    for (const mutation of invalidMutations) {
-      const invalid = structuredClone(aeon);
-      Object.assign(invalid.routes[0]!.feePolicy, mutation);
-      await expectContractMismatch(clientFor(invalid).launchDescriptor(APPLICATION_HANDLE));
-    }
 
     const missingClaimPolicy = launchDescriptor();
     delete (missingClaimPolicy.routes[0] as Partial<

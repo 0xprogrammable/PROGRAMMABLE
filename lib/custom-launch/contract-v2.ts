@@ -37,27 +37,6 @@ export type CustomLaunchFeePolicyV1 = Readonly<
       }];
     })
   | (CustomLaunchFeePolicyBaseV1 & {
-      readonly providerId: "aeon";
-      readonly feeMode: "aeon-partner-custom";
-      readonly marketPathId: string;
-      readonly totalRatePpm: 2000;
-      readonly totalRateBps: 20;
-      readonly chargeMode: "included-in-partner-total";
-      readonly normalProgrammableTenBpsApplied: false;
-      readonly legs: readonly [
-        CustomLaunchFeeLegV1 & {
-          readonly role: "provider";
-          readonly ratePpm: 1500;
-          readonly rateBps: 15;
-        },
-        CustomLaunchFeeLegV1 & {
-          readonly role: "programmable";
-          readonly ratePpm: 500;
-          readonly rateBps: 5;
-        },
-      ];
-    })
-  | (CustomLaunchFeePolicyBaseV1 & {
       readonly feeMode: "no-qualifying-market";
       readonly marketPathId: null;
       readonly totalRatePpm: 0;
@@ -89,7 +68,7 @@ export type CustomLaunchManualClaimPolicyV1 = Readonly<{
   readonly recipientSelector: "0x424ff2a5";
   readonly feeBpsSelector: "0x32c0314d";
   readonly sourceInterfaceId: "0x808cb67a";
-  readonly expectedProgrammableFeeBps: 5 | 10;
+  readonly expectedProgrammableFeeBps: 10;
 }>;
 
 export interface TrustedLaunchPermitSignerV2 {
@@ -564,13 +543,6 @@ export type PrincipalCustomLaunchApplicationSummaryV2 =
       controlRepositoryId?: undefined;
       controlRepositoryOwnerId?: undefined;
       grandfatheredAtReleaseBindingDigest?: undefined;
-    }>)
-  | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
-      intakeContract: "aeon-v1";
-      providerId: "aeon";
-      controlRepositoryId: "1325324453";
-      controlRepositoryOwnerId: "309941960";
-      grandfatheredAtReleaseBindingDigest?: null;
     }>)
   | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
       intakeContract: "registry-v3";
