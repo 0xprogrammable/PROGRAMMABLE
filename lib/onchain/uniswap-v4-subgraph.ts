@@ -240,6 +240,10 @@ export type OfficialV4LiquidityEvidenceReadCategory =
   | "response-envelope-schema"
   | "response-meta-schema"
   | "response-block-schema"
+  | "response-block-keys-schema"
+  | "response-block-number-schema"
+  | "response-block-hash-schema"
+  | "response-block-timestamp-schema"
   | "response-pool-schema"
   | "response-pool-id-schema"
   | "response-pool-token-schema"
@@ -450,14 +454,17 @@ function strictBlockTimestamp(value: unknown): {
   timestamp: string;
   time: string;
 } {
-  const timestamp = strictBlockNumber(value, "response-block-schema");
+  const timestamp = strictBlockNumber(
+    value,
+    "response-block-timestamp-schema",
+  );
   if (timestamp > 8_640_000_000_000n) {
-    return invalidResponse("response-block-schema");
+    return invalidResponse("response-block-timestamp-schema");
   }
   const milliseconds = Number(timestamp) * 1_000;
   const date = new Date(milliseconds);
   if (!Number.isFinite(milliseconds) || Number.isNaN(date.getTime())) {
-    return invalidResponse("response-block-schema");
+    return invalidResponse("response-block-timestamp-schema");
   }
   return { timestamp: timestamp.toString(), time: date.toISOString() };
 }
@@ -581,7 +588,7 @@ export function parseOfficialV4SubgraphResponse(
     !isRecord(value.data._meta.block) ||
     !hasOnlyKeys(value.data._meta.block, ["number", "hash", "timestamp"])
   ) {
-    return invalidResponse("response-block-schema");
+    return invalidResponse("response-block-keys-schema");
   }
   if (
     !Array.isArray(value.data.pools) ||
@@ -598,7 +605,7 @@ export function parseOfficialV4SubgraphResponse(
 
   const indexedBlockNumber = strictBlockNumber(
     value.data._meta.block.number,
-    "response-block-schema",
+    "response-block-number-schema",
   );
   const indexedBlockTimestamp = strictBlockTimestamp(
     value.data._meta.block.timestamp,
@@ -614,7 +621,7 @@ export function parseOfficialV4SubgraphResponse(
     indexedBlockNumber: indexedBlockNumber.toString(),
     indexedBlockHash: strictBytes32(
       value.data._meta.block.hash,
-      "response-block-schema",
+      "response-block-hash-schema",
     ),
     indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
     indexedBlockTime: indexedBlockTimestamp.time,
