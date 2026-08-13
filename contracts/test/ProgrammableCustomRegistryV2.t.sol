@@ -13,12 +13,14 @@ contract NeutralRegistryRuntimeV2 {
     }
 }
 
+contract NeutralOperationalControllerV2 { }
+
 contract ProgrammableCustomRegistryV2Test is Test {
     address internal constant ADMIN = address(0xA11CE);
-    address internal constant APPROVER = address(0xA990);
-    address internal constant REGISTRAR = address(0xB001);
-    address internal constant FINALIZER = address(0xF1A1);
-    address internal constant REVOKER = address(0xDEAD);
+    address internal APPROVER;
+    address internal REGISTRAR;
+    address internal FINALIZER;
+    address internal REVOKER;
     address internal constant OUTSIDER = address(0xBAD);
     address internal constant LAUNCH_WALLET = address(0x1A0C);
 
@@ -28,6 +30,10 @@ contract ProgrammableCustomRegistryV2Test is Test {
     function setUp() public {
         vm.chainId(1);
         vm.roll(100);
+        APPROVER = address(new NeutralOperationalControllerV2());
+        REGISTRAR = address(new NeutralOperationalControllerV2());
+        FINALIZER = address(new NeutralOperationalControllerV2());
+        REVOKER = address(new NeutralOperationalControllerV2());
         target = new NeutralRegistryRuntimeV2();
         registry = new ProgrammableCustomRegistryV2(_config());
     }
@@ -69,6 +75,34 @@ contract ProgrammableCustomRegistryV2Test is Test {
             vm.prank(holders[i]);
             registry.renounceRole(roles[i], holders[i]);
         }
+    }
+
+    function test_operationalControllerRotatesInTwoStepsWithoutRoleCollapse() public {
+        address successor = address(new NeutralOperationalControllerV2());
+        bytes32 approverRole = registry.APPROVER_ROLE();
+        bytes32 registrarRole = registry.REGISTRAR_ROLE();
+        vm.prank(ADMIN);
+        registry.beginOperationalControllerTransfer(approverRole, successor);
+        assertEq(registry.pendingOperationalController(approverRole).controller, successor);
+
+        vm.prank(successor);
+        vm.expectRevert(ProgrammableCustomRegistryV2.OperationalControllerTransferNotReady.selector);
+        registry.acceptOperationalControllerTransfer(approverRole);
+
+        vm.warp(block.timestamp + registry.defaultAdminDelay());
+        vm.prank(successor);
+        registry.acceptOperationalControllerTransfer(approverRole);
+        assertEq(registry.operationalController(approverRole), successor);
+        assertTrue(registry.hasRole(approverRole, successor));
+        assertFalse(registry.hasRole(approverRole, APPROVER));
+
+        vm.prank(ADMIN);
+        vm.expectRevert(ProgrammableCustomRegistryV2.OperationalControllerConflict.selector);
+        registry.beginOperationalControllerTransfer(registrarRole, successor);
+
+        vm.prank(ADMIN);
+        vm.expectRevert(ProgrammableCustomRegistryV2.OperationalControllerConflict.selector);
+        registry.beginDefaultAdminTransfer(successor);
     }
 
     function test_marketDescriptorRegistersOnlyAtStandard10() public {
@@ -268,7 +302,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         });
     }
 
-    function _config() private pure returns (ProgrammableCustomRegistryV2.RegistryConfigV2 memory) {
+    function _config() private view returns (ProgrammableCustomRegistryV2.RegistryConfigV2 memory) {
         return ProgrammableCustomRegistryV2.RegistryConfigV2({
             initialAdminDelay: 2 days,
             initialAdmin: ADMIN,

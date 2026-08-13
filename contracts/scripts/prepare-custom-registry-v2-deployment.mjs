@@ -43,6 +43,7 @@ const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
 requireDistinctRpcOrigins(rpcA, rpcB);
 const maxFeePerGas = positiveInteger("REGISTRY_MAX_FEE_PER_GAS_WEI", (1n << 256n) - 1n);
 const maxTotalCostWei = positiveInteger("REGISTRY_MAX_TOTAL_COST_WEI", (1n << 256n) - 1n);
+const validitySeconds = positiveInteger("REGISTRY_PREFLIGHT_VALIDITY_SECONDS", 900n);
 
 const artifactBytes = await readFile(
   path.join(root, "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json"),
@@ -172,6 +173,7 @@ const plan = {
     blockNumber: a.finalizedBlockNumber.toString(),
     blockHash: a.finalizedBlockHash,
   },
+  expiresAtTimestamp: Math.floor(Date.now() / 1000) + Number(validitySeconds),
   create: {
     kind: "CREATE",
     deployer,

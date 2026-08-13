@@ -51,11 +51,15 @@ export type CustomRegistryV2ApiRecord = Readonly<{
   }>;
   finality: Readonly<{
     evidenceHash: `0x${string}`;
+    transactionHash: `0x${string}`;
     observedAtBlock: string;
     observedBlockHash: `0x${string}`;
     confirmedHeadBlock: string;
     confirmedHeadBlockHash: `0x${string}`;
     finalizedAtBlock: string;
+    finalizedBlockHash: `0x${string}`;
+    transactionIndex: string;
+    logIndex: string;
     transitionSequence: string;
   }>;
 }>;
@@ -128,8 +132,12 @@ export function parseCustomRegistryV2ApiRecord(
     "confirmedHeadBlockHash",
     "evidenceHash",
     "finalizedAtBlock",
+    "finalizedBlockHash",
+    "logIndex",
     "observedAtBlock",
     "observedBlockHash",
+    "transactionHash",
+    "transactionIndex",
     "transitionSequence",
   ]);
 
@@ -267,6 +275,7 @@ export function parseCustomRegistryV2ApiRecord(
     }),
     finality: Object.freeze({
       evidenceHash: hash32(finality.evidenceHash, "finality evidence hash"),
+      transactionHash: hash32(finality.transactionHash, "finality transaction hash"),
       observedAtBlock,
       observedBlockHash: finalityObservedBlockHash,
       confirmedHeadBlock,
@@ -275,6 +284,9 @@ export function parseCustomRegistryV2ApiRecord(
         "confirmed head block hash",
       ),
       finalizedAtBlock,
+      finalizedBlockHash: hash32(finality.finalizedBlockHash, "finalized block hash"),
+      transactionIndex: decimal(finality.transactionIndex, "finality transaction index"),
+      logIndex: decimal(finality.logIndex, "finality log index"),
       transitionSequence: finalitySequence,
     }),
   });

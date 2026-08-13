@@ -26,6 +26,11 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         bytes32 registryPolicyCommitment;
     }
 
+    struct PendingControllerV2 {
+        address controller;
+        uint48 acceptAfter;
+    }
+
     string public constant PLATFORM_ID = "programmable";
     string public constant CATEGORY = "custom";
     uint64 public constant REGISTRY_GENERATION = 2;
@@ -63,6 +68,8 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
     mapping(bytes32 descriptorHash => bool registered) private _descriptorRegistered;
     mapping(address primaryContract => bool registered) private _primaryContractRegistered;
     mapping(bytes32 evidenceHash => bool consumed) private _evidenceConsumed;
+    mapping(bytes32 role => address controller) private _operationalControllers;
+    mapping(bytes32 role => PendingControllerV2 pending) private _pendingOperationalControllers;
 
     error ApprovalAlreadyAuthorized(bytes32 approvalId);
     error ApprovalAlreadyConsumed(bytes32 approvalId);
@@ -77,6 +84,9 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
     error HistoricalBlockOutsideNativeWindow(uint64 blockNumber, uint256 currentBlock);
     error IncompatibleOperationalRoles(address account);
     error ImmutableOperationalRole(bytes32 role);
+    error InvalidOperationalController(address controller);
+    error OperationalControllerConflict(address controller);
+    error OperationalControllerTransferNotReady(bytes32 role, address controller, uint48 acceptAfter);
     error InvalidBinding(bytes32 field);
     error InvalidLaunchState(bytes32 launchId, LaunchStatus supplied, LaunchStatus required);
     error InvalidPolicy(MarketMode marketMode, uint16 protocolFeeBps);
@@ -102,6 +112,10 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         _grantRole(REGISTRAR_ROLE, config.initialRegistrar);
         _grantRole(FINALIZER_ROLE, config.initialFinalizer);
         _grantRole(REVOKER_ROLE, config.initialRevoker);
+        _operationalControllers[APPROVER_ROLE] = config.initialApprover;
+        _operationalControllers[REGISTRAR_ROLE] = config.initialRegistrar;
+        _operationalControllers[FINALIZER_ROLE] = config.initialFinalizer;
+        _operationalControllers[REVOKER_ROLE] = config.initialRevoker;
     }
 
     function supportsInterface(bytes4 interfaceId)
@@ -133,6 +147,59 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
     {
         if (_isOperationalRole(role)) revert ImmutableOperationalRole(role);
         super.renounceRole(role, callerConfirmation);
+    }
+
+    function beginDefaultAdminTransfer(address newAdmin)
+        public
+        virtual
+        override(AccessControlDefaultAdminRules)
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (newAdmin != address(0) && _isControllerUsed(newAdmin, bytes32(0))) {
+            revert OperationalControllerConflict(newAdmin);
+        }
+        super.beginDefaultAdminTransfer(newAdmin);
+    }
+
+    function beginOperationalControllerTransfer(bytes32 role, address newController)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (!_isOperationalRole(role)) revert ImmutableOperationalRole(role);
+        _requireController(newController);
+        if (_isControllerUsed(newController, role)) revert OperationalControllerConflict(newController);
+        (address pendingAdmin,) = pendingDefaultAdmin();
+        if (newController == defaultAdmin() || newController == pendingAdmin) {
+            revert OperationalControllerConflict(newController);
+        }
+        uint48 acceptAfter = SafeCast.toUint48(block.timestamp) + defaultAdminDelay();
+        _pendingOperationalControllers[role] = PendingControllerV2(newController, acceptAfter);
+    }
+
+    function acceptOperationalControllerTransfer(bytes32 role) external {
+        PendingControllerV2 memory pending = _pendingOperationalControllers[role];
+        if (pending.controller != msg.sender || pending.acceptAfter == 0 || block.timestamp < pending.acceptAfter) {
+            revert OperationalControllerTransferNotReady(role, msg.sender, pending.acceptAfter);
+        }
+        _requireController(msg.sender);
+        if (_isControllerUsed(msg.sender, role)) revert OperationalControllerConflict(msg.sender);
+        (address pendingAdmin,) = pendingDefaultAdmin();
+        if (msg.sender == defaultAdmin() || msg.sender == pendingAdmin) {
+            revert OperationalControllerConflict(msg.sender);
+        }
+        address previous = _operationalControllers[role];
+        delete _pendingOperationalControllers[role];
+        _operationalControllers[role] = msg.sender;
+        super._revokeRole(role, previous);
+        super._grantRole(role, msg.sender);
+    }
+
+    function operationalController(bytes32 role) external view returns (address) {
+        return _operationalControllers[role];
+    }
+
+    function pendingOperationalController(bytes32 role) external view returns (PendingControllerV2 memory) {
+        return _pendingOperationalControllers[role];
     }
 
     function authorizeApproval(ApprovalAuthorizationV2 calldata authorization) external onlyRole(APPROVER_ROLE) {
@@ -391,7 +458,7 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         address[4] memory roles =
             [config.initialApprover, config.initialRegistrar, config.initialFinalizer, config.initialRevoker];
         for (uint256 i = 0; i < roles.length; ++i) {
-            if (roles[i] == address(0)) revert RegistryConfigurationInvalid(bytes32("operational-role"));
+            _requireController(roles[i]);
             if (roles[i] == config.initialAdmin) revert IncompatibleOperationalRoles(roles[i]);
             for (uint256 j = 0; j < i; ++j) {
                 if (roles[i] == roles[j]) revert IncompatibleOperationalRoles(roles[i]);
@@ -414,6 +481,23 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
 
     function _isOperationalRole(bytes32 role) private pure returns (bool) {
         return role == APPROVER_ROLE || role == REGISTRAR_ROLE || role == FINALIZER_ROLE || role == REVOKER_ROLE;
+    }
+
+    function _requireController(address controller) private view {
+        if (controller == address(0) || controller.code.length == 0) {
+            revert InvalidOperationalController(controller);
+        }
+    }
+
+    function _isControllerUsed(address controller, bytes32 exceptRole) private view returns (bool) {
+        bytes32[4] memory roles = [APPROVER_ROLE, REGISTRAR_ROLE, FINALIZER_ROLE, REVOKER_ROLE];
+        for (uint256 i = 0; i < roles.length; ++i) {
+            if (roles[i] != exceptRole && _operationalControllers[roles[i]] == controller) return true;
+            if (roles[i] != exceptRole && _pendingOperationalControllers[roles[i]].controller == controller) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function _validateRuntime(address target, bytes32 declaredCodeHash) private view {

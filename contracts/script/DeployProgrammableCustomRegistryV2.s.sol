@@ -6,7 +6,7 @@ import { stdJson } from "forge-std/StdJson.sol";
 
 import { ProgrammableCustomRegistryV2 } from "../src/ProgrammableCustomRegistryV2.sol";
 
-/// @notice Environment-only deployment script. Running tests or builds never broadcasts.
+/// @notice Simulation-only constructor verifier. It intentionally contains no broadcast cheatcode.
 contract DeployProgrammableCustomRegistryV2 is Script {
     using stdJson for string;
 
@@ -21,11 +21,9 @@ contract DeployProgrammableCustomRegistryV2 is Script {
             "reviewed plan schema mismatch"
         );
         require(
-            keccak256(bytes(reviewedPlan.readString(".status"))) == keccak256("READY_FOR_EXPLICIT_BROADCAST"),
-            "reviewed plan is not authorized"
+            keccak256(bytes(reviewedPlan.readString(".status"))) == keccak256("PREFLIGHT_ONLY_NO_TRANSACTION"),
+            "reviewed plan status mismatch"
         );
-        require(reviewedPlan.readBool(".signingAllowed"), "reviewed plan does not allow signing");
-        require(reviewedPlan.readBool(".broadcastAllowed"), "reviewed plan does not allow broadcast");
         require(reviewedPlan.readUint(".chainId") == block.chainid, "reviewed plan chain mismatch");
         address deployer = vm.envAddress("REGISTRY_DEPLOYER");
         require(reviewedPlan.readAddress(".create.deployer") == deployer, "reviewed plan deployer mismatch");
@@ -54,9 +52,7 @@ contract DeployProgrammableCustomRegistryV2 is Script {
             "reviewed plan constructor mismatch"
         );
 
-        vm.startBroadcast(deployer);
         registry = new ProgrammableCustomRegistryV2(config);
-        vm.stopBroadcast();
 
         require(registry.CHAIN_ID() == block.chainid, "registry chain mismatch");
         require(registry.REGISTRY_GENERATION() == 2, "registry generation mismatch");

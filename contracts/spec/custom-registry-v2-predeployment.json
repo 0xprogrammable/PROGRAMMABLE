@@ -15,10 +15,11 @@
   },
   "sourceDigests": {
     "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol": "0x0edb7785b12181f9039c478261c5bcb2db4f689611687f3df30924ca6bd719ad",
-    "contracts/src/ProgrammableCustomRegistryV2.sol": "0x27f8a9a5512a982d48e30ebe006b4d585b0f82c50d2eb09f5a6a1eb9936d0686",
-    "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0x3dcc00a0d25b7dd897d08de73da4d34384baf566c2f87b8fcabc9d2b1141b74f",
-    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0xceb7f964ad6e2be38eacbcc288d9e2d6081babca7917bbd2d65dc1731c3b62e5",
-    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0xc27861594ead6d0e525000a9ddc08fae8962542f17c29a2f111969a870ac1e3a"
+    "contracts/src/ProgrammableCustomRegistryV2.sol": "0xcf935207809f06e9f4b7eedcefc573ac733ccd70a9619068ceaef5385c031570",
+    "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0xdb8a8376323dfbc3c2ac60e31364d6bf767d8e597e2e8b765fd3685a8542a622",
+    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0x7874225112ec42ceae17ce9cdac8832f3c4ad93fa59d26f8e604ee77bc900b30",
+    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0xc27861594ead6d0e525000a9ddc08fae8962542f17c29a2f111969a870ac1e3a",
+    "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0xd1048f1563f30b2d4ac74599bdf1fb5020e50d797dbc823ef0157f05070de1a0"
   },
   "compiler": {
     "version": "0.8.26",
@@ -29,39 +30,39 @@
     "cborMetadata": false
   },
   "artifact": {
-    "creationBytecodeKeccak256": "0x0a750e17997375c9b79a9cafe62b72e74ed64cc149b87dc85b2b3665069faefe",
-    "runtimeTemplateKeccak256": "0x6626c7b3223247e6b03610e01db44ca94abcd29c965090f0cf2615665e9f055c",
+    "creationBytecodeKeccak256": "0x551e2795cb772b0f0790c4860cdc2b3680540fe03f54b4d151aad5adcbedc2a5",
+    "runtimeTemplateKeccak256": "0x0e900b966aa45898d26406b7fc97a826976a9ce1ef4c11ae37b4a8a75277d9fd",
     "runtimeImmutableReferences": [
       {
-        "start": 882,
+        "start": 926,
         "length": 32
       },
       {
-        "start": 1341,
+        "start": 1542,
         "length": 32
       },
       {
-        "start": 1725,
+        "start": 1989,
         "length": 32
       },
       {
-        "start": 4499,
+        "start": 5175,
         "length": 32
       },
       {
-        "start": 4691,
+        "start": 5367,
         "length": 32
       },
       {
-        "start": 8054,
+        "start": 9128,
         "length": 32
       },
       {
-        "start": 9220,
+        "start": 10938,
         "length": 32
       },
       {
-        "start": 9303,
+        "start": 11021,
         "length": 32
       }
     ],
@@ -70,6 +71,11 @@
         "name": "acceptDefaultAdminTransfer",
         "signature": "acceptDefaultAdminTransfer()",
         "selector": "0xcefc1429"
+      },
+      {
+        "name": "acceptOperationalControllerTransfer",
+        "signature": "acceptOperationalControllerTransfer(bytes32)",
+        "selector": "0x2d478a10"
       },
       {
         "name": "approvalCount",
@@ -95,6 +101,11 @@
         "name": "beginDefaultAdminTransfer",
         "signature": "beginDefaultAdminTransfer(address)",
         "selector": "0x634e93da"
+      },
+      {
+        "name": "beginOperationalControllerTransfer",
+        "signature": "beginOperationalControllerTransfer(bytes32,address)",
+        "selector": "0x5771cb99"
       },
       {
         "name": "cancelDefaultAdminTransfer",
@@ -217,6 +228,11 @@
         "selector": "0xdbe09cc4"
       },
       {
+        "name": "operationalController",
+        "signature": "operationalController(bytes32)",
+        "selector": "0x63198f4c"
+      },
+      {
         "name": "owner",
         "signature": "owner()",
         "selector": "0x8da5cb5b"
@@ -230,6 +246,11 @@
         "name": "pendingDefaultAdminDelay",
         "signature": "pendingDefaultAdminDelay()",
         "selector": "0xa1eda53c"
+      },
+      {
+        "name": "pendingOperationalController",
+        "signature": "pendingOperationalController(bytes32)",
+        "selector": "0x4e5936f4"
       },
       {
         "name": "PLATFORM_ID",

@@ -75,11 +75,15 @@ function finalizedRecord(marketMode = 1, protocolFeeBps = 10) {
     },
     finality: {
       evidenceHash: hash("e"),
+      transactionHash: hash("6"),
       observedAtBlock: "100",
       observedBlockHash: hash("f"),
       confirmedHeadBlock: "112",
       confirmedHeadBlockHash: hash("1"),
       finalizedAtBlock: "113",
+      finalizedBlockHash: hash("2"),
+      transactionIndex: "3",
+      logIndex: "4",
       transitionSequence: "3",
     },
   };
