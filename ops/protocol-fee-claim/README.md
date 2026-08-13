@@ -63,6 +63,19 @@ http://127.0.0.1:4178/ops/protocol-fee-claim/
 
 Oder auf macOS `ops/protocol-fee-claim/Programmable Fees.command` doppelklicken.
 
+## Vercel
+
+Die eigenständige öffentliche App wird aus genau diesem Verzeichnis gebaut.
+`claim-discovery.json` veröffentlicht dieselbe Discovery-Grenze, die der
+Scanner und seine Tests verwenden. Die Seite kann von jedem geöffnet werden;
+Claims bleiben dennoch an Ethereum Mainnet, die unveränderliche Treasury und
+einen atomaren MetaMask-Batch gebunden.
+
+```sh
+npm run build
+vercel --prod
+```
+
 ## Sicherheitsgrenzen
 
 - Die Seite läuft ausschließlich lokal und liest keinen Private Key oder Seed.

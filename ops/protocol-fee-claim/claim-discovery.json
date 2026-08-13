@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "programmable.fee-claim-discovery.v1",
+  "chainId": "1",
+  "rewardWallet": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  "execution": {
+    "method": "wallet_sendCalls",
+    "atomicRequired": true,
+    "unsupportedWalletBehavior": "fail_closed"
+  },
+  "classic": {
+    "claimMode": "one_aggregate_claim_per_hook_version",
+    "launchDiscovery": [
+      {
+        "version": "v3",
+        "launcher": "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
+        "startBlock": "25639596",
+        "eventTopic": "0xf23bd7fdf96caf9195ba5982de473632f59015abc714915dfbbe06cbd8e255e5",
+        "feeHook": "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC"
+      },
+      {
+        "version": "v2",
+        "launcher": "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+        "startBlock": "25624131",
+        "eventTopic": "0x54f861f401872200b25acd4a9f53153ac06a7be4562b3e43025a4a85740a5675",
+        "feeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC"
+      }
+    ],
+    "legacyAggregateClaim": {
+      "version": "v1",
+      "feeHook": "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc"
+    }
+  },
+  "stock": {
+    "discoveryMode": "fixed_release_assets",
+    "futureAssetsAutoAdded": false,
+    "claimLegCount": 18,
+    "currentAssetCount": 11,
+    "legacyAssetCount": 7
+  },
+  "customV1": {
+    "discoveryMode": "complete_registry_event_replay_plus_current_state",
+    "registry": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+    "startBlock": "25701139",
+    "futureFinalizedStandardSourcesAutoAdded": true,
+    "supportedProgrammableFeeBps": [5, 10],
+    "unknownOrMismatchedSources": "block_all_claims"
+  },
+  "customV2": {
+    "status": "HOLD",
+    "futureFinalizedStandardSourcesAutoAdded": false,
+    "reason": "No exact Mainnet deployment and finalized release binding exists yet."
+  }
+}

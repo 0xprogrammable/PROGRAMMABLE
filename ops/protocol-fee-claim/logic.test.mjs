@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   CLASSIC_LAUNCHERS,
   CLAIMS,
@@ -59,6 +60,48 @@ test("binds exactly Classic and deployed Stock fee sources", () => {
     HOOKS.some(({ id }) => id.includes("deep")),
     false,
   );
+});
+
+test("keeps the public claim discovery manifest aligned with the scanner", () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("./claim-discovery.json", import.meta.url), "utf8"),
+  );
+  assert.equal(manifest.chainId, BigInt(MAINNET_CHAIN_ID).toString());
+  assert.equal(manifest.rewardWallet.toLowerCase(), TREASURY.toLowerCase());
+  assert.deepEqual(
+    manifest.classic.launchDiscovery.map(
+      ({ launcher, startBlock, eventTopic, feeHook }) => ({
+        launcher: launcher.toLowerCase(),
+        startBlock,
+        eventTopic,
+        feeHook: feeHook.toLowerCase(),
+      }),
+    ),
+    CLASSIC_LAUNCHERS.map(({ address, startBlock, eventTopic, feeHook }) => ({
+      launcher: address.toLowerCase(),
+      startBlock: startBlock.toString(),
+      eventTopic,
+      feeHook: feeHook.toLowerCase(),
+    })),
+  );
+  assert.equal(
+    manifest.classic.legacyAggregateClaim.feeHook.toLowerCase(),
+    HOOKS.find(({ id }) => id === "classic-v1").address.toLowerCase(),
+  );
+  assert.equal(
+    manifest.stock.claimLegCount,
+    CLAIMS.filter(({ kind }) => kind === "asset").length,
+  );
+  assert.equal(
+    manifest.customV1.registry.toLowerCase(),
+    CUSTOM_REGISTRY.address.toLowerCase(),
+  );
+  assert.equal(
+    manifest.customV1.startBlock,
+    CUSTOM_REGISTRY.startBlock.toString(),
+  );
+  assert.equal(manifest.execution.atomicRequired, true);
+  assert.equal(manifest.execution.unsupportedWalletBehavior, "fail_closed");
 });
 
 test("uses the deployed claim and read selectors", () => {

@@ -29,6 +29,7 @@ const indexingSections = [
   { id: "verification", label: "Verify candidates" },
   { id: "finality", label: "Finality and reorgs" },
   { id: "storage", label: "Stored fields" },
+  { id: "claims", label: "Protocol fee claims" },
 ] as const;
 
 export default function IndexLaunchesPage() {
@@ -272,6 +273,49 @@ export default function IndexLaunchesPage() {
             <dd>The last finalized block number and hash.</dd>
           </div>
         </dl>
+      </section>
+
+      <section id="claims">
+        <div className={styles.sectionIntro}>
+          <h2>Keep the protocol fee inventory complete</h2>
+          <p>
+            Launch discovery and protocol fee claiming use related provenance,
+            but they are separate indexes with different execution bindings.
+          </p>
+        </div>
+
+        <ul className={styles.checkList}>
+          <li>
+            Classic V2 and V3 coin rows come from complete canonical Launcher
+            event scans. Fee execution is one aggregate claim per verified
+            version hook; the legacy V1 aggregate hook remains a separate row.
+          </li>
+          <li>
+            Custom V1 replays the complete Registry history, then verifies each
+            current launch state, runtime, recipient, fee policy and accrued
+            amount at one block. Every future finalized standard 5 or 10 bps
+            source is discovered without editing a coin list.
+          </li>
+          <li>
+            Stock claims use the published fixed release asset set. New Stock
+            assets are not inferred or silently added.
+          </li>
+          <li>
+            Custom V2 sources remain unavailable until an exact deployed,
+            finalized release binding exists. Unknown, revoked, mismatched or
+            unverified sources block execution instead of being omitted.
+          </li>
+        </ul>
+
+        <p className={styles.bodyCopy}>
+          The live claim console publishes its machine-readable boundary at{" "}
+          <a href="https://claimhazard.vercel.app/claim-discovery.json">
+            claimhazard.vercel.app/claim-discovery.json
+          </a>
+          . The page rescans before every claim and sends positive verified
+          entries only as one wallet-declared atomic batch from the fixed reward
+          wallet.
+        </p>
       </section>
 
       <nav
