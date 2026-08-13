@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Programmable",
   description:
-    "Create a Classic token, review Custom Hooks, or preview upcoming partner launch models.",
+    "Move an approved GitHub revision through wallet submission, finality, and a public launch record.",
   alternates: {
     canonical: "/launch",
   },

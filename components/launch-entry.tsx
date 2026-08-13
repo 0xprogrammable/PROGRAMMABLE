@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   lazy,
   Suspense,
@@ -19,6 +20,7 @@ import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import type { LaunchModel } from "@/lib/launch";
 import type { TrustedLaunchPermitSignerV2 } from "@/lib/custom-launch/contract-v2";
+import type { CustomLaunchStageV1 } from "@/components/custom-launch-experience";
 
 const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -26,6 +28,14 @@ const launchEnvironment =
     : "production";
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
+const LOCAL_PREVIEW_STAGES = new Set<CustomLaunchStageV1>([
+  "github",
+  "repositories",
+  "approval",
+  "prepare",
+  "wallet",
+  "registry",
+]);
 
 function loadLaunchForm() {
   return import("@/components/launch-builder");
@@ -83,14 +93,50 @@ function LaunchFormLoading({
   );
 }
 
-export function LaunchExperience({
-  customLaunchPublicEnabled,
-  trustedLaunchPermitSigners = [],
-}: {
+type LaunchExperienceProps = Readonly<{
+  customLaunchLocalPreviewStage?: CustomLaunchStageV1;
   customLaunchPublicEnabled: boolean;
   trustedLaunchPermitSigners?: readonly TrustedLaunchPermitSignerV2[];
-}) {
-  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
+}>;
+
+export function LaunchExperience(props: LaunchExperienceProps) {
+  if (
+    process.env.NODE_ENV !== "development"
+    || props.customLaunchLocalPreviewStage
+  ) {
+    return <LaunchExperienceRuntime {...props} />;
+  }
+
+  return (
+    <Suspense fallback={<LaunchExperienceRuntime {...props} />}>
+      <DevelopmentLaunchPreviewRoute {...props} />
+    </Suspense>
+  );
+}
+
+function DevelopmentLaunchPreviewRoute(props: LaunchExperienceProps) {
+  const searchParams = useSearchParams();
+  const previewCandidate = searchParams.get("localPreview");
+  const customLaunchLocalPreviewStage = previewCandidate
+    && LOCAL_PREVIEW_STAGES.has(previewCandidate as CustomLaunchStageV1)
+    ? previewCandidate as CustomLaunchStageV1
+    : undefined;
+  return (
+    <LaunchExperienceRuntime
+      {...props}
+      customLaunchLocalPreviewStage={customLaunchLocalPreviewStage}
+    />
+  );
+}
+
+function LaunchExperienceRuntime({
+  customLaunchLocalPreviewStage,
+  customLaunchPublicEnabled,
+  trustedLaunchPermitSigners = [],
+}: LaunchExperienceProps) {
+  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(
+    customLaunchLocalPreviewStage ? "custom" : null,
+  );
   const customLaunchButtonRef = useRef<HTMLButtonElement>(null);
   const restoreCustomLaunchFocusRef = useRef(false);
 
@@ -143,6 +189,7 @@ export function LaunchExperience({
         <LazyCustomLaunchExperience
           onBack={returnToModels}
           trustedLaunchPermitSigners={trustedLaunchPermitSigners}
+          localPreviewStage={customLaunchLocalPreviewStage}
         />
       </Suspense>
     );

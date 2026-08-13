@@ -186,6 +186,50 @@ export type LaunchProgress =
   | "publishing"
   | "complete";
 
+export type CustomLaunchStageV1 =
+  | "github"
+  | "repositories"
+  | "approval"
+  | "prepare"
+  | "wallet"
+  | "registry";
+
+const CUSTOM_LAUNCH_STAGES_V1 = Object.freeze([
+  { id: "github", label: "GitHub", detail: "Owner session" },
+  { id: "repositories", label: "Repositories", detail: "Allowed source" },
+  { id: "approval", label: "Approval", detail: "Exact revision" },
+  { id: "prepare", label: "Prepare", detail: "Bound launch" },
+  { id: "wallet", label: "Wallet", detail: "Browser submit" },
+  { id: "registry", label: "Registry", detail: "Final public record" },
+] as const satisfies readonly Readonly<{
+  id: CustomLaunchStageV1;
+  label: string;
+  detail: string;
+}>[]);
+
+export function resolveCustomLaunchStageV1(input: Readonly<{
+  screen: CustomLaunchScreen;
+  applicationCount: number;
+  launchProgress: LaunchProgress;
+}>): CustomLaunchStageV1 {
+  if (input.screen === "intro") return "github";
+  if (input.screen === "applications") {
+    return input.applicationCount > 0 ? "approval" : "repositories";
+  }
+  if (
+    input.launchProgress === "wallet-proof"
+    || input.launchProgress === "wallet-transaction"
+  ) return "wallet";
+  if (
+    input.launchProgress === "reconciling"
+    || input.launchProgress === "ambiguous"
+    || input.launchProgress === "confirmation"
+    || input.launchProgress === "publishing"
+    || input.launchProgress === "complete"
+  ) return "registry";
+  return "prepare";
+}
+
 export type PreparedLaunchRecoveryV2 = Readonly<{
   stage: "prepared";
   walletRequestAttempted: false;
@@ -1403,6 +1447,25 @@ function namespacedIdentity(value: unknown): Readonly<{ namespace: string; value
 }
 
 export function CustomLaunchExperience({
+  localPreviewStage,
+  ...runtimeProps
+}: {
+  onBack: () => void;
+  trustedLaunchPermitSigners: readonly TrustedLaunchPermitSignerV2[];
+  localPreviewStage?: CustomLaunchStageV1;
+}) {
+  if (localPreviewStage !== undefined) {
+    return (
+      <CustomLaunchLocalPreview
+        initialStage={localPreviewStage}
+        onBack={runtimeProps.onBack}
+      />
+    );
+  }
+  return <CustomLaunchRuntime {...runtimeProps} />;
+}
+
+function CustomLaunchRuntime({
   onBack,
   trustedLaunchPermitSigners,
 }: {
@@ -2754,33 +2817,64 @@ export function CustomLaunchExperience({
     : null;
   const durableApproval = selected !== null
     && customApplicationHasDurableApprovalV2(selected, null);
+  const currentStage = resolveCustomLaunchStageV1({
+    screen,
+    applicationCount: applications.length,
+    launchProgress,
+  });
 
   if (screen === "intro") {
     return (
-      <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={onBack} title="Build a custom launch">
+      <CustomLaunchFrame
+        boundaryRef={commitSessionBoundary}
+        onBack={onBack}
+        title="Launch an approved project"
+        eyebrow="GitHub launch"
+        stage={currentStage}
+      >
         <div className={styles.introGrid}>
           <section className={styles.introPrimary}>
-            <h2>Start with an idea.</h2>
+            <span className={styles.instrumentLabel}>Exact source in, public record out</span>
+            <h2>Move one approved revision to Ethereum.</h2>
+            <p className={styles.introCopy}>
+              Programmable binds the repository, approval, launch action, and final Registry record.
+              Your project remains independent and your browser wallet submits the transaction.
+            </p>
             <div className={styles.actions}>
-              <a className="primary-button" href={BUILDER_SKILL_URL} target="_blank" rel="noreferrer">
-                Build with an agent <ExternalLink aria-hidden="true" size={16} />
-              </a>
               <a className={styles.secondaryButton} href={SUBMISSION_REQUIREMENTS_URL} target="_blank" rel="noreferrer">
-                Read GitHub application guide
+                Read the application guide <ExternalLink aria-hidden="true" size={15} />
+              </a>
+              <a className={styles.textLink} href={BUILDER_SKILL_URL} target="_blank" rel="noreferrer">
+                Prepare a project with the builder
               </a>
             </div>
           </section>
           <section className={styles.statusEntry}>
-            <span className={styles.githubMark} aria-hidden="true">
-              {wallet ? <GitHubBrandIcon /> : <Wallet />}
-            </span>
-            <h2>{wallet ? "Already submitted?" : "Connect your launch wallet"}</h2>
-            {wallet ? (
+            <div className={styles.statusHeading}>
+              <span className={styles.githubMark} aria-hidden="true">
+                <GitHubBrandIcon />
+              </span>
+              <div>
+                <span className={styles.instrumentLabel}>Owner access</span>
+                <h2>{githubConnected ? "GitHub verified" : "Connect GitHub"}</h2>
+              </div>
+            </div>
+            <div className={styles.identityStack}>
+              <div className={styles.identityStatus} data-complete={githubConnected ? "true" : "false"}>
+                <span>GitHub</span>
+                <strong>{githubConnected ? `@${githubUsername}` : "Not connected"}</strong>
+              </div>
+              <div className={styles.identityStatus} data-complete={wallet ? "true" : "false"}>
+                <span>Browser wallet</span>
+                <strong>{wallet ? shortAddress(wallet.account) : "Not connected"}</strong>
+              </div>
+            </div>
+            {githubConnected && wallet ? (
               <div className={styles.walletGate}>
                 <div>
-                  <span>Launch wallet</span>
+                  <span>Session bound to</span>
                   <code>{shortAddress(wallet.account)}</code>
-                  <button type="button" onClick={openWallet}>Change wallet</button>
+                  <button type="button" onClick={openWallet}>Manage wallet</button>
                 </div>
                 <button
                   className={styles.githubButton}
@@ -2792,20 +2886,21 @@ export function CustomLaunchExperience({
                       ? () => void loadApplications()
                       : connectGithub}
                 >
-                  {applicationsLoading ? <LoaderCircle aria-hidden="true" className={styles.spin} size={17} /> : <span className={styles.githubButtonMark} aria-hidden="true"><GitHubBrandIcon /></span>}
+                  {applicationsLoading ? <LoaderCircle aria-hidden="true" className={styles.spin} size={17} /> : <ArrowRight aria-hidden="true" size={17} />}
                   {applicantRecovery !== "none"
                     ? applicantRecoveryAction
-                    : githubConnected
-                      ? "Check submission status"
-                      : authenticated
-                        ? "Link GitHub account"
-                        : "Verify with GitHub"}
+                    : "Load allowed repositories"}
                 </button>
               </div>
-            ) : (
+            ) : githubConnected ? (
               <button className={styles.githubButton} type="button" onClick={openWallet}>
                 <Wallet aria-hidden="true" size={17} />
-                Connect wallet
+                Connect browser wallet
+              </button>
+            ) : (
+              <button className={styles.githubButton} type="button" onClick={connectGithub}>
+                <span className={styles.githubButtonMark} aria-hidden="true"><GitHubBrandIcon /></span>
+                {authenticated ? "Link GitHub account" : "Continue with GitHub"}
               </button>
             )}
           </section>
@@ -2817,8 +2912,15 @@ export function CustomLaunchExperience({
 
   if (screen === "applications") {
     return (
-      <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={onBack} title="Custom launches" eyebrow={githubUsername ? `@${githubUsername}` : "GitHub submissions"}>
+      <CustomLaunchFrame
+        boundaryRef={commitSessionBoundary}
+        onBack={onBack}
+        title="Allowed repositories"
+        eyebrow={githubUsername ? `GitHub · @${githubUsername}` : "GitHub"}
+        stage={currentStage}
+      >
         <div className={styles.listToolbar}>
+          <p>Only revisions bound to your current GitHub identity appear here.</p>
           {applicantRecovery !== "none" ? (
             <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>
               {applicantRecoveryAction}
@@ -2831,10 +2933,12 @@ export function CustomLaunchExperience({
         </div>
         {applications.length === 0 ? (
           <section className={styles.emptyState}>
-            <h2>No custom submissions yet</h2>
+            <span className={styles.instrumentLabel}>No allowed source yet</span>
+            <h2>No approved repository is bound to this account.</h2>
+            <p>Open a GitHub application, then return when an exact revision has been approved.</p>
             <div className={styles.actions}>
-              <a className="primary-button" href={BUILDER_SKILL_URL} target="_blank" rel="noreferrer">Build with an agent</a>
-              <a className={styles.secondaryButton} href={SUBMISSION_REQUIREMENTS_URL} target="_blank" rel="noreferrer">Read GitHub application guide</a>
+              <a className="primary-button" href={SUBMISSION_REQUIREMENTS_URL} target="_blank" rel="noreferrer">Open the application guide</a>
+              <a className={styles.textLink} href={BUILDER_SKILL_URL} target="_blank" rel="noreferrer">Prepare a project with the builder</a>
             </div>
           </section>
         ) : (
@@ -2850,7 +2954,15 @@ export function CustomLaunchExperience({
   }
 
   return (
-    <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={returnToApplications} title={launchProgress === "complete" ? "Launch complete" : setupLoading && selected?.state === "ready_for_registration" ? "Final verification" : launchProgress === "idle" ? "Set up launch" : "Launch status"} eyebrow={selected?.repositoryFullName ?? "Approved project"}>
+    <CustomLaunchFrame
+      boundaryRef={commitSessionBoundary}
+      onBack={returnToApplications}
+      title={launchProgress === "complete" ? "Public record confirmed" : setupLoading && selected?.state === "ready_for_registration" ? "Verify exact approval" : launchProgress === "idle" ? "Prepare launch" : "Verify launch"}
+      eyebrow={selected?.repositoryFullName ?? "Approved project"}
+      stage={currentStage}
+      registryComplete={launchProgress === "complete"}
+      application={selected}
+    >
       {setupLoading || !selected ? (
         <div className={styles.loadingPanel} role="status"><LoaderCircle aria-hidden="true" className={styles.spin} size={20} /> {selected?.state === "ready_for_registration" ? "Completing final source verification" : "Loading approved launch"}</div>
       ) : !descriptor && launchProgress === "idle" ? (
@@ -2872,7 +2984,7 @@ export function CustomLaunchExperience({
             />
             {transactionHash ? <TransactionEvidence chainId={transactionChainId} transactionHash={transactionHash} /> : null}
             {launchProgress === "complete" ? (
-              <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link>
+              <Link className={styles.secondaryButton} href="/explore?model=custom">Open public record</Link>
             ) : applicantRecovery !== "none" ? (
               <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>{applicantRecoveryAction}</button>
             ) : (launchProgress === "reconciling" || launchProgress === "ambiguous") && selected !== null ? (
@@ -2939,7 +3051,7 @@ export function CustomLaunchExperience({
             <section className={styles.formSection}>
               <div className={styles.sectionHeading}><span aria-hidden="true">03</span><div><h2>Review</h2></div></div>
               <dl className={styles.reviewList}>
-                <div><dt>Source</dt><dd>{selected.repositoryFullName} · {selected.commitOid.slice(0, 9)}</dd></div>
+                <div><dt>Source</dt><dd>{selected.repositoryFullName} · PR #{selected.pullRequestNumber}<br /><code translate="no">commit {selected.commitOid.slice(0, 12)} · tree {selected.treeOid.slice(0, 12)}</code></dd></div>
                 <div><dt>Network</dt><dd>{chainLabel(approvedRoute?.chainId)}</dd></div>
                 <div><dt>Approved route</dt><dd>{approvedRoute?.launchRouteId}</dd></div>
                 <div><dt>Native value</dt><dd>{formatNativeValue(approvedRoute?.chainId, approvedRoute?.transactionValuePolicy.valueWei)}</dd></div>
@@ -2967,7 +3079,7 @@ export function CustomLaunchExperience({
               <span>{statusMessage || (durableApproval ? "Approved — launch anytime" : "Launch details verified")}</span>
             </div>
             {launchProgress === "complete" ? (
-              <Link className="primary-button" href="/explore?model=custom">Explore Custom <ArrowRight aria-hidden="true" size={16} /></Link>
+              <Link className="primary-button" href="/explore?model=custom">Open public record <ArrowRight aria-hidden="true" size={16} /></Link>
             ) : applicantRecovery !== "none" ? (
               <button className="primary-button" type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>
                 {applicantRecoveryAction}
@@ -2999,14 +3111,250 @@ export function CustomLaunchExperience({
   );
 }
 
-function CustomLaunchFrame({ boundaryRef, children, eyebrow = "Custom Hook", onBack, title }: { boundaryRef: (node: HTMLDivElement | null) => void; children: ReactNode; eyebrow?: string; onBack: () => void; title: string }) {
+function LaunchFlowRail({
+  registryComplete = false,
+  stage,
+}: {
+  registryComplete?: boolean;
+  stage: CustomLaunchStageV1;
+}) {
+  const currentIndex = CUSTOM_LAUNCH_STAGES_V1.findIndex(({ id }) => id === stage);
+
   return (
-    <div ref={boundaryRef} className={`launch-page page-width ${launchExperience.formPage} ${styles.page}`} data-launch-model="custom">
+    <aside className={styles.flowRail} aria-labelledby="custom-launch-path-title">
+      <div className={styles.flowRailHeading}>
+        <span className={styles.instrumentLabel}>Verified path</span>
+        <h2 id="custom-launch-path-title">Repository to Registry</h2>
+      </div>
+      <ol className={styles.flowSteps}>
+        {CUSTOM_LAUNCH_STAGES_V1.map((item, index) => {
+          const complete = index < currentIndex
+            || (registryComplete && index === currentIndex);
+          const current = index === currentIndex;
+          const state = complete ? "complete" : current ? "current" : "waiting";
+          return (
+            <li
+              key={item.id}
+              className={styles.flowStep}
+              data-state={state}
+              aria-current={current ? "step" : undefined}
+            >
+              <span className={styles.flowNode} aria-hidden="true">
+                {complete ? "✓" : String(index + 1).padStart(2, "0")}
+              </span>
+              <span className={styles.flowStepCopy}>
+                <strong>{item.label}</strong>
+                <small>{item.detail}</small>
+              </span>
+              <span className={styles.flowState}>
+                {complete ? "Verified" : current ? "Current" : "Waiting"}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <p className={styles.flowRailNote}>
+        A later step never unlocks from an earlier visual state. Every transition is rechecked.
+      </p>
+    </aside>
+  );
+}
+
+function ApprovalRevisionCard({
+  application,
+  local = false,
+}: {
+  application: PrincipalCustomLaunchApplicationSummaryV2;
+  local?: boolean;
+}) {
+  const approved = application.state === "approved"
+    || application.state === "launching"
+    || application.state === "launched";
+  return (
+    <section className={styles.approvalAnchor} aria-label="Exact approved revision">
+      <div className={styles.approvalAnchorLead}>
+        <span className={styles.instrumentLabel}>{local ? "Local sample revision" : "Exact approved revision"}</span>
+        <h2>{application.repositoryFullName}</h2>
+        <p>GitHub PR #{application.pullRequestNumber}</p>
+      </div>
+      <dl className={styles.revisionFacts}>
+        <div>
+          <dt>Commit</dt>
+          <dd><code translate="no">{application.commitOid}</code></dd>
+        </div>
+        <div>
+          <dt>Tree</dt>
+          <dd><code translate="no">{application.treeOid}</code></dd>
+        </div>
+      </dl>
+      <span className={styles.approvalBadge} data-approved={approved ? "true" : "false"}>
+        {approved ? "Approval bound" : "Approval pending"}
+      </span>
+    </section>
+  );
+}
+
+const LOCAL_PREVIEW_APPLICATION: PrincipalCustomLaunchApplicationSummaryV2 = Object.freeze({
+  applicationId: "local-interface-preview",
+  applicationHandle: `github-${"1".repeat(64)}`,
+  revisionId: "local-preview-revision",
+  repositoryId: "100000001",
+  repositoryOwnerId: "100000002",
+  repositoryFullName: "example-labs/approved-module",
+  pullRequestNumber: 24,
+  commitOid: "7c9a41d6f2b83e0a5d174c9260b48ee351a720df",
+  treeOid: "f14e7a893c2d50b4e1a6790d348c5fb217e6a09c",
+  state: "approved",
+  reasonCodes: [],
+  actionCodes: [],
+  correctionCount: 0,
+  correctionPreview: [],
+  receiptDigest: `sha256:${"2".repeat(64)}`,
+  launchEntitlementBindingHash: `sha256:${"3".repeat(64)}`,
+  updatedAt: "2026-08-13T06:24:17.000Z",
+});
+
+const LOCAL_PREVIEW_COPY: Readonly<Record<CustomLaunchStageV1, Readonly<{
+  title: string;
+  description: string;
+  action: string;
+}>>> = Object.freeze({
+  github: {
+    title: "Prove which GitHub account owns the launch.",
+    description: "The account opens only repositories and revisions explicitly allowed for that principal.",
+    action: "Connect GitHub",
+  },
+  repositories: {
+    title: "Choose from repositories you are allowed to launch.",
+    description: "Repository access alone is not approval. The next step binds one pull request and one immutable source tree.",
+    action: "Select repository",
+  },
+  approval: {
+    title: "Verify the approved commit and tree before preparing anything.",
+    description: "Any source change invalidates this approval and closes the launch path.",
+    action: "Use exact revision",
+  },
+  prepare: {
+    title: "Prepare one launch action from the approved adapter.",
+    description: "The route, network, value, target, and calldata stay bound to the approved source.",
+    action: "Prepare launch",
+  },
+  wallet: {
+    title: "Review the exact transaction in your browser wallet.",
+    description: "Programmable never takes custody and never submits an applicant transaction from a platform key.",
+    action: "Review wallet request",
+  },
+  registry: {
+    title: "Finality turns the transaction into a public Registry record.",
+    description: "The public page appears only after the required confirmations and exact read model verification.",
+    action: "End of local preview",
+  },
+});
+
+function CustomLaunchLocalPreview({
+  initialStage,
+  onBack,
+}: {
+  initialStage: CustomLaunchStageV1;
+  onBack: () => void;
+}) {
+  const [stage, setStage] = useState(initialStage);
+  const index = CUSTOM_LAUNCH_STAGES_V1.findIndex(({ id }) => id === stage);
+  const copy = LOCAL_PREVIEW_COPY[stage];
+  const showRevision = index >= 2;
+  const next = CUSTOM_LAUNCH_STAGES_V1[index + 1]?.id;
+  const previous = CUSTOM_LAUNCH_STAGES_V1[index - 1]?.id;
+
+  return (
+    <CustomLaunchFrame
+      boundaryRef={() => undefined}
+      onBack={onBack}
+      title="Approved project launch"
+      eyebrow="Local interface preview"
+      stage={stage}
+      registryComplete={stage === "registry"}
+      application={showRevision ? LOCAL_PREVIEW_APPLICATION : null}
+      applicationIsLocal
+    >
+      <section className={styles.previewPanel} aria-labelledby="local-preview-title">
+        <div className={styles.previewNotice} role="note">
+          <span>Local seed</span>
+          No account, wallet request, transaction, or public record is created.
+        </div>
+        <div className={styles.previewHero}>
+          <span className={styles.instrumentLabel}>Stage {String(index + 1).padStart(2, "0")}</span>
+          <h2 id="local-preview-title">{copy.title}</h2>
+          <p>{copy.description}</p>
+        </div>
+        <dl className={styles.previewFacts}>
+          <div><dt>GitHub owner</dt><dd>{index >= 1 ? "Verified" : "Required"}</dd></div>
+          <div><dt>Allowed source</dt><dd>{index >= 2 ? "Exact revision" : "Waiting"}</dd></div>
+          <div><dt>Browser wallet</dt><dd>{index >= 4 ? "Applicant controlled" : "Not requested"}</dd></div>
+          <div><dt>Registry record</dt><dd>{stage === "registry" ? "Simulated finality" : "Not published"}</dd></div>
+        </dl>
+        <div className={styles.previewActions}>
+          {previous ? (
+            <button className={styles.secondaryButton} type="button" onClick={() => setStage(previous)}>
+              Previous stage
+            </button>
+          ) : <span />}
+          <button
+            className="primary-button"
+            type="button"
+            disabled={!next}
+            onClick={() => next && setStage(next)}
+          >
+            {copy.action}
+            {next ? <ArrowRight aria-hidden="true" size={16} /> : <CircleCheck aria-hidden="true" size={16} />}
+          </button>
+        </div>
+        <div className={styles.visuallyHidden} role="status">
+          Local preview is showing {copy.title}
+        </div>
+      </section>
+    </CustomLaunchFrame>
+  );
+}
+
+function CustomLaunchFrame({
+  application = null,
+  applicationIsLocal = false,
+  boundaryRef,
+  children,
+  eyebrow = "Custom launch",
+  onBack,
+  registryComplete = false,
+  stage,
+  title,
+}: {
+  application?: PrincipalCustomLaunchApplicationSummaryV2 | null;
+  applicationIsLocal?: boolean;
+  boundaryRef: (node: HTMLDivElement | null) => void;
+  children: ReactNode;
+  eyebrow?: string;
+  onBack: () => void;
+  registryComplete?: boolean;
+  stage: CustomLaunchStageV1;
+  title: string;
+}) {
+  return (
+    <div ref={boundaryRef} className={`launch-page page-width ${launchExperience.formPage} ${styles.page}`} data-launch-model="custom" data-launch-stage={stage}>
       <header className="launch-page-heading">
         <button className="launch-model-back" type="button" onClick={onBack}><ArrowLeft aria-hidden="true" size={15} />Back</button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}><span className={launchExperience.formModelName}>{eyebrow}</span><h1>{title}</h1></div>
       </header>
-      {children}
+      <div className={styles.instrumentGrid}>
+        <LaunchFlowRail stage={stage} registryComplete={registryComplete} />
+        <div className={styles.instrumentWorkspace}>
+          {application ? (
+            <ApprovalRevisionCard
+              application={application}
+              local={applicationIsLocal}
+            />
+          ) : null}
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
@@ -3022,7 +3370,11 @@ function ApplicationRow({ application, onOpen }: { application: PrincipalCustomL
   const guidance = applicationGuidance(application);
   return (
     <article className={styles.applicationRow}>
-      <div className={styles.applicationIdentity}><strong>{application.repositoryFullName.split("/").at(-1)}</strong><span>{application.repositoryFullName} · PR #{application.pullRequestNumber} · {application.commitOid.slice(0, 9)}</span></div>
+      <div className={styles.applicationIdentity}>
+        <strong>{application.repositoryFullName.split("/").at(-1)}</strong>
+        <span>{application.repositoryFullName} · PR #{application.pullRequestNumber}</span>
+        <code translate="no">commit {application.commitOid.slice(0, 10)} · tree {application.treeOid.slice(0, 10)}</code>
+      </div>
       <div className={styles.applicationStatus} data-tone={display.tone}>{display.tone === "complete" || display.tone === "ready" ? <CircleCheck aria-hidden="true" size={17} /> : display.tone === "warning" ? <CircleAlert aria-hidden="true" size={17} /> : <Clock3 aria-hidden="true" size={17} />}<span><strong>{display.title}</strong><small>{formatObservedTime(application.updatedAt)}</small></span></div>
       {application.correctionPreview.length > 0 ? <ul className={styles.corrections}>{application.correctionPreview.slice(0, 3).map(({ correctionId, summary }) => <li key={correctionId}>{summary}</li>)}</ul> : null}
       {application.correctionPreview.length === 0 && guidance ? <p className={styles.guidance}>{guidance}</p> : null}

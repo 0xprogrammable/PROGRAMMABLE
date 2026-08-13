@@ -30,6 +30,7 @@ import {
   presentationFormFromResponse,
   requirePersistLaunchRecoveryV2,
   reportPersistedLaunchTransactionV2,
+  resolveCustomLaunchStageV1,
   shouldClearLaunchRecoveryV2,
   validateLaunchConfigurationV2,
   verifyAuthorizedLaunchPermitSignatureV2,
@@ -570,6 +571,46 @@ function replacePermitArtifact(
     ),
   };
 }
+
+describe("custom launch interface state line", () => {
+  it("advances only through the verified repository to Registry sequence", () => {
+    expect(resolveCustomLaunchStageV1({
+      screen: "intro",
+      applicationCount: 0,
+      launchProgress: "idle",
+    })).toBe("github");
+    expect(resolveCustomLaunchStageV1({
+      screen: "applications",
+      applicationCount: 0,
+      launchProgress: "idle",
+    })).toBe("repositories");
+    expect(resolveCustomLaunchStageV1({
+      screen: "applications",
+      applicationCount: 2,
+      launchProgress: "idle",
+    })).toBe("approval");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "preparing",
+    })).toBe("prepare");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "wallet-transaction",
+    })).toBe("wallet");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "confirmation",
+    })).toBe("registry");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "complete",
+    })).toBe("registry");
+  });
+});
 
 describe("custom launch browser authority", () => {
   it("matches the server canonical hash exactly", () => {
