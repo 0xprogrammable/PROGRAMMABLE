@@ -13,23 +13,31 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
-const INDEX_READ_ATTEMPTS = 2;
+const INDEX_READ_ATTEMPTS = 4;
+const INDEX_READ_RETRY_DELAY_MS = 1_500;
 
 function errorClassChain(error: unknown) {
-  const names: string[] = [];
+  const classes: Array<{ name: string; code?: number }> = [];
   const seen = new Set<unknown>();
   let current = error;
-  while (current && !seen.has(current) && names.length < 6) {
+  while (current && !seen.has(current) && classes.length < 6) {
     seen.add(current);
-    names.push(
-      current instanceof Error ? current.name : "UnknownIndexError",
-    );
+    const code =
+      typeof current === "object" &&
+        "code" in current &&
+        typeof (current as { code?: unknown }).code === "number"
+        ? (current as { code: number }).code
+        : undefined;
+    classes.push({
+      name: current instanceof Error ? current.name : "UnknownIndexError",
+      ...(code === undefined ? {} : { code }),
+    });
     current =
       typeof current === "object" && "cause" in current
         ? (current as { cause?: unknown }).cause
         : undefined;
   }
-  return names;
+  return classes;
 }
 
 function isAuthorized(request: NextRequest) {
@@ -90,6 +98,9 @@ export async function GET(request: NextRequest) {
               error instanceof Error ? error.name : "UnknownIndexError",
             errorClassChain: errorClassChain(error),
           });
+          await new Promise((resolve) =>
+            setTimeout(resolve, INDEX_READ_RETRY_DELAY_MS * attempt),
+          );
         }
       }
     }
