@@ -98,9 +98,11 @@ export async function GET(request: NextRequest) {
               error instanceof Error ? error.name : "UnknownIndexError",
             errorClassChain: errorClassChain(error),
           });
-          await new Promise((resolve) =>
-            setTimeout(resolve, INDEX_READ_RETRY_DELAY_MS * attempt),
-          );
+          if (attempt < INDEX_READ_ATTEMPTS) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, INDEX_READ_RETRY_DELAY_MS * attempt),
+            );
+          }
         }
       }
     }

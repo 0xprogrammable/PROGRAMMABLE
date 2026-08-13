@@ -10,7 +10,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
+    sha256: "2d0731780d7c1eba7bbb087ffabb751f1e948783d84954c4041a9f342abcfce0",
     schedulerWatchdog: Object.freeze({
       provider: "github-actions",
       workflow: Object.freeze({
