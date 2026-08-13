@@ -9,9 +9,24 @@
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "5f0c5c23582a48fc7995cc4fcba865a9c20199418c0b7a0b7f9b687b2ae8717d"
+        "sha256": "654eb383431ce6518deda90db07b2c083be0bc7bfb5f66c80b476dd853120244"
       },
-      "eventFiltersPerRange": 5,
+      "releaseRuntimes": [
+        {
+          "release": "classic-v3",
+          "path": "lib/onchain/classic-v3-read-model.ts",
+          "sha256": "1f9c711c8df4159a7b391e95880f7a9e5aa88191572d043b86fba9baa2b3f11b",
+          "eventFiltersPerRange": 2
+        },
+        {
+          "release": "stock-paired-v1-v3",
+          "path": "lib/onchain/stock-paired-read-model.ts",
+          "sha256": "6b5b5def718509f954e54a11849daf4584e3e048a3607b0a0126b5fe61ac7ec2",
+          "eventFiltersPerRange": 3
+        }
+      ],
+      "eventFiltersPerRange": 2,
+      "providerPasses": 2,
       "requestDeadlineMs": 270000
     },
     "schedulerWatchdog": {

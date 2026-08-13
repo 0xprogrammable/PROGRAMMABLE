@@ -5,6 +5,7 @@ import {
   HttpRequestError,
   http,
   keccak256,
+  LimitExceededRpcError,
   ResponseBodyTooLargeError,
   TimeoutError,
   type Address,
@@ -88,6 +89,15 @@ const TOKEN_HYDRATION_BATCH_SIZE = 12;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
 const RPC_PROVENANCE_BATCH_SIZE = 1;
 const MINIMUM_LOG_BLOCK_RANGE = 100n;
+const CLASSIC_LAUNCHER_EVENTS = [
+  memeTokenLaunchedEvent,
+  memeLiquidityConfiguredEvent,
+  memeCreatorInitialBuyEvent,
+] as const;
+const CLASSIC_FEE_HOOK_EVENTS = [
+  nativeSwapFeesAccruedEvent,
+  creatorFeesClaimedEvent,
+] as const;
 
 type FeeDisclosure = readonly [
   buySwapFeeBps: number,
@@ -219,7 +229,7 @@ async function assertRuntimeCode(
   }
 }
 
-type IndexedEvents = {
+export type IndexedEvents = {
   launches: LaunchEventRecord[];
   liquidities: LiquidityEventRecord[];
   initialBuys: InitialBuyEventRecord[];
@@ -227,7 +237,7 @@ type IndexedEvents = {
   creatorClaims: CreatorClaimEventRecord[];
 };
 
-function indexedEventsFingerprint(events: IndexedEvents) {
+export function indexedEventsFingerprint(events: IndexedEvents) {
   return JSON.stringify(
     {
       launches: events.launches,
@@ -241,6 +251,32 @@ function indexedEventsFingerprint(events: IndexedEvents) {
     (_, value) =>
       typeof value === "bigint" ? value.toString() : value,
   );
+}
+
+function assertCanonicalClassicEventSource(
+  eventName: string,
+  actualAddress: Address,
+  config: ReadyOnchainDeployment,
+) {
+  const expectedAddress =
+    eventName === "MemeTokenLaunched" ||
+    eventName === "MemeLiquidityConfigured" ||
+    eventName === "MemeCreatorInitialBuy"
+      ? config.launcher
+      : eventName === "NativeSwapFeesAccrued" ||
+          eventName === "CreatorFeesClaimed"
+        ? config.feeHook
+        : null;
+  if (expectedAddress === null) {
+    throw new Error(
+      `RPC returned event outside the canonical Classic filter: ${eventName}`,
+    );
+  }
+  if (actualAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error(
+      `RPC returned ${eventName} from a non-canonical contract`,
+    );
+  }
 }
 
 export async function indexVerifiedEvents(
@@ -265,35 +301,14 @@ export async function indexVerifiedEvents(
       allSettledOrThrow([
         client.getLogs({
           address: config.launcher,
-          event: memeTokenLaunchedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.launcher,
-          event: memeLiquidityConfiguredEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.launcher,
-          event: memeCreatorInitialBuyEvent,
+          events: CLASSIC_LAUNCHER_EVENTS,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
         }),
         client.getLogs({
           address: config.feeHook,
-          event: nativeSwapFeesAccruedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.feeHook,
-          event: creatorFeesClaimedEvent,
+          events: CLASSIC_FEE_HOOK_EVENTS,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
@@ -305,6 +320,7 @@ export async function indexVerifiedEvents(
     } catch (error) {
       if (
         (error instanceof TimeoutError ||
+          error instanceof LimitExceededRpcError ||
           error instanceof ResponseBodyTooLargeError ||
           error instanceof HttpRequestError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
@@ -325,93 +341,94 @@ export async function indexVerifiedEvents(
       }
       throw error;
     }
-    const [
-      launchLogs,
-      liquidityLogs,
-      initialBuyLogs,
-      feeLogs,
-      claimLogs,
-    ] = logs;
-
-    for (const log of launchLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      launches.push({
-        creator: getAddress(log.args.creator),
-        token: getAddress(log.args.token),
-        poolId: log.args.poolId,
-        feeHook: getAddress(log.args.feeHook),
-        positionRecipient: getAddress(log.args.positionRecipient),
-        positionTokenId: log.args.positionTokenId,
-        totalSwapFeeBps: log.args.totalSwapFeeBps,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
-    }
-
-    for (const log of liquidityLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      liquidities.push({
-        token: getAddress(log.args.token),
-        totalSupply: log.args.totalSupply,
-        tokenLiquidityAmount: log.args.tokenLiquidityAmount,
-        lockedTokenDust: log.args.lockedTokenDust,
-        initialTick: log.args.initialTick,
-        tickLower: log.args.tickLower,
-        tickUpper: log.args.tickUpper,
-        lpFeePips: log.args.lpFeePips,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
-    }
-
-    for (const log of initialBuyLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      initialBuys.push({
-        creator: getAddress(log.args.creator),
-        token: getAddress(log.args.token),
-        poolId: log.args.poolId,
-        nativeAmount: log.args.nativeAmount,
-        tokenAmount: log.args.tokenAmount,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
-    }
-
-    for (const log of feeLogs) {
+    for (const log of logs.flat()) {
+      assertCanonicalClassicEventSource(
+        log.eventName,
+        log.address,
+        config,
+      );
       if (log.removed) continue;
-      const poolKey = log.args.poolId.toLowerCase();
-      const current = volumes.get(poolKey) ?? ZERO_FEE_VOLUME;
-      volumes.set(poolKey, {
-        grossNativeAmount:
-          current.grossNativeAmount + log.args.grossNativeAmount,
-        creatorFees: current.creatorFees + log.args.creatorFee,
-        launcherFees: current.launcherFees + log.args.launcherFee,
-        swapCount: current.swapCount + 1,
-      });
-    }
 
-    for (const log of claimLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      creatorClaims.push({
-        poolId: log.args.poolId,
-        creator: getAddress(log.args.creator),
-        recipient: getAddress(log.args.recipient),
-        caller: getAddress(log.args.caller),
-        amount: log.args.amount,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
+      switch (log.eventName) {
+        case "MemeTokenLaunched":
+          if (log.blockNumber === null) continue;
+          launches.push({
+            creator: getAddress(log.args.creator),
+            token: getAddress(log.args.token),
+            poolId: log.args.poolId,
+            feeHook: getAddress(log.args.feeHook),
+            positionRecipient: getAddress(log.args.positionRecipient),
+            positionTokenId: log.args.positionTokenId,
+            totalSwapFeeBps: log.args.totalSwapFeeBps,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "MemeLiquidityConfigured":
+          if (log.blockNumber === null) continue;
+          liquidities.push({
+            token: getAddress(log.args.token),
+            totalSupply: log.args.totalSupply,
+            tokenLiquidityAmount: log.args.tokenLiquidityAmount,
+            lockedTokenDust: log.args.lockedTokenDust,
+            initialTick: log.args.initialTick,
+            tickLower: log.args.tickLower,
+            tickUpper: log.args.tickUpper,
+            lpFeePips: log.args.lpFeePips,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "MemeCreatorInitialBuy":
+          if (log.blockNumber === null) continue;
+          initialBuys.push({
+            creator: getAddress(log.args.creator),
+            token: getAddress(log.args.token),
+            poolId: log.args.poolId,
+            nativeAmount: log.args.nativeAmount,
+            tokenAmount: log.args.tokenAmount,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "NativeSwapFeesAccrued": {
+          const poolKey = log.args.poolId.toLowerCase();
+          const current = volumes.get(poolKey) ?? ZERO_FEE_VOLUME;
+          volumes.set(poolKey, {
+            grossNativeAmount:
+              current.grossNativeAmount + log.args.grossNativeAmount,
+            creatorFees: current.creatorFees + log.args.creatorFee,
+            launcherFees: current.launcherFees + log.args.launcherFee,
+            swapCount: current.swapCount + 1,
+          });
+          break;
+        }
+        case "CreatorFeesClaimed":
+          if (log.blockNumber === null) continue;
+          creatorClaims.push({
+            poolId: log.args.poolId,
+            creator: getAddress(log.args.creator),
+            recipient: getAddress(log.args.recipient),
+            caller: getAddress(log.args.caller),
+            amount: log.args.amount,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        default:
+          throw new Error("RPC returned an undecodable Classic event");
+      }
     }
     fromBlock = rangeEnd + 1n;
   }
@@ -725,13 +742,11 @@ async function readReadyModel(
     ),
   );
 
-  const indexedEventSets = await mapInBatches(
-    clients,
-    RPC_PROVENANCE_BATCH_SIZE,
-    (candidate) =>
+  const indexedEventSets = await allSettledOrThrow(
+    clients.map((candidate) =>
       withReadStage("classic-events", () =>
         indexVerifiedEvents(candidate, config, toBlock),
-      ),
+      )),
   );
   const launcherFeeValues = await withReadStage(
     "launcher-fee-accounting",

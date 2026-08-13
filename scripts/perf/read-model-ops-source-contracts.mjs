@@ -14,9 +14,24 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "5f0c5c23582a48fc7995cc4fcba865a9c20199418c0b7a0b7f9b687b2ae8717d",
+        sha256: "654eb383431ce6518deda90db07b2c083be0bc7bfb5f66c80b476dd853120244",
       }),
-      eventFiltersPerRange: 5,
+      releaseRuntimes: Object.freeze([
+        Object.freeze({
+          release: "classic-v3",
+          path: "lib/onchain/classic-v3-read-model.ts",
+          sha256: "1f9c711c8df4159a7b391e95880f7a9e5aa88191572d043b86fba9baa2b3f11b",
+          eventFiltersPerRange: 2,
+        }),
+        Object.freeze({
+          release: "stock-paired-v1-v3",
+          path: "lib/onchain/stock-paired-read-model.ts",
+          sha256: "6b5b5def718509f954e54a11849daf4584e3e048a3607b0a0126b5fe61ac7ec2",
+          eventFiltersPerRange: 3,
+        }),
+      ]),
+      eventFiltersPerRange: 2,
+      providerPasses: 2,
       requestDeadlineMs: 270_000,
     }),
     schedulerWatchdog: Object.freeze({
@@ -1469,6 +1484,17 @@ export function evaluateReadModelOperationsSourceContracts(
   const boundedRefresh = operations?.legacyIndexer?.boundedRefresh;
   const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
   const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
+  const releaseRuntimes = boundedRefresh?.releaseRuntimes;
+  const classicV3RefreshSource = source(releaseRuntimes?.[0]?.path);
+  const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
+  const hasAdaptiveCompleteRangeScan = (runtimeSource) =>
+    runtimeSource?.includes("allSettledOrThrow([") &&
+    runtimeSource?.includes("error instanceof TimeoutError") &&
+    runtimeSource?.includes("error instanceof LimitExceededRpcError") &&
+    runtimeSource?.includes("error instanceof HttpRequestError") &&
+    runtimeSource?.includes("error instanceof ResponseBodyTooLargeError") &&
+    runtimeSource?.includes("logBlockRange > MINIMUM_LOG_BLOCK_RANGE") &&
+    runtimeSource?.includes("continue;");
   check(
     "ops-legacy-bounded-refresh",
     exactJson(
@@ -1480,17 +1506,44 @@ export function evaluateReadModelOperationsSourceContracts(
         boundedRefresh?.runtime,
         expectedSha256Overrides,
       ) &&
+      Array.isArray(releaseRuntimes) &&
+      releaseRuntimes.length === 2 &&
+      releaseRuntimes[0]?.release === "classic-v3" &&
+      releaseRuntimes[0]?.eventFiltersPerRange === 2 &&
+      sourceBindingMatches(
+        source,
+        releaseRuntimes[0],
+        expectedSha256Overrides,
+      ) &&
+      releaseRuntimes[1]?.release === "stock-paired-v1-v3" &&
+      releaseRuntimes[1]?.eventFiltersPerRange === 3 &&
+      sourceBindingMatches(
+        source,
+        releaseRuntimes[1],
+        expectedSha256Overrides,
+      ) &&
+      boundedRefresh?.eventFiltersPerRange === 2 &&
+      boundedRefresh?.providerPasses === 2 &&
       legacyRouteSource?.includes(
         "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
       ) &&
       legacyRouteSource?.includes("withIndexRefreshDeadline(() =>") &&
       !legacyRouteSource?.includes("INDEX_READ_ATTEMPTS") &&
-      refreshRuntimeSource?.includes("TimeoutError,") &&
-      refreshRuntimeSource?.includes("error instanceof TimeoutError ||") &&
-      refreshRuntimeSource?.includes(
-        "const readLogs = () =>\n      allSettledOrThrow([",
-      ),
-    "the canonical refresh scans five disjoint event filters concurrently, bisects timeouts and fails before the platform deadline",
+      hasAdaptiveCompleteRangeScan(refreshRuntimeSource) &&
+      refreshRuntimeSource?.includes("events: CLASSIC_LAUNCHER_EVENTS") &&
+      refreshRuntimeSource?.includes("events: CLASSIC_FEE_HOOK_EVENTS") &&
+      refreshRuntimeSource?.includes("assertCanonicalClassicEventSource(") &&
+      refreshRuntimeSource?.includes("clients.map((candidate) =>") &&
+      hasAdaptiveCompleteRangeScan(classicV3RefreshSource) &&
+      classicV3RefreshSource?.includes(
+        "assertCanonicalClassicV3EventSource(",
+      ) &&
+      classicV3RefreshSource?.includes("clients.map((client) =>") &&
+      hasAdaptiveCompleteRangeScan(stockPairedRefreshSource) &&
+      stockPairedRefreshSource?.includes("events: STOCK_LAUNCHER_EVENTS") &&
+      stockPairedRefreshSource?.includes("assertCanonicalStockEventSource(") &&
+      stockPairedRefreshSource?.includes("clients.map((candidate) =>"),
+    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections and compare two provider passes before the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(
