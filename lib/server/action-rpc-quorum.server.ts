@@ -15,6 +15,7 @@ type ActionRpcVendor =
   | "drpc"
   | "publicnode"
   | "mevblocker"
+  | "tenderly"
   | "sepolia-org"
   | "blastapi"
   | "ankr";
@@ -145,6 +146,14 @@ function providerVendor(
     noQuery
   ) {
     return "mevblocker";
+  }
+  if (
+    chainId === 1 &&
+    value.hostname === "mainnet.gateway.tenderly.co" &&
+    rootPath &&
+    noQuery
+  ) {
+    return "tenderly";
   }
   if (
     chainId === 11_155_111 &&

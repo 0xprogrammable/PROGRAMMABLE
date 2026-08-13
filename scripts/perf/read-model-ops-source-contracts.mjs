@@ -23,7 +23,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/onchain/historical-read-rpc.server.ts",
-          sha256: "98ccb2a6471a4e38ef521b1fd7e41d55bb19b904a9c1d5e8d6948976a628d63e",
+          sha256: "725bde4016b635c77ed996e8b6d574b589f3cccd5778a7ed63ea9afbde4e77b7",
         }),
       ]),
       releaseRuntimes: Object.freeze([
@@ -113,7 +113,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "398de34ff2965d89ee2c4b1cffeba043ebe2586eb08685e2a0ea7ff0d6cf18b9",
+          sha256: "1f48c805536ff4824658c31650435eb56d30b730f9dc4d9ed0279040f8b52993",
         }),
       ]),
       policy: Object.freeze({
@@ -1547,19 +1547,22 @@ export function evaluateReadModelOperationsSourceContracts(
         "historicalReadOnchainDeployment(deployment)",
       ) &&
       historicalRpcSource?.includes(
-        'const INDEPENDENT_ARCHIVE_WITNESS = "https://rpc.mevblocker.io/";',
+        '"https://rpc.mevblocker.io/",',
       ) &&
       historicalRpcSource?.includes(
-        "primary: binding.secondary.url",
+        '"https://mainnet.gateway.tenderly.co/",',
       ) &&
       historicalRpcSource?.includes(
-        'primary?.vendorGroup !== "quicknode"',
+        "primary: ARCHIVE_WITNESSES[0]",
       ) &&
       historicalRpcSource?.includes(
-        'secondary?.vendorGroup !== "mevblocker"',
+        "secondary: ARCHIVE_WITNESSES[1]",
       ) &&
       historicalRpcSource?.includes(
-        "primary.endpointCommitment !== binding.secondary.endpointCommitment",
+        'primary?.vendorGroup !== "mevblocker"',
+      ) &&
+      historicalRpcSource?.includes(
+        'secondary?.vendorGroup !== "tenderly"',
       ) &&
       Array.isArray(releaseRuntimes) &&
       releaseRuntimes.length === 2 &&
