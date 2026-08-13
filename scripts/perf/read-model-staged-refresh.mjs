@@ -12,6 +12,7 @@ const MAXIMUM_FRESH_AGE_SECONDS = 10 * 60;
 const CANONICAL_UINT = /^(?:0|[1-9][0-9]{0,77})$/u;
 const HEX32 = /^0x[0-9a-f]{64}$/u;
 const MAXIMUM_UINT64 = (1n << 64n) - 1n;
+const PREWARM_PHASES = ["classic-primary", "classic-secondary"];
 
 function argumentsFrom(argv) {
   const result = {};
@@ -149,6 +150,23 @@ function exactRefreshResponse(value) {
   );
 }
 
+function exactPrewarmResponse(value, phase) {
+  const provider = phase === "classic-primary" ? "primary" : "secondary";
+  return (
+    value.response.status === 200 &&
+    value.response.headers
+      .get("cache-control")
+      ?.toLowerCase()
+      .includes("no-store") === true &&
+    value.body?.ok === true &&
+    value.body.phase === phase &&
+    value.body.provider === provider &&
+    CANONICAL_UINT.test(value.body.blockNumber) &&
+    HEX32.test(value.body.blockHash) &&
+    value.body.blockHash !== `0x${"00".repeat(32)}`
+  );
+}
+
 function exactHealthProof(value, refresh) {
   const index = value.body?.index;
   const rpc = value.body?.rpc;
@@ -247,16 +265,33 @@ export async function refreshExactStagedReadModel(input) {
     throw new Error("exact staged deployment binding verification failed");
   }
 
+  const protectedHeaders = {
+    Accept: "application/json",
+    Authorization: `Bearer ${input.cronSecret}`,
+    "Cache-Control": "no-cache",
+    "User-Agent": "programmable-staged-read-model-refresh/1",
+    "x-vercel-protection-bypass": input.automationBypassSecret,
+  };
+  for (const phase of PREWARM_PHASES) {
+    const prewarmUrl = new URL(REFRESH_PATH, target);
+    prewarmUrl.searchParams.set("phase", phase);
+    const prewarm = await requestJson(
+      fetchImpl,
+      prewarmUrl,
+      protectedHeaders,
+      330_000,
+    );
+    if (!exactPrewarmResponse(prewarm, phase)) {
+      throw new Error(
+        `exact staged ${phase} prewarm failed (${prewarm.response.status})`,
+      );
+    }
+  }
+
   const refresh = await requestJson(
     fetchImpl,
     new URL(REFRESH_PATH, target),
-    {
-      Accept: "application/json",
-      Authorization: `Bearer ${input.cronSecret}`,
-      "Cache-Control": "no-cache",
-      "User-Agent": "programmable-staged-read-model-refresh/1",
-      "x-vercel-protection-bypass": input.automationBypassSecret,
-    },
+    protectedHeaders,
     330_000,
   );
   if (!exactRefreshResponse(refresh)) {

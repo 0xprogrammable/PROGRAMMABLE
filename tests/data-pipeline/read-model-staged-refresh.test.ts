@@ -51,6 +51,20 @@ function refreshFixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function prewarmFixture(
+  phase: "classic-primary" | "classic-secondary",
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    ok: true,
+    phase,
+    provider: phase === "classic-primary" ? "primary" : "secondary",
+    blockNumber: BLOCK_NUMBER,
+    blockHash: BLOCK_HASH,
+    ...overrides,
+  };
+}
+
 function healthFixture(overrides: Record<string, unknown> = {}) {
   return {
     status: "healthy",
@@ -106,6 +120,13 @@ function stagedFetch(
       url.origin === new URL(TARGET_URL).origin &&
       url.pathname === "/api/ops/index-v2"
     ) {
+      const phase = url.searchParams.get("phase");
+      if (phase === "classic-primary" || phase === "classic-secondary") {
+        return Response.json(prewarmFixture(phase), {
+          status: 200,
+          headers: { "cache-control": "no-store" },
+        });
+      }
       return Response.json(input.refreshBody ?? refreshFixture(), {
         status: input.refreshStatus ?? 200,
         headers: { "cache-control": "no-store" },
@@ -166,16 +187,20 @@ describe("exact staged durable refresh runtime", () => {
     expect(requests.map(({ url }) => url.pathname)).toEqual([
       `/v13/deployments/${new URL(TARGET_URL).hostname}`,
       "/api/ops/index-v2",
+      "/api/ops/index-v2",
+      "/api/ops/index-v2",
       "/api/ops/health",
     ]);
-    const refreshRequest = requests[1]!;
+    expect(requests.slice(1, 3).map(({ url }) => url.searchParams.get("phase")))
+      .toEqual(["classic-primary", "classic-secondary"]);
+    const refreshRequest = requests[3]!;
     expect(refreshRequest.headers.get("authorization")).toBe(
       `Bearer ${CRON_SECRET}`,
     );
     expect(refreshRequest.headers.get("x-vercel-protection-bypass")).toBe(
       AUTOMATION_BYPASS_SECRET,
     );
-    const healthRequest = requests[2]!;
+    const healthRequest = requests[4]!;
     expect(healthRequest.headers.get("authorization")).toBeNull();
     expect(healthRequest.url.searchParams.get("stage_refresh_proof")).toBe(
       `${GIT_HEAD}-${DEPLOYMENT_ID}`,

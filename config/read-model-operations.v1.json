@@ -5,11 +5,11 @@
     "schedule": "*/5 * * * *",
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
-    "sha256": "763f093b6138bbb7bfaa175f2192798cabd9debbca641f4aefd14d59aff9ff55",
+    "sha256": "c3096ba966fe940e695c6b347dbbedcb7f568352de429a7abd18bf506c7fd26d",
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "76e5c5a6bebb697e842572a730e38e3423d6448f661119a2b31a0760b64ace58"
+        "sha256": "41cc8023775c09a3ca48825f1e19c2f6342f6c4b04855803b15ca3d77be6fa69"
       },
       "dependencies": [
         {

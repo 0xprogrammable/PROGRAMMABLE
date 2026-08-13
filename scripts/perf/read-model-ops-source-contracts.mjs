@@ -10,11 +10,11 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "763f093b6138bbb7bfaa175f2192798cabd9debbca641f4aefd14d59aff9ff55",
+    sha256: "c3096ba966fe940e695c6b347dbbedcb7f568352de429a7abd18bf506c7fd26d",
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "76e5c5a6bebb697e842572a730e38e3423d6448f661119a2b31a0760b64ace58",
+        sha256: "41cc8023775c09a3ca48825f1e19c2f6342f6c4b04855803b15ca3d77be6fa69",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -835,6 +835,9 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "Authorization: `Bearer ${input.cronSecret}`",
   '"x-vercel-protection-bypass": input.automationBypassSecret',
   'redirect: "error"',
+  'const PREWARM_PHASES = ["classic-primary", "classic-secondary"]',
+  'prewarmUrl.searchParams.set("phase", phase)',
+  "if (!exactPrewarmResponse(prewarm, phase)) {",
   "if (!exactRefreshResponse(refresh)) {",
   'value.body.indexSource === "durable"',
   'value.body.indexedReadModel?.status === "disabled"',
@@ -847,7 +850,7 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   '"stage_refresh_proof"',
 ]);
 const STAGED_DURABLE_REFRESH_SCRIPT_SHA256 =
-  "989495b90b8f8ebb549da1e869116d9dc3373567d8bff721285ced702271d68e";
+  "2f0f7d575b5d8bd34ae8a5fc3cec3ad775d097171ae903c9aa6c4f3ce2cb5385";
 const STAGED_DURABLE_REFRESH_WORKFLOW_STEP = [
   "      - name: Refresh and prove exact staged durable read model",
   "        if: needs.release-gate.outputs.verified_read_model == 'true'",

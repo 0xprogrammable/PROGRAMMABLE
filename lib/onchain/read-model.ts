@@ -1002,6 +1002,95 @@ async function readReadyModel(
   };
 }
 
+export type ClassicEventCacheProvider = "primary" | "secondary";
+
+export async function prewarmClassicEventCache(
+  config: OnchainDeployment,
+  provider: ClassicEventCacheProvider,
+) {
+  if (config.status !== "ready") {
+    throw new Error("Classic event cache prewarm requires a ready deployment");
+  }
+  const providerEndpoints = [
+    config.rpcUrl,
+    ...(config.rpcUrlSecondary ? [config.rpcUrlSecondary] : []),
+  ];
+  if (providerEndpoints.length !== 2) {
+    throw new Error("Classic event cache prewarm requires two independent RPCs");
+  }
+  const clients = providerEndpoints.map((endpoint, index) =>
+    index === 0
+      ? createOnchainClient(config)
+      : createOnchainClient(config, endpoint)
+  );
+  const chainStates = await withReadStage("classic-prewarm-chain-heads", () =>
+    mapInBatches(
+      clients,
+      RPC_PROVENANCE_BATCH_SIZE,
+      async (candidate) => ({
+        chainId: await candidate.getChainId(),
+        head: await candidate.getBlockNumber(),
+      }),
+    )
+  );
+  if (chainStates.some((state) => state.chainId !== config.chainId)) {
+    throw new Error("RPC chain does not match the deployment manifest");
+  }
+  const head = chainStates.reduce(
+    (lowest, state) => minimum(lowest, state.head),
+    chainStates[0].head,
+  );
+  const toBlock = head > config.confirmations
+    ? head - config.confirmations
+    : 0n;
+  const snapshotBlocks = await withReadStage(
+    "classic-prewarm-snapshot-blocks",
+    () =>
+      mapInBatches(
+        clients,
+        RPC_PROVENANCE_BATCH_SIZE,
+        (candidate) => candidate.getBlock({ blockNumber: toBlock }),
+      ),
+  );
+  const snapshotBlock = snapshotBlocks[0];
+  if (
+    !snapshotBlock.hash ||
+    snapshotBlocks.some(
+      (block) =>
+        !block.hash ||
+        block.hash.toLowerCase() !== snapshotBlock.hash?.toLowerCase(),
+    )
+  ) {
+    throw new Error(
+      "Independent RPCs disagree on the confirmed snapshot block",
+    );
+  }
+  if (toBlock >= config.deploymentBlock) {
+    const providerIndex = provider === "primary" ? 0 : 1;
+    await withReadStage(`classic-prewarm-${provider}`, () =>
+      withPersistentRpcIntegrityScope(
+        () => indexVerifiedEvents(clients[providerIndex], config, toBlock),
+        {
+          checkpointGroup: [
+            "classic-events",
+            config.chainId,
+            config.deploymentBlock.toString(),
+            config.launcher.toLowerCase(),
+            config.feeHook.toLowerCase(),
+            persistentRpcProviderId(providerEndpoints[providerIndex]),
+          ].join(":"),
+          expectedCursorBindings: 2,
+        },
+      )
+    );
+  }
+  return {
+    provider,
+    blockNumber: toBlock.toString(),
+    blockHash: snapshotBlock.hash,
+  };
+}
+
 type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
 
 function launchIdentity(token: LauncherToken) {
