@@ -5,7 +5,15 @@
     "schedule": "*/5 * * * *",
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
-    "sha256": "f28fb7054e0bb4670b3d0aa1c2f2b7362085dcf0390fc19eb0b5eb26be464ef7",
+    "sha256": "06235ff68203da970d51022fe0a9bbe3a7d0096c547ecd7fc31b1ce1d4f1da52",
+    "boundedRefresh": {
+      "runtime": {
+        "path": "lib/onchain/read-model.ts",
+        "sha256": "5f0c5c23582a48fc7995cc4fcba865a9c20199418c0b7a0b7f9b687b2ae8717d"
+      },
+      "eventFiltersPerRange": 5,
+      "requestDeadlineMs": 270000
+    },
     "schedulerWatchdog": {
       "provider": "github-actions",
       "workflow": {

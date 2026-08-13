@@ -643,6 +643,43 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
+    [
+      "the pre-platform deadline",
+      "app/api/ops/index-v2/route.ts",
+      "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
+      "const INDEX_REFRESH_DEADLINE_MS = 300_000;",
+    ],
+    [
+      "settled concurrent event filters",
+      "lib/onchain/read-model.ts",
+      "const readLogs = () =>\n      allSettledOrThrow([",
+      "const readLogs = () =>\n      Promise.all([",
+    ],
+    [
+      "timeout range bisection",
+      "lib/onchain/read-model.ts",
+      "error instanceof TimeoutError ||",
+      "false ||",
+    ],
+  ])(
+    "rejects a legacy refresh missing %s",
+    (_label, path, needle, replacement) => {
+      const source = readFileSync(resolve(ROOT, path), "utf8");
+      expect(source).toContain(needle);
+      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+        sourceOverrides: {
+          ...integratedOverrides(),
+          [path]: source.replace(needle, replacement),
+        },
+        expectedSha256Overrides: fixtureDigests(),
+      });
+      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+        "ops-legacy-bounded-refresh",
+      );
+    },
+  );
+
+  it.each([
     ["unprotected branch", "github.ref == 'refs/heads/production'"],
     [
       "pinned Node setup action",
