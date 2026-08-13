@@ -1,11 +1,10 @@
 import "server-only";
 
 import type { ReadyOnchainDeployment } from "../onchain/types";
+import { productionMainnetRpcPair } from
+  "../onchain/website-rpc-providers.server";
 import { createActionRpcQuorum } from
   "../server/action-rpc-quorum.server";
-
-const CURRENT_MARKET_RPC_SECONDARY = "https://rpc.mevblocker.io/";
-const RPC_ENDPOINT_COMMITMENT = /^0x[0-9a-f]{64}$/u;
 
 export class CurrentMarketRpcBindingError extends Error {
   override name = "CurrentMarketRpcBindingError";
@@ -15,46 +14,35 @@ export class CurrentMarketRpcBindingError extends Error {
   }
 }
 
-function quickNodeRpcUrl() {
-  const preferred = process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL;
-  return preferred === undefined || preferred === ""
-    ? process.env.ETHEREUM_RPC_URL_B
-    : preferred;
-}
-
 /**
- * Derives a current-market-only quorum from the production deployment
- * manifest. Its QuickNode endpoint is independently configured and
- * commitment-verified here; current evidence therefore does not depend on an
- * Alchemy endpoint being configured. A fixed, independently operated MEV
- * Blocker endpoint supplies the second exact-block observation.
+ * Derives the current-market exact-block quorum from the same commitment-bound
+ * private dRPC + QuickNode pair used by Website reads and background workers.
+ * Runtime health still proves chain id, head freshness and equal confirmed
+ * block hashes before any current valuation can be published.
  */
 export function currentMarketOnchainDeployment(
   baseDeployment: ReadyOnchainDeployment,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ReadyOnchainDeployment {
-  const expectedQuickNodeCommitment =
-    process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT;
-  if (
-    baseDeployment.chainId !== 1 ||
-    !expectedQuickNodeCommitment ||
-    !RPC_ENDPOINT_COMMITMENT.test(expectedQuickNodeCommitment)
-  ) {
+  if (baseDeployment.chainId !== 1) {
     throw new CurrentMarketRpcBindingError();
   }
 
   try {
+    const binding = productionMainnetRpcPair(environment);
     const providers = createActionRpcQuorum({
       chainId: 1,
-      primary: quickNodeRpcUrl(),
-      secondary: CURRENT_MARKET_RPC_SECONDARY,
+      primary: binding.primary.url,
+      secondary: binding.secondary.url,
       maximumProviders: 2,
     });
     const [primary, secondary] = providers;
     if (
       providers.length !== 2 ||
-      primary?.vendorGroup !== "quicknode" ||
-      secondary?.vendorGroup !== "mevblocker" ||
-      primary.endpointCommitment !== expectedQuickNodeCommitment
+      primary?.vendorGroup !== "drpc" ||
+      secondary?.vendorGroup !== "quicknode" ||
+      primary.endpointCommitment !== binding.primary.endpointCommitment ||
+      secondary.endpointCommitment !== binding.secondary.endpointCommitment
     ) {
       throw new CurrentMarketRpcBindingError();
     }
@@ -63,9 +51,10 @@ export function currentMarketOnchainDeployment(
       ...baseDeployment,
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
-      // Provider-neutral Website role IDs describe the replaced base pair.
-      // Do not mislabel this dedicated QuickNode + MEV Blocker quorum.
-      rpcProviderIds: undefined,
+      rpcProviderIds: {
+        primary: "drpc",
+        secondary: "quicknode",
+      },
     };
   } catch {
     throw new CurrentMarketRpcBindingError();

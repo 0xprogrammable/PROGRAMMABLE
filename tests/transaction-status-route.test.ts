@@ -32,7 +32,7 @@ vi.mock("viem", async (importOriginal) => {
 });
 
 vi.mock("@/lib/onchain/config", () => ({
-  getOnchainDeployment: () => mocks.deployment,
+  getWebsiteReadOnchainDeployment: () => mocks.deployment,
 }));
 
 vi.mock("@/lib/server/action-rpc-quorum.server", () => ({

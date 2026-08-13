@@ -57,7 +57,7 @@ const HOOK = BINDING.sources.find(
 const PROVIDER_DEPLOYMENTS = Object.freeze([
   Object.freeze({
     providerDeploymentId: "11111111-1111-5111-8111-111111111111",
-    providerIdentity: "alchemy-mainnet",
+    providerIdentity: "drpc-mainnet",
     endpointCommitment: `0x${"a".repeat(64)}`,
     originCommitment: `0x${"c".repeat(64)}`,
   }),
@@ -205,11 +205,11 @@ function feeAccrualLog(): CandidateRpcLog {
 }
 
 function provider(
-  vendor: "alchemy" | "quicknode",
+  vendor: "drpc" | "quicknode",
   logs: readonly CandidateRpcLog[],
   head = BLOCK_NUMBER,
 ): CandidateRpcProvider {
-  const deployment = PROVIDER_DEPLOYMENTS[vendor === "alchemy" ? 0 : 1];
+  const deployment = PROVIDER_DEPLOYMENTS[vendor === "drpc" ? 0 : 1];
   return {
     identity: deployment.providerIdentity,
     vendorGroup: vendor,
@@ -250,7 +250,7 @@ async function verifiedBundle(
   head = BLOCK_NUMBER,
 ): Promise<OptimisticPersistenceBundle> {
   const providers = [
-    provider("alchemy", logs, head),
+    provider("drpc", logs, head),
     provider("quicknode", logs, head),
   ] as const;
   return verifyOptimisticBlockForPersistence({
@@ -269,7 +269,7 @@ async function verifiedBundle(
 async function metadataRetryBundle(): Promise<OptimisticPersistenceBundle> {
   const logs = completeClassicLaunchLogs();
   const providers = [
-    provider("alchemy", logs),
+    provider("drpc", logs),
     provider("quicknode", logs),
   ] as const;
   for (const { client } of providers) {

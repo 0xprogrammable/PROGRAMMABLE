@@ -110,8 +110,8 @@ function runtime(overrides: {
   providers?: readonly CandidateRpcProvider[];
 } = {}) {
   const first = provider({
-    identity: "alchemy-mainnet-a",
-    vendorGroup: "alchemy",
+    identity: "drpc-mainnet-a",
+    vendorGroup: "drpc",
     endpointCommitment: ENDPOINT_A,
     endpointOriginCommitment: ORIGIN_A,
   });
@@ -125,7 +125,7 @@ function runtime(overrides: {
   const secondLive = overrides.secondLive ?? routeDtos();
   const indexed = overrides.indexed ?? routeDtos();
   const readLiveRoutes = vi.fn(async ({ source }) =>
-    source.vendorGroup === "alchemy" ? firstLive : secondLive,
+    source.vendorGroup === "drpc" ? firstLive : secondLive,
   );
   const reader =
     overrides.reader ??
@@ -352,8 +352,8 @@ describe("exact-checkpoint reconciler", () => {
 
   it("rejects an RPC block that does not match the database checkpoint", async () => {
     const first = provider({
-      identity: "alchemy-mainnet-a",
-      vendorGroup: "alchemy",
+      identity: "drpc-mainnet-a",
+      vendorGroup: "drpc",
       endpointCommitment: ENDPOINT_A,
       endpointOriginCommitment: ORIGIN_A,
       blockHash: `0x${"98".repeat(32)}`,

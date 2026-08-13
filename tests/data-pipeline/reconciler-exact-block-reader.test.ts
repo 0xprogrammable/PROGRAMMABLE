@@ -15,14 +15,16 @@ import {
   type ReconcilerRouteDto,
 } from "../../lib/data-pipeline/reconciler-preparity";
 import { rpcProviderCommitment } from "../../lib/data-pipeline/rpc-provider-commitments";
+import { productionMainnetRpcEnvironment } from
+  "../../lib/onchain/website-rpc-providers.server";
 
 const BLOCK_HASH = `0x${"11".repeat(32)}` as const;
 const ALTERNATE_HASH = `0x${"22".repeat(32)}` as const;
 const ADDRESS = `0x${"33".repeat(20)}` as const;
 const ALTERNATE_ADDRESS = `0x${"44".repeat(20)}` as const;
 const BLOCK_NUMBER = 25_700_000n;
-const ALCHEMY = "https://eth-mainnet.g.alchemy.com/v2/abcdefgh12345678";
-const QUICKNODE = "https://example.quiknode.pro/abcdefgh12345678/";
+const DRPC = "https://lb.drpc.live/ethereum/abcdefgh12345678";
+const QUICKNODE = "https://example.ethereum-mainnet.quiknode.pro/abcdefgh12345678/";
 
 const contract: ReconcilerPreParityContract = {
   chainId: "1",
@@ -100,11 +102,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(Number(body.id), "0x");
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -135,11 +137,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(Number(body.id), runtime);
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -166,11 +168,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(Number(body.id), "0x");
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -206,11 +208,11 @@ describe("exact-block reconciler RPC", () => {
       })).reverse());
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumBatchSize: 2,
       fetch: fetchMock as typeof fetch,
@@ -272,11 +274,11 @@ describe("exact-block reconciler RPC", () => {
       }).reverse());
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumBatchSize: 32,
       maximumRequests: 9,
@@ -321,11 +323,11 @@ describe("exact-block reconciler RPC", () => {
       })));
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -346,11 +348,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(Number(body.id), "0x");
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumLogicalRequests: 1,
       fetch: fetchMock as typeof fetch,
@@ -461,11 +463,11 @@ describe("exact-block reconciler RPC", () => {
   it("rejects a partition sequence that does not start at page zero and index zero", () => {
     const fetchMock = vi.fn();
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -552,11 +554,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcBatchResponse(response(body.map((request) => request.id)));
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -587,10 +589,7 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, block());
     });
     const reader = createExactBlockReconcilerRouteDtoReader({
-      env: {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
+      env: productionMainnetRpcEnvironment(DRPC, QUICKNODE),
       indexedStore: {
         readExactIndexedRouteCorpus: vi.fn(async () => routes("indexed")),
       },
@@ -598,12 +597,12 @@ describe("exact-block reconciler RPC", () => {
       fetch: fetchMock as typeof fetch,
     });
     const source = {
-      identity: "alchemy-mainnet-test",
-      vendorGroup: "alchemy",
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      identity: "drpc-mainnet-test",
+      vendorGroup: "drpc",
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
     };
 
@@ -626,10 +625,7 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, block());
     });
     const reader = createExactBlockReconcilerRouteDtoReader({
-      env: {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
+      env: productionMainnetRpcEnvironment(DRPC, QUICKNODE),
       indexedStore: {
         readExactIndexedRouteCorpus: vi.fn(async () => routes("indexed")),
       },
@@ -644,12 +640,12 @@ describe("exact-block reconciler RPC", () => {
 
     const result = await reader.readLiveRoutes({
       source: {
-        identity: "alchemy-mainnet-test",
-        vendorGroup: "alchemy",
-        endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+        identity: "drpc-mainnet-test",
+        vendorGroup: "drpc",
+        endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
         endpointOriginCommitment: rpcProviderCommitment(
           "origin",
-          new URL(ALCHEMY).origin,
+          new URL(DRPC).origin,
         ),
       },
       contract: classicV2Contract,
@@ -674,10 +670,7 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, block(blockRead === 1 ? BLOCK_HASH : ALTERNATE_HASH));
     });
     const reader = createExactBlockReconcilerRouteDtoReader({
-      env: {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
+      env: productionMainnetRpcEnvironment(DRPC, QUICKNODE),
       indexedStore: {
         readExactIndexedRouteCorpus: vi.fn(async () => routes("indexed")),
       },
@@ -687,12 +680,12 @@ describe("exact-block reconciler RPC", () => {
 
     await expect(reader.readLiveRoutes({
       source: {
-        identity: "alchemy-mainnet-test",
-        vendorGroup: "alchemy",
-        endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+        identity: "drpc-mainnet-test",
+        vendorGroup: "drpc",
+        endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
         endpointOriginCommitment: rpcProviderCommitment(
           "origin",
-          new URL(ALCHEMY).origin,
+          new URL(DRPC).origin,
         ),
       },
       contract,
@@ -712,11 +705,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, block());
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumRequests: 1,
       fetch: fetchMock as typeof fetch,
@@ -742,11 +735,11 @@ describe("exact-block reconciler RPC", () => {
   it("rejects an over-budget batch before sending a partial prefix", async () => {
     const fetchMock = vi.fn();
     const physicallyBounded = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumRequests: 1,
       maximumLogicalRequests: 10,
@@ -773,11 +766,11 @@ describe("exact-block reconciler RPC", () => {
     expect(physicallyBounded.logicalRequestCount()).toBe(3);
 
     const logicallyBounded = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumRequests: 10,
       maximumLogicalRequests: 2,
@@ -804,11 +797,11 @@ describe("exact-block reconciler RPC", () => {
       headers: { "content-length": String(8 * 1024 * 1024 + 1) },
     }));
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -836,11 +829,11 @@ describe("exact-block reconciler RPC", () => {
       },
     }), { status: 200 }));
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -865,11 +858,11 @@ describe("exact-block reconciler RPC", () => {
         })
       );
       const rpc = createExactBlockRpcClient({
-        endpoint: ALCHEMY,
-        endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+        endpoint: DRPC,
+        endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
         endpointOriginCommitment: rpcProviderCommitment(
           "origin",
-          new URL(ALCHEMY).origin,
+          new URL(DRPC).origin,
         ),
         timeoutMs: 100,
         fetch: fetchMock as typeof fetch,
@@ -893,11 +886,11 @@ describe("exact-block reconciler RPC", () => {
       status: 429,
     }));
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -930,11 +923,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, [rawLog, { ...rawLog, logIndex: "0x1" }]);
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -976,11 +969,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, receipt);
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -1044,11 +1037,11 @@ describe("exact-block reconciler RPC", () => {
       }).reverse());
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumBatchSize: 2,
       fetch: fetchMock as typeof fetch,
@@ -1099,11 +1092,11 @@ describe("exact-block reconciler RPC", () => {
       })));
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -1185,11 +1178,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, mutate(baseReceipt));
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -1222,11 +1215,11 @@ describe("exact-block reconciler RPC", () => {
       return rpcResponse(body.id, transaction);
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       fetch: fetchMock as typeof fetch,
     });
@@ -1292,11 +1285,11 @@ describe("exact-block reconciler RPC", () => {
       }).reverse());
     });
     const rpc = createExactBlockRpcClient({
-      endpoint: ALCHEMY,
-      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpoint: DRPC,
+      endpointCommitment: projectorRpcDeploymentCommitment(DRPC),
       endpointOriginCommitment: rpcProviderCommitment(
         "origin",
-        new URL(ALCHEMY).origin,
+        new URL(DRPC).origin,
       ),
       maximumBatchSize: 2,
       fetch: fetchMock as typeof fetch,
@@ -1332,10 +1325,7 @@ describe("exact-block reconciler RPC", () => {
   it("rejects an unbound provider identity before making a request", async () => {
     const fetchMock = vi.fn();
     const reader = createExactBlockReconcilerRouteDtoReader({
-      env: {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
+      env: productionMainnetRpcEnvironment(DRPC, QUICKNODE),
       indexedStore: {
         readExactIndexedRouteCorpus: vi.fn(async () => routes("indexed")),
       },
@@ -1345,12 +1335,12 @@ describe("exact-block reconciler RPC", () => {
 
     await expect(reader.readLiveRoutes({
       source: {
-        identity: "alchemy-mainnet-test",
-        vendorGroup: "alchemy",
+        identity: "drpc-mainnet-test",
+        vendorGroup: "drpc",
         endpointCommitment: ALTERNATE_HASH,
         endpointOriginCommitment: rpcProviderCommitment(
           "origin",
-          new URL(ALCHEMY).origin,
+          new URL(DRPC).origin,
         ),
       },
       contract,

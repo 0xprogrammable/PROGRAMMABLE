@@ -13,6 +13,8 @@ import { mainnet } from "viem/chains";
 
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
+import { stockPairedActionRpcProviders } from
+  "@/lib/server/action-rpc-quorum.server";
 import { getConfiguredStockPairedReleases } from "@/lib/stock-paired-release";
 import {
   coordinatePublicRouteRead,
@@ -39,16 +41,11 @@ function json(body: unknown, status = 200) {
 }
 
 function endpoints() {
-  const primary =
-    process.env.ETHEREUM_RPC_URL ??
-    "https://ethereum-rpc.publicnode.com";
-  const secondary =
-    process.env.ETHEREUM_RPC_URL_B ??
-    process.env.ETHEREUM_RPC_URL_SECONDARY ??
-    (primary === "https://ethereum-rpc.publicnode.com"
-      ? "https://rpc.mevblocker.io"
-      : "https://ethereum-rpc.publicnode.com");
-  return [primary, secondary] as const;
+  const [primary, secondary] = stockPairedActionRpcProviders();
+  if (!primary || !secondary) {
+    throw new Error("Stock-Paired RPC quorum is unavailable");
+  }
+  return [primary.endpoint, secondary.endpoint] as const;
 }
 
 async function readLegacyLaunchLookup(request: NextRequest) {

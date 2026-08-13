@@ -574,40 +574,6 @@ describe("read-model operations source contract", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("binds the private manual Router finality cron independently", () => {
-    const routePath = "app/api/ops/manual-router-finality/route.ts";
-    const runtimePath =
-      "lib/server/custom-launch/manual-router-finality-worker-v1.ts";
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        "vercel.json": readFileSync(resolve(ROOT, "vercel.json"), "utf8")
-          .replace(
-            '"/api/ops/manual-router-finality"',
-            '"/api/ops/manual-router-finality-drift"',
-          ),
-        [routePath]: readFileSync(resolve(ROOT, routePath), "utf8").replace(
-          "isManualRouterFinalityCronAuthorizedV1(request)",
-          "true",
-        ),
-        [runtimePath]: readFileSync(resolve(ROOT, runtimePath), "utf8").replace(
-          'env.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED !== "true"',
-          'env.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED === "true"',
-        ),
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
-      expect.arrayContaining([
-        "ops-cron-exact-set",
-        "ops-manual-router-finality-schedule",
-        "ops-manual-router-finality-source-digests",
-        "ops-manual-router-finality-route-auth",
-        "ops-manual-router-finality-activation",
-      ]),
-    );
-  });
-
   it("rejects scheduler, authorization and activation drift", () => {
     const vercelPath = resolve(ROOT, "vercel.json");
     const drift = evaluateReadModelOperationsSourceContracts(ROOT, {
@@ -981,12 +947,12 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
-      "PublicNode witness",
-      '            "https://ethereum-rpc.publicnode.com",\n',
+      "secret-only Vercel environment handoff",
+      'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
     ],
     [
-      "MEV Blocker witness",
-      '            "https://rpc.mevblocker.io",\n',
+      "private production witness resolver",
+      "runtimeProductionProviderEndpoints(process.env)",
     ],
     ["independent reader handoff", "                rpcUrls: independentRpcUrls,\n"],
   ])("fails closed when staged market proof drops the %s", (_label, needle) => {
@@ -1310,7 +1276,7 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
-    '"https://mainnet.gateway.tenderly.co"',
+    "runtimeProductionProviderEndpoints(process.env)",
     '"eth_getTransactionReceipt"',
     '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
     "swapLogs.length !== 1",
@@ -1589,7 +1555,7 @@ describe("read-model operations source contract", () => {
 
   it("binds the bounded exclusive real-block SLA operator before promotion", () => {
     const operatorPath = "scripts/perf/read-model-real-block-sla-operator.mjs";
-    const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
+    const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
     const unboundedOperator = readFileSync(
       resolve(ROOT, operatorPath),
       "utf8",
@@ -1668,12 +1634,14 @@ describe("read-model operations source contract", () => {
     ]);
   });
 
-  it("rejects an alternative promotion command in the canonical cutover runbook", () => {
+  it("keeps the historical candidate cutover retired and non-executable", () => {
     const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
-    const bypass = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
-      'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
-      'npx vercel promote "$UNREVIEWED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
-    );
+    const bypass = `${readFileSync(resolve(ROOT, runbookPath), "utf8")}
+\`\`\`sh
+node scripts/data-pipeline/cutover-operator.mjs bootstrap-plan
+vercel promote "$UNREVIEWED_DEPLOYMENT_ID"
+\`\`\`
+`;
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -1681,8 +1649,30 @@ describe("read-model operations source contract", () => {
       },
       expectedSha256Overrides: fixtureDigests(),
     });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-retired-candidate-cutover",
+        "ops-post-promotion-binding",
+      ]),
+    );
+  });
+
+  it("rejects a restored candidate scheduler selector", () => {
+    const bindingPath =
+      "lib/data-pipeline/candidate-projector-runtime-binding.server.ts";
+    const bypass = `${readFileSync(resolve(ROOT, bindingPath), "utf8")}
+const restoredHistoricalMode = "candidate-backfill";
+void restoredHistoricalMode;
+`;
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [bindingPath]: bypass,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-post-promotion-binding",
+      "ops-retired-candidate-cutover",
     );
   });
 });
@@ -2919,7 +2909,7 @@ describe("post-promotion route verification", () => {
       const url = new URL(String(input));
       const response = await base(input, init);
       if (
-        !["rpc.mevblocker.io", "mainnet.gateway.tenderly.co"].includes(
+        !["rpc-a.invalid", "rpc-b.invalid"].includes(
           url.hostname,
         )
       ) return response;
@@ -3013,7 +3003,7 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (url.hostname !== "mainnet.gateway.tenderly.co") return response;
+      if (url.hostname !== "rpc-b.invalid") return response;
       const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
       if (request.method !== "eth_getBlockByNumber") return response;
       const body = await response.json();

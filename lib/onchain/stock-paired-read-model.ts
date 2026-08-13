@@ -3,7 +3,6 @@ import {
   formatUnits,
   getAddress,
   HttpRequestError,
-  http,
   keccak256,
   LimitExceededRpcError,
   parseAbiItem,
@@ -30,6 +29,10 @@ import {
 import type { LauncherToken } from "../tokens";
 import { stateViewReadAbi, uerc20ReadAbi } from "./abis";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
+import {
+  persistentRpcHttp,
+  withPersistentRpcIntegrityScope,
+} from "./persistent-rpc-cache.server";
 import {
   enrichStockPairedTokenWithUsd,
   readStockQuoteAssetUsdWad,
@@ -177,11 +180,55 @@ function sameHex(left: string, right: string) {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function clientFor(endpoint: string) {
+function clientFor(
+  endpoint: string,
+  config: ReadyOnchainDeployment,
+  releases: readonly VerifiedStockPairedRelease[],
+) {
   return createPublicClient({
     chain: mainnet,
     batch: { multicall: true },
-    transport: http(endpoint, { retryCount: 1, timeout: 10_000 }),
+    transport: persistentRpcHttp(endpoint, {
+      chainId: 1,
+      maxLogBlockRange: config.logBlockRange,
+      http: { retryCount: 1, timeout: 10_000 },
+      immutableCodeBindings: [
+        {
+          address: config.stateView,
+          expectedRuntimeCodeHash: config.stateViewRuntimeCodeHash,
+          notBeforeBlock: BigInt(releases[0].startBlock),
+        },
+        ...releases.flatMap((release) => [
+          {
+            address: release.addresses.launcher,
+            expectedRuntimeCodeHash: release.runtimeCodeHashes.launcher,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.ethLaunchCoordinator,
+            expectedRuntimeCodeHash:
+              release.runtimeCodeHashes.ethLaunchCoordinator,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.feeHook,
+            expectedRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.quoteRegistry,
+            expectedRuntimeCodeHash: release.runtimeCodeHashes.quoteRegistry,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.feeSplitVaultFactory,
+            expectedRuntimeCodeHash:
+              release.runtimeCodeHashes.feeSplitVaultFactory,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+        ]),
+      ],
+    }),
   });
 }
 
@@ -266,7 +313,9 @@ export async function readStockPairedEvents(
     fromBlockFloor > releaseStartBlock
       ? fromBlockFloor
       : releaseStartBlock;
-  let logBlockRange = config.logBlockRange;
+  let logBlockRange = toBlock >= fromBlock
+    ? toBlock - fromBlock + 1n
+    : config.logBlockRange;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
@@ -771,8 +820,10 @@ export async function readStockPairedExploreModel(
   if (activeReleases.length === 0) return [];
 
   const clients = [
-    clientFor(config.rpcUrl),
-    ...(config.rpcUrlSecondary ? [clientFor(config.rpcUrlSecondary)] : []),
+    clientFor(config.rpcUrl, config, activeReleases),
+    ...(config.rpcUrlSecondary
+      ? [clientFor(config.rpcUrlSecondary, config, activeReleases)]
+      : []),
   ];
   await mapInBatches(
     clients,
@@ -833,12 +884,14 @@ export async function readStockPairedExploreModel(
     async (release) => {
       const eventSets = await allSettledOrThrow(
         clients.map((candidate) =>
-          readStockPairedEvents(
-            candidate,
-            config,
-            release,
-            toBlock,
-            options.fromBlock ?? BigInt(release.startBlock),
+          withPersistentRpcIntegrityScope(() =>
+            readStockPairedEvents(
+              candidate,
+              config,
+              release,
+              toBlock,
+              options.fromBlock ?? BigInt(release.startBlock),
+            ),
           )),
       );
       const fingerprint = eventFingerprint(eventSets[0]);

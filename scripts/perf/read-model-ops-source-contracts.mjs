@@ -14,19 +14,19 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "654eb383431ce6518deda90db07b2c083be0bc7bfb5f66c80b476dd853120244",
+        sha256: "3581757ab1d7da697a8fd1bd6c615b66dd248273c4be9f577cd08540e98d7926",
       }),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "1f9c711c8df4159a7b391e95880f7a9e5aa88191572d043b86fba9baa2b3f11b",
+          sha256: "e4fde83cd69fd222a7500d4fea46a41d2b7687808f540199c9b80d8bb785d7c2",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "6b5b5def718509f954e54a11849daf4584e3e048a3607b0a0126b5fe61ac7ec2",
+          sha256: "690a1d3fa1a00273df482c54a4a56fcec3807c7f191608ab3b0a739b0d9c211b",
           eventFiltersPerRange: 3,
         }),
       ]),
@@ -67,15 +67,15 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         deploymentConfig: Object.freeze({
           path: "lib/onchain/config.ts",
-          sha256: "715ee5b492d8ec7ed9d3870286f09debb344f9cdb05556a41ab8e50d0aa23cb2",
+          sha256: "0e75c3d55b54933504c702977c0d7972a788fe89d63cc3c2a7d19138ae7fbcb7",
         }),
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
-          sha256: "b6c35adf7598b53989fc68e82affcdc5b75559125e387a03afd6468933888fb3",
+          sha256: "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7",
         }),
         currentMarketRpc: Object.freeze({
           path: "lib/market-data/current-market-rpc.server.ts",
-          sha256: "ead586a84aba823c5312607b551f9a5701e18ce52c9b35bfb7882213434a746c",
+          sha256: "ef2e01d5a184839ce8c5bebe4ec8d05b374930be13ff16d65bccee12c7e96085",
         }),
       }),
     }),
@@ -103,56 +103,12 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "0cb84ff2a409980e84383699f73bfc1941dfe328f39e94d8e3658cc4aa4ed6f3",
+          sha256: "398de34ff2965d89ee2c4b1cffeba043ebe2586eb08685e2a0ea7ff0d6cf18b9",
         }),
       ]),
       policy: Object.freeze({
         path: "lib/protocol-revenue/keeper-policy.ts",
         sha256: "bb39f651c11e49173e5b07e42edd2bfa4a1c0e78e5b0345a47b338751e451787",
-      }),
-    }),
-    Object.freeze({
-      id: "manual-router-finality",
-      path: "/api/ops/manual-router-finality",
-      schedule: "* * * * *",
-      activationEnvironment: "PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED",
-      route: Object.freeze({
-        path: "app/api/ops/manual-router-finality/route.ts",
-        sha256: "73bb842a0bc9436d3a41ec9797a8ba82b71c7745c534a5cb5d5aea259e270656",
-      }),
-      auth: Object.freeze({
-        path: "lib/server/custom-launch/manual-router-cron-auth-v1.ts",
-        sha256: "21f03e26d47de05c678d77aedcefb93a57aad6ae8b5ad77c2374eb6c68391ead",
-      }),
-      runtime: Object.freeze({
-        path: "lib/server/custom-launch/manual-router-finality-worker-v1.ts",
-        sha256: "58b73adac414d26b46b6e868f63e1934c08901a1c4e20eac85f377926383f277",
-      }),
-      dependencies: Object.freeze([
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-discovery-v1.ts",
-          sha256: "12685b945d26d585eedb21212d4df7a57c89aa5e23b0594aa23e23e9be3fdc79",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-finality-v1.ts",
-          sha256: "f653ee2ea386740d4536445a86397ef527aa828d6e7f91f3741082d1b1f9833d",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-production-v1.ts",
-          sha256: "79915b2a03b39e457ea5fd1253a58f76242510170c46dbed95654b269e5af595",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-service-v1.ts",
-          sha256: "97a99851bc8eb0c60ad43d6548931da6faafb4f17f7857cdd31fd6767fe64412",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-store-v1.ts",
-          sha256: "24a464017173af3bda97d6fc7d143dec27453a25315424a8348cbca2ad8acd66",
-        }),
-      ]),
-      policy: Object.freeze({
-        path: "lib/server/custom-launch/manual-router-finality-policy-v1.ts",
-        sha256: "c24082d7a27f1742c6c8b9e4e86088a9d9a5c260b44061a1c86b69b9ae989343",
       }),
     }),
   ]),
@@ -168,12 +124,12 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "78483bf9b1110b4a97b719c6bb9bf9256285729e6002deb3621a9d1987373010",
+        sha256: "25c5427bd24714262e04d3eb14b6b31c71820e9b4070817d4146fe1309bb7fb5",
       }),
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          sha256: "1d4515a3ea088ed5164f3083e6fa7e6d639e786f23b18e85b663c4395c64abf5",
+          sha256: "014476a4f7b344b1d8a7c92aafab95d3e9efda1da4d2e323b83e838e8a068228",
         }),
       ]),
       migrations: Object.freeze([
@@ -217,6 +173,10 @@ const APPROVED_OPERATIONS = Object.freeze({
           path: "supabase/migrations/20260801204500_reuse_dual_rpc_block_evidence_constraint.sql",
           sha256: "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11",
         }),
+        Object.freeze({
+          path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
+        }),
       ]),
     }),
     Object.freeze({
@@ -230,7 +190,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/market-projector-runtime.server.ts",
-        sha256: "5ce3b98d0a373c45b309011b59cc6ec7eeaef54bc112f2b55d32dca433566da0",
+        sha256: "170138d1d3cc8de5cacb0b2b7a8f587d83e75d6e4031c314b226b673cc9dac6b",
       }),
       migrations: Object.freeze([
         Object.freeze({
@@ -244,6 +204,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260803000100_market_projector_health_view.sql",
           sha256: "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -282,11 +246,11 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-market-state.server.ts",
-          sha256: "88e55d7311c40ada819820c665fbe54247eb605373b5028346889e247dc790e3",
+          sha256: "e608497bc890bf2fbaf8f6af056fe91a5a4c84bae04c1a4fd80dccd04b779d9e",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-live-runtime.server.ts",
-          sha256: "817b4563eb503aa761efc922c264cf1699fd2264160adfd1a5294308750533f6",
+          sha256: "9cfc38593e10acdbb4206c93f7eea403ae32b944fd875cd2da8b330f6929bcd4",
         }),
         Object.freeze({
           path: "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
@@ -298,7 +262,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/data-pipeline/rpc-providers.server.ts",
-          sha256: "d6694f99366226a64a07b28ef3646cc05556048bc1ce790f9fbac4929c3ce77c",
+          sha256: "8901014d3f4beab60ff324efc90d2d57a3e034399942e9b42c2f01a0d7ef9b5d",
         }),
         Object.freeze({
           path: "app/api/ops/read-model-real-block-sla/route.ts",
@@ -307,6 +271,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
           sha256: "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -322,7 +290,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       maximumDeliveryToFirstVisibleMs: 10_000,
       script: Object.freeze({
         path: "scripts/perf/read-model-real-block-sla-gate.mjs",
-        sha256: "68cb5f77d3891070cba84f6b69f13eabb177016823f9baed6decdf62aa1a0c3a",
+        sha256: "c6fa20ec8f4bbc18dc15da91328329f1822db31df66d6bd02e403f06e93fc28f",
       }),
       schema: Object.freeze({
         path: "config/read-model-real-block-sla-db-attestation.schema.json",
@@ -794,8 +762,8 @@ export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
   "JSON.stringify(currentFdvDetail.token.liquidityEvidence)",
   'for (const range of ["1h", "1d", "1w", "all"])',
   "verifyCurrentPublicOnchainEvidenceV1({",
-  '"https://ethereum-rpc.publicnode.com"',
-  '"https://rpc.mevblocker.io"',
+  "runtimeProductionProviderEndpoints",
+  "rpcUrls: independentRpcUrls",
   '"programmable.current-market-independent-proof.v1"',
   "independentCurrentProof.providerCount !== 2",
   'currentChart.readStatus !== "live"',
@@ -964,7 +932,6 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
       (cutoverAuthorization &&
         /mode\s*===\s*["']cutover["']/u.test(source))) &&
     (/if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) ||
-      /if\s*\(\s*!isManualRouterFinalityCronAuthorizedV1\(request\)\s*\)/u.test(source) ||
       /if\s*\(\s*mode\s*===\s*null\s*\)/u.test(source)) &&
     /status\s*:\s*401\b/u.test(source) &&
     /status\s*:\s*503\b/u.test(source) &&
@@ -1258,6 +1225,41 @@ function manualPromotionSequenceIsFailClosed(source) {
   );
   return activePromotionCommands.length === 1 &&
     activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION;
+}
+
+function retiredCandidateCutoverIsFailClosed(input) {
+  return input.productionRunbook.includes("# Historical candidate cutover retired") &&
+    input.productionRunbook.includes("This document no longer authorizes a production cutover.") &&
+    input.productionRunbook.includes("historical evidence, not current") &&
+    !input.productionRunbook.includes("```sh") &&
+    !input.productionRunbook.includes("vercel promote") &&
+    !input.productionRunbook.includes("bootstrap-plan") &&
+    input.envioRunbook.includes("# Historical Envio candidate record") &&
+    input.envioRunbook.includes("not a current deployment, promotion") &&
+    input.envioRunbook.includes("must not be rebound") &&
+    !input.envioRunbook.includes("```") &&
+    !input.envioRunbook.includes("envio-cloud") &&
+    input.runtimeBinding.includes('mode: "release"') &&
+    input.runtimeBinding.includes("production-92f6373") &&
+    input.runtimeBinding.includes("f6714ef") &&
+    input.runtimeBinding.includes("retired-candidate-projector-runtime-binding") &&
+    !input.runtimeBinding.includes("candidate-backfill") &&
+    !input.runtimeBinding.includes("production-7f24e63") &&
+    !input.runtimeBinding.includes("d7a39a2") &&
+    input.cutoverOperator.includes("No mutation command is available") &&
+    input.cutoverOperator.includes("historical candidate cutover is retired") &&
+    input.cutoverRuntime.includes("historical candidate cutover is retired") &&
+    !input.cutoverRuntime.includes("PROGRAMMABLE_") &&
+    input.bootstrapRuntime.includes("historical candidate bootstrap is retired") &&
+    !input.bootstrapRuntime.includes("PROGRAMMABLE_") &&
+    input.packageJson?.scripts?.["test:retired-read-model-cutover"] ===
+      "node --test scripts/data-pipeline/cutover-operator.test.mjs scripts/data-pipeline/cutover-runtime.test.mjs scripts/data-pipeline/hosted-db-bootstrap.test.mjs" &&
+    input.packageJson?.scripts?.test?.includes(
+      "npm run test:retired-read-model-cutover",
+    ) === true &&
+    input.packageJson?.scripts?.["test:interface:ci"]?.includes(
+      "npm run test:retired-read-model-cutover",
+    ) === true;
 }
 
 function migrationContract(id, source) {
@@ -1712,9 +1714,15 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-source-projector-migrations",
     sourceWorker?.dependencies?.length === 1 &&
       source(sourceWorker.dependencies[0]?.path)?.includes(
-        "verify_candidate_database_promoted_v2",
+        "retired-candidate-projector-runtime-binding",
       ) &&
-      sourceWorker?.migrations?.length === 10 &&
+      source(sourceWorker.dependencies[0]?.path)?.includes(
+        'mode: "release"',
+      ) &&
+      !source(sourceWorker.dependencies[0]?.path)?.includes(
+        "candidate-backfill",
+      ) &&
+      sourceWorker?.migrations?.length === 11 &&
       migrationContract(
         "source-projector-lease",
         source(sourceWorker.migrations[0]?.path),
@@ -1754,12 +1762,15 @@ export function evaluateReadModelOperationsSourceContracts(
       migrationContract(
         "source-projector-block-evidence-conflict-fence",
         source(sourceWorker.migrations[9]?.path),
+      ) &&
+      source(sourceWorker.migrations[10]?.path)?.includes(
+        "rpc_provider_deployment_metadata_production_vendor_v2_check",
       ),
-    "the source worker is byte-bound to its runtime selector, database fence and provider evidence",
+    "the source worker is byte-bound to the current-only runtime selector, historical database fences and provider evidence",
   );
   check(
     "ops-market-projector-migration",
-    marketWorker?.migrations?.length === 3 &&
+    marketWorker?.migrations?.length === 4 &&
       migrationContract(
         "market-projector",
         source(marketWorker.migrations[0]?.path),
@@ -1770,6 +1781,9 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       source(marketWorker.migrations[2]?.path)?.includes(
         "market_projector_health_v1",
+      ) &&
+      source(marketWorker.migrations[3]?.path)?.includes(
+        "rpc_provider_deployment_metadata_production_vendor_v2_check",
       ),
     "the market worker is bound to exact lineage, terminal checkpoint and lease SQL",
   );
@@ -1848,6 +1862,30 @@ export function evaluateReadModelOperationsSourceContracts(
   const productionCutoverRunbook = source(
     "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
   ) ?? "";
+  const envioCandidateRunbook = source(
+    "docs/data-pipeline/ENVIO-CANDIDATE-RUNBOOK.md",
+  ) ?? "";
+  const candidateRuntimeBinding = source(
+    "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
+  ) ?? "";
+  const cutoverOperator = source(
+    "scripts/data-pipeline/cutover-operator.mjs",
+  ) ?? "";
+  const cutoverRuntime = source(
+    "scripts/data-pipeline/cutover-runtime.mjs",
+  ) ?? "";
+  const bootstrapRuntime = source(
+    "scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs",
+  ) ?? "";
+  const retiredCandidateCutover = Object.freeze({
+    productionRunbook: productionCutoverRunbook,
+    envioRunbook: envioCandidateRunbook,
+    runtimeBinding: candidateRuntimeBinding,
+    cutoverOperator,
+    cutoverRuntime,
+    bootstrapRuntime,
+    packageJson,
+  });
   check(
     "ops-package-verify-binding",
     packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
@@ -1880,22 +1918,18 @@ export function evaluateReadModelOperationsSourceContracts(
       operationsRunbook.includes(
         "npm run perf:read-model:real-block-sla-operator --",
       ) &&
-      productionCutoverRunbook.includes(
-        "npm run perf:read-model:real-block-sla-operator --",
-      ) &&
       operationsRunbook.includes(
         `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
       ) &&
-      productionCutoverRunbook.includes(
-        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
-      ) &&
       operationsRunbook.includes(
-        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
-      ) &&
-      productionCutoverRunbook.includes(
         `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
       ),
     "the operator arms and polls the exact staged deployment before writing one private evidence file",
+  );
+  check(
+    "ops-retired-candidate-cutover",
+    retiredCandidateCutoverIsFailClosed(retiredCandidateCutover),
+    "the obsolete candidate cutover has no executable production authority",
   );
   check(
     "ops-quicknode-stream-env-contract",
@@ -1998,10 +2032,24 @@ export function evaluateReadModelOperationsSourceContracts(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"https://ethereum-rpc.publicnode.com"',
+        '"./scripts/perf/read-model-provider-binding.mjs"',
       ) &&
-      stagedBitquerySmokeBlock.includes('"https://rpc.mevblocker.io"') &&
-      stagedBitquerySmokeBlock.includes("rpcUrls: independentRpcUrls") &&
+      stagedBitquerySmokeBlock.includes(
+        'VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
+      ) &&
+      !stagedBitquerySmokeBlock.includes(
+        "node --env-file=.vercel/.env.production.local",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "runtimeProductionProviderEndpoints(process.env)",
+      ) &&
+      !stagedBitquerySmokeBlock.includes("ethereum-rpc.publicnode.com") &&
+      !stagedBitquerySmokeBlock.includes("rpc.mevblocker.io") &&
+      stagedBitquerySmokeBlock.split("rpcUrls: independentRpcUrls").length - 1 ===
+        2 &&
       !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_A") &&
       !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_B") &&
       !stagedBitquerySmokeBlock.includes(
@@ -2012,9 +2060,6 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       !stagedBitquerySmokeBlock.includes(
         "runtimeProductionProviderBindingsFromUrls",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/read-model-provider-binding.mjs"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
@@ -2224,11 +2269,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "await verifyBitqueryGoldenMarketExecutionV1({",
       ) &&
       bitqueryGoldenParity.includes(
-        '"https://rpc.mevblocker.io"',
+        "runtimeProductionProviderEndpoints(process.env)",
       ) &&
-      bitqueryGoldenParity.includes(
-        '"https://mainnet.gateway.tenderly.co"',
-      ) &&
+      !bitqueryGoldenParity.includes("rpc.mevblocker.io") &&
+      !bitqueryGoldenParity.includes("mainnet.gateway.tenderly.co") &&
       !bitqueryGoldenParity.includes("ethereum-rpc.publicnode.com") &&
       !bitqueryGoldenParity.includes("MAINNET_STATE_VIEW") &&
       !bitqueryGoldenParity.includes("Q192") &&
@@ -2650,7 +2694,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !deployWorkflow.includes("vercel rollback") &&
       operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
       manualPromotionSequenceIsFailClosed(operationsRunbook) &&
-      manualPromotionSequenceIsFailClosed(productionCutoverRunbook) &&
+      retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
@@ -2695,7 +2739,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes('chart.readStatus !== "live"') &&
       postPromotion.includes("verifyBitqueryGoldenMarketExecutionV1") &&
       postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV2") &&
-      !postPromotion.includes(
+      postPromotion.includes(
         "verifyBitqueryGoldenMarketExecutionV1({\n      token: responses[4].body?.token,\n      fetchImpl,\n      rpcUrls:",
       ) &&
       postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
@@ -2785,7 +2829,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes('response.headers.get("x-programmable-data-quality")') &&
       !postPromotion.includes("/api/indexers/v1/token-list") &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
-    "the workflow is stage-only and both operator runbooks require the exact SLA-gated deployment promotion sequence",
+    "the workflow is stage-only, the current runbook requires exact SLA-gated promotion and the historical cutover stays retired",
   );
   check(
     "ops-vercel-project-prerequisite",

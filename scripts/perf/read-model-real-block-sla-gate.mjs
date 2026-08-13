@@ -28,6 +28,8 @@ const UINT = /^(?:0|[1-9][0-9]{0,18})$/u;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const SAFE_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+const QUICKNODE_ETHEREUM_MAINNET_HOST =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
 
 function fail(label) {
   throw new Error(`real block SLA evidence ${label} is invalid`);
@@ -256,14 +258,9 @@ function assertProvider(value, providerId, block) {
     SAFE_HOST,
   );
   if (
-    (providerId === "alchemy" &&
-      endpointHost !== "alchemy.com" &&
-      !endpointHost.endsWith(".alchemy.com")) ||
+    (providerId === "drpc" && endpointHost !== "lb.drpc.live") ||
     (providerId === "quicknode" &&
-      endpointHost !== "quicknode.com" &&
-      !endpointHost.endsWith(".quicknode.com") &&
-      endpointHost !== "quiknode.pro" &&
-      !endpointHost.endsWith(".quiknode.pro"))
+      !QUICKNODE_ETHEREUM_MAINNET_HOST.test(endpointHost))
   ) {
     fail(`${providerId} endpoint host`);
   }
@@ -587,7 +584,7 @@ export function verifyRealBlockSlaEvidence(evidenceValue, input) {
 
   const dualRpc = exactObject(evidence.dualRpc, "dual RPC", [
     "block",
-    "alchemy",
+    "drpc",
     "quicknode",
   ]);
   const dualBlock = exactObject(dualRpc.block, "dual RPC block", [
@@ -609,13 +606,13 @@ export function verifyRealBlockSlaEvidence(evidenceValue, input) {
   }
   bytes32(dualBlock.parentHash, "dual RPC parent hash");
   bytes32(dualBlock.logsCommitment, "dual RPC logs commitment");
-  const alchemy = assertProvider(dualRpc.alchemy, "alchemy", block);
+  const drpc = assertProvider(dualRpc.drpc, "drpc", block);
   const quicknode = assertProvider(dualRpc.quicknode, "quicknode", block);
   if (
-    alchemy.blockHead.observedAt < requestReceivedAt ||
-    alchemy.blockHead.observedAt > capturedAt ||
-    alchemy.marketHead.observedAt < requestReceivedAt ||
-    alchemy.marketHead.observedAt > capturedAt ||
+    drpc.blockHead.observedAt < requestReceivedAt ||
+    drpc.blockHead.observedAt > capturedAt ||
+    drpc.marketHead.observedAt < requestReceivedAt ||
+    drpc.marketHead.observedAt > capturedAt ||
     quicknode.blockHead.observedAt < requestReceivedAt ||
     quicknode.blockHead.observedAt > capturedAt ||
     quicknode.marketHead.observedAt < requestReceivedAt ||
@@ -624,21 +621,21 @@ export function verifyRealBlockSlaEvidence(evidenceValue, input) {
     fail("provider observation freshness");
   }
   if (
-    dualRpc.alchemy.endpointHost === dualRpc.quicknode.endpointHost ||
-    dualRpc.alchemy.endpointUrlSha256 === dualRpc.quicknode.endpointUrlSha256 ||
-    dualRpc.alchemy.providerDeploymentId ===
+    dualRpc.drpc.endpointHost === dualRpc.quicknode.endpointHost ||
+    dualRpc.drpc.endpointUrlSha256 === dualRpc.quicknode.endpointUrlSha256 ||
+    dualRpc.drpc.providerDeploymentId ===
       dualRpc.quicknode.providerDeploymentId ||
-    (alchemy.blockHead.number === quicknode.blockHead.number &&
-      dualRpc.alchemy.blockEvidenceHead.blockHash !==
+    (drpc.blockHead.number === quicknode.blockHead.number &&
+      dualRpc.drpc.blockEvidenceHead.blockHash !==
         dualRpc.quicknode.blockEvidenceHead.blockHash) ||
-    (alchemy.marketHead.number === quicknode.marketHead.number &&
-      dualRpc.alchemy.marketStateHead.blockHash !==
+    (drpc.marketHead.number === quicknode.marketHead.number &&
+      dualRpc.drpc.marketStateHead.blockHash !==
         dualRpc.quicknode.marketStateHead.blockHash)
   ) {
     fail("provider independence");
   }
   const confirmations = Math.min(
-    alchemy.marketHead.confirmations,
+    drpc.marketHead.confirmations,
     quicknode.marketHead.confirmations,
   );
 
@@ -895,16 +892,16 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
   timestamp(runtime.blockTimestamp, "runtime block timestamp");
   bytes32(runtime.blockEvidenceCommitment, "runtime block evidence");
   bytes32(runtime.logsCommitment, "runtime logs commitment");
-  pattern(runtime.providerADeploymentId, "Alchemy deployment", UUID);
+  pattern(runtime.providerADeploymentId, "dRPC deployment", UUID);
   pattern(runtime.providerBDeploymentId, "QuickNode deployment", UUID);
   if (runtime.providerADeploymentId === runtime.providerBDeploymentId) {
     fail("provider deployment independence");
   }
-  bytes32(runtime.providerAEndpointUrlSha256, "Alchemy endpoint receipt");
+  bytes32(runtime.providerAEndpointUrlSha256, "dRPC endpoint receipt");
   bytes32(runtime.providerBEndpointUrlSha256, "QuickNode endpoint receipt");
   const providerAHost = pattern(
     runtime.providerAEndpointHost,
-    "Alchemy endpoint host",
+    "dRPC endpoint host",
     SAFE_HOST,
   );
   const providerBHost = pattern(
@@ -913,11 +910,8 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
     SAFE_HOST,
   );
   if (
-    (providerAHost !== "alchemy.com" && !providerAHost.endsWith(".alchemy.com")) ||
-    (providerBHost !== "quicknode.com" &&
-      !providerBHost.endsWith(".quicknode.com") &&
-      providerBHost !== "quiknode.pro" &&
-      !providerBHost.endsWith(".quiknode.pro")) ||
+    providerAHost !== "lb.drpc.live" ||
+    !QUICKNODE_ETHEREUM_MAINNET_HOST.test(providerBHost) ||
     providerAHost === providerBHost ||
     runtime.providerAEndpointUrlSha256 === runtime.providerBEndpointUrlSha256
   ) fail("provider endpoint independence");
@@ -938,7 +932,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
     if (left.number === right.number && left.hash !== right.hash) fail(label);
   };
   const blockHeadA = runtimeHead(
-    "Alchemy", "block", runtime.blockProviderAHead,
+    "dRPC", "block", runtime.blockProviderAHead,
     runtime.blockProviderAHeadHash, runtime.blockProviderAObservedAt,
   );
   const blockHeadB = runtimeHead(
@@ -946,7 +940,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
     runtime.blockProviderBHeadHash, runtime.blockProviderBObservedAt,
   );
   sameHeightHash(blockHeadA, blockHeadB, "same-height block head agreement");
-  const blockCallsA = count(runtime.blockProviderCallCountA, "Alchemy block calls");
+  const blockCallsA = count(runtime.blockProviderCallCountA, "dRPC block calls");
   const blockCallsB = count(runtime.blockProviderCallCountB, "QuickNode block calls");
   if (
     blockCallsA !== (blockHeadA.number === targetBlock ? 4 : 5) ||
@@ -957,7 +951,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
   const metadataCallsA = metadataProviderCallCount(
     runtime.metadataProviderCallCountA,
     metadataCount,
-    "Alchemy metadata calls",
+    "dRPC metadata calls",
   );
   const metadataCallsB = metadataProviderCallCount(
     runtime.metadataProviderCallCountB,
@@ -1003,7 +997,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
     bytes32(row.marketCommitment, "market commitment");
     const confirmations = count(row.confirmations, "market confirmations", 0, 11);
     const headA = runtimeHead(
-      "Alchemy", "market", row.marketProviderAHead,
+      "dRPC", "market", row.marketProviderAHead,
       row.marketProviderAHeadHash, row.marketProviderAObservedAt,
     );
     const headB = runtimeHead(
@@ -1016,7 +1010,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
       headB.observedAt < blockHeadB.observedAt
     ) fail("market head ordering");
     sameHeightHash(headA, headB, "same-height market head agreement");
-    sameHeightHash(blockHeadA, headA, "same-provider Alchemy head agreement");
+    sameHeightHash(blockHeadA, headA, "same-provider dRPC head agreement");
     sameHeightHash(blockHeadB, headB, "same-provider QuickNode head agreement");
     sameHeightHash(blockHeadA, headB, "same-height cross-provider head agreement");
     sameHeightHash(blockHeadB, headA, "same-height cross-provider head agreement");
@@ -1025,7 +1019,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
         (headA.number < headB.number ? headA.number : headB.number) - targetBlock,
       )
     ) fail("market confirmation count");
-    const callsA = count(row.marketProviderCallCountA, "Alchemy market calls");
+    const callsA = count(row.marketProviderCallCountA, "dRPC market calls");
     const callsB = count(row.marketProviderCallCountB, "QuickNode market calls");
     if (
       callsA !== (headA.number === targetBlock ? 7 : 8) ||
@@ -1039,7 +1033,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
   const totalCallsB = blockCallsB + metadataCallsB + marketCallsB;
   for (const row of marketRows) {
     if (
-      count(row.totalProviderCallCountA, "Alchemy total calls") !== totalCallsA ||
+      count(row.totalProviderCallCountA, "dRPC total calls") !== totalCallsA ||
       count(row.totalProviderCallCountB, "QuickNode total calls") !== totalCallsB
     ) fail("aggregate provider call count");
   }

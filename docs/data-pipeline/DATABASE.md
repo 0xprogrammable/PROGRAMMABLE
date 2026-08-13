@@ -180,7 +180,7 @@ associate the same candidate with an exact static binding or dynamic
 attestation in each epoch without rewriting the raw row.
 
 The release-neutral Envio cursor has one explicit dual-RPC-attested genesis.
-Each bounded page independently compares the ordered Alchemy and QuickNode log
+Each bounded page independently compares the ordered private dRPC and QuickNode log
 commitments with the exact durable inbox interval. One atomic capability then
 appends candidates, coverage evidence and the succeeded outcome before its
 last-step cursor CAS. The projector cannot execute the standalone cursor
@@ -189,7 +189,7 @@ partial failure therefore leaves no advanced cursor.
 
 RPC deployments use a dedicated registration capability; the generic provider
 writer rejects `rpc_provider`. The specialized path is fixed to Ethereum
-mainnet (`chain_id = 1`) and derives the only accepted order: Alchemy first,
+mainnet (`chain_id = 1`) and derives the only accepted order: dRPC first,
 QuickNode second. It retains constructor version, endpoint URL commitment,
 endpoint origin commitment and a nonzero commitment linked to the allowlisted
 `rpc-endpoint-commitments-v1` evidence domain. Raw endpoint URLs and origins
@@ -358,7 +358,8 @@ verification sequence are documented in
 [`HOSTED-DATABASE-OPERATOR.md`](./HOSTED-DATABASE-OPERATOR.md). Its plan scans
 the complete ordered `supabase/migrations/*.sql` set; no hand-maintained
 worker manifest is an authority for migration completeness. Migration and
-release bootstrap remain separate operations.
+release activation remain separate operations. The historical candidate-only
+bootstrap is retired and is not an input to the current production release.
 
 Backup and restore must copy the stored fingerprint triple byte-for-byte.
 Compare ordered exports of:

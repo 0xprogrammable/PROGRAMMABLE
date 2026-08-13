@@ -3,7 +3,6 @@ import {
   formatUnits,
   getAddress,
   HttpRequestError,
-  http,
   keccak256,
   LimitExceededRpcError,
   parseAbiItem,
@@ -31,6 +30,10 @@ import {
   nativePriceWadFromSqrtPriceX96,
 } from "./math";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
+import {
+  persistentRpcHttp,
+  withPersistentRpcIntegrityScope,
+} from "./persistent-rpc-cache.server";
 import type { ExploreReadModel, ReadyOnchainDeployment } from "./types";
 
 const launchedEvent = parseAbiItem(
@@ -132,11 +135,42 @@ function sameHex(left: string, right: string) {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function clientFor(config: ReadyOnchainDeployment, endpoint: string) {
+function clientFor(
+  config: ReadyOnchainDeployment,
+  endpoint: string,
+  release: ClassicV3Release,
+) {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(endpoint, { retryCount: 1, timeout: 10_000 }),
+    transport: persistentRpcHttp(endpoint, {
+      chainId: config.chainId,
+      maxLogBlockRange: config.logBlockRange,
+      http: { retryCount: 1, timeout: 10_000 },
+      immutableCodeBindings: [
+        {
+          address: release.launcher,
+          expectedRuntimeCodeHash: release.launcherRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+        {
+          address: release.hook,
+          expectedRuntimeCodeHash: release.hookRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+        {
+          address: release.rewardVaultFactory,
+          expectedRuntimeCodeHash:
+            release.rewardVaultFactoryRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+        {
+          address: config.stateView,
+          expectedRuntimeCodeHash: config.stateViewRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+      ],
+    }),
   });
 }
 
@@ -222,7 +256,9 @@ export async function readClassicV3Events(
     fromBlockFloor > release.startBlock
       ? fromBlockFloor
       : release.startBlock;
-  let logBlockRange = config.logBlockRange;
+  let logBlockRange = toBlock >= fromBlock
+    ? toBlock - fromBlock + 1n
+    : config.logBlockRange;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
@@ -514,9 +550,9 @@ export async function readClassicV3ExploreModel(
     return { tokens: [], launcherFeesAccrued: 0n };
   }
   const clients = [
-    clientFor(config, config.rpcUrl),
+    clientFor(config, config.rpcUrl, release),
     ...(config.rpcUrlSecondary
-      ? [clientFor(config, config.rpcUrlSecondary)]
+      ? [clientFor(config, config.rpcUrlSecondary, release)]
       : []),
   ];
   await mapInBatches(
@@ -559,12 +595,14 @@ export async function readClassicV3ExploreModel(
   );
   const eventSets = await allSettledOrThrow(
     clients.map((client) =>
-      readClassicV3Events(
-        client,
-        config,
-        release,
-        toBlock,
-        options.fromBlock ?? release.startBlock,
+      withPersistentRpcIntegrityScope(() =>
+        readClassicV3Events(
+          client,
+          config,
+          release,
+          toBlock,
+          options.fromBlock ?? release.startBlock,
+        ),
       )),
   );
   const launcherFees = await mapInBatches(

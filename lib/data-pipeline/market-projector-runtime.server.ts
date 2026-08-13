@@ -34,6 +34,8 @@ import {
   assertProductionDualRpcProviders,
   createProductionDualRpcProviders,
 } from "./rpc-providers.server";
+import { productionMainnetRpcPair } from
+  "../onchain/website-rpc-providers.server";
 import {
   createUniswapAnalyticsClient,
   OFFICIAL_V4_SUBGRAPH_DEPLOYMENT,
@@ -1396,7 +1398,7 @@ function decodeChainlinkResult(value: unknown) {
 
 function exactRpcUrl(
   value: unknown,
-  provider: "alchemy" | "quicknode",
+  provider: "drpc" | "quicknode",
 ): string {
   if (typeof value !== "string") throw invalidInput("config", "rpc-url");
   let parsed: URL;
@@ -1405,11 +1407,11 @@ function exactRpcUrl(
   } catch {
     throw invalidInput("config", "rpc-url");
   }
-  const alchemy =
-    parsed.hostname === "eth-mainnet.g.alchemy.com" &&
-    /^\/v2\/[A-Za-z0-9_-]{8,256}$/u.test(parsed.pathname);
+  const drpc =
+    parsed.hostname === "lb.drpc.live" &&
+    /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u.test(parsed.pathname);
   const quicknode =
-    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u.test(
+    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u.test(
       parsed.hostname,
     ) && /^\/[A-Za-z0-9_-]{8,256}\/?$/u.test(parsed.pathname);
   if (
@@ -1419,7 +1421,7 @@ function exactRpcUrl(
     parsed.port ||
     parsed.search ||
     parsed.hash ||
-    (provider === "alchemy" ? !alchemy : !quicknode)
+    (provider === "drpc" ? !drpc : !quicknode)
   )
     throw invalidInput("config", "rpc-url");
   return parsed.toString();
@@ -1432,7 +1434,7 @@ export function createDualRpcMarketReader(
   }>,
 ): MarketRpc {
   const endpoints = Object.freeze([
-    exactRpcUrl(input.endpoints[0], "alchemy"),
+    exactRpcUrl(input.endpoints[0], "drpc"),
     exactRpcUrl(input.endpoints[1], "quicknode"),
   ] as const);
 
@@ -2163,6 +2165,7 @@ export function loadMarketProjectorRuntimeConfig(
   if (!pipeline.uniswap.apiKey) throw invalidInput("config", "graph-api-key");
   const providers = createProductionDualRpcProviders(env);
   assertProductionDualRpcProviders(providers);
+  const rpcPair = productionMainnetRpcPair(env);
   return Object.freeze({
     databaseUrl: validatedPostgresConnectionString(
       env.PROGRAMMABLE_RECONCILER_DATABASE_URL,
@@ -2176,8 +2179,8 @@ export function loadMarketProjectorRuntimeConfig(
       schemaCommitment,
     }),
     rpcEndpoints: Object.freeze([
-      exactRpcUrl(env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL, "alchemy"),
-      exactRpcUrl(env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL, "quicknode"),
+      exactRpcUrl(rpcPair.primary.url, "drpc"),
+      exactRpcUrl(rpcPair.secondary.url, "quicknode"),
     ] as const),
     rpcProviders: Object.freeze([
       Object.freeze({

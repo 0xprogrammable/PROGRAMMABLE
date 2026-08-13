@@ -40,17 +40,6 @@ import {
 import { mainnet, sepolia } from "viem/chains";
 import { bytesToHex, hexToBytes, type Hex } from "viem";
 
-import type {
-  HookemonApplicantFlowBindingV1,
-  HookemonBrowserWalletActionV1,
-} from "@/lib/custom-launch/hookemon-applicant-contract-v1";
-import {
-  HOOKEMON_BROWSER_ACTION_SCHEMA_V1,
-  revalidateHookemonBrowserWalletActionForSendV1,
-} from "@/lib/custom-launch/hookemon-applicant-contract-v1";
-import {
-  verifyHookemonActionIdentifierAuthorityForSendV1,
-} from "@/lib/custom-launch/hookemon-action-identifier-verifier-v1";
 import {
   applicantRefreshUserIsRateLimitedV1,
   createApplicantRefreshUserGateV1,
@@ -66,6 +55,7 @@ import {
   parsePreparedTransactionForAccount,
   type PreparedTransaction,
 } from "../lib/prepared-transaction";
+import { runWithBrowserWalletRequestLock } from "../lib/wallet-request-lock";
 
 type WalletState = {
   account: `0x${string}`;
@@ -133,10 +123,6 @@ type WalletContextValue = {
     data: `0x${string}`;
     value: `0x${string}`;
   }>) => Promise<Hex>;
-  sendHookemonBrowserWalletAction: (
-    action: HookemonBrowserWalletActionV1,
-    binding: HookemonApplicantFlowBindingV1,
-  ) => Promise<Hex>;
   sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
   readNativeBalance: () => Promise<WalletNativeBalance>;
   readTradeBalances: (token: `0x${string}`) => Promise<WalletTradeBalances>;
@@ -592,75 +578,6 @@ export async function assertExternalWalletAuthorityCurrent(input: Readonly<{
   }
 }
 
-export type HookemonEip1193TransactionV1 = Readonly<{
-  from: `0x${string}`;
-  to?: `0x${string}`;
-  nonce: `0x${string}`;
-  gas: `0x${string}`;
-  data: `0x${string}`;
-  value: "0x0";
-}>;
-
-/**
- * Isolated from the existing Router V1/V2 sender: Hookemon must bind an exact
- * nonce and must omit `to` only for the normal-CREATE step.
- */
-export function buildHookemonEip1193TransactionV1(
-  action: HookemonBrowserWalletActionV1,
-  binding: HookemonApplicantFlowBindingV1,
-  connectedAccount: `0x${string}`,
-  currentEpochSeconds: string,
-): HookemonEip1193TransactionV1 {
-  const validatedAction = revalidateHookemonBrowserWalletActionForSendV1(
-    action,
-    binding,
-    currentEpochSeconds,
-  );
-  const transaction = validatedAction.transaction;
-  const executableAction = validatedAction.actionIndex === 0
-    ? validatedAction.actionKind === "ERC20_APPROVAL"
-      && validatedAction.currentness.kind === "PRE_APPROVAL"
-    : validatedAction.actionIndex === 1
-      && validatedAction.actionKind === "EOA_CREATE"
-      && validatedAction.currentness.kind === "PRE_CREATE";
-  if (
-    validatedAction.schemaVersion !== HOOKEMON_BROWSER_ACTION_SCHEMA_V1
-    || !executableAction
-    || transaction.chainId !== "0x1"
-    || transaction.method !== "eth_sendTransaction"
-    || transaction.from.toLowerCase() !== connectedAccount.toLowerCase()
-  ) {
-    throw new Error("The Hookemon wallet action is not executable");
-  }
-  if (
-    validatedAction.currentness.observedPendingNonce !== transaction.nonce
-    || (validatedAction.actionIndex === 0 && transaction.to === null)
-    || (validatedAction.actionIndex === 1 && transaction.to !== null)
-  ) throw new Error("The Hookemon wallet action nonce or target drifted");
-  verifyHookemonActionIdentifierAuthorityForSendV1(validatedAction, binding);
-  const common = {
-    from: transaction.from,
-    nonce: transaction.nonce,
-    gas: transaction.gas,
-    data: transaction.data,
-    value: transaction.value,
-  } as const;
-  return transaction.to === null
-    ? Object.freeze(common)
-    : Object.freeze({ ...common, to: transaction.to });
-}
-
-export function assertHookemonPendingNonceV1(
-  observed: unknown,
-  expected: `0x${string}`,
-): void {
-  if (
-    typeof observed !== "string"
-    || !/^0x(?:0|[1-9a-f][0-9a-f]*)$/u.test(observed)
-    || observed !== expected
-  ) throw new Error("The Hookemon wallet nonce changed. Refresh the exact plan");
-}
-
 function decodeBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new Error("The launch authorization message is invalid");
@@ -904,6 +821,18 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       chainId: normalizeChainId(connectedWalletChainId),
     };
   }, [connectedWalletAddress, connectedWalletChainId]);
+  const walletRequestSessionRef = useRef({
+    authenticated: activeAuthenticated,
+    privyUserId: user?.id ?? null,
+    account: wallet?.account ?? null,
+  });
+  useEffect(() => {
+    walletRequestSessionRef.current = {
+      authenticated: activeAuthenticated,
+      privyUserId: user?.id ?? null,
+      account: wallet?.account ?? null,
+    };
+  }, [activeAuthenticated, user?.id, wallet?.account]);
   const providerSettled = isWalletProviderSettled(
     ready,
     walletsReady,
@@ -1214,26 +1143,57 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       const isEmbeddedWallet =
         connectedWallet.walletClientType === "privy" ||
         connectedWallet.walletClientType === "privy-v2";
+      const sessionSubject = user?.id ?? null;
+      const expectedAccount = wallet.account.toLowerCase();
+      if (sessionSubject === null) {
+        throw new Error("Your wallet session expired. Reconnect and try again");
+      }
+      const assertCurrentSession = () => {
+        const current = walletRequestSessionRef.current;
+        if (
+          !current.authenticated ||
+          current.privyUserId !== sessionSubject ||
+          current.account?.toLowerCase() !== expectedAccount
+        ) {
+          throw new Error("The wallet session changed. Reconnect and try again");
+        }
+      };
 
       try {
         if (wallet.chainId !== appChainHex) {
           await connectedWallet.switchChain(appChain.id);
+          assertCurrentSession();
         }
 
+        const sendLocked = (execute: () => Promise<Hex>) =>
+          runWithBrowserWalletRequestLock({
+            sessionSubject,
+            account: wallet.account,
+            chainId: String(prepared.chainId),
+            requestSubject: JSON.stringify([
+              "prepared-transaction-v1",
+              prepared,
+              expectedAccount,
+            ]),
+            assertCurrentSession,
+            execute,
+          });
         if (isEmbeddedWallet) {
-          const review = getPreparedTransactionReview(prepared.kind);
-          const result = await sendPrivyTransaction(
-            buildPrivyTransactionRequest(prepared),
-            {
-              address: wallet.account,
-              uiOptions: {
-                description: review.description,
-                buttonText: review.buttonText,
-                successHeader: review.successHeader,
+          return await sendLocked(async () => {
+            const review = getPreparedTransactionReview(prepared.kind);
+            const result = await sendPrivyTransaction(
+              buildPrivyTransactionRequest(prepared),
+              {
+                address: wallet.account,
+                uiOptions: {
+                  description: review.description,
+                  buttonText: review.buttonText,
+                  successHeader: review.successHeader,
+                },
               },
-            },
-          );
-          return parseSubmittedTransactionHash(result.hash);
+            );
+            return parseSubmittedTransactionHash(result.hash);
+          });
         }
 
         const provider = await connectedWallet.getEthereumProvider();
@@ -1246,17 +1206,19 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         ) {
           throw new Error(`The wallet is not connected to ${appNetworkName}`);
         }
-
-        const hash = await provider.request({
-          method: "eth_sendTransaction",
-          params: [buildEip1193TransactionRequest(prepared, wallet.account)],
+        assertCurrentSession();
+        return await sendLocked(async () => {
+          const hash = await provider.request({
+            method: "eth_sendTransaction",
+            params: [buildEip1193TransactionRequest(prepared, wallet.account)],
+          });
+          return parseSubmittedTransactionHash(hash);
         });
-        return parseSubmittedTransactionHash(hash);
       } catch (caught) {
         throw new Error(getWalletTransactionErrorMessage(caught));
       }
     },
-    [connectedWallet, sendPrivyTransaction, wallet],
+    [connectedWallet, sendPrivyTransaction, user?.id, wallet],
   );
 
   const signLaunchMessage = useCallback(async (
@@ -1336,25 +1298,55 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     const isEmbeddedWallet =
       connectedWallet.walletClientType === "privy" ||
       connectedWallet.walletClientType === "privy-v2";
+    const sessionSubject = user?.id ?? null;
+    const expectedAccount = wallet.account.toLowerCase();
+    if (sessionSubject === null) {
+      throw new Error("Your wallet session expired. Reconnect and try again");
+    }
+    const assertCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      if (
+        !current.authenticated ||
+        current.privyUserId !== sessionSubject ||
+        current.account?.toLowerCase() !== expectedAccount
+      ) {
+        throw new Error("The wallet session changed. Reconnect and try again");
+      }
+    };
     try {
       if (wallet.chainId !== appChainHex) {
         await connectedWallet.switchChain(appChain.id);
+        assertCurrentSession();
       }
-      if (isEmbeddedWallet) {
-        const result = await sendPrivyTransaction({
-          to: input.to,
-          data: input.data,
-          value: BigInt(input.value),
-          chainId: appChain.id,
-        }, {
-          address: wallet.account,
-          uiOptions: {
-            description: "Submit the approved Custom launch on Ethereum",
-            buttonText: "Launch token",
-            successHeader: "Launch submitted",
-          },
+      const sendLocked = (execute: () => Promise<Hex>) =>
+        runWithBrowserWalletRequestLock({
+          sessionSubject,
+          account: wallet.account,
+          chainId: input.chainId,
+          requestSubject: JSON.stringify(["browser-wallet-action-v1", input]),
+          assertCurrentSession,
+          execute,
         });
-        return parseSubmittedTransactionHash(result.hash);
+      if (isEmbeddedWallet) {
+        return await sendLocked(async () => {
+          const result = await sendPrivyTransaction(
+            {
+              to: input.to,
+              data: input.data,
+              value: BigInt(input.value),
+              chainId: appChain.id,
+            },
+            {
+              address: wallet.account,
+              uiOptions: {
+                description: "Submit the approved Custom launch on Ethereum",
+                buttonText: "Launch token",
+                successHeader: "Launch submitted",
+              },
+            },
+          );
+          return parseSubmittedTransactionHash(result.hash);
+        });
       }
       const provider = await connectedWallet.getEthereumProvider();
       await assertExternalWalletAuthorityCurrent({
@@ -1363,97 +1355,25 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         networkName: appNetworkName,
         request: (method) => provider.request({ method }),
       });
-      const hash = await provider.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: wallet.account,
-          to: input.to,
-          data: input.data,
-          value: input.value,
-        }],
-      });
-      return parseSubmittedTransactionHash(hash);
-    } catch (caught) {
-      throw new Error(getWalletTransactionErrorMessage(caught));
-    }
-  }, [connectedWallet, sendPrivyTransaction, wallet]);
-
-  const sendHookemonBrowserWalletAction = useCallback(async (
-    action: HookemonBrowserWalletActionV1,
-    binding: HookemonApplicantFlowBindingV1,
-  ) => {
-    if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
-    }
-    if (appChain.id !== 1) {
-      throw new Error("The Hookemon launch is available only on Ethereum");
-    }
-    const transaction = buildHookemonEip1193TransactionV1(
-      action,
-      binding,
-      wallet.account,
-      Math.floor(Date.now() / 1_000).toString(),
-    );
-    const isEmbeddedWallet =
-      connectedWallet.walletClientType === "privy" ||
-      connectedWallet.walletClientType === "privy-v2";
-    try {
-      if (wallet.chainId !== "0x1") {
-        await connectedWallet.switchChain(1);
-      }
-      const provider = await connectedWallet.getEthereumProvider();
-      await assertExternalWalletAuthorityCurrent({
-        expectedAccount: wallet.account,
-        expectedChainId: "0x1",
-        networkName: "Ethereum",
-        request: (method) => provider.request({ method }),
-      });
-      const pendingNonce = await provider.request({
-        method: "eth_getTransactionCount",
-        params: [wallet.account, "pending"],
-      });
-      assertHookemonPendingNonceV1(pendingNonce, transaction.nonce);
-      const currentTransaction = buildHookemonEip1193TransactionV1(
-        action,
-        binding,
-        wallet.account,
-        Math.floor(Date.now() / 1_000).toString(),
-      );
-      if (isEmbeddedWallet) {
-        const result = await sendPrivyTransaction({
-          ...(currentTransaction.to === undefined
-            ? {}
-            : { to: currentTransaction.to }),
-          data: currentTransaction.data,
-          value: 0n,
-          nonce: BigInt(currentTransaction.nonce),
-          gasLimit: BigInt(currentTransaction.gas),
-          chainId: 1,
-        }, {
-          address: wallet.account,
-          uiOptions: action.actionIndex === 0
-            ? {
-                description: "Approve the exact Hookemon USDC funding",
-                buttonText: "Approve USDC",
-                successHeader: "Approval submitted",
-              }
-            : {
-                description: "Create the exact Hookemon AtomicLauncher",
-                buttonText: "Create launcher",
-                successHeader: "Launcher submitted",
-              },
+      assertCurrentSession();
+      return await sendLocked(async () => {
+        const hash = await provider.request({
+          method: "eth_sendTransaction",
+          params: [
+            {
+              from: wallet.account,
+              to: input.to,
+              data: input.data,
+              value: input.value,
+            },
+          ],
         });
-        return parseSubmittedTransactionHash(result.hash);
-      }
-      const hash = await provider.request({
-        method: "eth_sendTransaction",
-        params: [currentTransaction],
+        return parseSubmittedTransactionHash(hash);
       });
-      return parseSubmittedTransactionHash(hash);
     } catch (caught) {
       throw new Error(getWalletTransactionErrorMessage(caught));
     }
-  }, [connectedWallet, sendPrivyTransaction, wallet]);
+  }, [connectedWallet, sendPrivyTransaction, user?.id, wallet]);
 
   const readTradeBalances = useCallback(
     async (token: `0x${string}`) => {
@@ -1561,7 +1481,6 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       setUsername,
       signLaunchMessage,
       sendBrowserWalletAction,
-      sendHookemonBrowserWalletAction,
       sendTransaction,
       readNativeBalance,
       readTradeBalances,
@@ -1586,7 +1505,6 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       refreshApplicantSession,
       reauthorizeGithub,
       sendBrowserWalletAction,
-      sendHookemonBrowserWalletAction,
       sendTransaction,
       signLaunchMessage,
       providerSettled,
@@ -1656,9 +1574,6 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendBrowserWalletAction: async () => {
-        throw new Error("Wallet sign-in is unavailable");
-      },
-      sendHookemonBrowserWalletAction: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendTransaction: async () => {

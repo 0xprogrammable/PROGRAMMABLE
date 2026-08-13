@@ -1,25 +1,45 @@
 import { keccak256, toBytes } from "viem";
 
-const ALCHEMY_HOST = "eth-mainnet.g.alchemy.com";
-const ALCHEMY_API_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
-const QUICKNODE_API_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
-const QUICKNODE_HOST =
-  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u;
-const DOMAINS = Object.freeze({
-  endpoint: "programmable:data-pipeline:rpc-endpoint:v1\0",
-  origin: "programmable:data-pipeline:rpc-origin:v1\0",
-});
-const HEX_BYTES32 = /^0x[0-9a-f]{64}$/u;
-const PINNED_COMMITMENT_NAMES = Object.freeze({
-  alchemy: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
-  quicknode: "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+export const PRODUCTION_RPC_ENV = Object.freeze({
+  primaryProvider: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+  primaryUrl: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+  primaryCommitment:
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+  secondaryProvider: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+  secondaryUrl: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+  secondaryCommitment:
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
 });
 
+const DRPC_HOST = "lb.drpc.live";
+const DRPC_PATH = /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u;
+const QUICKNODE_HOST =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
+const QUICKNODE_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
+const HEX_BYTES32 = /^0x[0-9a-f]{64}$/u;
+const ENDPOINT_DOMAIN = "programmable:data-pipeline:rpc-endpoint:v1\0";
+
 function endpoint(value, provider) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 1_024) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 1_024 ||
+    value !== value.trim()
+  ) {
     throw new Error(`${provider} RPC URL is required`);
   }
-  const parsed = new URL(value);
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${provider} RPC URL is not an approved Mainnet endpoint`);
+  }
+  const pathValid = provider === "drpc"
+    ? parsed.hostname === DRPC_HOST && DRPC_PATH.test(parsed.pathname)
+    : QUICKNODE_HOST.test(parsed.hostname) && QUICKNODE_PATH.test(parsed.pathname);
+  const credential = provider === "drpc"
+    ? parsed.pathname.replace(/^\/ethereum\//u, "").replace(/\/$/u, "")
+    : parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "");
   if (
     parsed.protocol !== "https:" ||
     parsed.username !== "" ||
@@ -27,125 +47,104 @@ function endpoint(value, provider) {
     parsed.port !== "" ||
     parsed.search !== "" ||
     parsed.hash !== "" ||
-    (provider === "alchemy" &&
-      (parsed.hostname !== ALCHEMY_HOST ||
-        !ALCHEMY_API_PATH.test(parsed.pathname))) ||
-    (provider === "quicknode" &&
-      (!QUICKNODE_HOST.test(parsed.hostname) ||
-        !QUICKNODE_API_PATH.test(parsed.pathname))) ||
-    (provider === "alchemy" && parsed.pathname.slice("/v2/".length) === "docs-demo") ||
-    (provider === "quicknode" &&
-      parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "") === "docs-demo")
+    !pathValid ||
+    credential === "docs-demo"
   ) {
     throw new Error(`${provider} RPC URL is not an approved Mainnet endpoint`);
   }
   return parsed;
 }
 
-function classifyEndpoint(value) {
-  for (const provider of ["alchemy", "quicknode"]) {
-    try {
-      return { provider, url: endpoint(value, provider) };
-    } catch {
-      // Try the other approved vendor. Error details never contain the URL.
-    }
-  }
-  throw new Error("legacy RPC URL is not an approved Mainnet endpoint");
+function endpointCommitment(value) {
+  return keccak256(toBytes(`${ENDPOINT_DOMAIN}${value}`));
 }
 
-function optionalEndpoint(value, provider) {
-  return value === undefined || value === ""
-    ? undefined
-    : endpoint(value, provider);
+function configuredPair(environment) {
+  if (
+    environment[PRODUCTION_RPC_ENV.primaryProvider] !== "drpc" ||
+    environment[PRODUCTION_RPC_ENV.secondaryProvider] !== "quicknode"
+  ) {
+    throw new Error("production RPC provider roles are invalid");
+  }
+  const primary = endpoint(
+    environment[PRODUCTION_RPC_ENV.primaryUrl],
+    "drpc",
+  );
+  const secondary = endpoint(
+    environment[PRODUCTION_RPC_ENV.secondaryUrl],
+    "quicknode",
+  );
+  if (primary.origin === secondary.origin || primary.toString() === secondary.toString()) {
+    throw new Error("dRPC and QuickNode must be independent endpoints");
+  }
+  return Object.freeze({ primary, secondary });
 }
 
-function selectedEndpoints(environment) {
-  const selected = {
-    alchemy: optionalEndpoint(
-      environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-      "alchemy",
-    ),
-    quicknode: optionalEndpoint(
-      environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
-      "quicknode",
-    ),
-  };
-  const fallback = { alchemy: new Map(), quicknode: new Map() };
-  for (const value of [
-    environment.ETHEREUM_RPC_URL,
-    environment.ETHEREUM_RPC_URL_B,
-  ]) {
-    if (value === undefined || value === "") continue;
-    const classified = classifyEndpoint(value);
-    fallback[classified.provider].set(
-      classified.url.toString(),
-      classified.url,
-    );
+function binding(role, vendorGroup, url, pinnedCommitment) {
+  const commitment = endpointCommitment(url.toString());
+  if (
+    pinnedCommitment !== undefined &&
+    pinnedCommitment !== "" &&
+    (!HEX_BYTES32.test(pinnedCommitment) || pinnedCommitment !== commitment)
+  ) {
+    throw new Error(`${role} provider commitment is invalid`);
   }
-  for (const provider of ["alchemy", "quicknode"]) {
-    if (selected[provider]) continue;
-    const candidates = [...fallback[provider].values()];
-    if (candidates.length !== 1) {
-      throw new Error(`one ${provider} Mainnet RPC endpoint is required`);
-    }
-    selected[provider] = candidates[0];
-  }
-  return selected;
-}
-
-function commitment(kind, value) {
-  return keccak256(toBytes(`${DOMAINS[kind]}${value}`));
-}
-
-function bindingsFromCommitments(commitments) {
-  if (commitments.alchemy === commitments.quicknode) {
-    throw new Error("Alchemy and QuickNode commitments must differ");
-  }
-  return ["alchemy", "quicknode"].map((vendorGroup) => {
-    const endpointCommitment = commitments[vendorGroup];
-    return Object.freeze({
-      vendorGroup,
-      identity: `${vendorGroup}-mainnet-${endpointCommitment.slice(2, 34)}`,
-      endpointCommitment,
-    });
+  return Object.freeze({
+    role,
+    vendorGroup,
+    identity: `${vendorGroup}-mainnet-${commitment.slice(2, 34)}`,
+    endpointCommitment: commitment,
   });
 }
 
 export function runtimeProductionProviderBindingsFromUrls(environment) {
-  const endpoints = selectedEndpoints(environment);
-  if (endpoints.alchemy.origin === endpoints.quicknode.origin) {
-    throw new Error("Alchemy and QuickNode must be independent endpoints");
-  }
-  return bindingsFromCommitments(
-    Object.fromEntries(
-      Object.entries(endpoints).map(([provider, url]) => [
-        provider,
-        commitment("endpoint", url.toString()),
-      ]),
+  const pair = configuredPair(environment);
+  return Object.freeze([
+    binding(
+      "primary",
+      "drpc",
+      pair.primary,
+      environment[PRODUCTION_RPC_ENV.primaryCommitment],
     ),
-  );
+    binding(
+      "secondary",
+      "quicknode",
+      pair.secondary,
+      environment[PRODUCTION_RPC_ENV.secondaryCommitment],
+    ),
+  ]);
+}
+
+/**
+ * Returns the already validated private endpoints for bounded release probes.
+ * Callers must not serialize, log or persist this result.
+ */
+export function runtimeProductionProviderEndpoints(environment) {
+  const pair = configuredPair(environment);
+  runtimeProductionProviderBindingsFromUrls(environment);
+  return Object.freeze([pair.primary.toString(), pair.secondary.toString()]);
 }
 
 export function expectedProductionProviderBindings(environment = process.env) {
-  const pinned = Object.fromEntries(
-    Object.entries(PINNED_COMMITMENT_NAMES).map(([provider, name]) => [
-      provider,
-      environment[name],
-    ]),
-  );
-  const pinnedCount = Object.values(pinned).filter(
-    (value) => value !== undefined && value !== "",
-  ).length;
-  if (pinnedCount !== 0 && pinnedCount !== 2) {
-    throw new Error("both pinned provider commitments are required");
-  }
-  if (pinnedCount === 2) {
-    for (const [provider, value] of Object.entries(pinned)) {
-      if (!HEX_BYTES32.test(value)) {
-        throw new Error(`${provider} provider commitment is invalid`);
-      }
+  const pinned = [
+    ["primary", "drpc", environment[PRODUCTION_RPC_ENV.primaryCommitment]],
+    ["secondary", "quicknode", environment[PRODUCTION_RPC_ENV.secondaryCommitment]],
+  ];
+  if (pinned.every(([, , value]) => typeof value === "string" && HEX_BYTES32.test(value))) {
+    if (pinned[0][2] === pinned[1][2]) {
+      throw new Error("dRPC and QuickNode commitments must differ");
     }
-    return bindingsFromCommitments(pinned);
+    return Object.freeze(pinned.map(([role, vendorGroup, endpointCommitment]) =>
+      Object.freeze({
+        role,
+        vendorGroup,
+        identity: `${vendorGroup}-mainnet-${endpointCommitment.slice(2, 34)}`,
+        endpointCommitment,
+      })
+    ));
+  }
+  if (pinned.some(([, , value]) => value !== undefined && value !== "")) {
+    throw new Error("both pinned provider commitments are required");
   }
   return runtimeProductionProviderBindingsFromUrls(environment);
 }

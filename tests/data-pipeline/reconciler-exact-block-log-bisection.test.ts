@@ -6,7 +6,7 @@ import { createExactBlockRpcClient } from "../../lib/data-pipeline/reconciler-ex
 import { projectorRpcDeploymentCommitment } from "../../lib/data-pipeline/projector-provider-commitments";
 import { rpcProviderCommitment } from "../../lib/data-pipeline/rpc-provider-commitments";
 
-const ENDPOINT = "https://eth-mainnet.g.alchemy.com/v2/abcdefgh12345678";
+const ENDPOINT = "https://lb.drpc.live/ethereum/abcdefgh12345678";
 const ADDRESS = `0x${"11".repeat(20)}` as const;
 const BLOCK_HASH = `0x${"22".repeat(32)}` as const;
 const TOPIC = `0x${"33".repeat(32)}` as const;

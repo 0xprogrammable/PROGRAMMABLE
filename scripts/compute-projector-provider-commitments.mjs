@@ -33,12 +33,12 @@ try {
   const commitments = await vite.ssrLoadModule(
     "/lib/data-pipeline/projector-provider-commitments.ts",
   );
-  const alchemy = commitments.canonicalProjectorRpcEndpoint(
-    process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-    "alchemy",
+  const drpc = commitments.canonicalProjectorRpcEndpoint(
+    process.env.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL,
+    "drpc",
   );
   const quicknode = commitments.canonicalProjectorRpcEndpoint(
-    process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+    process.env.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL,
     "quicknode",
   );
   const envioEndpoint = commitments.canonicalProjectorEnvioEndpoint(
@@ -62,9 +62,9 @@ try {
       }),
     envioSchemaCommitment:
       commitments.projectorEnvioSchemaCommitment(binding),
-    alchemyDeploymentCommitment:
-      commitments.projectorRpcDeploymentCommitment(alchemy),
-    alchemySchemaCommitment: rpcSchema,
+    drpcDeploymentCommitment:
+      commitments.projectorRpcDeploymentCommitment(drpc),
+    drpcSchemaCommitment: rpcSchema,
     quicknodeDeploymentCommitment:
       commitments.projectorRpcDeploymentCommitment(quicknode),
     quicknodeSchemaCommitment: rpcSchema,

@@ -911,8 +911,8 @@ describe("market projector runtime", () => {
     });
     const reader = createDualRpcMarketReader({
       endpoints: [
-        "https://eth-mainnet.g.alchemy.com/v2/abcdefgh",
-        "https://blue.quiknode.pro/abcdefgh/",
+        "https://lb.drpc.live/ethereum/abcdefgh",
+        "https://blue.ethereum-mainnet.quiknode.pro/abcdefgh/",
       ],
       fetcher,
     });
@@ -963,8 +963,8 @@ describe("market projector runtime", () => {
   it("rejects a stale Chainlink answer at the exact historical block", async () => {
     const reader = createDualRpcMarketReader({
       endpoints: [
-        "https://eth-mainnet.g.alchemy.com/v2/abcdefgh",
-        "https://blue.quiknode.pro/abcdefgh/",
+        "https://lb.drpc.live/ethereum/abcdefgh",
+        "https://blue.ethereum-mainnet.quiknode.pro/abcdefgh/",
       ],
       fetcher: rpcFetcher({
         updatedAt: BigInt(Math.floor(TARGET_TIME.getTime() / 1_000) - 3_601),

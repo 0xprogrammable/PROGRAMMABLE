@@ -18,6 +18,8 @@ import {
   processDurableWakeJob,
   type QuickNodeWakeClaim,
 } from "../../lib/data-pipeline/quicknode-wake-queue.server";
+import { productionMainnetRpcEnvironment } from
+  "../../lib/onchain/website-rpc-providers.server";
 
 const TARGET: RealBlockSlaCaptureTarget = Object.freeze({
   deliveryReceiptId: "19",
@@ -53,12 +55,10 @@ function receiptBundle(): OptimisticPersistenceBundle {
   } as unknown as OptimisticPersistenceBundle;
 }
 
-const RPC_ENV = Object.freeze({
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-    "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key",
-  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-    "https://programmable.ethereum.quiknode.pro/quicknode-test-token/",
-});
+const RPC_ENV = productionMainnetRpcEnvironment(
+  "https://lb.drpc.live/ethereum/drpc-test-key",
+  "https://programmable.ethereum-mainnet.quiknode.pro/quicknode-test-token/",
+);
 
 describe("optimistic wake SLA capture plan", () => {
   it("adds no SLA sentinel work, receipts or self-fetch when the DB has no consumed arm", async () => {

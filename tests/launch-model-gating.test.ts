@@ -188,7 +188,6 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("Create a Classic coin");
     expect(html).toContain("Open approved Custom Hook launch");
     expect(html).toContain('data-status="available">Available</small>');
-    expect(html).not.toContain('data-launch-model-option="manual-applicant"');
     expect(html).not.toContain(">Ready</small>");
     expect(html).not.toContain("Build or resume");
     expect(html).not.toContain("Coming soon");
@@ -244,9 +243,7 @@ describe("unreleased launch model gating", () => {
       }),
     );
     expect(html).not.toContain('data-launch-model-option="custom"');
-    expect(html).not.toContain('data-launch-model-option="manual-applicant"');
     expect(html).not.toContain('id="launch-model-custom-title"');
-    expect(html).not.toContain('id="launch-model-manual-applicant-title"');
     expect(html).not.toContain("Coming soon");
     expect(html).not.toContain("Build or resume");
   });

@@ -3,7 +3,6 @@ import {
   formatUnits,
   getAddress,
   HttpRequestError,
-  http,
   keccak256,
   LimitExceededRpcError,
   ResponseBodyTooLargeError,
@@ -36,6 +35,10 @@ import {
   buildTokenLinks,
   sanitizeImageUrl,
 } from "./metadata";
+import {
+  persistentRpcHttp,
+  withPersistentRpcIntegrityScope,
+} from "./persistent-rpc-cache.server";
 import { enrichExploreModelWithUsd } from "./usd";
 import type {
   ExploreReadModel,
@@ -160,9 +163,34 @@ function createOnchainClient(
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(rpcUrl, {
-      retryCount: 1,
-      timeout: 10_000,
+    transport: persistentRpcHttp(rpcUrl, {
+      chainId: config.chainId,
+      maxLogBlockRange: config.logBlockRange,
+      http: {
+        retryCount: 1,
+        timeout: 10_000,
+      },
+      ...(config.status === "ready"
+        ? {
+            immutableCodeBindings: [
+              {
+                address: config.launcher,
+                expectedRuntimeCodeHash: config.launcherRuntimeCodeHash,
+                notBeforeBlock: config.deploymentBlock,
+              },
+              {
+                address: config.feeHook,
+                expectedRuntimeCodeHash: config.feeHookRuntimeCodeHash,
+                notBeforeBlock: config.deploymentBlock,
+              },
+              {
+                address: config.stateView,
+                expectedRuntimeCodeHash: config.stateViewRuntimeCodeHash,
+                notBeforeBlock: config.deploymentBlock,
+              },
+            ],
+          }
+        : {}),
     }),
   });
 }
@@ -291,7 +319,9 @@ export async function indexVerifiedEvents(
   const creatorClaims: CreatorClaimEventRecord[] = [];
 
   let fromBlock = config.deploymentBlock;
-  let logBlockRange = config.logBlockRange;
+  let logBlockRange = toBlock >= fromBlock
+    ? toBlock - fromBlock + 1n
+    : config.logBlockRange;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
@@ -745,8 +775,11 @@ async function readReadyModel(
   const indexedEventSets = await allSettledOrThrow(
     clients.map((candidate) =>
       withReadStage("classic-events", () =>
-        indexVerifiedEvents(candidate, config, toBlock),
-      )),
+        withPersistentRpcIntegrityScope(() =>
+          indexVerifiedEvents(candidate, config, toBlock),
+        ),
+      ),
+    ),
   );
   const launcherFeeValues = await withReadStage(
     "launcher-fee-accounting",
@@ -1112,6 +1145,24 @@ let cachedRead:
     }
   | undefined;
 
+const liveReadFlights = new Map<string, Promise<ExploreReadModel>>();
+
+function liveReadFlightKey(config: OnchainDeployment) {
+  return [
+    config.environment,
+    config.status,
+    config.chainId,
+    config.releaseVersion,
+    config.launcher,
+    config.feeHook,
+    config.deploymentBlock,
+    config.rpcUrl,
+    config.rpcUrlSecondary,
+    config.confirmations,
+    config.logBlockRange,
+  ].join(":");
+}
+
 function emptyReadModel(): ExploreReadModel {
   return {
     status: "not-deployed",
@@ -1126,19 +1177,32 @@ function emptyReadModel(): ExploreReadModel {
 export async function readLiveExploreModel(
   config: OnchainDeployment = getPublicOnchainDeployment(),
 ): Promise<ExploreReadModel> {
-  const model = config.status === "ready"
-    ? readReadyRegistryModel(config)
-    : emptyReadModel();
-  const resolvedModel = await model;
-  if (config.status !== "ready") return resolvedModel;
+  const key = liveReadFlightKey(config);
+  const existing = liveReadFlights.get(key);
+  if (existing) return existing;
+  const value = (async () => {
+    const model = config.status === "ready"
+      ? readReadyRegistryModel(config)
+      : emptyReadModel();
+    const resolvedModel = await model;
+    if (config.status !== "ready") return resolvedModel;
 
+    try {
+      return await enrichExploreModelWithUsd(resolvedModel, config);
+    } catch (error) {
+      console.error("ETH/USD enrichment failed", {
+        name: error instanceof Error ? error.name : "UnknownError",
+      });
+      return resolvedModel;
+    }
+  })();
+  liveReadFlights.set(key, value);
   try {
-    return await enrichExploreModelWithUsd(resolvedModel, config);
-  } catch (error) {
-    console.error("ETH/USD enrichment failed", {
-      name: error instanceof Error ? error.name : "UnknownError",
-    });
-    return resolvedModel;
+    return await value;
+  } finally {
+    if (liveReadFlights.get(key) === value) {
+      liveReadFlights.delete(key);
+    }
   }
 }
 

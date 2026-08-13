@@ -64,26 +64,6 @@ function databaseEnvironment(
   });
 }
 
-function candidateCaptureEnvironment() {
-  return environment({
-    PROGRAMMABLE_PROJECTOR_BINDING_MODE: "candidate-backfill",
-    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
-      "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
-    PROGRAMMABLE_ENVIO_GRAPHQL_URL:
-      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
-    PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY:
-      "envio:production-7f24e63",
-    INDEXED_EXPLORE_LIST_READS_ENABLED: "false",
-    INDEXED_EXPLORE_TOKEN_READS_ENABLED: "false",
-    INDEXED_EXPLORE_CHART_READS_ENABLED: "false",
-    INDEXED_CREATOR_PROFILE_READS_ENABLED: "false",
-    INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED: "false",
-    INDEXED_LAUNCH_LOOKUP_ENABLED: "false",
-    INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED: "false",
-    INDEXED_READ_SHADOW_COMPARE_ENABLED: "false",
-  });
-}
-
 function body(overrides: Record<string, unknown> = {}) {
   return {
     schemaVersion: 1,
@@ -252,8 +232,8 @@ describe("read-model performance capture binding", () => {
     const readCandidatesAfter = vi.fn(async () => candidates);
     const providers = [
       {
-        identity: "alchemy-provider",
-        vendorGroup: "alchemy",
+        identity: "drpc-provider",
+        vendorGroup: "drpc",
         endpointCommitment: bytes32("a"),
         endpointOriginCommitment: bytes32("b"),
       },
@@ -372,8 +352,8 @@ describe("read-model performance capture binding", () => {
     const readCandidate = vi.fn(async (id: string) => ({ candidateId: id }));
     const providers = [
       {
-        identity: "alchemy-provider",
-        vendorGroup: "alchemy",
+        identity: "drpc-provider",
+        vendorGroup: "drpc",
         endpointCommitment: bytes32("a"),
         endpointOriginCommitment: bytes32("b"),
       },
@@ -438,7 +418,7 @@ describe("read-model performance capture binding", () => {
     } as never;
 
     const result = await captureReadModelPerformance(body(), {
-      env: candidateCaptureEnvironment(),
+      env: environment(),
       dependencies,
     });
 
@@ -490,10 +470,10 @@ describe("read-model performance capture binding", () => {
     });
     expect(JSON.stringify(result)).not.toContain("https://rpc");
     expect(createEnvio).toHaveBeenCalledWith(expect.objectContaining({
-      endpoint: "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+      endpoint: "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
       releaseBinding: expect.objectContaining({
         envio: expect.objectContaining({
-          deploymentLabel: "production-7f24e63",
+          deploymentLabel: "production-92f6373",
         }),
       }),
     }));

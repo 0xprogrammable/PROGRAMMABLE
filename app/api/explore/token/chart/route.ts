@@ -23,7 +23,7 @@ import type { MarketChartV1, MarketValuationV1 } from
   "../../../../../lib/market-data/market-data-v1";
 import { PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION } from
   "../../../../../lib/market-data/market-data-v1";
-import { getOnchainDeployment } from "../../../../../lib/onchain/config";
+import { getWebsiteReadOnchainDeployment } from "../../../../../lib/onchain/config";
 import { readDurableExploreModel } from
   "../../../../../lib/onchain/durable-model";
 import { isTokenChartRange } from "../../../../../lib/onchain/chart";
@@ -67,7 +67,7 @@ async function readPrimaryChartModel() {
 }
 
 async function readDurableChartFallback() {
-  const deployment = getOnchainDeployment("production");
+  const deployment = getWebsiteReadOnchainDeployment("production");
   if (deployment.status !== "ready") {
     throw new Error("Production Explore deployment is not ready");
   }

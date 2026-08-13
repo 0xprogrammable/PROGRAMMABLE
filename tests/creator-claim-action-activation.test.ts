@@ -47,7 +47,7 @@ const deployment = {
   stateViewRuntimeCodeHash: `0x${"77".repeat(32)}` as Hex,
   rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/alchemy-claim-key",
   rpcUrlSecondary:
-    "https://claim-node.quiknode.pro/quicknode-claim-key/",
+    "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/",
   confirmations: 12n,
   logBlockRange: 10_000n,
 };
@@ -168,7 +168,7 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
-    getOnchainDeployment: () => deployment,
+    getWebsiteReadOnchainDeployment: () => deployment,
     readExploreModel: mocks.readLegacy,
   };
 });
@@ -197,7 +197,7 @@ describe("creator claim action identity activation", () => {
     deployment.rpcUrl =
       "https://eth-mainnet.g.alchemy.com/v2/alchemy-claim-key";
     deployment.rpcUrlSecondary =
-      "https://claim-node.quiknode.pro/quicknode-claim-key/";
+      "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/";
     mocks.lookup.mockResolvedValue(indexedToken);
     mocks.readLegacy.mockResolvedValue(legacyModel);
     const clients = [
@@ -231,13 +231,13 @@ describe("creator claim action identity activation", () => {
           accountBalanceWei: "900000000000000000",
         },
       });
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(4);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
       expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
       expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
     },
   );
 
-  it("uses two agreeing fixed fallback providers when both configured providers are unavailable", async () => {
+  it("does not fall back to public providers when the private pair is unavailable", async () => {
     const clients = [
       unavailableRpcClient("monthly capacity exceeded"),
       unavailableRpcClient("secondary transport unavailable"),
@@ -252,14 +252,11 @@ describe("creator claim action identity activation", () => {
     const response = await POST(request());
     const payload = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     expect(payload).toMatchObject({
-      status: "ready",
-      claim: { account: creator, tokenAddress: token, poolId },
-      gas: {
-        estimatedGas: "108000",
-        gasPriceWei: "2700000000",
-        accountBalanceWei: "700000000000000000",
+      status: "blocked",
+      error: {
+        code: "rpc-unavailable",
       },
     });
   });

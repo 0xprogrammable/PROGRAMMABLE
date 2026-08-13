@@ -161,12 +161,25 @@ function createLaunchRpcClient(rpcUrl: string) {
   });
 }
 
-const client = createLaunchRpcClient(
-  launchEnvironment === "rehearsal"
-    ? (process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org")
-    : (process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"),
-);
 type LaunchRpcClient = ReturnType<typeof createLaunchRpcClient>;
+
+function defaultLaunchRpcClient() {
+  if (launchEnvironment === "rehearsal") {
+    return createLaunchRpcClient(
+      process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org",
+    );
+  }
+  const deployment = getWebsiteReadOnchainDeployment("production");
+  return createLaunchRpcClient(deployment.rpcUrl);
+}
+
+const client = new Proxy({} as LaunchRpcClient, {
+  get(_target, property) {
+    const selected = defaultLaunchRpcClient();
+    const value = Reflect.get(selected, property);
+    return typeof value === "function" ? value.bind(selected) : value;
+  },
+});
 
 async function withClassicLaunchRpcFailover<Output>(
   read: (rpcClient: LaunchRpcClient) => Promise<Output>,
@@ -546,7 +559,7 @@ async function assertRuntimeCodeHash(
   address: Address,
   expected: Hex,
   label: string,
-  rpcClient: LaunchRpcClient = client,
+  rpcClient: LaunchRpcClient = defaultLaunchRpcClient(),
 ) {
   const code = await rpcClient.getCode({ address });
   if (!code || code === "0x") {
@@ -563,7 +576,7 @@ async function assertRuntimeCodeHash(
 async function estimatePreparedTransaction(
   account: Address,
   transaction: Omit<PreparedLaunchTransaction, "gasLimit">,
-  rpcClient: LaunchRpcClient = client,
+  rpcClient: LaunchRpcClient = defaultLaunchRpcClient(),
 ) {
   const value = BigInt(transaction.value);
   const balance = await rpcClient.getBalance({ address: account });
@@ -609,7 +622,7 @@ async function assertMemeReleaseInfrastructure(
     memeLaunch: Hex;
     lockedPositionFeeForwarderFactory: Hex;
   },
-  rpcClient: LaunchRpcClient = client,
+  rpcClient: LaunchRpcClient = defaultLaunchRpcClient(),
 ) {
   await Promise.all([
     assertRuntimeCodeHash(
@@ -785,7 +798,7 @@ async function prepareMemeLaunch(
   draft: LaunchDraft,
   connectedWalletCheck: LaunchPreflightCheck,
   deployment: ReleaseDeployment,
-  rpcClient: LaunchRpcClient = client,
+  rpcClient: LaunchRpcClient = defaultLaunchRpcClient(),
 ) {
   const totalSwapFeeBps = validateMemeLaunchDraft(draft);
   const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);

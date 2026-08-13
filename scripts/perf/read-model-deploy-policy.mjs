@@ -8,7 +8,10 @@ import {
   PROJECTOR_WAKE_ROUTE,
   QUICKNODE_STREAM_SECRET_ENV_NAME,
 } from "./read-model-projector-wake-canary.mjs";
-import { runtimeProductionProviderBindingsFromUrls } from "./read-model-provider-binding.mjs";
+import {
+  PRODUCTION_RPC_ENV,
+  runtimeProductionProviderBindingsFromUrls,
+} from "./read-model-provider-binding.mjs";
 
 export { PROJECTOR_WAKE_ROUTE, QUICKNODE_STREAM_SECRET_ENV_NAME };
 
@@ -65,20 +68,17 @@ const EXPECTED_UNISWAP_GRAPH_SCHEMA_COMMITMENT =
   "0xd0d2087059ca0a7c1e7c633999ff75ea34fcc00d42cee8985a79d0ef76e6813c";
 
 const COMMITMENT_NAMES = Object.freeze([
-  "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
-  "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+  PRODUCTION_RPC_ENV.primaryCommitment,
+  PRODUCTION_RPC_ENV.secondaryCommitment,
 ]);
 const HEX_BYTES32 = /^0x[0-9a-f]{64}$/u;
 const RUNTIME_RPC_URL_NAMES = Object.freeze([
-  "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-  "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
-  "ETHEREUM_RPC_URL",
-  "ETHEREUM_RPC_URL_B",
+  PRODUCTION_RPC_ENV.primaryUrl,
+  PRODUCTION_RPC_ENV.secondaryUrl,
 ]);
-const ALCHEMY_MAINNET_RPC_URL_ENV_NAME =
-  "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL";
-const ALCHEMY_MAINNET_RPC_HOST = "eth-mainnet.g.alchemy.com";
-const ALCHEMY_MAINNET_RPC_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
+const RUNTIME_RPC_BINDING_NAMES = Object.freeze(
+  Object.values(PRODUCTION_RPC_ENV),
+);
 const VERCEL_SENSITIVE_PLACEHOLDER = /^\[[A-Za-z]{1,32}\]$/u;
 
 function decodeDotenvValue(value, name) {
@@ -290,54 +290,6 @@ function validateRequiredServerSecrets(contents, wakeCanaryRequired) {
   });
 }
 
-function validateAlchemyOnlyRuntimeEnvironment(contents, required) {
-  if (!required) {
-    return Object.freeze({
-      ready: true,
-      binding: "not-required",
-      invalidNames: Object.freeze([]),
-    });
-  }
-  const configured = readSelectedDotenvValues(contents, [
-    ALCHEMY_MAINNET_RPC_URL_ENV_NAME,
-  ]);
-  const value = configured[ALCHEMY_MAINNET_RPC_URL_ENV_NAME];
-  if (VERCEL_SENSITIVE_PLACEHOLDER.test(value ?? "")) {
-    return Object.freeze({
-      ready: true,
-      binding: "deferred-stage",
-      invalidNames: Object.freeze([]),
-    });
-  }
-  try {
-    const endpoint = new URL(value);
-    if (
-      endpoint.protocol !== "https:" ||
-      endpoint.hostname !== ALCHEMY_MAINNET_RPC_HOST ||
-      endpoint.port !== "" ||
-      endpoint.username !== "" ||
-      endpoint.password !== "" ||
-      endpoint.search !== "" ||
-      endpoint.hash !== "" ||
-      !ALCHEMY_MAINNET_RPC_PATH.test(endpoint.pathname) ||
-      endpoint.pathname.slice("/v2/".length) === "docs-demo"
-    ) {
-      throw new Error("invalid Alchemy endpoint");
-    }
-    return Object.freeze({
-      ready: true,
-      binding: "verified",
-      invalidNames: Object.freeze([]),
-    });
-  } catch {
-    return Object.freeze({
-      ready: false,
-      binding: "unverified",
-      invalidNames: Object.freeze([ALCHEMY_MAINNET_RPC_URL_ENV_NAME]),
-    });
-  }
-}
-
 export function evaluateReadModelDeployPolicy(
   contents,
   environment = {},
@@ -366,10 +318,6 @@ export function evaluateReadModelDeployPolicy(
     contents,
     evidenceRequired ? expectations : undefined,
   );
-  const alchemyEnvironmentPreflight = validateAlchemyOnlyRuntimeEnvironment(
-    contents,
-    !evidenceRequired,
-  );
   const wakeCanaryRequired = WORKER_ACTIVATION_FLAG_NAMES.some(
     (name) => workerFlags.values[name],
   );
@@ -377,35 +325,37 @@ export function evaluateReadModelDeployPolicy(
     contents,
     wakeCanaryRequired,
   );
-  const invalidCommitments = evidenceRequired
-    ? COMMITMENT_NAMES.filter(
-        (name) => !HEX_BYTES32.test(environment[name] ?? ""),
-      )
-    : [];
-  let runtimeCommitmentsMatch = !evidenceRequired;
-  let runtimeProviderBinding = evidenceRequired
-    ? "unverified"
-    : alchemyEnvironmentPreflight.binding;
-  if (evidenceRequired && invalidCommitments.length === 0) {
+  const invalidCommitments = COMMITMENT_NAMES.filter(
+    (name) => !HEX_BYTES32.test(environment[name] ?? ""),
+  );
+  let runtimeCommitmentsMatch = false;
+  let runtimeProviderBinding = "unverified";
+  if (invalidCommitments.length === 0) {
     try {
       const runtimeEnvironment = readSelectedDotenvValues(
         contents,
-        RUNTIME_RPC_URL_NAMES,
+        RUNTIME_RPC_BINDING_NAMES,
       );
-      const configuredRuntimeValues = Object.values(runtimeEnvironment).filter(
-        (value) => value !== undefined && value !== "",
+      const configuredRuntimeValues = RUNTIME_RPC_URL_NAMES.map(
+        (name) => runtimeEnvironment[name],
       );
       const sensitiveValuesDeferred =
-        configuredRuntimeValues.length >= 2 &&
+        configuredRuntimeValues.length === 2 &&
         configuredRuntimeValues.every((value) =>
-          VERCEL_SENSITIVE_PLACEHOLDER.test(value),
+          VERCEL_SENSITIVE_PLACEHOLDER.test(value ?? ""),
         );
       if (sensitiveValuesDeferred) {
         // Vercel deliberately replaces Sensitive environment values during
         // `vercel pull`. The staged runtime capture recomputes both endpoint
         // commitments from the real URLs and the release gate compares them
         // with the pinned GitHub environment variables before promotion.
-        runtimeCommitmentsMatch = true;
+        runtimeCommitmentsMatch =
+          runtimeEnvironment[PRODUCTION_RPC_ENV.primaryProvider] === "drpc" &&
+          runtimeEnvironment[PRODUCTION_RPC_ENV.secondaryProvider] === "quicknode" &&
+          runtimeEnvironment[PRODUCTION_RPC_ENV.primaryCommitment] ===
+            environment[PRODUCTION_RPC_ENV.primaryCommitment] &&
+          runtimeEnvironment[PRODUCTION_RPC_ENV.secondaryCommitment] ===
+            environment[PRODUCTION_RPC_ENV.secondaryCommitment];
         runtimeProviderBinding = "deferred-stage";
       } else {
         const runtimeBindings = runtimeProductionProviderBindingsFromUrls(
@@ -415,9 +365,9 @@ export function evaluateReadModelDeployPolicy(
           (binding) =>
             binding.endpointCommitment ===
             environment[
-              binding.vendorGroup === "alchemy"
-                ? COMMITMENT_NAMES[0]
-                : COMMITMENT_NAMES[1]
+              binding.role === "primary"
+                ? PRODUCTION_RPC_ENV.primaryCommitment
+                : PRODUCTION_RPC_ENV.secondaryCommitment
             ],
         );
         runtimeProviderBinding = runtimeCommitmentsMatch
@@ -430,7 +380,7 @@ export function evaluateReadModelDeployPolicy(
     }
   }
   return Object.freeze({
-    mode: evidenceRequired ? "indexed-or-shadow" : "alchemy-only",
+    mode: evidenceRequired ? "indexed-or-shadow" : "direct-rpc",
     evidenceRequired,
     nonLegacyFlags,
     indexedFlags: indexedFlags.values,
@@ -438,12 +388,13 @@ export function evaluateReadModelDeployPolicy(
     policyReady:
       invalidFlagNames.length === 0 &&
       environmentPreflight.ready &&
-      alchemyEnvironmentPreflight.ready &&
-      secretEnvironmentPreflight.ready,
+      secretEnvironmentPreflight.ready &&
+      invalidCommitments.length === 0 &&
+      runtimeCommitmentsMatch,
     invalidFlagNames,
     invalidNonSecretEnvironmentNames: environmentPreflight.invalidNames,
-    invalidAlchemyRuntimeEnvironmentNames:
-      alchemyEnvironmentPreflight.invalidNames,
+    invalidProductionRpcRuntimeEnvironmentNames:
+      runtimeCommitmentsMatch ? Object.freeze([]) : RUNTIME_RPC_BINDING_NAMES,
     wakeRoute: PROJECTOR_WAKE_ROUTE,
     wakeCanaryRequired,
     streamSecretReady: secretEnvironmentPreflight.ready,
@@ -577,7 +528,7 @@ export function validateStagedReleaseAttestation(value, expectations = {}) {
   const nonLegacy =
     Object.values(indexedFlags).some(Boolean) ||
     Object.values(workerActivationFlags).some(Boolean);
-  const expectedMode = nonLegacy ? "indexed-or-shadow" : "alchemy-only";
+  const expectedMode = nonLegacy ? "indexed-or-shadow" : "direct-rpc";
   if (attestation.policyMode !== expectedMode) {
     throw new Error("staged release attestation mode is invalid");
   }
@@ -731,13 +682,13 @@ function main() {
       [
         ...result.invalidFlagNames,
         ...result.invalidNonSecretEnvironmentNames,
-        ...result.invalidAlchemyRuntimeEnvironmentNames,
+        ...result.invalidProductionRpcRuntimeEnvironmentNames,
         ...result.invalidServerSecretEnvironmentNames,
       ].length > 0
         ? `release environment preflight failed: ${[
             ...result.invalidFlagNames,
             ...result.invalidNonSecretEnvironmentNames,
-            ...result.invalidAlchemyRuntimeEnvironmentNames,
+            ...result.invalidProductionRpcRuntimeEnvironmentNames,
             ...result.invalidServerSecretEnvironmentNames,
           ].join(", ")}`
         : "release environment preflight failed",
