@@ -12,6 +12,7 @@ import {
   readExploreModel,
   type IndexedEvents,
 } from "../lib/onchain/read-model";
+import { PersistentRpcCacheError } from "../lib/onchain/persistent-rpc-cache.server";
 import type {
   OnchainDeployment,
   ReadyOnchainDeployment,
@@ -141,6 +142,28 @@ describe("Explore verified event indexing", () => {
     expect(feeHookInput.events.map((event) => event.name)).toEqual([
       "NativeSwapFeesAccrued",
       "CreatorFeesClaimed",
+    ]);
+  });
+
+  it("keeps a full-range logical request above the persistent transport chunk bound", async () => {
+    const getLogs = vi.fn(
+      async (input: { fromBlock: bigint; toBlock: bigint }) => {
+        void input;
+        return [];
+      },
+    );
+
+    await indexVerifiedEvents(
+      { getLogs } as unknown as PublicClient,
+      { ...readyDeployment, logBlockRange: 100n },
+      1_000n,
+    );
+
+    expect(
+      getLogs.mock.calls.map(([input]) => [input.fromBlock, input.toBlock]),
+    ).toEqual([
+      [1n, 1_000n],
+      [1n, 1_000n],
     ]);
   });
 
@@ -359,6 +382,27 @@ describe("Explore verified event indexing", () => {
         errorName: "TimeoutError",
       }),
     );
+  });
+
+  it("does not replay a partial no-store cursor range", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = new PersistentRpcCacheError(
+      "Persistent RPC passthrough stopped after a partial range; refusing to replay its prefix",
+    );
+    const getLogs = vi.fn(async () => {
+      throw error;
+    });
+
+    await expect(
+      indexVerifiedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        1_000n,
+      ),
+    ).rejects.toBe(error);
+
+    expect(getLogs).toHaveBeenCalledTimes(2);
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   it("halves after the bounded retry and grows after a successful window", async () => {

@@ -81,6 +81,7 @@ import {
   mergeStockPairedExploreModel,
   readStockPairedExploreModel,
 } from "./stock-paired-read-model";
+import { settleParallelReadsInOrder } from "./parallel-reads";
 
 const ZERO_FEE_VOLUME: FeeVolume = {
   grossNativeAmount: 0n,
@@ -1140,45 +1141,54 @@ async function readReadyRegistryModel(
     throw new Error("The Classic registry has no confirmed snapshot");
   }
   const snapshotBlockNumber = registry.snapshot.blockNumber;
-  if (isClassicV3ExploreReleaseReady(config)) {
-    registry = mergeClassicV3ExploreModel(
-      registry,
-      await withReadStage("classic-v3", () =>
-        readClassicV3ExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  const [classicV3, deepV1, deepV2, deepV3, stockPaired] =
+    await settleParallelReadsInOrder([
+      () =>
+        isClassicV3ExploreReleaseReady(config)
+          ? withReadStage("classic-v3", () =>
+              readClassicV3ExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isDeepExploreReleaseReady(config)
+          ? withReadStage("deep-v1", () =>
+              readDeepExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isDeepV2ExploreReleaseReady(config)
+          ? withReadStage("deep-v2", () =>
+              readDeepV2ExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isDeepV3ExploreReleaseReady(config)
+          ? withReadStage("deep-v3", () =>
+              readDeepV3ExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isStockPairedExploreReleaseReady(config)
+          ? withReadStage("stock-paired", () =>
+              readStockPairedExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+    ] as const);
+
+  if (classicV3 !== null) {
+    registry = mergeClassicV3ExploreModel(registry, classicV3);
   }
-  if (isDeepExploreReleaseReady(config)) {
-    registry = mergeDeepExploreModel(
-      registry,
-      await withReadStage("deep-v1", () =>
-        readDeepExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (deepV1 !== null) {
+    registry = mergeDeepExploreModel(registry, deepV1);
   }
-  if (isDeepV2ExploreReleaseReady(config)) {
-    registry = mergeDeepExploreModel(
-      registry,
-      await withReadStage("deep-v2", () =>
-        readDeepV2ExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (deepV2 !== null) {
+    registry = mergeDeepExploreModel(registry, deepV2);
   }
-  if (isDeepV3ExploreReleaseReady(config)) {
-    registry = mergeDeepV3ExploreModel(
-      registry,
-      await withReadStage("deep-v3", () =>
-        readDeepV3ExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (deepV3 !== null) {
+    registry = mergeDeepV3ExploreModel(registry, deepV3);
   }
-  if (isStockPairedExploreReleaseReady(config)) {
-    registry = mergeStockPairedExploreModel(
-      registry,
-      await withReadStage("stock-paired", () =>
-        readStockPairedExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (stockPaired !== null) {
+    registry = mergeStockPairedExploreModel(registry, stockPaired);
   }
   return registry;
 }
