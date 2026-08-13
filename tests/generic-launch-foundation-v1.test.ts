@@ -249,6 +249,10 @@ describe("generic launch V1 canonical contracts", () => {
     const release = adapter();
     const result = executionResult(launchSubject, release);
     const otherRelease = adapter("adapter-b", "0");
+    const failedResult = createCandidateExecutionResultV1({
+      ...result,
+      status: "failed",
+    });
 
     expect(() => createGenericLaunchRecordV1({
       subject: launchSubject,
@@ -260,7 +264,7 @@ describe("generic launch V1 canonical contracts", () => {
     expect(() => createGenericLaunchRecordV1({
       subject: launchSubject,
       routeAdapterRelease: release,
-      executionResult: { ...result, status: "failed" },
+      executionResult: failedResult,
       readModelBindingHash: READ_MODEL_BINDING,
       publicProjectionHash: digest("7"),
     })).toThrow();
@@ -387,6 +391,19 @@ describe("generic launch V1 schema and dark API", () => {
     await expect(authenticatedStore(descriptor, substituted)).rejects.toThrow(
       /not descriptor-bound/u,
     );
+
+    const rejectingAuthenticator = createGenericLaunchReadStoreAuthenticatorV1({
+      verifierBindingHash: VERIFIER_BINDING,
+      async verifyCanonicalReadModel() {
+        return false;
+      },
+    });
+    await expect(authenticateGenericLaunchReadStoreV1({
+      descriptor,
+      store: readStore,
+      authenticator: rejectingAuthenticator,
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/authentication failed/u);
 
     const mutableStore = store([launchRecord()]);
     const capability = await authenticatedStore(descriptor, mutableStore);
