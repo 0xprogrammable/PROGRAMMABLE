@@ -890,6 +890,59 @@ describe("official Uniswap v4 subgraph adapter", () => {
     });
   });
 
+  it("uses the quorum RPC hash only for the exact same Graph block when hash is null", async () => {
+    const exactNullMeta = exactOfficialResponse(null);
+    (exactNullMeta.data._meta.block as { hash: string | null }).hash = null;
+    exactNullMeta.data.pools[0].totalValueLockedUSD = "10000";
+    const referenceHead = {
+      chainId: 1 as const,
+      blockNumber: REFERENCE_BLOCK_NUMBER,
+      blockHash: REFERENCE_BLOCK_HASH,
+      blockTimestamp: "1786576740",
+    };
+    const read = (response: unknown) =>
+      readOfficialV4LiquidityEvidenceSnapshot(
+        {
+          tokens: [canonicalToken()],
+          referenceHead,
+          now: new Date("2026-08-12T23:21:00.000Z"),
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher: async () => jsonResponse(response),
+        },
+      );
+
+    await expect(read(exactNullMeta)).resolves.toMatchObject({
+      evidence: [{
+        freshness: "current",
+        provenance: {
+          indexedBlockNumber: REFERENCE_BLOCK_NUMBER,
+          indexedBlockHash: REFERENCE_BLOCK_HASH,
+          indexedBlockTimestamp: "1786576740",
+          indexedBlockTime: "2026-08-12T23:19:00.000Z",
+          referenceHeadBlockNumber: REFERENCE_BLOCK_NUMBER,
+          referenceHeadBlockHash: REFERENCE_BLOCK_HASH,
+          lagBlocks: "0",
+        },
+      }],
+      snapshot: {
+        chainId: 1,
+        blockNumber: REFERENCE_BLOCK_NUMBER,
+        blockHash: REFERENCE_BLOCK_HASH,
+      },
+    });
+
+    const laggedNullHash = officialResponse(25_629_999);
+    (laggedNullHash.data._meta.block as { hash: string | null }).hash = null;
+    laggedNullHash.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(laggedNullHash)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+      category: "response-hash",
+    });
+  });
+
   it("emits fixed secret-free diagnostic categories for official liquidity failures", async () => {
     const diagnosticFor = async (
       fetcher: (input: string, init?: RequestInit) => Promise<Response>,

@@ -163,7 +163,7 @@ type ParsedPool = {
 type ParsedResponse = {
   deployment: string;
   indexedBlockNumber: string;
-  indexedBlockHash: `0x${string}`;
+  indexedBlockHash?: `0x${string}`;
   indexedBlockTimestamp?: string;
   indexedBlockTime?: string;
   pools: ParsedPool[];
@@ -641,10 +641,14 @@ export function parseOfficialV4SubgraphResponse(
   return {
     deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
     indexedBlockNumber: indexedBlockNumber.toString(),
-    indexedBlockHash: strictBytes32(
-      value.data._meta.block.hash,
-      "response-block-hash-schema",
-    ),
+    ...(value.data._meta.block.hash === null
+      ? {}
+      : {
+          indexedBlockHash: strictBytes32(
+            value.data._meta.block.hash,
+            "response-block-hash-schema",
+          ),
+        }),
     ...(indexedBlockTimestamp
       ? {
           indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
@@ -1089,6 +1093,20 @@ function responseMatchesLiquiditySnapshot(
     response.indexedBlockHash === snapshot.blockHash;
 }
 
+function bindExactQuorumReferenceHead(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+): ParsedResponse {
+  if (
+    response.indexedBlockHash !== undefined ||
+    response.indexedBlockNumber !== referenceHead.blockNumber
+  ) return response;
+  // graph-node documents `_Block_.hash` as nullable for a block-number
+  // constrained query. Only the exact independently quorum-verified RPC head
+  // can supply that missing hash; a lagged Graph block remains unbound.
+  return { ...response, indexedBlockHash: referenceHead.blockHash };
+}
+
 function coverageFailure(
   category: OfficialV4LiquidityEvidenceReadCategory,
 ): OfficialV4LiquidityEvidenceReadError {
@@ -1206,6 +1224,7 @@ function liquidityEvidence(
   ) as `0x${string}`;
   const indexedTime = effectiveIndexedTime(response, referenceHead);
   if (!indexedTime) throw coverageFailure("response-freshness");
+  if (!response.indexedBlockHash) throw coverageFailure("response-hash");
   return {
     source: OFFICIAL_V4_LIQUIDITY_EVIDENCE_SOURCE,
     identity: {
@@ -1325,6 +1344,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
       options.signal?.throwIfAborted();
       throw requestFailure(error);
     }
+    response = bindExactQuorumReferenceHead(response, referenceHead);
     if (
       requestedSnapshot === undefined &&
       responseIsAheadOfReferenceHead(response, referenceHead)
@@ -1345,6 +1365,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
         options.signal?.throwIfAborted();
         throw requestFailure(error);
       }
+      response = bindExactQuorumReferenceHead(response, referenceHead);
       if (!responseMatchesLiquiditySnapshot(response, referenceHead)) {
         throw coverageFailure(snapshotFailureCategory(response, referenceHead));
       }
@@ -1360,6 +1381,9 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
     }
     if (!isCurrentIndexedTime(response, referenceHead, now)) {
       throw coverageFailure("response-freshness");
+    }
+    if (!response.indexedBlockHash) {
+      throw coverageFailure("response-hash");
     }
     return {
       evidence: [],
@@ -1413,6 +1437,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
       options.signal?.throwIfAborted();
       throw requestFailure(error);
     }
+    response = bindExactQuorumReferenceHead(response, referenceHead);
     if (responseIsAheadOfReferenceHead(response, referenceHead)) {
       try {
         response = await fetchPoolAnalyticsCached({
@@ -1429,6 +1454,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
         options.signal?.throwIfAborted();
         throw requestFailure(error);
       }
+      response = bindExactQuorumReferenceHead(response, referenceHead);
       if (!responseMatchesLiquiditySnapshot(response, referenceHead)) {
         throw coverageFailure(snapshotFailureCategory(response, referenceHead));
       }
@@ -1441,6 +1467,9 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
     }
     if (!isCurrentIndexedTime(response, referenceHead, now)) {
       throw coverageFailure("response-freshness");
+    }
+    if (!response.indexedBlockHash) {
+      throw coverageFailure("response-hash");
     }
     liquiditySnapshot = {
       chainId: 1,
@@ -1474,7 +1503,10 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
               timeoutMs: boundedTimeout(options.timeoutMs),
               fetcher,
               signal: options.signal,
-            }).then((response) => ({ response, requestedPoolIds })),
+            }).then((response) => ({
+              response: bindExactQuorumReferenceHead(response, referenceHead),
+              requestedPoolIds,
+            })),
           ),
       );
     } catch (error) {
@@ -1637,10 +1669,12 @@ export async function enrichExplorePageWithOfficialV4Subgraph(
       fetcher: options.fetcher ?? fetch,
     });
     const requested = new Set(poolIds);
+    const indexedBlockHash = response.indexedBlockHash;
     if (
+      !indexedBlockHash ||
       !snapshotIsCompatible(
         response.indexedBlockNumber,
-        response.indexedBlockHash,
+        indexedBlockHash,
         page.snapshot.blockNumber,
         page.snapshot.blockHash,
       ) ||
@@ -1664,7 +1698,7 @@ export async function enrichExplorePageWithOfficialV4Subgraph(
         uniswapV4Pool: {
           source: "official-uniswap-v4-subgraph" as const,
           indexedBlockNumber: response.indexedBlockNumber,
-          indexedBlockHash: response.indexedBlockHash,
+          indexedBlockHash,
           volumeUsdWad: pool.volumeUsdWad,
           tvlUsdWad: pool.tvlUsdWad,
           transactionCount: pool.transactionCount,
