@@ -2357,6 +2357,10 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes(
         'id: "production-bitquery-golden-independent-parity"',
       ) &&
+      postPromotion.includes(
+        'const PRODUCTION_ORIGIN = "https://programmable.market";',
+      ) &&
+      postPromotion.includes("target.origin !== PRODUCTION_ORIGIN") &&
       postPromotion.includes('response.headers.get("x-programmable-market-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-price-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-market-as-of")') &&

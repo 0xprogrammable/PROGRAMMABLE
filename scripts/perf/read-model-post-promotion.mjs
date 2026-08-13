@@ -25,6 +25,7 @@ import {
 } from "./bitquery-historical-release-gate.mjs";
 
 const HEALTH_PATH = "/api/ops/health";
+const PRODUCTION_ORIGIN = "https://programmable.market";
 const EXPLORE_PAGE_SIZE = 100;
 const MAXIMUM_EXPLORE_TOKENS = 400;
 const EXPLORE_PATH =
@@ -1129,6 +1130,11 @@ export async function verifyPostPromotion(input) {
     target.hash !== ""
   ) {
     throw new Error("post-promotion target must be an HTTPS origin");
+  }
+  if (target.origin !== PRODUCTION_ORIGIN) {
+    throw new Error(
+      "post-promotion target must be the programmable.market production origin",
+    );
   }
   if (
     !/^dpl_[A-Za-z0-9]{20,80}$/u.test(input.expectedDeploymentId ?? "") ||

@@ -1057,6 +1057,30 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("fails closed when post-promotion drops the fixed production origin", () => {
+    const postPromotionPath =
+      "scripts/perf/read-model-post-promotion.mjs";
+    const postPromotion = readFileSync(
+      resolve(ROOT, postPromotionPath),
+      "utf8",
+    );
+    const unsafePostPromotion = postPromotion.replace(
+      "target.origin !== PRODUCTION_ORIGIN",
+      "false",
+    );
+    expect(unsafePostPromotion).not.toBe(postPromotion);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [postPromotionPath]: unsafePostPromotion,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
   it.each([
     ["StateView price source", 'price?.source !== "uniswap-v4-stateview-chainlink-v1"'],
     ["official liquidity source", 'liquidity?.source !== "official-uniswap-v4-subgraph"'],
@@ -2711,6 +2735,16 @@ describe("post-promotion route verification", () => {
         targetUrl: "https://programmable.market/untrusted",
       }),
     ).rejects.toThrow("HTTPS origin");
+  });
+
+  it("rejects an exact staged origin before any production proof runs", async () => {
+    await expect(
+      verifyPostPromotion({
+        ...postPromotionInput(),
+        targetUrl:
+          "https://launcher-v4-example-aficialais-projects.vercel.app",
+      }),
+    ).rejects.toThrow("programmable.market production origin");
   });
 
   it("fails if production does not resolve to the staged deployment", async () => {
