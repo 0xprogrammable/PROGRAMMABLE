@@ -1836,6 +1836,8 @@ type PersistentRpcBlobClient = Readonly<{
 
 type PersistentRpcBlobClientLoader = () => Promise<PersistentRpcBlobClient>;
 
+const PRIVATE_BLOB_READ_ATTEMPTS = 3;
+
 async function loadPersistentRpcBlobClient(): Promise<PersistentRpcBlobClient> {
   const { get, head, put } = await import("@vercel/blob");
   return { get, head, put };
@@ -1848,38 +1850,49 @@ export function createVercelBlobPersistentRpcCacheStore(
   return {
     async read(path) {
       const { get, head } = await loadClient();
-      const result = await get(path, {
-        access: "private",
-        token,
-        useCache: false,
-      });
-      if (!result || result.statusCode !== 200 || !result.stream) return null;
       const maximumBytes = persistentRpcCachePathByteLimit(path);
-      let metadata;
-      try {
-        const current = await head(path, { token });
-        metadata = bindPrivateBlobReadMetadata({
-          responseEtag: result.blob.etag,
-          headEtag: current.etag,
-          headSize: current.size,
+      for (let attempt = 1; attempt <= PRIVATE_BLOB_READ_ATTEMPTS; attempt += 1) {
+        const result = await get(path, {
+          access: "private",
+          token,
+          useCache: false,
         });
-      } catch (error) {
-        await result.stream.cancel(
-          "Persistent RPC Blob metadata could not be bound",
-        );
-        throw error;
+        if (!result || result.statusCode !== 200 || !result.stream) return null;
+        try {
+          const current = await head(path, { token });
+          const metadata = bindPrivateBlobReadMetadata({
+            responseEtag: result.blob.etag,
+            headEtag: current.etag,
+            headSize: current.size,
+          });
+          return {
+            etag: metadata.etag,
+            value: await readBoundedBlobJson({
+              stream: result.stream,
+              maximumBytes,
+              declaredSize: metadata.declaredSize,
+              declaredContentLength: result.headers.get("content-encoding")
+                ? null
+                : contentLength(result.headers),
+            }),
+          };
+        } catch (error) {
+          try {
+            await result.stream.cancel(
+              "Persistent RPC Blob read could not be bound",
+            );
+          } catch {
+            // The original bounded-read failure remains authoritative.
+          }
+          if (
+            !(error instanceof PersistentRpcCacheError) ||
+            attempt === PRIVATE_BLOB_READ_ATTEMPTS
+          ) {
+            throw error;
+          }
+        }
       }
-      return {
-        etag: metadata.etag,
-        value: await readBoundedBlobJson({
-          stream: result.stream,
-          maximumBytes,
-          declaredSize: metadata.declaredSize,
-          declaredContentLength: result.headers.get("content-encoding")
-            ? null
-            : contentLength(result.headers),
-        }),
-      };
+      fail("Persistent RPC Blob read retry budget was exhausted");
     },
     async create(path, value) {
       const { get, put } = await loadClient();

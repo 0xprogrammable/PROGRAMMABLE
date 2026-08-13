@@ -175,6 +175,8 @@ function reorgOnCreateStore(
 
 function weakEtagBlobClient() {
   const values = new Map<string, { body: string; etag: string }>();
+  const readCounts = new Map<string, number>();
+  const truncatedReads = new Map<string, number>();
   let generation = 0;
   const nextEtag = () => {
     generation += 1;
@@ -184,7 +186,15 @@ function weakEtagBlobClient() {
     async get(path: string) {
       const current = values.get(path);
       if (!current) return null;
-      const bytes = new TextEncoder().encode(current.body);
+      readCounts.set(path, (readCounts.get(path) ?? 0) + 1);
+      const encoded = new TextEncoder().encode(current.body);
+      const remainingTruncations = truncatedReads.get(path) ?? 0;
+      if (remainingTruncations > 0) {
+        truncatedReads.set(path, remainingTruncations - 1);
+      }
+      const bytes = remainingTruncations > 0
+        ? encoded.slice(0, Math.max(0, encoded.byteLength - 1))
+        : encoded;
       return {
         statusCode: 200 as const,
         stream: new ReadableStream<Uint8Array>({
@@ -238,10 +248,35 @@ function weakEtagBlobClient() {
       const current = values.get(path);
       return current ? JSON.parse(current.body) as unknown : null;
     },
+    readCount(path: string) {
+      return readCounts.get(path) ?? 0;
+    },
+    truncateReads(path: string, count: number) {
+      truncatedReads.set(path, count);
+    },
   };
 }
 
 describe("persistent RPC log cursor", () => {
+  it("retries transient truncated private Blob reads within a strict budget", async () => {
+    const blob = weakEtagBlobClient();
+    const store = createVercelBlobPersistentRpcCacheStore(
+      "test-read-write-token",
+      async () => blob.client,
+    );
+    const path = "indexes/rpc-log-cursors/v3/1/provider/stream/cursor.json";
+    const value = { status: "complete", blockNumber: "0x1" };
+
+    await expect(store.create(path, value)).resolves.toBe("created");
+    blob.truncateReads(path, 2);
+    await expect(store.read(path)).resolves.toMatchObject({ value });
+    expect(blob.readCount(path)).toBe(3);
+
+    blob.truncateReads(path, 3);
+    await expect(store.read(path)).rejects.toThrow(/does not match/u);
+    expect(blob.readCount(path)).toBe(6);
+  });
+
   it("commits both provider cursors through weak Blob ETags and rejects a stale writer", async () => {
     const blob = weakEtagBlobClient();
     const store = createVercelBlobPersistentRpcCacheStore(
