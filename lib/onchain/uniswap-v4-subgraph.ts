@@ -163,9 +163,9 @@ type ParsedPool = {
 type ParsedResponse = {
   deployment: string;
   indexedBlockNumber: string;
-  indexedBlockHash: `0x${string}`;
-  indexedBlockTimestamp: string;
-  indexedBlockTime: string;
+  indexedBlockHash?: `0x${string}`;
+  indexedBlockTimestamp?: string;
+  indexedBlockTime?: string;
   pools: ParsedPool[];
 };
 
@@ -218,6 +218,7 @@ export type OfficialV4LiquidityReferenceHeadV1 = Readonly<{
   chainId: 1;
   blockNumber: string;
   blockHash: `0x${string}`;
+  blockTimestamp?: string;
 }>;
 
 export type OfficialV4LiquiditySnapshotV1 =
@@ -228,17 +229,76 @@ export type OfficialV4LiquidityEvidenceSnapshotReadV1 = Readonly<{
   snapshot: OfficialV4LiquiditySnapshotV1;
 }>;
 
+export type OfficialV4LiquidityEvidenceReadCategory =
+  | "invalid-input"
+  | "invalid-config"
+  | "request-http"
+  | "request-transport"
+  | "request-timeout"
+  | "request-capacity"
+  | "request-circuit"
+  | "response-schema"
+  | "response-envelope-schema"
+  | "response-meta-schema"
+  | "response-block-schema"
+  | "response-block-keys-schema"
+  | "response-block-number-schema"
+  | "response-block-hash-schema"
+  | "response-block-timestamp-schema"
+  | "response-block-timestamp-null"
+  | "response-block-timestamp-number"
+  | "response-block-timestamp-string"
+  | "response-block-timestamp-other"
+  | "response-pool-schema"
+  | "response-pool-id-schema"
+  | "response-pool-token-schema"
+  | "response-pool-hook-schema"
+  | "response-pool-fee-schema"
+  | "response-pool-tick-schema"
+  | "response-pool-market-schema"
+  | "response-deployment"
+  | "response-indexing-error"
+  | "response-ahead"
+  | "response-lag"
+  | "response-hash"
+  | "response-freshness"
+  | "exact-pool-coverage"
+  | "pool-identity";
+
 export class OfficialV4LiquidityEvidenceReadError extends Error {
   readonly code:
     | "invalid-input"
     | "invalid-config"
     | "coverage-incomplete";
+  readonly category: OfficialV4LiquidityEvidenceReadCategory;
 
-  constructor(code: OfficialV4LiquidityEvidenceReadError["code"]) {
+  constructor(
+    code: OfficialV4LiquidityEvidenceReadError["code"],
+    category: OfficialV4LiquidityEvidenceReadCategory = code === "coverage-incomplete"
+      ? "exact-pool-coverage"
+      : code,
+  ) {
     super(`Official Uniswap v4 liquidity evidence read failed: ${code}`);
     this.name = "OfficialV4LiquidityEvidenceReadError";
     this.code = code;
+    this.category = category;
   }
+}
+
+class OfficialV4SubgraphDiagnosticError extends Error {
+  readonly category: OfficialV4LiquidityEvidenceReadCategory;
+
+  constructor(category: OfficialV4LiquidityEvidenceReadCategory) {
+    super("Invalid Uniswap v4 subgraph response");
+    this.name = "OfficialV4SubgraphDiagnosticError";
+    this.category = category;
+  }
+}
+
+/** Fixed-enum telemetry only; never includes URLs, keys, queries or raw errors. */
+export function safeOfficialV4LiquidityEvidenceReadError(error: unknown) {
+  if (!(error instanceof OfficialV4LiquidityEvidenceReadError)) return null;
+  return { name: error.name, category: error.category } as const;
 }
 
 type FetcherState = {
@@ -250,8 +310,10 @@ type FetcherState = {
 
 const fetcherStates = new WeakMap<Fetcher, FetcherState>();
 
-function invalidResponse(): never {
-  throw new Error("Invalid Uniswap v4 subgraph response");
+function invalidResponse(
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): never {
+  throw new OfficialV4SubgraphDiagnosticError(category);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -272,18 +334,25 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]) {
   );
 }
 
-function strictUnsignedInteger(value: unknown, maximumDigits = 78): string {
+function strictUnsignedInteger(
+  value: unknown,
+  maximumDigits = 78,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): string {
   if (
     typeof value !== "string" ||
     !/^(0|[1-9]\d*)$/.test(value) ||
     value.length > maximumDigits
   ) {
-    return invalidResponse();
+    return invalidResponse(category);
   }
   return value;
 }
 
-function strictBlockNumber(value: unknown): bigint {
+function strictBlockNumber(
+  value: unknown,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): bigint {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     return BigInt(value);
   }
@@ -294,19 +363,25 @@ function strictBlockNumber(value: unknown): bigint {
   ) {
     return BigInt(value);
   }
-  return invalidResponse();
+  return invalidResponse(category);
 }
 
-function strictAddress(value: unknown): `0x${string}` {
+function strictAddress(
+  value: unknown,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): `0x${string}` {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) {
-    return invalidResponse();
+    return invalidResponse(category);
   }
   return value.toLowerCase() as `0x${string}`;
 }
 
-function strictBytes32(value: unknown): `0x${string}` {
+function strictBytes32(
+  value: unknown,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): `0x${string}` {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    return invalidResponse();
+    return invalidResponse(category);
   }
   return value.toLowerCase() as `0x${string}`;
 }
@@ -318,11 +393,11 @@ function strictTick(value: unknown): number | undefined {
     !/^-?(0|[1-9]\d*)$/.test(value) ||
     value.length > 8
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-tick-schema");
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < -887_272 || parsed > 887_272) {
-    return invalidResponse();
+    return invalidResponse("response-pool-tick-schema");
   }
   return parsed;
 }
@@ -333,11 +408,11 @@ function strictTickSpacing(value: unknown): number {
     !/^[1-9]\d*$/.test(value) ||
     value.length > 5
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-fee-schema");
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed > 32_767) {
-    return invalidResponse();
+    return invalidResponse("response-pool-fee-schema");
   }
   return parsed;
 }
@@ -350,7 +425,7 @@ function strictDecimals(value: unknown): number {
         ? Number(value)
         : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 255) {
-    return invalidResponse();
+    return invalidResponse("response-pool-token-schema");
   }
   return parsed;
 }
@@ -361,11 +436,11 @@ function strictUnsignedDecimal(value: unknown): string {
     value.length > 160 ||
     !/^(0|[1-9]\d*)(?:\.(\d+))?$/.test(value)
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-market-schema");
   }
   const [integerPart, fractionalPart = ""] = value.split(".");
   if (integerPart.length > 78 || fractionalPart.length > 78) {
-    return invalidResponse();
+    return invalidResponse("response-pool-market-schema");
   }
   return value;
 }
@@ -383,13 +458,35 @@ function decimalToWad(value: unknown): string {
 function strictBlockTimestamp(value: unknown): {
   timestamp: string;
   time: string;
-} {
-  const timestamp = strictBlockNumber(value);
-  if (timestamp > 8_640_000_000_000n) return invalidResponse();
+} | undefined {
+  // graph-node declares `_Block_.timestamp: Int`, not `Int!`. A null value is
+  // preserved here and can only be replaced later by the independently
+  // quorum-verified RPC timestamp of this exact same block number and hash.
+  if (value === null) return undefined;
+  let timestamp: bigint;
+  try {
+    timestamp = strictBlockNumber(
+      value,
+      "response-block-timestamp-schema",
+    );
+  } catch {
+    return invalidResponse(
+      value === null
+        ? "response-block-timestamp-null"
+        : typeof value === "number"
+          ? "response-block-timestamp-number"
+          : typeof value === "string"
+            ? "response-block-timestamp-string"
+            : "response-block-timestamp-other",
+    );
+  }
+  if (timestamp > 8_640_000_000_000n) {
+    return invalidResponse("response-block-timestamp-schema");
+  }
   const milliseconds = Number(timestamp) * 1_000;
   const date = new Date(milliseconds);
   if (!Number.isFinite(milliseconds) || Number.isNaN(date.getTime())) {
-    return invalidResponse();
+    return invalidResponse("response-block-timestamp-schema");
   }
   return { timestamp: timestamp.toString(), time: date.toISOString() };
 }
@@ -418,22 +515,26 @@ function parsePool(value: unknown): ParsedPool {
     !isRecord(value.token1) ||
     !hasOnlyKeys(value.token1, ["id", "decimals"])
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-schema");
   }
 
-  const token0 = strictAddress(value.token0.id);
-  const token1 = strictAddress(value.token1.id);
-  const hooks = strictAddress(value.hooks);
-  const feeTierPips = strictUnsignedInteger(value.feeTier, 8);
+  const token0 = strictAddress(value.token0.id, "response-pool-token-schema");
+  const token1 = strictAddress(value.token1.id, "response-pool-token-schema");
+  const hooks = strictAddress(value.hooks, "response-pool-hook-schema");
+  const feeTierPips = strictUnsignedInteger(
+    value.feeTier,
+    8,
+    "response-pool-fee-schema",
+  );
   const fee = BigInt(feeTierPips);
   if (
     (fee > 1_000_000n && fee !== 0x80_0000n) ||
     BigInt(token0) >= BigInt(token1)
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-fee-schema");
   }
   const tickSpacing = strictTickSpacing(value.tickSpacing);
-  const id = strictBytes32(value.id);
+  const id = strictBytes32(value.id, "response-pool-id-schema");
   let recomputedId: string;
   try {
     recomputedId = computeOfficialV4PoolId({
@@ -444,9 +545,9 @@ function parsePool(value: unknown): ParsedPool {
       hooks,
     }).toLowerCase();
   } catch {
-    return invalidResponse();
+    return invalidResponse("response-pool-id-schema");
   }
-  if (id !== recomputedId) return invalidResponse();
+  if (id !== recomputedId) return invalidResponse("response-pool-id-schema");
 
   return {
     id,
@@ -457,10 +558,22 @@ function parsePool(value: unknown): ParsedPool {
     hooks,
     feeTierPips,
     tickSpacing,
-    liquidity: strictUnsignedInteger(value.liquidity),
-    sqrtPriceX96: strictUnsignedInteger(value.sqrtPrice),
+    liquidity: strictUnsignedInteger(
+      value.liquidity,
+      78,
+      "response-pool-market-schema",
+    ),
+    sqrtPriceX96: strictUnsignedInteger(
+      value.sqrtPrice,
+      78,
+      "response-pool-market-schema",
+    ),
     tick: strictTick(value.tick),
-    transactionCount: strictUnsignedInteger(value.txCount),
+    transactionCount: strictUnsignedInteger(
+      value.txCount,
+      78,
+      "response-pool-market-schema",
+    ),
     volumeUsdWad: decimalToWad(value.volumeUSD),
     totalValueLockedToken0: strictUnsignedDecimal(
       value.totalValueLockedToken0,
@@ -479,24 +592,43 @@ export function parseOfficialV4SubgraphResponse(
     !isRecord(value) ||
     !hasOnlyKeys(value, ["data"]) ||
     !isRecord(value.data) ||
-    !hasOnlyKeys(value.data, ["_meta", "pools"]) ||
+    !hasOnlyKeys(value.data, ["_meta", "pools"])
+  ) {
+    return invalidResponse("response-envelope-schema");
+  }
+  if (
     !isRecord(value.data._meta) ||
     !hasOnlyKeys(value.data._meta, [
       "block",
       "deployment",
       "hasIndexingErrors",
-    ]) ||
-    value.data._meta.deployment !== OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT ||
-    value.data._meta.hasIndexingErrors !== false ||
+    ])
+  ) {
+    return invalidResponse("response-meta-schema");
+  }
+  if (
     !isRecord(value.data._meta.block) ||
-    !hasOnlyKeys(value.data._meta.block, ["number", "hash", "timestamp"]) ||
+    !hasOnlyKeys(value.data._meta.block, ["number", "hash", "timestamp"])
+  ) {
+    return invalidResponse("response-block-keys-schema");
+  }
+  if (
     !Array.isArray(value.data.pools) ||
     value.data.pools.length > OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-schema");
+  }
+  if (value.data._meta.deployment !== OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT) {
+    return invalidResponse("response-deployment");
+  }
+  if (value.data._meta.hasIndexingErrors !== false) {
+    return invalidResponse("response-indexing-error");
   }
 
-  const indexedBlockNumber = strictBlockNumber(value.data._meta.block.number);
+  const indexedBlockNumber = strictBlockNumber(
+    value.data._meta.block.number,
+    "response-block-number-schema",
+  );
   const indexedBlockTimestamp = strictBlockTimestamp(
     value.data._meta.block.timestamp,
   );
@@ -509,9 +641,20 @@ export function parseOfficialV4SubgraphResponse(
   return {
     deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
     indexedBlockNumber: indexedBlockNumber.toString(),
-    indexedBlockHash: strictBytes32(value.data._meta.block.hash),
-    indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
-    indexedBlockTime: indexedBlockTimestamp.time,
+    ...(value.data._meta.block.hash === null
+      ? {}
+      : {
+          indexedBlockHash: strictBytes32(
+            value.data._meta.block.hash,
+            "response-block-hash-schema",
+          ),
+        }),
+    ...(indexedBlockTimestamp
+      ? {
+          indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
+          indexedBlockTime: indexedBlockTimestamp.time,
+        }
+      : {}),
     pools,
   };
 }
@@ -523,7 +666,7 @@ function parseOfficialV4SubgraphSnapshotResponse(value: unknown) {
     !isRecord(value.data) ||
     !hasOnlyKeys(value.data, ["_meta"])
   ) {
-    return invalidResponse();
+    return invalidResponse("response-envelope-schema");
   }
   return parseOfficialV4SubgraphResponse({
     data: { _meta: value.data._meta, pools: [] },
@@ -584,12 +727,12 @@ async function readBoundedResponseBody(response: Response) {
       declaredLength.length > 12 ||
       BigInt(declaredLength) > BigInt(MAXIMUM_RESPONSE_BYTES))
   ) {
-    throw new Error("Uniswap v4 subgraph response is too large");
+    return invalidResponse();
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error("Uniswap v4 subgraph response has no body");
+    return invalidResponse();
   }
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const chunks: string[] = [];
@@ -601,7 +744,7 @@ async function readBoundedResponseBody(response: Response) {
       if (done) break;
       bytesRead += value.byteLength;
       if (bytesRead > MAXIMUM_RESPONSE_BYTES) {
-        throw new Error("Uniswap v4 subgraph response is too large");
+        return invalidResponse();
       }
       chunks.push(decoder.decode(value, { stream: true }));
     }
@@ -628,9 +771,13 @@ async function fetchPoolAnalytics(input: {
   signal?: AbortSignal;
 }) {
   const controller = new AbortController();
+  let timedOut = false;
   const abortFromCaller = () => controller.abort(input.signal?.reason);
   const timeout = setTimeout(
-    () => controller.abort(new Error("Uniswap v4 subgraph request timed out")),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
     input.timeoutMs,
   );
   if (input.signal?.aborted) abortFromCaller();
@@ -668,13 +815,25 @@ async function fetchPoolAnalytics(input: {
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw new Error("Uniswap v4 subgraph request failed");
+      throw new OfficialV4SubgraphDiagnosticError("request-http");
     }
     const body = await readBoundedResponseBody(response);
-    const parsed: unknown = JSON.parse(body);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return invalidResponse();
+    }
     return input.metaOnly
       ? parseOfficialV4SubgraphSnapshotResponse(parsed)
       : parseOfficialV4SubgraphResponse(parsed);
+  } catch (error) {
+    if (input.signal?.aborted) throw error;
+    if (timedOut) {
+      throw new OfficialV4SubgraphDiagnosticError("request-timeout");
+    }
+    if (error instanceof OfficialV4SubgraphDiagnosticError) throw error;
+    throw new OfficialV4SubgraphDiagnosticError("request-transport");
   } finally {
     clearTimeout(timeout);
     input.signal?.removeEventListener("abort", abortFromCaller);
@@ -742,10 +901,10 @@ async function fetchPoolAnalyticsCached(input: {
   const pending = state.inFlight.get(key);
   if (pending) return pending;
   if (state.openUntil > now) {
-    throw new Error("Uniswap v4 subgraph circuit is open");
+    throw new OfficialV4SubgraphDiagnosticError("request-circuit");
   }
   if (state.inFlight.size >= MAXIMUM_IN_FLIGHT_REQUESTS) {
-    throw new Error("Uniswap v4 subgraph request capacity reached");
+    throw new OfficialV4SubgraphDiagnosticError("request-capacity");
   }
 
   const request = fetchPoolAnalytics(input)
@@ -868,7 +1027,12 @@ function canonicalReferenceHead(
     value.blockNumber.length > 78 ||
     BigInt(value.blockNumber) > 2_147_483_647n ||
     typeof value.blockHash !== "string" ||
-    !/^0x[0-9a-fA-F]{64}$/.test(value.blockHash)
+    !/^0x[0-9a-fA-F]{64}$/.test(value.blockHash) ||
+    (value.blockTimestamp !== undefined &&
+      (typeof value.blockTimestamp !== "string" ||
+        !/^(0|[1-9]\d*)$/.test(value.blockTimestamp) ||
+        value.blockTimestamp.length > 78 ||
+        BigInt(value.blockTimestamp) > 8_640_000_000_000n))
   ) {
     return undefined;
   }
@@ -876,6 +1040,9 @@ function canonicalReferenceHead(
     chainId: 1,
     blockNumber: BigInt(value.blockNumber).toString(),
     blockHash: value.blockHash.toLowerCase() as `0x${string}`,
+    ...(value.blockTimestamp === undefined
+      ? {}
+      : { blockTimestamp: BigInt(value.blockTimestamp).toString() }),
   };
 }
 
@@ -926,6 +1093,58 @@ function responseMatchesLiquiditySnapshot(
     response.indexedBlockHash === snapshot.blockHash;
 }
 
+function bindExactQuorumReferenceHead(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+): ParsedResponse {
+  if (
+    response.indexedBlockHash !== undefined ||
+    response.indexedBlockNumber !== referenceHead.blockNumber
+  ) return response;
+  // graph-node documents `_Block_.hash` as nullable for a block-number
+  // constrained query. Only the exact independently quorum-verified RPC head
+  // can supply that missing hash; a lagged Graph block remains unbound.
+  return { ...response, indexedBlockHash: referenceHead.blockHash };
+}
+
+function coverageFailure(
+  category: OfficialV4LiquidityEvidenceReadCategory,
+): OfficialV4LiquidityEvidenceReadError {
+  return new OfficialV4LiquidityEvidenceReadError(
+    "coverage-incomplete",
+    category,
+  );
+}
+
+function requestFailure(error: unknown): OfficialV4LiquidityEvidenceReadError {
+  return coverageFailure(
+    error instanceof OfficialV4SubgraphDiagnosticError
+      ? error.category
+      : "request-transport",
+  );
+}
+
+function referenceHeadFailureCategory(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+): OfficialV4LiquidityEvidenceReadCategory {
+  const indexed = BigInt(response.indexedBlockNumber);
+  const reference = BigInt(referenceHead.blockNumber);
+  if (indexed > reference) return "response-ahead";
+  if (reference - indexed > MAXIMUM_SUBGRAPH_LAG_BLOCKS) return "response-lag";
+  return "response-hash";
+}
+
+function snapshotFailureCategory(
+  response: ParsedResponse,
+  snapshot: OfficialV4LiquiditySnapshotV1,
+): OfficialV4LiquidityEvidenceReadCategory {
+  const indexed = BigInt(response.indexedBlockNumber);
+  const expected = BigInt(snapshot.blockNumber);
+  if (indexed > expected) return "response-ahead";
+  return indexed === expected ? "response-hash" : "response-lag";
+}
+
 function responseCoversExactly(
   response: ParsedResponse,
   requestedPoolIds: readonly string[],
@@ -937,9 +1156,41 @@ function responseCoversExactly(
     [...returned].every((poolId) => requested.has(poolId));
 }
 
-function isCurrentIndexedTime(response: ParsedResponse, now: Date) {
+function effectiveIndexedTime(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+) {
+  if (response.indexedBlockTimestamp && response.indexedBlockTime) {
+    return {
+      timestamp: response.indexedBlockTimestamp,
+      time: response.indexedBlockTime,
+    };
+  }
+  if (
+    response.indexedBlockNumber !== referenceHead.blockNumber ||
+    response.indexedBlockHash !== referenceHead.blockHash ||
+    referenceHead.blockTimestamp === undefined
+  ) return undefined;
+  const milliseconds = Number(BigInt(referenceHead.blockTimestamp)) * 1_000;
+  const time = new Date(milliseconds);
+  if (!Number.isFinite(milliseconds) || Number.isNaN(time.getTime())) {
+    return undefined;
+  }
+  return {
+    timestamp: referenceHead.blockTimestamp,
+    time: time.toISOString(),
+  };
+}
+
+function isCurrentIndexedTime(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+  now: Date,
+) {
+  const indexedTime = effectiveIndexedTime(response, referenceHead);
+  if (!indexedTime) return false;
   const nowMs = now.getTime();
-  const indexedMs = Number(BigInt(response.indexedBlockTimestamp)) * 1_000;
+  const indexedMs = Number(BigInt(indexedTime.timestamp)) * 1_000;
   return (
     Number.isFinite(nowMs) &&
     Number.isFinite(indexedMs) &&
@@ -965,12 +1216,15 @@ function liquidityEvidence(
     !positiveDecimal(pool.totalValueLockedToken0) &&
     !positiveDecimal(pool.totalValueLockedToken1)
   ) {
-    throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    throw coverageFailure("pool-identity");
   }
   const tokenAddress = token.tokenAddress.toLowerCase() as `0x${string}`;
   const quoteAddress = (
     pool.token0 === tokenAddress ? pool.token1 : pool.token0
   ) as `0x${string}`;
+  const indexedTime = effectiveIndexedTime(response, referenceHead);
+  if (!indexedTime) throw coverageFailure("response-freshness");
+  if (!response.indexedBlockHash) throw coverageFailure("response-hash");
   return {
     source: OFFICIAL_V4_LIQUIDITY_EVIDENCE_SOURCE,
     identity: {
@@ -1000,8 +1254,8 @@ function liquidityEvidence(
       deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
       indexedBlockNumber: response.indexedBlockNumber,
       indexedBlockHash: response.indexedBlockHash,
-      indexedBlockTimestamp: response.indexedBlockTimestamp,
-      indexedBlockTime: response.indexedBlockTime,
+      indexedBlockTimestamp: indexedTime.timestamp,
+      indexedBlockTime: indexedTime.time,
       referenceHeadBlockNumber: referenceHead.blockNumber,
       referenceHeadBlockHash: referenceHead.blockHash,
       lagBlocks,
@@ -1086,10 +1340,11 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
         fetcher,
         signal: options.signal,
       });
-    } catch {
+    } catch (error) {
       options.signal?.throwIfAborted();
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+      throw requestFailure(error);
     }
+    response = bindExactQuorumReferenceHead(response, referenceHead);
     if (
       requestedSnapshot === undefined &&
       responseIsAheadOfReferenceHead(response, referenceHead)
@@ -1106,25 +1361,29 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
           fetcher,
           signal: options.signal,
         });
-      } catch {
+      } catch (error) {
         options.signal?.throwIfAborted();
-        throw new OfficialV4LiquidityEvidenceReadError(
-          "coverage-incomplete",
-        );
+        throw requestFailure(error);
       }
+      response = bindExactQuorumReferenceHead(response, referenceHead);
       if (!responseMatchesLiquiditySnapshot(response, referenceHead)) {
-        throw new OfficialV4LiquidityEvidenceReadError(
-          "coverage-incomplete",
-        );
+        throw coverageFailure(snapshotFailureCategory(response, referenceHead));
       }
     }
+    if (referenceHeadLag(response, referenceHead) === undefined) {
+      throw coverageFailure(referenceHeadFailureCategory(response, referenceHead));
+    }
     if (
-      referenceHeadLag(response, referenceHead) === undefined ||
-      (requestedSnapshot !== undefined &&
-        !responseMatchesLiquiditySnapshot(response, requestedSnapshot)) ||
-      !isCurrentIndexedTime(response, now)
+      requestedSnapshot !== undefined &&
+      !responseMatchesLiquiditySnapshot(response, requestedSnapshot)
     ) {
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+      throw coverageFailure(snapshotFailureCategory(response, requestedSnapshot));
+    }
+    if (!isCurrentIndexedTime(response, referenceHead, now)) {
+      throw coverageFailure("response-freshness");
+    }
+    if (!response.indexedBlockHash) {
+      throw coverageFailure("response-hash");
     }
     return {
       evidence: [],
@@ -1174,10 +1433,11 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
         fetcher,
         signal: options.signal,
       });
-    } catch {
+    } catch (error) {
       options.signal?.throwIfAborted();
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+      throw requestFailure(error);
     }
+    response = bindExactQuorumReferenceHead(response, referenceHead);
     if (responseIsAheadOfReferenceHead(response, referenceHead)) {
       try {
         response = await fetchPoolAnalyticsCached({
@@ -1190,24 +1450,26 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
           fetcher,
           signal: options.signal,
         });
-      } catch {
+      } catch (error) {
         options.signal?.throwIfAborted();
-        throw new OfficialV4LiquidityEvidenceReadError(
-          "coverage-incomplete",
-        );
+        throw requestFailure(error);
       }
+      response = bindExactQuorumReferenceHead(response, referenceHead);
       if (!responseMatchesLiquiditySnapshot(response, referenceHead)) {
-        throw new OfficialV4LiquidityEvidenceReadError(
-          "coverage-incomplete",
-        );
+        throw coverageFailure(snapshotFailureCategory(response, referenceHead));
       }
     }
-    if (
-      referenceHeadLag(response, referenceHead) === undefined ||
-      !responseCoversExactly(response, requestedPoolIds) ||
-      !isCurrentIndexedTime(response, now)
-    ) {
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    if (referenceHeadLag(response, referenceHead) === undefined) {
+      throw coverageFailure(referenceHeadFailureCategory(response, referenceHead));
+    }
+    if (!responseCoversExactly(response, requestedPoolIds)) {
+      throw coverageFailure("exact-pool-coverage");
+    }
+    if (!isCurrentIndexedTime(response, referenceHead, now)) {
+      throw coverageFailure("response-freshness");
+    }
+    if (!response.indexedBlockHash) {
+      throw coverageFailure("response-hash");
     }
     liquiditySnapshot = {
       chainId: 1,
@@ -1241,25 +1503,26 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
               timeoutMs: boundedTimeout(options.timeoutMs),
               fetcher,
               signal: options.signal,
-            }).then((response) => ({ response, requestedPoolIds })),
+            }).then((response) => ({
+              response: bindExactQuorumReferenceHead(response, referenceHead),
+              requestedPoolIds,
+            })),
           ),
       );
-    } catch {
+    } catch (error) {
       options.signal?.throwIfAborted();
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+      throw requestFailure(error);
     }
     for (const result of completed) {
       if (!responseCoversExactly(result.response, result.requestedPoolIds)) {
-        throw new OfficialV4LiquidityEvidenceReadError(
-          "coverage-incomplete",
-        );
+        throw coverageFailure("exact-pool-coverage");
       }
       responses.push(result.response);
     }
   }
 
   if (!liquiditySnapshot) {
-    throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    throw coverageFailure("exact-pool-coverage");
   }
 
   const responseByPoolId = new Map<
@@ -1268,12 +1531,14 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
   >();
   for (const response of responses) {
     const lagBlocks = referenceHeadLag(response, referenceHead);
-    if (
-      lagBlocks === undefined ||
-      !responseMatchesLiquiditySnapshot(response, liquiditySnapshot) ||
-      !isCurrentIndexedTime(response, now)
-    ) {
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    if (lagBlocks === undefined) {
+      throw coverageFailure(referenceHeadFailureCategory(response, referenceHead));
+    }
+    if (!responseMatchesLiquiditySnapshot(response, liquiditySnapshot)) {
+      throw coverageFailure(snapshotFailureCategory(response, liquiditySnapshot));
+    }
+    if (!isCurrentIndexedTime(response, referenceHead, now)) {
+      throw coverageFailure("response-freshness");
     }
     for (const pool of response.pools) {
       responseByPoolId.set(pool.id, { pool, response, lagBlocks });
@@ -1287,7 +1552,7 @@ export async function readOfficialV4LiquidityEvidenceSnapshot(
       !matched ||
       !matchesCanonicalLiquidityEvidence(matched.pool, token)
     ) {
-      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+      throw coverageFailure("pool-identity");
     }
     const item = liquidityEvidence(
       token,
@@ -1404,10 +1669,12 @@ export async function enrichExplorePageWithOfficialV4Subgraph(
       fetcher: options.fetcher ?? fetch,
     });
     const requested = new Set(poolIds);
+    const indexedBlockHash = response.indexedBlockHash;
     if (
+      !indexedBlockHash ||
       !snapshotIsCompatible(
         response.indexedBlockNumber,
-        response.indexedBlockHash,
+        indexedBlockHash,
         page.snapshot.blockNumber,
         page.snapshot.blockHash,
       ) ||
@@ -1431,7 +1698,7 @@ export async function enrichExplorePageWithOfficialV4Subgraph(
         uniswapV4Pool: {
           source: "official-uniswap-v4-subgraph" as const,
           indexedBlockNumber: response.indexedBlockNumber,
-          indexedBlockHash: response.indexedBlockHash,
+          indexedBlockHash,
           volumeUsdWad: pool.volumeUsdWad,
           tvlUsdWad: pool.tvlUsdWad,
           transactionCount: pool.transactionCount,

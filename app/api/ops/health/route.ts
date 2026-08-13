@@ -7,6 +7,7 @@ import {
   type OperationalRpcHealth,
 } from "../../../../lib/onchain";
 import { readIndexedReadModelHealth } from "../../../../lib/data-pipeline/read-model-health.server";
+import { currentMarketOnchainDeployment } from "../../../../lib/market-data/current-market-rpc.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,11 +69,12 @@ export async function GET() {
         "The verified production release is not operationally eligible",
       );
     }
+    const healthDeployment = currentMarketOnchainDeployment(deployment);
     if (indexed) {
       if (indexed.chainId !== deployment.chainId) {
         throw new Error("Indexed read-model chain binding is unavailable");
       }
-      const rpc = await readOperationalRpcHealth(deployment);
+      const rpc = await readOperationalRpcHealth(healthDeployment);
       if (rpc.status === "unhealthy") {
         return unhealthyRpcResponse(rpc, startedAt);
       }
@@ -102,7 +104,7 @@ export async function GET() {
 
     const [index, rpc] = await Promise.all([
       readDurableExploreModel(deployment, MAX_INDEX_AGE_MS),
-      readOperationalRpcHealth(deployment),
+      readOperationalRpcHealth(healthDeployment),
     ]);
     if (rpc.status === "unhealthy") {
       return unhealthyRpcResponse(rpc, startedAt);

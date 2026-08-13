@@ -340,6 +340,9 @@ async function valueExploreEntriesWithCurrentEvidenceInternal(
           chainId: 1 as const,
           blockNumber: operationalSnapshot.blockNumber,
           blockHash: operationalSnapshot.blockHash,
+          ...(operationalSnapshot.blockTimestamp
+            ? { blockTimestamp: operationalSnapshot.blockTimestamp }
+            : {}),
         };
         if (candidates.length === 0) {
           if (
