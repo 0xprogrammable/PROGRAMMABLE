@@ -373,7 +373,7 @@ export function evaluateAlchemyExploreSourceContracts(
       exploreConsumerSource.includes('return "last-known-good"') &&
       exploreConsumerSource.includes('"registry.custom-launched"') &&
       exploreConsumerSource.includes('?? "partial"') &&
-      deployWorkflowSource.includes("Smoke staged Bitquery market APIs") &&
+      deployWorkflowSource.includes("Smoke staged public market APIs") &&
       deployWorkflowSource.includes(
         '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
       ) &&
