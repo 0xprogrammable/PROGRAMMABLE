@@ -261,11 +261,13 @@ function runtimeCodePath(
   input: PersistentRequestInput,
   binding: ImmutableCodeBinding,
 ) {
+  const runtimeProofVersion = "v2";
   const releaseBinding = digest({
+    runtimeProofVersion,
     expectedRuntimeCodeHash: binding.expectedRuntimeCodeHash.toLowerCase(),
     notBeforeBlock: quantityHex(binding.notBeforeBlock),
   });
-  return `${CACHE_DIRECTORY}/${input.chainId}/${input.providerId}/runtime/${binding.address.toLowerCase()}/${releaseBinding}.json`;
+  return `${CACHE_DIRECTORY}/${input.chainId}/${input.providerId}/runtime-${runtimeProofVersion}/${binding.address.toLowerCase()}/${releaseBinding}.json`;
 }
 
 function parseCursor(

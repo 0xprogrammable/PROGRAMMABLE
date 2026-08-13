@@ -829,6 +829,55 @@ describe("persistent RPC log cursor", () => {
     ).rejects.toBeInstanceOf(PersistentRpcCacheReorgError);
   });
 
+  it("isolates current runtime proofs from legacy runtime cache entries", async () => {
+    const code = "0x6001600055" as const;
+    const expectedRuntimeCodeHash = keccak256(code);
+    const backing = createMemoryPersistentRpcCacheStore();
+    const paths: string[] = [];
+    const store = {
+      async read(path: string) {
+        paths.push(path);
+        return backing.read(path);
+      },
+      async create(path: string, value: unknown) {
+        paths.push(path);
+        return backing.create(path, value);
+      },
+      async replace(path: string, value: unknown, expectedEtag: string) {
+        paths.push(path);
+        return backing.replace(path, value, expectedEtag);
+      },
+    };
+    const rpc = (async ({ method, params }: { method: string; params?: unknown[] }) => {
+      if (method === "eth_getCode") return code;
+      if (method === "eth_getBlockByNumber") {
+        const blockNumber = BigInt(String(params?.[0]));
+        return {
+          number: quantity(blockNumber),
+          hash: bytes32(10_000n + blockNumber),
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    }) as EIP1193RequestFn;
+    const request = createPersistentRpcRequest({
+      chainId: 1,
+      providerId: "provider-runtime-v2",
+      request: rpc,
+      store,
+      immutableCodeBindings: [{
+        address: ADDRESS as `0x${string}`,
+        expectedRuntimeCodeHash,
+        notBeforeBlock: 100n,
+      }],
+    });
+
+    await expect(
+      request({ method: "eth_getCode", params: [ADDRESS, quantity(100)] }),
+    ).resolves.toBe(code);
+    expect(paths.some((path) => path.includes("/runtime-v2/"))).toBe(true);
+    expect(paths.some((path) => path.includes("/runtime/"))).toBe(false);
+  });
+
   it("does not persist runtime code across a changing canonical anchor", async () => {
     const code = "0x6001600055" as const;
     const binding = {
