@@ -70,6 +70,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
       }
       return readback.authorization ?? null;
     },
+
     async getLatestLifecycle(
       input: Parameters<GenericLaunchMaterializationStoreV2["getLatestLifecycle"]>[0],
     ) {
@@ -121,21 +122,48 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
       try {
         await client.query("BEGIN");
         open = true;
+        await client.query(`
+          SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+        `, [launchId]);
+        const already = await client.query<LifecycleRow>(`
+          SELECT lifecycle_generation::text, lifecycle_evidence_hash,
+                 lifecycle_state, record_hash
+            FROM programmable_website_projection_v1.generic_launch_materializations_v2
+           WHERE launch_id = $1 AND lifecycle_evidence_hash = $2
+           LIMIT 1
+        `, [launchId, lifecycleEvidenceHash]);
+        const alreadyRow = already.rows[0];
+        if (alreadyRow !== undefined) {
+          const parsed = lifecycleRow(alreadyRow);
+          if (parsed.state !== input.state
+            || parsed.recordHash !== (record?.recordHash ?? null)) {
+            throw new TypeError("Generic launch lifecycle idempotency conflicted");
+          }
+          await client.query("COMMIT");
+          open = false;
+          return Object.freeze({ kind: "existing" as const });
+        }
+        const next = await client.query<{ generation: unknown }>(`
+          SELECT (COALESCE(MAX(lifecycle_generation), 0) + 1)::text AS generation
+            FROM programmable_website_projection_v1.generic_launch_materializations_v2
+           WHERE launch_id = $1
+        `, [launchId]);
+        const generation = decimal(
+          next.rows[0]?.generation,
+          "next lifecycle generation",
+        );
         const inserted = await client.query(`
           INSERT INTO programmable_website_projection_v1.generic_launch_materializations_v2
             (approval_id, launch_id, descriptor_hash, lifecycle_generation,
              lifecycle_state, lifecycle_evidence_hash, canonical_record,
              record_hash, source_projection_hash, finalization_block)
-          SELECT $1, $2, $3, COALESCE(MAX(lifecycle_generation), 0) + 1,
-                 $4, $5, $6, $7, $8, $9::numeric
-            FROM programmable_website_projection_v1.generic_launch_materializations_v2
-           WHERE launch_id = $2
-          ON CONFLICT DO NOTHING
+          VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8, $9, $10::numeric)
           RETURNING lifecycle_generation
         `, [
           approvalId,
           launchId,
           descriptorHash,
+          generation,
           input.state,
           lifecycleEvidenceHash,
           canonicalRecord,
@@ -148,25 +176,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
           open = false;
           return Object.freeze({ kind: "created" as const });
         }
-        const existing = await client.query<LifecycleRow>(`
-          SELECT lifecycle_generation::text, lifecycle_evidence_hash,
-                 lifecycle_state, record_hash
-            FROM programmable_website_projection_v1.generic_launch_materializations_v2
-           WHERE launch_id = $1 AND lifecycle_evidence_hash = $2
-           LIMIT 1
-        `, [launchId, lifecycleEvidenceHash]);
-        await client.query("COMMIT");
-        open = false;
-        const row = existing.rows[0];
-        if (row === undefined) {
-          throw new TypeError("Generic launch lifecycle generation conflicted");
-        }
-        const parsed = lifecycleRow(row);
-        if (parsed.state !== input.state
-          || parsed.recordHash !== (record?.recordHash ?? null)) {
-          throw new TypeError("Generic launch lifecycle idempotency conflicted");
-        }
-        return Object.freeze({ kind: "existing" as const });
+        throw new TypeError("Generic launch lifecycle insert failed");
       } catch (error) {
         if (open) await client.query("ROLLBACK").catch(() => undefined);
         throw error;

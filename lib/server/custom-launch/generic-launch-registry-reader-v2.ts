@@ -13,6 +13,8 @@ import { mainnet } from "viem/chains";
 
 import registryAbiArtifact from
   "@/docs/security/abi/ProgrammableCustomRegistryV2.json";
+import { CUSTOM_REGISTRY_V2_EVENT_ABI } from
+  "@/lib/data-pipeline/custom-registry-v2-event-manifest";
 import { canonicalizeJson, type JsonValue } from
   "../projection-target/canonical-json";
 import type {
@@ -178,6 +180,8 @@ async function observeProvider(
       !== input.approval.primaryFinality.transactionHash
     || primaryReceipt.blockHash.toLowerCase() !== input.approval.primaryFinality.blockHash
     || primaryReceipt.blockNumber.toString() !== input.approval.primaryFinality.blockNumber
+    || primaryReceipt.contractAddress?.toLowerCase()
+      !== input.approval.descriptor.primaryContract
     || primaryBlock.hash?.toLowerCase() !== input.approval.primaryFinality.blockHash
     || primaryCode === undefined
     || keccak256(primaryCode) !== input.approval.descriptor.primaryRuntimeCodeHash) {
@@ -290,7 +294,10 @@ function decodeLifecycleLogs(
     let decoded: Readonly<{ eventName: string; args: unknown }>;
     try {
       decoded = decodeEventLog({
-        abi: ABI, data: log.data, topics: log.topics, strict: true,
+        abi: CUSTOM_REGISTRY_V2_EVENT_ABI,
+        data: log.data,
+        topics: log.topics,
+        strict: true,
       }) as Readonly<{ eventName: string; args: unknown }>;
     } catch {
       continue;
