@@ -45,8 +45,10 @@ test("both production transaction stagers use protected Keychain custody instead
     "utf8",
   );
   assert.match(keychainSource, /default-keychain/u);
+  assert.match(keychainSource, /list-keychains/u);
   assert.match(keychainSource, /find-generic-password/u);
-  assert.match(keychainSource, /"-k"/u);
+  assert.doesNotMatch(keychainSource, /"-k"/u);
+  assert.match(keychainSource, /sole search target/u);
   for (const name of [
     "stage-custom-registry-v2-safe-transaction.mjs",
     "stage-custom-registry-v2-deployment-transaction.mjs",

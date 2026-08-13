@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "programmable.custom-registry-v2-safe-controller-policy.v2",
+  "schemaVersion": "programmable.custom-registry-v2-safe-controller-policy.v3",
   "chainId": "1",
   "safeVersion": "1.4.1",
   "source": {
@@ -46,6 +46,18 @@
     "paymentReceiver": "0x0000000000000000000000000000000000000000",
     "modules": [],
     "guard": "0x0000000000000000000000000000000000000000"
+  },
+  "temporaryPublicCustody": {
+    "controllerSafes": 4,
+    "ownersPerSafe": 1,
+    "threshold": 1,
+    "ownerStorage": "CURRENT_USER_DEFAULT_KEYCHAIN_DISTINCT_GENERIC_PASSWORD_ITEM_PER_ROLE",
+    "sameHostConcentrationAccepted": true,
+    "restartReadbackRequired": false,
+    "encryptedBackupRequired": false,
+    "hardwareTwoOfThreeMigrationRequiredBeforePublicActivation": false,
+    "hardwareTwoOfThreeMigrationDeferred": true,
+    "ownerDecision": "TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_EXPLICITLY_ACCEPTED"
   },
   "storageSlots": {
     "fallbackHandler": "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5",

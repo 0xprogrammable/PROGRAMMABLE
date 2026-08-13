@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "programmable.custom-registry-v2-production-policy.v3",
+  "schemaVersion": "programmable.custom-registry-v2-production-policy.v4",
   "registryGeneration": 2,
   "chainId": "1",
   "registrySource": {
@@ -122,6 +122,12 @@
     "adminDistinctFromOperationalControllers": true,
     "operationalControllersDistinct": true,
     "operationalControllersMustHaveRuntimeCode": true,
-    "operationalControllerTransferTwoStep": true
+    "operationalControllerTransferTwoStep": true,
+    "temporaryPublicCustody": "FOUR_DISTINCT_SAFE_ONE_OF_ONE_CURRENT_USER_KEYCHAIN_CONTROLLERS_OWNER_ACCEPTED",
+    "sameHostConcentrationAccepted": true,
+    "restartReadbackRequiredForPublicActivation": false,
+    "encryptedBackupRequiredForPublicActivation": false,
+    "hardwareTwoOfThreeMigrationRequiredForPublicActivation": false,
+    "hardwareTwoOfThreeMigrationDeferred": true
   }
 }

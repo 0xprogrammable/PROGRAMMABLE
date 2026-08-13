@@ -158,10 +158,14 @@ if (
   sha256(safePolicyBytes) !== plan.safeControllerPolicySha256 ||
   sha256(releasePolicyBytes) !== plan.releasePolicySha256 ||
   sha256(predeploymentBytes) !== plan.predeploymentManifestSha256 ||
-  releasePolicy.activationAllowed !== false ||
-  predeployment.activationAllowed !== false
+  releasePolicy.schemaVersion !==
+    "programmable.custom-registry-release-policy.v4" ||
+  releasePolicy.activationAllowed !== true ||
+  predeployment.schemaVersion !==
+    "programmable.custom-registry-predeployment.v4" ||
+  predeployment.activationAllowed !== true
 ) {
-  throw new Error("hardware migration source, evidence, or activation policy drifted");
+  throw new Error("hardware migration source, evidence, or release policy drifted");
 }
 assertSafePublicMigrationReleaseAuthorization({
   actual: plan.releaseAuthorization,

@@ -41,7 +41,7 @@ export function assertProductionPolicyApprovalBinding({
   const approvalBinding = productionPolicy?.approvalDescriptorBinding;
   if (
     productionPolicy?.schemaVersion !==
-      "programmable.custom-registry-v2-production-policy.v3" ||
+      "programmable.custom-registry-v2-production-policy.v4" ||
     approvalBinding?.schema !==
       "programmable.approval-registry-descriptor-binding.v3" ||
     approvalBinding?.domain !==
@@ -183,7 +183,7 @@ export const SAFE_VERIFICATION_SCHEMA =
 export const SAFE_STAGED_TRANSACTION_SCHEMA =
   "programmable.custom-registry-v2-staged-safe-atomic-transaction.v1";
 export const SAFE_CUSTODY_PROOF_SCHEMA =
-  "programmable.custom-registry-v2-keychain-custody-proof.v2";
+  "programmable.custom-registry-v2-keychain-custody-proof.v3";
 export const SAFE_CONTROLLER_ROLES = [
   "approver",
   "registrar",
@@ -389,7 +389,7 @@ export function assertSafePolicyBoundPlan({
   const canonicalUint = (value) => /^(0|[1-9][0-9]*)$/u.test(value ?? "");
   if (
     policy?.schemaVersion !==
-      "programmable.custom-registry-v2-safe-controller-policy.v2" ||
+      "programmable.custom-registry-v2-safe-controller-policy.v3" ||
     policy.chainId !== "1" ||
     policy.safeVersion !== "1.4.1" ||
     policy.source?.repository !== "safe-fndn/safe-smart-account" ||
@@ -440,6 +440,20 @@ export function assertSafePolicyBoundPlan({
     policy.predictionPrivacy?.publicPredictionsRetired !== true ||
     policy.predictionPrivacy?.leakageFallback !==
       "ABANDON_LEAKED_PREDICTIONS_ROTATE_OWNERS_AND_SALTS_GENERATE_FRESH_PLAN_AND_AUTHORIZATION" ||
+    policy.temporaryPublicCustody?.controllerSafes !== 4 ||
+    policy.temporaryPublicCustody?.ownersPerSafe !== 1 ||
+    policy.temporaryPublicCustody?.threshold !== 1 ||
+    policy.temporaryPublicCustody?.ownerStorage !==
+      "CURRENT_USER_DEFAULT_KEYCHAIN_DISTINCT_GENERIC_PASSWORD_ITEM_PER_ROLE" ||
+    policy.temporaryPublicCustody?.sameHostConcentrationAccepted !== true ||
+    policy.temporaryPublicCustody?.restartReadbackRequired !== false ||
+    policy.temporaryPublicCustody?.encryptedBackupRequired !== false ||
+    policy.temporaryPublicCustody
+      ?.hardwareTwoOfThreeMigrationRequiredBeforePublicActivation !== false ||
+    policy.temporaryPublicCustody?.hardwareTwoOfThreeMigrationDeferred !==
+      true ||
+    policy.temporaryPublicCustody?.ownerDecision !==
+      "TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_EXPLICITLY_ACCEPTED" ||
     !/^[0-9a-f]{40}$/u.test(plan.source?.commit ?? "") ||
     !/^[0-9a-f]{40}$/u.test(plan.source?.tree ?? "") ||
     !Number.isSafeInteger(plan.exactPendingNonce) ||
@@ -457,9 +471,22 @@ export function assertSafePolicyBoundPlan({
     !/^0x[0-9a-f]{64}$/u.test(sourceManifestSha256 ?? "") ||
     plan.sourceManifestSha256 !== sourceManifestSha256 ||
     manifest?.schemaVersion !==
-      "programmable.custom-registry-predeployment.v3" ||
+      "programmable.custom-registry-predeployment.v4" ||
     manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
-    manifest.activationAllowed !== false ||
+    manifest.activationAllowed !== true ||
+    manifest.controllerCustody?.model !==
+      "FOUR_DISTINCT_SAFE_ONE_OF_ONE_CURRENT_USER_KEYCHAIN_CONTROLLERS_OWNER_ACCEPTED" ||
+    manifest.controllerCustody?.controllerSafes !== 4 ||
+    manifest.controllerCustody?.ownersPerSafe !== 1 ||
+    manifest.controllerCustody?.threshold !== 1 ||
+    manifest.controllerCustody?.sameHostConcentrationAccepted !== true ||
+    manifest.controllerCustody
+      ?.restartReadbackRequiredForPublicActivation !== false ||
+    manifest.controllerCustody
+      ?.encryptedBackupRequiredForPublicActivation !== false ||
+    manifest.controllerCustody
+      ?.hardwareTwoOfThreeMigrationRequiredForPublicActivation !== false ||
+    manifest.controllerCustody?.hardwareTwoOfThreeMigrationDeferred !== true ||
     manifest.sourceDigests?.[
       "config/custom-registry-v2-safe-controller-policy.json"
     ] !== plan.policySha256 ||
@@ -479,7 +506,7 @@ export function assertSafePolicyBoundPlan({
     plan.releaseAuthorization?.authorizationSemantics !==
       AUTHORIZATION_SEMANTICS ||
     manifest.releaseAuthorization?.stagedRawTransactionTrustBoundary !==
-      "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
+      "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
     plan.releaseAuthorization?.stagedRawTransactionTrustBoundary !==
       manifest.releaseAuthorization.stagedRawTransactionTrustBoundary ||
     manifest.releaseAuthorization?.dispatchIntentFinalConfirmation !==
@@ -786,10 +813,11 @@ export function assertSafeCustodyProof({ proof, owners, deployer, admin }) {
       "SIX_DISTINCT_GENERIC_PASSWORD_ITEMS_WITH_DISTINCT_PRIVATE_KEY_HASHES_AND_PUBLIC_ADDRESSES" ||
     proof.secretValuesPrinted !== false ||
     proof.plaintextRetention !== "NO_DURABLE_PLAINTEXT_FINAL_KEYS" ||
-    proof.restartReadbackVerified !== true ||
-    proof.encryptedBackupStrategyVerified !== true ||
+    proof.restartReadbackVerified !== false ||
+    proof.encryptedBackupStrategyVerified !== false ||
+    proof.ownerAcceptedUnbackedSingleHostCustody !== true ||
     proof.temporaryGovernance !==
-      "SAME_HOST_ONE_OF_ONE_DARK_DEPLOYMENT_ONLY_MIGRATE_TO_DISTINCT_HARDWARE_TWO_OF_THREE_BEFORE_PUBLIC_ACTIVATION" ||
+      "SAME_HOST_ONE_OF_ONE_PUBLIC_ACTIVATION_OWNER_ACCEPTED_HARDWARE_TWO_OF_THREE_MIGRATION_DEFERRED" ||
     !/^0x[0-9a-f]{64}$/u.test(proof.inventorySha256 ?? "") ||
     proof.roles?.length !== expectedRoles.length
   ) {

@@ -164,14 +164,14 @@ if (
 }
 if (
   releasePolicy.schemaVersion !==
-    "programmable.custom-registry-release-policy.v3" ||
-  releasePolicy.activationAllowed !== false ||
+    "programmable.custom-registry-release-policy.v4" ||
+  releasePolicy.activationAllowed !== true ||
   predeployment.schemaVersion !==
-    "programmable.custom-registry-predeployment.v3" ||
-  predeployment.activationAllowed !== false ||
+    "programmable.custom-registry-predeployment.v4" ||
+  predeployment.activationAllowed !== true ||
   predeployment.status !== "SOURCE_ONLY_NOT_DEPLOYED"
 ) {
-  throw new Error("public migration requires activation-disabled release policy");
+  throw new Error("public migration requires the active temporary custody release policy");
 }
 assertSafePublicMigrationReleaseAuthorization({
   actual: predeployment.releaseAuthorization,

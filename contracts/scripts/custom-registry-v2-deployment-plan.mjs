@@ -121,9 +121,22 @@ export async function assertRegistryDeploymentPlan({
     plan.rpcProviderBindings[0].rpcOrigin ===
       plan.rpcProviderBindings[1].rpcOrigin ||
     manifest.schemaVersion !==
-      "programmable.custom-registry-predeployment.v3" ||
+      "programmable.custom-registry-predeployment.v4" ||
     manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
-    manifest.activationAllowed !== false ||
+    manifest.activationAllowed !== true ||
+    manifest.controllerCustody?.model !==
+      "FOUR_DISTINCT_SAFE_ONE_OF_ONE_CURRENT_USER_KEYCHAIN_CONTROLLERS_OWNER_ACCEPTED" ||
+    manifest.controllerCustody?.controllerSafes !== 4 ||
+    manifest.controllerCustody?.ownersPerSafe !== 1 ||
+    manifest.controllerCustody?.threshold !== 1 ||
+    manifest.controllerCustody?.sameHostConcentrationAccepted !== true ||
+    manifest.controllerCustody
+      ?.restartReadbackRequiredForPublicActivation !== false ||
+    manifest.controllerCustody
+      ?.encryptedBackupRequiredForPublicActivation !== false ||
+    manifest.controllerCustody
+      ?.hardwareTwoOfThreeMigrationRequiredForPublicActivation !== false ||
+    manifest.controllerCustody?.hardwareTwoOfThreeMigrationDeferred !== true ||
     committedAbiDocument.schemaVersion !==
       "programmable.custom-registry-abi.v2" ||
     manifest.artifact?.creationBytecodeKeccak256 !==
@@ -324,7 +337,7 @@ export async function assertRegistryDeploymentPlan({
     plan.releaseAuthorization.authorizationSemantics !==
       "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION" ||
     plan.releaseAuthorization.stagedRawTransactionTrustBoundary !==
-      "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
+      "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
     plan.releaseAuthorization.dispatchIntentFinalConfirmation !==
       "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION" ||
     plan.releaseAuthorization.nonceScopedJournalExclusivity !==
