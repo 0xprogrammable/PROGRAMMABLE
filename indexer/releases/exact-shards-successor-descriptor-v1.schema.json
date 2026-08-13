@@ -11,6 +11,7 @@
     "activationAllowed",
     "chainId",
     "minimumConfirmations",
+    "registryConfiguration",
     "consumerAbis",
     "contracts"
   ],
@@ -25,7 +26,7 @@
       "enum": ["unconfigured", "bound"]
     },
     "activationAllowed": {
-      "const": false
+      "type": "boolean"
     },
     "chainId": {
       "type": "integer",
@@ -36,6 +37,12 @@
       "type": ["integer", "null"],
       "minimum": 1,
       "maximum": 9007199254740991
+    },
+    "registryConfiguration": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/registryConfiguration" }
+      ]
     },
     "consumerAbis": {
       "type": "object",
@@ -82,7 +89,13 @@
       },
       "then": {
         "properties": {
+          "activationAllowed": {
+            "const": false
+          },
           "minimumConfirmations": {
+            "const": null
+          },
+          "registryConfiguration": {
             "const": null
           },
           "contracts": {
@@ -106,6 +119,9 @@
             "type": "integer",
             "minimum": 1
           },
+          "registryConfiguration": {
+            "$ref": "#/$defs/registryConfiguration"
+          },
           "contracts": {
             "properties": {
               "registry": {
@@ -124,6 +140,58 @@
     }
   ],
   "$defs": {
+    "registryConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registryGeneration",
+        "chainProfileHash",
+        "registryPolicyHash",
+        "feePolicyVerifier"
+      ],
+      "properties": {
+        "registryGeneration": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "chainProfileHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "not": { "const": "0x0000000000000000000000000000000000000000000000000000000000000000" }
+        },
+        "registryPolicyHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "not": { "const": "0x0000000000000000000000000000000000000000000000000000000000000000" }
+        },
+        "feePolicyVerifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "address",
+            "runtimeCodeHash",
+            "feePolicyBindingHash",
+            "economicTemplateHash"
+          ],
+          "properties": {
+            "address": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{40}$",
+              "not": { "const": "0x0000000000000000000000000000000000000000" }
+            },
+            "runtimeCodeHash": {
+              "const": "0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac"
+            },
+            "feePolicyBindingHash": {
+              "const": "0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d"
+            },
+            "economicTemplateHash": {
+              "const": "0x898f3bc526249e1917752c322011f2fae8729496fe410398b3745b9972f897fd"
+            }
+          }
+        }
+      }
+    },
     "nullableContract": {
       "oneOf": [
         {

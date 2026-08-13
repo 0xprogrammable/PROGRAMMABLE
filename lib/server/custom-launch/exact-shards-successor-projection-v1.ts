@@ -6,6 +6,8 @@ import {
   encodeAbiParameters,
   keccak256,
   parseAbi,
+  toFunctionSelector,
+  toHex,
   type Address,
   type Hex,
 } from "viem";
@@ -36,6 +38,70 @@ const LAUNCH_ID_DOMAIN =
   "0x43422cb1e64441d3e905301f644720cc17c297817130fde0bbcf3318f8c97b52";
 const PUBLIC_IDENTITY_BINDING_TYPEHASH =
   "0x498832eeb344297e6fe6a4ca913f12e0905a46029de4db75a154328c57427b94";
+const EXACT_SHARDS_REGISTRY_SCHEMA_ID = keccak256(toHex(
+  "programmable.exact-shards-registry.v1",
+));
+const EXACT_SHARDS_APPROVAL_BINDING_DOMAIN = keccak256(toHex(
+  "programmable.exact-shards-approval-binding.v1",
+));
+const EXACT_SHARDS_REVIEW_DEPLOYMENT_BINDING_DOMAIN = keccak256(toHex(
+  "programmable.exact-shards-review-deployment-binding.v1",
+));
+const EXACT_SHARDS_IDENTITY_DOMAIN = keccak256(toHex(
+  "programmable.exact-shards-launch-identity.v1",
+));
+const EXACT_SHARDS_REGISTERED_RECORD_DOMAIN = keccak256(toHex(
+  "programmable.exact-shards-registered-record.v1",
+));
+const EXACT_SHARDS_LAUNCH_METADATA_DOMAIN = keccak256(toHex(
+  "programmable.exact-shards-launch-metadata-binding.v1",
+));
+const EXACT_SHARDS_LEG_TYPEHASH = keccak256(toHex(
+  "ProgrammableRevenueLegV1(bytes32 roleHash,uint16 feeBps,address recipient,bytes32 recipientModeHash)",
+));
+const EXACT_SHARDS_POLICY_TYPEHASH = keccak256(toHex(
+  "ProgrammableRevenuePolicyV1(bytes32 profileKey,address feeAsset,bytes32 feeBasisHash,uint16 totalFeeBps,bytes32 legsHash)",
+));
+const EXACT_SHARDS_STORED_CLAIM_TYPEHASH = keccak256(toHex(
+  "ProgrammableExactShardsStoredFeeClaimV1(uint8 ordinal,bytes32 roleHash,uint16 grossVolumeFeeBps,uint16 shareOfFeeBps,address initialRecipientOrAccumulator,bytes32 recipientModeHash,bytes4 claimSelector,bytes4 handoffSelector,bytes32 legHash)",
+));
+const EXACT_SHARDS_FEE_POLICY_RECORD_DOMAIN = keccak256(toHex(
+  "programmable.exact-shards-fee-policy-record.v1",
+));
+const EXACT_SHARDS_PROFILE_KEY =
+  "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c" as Hex;
+const EXACT_SHARDS_FEE_BASIS_HASH =
+  "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191" as Hex;
+const EXACT_SHARDS_BUILDER_RECIPIENT =
+  "0xceebb3a6543cebeb2ed66963897a0abea52a50cc" as Address;
+const EXACT_SHARDS_PROGRAMMABLE_RECIPIENT =
+  "0x4957f49620aff3adbbe8195a4f633e49cc93376c" as Address;
+const EXACT_SHARDS_BUILDER_RECIPIENT_MODE =
+  "0xc1ed7eaa8d37d922e99971bb6369533361b226b731cf9677e60e36b376519ea4" as Hex;
+const EXACT_SHARDS_PROGRAMMABLE_RECIPIENT_MODE =
+  "0x496f134b2bbc4d8ae230c1aa1a607788d75231c8ee823312e515b851a927d4f4" as Hex;
+const EXACT_SHARDS_HOLDER_RECIPIENT_MODE =
+  "0x9aec909e12714c25df903902800a480772830ed15716e130e797f7447138ba55" as Hex;
+const EXACT_SHARDS_VERIFIER_RUNTIME_CODE_HASH =
+  "0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac" as Hex;
+const EXACT_SHARDS_FEE_POLICY_BINDING_HASH =
+  "0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d" as Hex;
+const EXACT_SHARDS_ECONOMIC_TEMPLATE_HASH =
+  "0x898f3bc526249e1917752c322011f2fae8729496fe410398b3745b9972f897fd" as Hex;
+const EXACT_SHARDS_SOURCE_REVISION_HASH =
+  "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc" as Hex;
+const EXACT_SHARDS_REVIEWED_BUILD_SHA256 =
+  "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed" as Hex;
+const EXACT_SHARDS_CLAIM_SELECTORS = Object.freeze([
+  toFunctionSelector("claimBuilderFees()"),
+  toFunctionSelector("claimLauncherFees()"),
+  toFunctionSelector("claim(uint256[])"),
+] as const);
+const EXACT_SHARDS_HANDOFF_SELECTORS = Object.freeze([
+  toFunctionSelector("setBuilderFeeRecipient(address)"),
+  "0x00000000" as Hex,
+  "0x00000000" as Hex,
+] as const);
 
 const ABI_DECLARATIONS = [
   "struct LaunchPermitV1 { uint64 githubRepositoryId; uint64 approvalGeneration; uint64 permitGeneration; uint64 notBefore; uint64 deadline; uint64 signerEpoch; uint256 nonce; uint256 chainId; bytes32 repositoryKey; address route; bytes32 routeId; address applicantWallet; bytes32 launchId; bytes32 approvalId; bytes32 technicalApprovalHash; bytes32 descriptorHash; bytes32 presentationBindingHash; bytes32 configurationHash; bytes32 walletOwnershipBindingHash; bytes32 executionPlanHash; bytes32 executionCoreHash; bytes32 executionCalldataKeccak256; bytes32 generationBindingHash; uint256 executionValue; bytes32 releaseBindingHash; bytes32 kernelExecutionEnvelopeHash; }",
@@ -193,14 +259,27 @@ export type ExactShardsContractDescriptorV1 = Readonly<{
   consumerAbiSha256: `sha256:${string}`;
 }>;
 
+export type ExactShardsRegistryConfigurationV1 = Readonly<{
+  registryGeneration: bigint;
+  chainProfileHash: Hex;
+  registryPolicyHash: Hex;
+  feePolicyVerifier: Readonly<{
+    address: Address;
+    runtimeCodeHash: Hex;
+    feePolicyBindingHash: Hex;
+    economicTemplateHash: Hex;
+  }>;
+}>;
+
 export type BoundExactShardsSuccessorDescriptorV1 = Readonly<{
   schemaVersion: "programmable.exact-shards-successor-descriptor.v1";
   lane: "registry.exact-shards-v2";
   status: "bound";
-  activationAllowed: false;
+  activationAllowed: boolean;
   chainId: number;
   minimumConfirmations: number;
   consumerAbis: typeof EXACT_SHARDS_CONSUMER_ABI_SHA256_V1;
+  registryConfiguration: ExactShardsRegistryConfigurationV1;
   contracts: Readonly<{
     registry: ExactShardsContractDescriptorV1;
     route: ExactShardsContractDescriptorV1;
@@ -216,6 +295,7 @@ export type UnconfiguredExactShardsSuccessorDescriptorV1 = Readonly<{
   chainId: number;
   minimumConfirmations: null;
   consumerAbis: typeof EXACT_SHARDS_CONSUMER_ABI_SHA256_V1;
+  registryConfiguration: null;
   contracts: Readonly<{
     registry: null;
     route: null;
@@ -233,11 +313,11 @@ export function parseExactShardsSuccessorDescriptorV1(
   const source = object(value, "ExactShards successor descriptor");
   exactKeys(source, [
     "activationAllowed", "chainId", "consumerAbis", "contracts", "lane",
-    "minimumConfirmations", "schemaVersion", "status",
+    "minimumConfirmations", "registryConfiguration", "schemaVersion", "status",
   ], "ExactShards successor descriptor");
   if (source.schemaVersion !== "programmable.exact-shards-successor-descriptor.v1"
     || source.lane !== "registry.exact-shards-v2"
-    || source.activationAllowed !== false
+    || typeof source.activationAllowed !== "boolean"
     || !positiveSafeInteger(source.chainId)) {
     throw new TypeError("ExactShards successor descriptor is invalid");
   }
@@ -257,7 +337,8 @@ export function parseExactShardsSuccessorDescriptorV1(
   }
   if (source.status === "unconfigured") {
     if (source.minimumConfirmations !== null || contracts.registry !== null
-      || contracts.route !== null || contracts.permitAuthority !== null) {
+      || contracts.route !== null || contracts.permitAuthority !== null
+      || source.registryConfiguration !== null || source.activationAllowed !== false) {
       throw new TypeError("unconfigured ExactShards descriptor contains deployment claims");
     }
     return Object.freeze({
@@ -268,6 +349,7 @@ export function parseExactShardsSuccessorDescriptorV1(
       chainId: source.chainId as number,
       minimumConfirmations: null,
       consumerAbis: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1,
+      registryConfiguration: null,
       contracts: Object.freeze({
         registry: null,
         route: null,
@@ -298,14 +380,23 @@ export function parseExactShardsSuccessorDescriptorV1(
   if (new Set(Object.values(parsed).map(({ address }) => address)).size !== 3) {
     throw new TypeError("ExactShards successor contract addresses are not distinct");
   }
+  const registryConfiguration = parseRegistryConfiguration(
+    source.registryConfiguration,
+  );
+  if (registryConfiguration.feePolicyVerifier.address === parsed.registry.address
+    || registryConfiguration.feePolicyVerifier.address === parsed.route.address
+    || registryConfiguration.feePolicyVerifier.address === parsed.permitAuthority.address) {
+    throw new TypeError("ExactShards fee verifier address is not distinct");
+  }
   return Object.freeze({
     schemaVersion: source.schemaVersion,
     lane: source.lane,
     status: "bound" as const,
-    activationAllowed: false as const,
+    activationAllowed: source.activationAllowed,
     chainId: source.chainId as number,
     minimumConfirmations: source.minimumConfirmations as number,
     consumerAbis: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1,
+    registryConfiguration,
     contracts: Object.freeze(parsed),
   });
 }
@@ -375,6 +466,65 @@ export type ExactShardsAuthenticatedRpcObservationV1 = Readonly<{
   snapshot: ExactShardsRegistrySnapshotV1;
 }>;
 
+export type ExactShardsCanonicalRegistrationV1 = Readonly<{
+  chainId: string;
+  registryGeneration: string;
+  launchId: Hex;
+  projectId: Hex;
+  websiteProjectIdSha256: Hex;
+  websiteLaunchIdSha256: Hex;
+  approvalId: Hex;
+  approvalBindingHash: Hex;
+  githubRepositoryId: string;
+  approvalGeneration: string;
+  commitId: Hex;
+  sourceCommitment: Hex;
+  buildCommitment: Hex;
+  artifactSetHash: Hex;
+  deploymentConfigurationHash: Hex;
+  configurationHash: Hex;
+  tokenNameHash: Hex;
+  tokenSymbolHash: Hex;
+  presentationBindingHash: Hex;
+  permissionsHash: Hex;
+  deploymentId: Hex;
+  deploymentSetHash: Hex;
+  runtimeCodeSetHash: Hex;
+  primaryContract: Address;
+  primaryRuntimeCodeHash: Hex;
+  launchWallet: Address;
+  modelId: Hex;
+  modelVersion: Hex;
+  templateId: Hex;
+  templateVersion: Hex;
+  providerId: Hex;
+  builderAttributionHash: Hex;
+  originHash: Hex;
+  assetSetHash: Hex;
+  marketSetHash: Hex;
+  marketPathId: Hex;
+  capabilitySetHash: Hex;
+  reviewPolicyHash: Hex;
+  securityReviewHash: Hex;
+  reviewResultId: Hex;
+  reviewDeploymentBindingHash: Hex;
+  finalityPolicyHash: Hex;
+  registeredRecordCommitment: Hex;
+  feePolicy: Readonly<{
+    profileKey: Hex;
+    feeAsset: Address;
+    feeBasisHash: Hex;
+    totalFeeBps: 100;
+    legsHash: Hex;
+  }>;
+  orderedFeeLegs: readonly Readonly<{
+    roleHash: Hex;
+    feeBps: 10 | 80;
+    recipient: Address;
+    recipientModeHash: Hex;
+  }>[];
+}>;
+
 export type ExactShardsPublicRecordV1 = Readonly<{
   schemaVersion: "programmable.exact-shards-public-record.v1";
   sourceLane: "registry.exact-shards-v2";
@@ -384,6 +534,7 @@ export type ExactShardsPublicRecordV1 = Readonly<{
     correctionSupported: false;
     refinalizationSupported: false;
   }>;
+  registration: ExactShardsCanonicalRegistrationV1;
   publicIdentity: Readonly<{
     websiteProjectId: `sha256:${string}`;
     websiteLaunchId: `sha256:${string}`;
@@ -429,6 +580,7 @@ export type ExactShardsPublicRecordV1 = Readonly<{
     deploymentConfigurationHash: Hex;
     deploymentSetHash: Hex;
     runtimeCodeSetHash: Hex;
+    identityHash: Hex;
     registeredRecordCommitment: Hex;
   }>;
   economics: Readonly<{
@@ -482,6 +634,320 @@ export type ExactShardsPublicRecordV1 = Readonly<{
   recordBindingSha256: `sha256:${string}`;
 }>;
 
+type ExactShardsDerivedSemanticsV1 = Readonly<{
+  registration: ExactShardsCanonicalRegistrationV1;
+  registryInstanceHash: Hex;
+  policyHash: Hex;
+  feePolicyRecordHash: Hex;
+  claimSetHash: Hex;
+  identityHash: Hex;
+  claims: ExactShardsPublicRecordV1["economics"]["claims"];
+}>;
+
+export function deriveExactShardsRegistrationSemanticsV1(input: Readonly<{
+  descriptor: unknown;
+  registration: unknown;
+}>): ExactShardsDerivedSemanticsV1 {
+  const descriptor = requireBoundDescriptor(input.descriptor);
+  const source = object(input.registration, "ExactShards registration");
+  exactKeys(source, [
+    "approvalBindingHash", "approvalGeneration", "approvalId", "artifactSetHash",
+    "assetSetHash", "buildCommitment", "builderAttributionHash", "capabilitySetHash",
+    "chainId", "commitId", "configurationHash", "deploymentConfigurationHash",
+    "deploymentId", "deploymentSetHash", "feePolicy", "finalityPolicyHash",
+    "githubRepositoryId", "launchId", "launchWallet", "marketPathId", "marketSetHash",
+    "modelId", "modelVersion", "orderedFeeLegs", "originHash", "permissionsHash",
+    "presentationBindingHash", "primaryContract", "primaryRuntimeCodeHash", "projectId",
+    "providerId", "registeredRecordCommitment", "registryGeneration",
+    "reviewDeploymentBindingHash", "reviewPolicyHash", "reviewResultId",
+    "runtimeCodeSetHash", "securityReviewHash", "sourceCommitment", "templateId",
+    "templateVersion", "tokenNameHash", "tokenSymbolHash", "websiteLaunchIdSha256",
+    "websiteProjectIdSha256",
+  ], "ExactShards registration");
+  const chainId = number(source.chainId, "registration chain ID");
+  const registryGeneration = number(
+    source.registryGeneration,
+    "registration registry generation",
+  );
+  const githubRepositoryId = number(
+    source.githubRepositoryId,
+    "registration GitHub repository ID",
+  );
+  const approvalGeneration = number(
+    source.approvalGeneration,
+    "registration approval generation",
+  );
+  const normalizedFeePolicy = object(source.feePolicy, "registration fee policy");
+  exactKeys(normalizedFeePolicy, [
+    "feeAsset", "feeBasisHash", "legsHash", "profileKey", "totalFeeBps",
+  ], "registration fee policy");
+  const legsInput = source.orderedFeeLegs;
+  if (!Array.isArray(legsInput) || legsInput.length !== 3) {
+    throw new TypeError("ExactShards registration fee legs are invalid");
+  }
+  const expectedLegs = [
+    [BUILDER_ROLE_HASH, 10, EXACT_SHARDS_BUILDER_RECIPIENT,
+      EXACT_SHARDS_BUILDER_RECIPIENT_MODE],
+    [PROGRAMMABLE_ROLE_HASH, 10, EXACT_SHARDS_PROGRAMMABLE_RECIPIENT,
+      EXACT_SHARDS_PROGRAMMABLE_RECIPIENT_MODE],
+    [HOLDER_ROLE_HASH, 80, null, EXACT_SHARDS_HOLDER_RECIPIENT_MODE],
+  ] as const;
+  const orderedFeeLegs = legsInput.map((candidate, index) => {
+    const leg = object(candidate, `registration fee leg ${index}`);
+    exactKeys(leg, ["feeBps", "recipient", "recipientModeHash", "roleHash"],
+      `registration fee leg ${index}`);
+    const expected = expectedLegs[index]!;
+    const feeBps = Number(number(leg.feeBps, `registration fee leg ${index} rate`));
+    const recipient = address(leg.recipient, `registration fee leg ${index} recipient`);
+    const normalized = Object.freeze({
+      roleHash: hex32(leg.roleHash, `registration fee leg ${index} role`),
+      feeBps: feeBps as 10 | 80,
+      recipient,
+      recipientModeHash: hex32(
+        leg.recipientModeHash,
+        `registration fee leg ${index} recipient mode`,
+      ),
+    });
+    if (normalized.roleHash !== expected[0] || normalized.feeBps !== expected[1]
+      || (expected[2] === null ? normalized.recipient === ZERO_ADDRESS
+        : normalized.recipient !== expected[2])
+      || normalized.recipientModeHash !== expected[3]) {
+      throw new TypeError("ExactShards registration fee leg is not the reviewed profile");
+    }
+    return normalized;
+  });
+  const legHashes = orderedFeeLegs.map((leg) => keccak256(encodeAbiParameters(
+    [
+      { type: "bytes32" }, { type: "bytes32" }, { type: "uint16" },
+      { type: "address" }, { type: "bytes32" },
+    ],
+    [EXACT_SHARDS_LEG_TYPEHASH, leg.roleHash, leg.feeBps, leg.recipient,
+      leg.recipientModeHash],
+  ))) as [Hex, Hex, Hex];
+  const legsHash = keccak256(encodeAbiParameters(
+    [{ type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" }],
+    legHashes,
+  ));
+  const feePolicy = Object.freeze({
+    profileKey: hex32(normalizedFeePolicy.profileKey, "registration fee profile"),
+    feeAsset: address(normalizedFeePolicy.feeAsset, "registration fee asset", true),
+    feeBasisHash: hex32(normalizedFeePolicy.feeBasisHash, "registration fee basis"),
+    totalFeeBps: Number(number(
+      normalizedFeePolicy.totalFeeBps,
+      "registration total fee",
+    )) as 100,
+    legsHash: hex32(normalizedFeePolicy.legsHash, "registration legs hash"),
+  });
+  if (feePolicy.profileKey !== EXACT_SHARDS_PROFILE_KEY
+    || feePolicy.feeAsset !== ZERO_ADDRESS
+    || feePolicy.feeBasisHash !== EXACT_SHARDS_FEE_BASIS_HASH
+    || feePolicy.totalFeeBps !== 100
+    || feePolicy.legsHash !== legsHash) {
+    throw new TypeError("ExactShards registration fee policy is not the reviewed profile");
+  }
+  const policyHash = keccak256(encodeAbiParameters(
+    [
+      { type: "bytes32" }, { type: "bytes32" }, { type: "address" },
+      { type: "bytes32" }, { type: "uint16" }, { type: "bytes32" },
+    ],
+    [EXACT_SHARDS_POLICY_TYPEHASH, feePolicy.profileKey, feePolicy.feeAsset,
+      feePolicy.feeBasisHash, feePolicy.totalFeeBps, feePolicy.legsHash],
+  ));
+  const shares = [1000, 1000, 8000] as const;
+  const roles = ["builder", "programmable", "holder"] as const;
+  const claims = Object.freeze(orderedFeeLegs.map((leg, index) => {
+    const ordinal = index as 0 | 1 | 2;
+    const storedClaimHash = keccak256(encodeAbiParameters(
+      [
+        { type: "bytes32" }, { type: "uint8" }, { type: "bytes32" },
+        { type: "uint16" }, { type: "uint16" }, { type: "address" },
+        { type: "bytes32" }, { type: "bytes4" }, { type: "bytes4" },
+        { type: "bytes32" },
+      ],
+      [EXACT_SHARDS_STORED_CLAIM_TYPEHASH, ordinal, leg.roleHash, leg.feeBps,
+        shares[ordinal], leg.recipient, leg.recipientModeHash,
+        EXACT_SHARDS_CLAIM_SELECTORS[ordinal], EXACT_SHARDS_HANDOFF_SELECTORS[ordinal],
+        legHashes[ordinal]],
+    ));
+    return Object.freeze({
+      ordinal,
+      role: roles[ordinal],
+      roleHash: leg.roleHash,
+      grossVolumeFeeBps: leg.feeBps,
+      shareOfFeeBps: shares[ordinal],
+      recipient: leg.recipient,
+      recipientModeHash: leg.recipientModeHash,
+      claimSelector: EXACT_SHARDS_CLAIM_SELECTORS[ordinal],
+      handoffSelector: EXACT_SHARDS_HANDOFF_SELECTORS[ordinal],
+      legHash: legHashes[ordinal],
+      storedClaimHash,
+    });
+  }));
+  const claimSetHash = keccak256(encodeAbiParameters(
+    [{ type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" }],
+    [claims[0]!.storedClaimHash, claims[1]!.storedClaimHash,
+      claims[2]!.storedClaimHash],
+  ));
+  const registryConfiguration = descriptor.registryConfiguration;
+  const registryInstanceHash = keccak256(encodeAbiParameters(
+    [
+      { type: "bytes32" }, { type: "uint256" }, { type: "uint64" },
+      { type: "address" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "address" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "address" }, { type: "bytes32" },
+    ],
+    [EXACT_SHARDS_REGISTRY_SCHEMA_ID, BigInt(descriptor.chainId),
+      registryConfiguration.registryGeneration, descriptor.contracts.registry.address,
+      registryConfiguration.chainProfileHash, registryConfiguration.registryPolicyHash,
+      registryConfiguration.feePolicyVerifier.address,
+      registryConfiguration.feePolicyVerifier.runtimeCodeHash,
+      registryConfiguration.feePolicyVerifier.feePolicyBindingHash,
+      descriptor.contracts.permitAuthority.address,
+      descriptor.contracts.permitAuthority.runtimeCodeHash],
+  ));
+  const feePolicyRecordHash = keccak256(encodeAbiParameters(
+    [
+      { type: "bytes32" }, { type: "bytes32" }, { type: "address" },
+      { type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "bytes32" },
+    ],
+    [EXACT_SHARDS_FEE_POLICY_RECORD_DOMAIN, registryInstanceHash,
+      registryConfiguration.feePolicyVerifier.address,
+      registryConfiguration.feePolicyVerifier.runtimeCodeHash,
+      registryConfiguration.feePolicyVerifier.feePolicyBindingHash,
+      policyHash, claimSetHash],
+  ));
+  const normalized = canonicalRegistration(source, feePolicy, orderedFeeLegs);
+  const repositoryKey = keccak256(encodeAbiParameters(
+    [{ type: "string" }, { type: "uint256" }],
+    ["programmable.github.repository.v1", githubRepositoryId],
+  ));
+  const reviewedSourceHash = keccak256(encodeAbiParameters(
+    [
+      { type: "uint64" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "bytes32" }, { type: "bytes32" },
+    ],
+    [githubRepositoryId, repositoryKey, normalized.commitId,
+      normalized.sourceCommitment, normalized.buildCommitment],
+  ));
+  const reviewedModelHash = keccak256(encodeAbiParameters(
+    Array.from({ length: 8 }, () => ({ type: "bytes32" as const })),
+    [normalized.modelId, normalized.modelVersion, normalized.templateId,
+      normalized.templateVersion, normalized.providerId, normalized.permissionsHash,
+      normalized.marketPathId, normalized.capabilitySetHash],
+  ));
+  const reviewedSecurityAndEconomicsHash = keccak256(encodeAbiParameters(
+    Array.from({ length: 6 }, () => ({ type: "bytes32" as const })),
+    [normalized.reviewPolicyHash, normalized.securityReviewHash,
+      normalized.reviewResultId, registryConfiguration.feePolicyVerifier.economicTemplateHash,
+      normalized.configurationHash, normalized.finalityPolicyHash],
+  ));
+  const approvalBindingHash = keccak256(encodeAbiParameters(
+    [
+      { type: "bytes32" }, { type: "bytes32" }, { type: "uint64" },
+      { type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" },
+    ],
+    [EXACT_SHARDS_APPROVAL_BINDING_DOMAIN, normalized.projectId,
+      approvalGeneration, reviewedSourceHash, reviewedModelHash,
+      reviewedSecurityAndEconomicsHash],
+  ));
+  const reviewDeploymentBindingHash = keccak256(encodeAbiParameters(
+    [
+      { type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "address" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" },
+    ],
+    [EXACT_SHARDS_REVIEW_DEPLOYMENT_BINDING_DOMAIN, registryInstanceHash,
+      approvalBindingHash, normalized.deploymentId, normalized.deploymentSetHash,
+      normalized.runtimeCodeSetHash, normalized.primaryContract,
+      normalized.primaryRuntimeCodeHash, normalized.deploymentConfigurationHash,
+      normalized.configurationHash, normalized.permissionsHash, feePolicyRecordHash],
+  ));
+  const scopeAndApprovalHash = keccak256(encodeAbiParameters(
+    [
+      { type: "uint256" }, { type: "uint64" }, { type: "bytes32" },
+      { type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" },
+      { type: "bytes32" }, { type: "uint64" }, { type: "bytes32" },
+    ],
+    [chainId, registryGeneration, normalized.launchId, normalized.projectId,
+      normalized.websiteProjectIdSha256, normalized.websiteLaunchIdSha256,
+      normalized.approvalId, approvalGeneration, approvalBindingHash],
+  ));
+  const sourceAndDeploymentHash = keccak256(encodeAbiParameters(
+    [{ type: "bytes32[15]" }],
+    [[
+      uintToBytes32(githubRepositoryId), repositoryKey, normalized.commitId,
+      normalized.sourceCommitment, normalized.buildCommitment, normalized.artifactSetHash,
+      normalized.deploymentConfigurationHash, normalized.configurationHash,
+      normalized.permissionsHash, normalized.deploymentId, normalized.deploymentSetHash,
+      normalized.runtimeCodeSetHash, addressToBytes32(normalized.primaryContract),
+      normalized.primaryRuntimeCodeHash, addressToBytes32(normalized.launchWallet),
+    ]],
+  ));
+  const attributionHash = keccak256(encodeAbiParameters(
+    [{ type: "bytes32[11]" }],
+    [[normalized.modelId, normalized.modelVersion, normalized.templateId,
+      normalized.templateVersion, normalized.providerId,
+      normalized.builderAttributionHash, normalized.originHash, normalized.assetSetHash,
+      normalized.marketSetHash, normalized.marketPathId, normalized.capabilitySetHash]],
+  ));
+  const reviewHash = keccak256(encodeAbiParameters(
+    Array.from({ length: 4 }, () => ({ type: "bytes32" as const })),
+    [normalized.reviewPolicyHash, normalized.securityReviewHash,
+      normalized.reviewResultId, reviewDeploymentBindingHash],
+  ));
+  const metadataHash = keccak256(encodeAbiParameters(
+    Array.from({ length: 4 }, () => ({ type: "bytes32" as const })),
+    [EXACT_SHARDS_LAUNCH_METADATA_DOMAIN, normalized.tokenNameHash,
+      normalized.tokenSymbolHash, normalized.presentationBindingHash],
+  ));
+  const registeredRecordCommitment = keccak256(encodeAbiParameters(
+    Array.from({ length: 9 }, () => ({ type: "bytes32" as const })),
+    [EXACT_SHARDS_REGISTERED_RECORD_DOMAIN, registryInstanceHash,
+      scopeAndApprovalHash, sourceAndDeploymentHash, attributionHash, reviewHash,
+      metadataHash, feePolicyRecordHash, normalized.finalityPolicyHash],
+  ));
+  const identityHash = keccak256(encodeAbiParameters(
+    [{ type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" }],
+    [EXACT_SHARDS_IDENTITY_DOMAIN, registryInstanceHash, registeredRecordCommitment],
+  ));
+  const canonicalIdentities = deriveExactShardsCanonicalIdentitiesV1({
+    websiteProjectIdSha256: normalized.websiteProjectIdSha256,
+    websiteLaunchIdSha256: normalized.websiteLaunchIdSha256,
+    githubRepositoryId,
+    approvalGeneration,
+    approvalBindingHash,
+    chainId,
+    registry: descriptor.contracts.registry.address,
+    registryGeneration,
+    primaryContract: normalized.primaryContract,
+  });
+  if (chainId !== BigInt(descriptor.chainId)
+    || registryGeneration !== registryConfiguration.registryGeneration
+    || normalized.sourceCommitment !== EXACT_SHARDS_SOURCE_REVISION_HASH
+    || normalized.buildCommitment !== EXACT_SHARDS_REVIEWED_BUILD_SHA256
+    || normalized.marketPathId !== EXACT_SHARDS_PROFILE_KEY
+    || normalized.providerId !== ZERO_HASH
+    || normalized.projectId !== canonicalIdentities.projectId
+    || normalized.approvalId !== canonicalIdentities.approvalId
+    || normalized.launchId !== canonicalIdentities.launchId
+    || normalized.approvalBindingHash !== approvalBindingHash
+    || normalized.reviewDeploymentBindingHash !== reviewDeploymentBindingHash
+    || normalized.registeredRecordCommitment !== registeredRecordCommitment) {
+    throw new TypeError("ExactShards registration semantics are invalid");
+  }
+  return deepFreeze({
+    registration: normalized,
+    registryInstanceHash,
+    policyHash,
+    feePolicyRecordHash,
+    claimSetHash,
+    identityHash,
+    claims,
+  });
+}
+
 export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
   descriptor: unknown;
   observations: readonly [
@@ -514,6 +980,10 @@ export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
   ];
   const permit = object(authorization.permit, "ExactShards permit");
   const registration = object(execution.registration, "ExactShards registration");
+  const semantics = deriveExactShardsRegistrationSemanticsV1({
+    descriptor,
+    registration,
+  });
   const launchId = hex32(registration.launchId, "registration launch ID");
   const projectId = hex32(registration.projectId, "registration project ID");
   const launchWallet = address(registration.launchWallet, "registration launch wallet");
@@ -545,6 +1015,7 @@ export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
     first,
     permit,
     registration,
+    semantics,
     launchEvents,
     finality.args,
     finality.logIndex,
@@ -553,33 +1024,24 @@ export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
   const orderedClaims = launchEvents.claims
     .slice()
     .sort((left, right) => Number(left.args.ordinal) - Number(right.args.ordinal));
-  const claims = orderedClaims.map(({ args }) => {
-    const ordinal = Number(args.ordinal) as 0 | 1 | 2;
-    const expected = [
-      [BUILDER_ROLE_HASH, 10, 1000, "builder"],
-      [PROGRAMMABLE_ROLE_HASH, 10, 1000, "programmable"],
-      [HOLDER_ROLE_HASH, 80, 8000, "holder"],
-    ] as const;
-    const terms = expected[ordinal];
-    if (terms === undefined || args.roleHash !== terms[0]
-      || Number(args.grossVolumeFeeBps) !== terms[1]
-      || Number(args.shareOfFeeBps) !== terms[2]) {
-      throw new TypeError("ExactShards fee claim is not canonical 10/10/80");
+  for (const [index, { args }] of orderedClaims.entries()) {
+    const expected = semantics.claims[index]!;
+    if (Number(args.ordinal) !== expected.ordinal
+      || hex32(args.roleHash, "claim role hash") !== expected.roleHash
+      || Number(args.grossVolumeFeeBps) !== expected.grossVolumeFeeBps
+      || Number(args.shareOfFeeBps) !== expected.shareOfFeeBps
+      || address(args.initialRecipientOrAccumulator, "claim recipient")
+        !== expected.recipient
+      || hex32(args.recipientModeHash, "claim recipient mode")
+        !== expected.recipientModeHash
+      || hex(args.claimSelector, 4, "claim selector") !== expected.claimSelector
+      || hex(args.handoffSelector, 4, "handoff selector") !== expected.handoffSelector
+      || hex32(args.legHash, "claim leg hash") !== expected.legHash
+      || hex32(args.storedClaimHash, "stored claim hash") !== expected.storedClaimHash) {
+      throw new TypeError("ExactShards fee claim does not match reviewed semantics");
     }
-    return Object.freeze({
-      ordinal,
-      role: terms[3],
-      roleHash: hex32(args.roleHash, "claim role hash"),
-      grossVolumeFeeBps: terms[1],
-      shareOfFeeBps: terms[2],
-      recipient: address(args.initialRecipientOrAccumulator, "claim recipient"),
-      recipientModeHash: hex32(args.recipientModeHash, "claim recipient mode"),
-      claimSelector: hex(args.claimSelector, 4, "claim selector"),
-      handoffSelector: hex(args.handoffSelector, 4, "handoff selector"),
-      legHash: hex32(args.legHash, "claim leg hash"),
-      storedClaimHash: hex32(args.storedClaimHash, "stored claim hash"),
-    });
-  });
+  }
+  const claims = semantics.claims;
   if (claims[2]?.recipient
     !== address(launchEvents.completed.args.hook, "launched hook")) {
     throw new TypeError("ExactShards holder claim is not bound to the launched hook");
@@ -603,6 +1065,7 @@ export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
       correctionSupported: false as const,
       refinalizationSupported: false as const,
     }),
+    registration: semantics.registration,
     publicIdentity: Object.freeze({
       websiteProjectId: rawSha256(
         registration.websiteProjectIdSha256,
@@ -675,22 +1138,20 @@ export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
       ),
       deploymentSetHash: hex32(registration.deploymentSetHash, "deployment set hash"),
       runtimeCodeSetHash: hex32(registration.runtimeCodeSetHash, "runtime set hash"),
+      identityHash: semantics.identityHash,
       registeredRecordCommitment: hex32(
         registration.registeredRecordCommitment,
         "registered record commitment",
       ),
     }),
     economics: Object.freeze({
-      profileKey: hex32(launchEvents.policy.args.profileKey, "fee profile"),
-      feeAsset: address(launchEvents.policy.args.feeAsset, "fee asset", true),
-      feeBasisHash: hex32(launchEvents.policy.args.feeBasisHash, "fee basis"),
+      profileKey: semantics.registration.feePolicy.profileKey,
+      feeAsset: semantics.registration.feePolicy.feeAsset,
+      feeBasisHash: semantics.registration.feePolicy.feeBasisHash,
       totalFeeBps: 100 as const,
-      policyHash: hex32(launchEvents.policy.args.policyHash, "fee policy hash"),
-      feePolicyRecordHash: hex32(
-        launchEvents.policy.args.feePolicyRecordHash,
-        "fee policy record hash",
-      ),
-      claimSetHash: hex32(launchEvents.policy.args.claimSetHash, "claim set hash"),
+      policyHash: semantics.policyHash,
+      feePolicyRecordHash: semantics.feePolicyRecordHash,
+      claimSetHash: semantics.claimSetHash,
       claims: Object.freeze(claims),
     }),
     finality: Object.freeze({
@@ -874,7 +1335,7 @@ export function validateExactShardsPublicRecordV1(
   const record = object(value, "ExactShards public record");
   exactKeys(record, [
     "approval", "descriptor", "economics", "finality", "launch", "lifecycle",
-    "publicIdentity", "recordBindingSha256", "schemaVersion", "source",
+    "publicIdentity", "recordBindingSha256", "registration", "schemaVersion", "source",
     "sourceLane",
   ], "ExactShards public record");
   const lifecycle = object(record.lifecycle, "ExactShards public lifecycle");
@@ -905,7 +1366,7 @@ export function validateExactShardsPublicRecordV1(
   exactKeys(launch, [
     "blockHash", "blockNumber", "configurationHash",
     "deploymentConfigurationHash", "deploymentSetHash", "hook",
-    "hookRuntimeCodeHash", "nft", "nftRuntimeCodeHash", "presentationBindingHash",
+    "hookRuntimeCodeHash", "identityHash", "nft", "nftRuntimeCodeHash", "presentationBindingHash",
     "primaryContract", "primaryRuntimeCodeHash", "registeredRecordCommitment",
     "registrationLogIndex", "route", "runtimeCodeSetHash", "shard",
     "tokenNameHash", "tokenSymbolHash", "transactionHash", "transactionIndex",
@@ -922,6 +1383,11 @@ export function validateExactShardsPublicRecordV1(
     "finalizationTransactionHash", "finalizedAtBlock", "finalizedAtTimestamp",
     "finalizedBlockHash", "policyHash", "providerIds", "trustDomains",
   ], "ExactShards finality record");
+  const semantics = deriveExactShardsRegistrationSemanticsV1({
+    descriptor,
+    registration: record.registration,
+  });
+  const registration = semantics.registration;
   const websiteProjectId = digest(identity.websiteProjectId, "Website project ID");
   const websiteLaunchId = digest(identity.websiteLaunchId, "Website launch ID");
   const githubRepositoryId = positiveDecimal(source.githubRepositoryId,
@@ -957,19 +1423,33 @@ export function validateExactShardsPublicRecordV1(
       !== canonicalIdentities.launchId
     || hex32(identity.mappingHash, "identity mapping hash")
       !== canonicalIdentities.identityMappingHash
+    || registration.websiteProjectIdSha256 !== `0x${websiteProjectId.slice(7)}`
+    || registration.websiteLaunchIdSha256 !== `0x${websiteLaunchId.slice(7)}`
+    || registration.projectId !== canonicalIdentities.projectId
+    || registration.launchId !== canonicalIdentities.launchId
     || hex32(source.repositoryKey, "repository key")
       !== canonicalIdentities.repositoryKey
+    || source.githubRepositoryId !== registration.githubRepositoryId
+    || source.approvalGeneration !== registration.approvalGeneration
+    || source.registryGeneration !== registration.registryGeneration
+    || source.commitId !== registration.commitId
+    || source.sourceCommitment !== registration.sourceCommitment
+    || source.buildCommitment !== registration.buildCommitment
     || hex32(source.commitId, "commit ID") === ZERO_HASH
     || hex32(source.sourceCommitment, "source commitment") === ZERO_HASH
     || hex32(source.buildCommitment, "build commitment") === ZERO_HASH
     || hex32(approval.approvalId, "approval ID") !== canonicalIdentities.approvalId
+    || approval.approvalId !== registration.approvalId
+    || approval.approvalBindingHash !== registration.approvalBindingHash
     || hex32(approval.permitDigest, "permit digest") === ZERO_HASH
     || positiveDecimal(approval.permitGeneration, "permit generation") === 0n
     || positiveDecimal(approval.signerEpoch, "signer epoch") === 0n
     || address(launch.wallet, "launch wallet") === ZERO_ADDRESS
+    || launch.wallet !== registration.launchWallet
     || address(launch.route, "launch route") !== descriptor.contracts.route.address
     || address(launch.shard, "launched shard")
       !== address(launch.primaryContract, "primary contract")
+    || launch.primaryContract !== registration.primaryContract
     || address(launch.hook, "launched hook") === ZERO_ADDRESS
     || address(launch.nft, "launched NFT") === ZERO_ADDRESS
     || hex32(launch.transactionHash, "launch transaction hash") === ZERO_HASH
@@ -979,27 +1459,40 @@ export function validateExactShardsPublicRecordV1(
     || !nonnegativeUint32(launch.transactionIndex)
     || !nonnegativeUint32(launch.registrationLogIndex)
     || hex32(launch.primaryRuntimeCodeHash, "primary runtime code hash") === ZERO_HASH
+    || launch.primaryRuntimeCodeHash !== registration.primaryRuntimeCodeHash
     || hex32(launch.hookRuntimeCodeHash, "hook runtime code hash") === ZERO_HASH
     || hex32(launch.nftRuntimeCodeHash, "NFT runtime code hash") === ZERO_HASH
     || hex32(launch.tokenNameHash, "token name hash") === ZERO_HASH
+    || launch.tokenNameHash !== registration.tokenNameHash
     || hex32(launch.tokenSymbolHash, "token symbol hash") === ZERO_HASH
+    || launch.tokenSymbolHash !== registration.tokenSymbolHash
     || hex32(launch.presentationBindingHash, "presentation binding") === ZERO_HASH
+    || launch.presentationBindingHash !== registration.presentationBindingHash
     || hex32(launch.configurationHash, "configuration hash") === ZERO_HASH
+    || launch.configurationHash !== registration.configurationHash
     || hex32(launch.deploymentConfigurationHash, "deployment configuration hash")
       === ZERO_HASH
+    || launch.deploymentConfigurationHash !== registration.deploymentConfigurationHash
     || hex32(launch.deploymentSetHash, "deployment set hash") === ZERO_HASH
+    || launch.deploymentSetHash !== registration.deploymentSetHash
     || hex32(launch.runtimeCodeSetHash, "runtime code set hash") === ZERO_HASH
+    || launch.runtimeCodeSetHash !== registration.runtimeCodeSetHash
+    || hex32(launch.identityHash, "registration identity hash") !== semantics.identityHash
     || hex32(launch.registeredRecordCommitment, "registered record commitment")
       === ZERO_HASH
+    || launch.registeredRecordCommitment !== registration.registeredRecordCommitment
     || economics.totalFeeBps !== 100
-    || hex32(economics.profileKey, "fee profile") === ZERO_HASH
-    || hex32(economics.feeBasisHash, "fee basis") === ZERO_HASH
-    || hex32(economics.policyHash, "fee policy hash") === ZERO_HASH
-    || hex32(economics.feePolicyRecordHash, "fee policy record hash") === ZERO_HASH
-    || hex32(economics.claimSetHash, "fee claim set hash") === ZERO_HASH
-    || !validPublicClaims(economics.claims, address(launch.hook, "launched hook"))
+    || economics.profileKey !== registration.feePolicy.profileKey
+    || economics.feeAsset !== registration.feePolicy.feeAsset
+    || economics.feeBasisHash !== registration.feePolicy.feeBasisHash
+    || economics.policyHash !== semantics.policyHash
+    || economics.feePolicyRecordHash !== semantics.feePolicyRecordHash
+    || economics.claimSetHash !== semantics.claimSetHash
+    || canonical(economics.claims) !== canonical(semantics.claims)
+    || semantics.claims[2]?.recipient !== address(launch.hook, "launched hook")
     || hex32(finality.evidenceHash, "finality evidence") === ZERO_HASH
     || hex32(finality.policyHash, "finality policy") === ZERO_HASH
+    || finality.policyHash !== registration.finalityPolicyHash
     || positiveDecimal(finality.confirmedHeadBlockNumber, "confirmed head block")
       < positiveDecimal(launch.blockNumber, "launch block number")
         + BigInt(descriptor.minimumConfirmations)
@@ -1078,9 +1571,10 @@ export function createExactShardsSuccessorPublicReadHandlersV1(input: Readonly<{
           message: "invalid_exact_shards_feed_request",
         });
       }
-      // A bound deployment descriptor is necessary but never sufficient.
-      // Publication requires a separate, explicit release authorization.
-      if (descriptor.status !== "bound" || !input.publicationAuthorized) {
+      // Deployment binding and publication authorization are both necessary;
+      // neither can override the descriptor's immutable activation deny.
+      if (descriptor.status !== "bound" || !descriptor.activationAllowed
+        || !input.publicationAuthorized) {
         return unavailable();
       }
       try {
@@ -1111,7 +1605,8 @@ export function createExactShardsSuccessorPublicReadHandlersV1(input: Readonly<{
           message: "invalid_exact_shards_detail_request",
         });
       }
-      if (descriptor.status !== "bound" || !input.publicationAuthorized) {
+      if (descriptor.status !== "bound" || !descriptor.activationAllowed
+        || !input.publicationAuthorized) {
         return unavailable();
       }
       try {
@@ -1301,6 +1796,7 @@ function correlateLaunch(
   observation: ExactShardsAuthenticatedRpcObservationV1,
   permit: Record<string, unknown>,
   registration: Record<string, unknown>,
+  semantics: ExactShardsDerivedSemanticsV1,
   events: ReturnType<typeof decodeLaunchReceipt>,
   finality: Record<string, unknown>,
   finalityLogIndex: number,
@@ -1308,21 +1804,10 @@ function correlateLaunch(
   const launchId = hex32(registration.launchId, "launch ID");
   const projectId = hex32(registration.projectId, "project ID");
   const approvalId = hex32(registration.approvalId, "approval ID");
-  const recordHash = hex32(
-    registration.registeredRecordCommitment,
-    "registered record commitment",
-  );
-  const feePolicyHash = hex32(events.policy.args.policyHash, "fee policy hash");
-  const feePolicyRecordHash = hex32(
-    events.policy.args.feePolicyRecordHash,
-    "fee policy record hash",
-  );
+  const recordHash = semantics.registration.registeredRecordCommitment;
+  const feePolicyHash = semantics.policyHash;
+  const feePolicyRecordHash = semantics.feePolicyRecordHash;
   const state = observation.snapshot.launchState;
-  const registrationLegs = registration.orderedFeeLegs;
-  if (!Array.isArray(registrationLegs) || registrationLegs.length !== 3) {
-    throw new TypeError("ExactShards registration fee legs are invalid");
-  }
-  const feePolicy = object(registration.feePolicy, "registration fee policy");
   const canonicalIdentities = deriveExactShardsCanonicalIdentitiesV1({
     websiteProjectIdSha256: hex32(
       registration.websiteProjectIdSha256,
@@ -1376,6 +1861,7 @@ function correlateLaunch(
       === address(registration.primaryContract, "registration primary contract"),
     events.registered.args.approvalId === approvalId,
     events.registered.args.deploymentId === registration.deploymentId,
+    events.registered.args.identityHash === semantics.identityHash,
     events.registered.args.registeredRecordCommitment === recordHash,
     events.registered.args.feePolicyHash === feePolicyHash,
     events.registered.args.feePolicyRecordHash === feePolicyRecordHash,
@@ -1393,12 +1879,16 @@ function correlateLaunch(
     events.metadata.args.tokenSymbolHash === registration.tokenSymbolHash,
     events.metadata.args.presentationBindingHash === registration.presentationBindingHash,
     events.policy.args.launchId === launchId,
-    events.policy.args.profileKey === feePolicy.profileKey,
+    events.policy.args.policyHash === feePolicyHash,
+    events.policy.args.feePolicyRecordHash === feePolicyRecordHash,
+    events.policy.args.claimSetHash === semantics.claimSetHash,
+    events.policy.args.verifierBindingHash === EXACT_SHARDS_FEE_POLICY_BINDING_HASH,
+    events.policy.args.profileKey === semantics.registration.feePolicy.profileKey,
     address(events.policy.args.feeAsset, "policy event fee asset", true)
-      === address(feePolicy.feeAsset, "registration fee asset", true),
-    events.policy.args.feeBasisHash === feePolicy.feeBasisHash,
+      === semantics.registration.feePolicy.feeAsset,
+    events.policy.args.feeBasisHash === semantics.registration.feePolicy.feeBasisHash,
     events.policy.args.totalFeeBps === 100,
-    events.policy.args.legsHash === feePolicy.legsHash,
+    events.policy.args.legsHash === semantics.registration.feePolicy.legsHash,
     finality.launchId === launchId,
     finality.observedTransactionHash === observation.launchTransaction.hash,
     finality.observedBlockNumber === observation.launchReceipt.blockNumber,
@@ -1440,12 +1930,20 @@ function correlateLaunch(
     (left, right) => Number(left.args.ordinal) - Number(right.args.ordinal),
   );
   for (const [index, claim] of claims.entries()) {
-    const leg = object(registrationLegs[index], `registration fee leg ${index}`);
-    if (claim.args.ordinal !== index || claim.args.roleHash !== leg.roleHash
-      || claim.args.grossVolumeFeeBps !== leg.feeBps
-      || claim.args.initialRecipientOrAccumulator !== leg.recipient
-      || claim.args.recipientModeHash !== leg.recipientModeHash
-      || claim.args.launchId !== launchId) {
+    const expected = semantics.claims[index]!;
+    if (Number(claim.args.ordinal) !== index || claim.args.roleHash !== expected.roleHash
+      || Number(claim.args.grossVolumeFeeBps) !== expected.grossVolumeFeeBps
+      || Number(claim.args.shareOfFeeBps) !== expected.shareOfFeeBps
+      || address(claim.args.initialRecipientOrAccumulator, "claim recipient")
+        !== expected.recipient
+      || hex32(claim.args.recipientModeHash, "claim recipient mode")
+        !== expected.recipientModeHash
+      || hex(claim.args.claimSelector, 4, "claim selector") !== expected.claimSelector
+      || hex(claim.args.handoffSelector, 4, "handoff selector") !== expected.handoffSelector
+      || hex32(claim.args.legHash, "claim leg hash") !== expected.legHash
+      || hex32(claim.args.storedClaimHash, "stored claim hash")
+        !== expected.storedClaimHash
+      || hex32(claim.args.launchId, "claim launch ID") !== launchId) {
       throw new TypeError("ExactShards fee claim event and calldata disagree");
     }
   }
@@ -1568,6 +2066,171 @@ function parseContractDescriptor(
   return parsed;
 }
 
+function canonicalRegistration(
+  source: Record<string, unknown>,
+  feePolicy: ExactShardsCanonicalRegistrationV1["feePolicy"],
+  orderedFeeLegs: ExactShardsCanonicalRegistrationV1["orderedFeeLegs"],
+): ExactShardsCanonicalRegistrationV1 {
+  const result = Object.freeze({
+    chainId: number(source.chainId, "registration chain ID").toString(),
+    registryGeneration: number(
+      source.registryGeneration,
+      "registration registry generation",
+    ).toString(),
+    launchId: hex32(source.launchId, "registration launch ID"),
+    projectId: hex32(source.projectId, "registration project ID"),
+    websiteProjectIdSha256: hex32(
+      source.websiteProjectIdSha256,
+      "registration Website project ID",
+    ),
+    websiteLaunchIdSha256: hex32(
+      source.websiteLaunchIdSha256,
+      "registration Website launch ID",
+    ),
+    approvalId: hex32(source.approvalId, "registration approval ID"),
+    approvalBindingHash: hex32(
+      source.approvalBindingHash,
+      "registration approval binding",
+    ),
+    githubRepositoryId: number(
+      source.githubRepositoryId,
+      "registration GitHub repository ID",
+    ).toString(),
+    approvalGeneration: number(
+      source.approvalGeneration,
+      "registration approval generation",
+    ).toString(),
+    commitId: hex32(source.commitId, "registration commit ID"),
+    sourceCommitment: hex32(source.sourceCommitment, "registration source commitment"),
+    buildCommitment: hex32(source.buildCommitment, "registration build commitment"),
+    artifactSetHash: hex32(source.artifactSetHash, "registration artifact set"),
+    deploymentConfigurationHash: hex32(
+      source.deploymentConfigurationHash,
+      "registration deployment configuration",
+    ),
+    configurationHash: hex32(source.configurationHash, "registration configuration"),
+    tokenNameHash: hex32(source.tokenNameHash, "registration token name"),
+    tokenSymbolHash: hex32(source.tokenSymbolHash, "registration token symbol"),
+    presentationBindingHash: hex32(
+      source.presentationBindingHash,
+      "registration presentation binding",
+    ),
+    permissionsHash: hex32(source.permissionsHash, "registration permissions"),
+    deploymentId: hex32(source.deploymentId, "registration deployment ID"),
+    deploymentSetHash: hex32(source.deploymentSetHash, "registration deployment set"),
+    runtimeCodeSetHash: hex32(source.runtimeCodeSetHash, "registration runtime set"),
+    primaryContract: address(source.primaryContract, "registration primary contract"),
+    primaryRuntimeCodeHash: hex32(
+      source.primaryRuntimeCodeHash,
+      "registration primary runtime",
+    ),
+    launchWallet: address(source.launchWallet, "registration launch wallet"),
+    modelId: hex32(source.modelId, "registration model ID"),
+    modelVersion: hex32(source.modelVersion, "registration model version"),
+    templateId: hex32(source.templateId, "registration template ID"),
+    templateVersion: hex32(source.templateVersion, "registration template version"),
+    providerId: hex32(source.providerId, "registration provider ID"),
+    builderAttributionHash: hex32(
+      source.builderAttributionHash,
+      "registration builder attribution",
+    ),
+    originHash: hex32(source.originHash, "registration origin"),
+    assetSetHash: hex32(source.assetSetHash, "registration asset set"),
+    marketSetHash: hex32(source.marketSetHash, "registration market set"),
+    marketPathId: hex32(source.marketPathId, "registration market path"),
+    capabilitySetHash: hex32(source.capabilitySetHash, "registration capability set"),
+    reviewPolicyHash: hex32(source.reviewPolicyHash, "registration review policy"),
+    securityReviewHash: hex32(source.securityReviewHash, "registration security review"),
+    reviewResultId: hex32(source.reviewResultId, "registration review result"),
+    reviewDeploymentBindingHash: hex32(
+      source.reviewDeploymentBindingHash,
+      "registration review deployment binding",
+    ),
+    finalityPolicyHash: hex32(source.finalityPolicyHash, "registration finality policy"),
+    registeredRecordCommitment: hex32(
+      source.registeredRecordCommitment,
+      "registration registered record commitment",
+    ),
+    feePolicy,
+    orderedFeeLegs: Object.freeze(orderedFeeLegs),
+  });
+  const requiredNonzero = [
+    result.projectId, result.websiteProjectIdSha256, result.websiteLaunchIdSha256,
+    result.approvalId, result.commitId, result.sourceCommitment, result.buildCommitment,
+    result.artifactSetHash, result.deploymentConfigurationHash, result.configurationHash,
+    result.tokenNameHash, result.tokenSymbolHash, result.presentationBindingHash,
+    result.permissionsHash, result.deploymentId, result.deploymentSetHash,
+    result.runtimeCodeSetHash, result.primaryRuntimeCodeHash,
+    result.builderAttributionHash, result.originHash, result.assetSetHash,
+    result.marketSetHash, result.marketPathId, result.capabilitySetHash,
+    result.reviewPolicyHash, result.securityReviewHash, result.reviewResultId,
+    result.finalityPolicyHash, result.registeredRecordCommitment,
+  ];
+  if (requiredNonzero.includes(ZERO_HASH)
+    || BigInt(result.chainId) === 0n || BigInt(result.registryGeneration) === 0n
+    || BigInt(result.githubRepositoryId) === 0n
+    || BigInt(result.approvalGeneration) === 0n
+    || (result.modelId === ZERO_HASH) !== (result.modelVersion === ZERO_HASH)
+    || (result.templateId === ZERO_HASH) !== (result.templateVersion === ZERO_HASH)) {
+    throw new TypeError("ExactShards registration bindings are invalid");
+  }
+  return result;
+}
+
+function uintToBytes32(value: bigint): Hex {
+  return `0x${value.toString(16).padStart(64, "0")}` as Hex;
+}
+
+function addressToBytes32(value: Address): Hex {
+  return `0x${"0".repeat(24)}${value.slice(2)}` as Hex;
+}
+
+function parseRegistryConfiguration(value: unknown): ExactShardsRegistryConfigurationV1 {
+  const source = object(value, "ExactShards registry configuration");
+  exactKeys(source, [
+    "chainProfileHash", "feePolicyVerifier", "registryGeneration",
+    "registryPolicyHash",
+  ], "ExactShards registry configuration");
+  const verifier = object(source.feePolicyVerifier, "ExactShards fee verifier");
+  exactKeys(verifier, [
+    "address", "economicTemplateHash", "feePolicyBindingHash", "runtimeCodeHash",
+  ], "ExactShards fee verifier");
+  const configuration = Object.freeze({
+    registryGeneration: positiveBigint(
+      source.registryGeneration,
+      "ExactShards registry generation",
+    ),
+    chainProfileHash: hex32(source.chainProfileHash, "ExactShards chain profile"),
+    registryPolicyHash: hex32(source.registryPolicyHash, "ExactShards registry policy"),
+    feePolicyVerifier: Object.freeze({
+      address: address(verifier.address, "ExactShards fee verifier"),
+      runtimeCodeHash: hex32(
+        verifier.runtimeCodeHash,
+        "ExactShards fee verifier runtime",
+      ),
+      feePolicyBindingHash: hex32(
+        verifier.feePolicyBindingHash,
+        "ExactShards fee policy binding",
+      ),
+      economicTemplateHash: hex32(
+        verifier.economicTemplateHash,
+        "ExactShards economic template",
+      ),
+    }),
+  });
+  if (configuration.chainProfileHash === ZERO_HASH
+    || configuration.registryPolicyHash === ZERO_HASH
+    || configuration.feePolicyVerifier.runtimeCodeHash
+      !== EXACT_SHARDS_VERIFIER_RUNTIME_CODE_HASH
+    || configuration.feePolicyVerifier.feePolicyBindingHash
+      !== EXACT_SHARDS_FEE_POLICY_BINDING_HASH
+    || configuration.feePolicyVerifier.economicTemplateHash
+      !== EXACT_SHARDS_ECONOMIC_TEMPLATE_HASH) {
+    throw new TypeError("ExactShards registry configuration binding is invalid");
+  }
+  return configuration;
+}
+
 function publicContractDescriptor(
   descriptor: ExactShardsContractDescriptorV1,
 ) {
@@ -1643,6 +2306,9 @@ function number(value: unknown, label: string): bigint {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     return BigInt(value);
   }
+  if (typeof value === "string" && /^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    return BigInt(value);
+  }
   throw new TypeError(`${label} must be an unsigned integer`);
 }
 
@@ -1659,36 +2325,6 @@ function positiveDecimal(value: unknown, label: string): bigint {
     throw new TypeError(`${label} must be a positive decimal string`);
   }
   return BigInt(value);
-}
-
-function validPublicClaims(value: unknown, launchedHook: Address): boolean {
-  if (!Array.isArray(value) || value.length !== 3) return false;
-  const expected = [
-    [0, "builder", BUILDER_ROLE_HASH, 10, 1000],
-    [1, "programmable", PROGRAMMABLE_ROLE_HASH, 10, 1000],
-    [2, "holder", HOLDER_ROLE_HASH, 80, 8000],
-  ] as const;
-  return value.every((candidate, index) => {
-    const claim = object(candidate, `ExactShards public fee claim ${index}`);
-    exactKeys(claim, [
-      "claimSelector", "grossVolumeFeeBps", "handoffSelector", "legHash",
-      "ordinal", "recipient", "recipientModeHash", "role", "roleHash",
-      "shareOfFeeBps", "storedClaimHash",
-    ], `ExactShards public fee claim ${index}`);
-    const terms = expected[index]!;
-    const recipient = address(claim.recipient, `claim ${index} recipient`);
-    return claim.ordinal === terms[0]
-      && claim.role === terms[1]
-      && hex32(claim.roleHash, `claim ${index} role hash`) === terms[2]
-      && claim.grossVolumeFeeBps === terms[3]
-      && claim.shareOfFeeBps === terms[4]
-      && (index !== 2 || recipient === launchedHook)
-      && hex32(claim.recipientModeHash, `claim ${index} recipient mode`) !== ZERO_HASH
-      && hex(claim.claimSelector, 4, `claim ${index} selector`) !== "0x00000000"
-      && hex(claim.handoffSelector, 4, `claim ${index} handoff selector`).length === 10
-      && hex32(claim.legHash, `claim ${index} leg hash`) !== ZERO_HASH
-      && hex32(claim.storedClaimHash, `claim ${index} stored hash`) !== ZERO_HASH;
-  });
 }
 
 function validProviderConsensus(providerIds: unknown, trustDomains: unknown): boolean {

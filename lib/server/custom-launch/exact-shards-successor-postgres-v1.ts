@@ -22,6 +22,7 @@ import {
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
 const MAXIMUM_PUBLIC_EXACT_SHARDS = 100;
+const CANONICAL_HISTORY_LOCK = "registry.exact-shards-v2.canonical-history.v1";
 
 interface CurrentRow extends Record<string, unknown> {
   website_project_id: string;
@@ -94,6 +95,10 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     try {
       await client.query("BEGIN");
       transactionOpen = true;
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
+        [CANONICAL_HISTORY_LOCK],
+      );
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [record.publicIdentity.registryLaunchId],
@@ -188,6 +193,10 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
       transactionOpen = true;
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
+        [CANONICAL_HISTORY_LOCK],
+      );
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
         [record.launchId],
       );
       const current = await client.query<CurrentRow>(`
@@ -270,6 +279,13 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     try {
       await client.query("BEGIN");
       transactionOpen = true;
+      // Serialize with both materializers before discovering affected rows.
+      // Otherwise an event can become canonical immediately after discovery
+      // and escape this rollback forever.
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
+        [CANONICAL_HISTORY_LOCK],
+      );
       const affected = await client.query<{ launch_id: string }>(`
         SELECT DISTINCT launch_id
           FROM programmable_website_projection_v1.registry_exact_shards_events
