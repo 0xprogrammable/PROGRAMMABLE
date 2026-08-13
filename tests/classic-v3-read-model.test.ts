@@ -1,5 +1,6 @@
 import {
   LimitExceededRpcError,
+  TimeoutError,
   type PublicClient,
 } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -128,6 +129,31 @@ describe("Classic V3 event scan", () => {
       ),
     ).resolves.toEqual({ launches: [], volumes: new Map() });
     expect(getLogs).toHaveBeenCalledTimes(6);
+  });
+
+  it("retries the same complete Classic V3 window after a transient", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new TimeoutError({
+          body: { method: "eth_getLogs" },
+          url: readyDeployment.rpcUrl,
+        });
+      }
+      return [];
+    });
+    await expect(
+      readClassicV3Events(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_000n,
+        1n,
+      ),
+    ).resolves.toEqual({ launches: [], volumes: new Map() });
+    expect(getLogs).toHaveBeenCalledTimes(4);
   });
 
   it("fails closed on a decoded event from the wrong contract", async () => {

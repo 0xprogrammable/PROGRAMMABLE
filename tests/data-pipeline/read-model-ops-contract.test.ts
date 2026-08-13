@@ -658,8 +658,26 @@ describe("read-model operations source contract", () => {
     [
       "timeout range bisection",
       "lib/onchain/read-model.ts",
-      "error instanceof TimeoutError ||",
-      "false ||",
+      "error instanceof TimeoutError",
+      "false",
+    ],
+    [
+      "single-block adaptive floor",
+      "lib/onchain/read-model.ts",
+      "const MINIMUM_LOG_BLOCK_RANGE = 1n;",
+      "const MINIMUM_LOG_BLOCK_RANGE = 100n;",
+    ],
+    [
+      "bounded minimum-window retries",
+      "lib/onchain/read-model.ts",
+      "const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;",
+      "const MINIMUM_RANGE_TRANSIENT_RETRIES = 0;",
+    ],
+    [
+      "post-success range recovery",
+      "lib/onchain/read-model.ts",
+      "logBlockRange * 2n",
+      "logBlockRange",
     ],
     [
       "Classic V2 result-limit range bisection",
