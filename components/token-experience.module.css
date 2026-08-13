@@ -84,7 +84,7 @@
 
 .image {
   aspect-ratio: 1;
-  background: #07112f;
+  background: var(--liquid-glass-inner-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 22px;
   isolation: isolate;
@@ -93,7 +93,7 @@
 }
 
 .image img {
-  background: #07112f;
+  background: var(--liquid-glass-inner-background);
   display: block;
   height: calc(100% + 4px) !important;
   inset: -2px !important;
@@ -579,7 +579,7 @@
 
 .customSideControl .sideButtonSelected {
   background: var(--liquid-glass-control-background-hover);
-  box-shadow: 0 2px 8px color-mix(in srgb, black 7%, transparent);
+  box-shadow: var(--liquid-glass-control-shadow);
 }
 
 .tradeFooter > span {
@@ -855,9 +855,7 @@
   background: var(--accent-glass-background);
   border: 1px solid var(--accent-glass-border);
   border-radius: 20px;
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
-    0 10px 28px var(--control-glass-shadow-color);
+  box-shadow: var(--liquid-glass-control-shadow);
   color: var(--accent-ink);
   display: inline-flex;
   font-size: 12px;
@@ -1019,7 +1017,7 @@
   border: 0;
   border-radius: 11px;
   bottom: 4px;
-  box-shadow: 0 2px 8px color-mix(in srgb, black 7%, transparent);
+  box-shadow: var(--liquid-glass-control-shadow);
   left: 4px;
   pointer-events: none;
   position: absolute;

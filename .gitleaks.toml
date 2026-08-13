@@ -83,8 +83,10 @@ condition = "AND"
 regexTarget = "match"
 paths = [
   '''scripts/perf/bitquery-golden-market-parity\.mjs''',
+  '''scripts/perf/bitquery-historical-release-gate\.mjs''',
   '''scripts/perf/read-model-post-promotion\.mjs''',
   '''tests/bitquery-market-data\.test\.ts''',
+  '''tests/data-pipeline/bitquery-historical-release-gate\.test\.ts''',
   '''tests/data-pipeline/read-model-ops-contract\.test\.ts''',
 ]
 regexes = ['''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''']
@@ -140,6 +142,16 @@ regexes = [
   '''EXACT_SHARDS_(?:TOKEN_SALT|TOKEN|TOKEN_RUNTIME_HASH)_V1\s*=\s*"0x[0-9a-fA-F]{64}"''',
   '''(?i)0x50d17eaaeb52c66e64b918385abf6523fdae57cf''',
 ]
+
+[[allowlists]]
+description = "Route-closure manifests contain public onchain profile keys, not credentials"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''config/hookemon-route-closure\.v1\.json''',
+  '''contracts/spec/shards-route-closure-v1\.json''',
+]
+regexes = ['''profileKey"?:\s*"0x[0-9a-fA-F]{64}"''']
 
 [[allowlists]]
 description = "Router V3 vendored artifacts contain public bytes32 profile and winner bindings"

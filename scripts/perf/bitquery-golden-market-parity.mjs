@@ -18,12 +18,12 @@ const MINIMUM_CONFIRMATIONS = 12n;
 const MAXIMUM_FEED_AGE_SECONDS = 7_200n;
 const MAXIMUM_DEVIATION_BPS = 1_500n;
 const RUNTIME_CONFIDENCE_DEVIATION_BPS = 1_000n;
-const MINIMUM_LIQUIDITY_USD_WAD = 10_000n * 10n ** 18n;
 const WAD = 10n ** 18n;
 const Q192 = 1n << 192n;
 
 const stateViewAbi = parseAbi([
   "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
 ]);
 const erc20Abi = parseAbi([
   "function decimals() view returns (uint8)",
@@ -102,6 +102,11 @@ async function readProvider(fetchImpl, rpcUrl, tokenAddress, poolId, blockHex) {
     abi: erc20Abi,
     functionName: "decimals",
   });
+  const liquidityData = encodeFunctionData({
+    abi: stateViewAbi,
+    functionName: "getLiquidity",
+    args: [poolId],
+  });
   const totalSupplyData = encodeFunctionData({
     abi: erc20Abi,
     functionName: "totalSupply",
@@ -121,15 +126,25 @@ async function readProvider(fetchImpl, rpcUrl, tokenAddress, poolId, blockHex) {
     [{ to, data }, blockHex],
     id,
   );
-  const [headHex, block, slot0Hex, decimalsHex, supplyHex, feedDecimalsHex, roundHex] =
+  const [
+    headHex,
+    block,
+    slot0Hex,
+    liquidityHex,
+    decimalsHex,
+    supplyHex,
+    feedDecimalsHex,
+    roundHex,
+  ] =
     await Promise.all([
       jsonRpc(fetchImpl, rpcUrl, "eth_blockNumber", [], 1),
       jsonRpc(fetchImpl, rpcUrl, "eth_getBlockByNumber", [blockHex, false], 2),
       call(MAINNET_STATE_VIEW, slot0Data, 3),
-      call(tokenAddress, decimalsData, 4),
-      call(tokenAddress, totalSupplyData, 5),
-      call(MAINNET_ETH_USD_FEED, feedDecimalsData, 6),
-      call(MAINNET_ETH_USD_FEED, roundData, 7),
+      call(MAINNET_STATE_VIEW, liquidityData, 4),
+      call(tokenAddress, decimalsData, 5),
+      call(tokenAddress, totalSupplyData, 6),
+      call(MAINNET_ETH_USD_FEED, feedDecimalsData, 7),
+      call(MAINNET_ETH_USD_FEED, roundData, 8),
     ]);
   if (
     !/^0x[0-9a-f]+$/iu.test(headHex ?? "") ||
@@ -144,6 +159,11 @@ async function readProvider(fetchImpl, rpcUrl, tokenAddress, poolId, blockHex) {
     abi: stateViewAbi,
     functionName: "getSlot0",
     data: slot0Hex,
+  });
+  const poolLiquidity = decodeFunctionResult({
+    abi: stateViewAbi,
+    functionName: "getLiquidity",
+    data: liquidityHex,
   });
   const tokenDecimals = Number(decodeFunctionResult({
     abi: erc20Abi,
@@ -171,6 +191,7 @@ async function readProvider(fetchImpl, rpcUrl, tokenAddress, poolId, blockHex) {
     blockHash: block.hash.toLowerCase(),
     blockTimestamp: BigInt(block.timestamp),
     sqrtPriceX96,
+    poolLiquidity,
     tokenDecimals,
     totalSupplyRaw,
     feedDecimals,
@@ -181,6 +202,7 @@ async function readProvider(fetchImpl, rpcUrl, tokenAddress, poolId, blockHex) {
   });
   if (
     observation.sqrtPriceX96 <= 0n ||
+    observation.poolLiquidity <= 0n ||
     !Number.isInteger(observation.tokenDecimals) ||
     observation.tokenDecimals < 0 ||
     observation.tokenDecimals > 255 ||
@@ -206,6 +228,7 @@ function sameObservation(left, right) {
     "blockHash",
     "blockTimestamp",
     "sqrtPriceX96",
+    "poolLiquidity",
     "tokenDecimals",
     "totalSupplyRaw",
     "feedDecimals",
@@ -233,6 +256,8 @@ async function readProviderWithRetry(fetchImpl, rpcUrl, tokenAddress, poolId, bl
  * Release-only independent correctness proof. Bitquery remains the runtime
  * market source; two fixed public Ethereum readers only verify that the
  * golden Bitquery observation has the right units, orientation and scale.
+ * StateView liquidity is read at that historical block only to prove the pool
+ * was active; it is neither a current-liquidity nor a USD-liquidity claim.
  */
 export async function verifyBitqueryGoldenMarketParityV1(input) {
   const token = input?.token;
@@ -257,10 +282,6 @@ export async function verifyBitqueryGoldenMarketParityV1(input) {
   const trade = pool.latestTrade;
   const priceUsdWad = positiveInteger(trade?.priceUsdWad, "indexed USD price");
   const rawPriceUsdWad = positiveInteger(trade?.rawPriceUsdWad, "raw USD price");
-  const liquidityUsdWad = positiveInteger(
-    pool?.liquidity?.valueUsdWad,
-    "exact-pool USD liquidity",
-  );
   const totalSupplyRaw = positiveInteger(token?.totalSupplyRaw, "canonical total supply");
   const tokenDecimals = token?.tokenDecimals;
   const { block, hex: blockHex } = canonicalBlockNumber(trade?.blockNumber);
@@ -271,7 +292,6 @@ export async function verifyBitqueryGoldenMarketParityV1(input) {
     !Number.isInteger(tokenDecimals) ||
     tokenDecimals < 0 ||
     tokenDecimals > 255 ||
-    liquidityUsdWad < MINIMUM_LIQUIDITY_USD_WAD ||
     Math.abs(tradeTime - priceTime) > 5 * 60_000 ||
     !withinDeviation(priceUsdWad, rawPriceUsdWad, RUNTIME_CONFIDENCE_DEVIATION_BPS)
   ) {
@@ -288,6 +308,7 @@ export async function verifyBitqueryGoldenMarketParityV1(input) {
   if (
     !sameObservation(first, second) ||
     first.blockNumber !== block ||
+    tradeTime !== Number(first.blockTimestamp) * 1_000 ||
     first.head < block + MINIMUM_CONFIRMATIONS ||
     second.head < block + MINIMUM_CONFIRMATIONS ||
     first.tokenDecimals !== tokenDecimals ||
@@ -327,6 +348,8 @@ export async function verifyBitqueryGoldenMarketParityV1(input) {
     poolId: PCAN_POOL_ID,
     blockNumber: block.toString(),
     blockHash: first.blockHash,
+    blockTime: new Date(Number(first.blockTimestamp) * 1_000).toISOString(),
+    historicalPoolLiquidity: first.poolLiquidity.toString(),
     confirmations: Number(
       (first.head < second.head ? first.head : second.head) - block,
     ),

@@ -61,14 +61,10 @@
   height: 56px;
   justify-content: center;
   overflow: hidden;
-  outline: 1px solid color-mix(in srgb, black 9%, transparent);
+  outline: 1px solid var(--liquid-glass-border);
   outline-offset: -1px;
   position: relative;
   width: 56px;
-}
-
-:global(html[data-theme="dark"]) .avatar {
-  outline-color: color-mix(in srgb, white 10%, transparent);
 }
 
 .avatar img {
@@ -936,15 +932,11 @@
   border-radius: 10px;
   flex: none;
   height: 42px;
-  outline: 1px solid color-mix(in srgb, black 9%, transparent);
+  outline: 1px solid var(--liquid-glass-border);
   outline-offset: -1px;
   overflow: hidden;
   position: relative;
   width: 42px;
-}
-
-:global(html[data-theme="dark"]) .claimArt {
-  outline-color: color-mix(in srgb, white 10%, transparent);
 }
 
 .claimArt img {
@@ -1854,4 +1846,9 @@
   .claimEmpty::before {
     background: CanvasText;
   }
+}
+
+.connectCard p,
+.launchesHeader p {
+  display: none;
 }

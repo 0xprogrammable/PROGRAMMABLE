@@ -20,6 +20,8 @@ import {
   MANUAL_ROUTER_PRODUCTION_BINDING_V1,
   assertManualRouterProductionBindingV1,
 } from "../lib/custom-launch/manual-router-bindings-v1";
+import { ApplicantRefreshUserUnavailableErrorV1 } from
+  "../lib/custom-launch/applicant-refresh-user-gate-v1";
 import {
   MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2,
   MANUAL_ROUTER_NESTED_FACTORY_PROFILE_TYPE_V2,
@@ -152,6 +154,25 @@ describe("manual Applicant Privy hydration", () => {
     expect(component).toContain("authReady,\n    authenticated,\n    githubConnected,\n    loadDirectory");
   });
 
+  it("keeps selection changes out of the discovery effect dependency", () => {
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    const loadStart = component.indexOf(
+      "const loadDirectory = useCallback(async",
+    );
+    const loadEnd = component.indexOf("\n  useEffect(() => {", loadStart);
+    const loadSource = component.slice(loadStart, loadEnd);
+
+    expect(loadSource).toContain("selectedSubjectHashRef.current");
+    expect(loadSource.match(/runManualRouterRequestWithFreshSessionV1/gu))
+      .toHaveLength(2);
+    expect(loadSource).not.toContain(
+      "selectedSubjectHash,\n",
+    );
+  });
+
   it("requires one refreshed Applicant session and never retries a request", async () => {
     const refreshApplicantSession = vi.fn(async () => ({
       accessToken: "access-token",
@@ -187,6 +208,23 @@ describe("manual Applicant Privy hydration", () => {
       code: "applicant_authentication_required",
     });
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("renders Privy capacity as retryable without asking for GitHub again", async () => {
+    const request = acquireManualRouterWebsiteSessionV1({
+      refreshApplicantSession: async () => {
+        throw new ApplicantRefreshUserUnavailableErrorV1();
+      },
+    });
+
+    await expect(request).rejects.toMatchObject({
+      code: "applicant_session_rate_limited",
+      retryable: true,
+      status: 429,
+    });
+    await request.catch((error: unknown) => {
+      expect(manualRouterRetainsKnownApprovalV1(error)).toBe(true);
+    });
   });
 
   it("rejects a refreshed session for the wrong numeric principal or wallet", async () => {
@@ -2130,22 +2168,32 @@ describe("manual Applicant browser contract", () => {
     });
   });
 
-  it("adds the Applicant entry only behind its separate flag and exposes no upload fallback", () => {
+  it("keeps the legacy Applicant implementation out of the public picker", () => {
     const disabled = renderToStaticMarkup(createElement(LaunchModelPicker, {
-      manualApplicantLaunchEnabled: false,
+      customLaunchPublicEnabled: false,
       onChoose: () => undefined,
     }));
     const enabled = renderToStaticMarkup(createElement(LaunchModelPicker, {
-      manualApplicantLaunchEnabled: true,
+      customLaunchPublicEnabled: true,
       onChoose: () => undefined,
     }));
     expect(disabled).not.toContain('data-launch-model-option="manual-applicant"');
-    expect(enabled).toContain('data-launch-model-option="manual-applicant"');
+    expect(disabled).not.toContain('data-launch-model-option="custom"');
+    expect(enabled).toContain('data-launch-model-option="custom"');
+    expect(enabled).not.toContain('data-launch-model-option="manual-applicant"');
     expect(enabled).toContain(
-      'id="launch-model-manual-applicant-title">Custom Hook</strong>',
+      'id="launch-model-custom-title">Custom Hook</strong>',
     );
-    expect(enabled).toContain("Open Custom Hook launch");
-    expect(enabled).not.toContain('data-launch-model-option="custom"');
+    expect(enabled).toContain("Open approved Custom Hook launch");
+    expect(enabled).toContain('data-status="available">Available</small>');
+    expect(enabled).not.toContain(">Ready</small>");
+
+    const entry = readFileSync(
+      join(process.cwd(), "components/launch-entry.tsx"),
+      "utf8",
+    );
+    expect(entry).not.toContain('from "@/components/manual-applicant-launch"');
+    expect(entry).not.toContain('"manual-applicant"');
 
     const component = readFileSync(
       join(process.cwd(), "components/manual-applicant-launch.tsx"),
@@ -2203,12 +2251,6 @@ describe("manual Applicant browser contract", () => {
     expect(component).not.toContain("Fresh signature");
     expect(component).not.toContain("signing team");
 
-    const entry = readFileSync(
-      join(process.cwd(), "components/launch-entry.tsx"),
-      "utf8",
-    );
-    expect(entry).toContain("manualApplicantButtonRef.current?.focus()");
-    expect(entry).toContain("ref={manualApplicantButtonRef}");
   });
 
   it("imports the canonical Router binding instead of creating a second profile producer", () => {

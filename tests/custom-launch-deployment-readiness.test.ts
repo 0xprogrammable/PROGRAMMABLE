@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 import {
   createCustomLaunchDeploymentReadinessHandlerV1,
 } from "../lib/server/custom-launch/deployment-readiness";
+import { canonicalSha256 } from "../lib/server/projection-target/hashing";
 
 const NOW = new Date("2026-08-05T12:00:00.000Z");
 const PACKAGE_ARTIFACT_HASH = `sha256:${"9".repeat(64)}`;
@@ -21,6 +22,25 @@ const permitSigner = {
     rawPermitPublicKey,
   ])).digest("hex")}`,
 };
+const receiptSignerCore = {
+  schemaVersion: "programmable.remote-ed25519-provider-identity.v2" as const,
+  endpoint: "https://signer.programmable.example/v1/sign",
+  audience: "programmable.launch-presentation-image.v1",
+  keyId: "token-image-receipt",
+  keyEpoch: "1",
+  publicKeySpkiSha256: permitSigner.publicKeySpkiSha256,
+};
+const receiptSigner = {
+  schemaVersion: "programmable.token-image-upload-receipt-signer-binding.v1",
+  endpoint: receiptSignerCore.endpoint,
+  audience: receiptSignerCore.audience,
+  keyId: receiptSignerCore.keyId,
+  keyEpoch: receiptSignerCore.keyEpoch,
+  publicKeyBase64Url: permitSigner.publicKeyBase64Url,
+  publicKeySpkiSha256: receiptSignerCore.publicKeySpkiSha256,
+  providerIdentityHash: canonicalSha256(receiptSignerCore.schemaVersion, receiptSignerCore),
+  credentialMode: "vercel-oidc-bearer",
+};
 const configured = {
   PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "true",
   PROGRAMMABLE_APPROVAL_SERVICE_V2_ORIGIN: "https://approval.programmable.example",
@@ -28,7 +48,10 @@ const configured = {
   PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "manual_review",
   NEXT_PUBLIC_PRIVY_APP_ID: "privy-app",
   PRIVY_APP_SECRET: "privy-secret",
+  TOKEN_IMAGE_BLOB_READ_WRITE_TOKEN: "blob-token",
   PROGRAMMABLE_LAUNCH_PERMIT_SIGNERS_V2_JSON: JSON.stringify([permitSigner]),
+  PROGRAMMABLE_TOKEN_IMAGE_UPLOAD_RECEIPT_SIGNER_V1_JSON:
+    JSON.stringify(receiptSigner),
   PROGRAMMABLE_RELEASE_COMMIT_SHA: "1".repeat(40),
   VERCEL_URL: "programmable-immutable-abc.vercel.app",
 };

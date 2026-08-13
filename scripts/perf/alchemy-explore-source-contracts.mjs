@@ -209,6 +209,14 @@ export function evaluateAlchemyExploreSourceContracts(
       bitqueryMarketSource.includes('"BITQUERY_OAUTH_TOKEN" as const') &&
       bitqueryMarketSource.includes("MARKET_BATCH_SIZE = 100") &&
       bitqueryMarketSource.includes("MARKET_BATCH_CONCURRENCY = 2") &&
+      bitqueryMarketSource.includes("INDEXED_PRICE_BATCH_SIZE = 20") &&
+      bitqueryMarketSource.includes("INDEXED_PRICE_BATCH_CONCURRENCY = 2") &&
+      bitqueryMarketSource.includes(
+        "offset += INDEXED_PRICE_BATCH_SIZE",
+      ) &&
+      bitqueryMarketSource.includes(
+        "readIndexedPriceObservations(priceCandidates, options)",
+      ) &&
       bitqueryMarketSource.includes("PoolId: { in: $pools }") &&
       bitqueryMarketSource.includes("limitBy: { by: Trade_PoolId, count: 1 }") &&
       bitqueryMarketSource.includes(
@@ -222,7 +230,7 @@ export function evaluateAlchemyExploreSourceContracts(
         'Block: { Time: { till: "${trade.time}" } }',
       ) &&
       bitqueryMarketSource.includes(
-        'Token: { Id: { is: "bid:eth" } }',
+        'Token: { Id: { is: "bid:eth:${WETH_ADDRESS}" } }',
       ) &&
       bitqueryMarketSource.includes(
         'const dataset = range === "1h" ? "" : ", dataset: combined";',
@@ -261,12 +269,32 @@ export function evaluateAlchemyExploreSourceContracts(
         .filter(({ id }) => id !== "token-list")
         .every(({ source }) => {
           const supplyHydration = source.indexOf(
-            "await hydrateMissingCanonicalTokenSupplyV1(",
+            "hydrateMissingCanonicalTokenSupplyV1(",
           );
           const marketRead = source.indexOf(
-            "await readBitqueryTokenMarketDataV1(",
+            "readBitqueryTokenMarketDataV1(",
           );
-          return supplyHydration >= 0 && marketRead > supplyHydration;
+          const inputEnd = Math.max(supplyHydration, marketRead);
+          const reconciliation = [
+            "valueExploreEntriesWithMarketData(",
+            "withBitqueryMarketData(",
+          ]
+            .map((needle) => source.indexOf(needle, inputEnd))
+            .filter((position) => position >= 0)
+            .sort((left, right) => left - right)[0] ?? -1;
+          const inputWindow = source.slice(
+            Math.max(0, Math.min(supplyHydration, marketRead) - 160),
+            reconciliation,
+          );
+          const supplyCompletesFirst =
+            source.slice(Math.max(0, supplyHydration - 16), supplyHydration)
+              .includes("await") &&
+            marketRead > supplyHydration;
+          const inputsJoinBeforeValuation = inputWindow.includes("Promise.all");
+          return supplyHydration >= 0 &&
+            marketRead >= 0 &&
+            reconciliation > inputEnd &&
+            (supplyCompletesFirst || inputsJoinBeforeValuation);
         }),
     "missing supply is hydrated before market valuation only after fixed readers agree on block hash, decimals and total supply",
   );

@@ -36,6 +36,9 @@ import {
   isExactHookemonApplicantGithubLoginV1,
 } from "@/lib/custom-launch/hookemon-applicant-presentation-v1";
 import {
+  isApplicantRefreshUserUnavailableErrorV1,
+} from "@/lib/custom-launch/applicant-refresh-user-gate-v1";
+import {
   type ManualRouterApplicantListResponseV1,
   type ManualRouterPersistedAttemptV1,
   type ManualRouterResolveResponseV1,
@@ -207,7 +210,20 @@ export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
   ) => Promise<WalletApplicantSessionV1 | null>;
   requirement?: WalletApplicantIdentityRequirementV1;
 }>): Promise<ManualRouterWebsiteSessionV1> {
-  const session = await input.refreshApplicantSession(input.requirement);
+  let session: WalletApplicantSessionV1 | null;
+  try {
+    session = await input.refreshApplicantSession(input.requirement);
+  } catch (error) {
+    if (isApplicantRefreshUserUnavailableErrorV1(error)) {
+      throw new ManualRouterWebsiteRequestErrorV1(
+        error.status,
+        error.code,
+        error.message,
+        error.retryable,
+      );
+    }
+    throw error;
+  }
   if (!session) {
     throw new ManualRouterWebsiteRequestErrorV1(
       401,
@@ -269,6 +285,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     useState<ManualRouterDirectory | null>(null);
   const [selectedSubjectHash, setSelectedSubjectHash] =
     useState<ManualRouterSha256V1 | "">("");
+  const selectedSubjectHashRef = useRef<ManualRouterSha256V1 | "">("");
   const [resolved, setResolved] =
     useState<ManualRouterResolved | null>(null);
   const [routeAcceptance, setRouteAcceptance] =
@@ -450,11 +467,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         requireExactShardsRoute: exactShardsApplicant,
       });
       if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
-      const preferred = options?.preferredSubjectHash || selectedSubjectHash;
+      const preferred = options?.preferredSubjectHash
+        || selectedSubjectHashRef.current;
       const chosen = next.submissions.some(({ subjectHash }) =>
         subjectHash === preferred)
         ? preferred
         : preferredSubmission(next.submissions)?.subjectHash ?? "";
+      selectedSubjectHashRef.current = chosen;
       setSelectedSubjectHash(chosen);
       const chosenSubmission = next.submissions.find(({ subjectHash }) =>
         subjectHash === chosen) ?? null;
@@ -619,7 +638,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     githubConnected,
     githubUsername,
     exactShardsApplicant,
-    selectedSubjectHash,
     routeDiscoveryAllowed,
     wallet,
   ]);
@@ -661,6 +679,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
 
   const chooseSubmission = useCallback(async (subjectHash: string) => {
     if (!/^sha256:[0-9a-f]{64}$/u.test(subjectHash)) return;
+    selectedSubjectHashRef.current = subjectHash as ManualRouterSha256V1;
     setSelectedSubjectHash(subjectHash as ManualRouterSha256V1);
     setResolved(null);
     setAttempt(null);
@@ -1168,7 +1187,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
 
       <section className={styles.hero} aria-labelledby="applicant-launch-title">
         <div className={styles.heroCopy}>
-          <span className={styles.kicker}>Applicant launch</span>
           <h1 id="applicant-launch-title" ref={titleRef} tabIndex={-1}>
             {exactHookemonApplicant
               ? "Prepare the Hookemon launch"
@@ -1211,7 +1229,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         >
           <div className={styles.sectionHeading}>
             <div>
-              <span className={styles.kicker}>Your launch</span>
               <h2 id="applicant-workspace-title">Approved submission</h2>
             </div>
             {loading ? (

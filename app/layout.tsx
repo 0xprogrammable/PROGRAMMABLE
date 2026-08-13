@@ -19,7 +19,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 const siteUrl = new URL("https://programmable.market");
-const siteDescription = "Tokens that behave how you imagine.";
+const siteDescription =
+  "Create tokens with a clear launch model and programmable onchain behavior.";
 const socialImageUrl = new URL(
   "/og/programmable-night-garden-og-1200x630.png",
   siteUrl,
@@ -105,14 +106,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      data-scroll-behavior="smooth"
-      data-theme="dark"
-    >
-      <body
-        className={`${instrumentSans.variable} ${plexMono.variable}`}
-      >
+    <html lang="en" data-scroll-behavior="smooth" data-theme="dark">
+      <body className={`${instrumentSans.variable} ${plexMono.variable}`}>
         <AppShell>{children}</AppShell>
       </body>
     </html>

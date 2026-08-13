@@ -1,0 +1,75 @@
+{
+  "signerBinding": {
+    "schemaVersion": "programmable.token-image-upload-receipt-signer-binding.v1",
+    "endpoint": "https://signer.programmable.example/v1/sign",
+    "audience": "programmable.launch-presentation-image.v1",
+    "keyId": "token-image-receipt",
+    "keyEpoch": "1",
+    "publicKeyBase64Url": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+    "publicKeySpkiSha256": "sha256:fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2",
+    "providerIdentityHash": "sha256:3a30a6d68e0a7a136abbf533caefcf9eade51fcc4238b76ca53f9fded3e6d5a5",
+    "credentialMode": "vercel-oidc-bearer"
+  },
+  "receipt": {
+    "schemaVersion": "programmable.signed-token-image-upload-receipt.v1",
+    "payload": {
+      "schemaVersion": "programmable.token-image-upload-receipt.v1",
+      "audience": "programmable.launch-presentation-image.v1",
+      "launchScope": {
+        "applicationId": "wild-game",
+        "applicationHandle": "github-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grantId": "10000000-0000-4000-8000-000000000001",
+        "grantBindingHash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "uploadOwner": {
+        "provider": "privy-github",
+        "privyUserId": "did:privy:user-1",
+        "githubUserId": "123",
+        "githubPrincipalHash": "sha256:5eddbd98594c77b50b0ace34c085e484cf7df75cd7abfe788e2aae5191757d57"
+      },
+      "blob": {
+        "storeId": "store_k2uoiPT9WCHJtz3H",
+        "host": "k2uoipt9wchjtz3h.public.blob.vercel-storage.com",
+        "pathname": "token-images/golden.webp",
+        "url": "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/token-images/golden.webp",
+        "etag": "golden-etag-v1"
+      },
+      "image": {
+        "contentSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "mediaType": "image/webp",
+        "byteLength": 12345,
+        "width": 1000,
+        "height": 1000
+      },
+      "signingAuthority": {
+        "providerIdentityHash": "sha256:3a30a6d68e0a7a136abbf533caefcf9eade51fcc4238b76ca53f9fded3e6d5a5",
+        "keyId": "token-image-receipt",
+        "keyEpoch": "1",
+        "publicKeySpkiSha256": "sha256:fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2"
+      },
+      "issuedAt": "2026-08-12T12:00:00.000Z",
+      "expiresAt": "2026-08-12T12:05:00.000Z"
+    },
+    "payloadSha256": "sha256:9eb89b5303a2f365e9da1d21f0f9512acb6db82450953654a73b79a0926d7328",
+    "signature": "qnqh0SKR1Is9dxKPTKg3dJgkaenrYCZRJ_7g6EA04fNBOd9DrPfrztfUQALRGlGJgf2di4mQjXd9QmoP_bDYBg",
+    "signatureSha256": "sha256:83526e1b68092d4dde4fed9086bdf4e11b5b5f0a314685dedf0e3b14c48fe9fb",
+    "providerReceipt": {
+      "schemaVersion": "programmable.remote-signing-provider-receipt.v2",
+      "outcome": "completed",
+      "audience": "programmable.launch-presentation-image.v1",
+      "keyId": "token-image-receipt",
+      "keyEpoch": "1",
+      "algorithm": "Ed25519",
+      "providerIdentityHash": "sha256:3a30a6d68e0a7a136abbf533caefcf9eade51fcc4238b76ca53f9fded3e6d5a5",
+      "idempotencyKey": "sha256:39ba65b39aac9077dfd152fc2ab910ef053935a93cd0172569da5dbef8a65f34",
+      "messageSha256": "sha256:9eb89b5303a2f365e9da1d21f0f9512acb6db82450953654a73b79a0926d7328",
+      "requestDigest": "sha256:0610676df54bc8a3aebdf829ebf4c20a72b48c88984898ec673ac86660ff00df",
+      "signature": "qnqh0SKR1Is9dxKPTKg3dJgkaenrYCZRJ_7g6EA04fNBOd9DrPfrztfUQALRGlGJgf2di4mQjXd9QmoP_bDYBg",
+      "observedAt": "2026-08-12T12:00:00.000Z",
+      "expiresAt": "2026-08-12T12:05:00.000Z"
+    },
+    "providerReceiptSha256": "sha256:a98d746fa9d3d1c3d257e3b00ff5619c9d6338fcdfcabf5dd9ce065c0985bc4d",
+    "providerReceiptSignature": "8rLYkiWDOhzYe8Qf1OJ5s7NOm8SYpAZjdwcbI0KfBCL0sCVa81GtOy5wbcdFvIZdDHpfeFlkXBg5SkLr-KkHCQ",
+    "providerReceiptSignatureSha256": "sha256:60025d9647c3f454dba1ccc27dd7c158e68c670aba61f467041dfea88725316a"
+  }
+}

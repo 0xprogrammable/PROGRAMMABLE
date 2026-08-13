@@ -9,6 +9,7 @@ import {
   type ValuedExploreEntry,
   withBitqueryMarketData,
   withExploreValuation,
+  withPublicExploreBitqueryMarketData,
 } from "../lib/explore-financial-data";
 import type { TokenMarketDataV1 } from
   "../lib/market-data/market-data-v1";
@@ -197,7 +198,7 @@ describe("Explore financial-data semantics", () => {
     expect(published).not.toHaveProperty("tokenPriceQuoteWad");
   });
 
-  it("publishes an exact-pool last-trade FDV as stale when liquidity is unavailable", () => {
+  it("preserves exact historical detail but removes FDV beyond the public stale ceiling", () => {
     const poolId = `0x${"34".repeat(32)}` as const;
     const marketData = {
       schemaVersion: "programmable.market-data.v1",
@@ -244,6 +245,21 @@ describe("Explore financial-data semantics", () => {
     });
     expect(valuationSortValue(entry)).toBeNull();
     expect(publicExploreEntryV1(entry)).not.toHaveProperty("fdvUsdWad");
+
+    const publicEntry = withPublicExploreBitqueryMarketData(
+      canonicalTokenExploreEntryV1(goldenToken()),
+      marketData,
+      Date.parse(marketData.generatedAt),
+    );
+    expect(publicEntry.valuation).toEqual({
+      status: "unavailable",
+      reason: "price-unavailable",
+    });
+    expect(publicEntry.marketData?.pools[0]?.valuation).toEqual({
+      status: "unavailable",
+      reason: "price-unavailable",
+    });
+    expect(valuationSortValue(publicEntry)).toBeNull();
   });
 
   it("keeps the indexed USD timestamp authoritative for public freshness", () => {

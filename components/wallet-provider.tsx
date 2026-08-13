@@ -55,6 +55,12 @@ import {
 import {
   verifyHookemonActionIdentifierAuthorityForSendV1,
 } from "@/lib/custom-launch/hookemon-action-identifier-verifier-v1";
+import {
+  applicantRefreshUserIsRateLimitedV1,
+  createApplicantRefreshUserGateV1,
+  isApplicantRefreshUserUnavailableErrorV1,
+  type ApplicantRefreshUserGateV1,
+} from "@/lib/custom-launch/applicant-refresh-user-gate-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import {
   buildEip1193TransactionRequest,
@@ -203,7 +209,48 @@ type ApplicantAuthoritySnapshotV1 = Readonly<{
   githubUserId: string | null;
   githubLogin: string | null;
   walletAddress: string | null;
+  linkedAccountsFingerprint: string | null;
 }>;
+
+function applicantLinkedAccountsFingerprintV1(
+  linkedAccounts: unknown,
+): string | null {
+  if (!Array.isArray(linkedAccounts)) return null;
+
+  const records = linkedAccounts.map((account) => {
+    if (account === null || typeof account !== "object") {
+      return ["invalid", null, null, null, null] as const;
+    }
+    const record = account as Readonly<Record<string, unknown>>;
+    const normalized = (field: string, lowerCase = false): string | null => {
+      const value = record[field];
+      if (typeof value !== "string") return null;
+      return lowerCase ? value.toLowerCase() : value;
+    };
+    return [
+      normalized("type"),
+      normalized("subject"),
+      normalized("username", true),
+      normalized("address", true),
+      normalized("chainType", true),
+    ] as const;
+  });
+  records.sort((left, right) =>
+    JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return JSON.stringify(records);
+}
+
+function applicantAuthorityCacheKeyV1(
+  authority: ApplicantAuthoritySnapshotV1,
+): string {
+  return JSON.stringify([
+    authority.privyUserId,
+    authority.githubUserId,
+    authority.githubLogin?.toLowerCase() ?? null,
+    authority.walletAddress?.toLowerCase() ?? null,
+    authority.linkedAccountsFingerprint,
+  ]);
+}
 
 export async function refreshWalletApplicantSessionV1(input: Readonly<{
   authenticated: boolean;
@@ -295,7 +342,8 @@ export async function refreshWalletApplicantSessionV1(input: Readonly<{
       githubLogin: github.username,
       launchWallet,
     });
-  } catch {
+  } catch (error) {
+    if (isApplicantRefreshUserUnavailableErrorV1(error)) throw error;
     return null;
   }
 }
@@ -308,7 +356,8 @@ function authoritySnapshotMatches(
     && current.githubUserId === expected.githubUserId
     && current.githubLogin?.toLowerCase() === expected.githubLogin?.toLowerCase()
     && current.walletAddress?.toLowerCase()
-      === expected.walletAddress?.toLowerCase();
+      === expected.walletAddress?.toLowerCase()
+    && current.linkedAccountsFingerprint === expected.linkedAccountsFingerprint;
 }
 
 export function getWalletProfileStorageKey(account: string) {
@@ -746,8 +795,30 @@ function ConfiguredWalletProvider({
 function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
   const { refreshUser } = useUser();
+  const [applicantRefreshUserGate] = useState<ApplicantRefreshUserGateV1<
+    RefreshableApplicantUserV1 | null | undefined
+  >>(() => createApplicantRefreshUserGateV1<
+    RefreshableApplicantUserV1 | null | undefined
+  >({
+    source: () =>
+      refreshUser() as Promise<RefreshableApplicantUserV1>,
+    isRateLimited: applicantRefreshUserIsRateLimitedV1,
+  }));
+  useEffect(() => {
+    applicantRefreshUserGate.setSource(
+      () => refreshUser() as Promise<RefreshableApplicantUserV1>,
+    );
+  }, [applicantRefreshUserGate, refreshUser]);
   const { reauthorize } = useOAuthTokens();
   const { identityToken } = useIdentityToken();
+  // Keep the latest hook value available to stable Applicant callbacks. The
+  // callback must not depend on the token itself: Privy updates this value
+  // after `refreshUser()`, and changing the callback identity would restart
+  // the discovery effect while its first request is still settling.
+  const applicantIdentityTokenRef = useRef<string | null>(identityToken);
+  useEffect(() => {
+    applicantIdentityTokenRef.current = identityToken;
+  }, [identityToken]);
   const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
   const { signMessage: signPrivyMessage } = usePrivySignMessage();
   const { ready: walletsReady, wallets } = useWallets();
@@ -761,6 +832,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const [selectedWalletAddress, setSelectedWalletAddress] = useState<string | null>(null);
   const { login } = useLogin({
     onComplete: () => {
+      applicantRefreshUserGate.invalidate();
       setSessionSuppressed(false);
       setError("");
       setDialogOpen(false);
@@ -775,6 +847,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   });
   const { linkGithub, linkWallet } = useLinkAccount({
     onSuccess: () => {
+      applicantRefreshUserGate.invalidate();
       setError("");
       setDialogOpen(false);
     },
@@ -819,16 +892,22 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     });
   }, [wallets]);
 
+  const connectedWalletAddress = connectedWallet?.address;
+  const connectedWalletChainId = connectedWallet?.chainId;
   const wallet = useMemo<WalletState | null>(() => {
-    if (!connectedWallet || !isEthereumAddress(connectedWallet.address)) {
+    if (
+      !connectedWalletAddress
+      || typeof connectedWalletChainId !== "string"
+      || !isEthereumAddress(connectedWalletAddress)
+    ) {
       return null;
     }
 
     return {
-      account: connectedWallet.address,
-      chainId: normalizeChainId(connectedWallet.chainId),
+      account: connectedWalletAddress,
+      chainId: normalizeChainId(connectedWalletChainId),
     };
-  }, [connectedWallet]);
+  }, [connectedWalletAddress, connectedWalletChainId]);
   const providerSettled = isWalletProviderSettled(
     ready,
     walletsReady,
@@ -844,31 +923,72 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     }),
     [activeAuthenticated, identityToken],
   );
-  const applicantAuthorityRef = useRef<ApplicantAuthoritySnapshotV1>({
+  const applicantLinkedAccountsFingerprint = useMemo(
+    () => applicantLinkedAccountsFingerprintV1(user?.linkedAccounts),
+    [user?.linkedAccounts],
+  );
+  const initialApplicantAuthority: ApplicantAuthoritySnapshotV1 = {
     privyUserId: user?.id ?? null,
     githubUserId: user?.github?.subject ?? null,
     githubLogin: user?.github?.username ?? null,
     walletAddress: wallet?.account ?? null,
-  });
+    linkedAccountsFingerprint: applicantLinkedAccountsFingerprint,
+  };
+  const applicantAuthorityRef = useRef<ApplicantAuthoritySnapshotV1>(
+    initialApplicantAuthority,
+  );
+  const applicantAuthorityKeyRef = useRef(
+    applicantAuthorityCacheKeyV1(initialApplicantAuthority),
+  );
   useEffect(() => {
-    applicantAuthorityRef.current = {
+    const nextAuthority: ApplicantAuthoritySnapshotV1 = {
       privyUserId: user?.id ?? null,
       githubUserId: user?.github?.subject ?? null,
       githubLogin: user?.github?.username ?? null,
       walletAddress: wallet?.account ?? null,
+      linkedAccountsFingerprint: applicantLinkedAccountsFingerprint,
     };
-  }, [user?.github?.subject, user?.github?.username, user?.id, wallet?.account]);
+    const nextAuthorityKey = applicantAuthorityCacheKeyV1(nextAuthority);
+    if (applicantAuthorityKeyRef.current !== nextAuthorityKey) {
+      applicantRefreshUserGate.invalidate();
+    }
+    applicantAuthorityRef.current = nextAuthority;
+    applicantAuthorityKeyRef.current = nextAuthorityKey;
+  }, [
+    applicantLinkedAccountsFingerprint,
+    applicantRefreshUserGate,
+    user?.github?.subject,
+    user?.github?.username,
+    user?.id,
+    wallet?.account,
+  ]);
   const refreshApplicantSession = useCallback(
-    (requirement?: WalletApplicantIdentityRequirementV1) =>
-      refreshWalletApplicantSessionV1({
+    (requirement?: WalletApplicantIdentityRequirementV1) => {
+      const authorityKey = applicantAuthorityCacheKeyV1(
+        applicantAuthorityRef.current,
+      );
+      return refreshWalletApplicantSessionV1({
         authenticated: activeAuthenticated && ready,
         readCurrentAuthority: () => applicantAuthorityRef.current,
-        refreshUser,
+        refreshUser: () => applicantRefreshUserGate.refresh(authorityKey),
         getAccessToken,
-        getIdentityToken: getPrivyIdentityToken,
+        // `refreshUser()` already performs Privy's `/users/me` read and updates
+        // its identity-token store. Calling the exported global
+        // `getIdentityToken()` here would perform a second `/users/me` read and
+        // deterministically hit Privy's one-request rate bucket. Applicant
+        // sessions therefore consume only the hook-cached token; if hydration
+        // has not exposed it yet, the session fails closed and the next retry
+        // can use the updated hook value.
+        getIdentityToken: async () => applicantIdentityTokenRef.current,
         requirement,
-      }),
-    [activeAuthenticated, getAccessToken, ready, refreshUser],
+      });
+    },
+    [
+      activeAuthenticated,
+      applicantRefreshUserGate,
+      getAccessToken,
+      ready,
+    ],
   );
   const reauthorizeGithub = useCallback(async () => {
     if (!ready || !activeAuthenticated || !githubConnected) {
@@ -876,8 +996,16 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     }
     // No OAuth grant callback is registered: the Website never receives,
     // stores or logs the provider access token during reauthorization.
+    applicantRefreshUserGate.invalidate();
     await reauthorize({ provider: "github" });
-  }, [activeAuthenticated, githubConnected, ready, reauthorize]);
+    applicantRefreshUserGate.invalidate();
+  }, [
+    activeAuthenticated,
+    applicantRefreshUserGate,
+    githubConnected,
+    ready,
+    reauthorize,
+  ]);
 
   const profileValue = useSyncExternalStore(
     subscribeToProfiles,
@@ -996,6 +1124,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const disconnect = useCallback(async (options?: {
     showDialogOnFailure?: boolean;
   }) => {
+    applicantRefreshUserGate.invalidate();
     setDisconnecting(true);
     setError("");
     const markDisconnectFailed = () => {
@@ -1034,7 +1163,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     } finally {
       setDisconnecting(false);
     }
-  }, [authenticated, logout, wallets]);
+  }, [applicantRefreshUserGate, authenticated, logout, wallets]);
 
   const copyAddress = useCallback(async () => {
     if (!wallet) return;

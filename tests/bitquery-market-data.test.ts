@@ -45,6 +45,15 @@ const SECOND_CUSTOM: MarketDataIdentityV1 = {
   protocol: "uniswap_v4",
 };
 
+function generatedIdentity(index: number): MarketDataIdentityV1 {
+  return {
+    chainId: "1",
+    tokenAddress: `0x${index.toString(16).padStart(40, "0")}`,
+    poolId: `0x${index.toString(16).padStart(64, "0")}`,
+    protocol: "uniswap_v4",
+  };
+}
+
 function tradeRow(input: Readonly<{
   identity?: MarketDataIdentityV1;
   block?: string;
@@ -108,7 +117,13 @@ function liquidityRow(
     omitFirstUsd?: boolean;
     omitSecondUsd?: boolean;
     quoteAddress?: string;
+    tokenAddress?: string;
     time?: string;
+    transaction?: string;
+    transactionIndex?: number;
+    logIndex?: number;
+    amountFirst?: string;
+    amountSecond?: string;
     amountFirstUsd?: string;
     amountSecondUsd?: string;
   }> = {},
@@ -118,11 +133,16 @@ function liquidityRow(
       Number: "25740000",
       Time: options.time ?? "2026-08-11T14:00:00.000Z",
     },
+    Log: { Index: options.logIndex ?? 1 },
+    Transaction: {
+      Hash: options.transaction ?? `0x${"aa".repeat(32)}`,
+      Index: options.transactionIndex ?? 7,
+    },
     PoolEvent: {
       Pool: {
         PoolId: identity.poolId,
         CurrencyA: {
-          SmartContract: identity.tokenAddress,
+          SmartContract: options.tokenAddress ?? identity.tokenAddress,
           Symbol: "PCAN",
         },
         CurrencyB: {
@@ -131,8 +151,8 @@ function liquidityRow(
         },
       },
       Liquidity: {
-        AmountCurrencyA: "100",
-        AmountCurrencyB: "20",
+        AmountCurrencyA: options.amountFirst ?? "100",
+        AmountCurrencyB: options.amountSecond ?? "20",
         ...(options.omitFirstUsd
           ? {}
           : { AmountCurrencyAInUSD: options.amountFirstUsd ?? "100000" }),
@@ -190,13 +210,16 @@ function tradingPriceRow(
 ) {
   return {
     Block: { Time: input.time ?? "2026-08-11T14:00:00.000Z" },
-    Pair: {
-      Token: {
-        Id: input.tokenId ?? "bid:eth",
-        Address: input.tokenAddress ?? "0x",
+    Token: {
+      Id: input.tokenId ?? `bid:eth:${WETH}`,
+      Address: input.tokenAddress ?? WETH,
+    },
+    Price: {
+      IsQuotedInUsd: true,
+      Ohlc: {
+        Close: input.priceUsd === undefined ? "2500" : input.priceUsd,
       },
     },
-    PriceInUsd: input.priceUsd === undefined ? "2500" : input.priceUsd,
   };
 }
 
@@ -305,8 +328,9 @@ describe("Bitquery-only market data", () => {
       if (request.query.includes("ProgrammableMarketPrices")) {
         expect(request.variables).toEqual({});
         expect(request.query).toContain(
-          `Token: { Id: { is: "bid:eth" } }`,
+          `Token: { Id: { is: "bid:eth:${WETH}" } }`,
         );
+        expect(request.query).toContain("Price: { IsQuotedInUsd: true }");
         expect(request.query).toContain(
           `Block: { Time: { till: "2026-08-11T14:00:00.000Z" } }`,
         );
@@ -317,6 +341,11 @@ describe("Bitquery-only market data", () => {
       if (request.query.includes("ProgrammableMarketLiquidity")) {
         expect(request.variables).toEqual({ pools: [PCAN.poolId] });
         expect(request.query).toContain("latestLiquidity: DEXPoolEvents(");
+        expect(request.query).toContain("CurrencyA { SmartContract Symbol }");
+        expect(request.query).toContain("AmountCurrencyA");
+        expect(request.query).toContain("AmountCurrencyB");
+        expect(request.query).toContain("Log { Index }");
+        expect(request.query).toContain("Transaction { Hash Index }");
         expect(request.query).not.toContain("latestTrades: DEXTrades(");
         return jsonResponse({
           data: { EVM: { latestLiquidity: [liquidityRow(PCAN)] } },
@@ -357,7 +386,7 @@ describe("Bitquery-only market data", () => {
     });
     const market = values.get(PCAN.tokenAddress);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(market && isTokenMarketDataV1(market)).toBe(true);
     expect(market).toMatchObject({
       source: "bitquery",
@@ -382,6 +411,48 @@ describe("Bitquery-only market data", () => {
         },
       }],
     });
+  });
+
+  it("starts independent market reads before the core snapshot completes", async () => {
+    let releaseCore: (() => void) | undefined;
+    const corePending = new Promise<void>((resolve) => {
+      releaseCore = resolve;
+    });
+    const started = new Set<string>();
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        started.add("core");
+        await corePending;
+      } else if (request.query.includes("ProgrammableMarketLiquidity")) {
+        started.add("liquidity");
+      } else if (request.query.includes("ProgrammableMarketStats")) {
+        started.add("stats");
+      } else {
+        throw new Error("unexpected market request");
+      }
+      return jsonResponse(marketResponse());
+    }) as typeof fetch;
+
+    const read = readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    try {
+      await vi.waitFor(() => {
+        expect([...started].sort()).toEqual(["core", "liquidity", "stats"]);
+      });
+    } finally {
+      releaseCore?.();
+    }
+
+    const values = await read;
+    expect(values.get(PCAN.tokenAddress)).toMatchObject({ source: "bitquery" });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
   it.each([
@@ -417,7 +488,7 @@ describe("Bitquery-only market data", () => {
     });
     const pool = values.get(PCAN.tokenAddress)?.pools[0];
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(pool?.latestTrade).toMatchObject({
       priceUsdWad: "250000000000000000",
       priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
@@ -554,7 +625,7 @@ describe("Bitquery-only market data", () => {
     });
   });
 
-  it("normalizes native ETH without inventing missing liquidity USD", async () => {
+  it("derives exact-pool USD liquidity from event reserves and the bound native trade", async () => {
     const nativeEth = "0x0000000000000000000000000000000000000000";
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       trade: tradeRow({
@@ -579,7 +650,169 @@ describe("Bitquery-only market data", () => {
         priceUsdWad: "250000000000000000",
         quoteAddress: nativeEth,
       },
+      liquidity: {
+        valueUsdWad: "50025000000000000000000",
+        asOfBlock: "25740000",
+      },
     });
+  });
+
+  it("does not treat an indexed native price as transaction-bound liquidity evidence", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      trade: tradeRow({
+        omitPriceUsd: true,
+        omitQuotePriceUsd: true,
+        omitAmountUsd: true,
+      }),
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.latestTrade).toHaveProperty(
+      "priceUsdWad",
+    );
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("keeps a legitimate zero reserve while requiring positive total liquidity", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        amountFirst: "0",
+        amountFirstUsd: "0",
+        amountSecond: "20",
+        amountSecondUsd: "50000",
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.liquidity).toMatchObject({
+      valueUsdWad: "50000000000000000000000",
+      freshness: "current",
+    });
+  });
+
+  it("does not publish zero total liquidity", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        amountFirst: "0",
+        amountFirstUsd: "0",
+        amountSecond: "0",
+        amountSecondUsd: "0",
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("does not derive missing liquidity USD for an unverified quote asset", async () => {
+    const unknownQuote = "0x2222222222222222222222222222222222222222";
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      trade: tradeRow({ quoteAddress: unknownQuote, quoteSymbol: "QUOTE" }),
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+        quoteAddress: unknownQuote,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("does not derive liquidity USD across different transactions", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+        transaction: `0x${"bb".repeat(32)}`,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("does not derive liquidity USD across different event logs", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+        logIndex: 2,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("rejects liquidity whose currencies do not contain the bound token", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        tokenAddress: "0x2222222222222222222222222222222222222222",
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it.each([
+    ["zero reserve with positive USD", "0", "1"],
+    ["positive reserve with zero USD", "1", "0"],
+  ])("rejects %s", async (_label, amountFirst, amountFirstUsd) => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, { amountFirst, amountFirstUsd }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
     expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
       "liquidity",
     );
@@ -667,9 +900,79 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(values.get(PCAN.tokenAddress)?.pools[0]?.identity).toEqual(PCAN);
     expect(values.get(CLASSIC.tokenAddress)?.pools[0]?.identity).toEqual(CLASSIC);
+  });
+
+  it("bounds historical USD price aliases without dropping later pools", async () => {
+    const identities = Array.from(
+      { length: 41 },
+      (_, index) => generatedIdentity(index + 1),
+    );
+    const priceBatchSizes: number[] = [];
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestTrades: identities.map((identity) => tradeRow({
+                identity,
+                omitPriceUsd: true,
+                omitQuotePriceUsd: true,
+              })),
+            },
+            Trading: {
+              tokenSupplies: identities.map((identity) => supplyRow({ identity })),
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketPrices")) {
+        const aliases = [...request.query.matchAll(/price(\d+): Tokens/gu)];
+        priceBatchSizes.push(aliases.length);
+        return jsonResponse({
+          data: {
+            Trading: Object.fromEntries(aliases.map((match) => [
+              `price${match[1]}`,
+              [tradingPriceRow()],
+            ])),
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestLiquidity: identities.map((identity) =>
+                liquidityRow(identity)),
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketStats")) {
+        return jsonResponse({ data: { EVM: { stats: [] } } });
+      }
+      throw new Error("unexpected market request");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataV1(identities, {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(priceBatchSizes.sort((first, second) => first - second)).toEqual([
+      1,
+      20,
+      20,
+    ]);
+    expect(identities.every((identity) =>
+      values.get(identity.tokenAddress)?.pools[0]?.latestTrade?.priceUsdWad ===
+        "250000000000000000"
+    )).toBe(true);
   });
 
   it("recovers missing indexed prices from bounded singleton queries", async () => {
@@ -900,7 +1203,10 @@ describe("Bitquery-only market data", () => {
 
   it("does not invent total USD liquidity when one pool side is missing", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
-      liquidity: liquidityRow(PCAN, { omitSecondUsd: true }),
+      liquidity: liquidityRow(PCAN, {
+        omitSecondUsd: true,
+        transaction: `0x${"bb".repeat(32)}`,
+      }),
     }))) as typeof fetch;
     const values = await readBitqueryTokenMarketDataV1([PCAN], {
       fetchImpl,
@@ -1134,6 +1440,265 @@ describe("Bitquery OHLCV chart and server stream", () => {
     },
   );
 
+  it("pages active exact-pool history within the provider response bound", async () => {
+    const now = new Date("2026-08-11T14:02:00.000Z");
+    const trades = Array.from({ length: 1_228 }, (_, index) => tradeRow({
+      block: String(25_750_000 - index),
+      time: new Date(now.getTime() - (index + 1) * 60_000).toISOString(),
+      transaction: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      transactionIndex: index % 200,
+      logIndex: index % 1_000,
+    }));
+    const pageIndexes: number[] = [];
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      const pageIndex = pageIndexes.length;
+      pageIndexes.push(pageIndex);
+      expect(request.query).toContain("limit: { count: 500 }");
+      expect(request.query).not.toContain("offset");
+      expect(request.query).toContain("dataset: combined");
+      expect(request.query).toContain("since: $since, till: $till");
+      expect(request.variables).toMatchObject({
+        poolId: PCAN.poolId,
+        till: now.toISOString(),
+      });
+      if (pageIndex === 0) {
+        expect(request.query).not.toContain("any: [");
+      } else {
+        const prior = trades[pageIndex * 500 - 1];
+        expect(request.query).toContain("any: [");
+        expect(request.query).toContain(
+          `Number: { lt: "${prior.Block.Number}" }`,
+        );
+        expect(request.query).toContain(
+          `Transaction: { Index: { eq: ${prior.Transaction.Index} } }`,
+        );
+        expect(request.query).toContain(
+          `Log: { Index: { lt: ${prior.Log.Index} } }`,
+        );
+      }
+      expect(request.query).not.toContain("Trading {");
+      return jsonResponse({
+        data: {
+          EVM: {
+            DEXTrades: trades.slice(pageIndex * 500, (pageIndex + 1) * 500),
+          },
+        },
+      });
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1d",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now,
+    });
+
+    expect(pageIndexes).toEqual([0, 1, 2]);
+    expect(chart).toMatchObject({
+      readStatus: "live",
+      status: "ready",
+      swapCount: 1_228,
+      volumeUsdWad: (25n * 1_228n * 10n ** 18n).toString(),
+      truncated: false,
+    });
+    expect(chart.points.length).toBeGreaterThan(1);
+    expect(chart.points.every((point, index) =>
+      index === 0 || Date.parse(chart.points[index - 1].time) <= Date.parse(point.time)
+    )).toBe(true);
+    expect(isMarketChartV1(chart)).toBe(true);
+  });
+
+  it("fails closed when a provider page overlaps the prior keyset boundary", async () => {
+    const now = new Date("2026-08-11T14:02:00.000Z");
+    const trades = Array.from({ length: 1_000 }, (_, index) => tradeRow({
+      block: String(25_750_000 - index),
+      time: new Date(now.getTime() - (index + 1) * 60_000).toISOString(),
+      transaction: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      transactionIndex: index % 200,
+      logIndex: index % 1_000,
+    }));
+    const pages = [
+      trades.slice(0, 500),
+      [trades[499], ...trades.slice(500, 727)],
+    ];
+    let pageIndex = 0;
+    const fetchImpl = vi.fn(async () => {
+      return jsonResponse({
+        data: { EVM: { DEXTrades: pages[pageIndex++] } },
+      });
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "all",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(chart).toMatchObject({
+      readStatus: "cache-fallback",
+      status: "unavailable",
+      swapCount: 0,
+      truncated: false,
+    });
+    expect(isMarketChartV1(chart)).toBe(true);
+  });
+
+  it("marks an exact keyset cap as truncated without inventing completeness", async () => {
+    const now = new Date("2026-08-11T14:02:00.000Z");
+    const trades = Array.from({ length: 2_000 }, (_, index) => tradeRow({
+      block: String(25_750_000 - index),
+      time: new Date(now.getTime() - (index + 1) * 60_000).toISOString(),
+      transaction: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      transactionIndex: index % 200,
+      logIndex: index % 1_000,
+    }));
+    let pageIndex = 0;
+    const fetchImpl = vi.fn(async () => {
+      const offset = pageIndex * 500;
+      pageIndex += 1;
+      return jsonResponse({
+        data: {
+          EVM: {
+            DEXTrades: trades.slice(offset, offset + 500),
+          },
+        },
+      });
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "all",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(chart).toMatchObject({
+      readStatus: "live",
+      status: "partial",
+      swapCount: 2_000,
+      volumeUsdWad: (25n * 2_000n * 10n ** 18n).toString(),
+      truncated: true,
+    });
+    expect(isMarketChartV1(chart)).toBe(true);
+  });
+
+  it("does not publish an incomplete chart when a later history page fails", async () => {
+    const firstPage = Array.from({ length: 500 }, (_, index) => tradeRow({
+      block: String(25_750_000 - index),
+      transaction: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      transactionIndex: index % 200,
+      logIndex: index,
+    }));
+    let requestCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return jsonResponse({ data: { EVM: { DEXTrades: firstPage } } });
+      }
+      throw new Error("provider page failed");
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1d",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(chart).toMatchObject({
+      readStatus: "cache-fallback",
+      status: "unavailable",
+      points: [],
+      swapCount: 0,
+    });
+    expect(isMarketChartV1(chart)).toBe(true);
+  });
+
+  it("bounds all history pages by one twelve-second read deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const firstPage = Array.from({ length: 500 }, (_, index) => tradeRow({
+        block: String(25_750_000 - index),
+        transaction: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+        transactionIndex: index % 200,
+        logIndex: index,
+      }));
+      let callCount = 0;
+      const fetchImpl = vi.fn((
+        _url: string | URL | Request,
+        init?: RequestInit,
+      ) => {
+        callCount += 1;
+        const response = callCount === 1
+          ? jsonResponse({ data: { EVM: { DEXTrades: firstPage } } })
+          : null;
+        const delay = callCount === 1 ? 7_000 : 20_000;
+        return new Promise<Response>((resolve, reject) => {
+          const signal = init?.signal;
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            if (response === null) {
+              reject(new Error("unexpected late response"));
+            } else {
+              resolve(response);
+            }
+          }, delay);
+          if (signal?.aborted) onAbort();
+          else signal?.addEventListener("abort", onAbort, { once: true });
+        });
+      }) as typeof fetch;
+
+      let settled = false;
+      const pending = readBitqueryMarketChartV1({
+        identity: PCAN,
+        range: "1d",
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+        fetchImpl,
+        token: OAUTH_TOKEN,
+        now: new Date("2026-08-11T14:02:00.000Z"),
+      }).then((value) => {
+        settled = true;
+        return value;
+      });
+
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const chart = await pending;
+      expect(chart).toMatchObject({
+        readStatus: "cache-fallback",
+        status: "unavailable",
+        swapCount: 0,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not preserve a cached empty chart as confirmed through failure", async () => {
     const success = vi.fn(async () => jsonResponse({
       data: {
@@ -1210,6 +1775,131 @@ describe("Bitquery OHLCV chart and server stream", () => {
     });
     expect(fallback.points).toHaveLength(1);
     expect(isMarketChartV1(fallback)).toBe(true);
+  });
+
+  it("reuses a populated chart for the two-second server cache window", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: {
+          DEXTrades: [tradeRow({
+            block: "25740000",
+            time: "2026-08-11T14:01:00.000Z",
+            transaction: `0x${"45".repeat(32)}`,
+            priceQuote: "1",
+          })],
+        },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+    const first = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    const second = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:01.999Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it("does not reuse a chart across different canonical valuations", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: {
+          DEXTrades: [tradeRow({
+            block: "25740000",
+            time: "2026-08-11T14:01:00.000Z",
+            transaction: `0x${"46".repeat(32)}`,
+            priceQuote: "1",
+          })],
+        },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+    const firstValuation = {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      valueUsdWad: "100",
+      fdvUsdWad: "100",
+      totalSupply: "1000",
+      asOfTime: "2026-08-11T14:01:00.000Z",
+      freshness: "current",
+    } as const;
+    const secondValuation = {
+      ...firstValuation,
+      valueUsdWad: "200",
+      fdvUsdWad: "200",
+    } as const;
+    const first = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      valuation: firstValuation,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    const second = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      valuation: secondValuation,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:01.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(first.valuation).toEqual(firstValuation);
+    expect(second.valuation).toEqual(secondValuation);
+  });
+
+  it("omits redundant supply pricing when canonical valuation is provided", async () => {
+    const valuation = {
+      status: "unavailable",
+      reason: "source-unavailable",
+    } as const;
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      expect(request.query).not.toContain("Trading {");
+      expect(request.query).not.toContain("Tokens(");
+      expect(request.variables).not.toHaveProperty("tokenAddress");
+      return jsonResponse({
+        data: {
+          EVM: {
+            DEXTrades: [tradeRow({
+              block: "25740000",
+              time: "2026-08-11T14:01:00.000Z",
+              transaction: `0x${"47".repeat(32)}`,
+              priceQuote: "1",
+            })],
+          },
+        },
+      });
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      valuation,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(chart.valuation).toEqual(valuation);
+    expect(chart.points).toHaveLength(1);
   });
 
   it("builds exact-pool quote candles without promoting raw DEX USD", async () => {
@@ -1306,21 +1996,21 @@ describe("Bitquery OHLCV chart and server stream", () => {
           DEXTrades: [
             tradeRow({
               block: "25740000",
-              time: "2026-08-11T14:00:01.000Z",
-              transaction,
-              logIndex: 1,
-              priceUsd: "1",
-              priceQuote: "1",
-              amountUsd: "10",
-            }),
-            tradeRow({
-              block: "25740000",
               time: "2026-08-11T14:00:02.000Z",
               transaction,
               logIndex: 2,
               priceUsd: "2",
               priceQuote: "2",
               amountUsd: "20",
+            }),
+            tradeRow({
+              block: "25740000",
+              time: "2026-08-11T14:00:01.000Z",
+              transaction,
+              logIndex: 1,
+              priceUsd: "1",
+              priceQuote: "1",
+              amountUsd: "10",
             }),
           ],
         },
@@ -1358,18 +2048,18 @@ describe("Bitquery OHLCV chart and server stream", () => {
             tradeRow({
               block: "25740000",
               time: "2026-08-11T14:00:01.000Z",
-              transaction: `0x${"ff".repeat(32)}`,
-              transactionIndex: 1,
-              logIndex: 9,
-              priceQuote: "1",
-            }),
-            tradeRow({
-              block: "25740000",
-              time: "2026-08-11T14:00:01.000Z",
               transaction: `0x${"00".repeat(32)}`,
               transactionIndex: 2,
               logIndex: 1,
               priceQuote: "2",
+            }),
+            tradeRow({
+              block: "25740000",
+              time: "2026-08-11T14:00:01.000Z",
+              transaction: `0x${"ff".repeat(32)}`,
+              transactionIndex: 1,
+              logIndex: 9,
+              priceQuote: "1",
             }),
           ],
         },
@@ -1394,12 +2084,12 @@ describe("Bitquery OHLCV chart and server stream", () => {
   it("never promotes raw DEX USD into chart prices or volume", async () => {
     const trades = [
       tradeRow({
-        block: "25740000",
-        time: "2026-08-11T14:00:01.000Z",
-        transaction: `0x${"11".repeat(32)}`,
-        priceUsd: "1",
-        priceQuote: "1",
-        amountUsd: "10",
+        block: "25740002",
+        time: "2026-08-11T14:01:10.000Z",
+        transaction: `0x${"13".repeat(32)}`,
+        priceUsd: "2",
+        priceQuote: "2",
+        amountUsd: "20",
       }),
       tradeRow({
         block: "25740001",
@@ -1410,12 +2100,12 @@ describe("Bitquery OHLCV chart and server stream", () => {
         priceQuote: "1.5",
       }),
       tradeRow({
-        block: "25740002",
-        time: "2026-08-11T14:01:10.000Z",
-        transaction: `0x${"13".repeat(32)}`,
-        priceUsd: "2",
-        priceQuote: "2",
-        amountUsd: "20",
+        block: "25740000",
+        time: "2026-08-11T14:00:01.000Z",
+        transaction: `0x${"11".repeat(32)}`,
+        priceUsd: "1",
+        priceQuote: "1",
+        amountUsd: "10",
       }),
     ];
     const fetchImpl = vi.fn(async () => jsonResponse({
@@ -1501,9 +2191,17 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(BITQUERY_MARKET_STREAM_QUERY).toContain(
       "Pool: { PoolId: { in: $poolIds } }",
     );
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain(
+      "CurrencyA { SmartContract Symbol }",
+    );
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain("AmountCurrencyA");
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain("AmountCurrencyB");
+    expect(BITQUERY_MARKET_STREAM_QUERY.match(/Log \{ Index \}/gu)).toHaveLength(2);
     expect(BITQUERY_MARKET_STREAM_QUERY.match(/DEXTrades\(/gu)).toHaveLength(1);
     expect(BITQUERY_MARKET_STREAM_QUERY.match(/DEXPoolEvents\(/gu)).toHaveLength(1);
-    expect(BITQUERY_MARKET_STREAM_QUERY).toContain("Transaction { Hash Index }");
+    expect(
+      BITQUERY_MARKET_STREAM_QUERY.match(/Transaction \{ Hash Index \}/gu),
+    ).toHaveLength(2);
     expect(
       BITQUERY_MARKET_STREAM_QUERY.match(
         /TransactionStatus: \{ Success: true \}/gu,

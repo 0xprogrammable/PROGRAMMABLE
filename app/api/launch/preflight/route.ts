@@ -123,6 +123,7 @@ import {
   resolveReservedLaunchModel,
   type DeepLaunchModelRelease,
 } from "@/lib/launch-model-gating";
+import { getWebsiteReadOnchainDeployment } from "@/lib/onchain/config";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -150,18 +151,34 @@ const selectedStockPairedRelease =
     ? getConfiguredStockPairedLaunchRelease()
     : null;
 
-const client = createPublicClient({
-  chain: launchChain,
-  transport: http(
-    launchEnvironment === "rehearsal"
-      ? (process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org")
-      : (process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"),
-    {
+function createLaunchRpcClient(rpcUrl: string) {
+  return createPublicClient({
+    chain: launchChain,
+    transport: http(rpcUrl, {
       retryCount: 1,
       timeout: 12_000,
-    },
-  ),
-});
+    }),
+  });
+}
+
+const client = createLaunchRpcClient(
+  launchEnvironment === "rehearsal"
+    ? (process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org")
+    : (process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"),
+);
+type LaunchRpcClient = ReturnType<typeof createLaunchRpcClient>;
+
+async function withClassicLaunchRpcFailover<Output>(
+  read: (rpcClient: LaunchRpcClient) => Promise<Output>,
+) {
+  const { withOperationalRpcFailover } = await import(
+    "@/lib/onchain/operational-rpc-failover.server"
+  );
+  const deployment = getWebsiteReadOnchainDeployment(launchEnvironment);
+  return withOperationalRpcFailover(deployment, (selected) =>
+    read(createLaunchRpcClient(selected.rpcUrl)),
+  );
+}
 
 function createDeepV3RuntimeBindingClients(): readonly [
   DeepV3RuntimeBindingClient,
@@ -529,8 +546,9 @@ async function assertRuntimeCodeHash(
   address: Address,
   expected: Hex,
   label: string,
+  rpcClient: LaunchRpcClient = client,
 ) {
-  const code = await client.getCode({ address });
+  const code = await rpcClient.getCode({ address });
   if (!code || code === "0x") {
     throw new Error(`${label} has no runtime bytecode`);
   }
@@ -545,29 +563,30 @@ async function assertRuntimeCodeHash(
 async function estimatePreparedTransaction(
   account: Address,
   transaction: Omit<PreparedLaunchTransaction, "gasLimit">,
+  rpcClient: LaunchRpcClient = client,
 ) {
   const value = BigInt(transaction.value);
-  const balance = await client.getBalance({ address: account });
+  const balance = await rpcClient.getBalance({ address: account });
   if (balance <= value) {
     throw new LaunchInputError(
       "The wallet does not have enough ETH for this transaction and network fees",
     );
   }
 
-  await client.call({
+  await rpcClient.call({
     account,
     to: transaction.to,
     data: transaction.data,
     value,
   });
   const [estimatedGas, gasPrice] = await Promise.all([
-    client.estimateGas({
+    rpcClient.estimateGas({
       account,
       to: transaction.to,
       data: transaction.data,
       value,
     }),
-    client.getGasPrice(),
+    rpcClient.getGasPrice(),
   ]);
   const gasLimit = (estimatedGas * 120n + 99n) / 100n;
 
@@ -590,39 +609,51 @@ async function assertMemeReleaseInfrastructure(
     memeLaunch: Hex;
     lockedPositionFeeForwarderFactory: Hex;
   },
+  rpcClient: LaunchRpcClient = client,
 ) {
   await Promise.all([
     assertRuntimeCodeHash(
       officialPoolManager,
       selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
       "Uniswap PoolManager",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       officialPositionManager,
       selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
       "Uniswap PositionManager",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       officialTokenFactory,
       selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
       "Uniswap UERC20Factory",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       hookFactory,
       codeHashes.ethCreatorFeeHookFactory,
       "ETH creator fee hook factory",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       feeHook,
       codeHashes.ethCreatorFeeHook,
       "ETH creator fee hook",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       positionForwarderFactory,
       codeHashes.lockedPositionFeeForwarderFactory,
       "Locked position factory",
+      rpcClient,
     ),
-    assertRuntimeCodeHash(launcher, codeHashes.memeLaunch, "Classic"),
+    assertRuntimeCodeHash(
+      launcher,
+      codeHashes.memeLaunch,
+      "Classic",
+      rpcClient,
+    ),
   ]);
 
   const [
@@ -640,67 +671,67 @@ async function assertMemeReleaseInfrastructure(
     minimumInitialBuyWei,
     factoryRecognizesHook,
   ] = await Promise.all([
-    client.readContract({
+    rpcClient.readContract({
       address: launcher,
       abi: memeLaunchAbi,
       functionName: "poolManager",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: launcher,
       abi: memeLaunchAbi,
       functionName: "positionManager",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: launcher,
       abi: memeLaunchAbi,
       functionName: "tokenFactory",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: launcher,
       abi: memeLaunchAbi,
       functionName: "feeHook",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: launcher,
       abi: memeLaunchAbi,
       functionName: "positionForwarderFactory",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: positionForwarderFactory,
       abi: lockedPositionFeeForwarderFactoryAbi,
       functionName: "positionManager",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: feeHook,
       abi: ethCreatorFeeHookAbi,
       functionName: "poolManager",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: feeHook,
       abi: ethCreatorFeeHookAbi,
       functionName: "launcherFeeRecipient",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: feeHook,
       abi: ethCreatorFeeHookAbi,
       functionName: "LAUNCHER_FEE_BPS",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: feeHook,
       abi: ethCreatorFeeHookAbi,
       functionName: "LP_FEE_PIPS",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: feeHook,
       abi: ethCreatorFeeHookAbi,
       functionName: "TICK_SPACING",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: launcher,
       abi: memeLaunchAbi,
       functionName: "MIN_INITIAL_BUY_WEI",
     }),
-    client.readContract({
+    rpcClient.readContract({
       address: hookFactory,
       abi: ethCreatorFeeHookFactoryAbi,
       functionName: "isFactoryHook",
@@ -754,6 +785,7 @@ async function prepareMemeLaunch(
   draft: LaunchDraft,
   connectedWalletCheck: LaunchPreflightCheck,
   deployment: ReleaseDeployment,
+  rpcClient: LaunchRpcClient = client,
 ) {
   const totalSwapFeeBps = validateMemeLaunchDraft(draft);
   const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
@@ -857,9 +889,10 @@ async function prepareMemeLaunch(
       lockedPositionFeeForwarderFactory:
         runtimeCodeHashes.lockedPositionFeeForwarderFactory as Hex,
     },
+    rpcClient,
   );
 
-  const [predictedToken] = await client.readContract({
+  const [predictedToken] = await rpcClient.readContract({
     address: launcher,
     abi: memeLaunchAbi,
     functionName: "predictTokenAddress",
@@ -870,7 +903,7 @@ async function prepareMemeLaunch(
       draft.launchSalt,
     ],
   });
-  const existingCode = await client.getCode({ address: predictedToken });
+  const existingCode = await rpcClient.getCode({ address: predictedToken });
   if (existingCode && existingCode !== "0x") {
     throw new LaunchInputError(
       "This deterministic token address is already in use",
@@ -884,7 +917,11 @@ async function prepareMemeLaunch(
     data: encodeMemeLaunch(draft, draft.launchSalt),
     value: initialBuyWei.toString(),
   };
-  const gasLimit = await estimatePreparedTransaction(account, launchBase);
+  const gasLimit = await estimatePreparedTransaction(
+    account,
+    launchBase,
+    rpcClient,
+  );
   return response({
     status: "ready",
     mode: "meme",
@@ -934,58 +971,75 @@ async function assertClassicV3Infrastructure(
     memeLaunchV2: Hex;
     lockedPositionFeeForwarderFactory: Hex;
   },
+  rpcClient: LaunchRpcClient,
 ) {
+  const client = rpcClient;
   await Promise.all([
     assertRuntimeCodeHash(
       officialPoolManager,
       selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
       "Uniswap PoolManager",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       officialPositionManager,
       selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
       "Uniswap PositionManager",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       officialTokenFactory,
       selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
       "Uniswap UERC20Factory",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       hookFactory,
       codeHashes.ethCreatorFeeHookFactoryV3,
       "Classic hook factory",
+      rpcClient,
     ),
-    assertRuntimeCodeHash(hook, codeHashes.ethCreatorFeeHookV3, "Classic hook"),
+    assertRuntimeCodeHash(
+      hook,
+      codeHashes.ethCreatorFeeHookV3,
+      "Classic hook",
+      rpcClient,
+    ),
     assertRuntimeCodeHash(
       vaultFactory,
       codeHashes.classicRewardVaultFactoryV1,
       "Classic reward factory",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       ctoAuthority,
       codeHashes.classicCtoAuthorityV1,
       "Classic CTO authority",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       initialBuyVestingWalletFactory,
       codeHashes.classicInitialBuyVestingWalletFactoryV1,
       "Classic Initial Buy custody factory",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       launchPolicy,
       codeHashes.classicLaunchPolicyV1,
       "Classic launch policy",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       positionForwarderFactory,
       codeHashes.lockedPositionFeeForwarderFactory,
       "Locked position factory",
+      rpcClient,
     ),
     assertRuntimeCodeHash(
       launcher,
       codeHashes.memeLaunchV2,
       "Classic launcher",
+      rpcClient,
     ),
   ]);
 
@@ -1268,7 +1322,9 @@ async function prepareClassicV3Launch(
   draft: LaunchDraft,
   connectedWalletCheck: LaunchPreflightCheck,
   deployment: ReleaseDeployment,
+  rpcClient: LaunchRpcClient,
 ) {
+  const client = rpcClient;
   const configuration = validateClassicV3LaunchDraft(draft, account);
   const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
   if (initialBuyWei === null) {
@@ -1364,6 +1420,7 @@ async function prepareClassicV3Launch(
       lockedPositionFeeForwarderFactory: deployment.runtimeCodeHashes
         .lockedPositionFeeForwarderFactory as Hex,
     },
+    rpcClient,
   );
 
   const [predictedToken] = await client.readContract({
@@ -1402,7 +1459,11 @@ async function prepareClassicV3Launch(
     data: encodeClassicV3Launch(draft, draft.launchSalt, account),
     value: initialBuyWei.toString(),
   };
-  const gasLimit = await estimatePreparedTransaction(account, launchBase);
+  const gasLimit = await estimatePreparedTransaction(
+    account,
+    launchBase,
+    rpcClient,
+  );
   return response({
     status: "ready",
     mode: "classic-v3",
@@ -2756,11 +2817,23 @@ export async function POST(request: NextRequest) {
       );
     }
     if (draft.launchModel === "classic-v3") {
-      return await prepareClassicV3Launch(
-        account,
-        draft,
-        connectedWalletCheck,
-        selectedManifest,
+      if (connectedWalletCheck.status !== "pass") {
+        return await prepareClassicV3Launch(
+          account,
+          draft,
+          connectedWalletCheck,
+          selectedManifest,
+          client,
+        );
+      }
+      return await withClassicLaunchRpcFailover((rpcClient) =>
+        prepareClassicV3Launch(
+          account,
+          draft,
+          connectedWalletCheck,
+          selectedManifest,
+          rpcClient,
+        ),
       );
     }
     if (draft.launchModel === "deep") {
@@ -2778,11 +2851,23 @@ export async function POST(request: NextRequest) {
         },
       );
     }
-    return await prepareMemeLaunch(
-      account,
-      draft,
-      connectedWalletCheck,
-      selectedManifest,
+    if (connectedWalletCheck.status !== "pass") {
+      return await prepareMemeLaunch(
+        account,
+        draft,
+        connectedWalletCheck,
+        selectedManifest,
+        client,
+      );
+    }
+    return await withClassicLaunchRpcFailover((rpcClient) =>
+      prepareMemeLaunch(
+        account,
+        draft,
+        connectedWalletCheck,
+        selectedManifest,
+        rpcClient,
+      ),
     );
   } catch (caught) {
     if (caught instanceof LaunchInputError) {
