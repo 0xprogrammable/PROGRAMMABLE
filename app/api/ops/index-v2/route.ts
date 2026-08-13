@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getWebsiteReadOnchainDeployment,
+  prewarmClassicEventCache,
   readLiveExploreModel,
   writeDurableExploreModel,
 } from "../../../../lib/onchain";
@@ -99,6 +100,19 @@ export async function GET(request: NextRequest) {
 
   const startedAt = Date.now();
   try {
+    const phaseValues = request.nextUrl.searchParams.getAll("phase");
+    const queryKeys = [...request.nextUrl.searchParams.keys()];
+    const phase = phaseValues[0] ?? "refresh";
+    if (
+      queryKeys.some((key) => key !== "phase") ||
+      phaseValues.length > 1 ||
+      !["refresh", "classic-primary", "classic-secondary"].includes(phase)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid index refresh phase" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const deployment = getWebsiteReadOnchainDeployment("production");
     if (deployment.status !== "ready") {
       throw new Error(
@@ -106,6 +120,23 @@ export async function GET(request: NextRequest) {
       );
     }
     const durableRefreshDeployment = historicalReadOnchainDeployment(deployment);
+    if (phase === "classic-primary" || phase === "classic-secondary") {
+      const result = await withIndexRefreshDeadline(() =>
+        prewarmClassicEventCache(
+          durableRefreshDeployment,
+          phase === "classic-primary" ? "primary" : "secondary",
+        )
+      );
+      console.info("Programmable classic event cache prewarm completed", {
+        phase,
+        blockNumber: result.blockNumber,
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json(
+        { ok: true, phase, ...result },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const model = await withIndexRefreshDeadline(() =>
       readLiveExploreModel(durableRefreshDeployment),
     );

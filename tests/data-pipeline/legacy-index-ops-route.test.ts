@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getOperationalOnchainDeployment: vi.fn(),
   historicalReadOnchainDeployment: vi.fn(),
+  prewarmClassicEventCache: vi.fn(),
   readLiveExploreModel: vi.fn(),
   writeDurableExploreModel: vi.fn(),
   writePortfolioHistorySnapshot: vi.fn(),
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../lib/onchain", () => ({
   getWebsiteReadOnchainDeployment: mocks.getOperationalOnchainDeployment,
+  prewarmClassicEventCache: mocks.prewarmClassicEventCache,
   readLiveExploreModel: mocks.readLiveExploreModel,
   writeDurableExploreModel: mocks.writeDurableExploreModel,
 }));
@@ -57,6 +59,13 @@ describe("legacy index operations routes", () => {
       durableRefreshDeployment,
     );
     mocks.readLiveExploreModel.mockResolvedValue({ status: "ready" });
+    mocks.prewarmClassicEventCache.mockImplementation(
+      async (_deployment, provider: "primary" | "secondary") => ({
+        provider,
+        blockNumber: "25600000",
+        blockHash: `0x${"11".repeat(32)}`,
+      }),
+    );
     mocks.writeDurableExploreModel.mockResolvedValue({
       blockNumber: "25600000",
       tokenCount: 265,
@@ -120,6 +129,48 @@ describe("legacy index operations routes", () => {
       { status: "ready" },
     );
     expect(mocks.writePortfolioHistorySnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["classic-primary", "primary"],
+    ["classic-secondary", "secondary"],
+  ] as const)(
+    "prewarms the exact %s event cache without publishing a model",
+    async (phase, provider) => {
+      vi.spyOn(console, "info").mockImplementation(() => undefined);
+      const response = await getCanonicalIndex(
+        new NextRequest(
+          `https://programmable.family/api/ops/index-v2?phase=${phase}`,
+          { headers: { authorization: `Bearer ${SECRET}` } },
+        ),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: true,
+        phase,
+        provider,
+        blockNumber: "25600000",
+      });
+      expect(mocks.prewarmClassicEventCache).toHaveBeenCalledWith(
+        durableRefreshDeployment,
+        provider,
+      );
+      expect(mocks.readLiveExploreModel).not.toHaveBeenCalled();
+      expect(mocks.writeDurableExploreModel).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects malformed prewarm phases before reading providers", async () => {
+    const response = await getCanonicalIndex(
+      new NextRequest(
+        "https://programmable.family/api/ops/index-v2?phase=classic-primary&phase=classic-secondary",
+        { headers: { authorization: `Bearer ${SECRET}` } },
+      ),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.getOperationalOnchainDeployment).not.toHaveBeenCalled();
+    expect(mocks.prewarmClassicEventCache).not.toHaveBeenCalled();
   });
 
   it("fails fast after one full read failure without starting a write", async () => {
