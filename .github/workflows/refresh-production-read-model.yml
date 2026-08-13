@@ -5,8 +5,7 @@ on:
     - cron: "2-57/5 * * * *"
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: production-read-model-refresh
@@ -41,6 +40,8 @@ jobs:
           const HEALTH_ATTEMPTS = 18;
           const HEALTH_RETRY_DELAY_MS = 5_000;
           const CANONICAL_UINT = /^(?:0|[1-9][0-9]{0,77})$/u;
+          const HEX32 = /^0x[0-9a-f]{64}$/u;
+          const MAXIMUM_UINT64 = (1n << 64n) - 1n;
 
           const targetOrigin = process.env.TARGET_ORIGIN;
           const cronSecret = process.env.CRON_SECRET;
@@ -169,6 +170,21 @@ jobs:
             const healthBlock = CANONICAL_UINT.test(index?.blockNumber)
               ? BigInt(index.blockNumber)
               : null;
+            const rpc = health.body?.rpc;
+            const confirmedBlock = rpc?.confirmedBlock;
+            const confirmedBlockNumber = CANONICAL_UINT.test(
+              confirmedBlock?.number,
+            )
+              ? BigInt(confirmedBlock.number)
+              : null;
+            const primary = rpc?.providers?.primary;
+            const secondary = rpc?.providers?.secondary;
+            const primaryHead = CANONICAL_UINT.test(primary?.head)
+              ? BigInt(primary.head)
+              : null;
+            const secondaryHead = CANONICAL_UINT.test(secondary?.head)
+              ? BigInt(secondary.head)
+              : null;
             if (
               health.response.status === 200 &&
               health.body?.status === "healthy" &&
@@ -176,21 +192,45 @@ jobs:
               health.body.indexSource === "durable" &&
               health.body.indexedReadModel?.status === "disabled" &&
               healthBlock !== null &&
+              healthBlock <= MAXIMUM_UINT64 &&
               healthBlock >= refreshBlock &&
               Number.isSafeInteger(index?.ageSeconds) &&
               index.ageSeconds >= 0 &&
               index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS &&
               Number.isSafeInteger(index?.tokenCount) &&
               index.tokenCount >= 0 &&
-              health.body.rpc?.status === "healthy" &&
-              health.body.rpc?.chainId === 1 &&
-              health.body.rpc?.read?.status === "available" &&
-              health.body.rpc?.quorum?.status === "verified"
+              rpc?.status === "healthy" &&
+              rpc?.chainId === 1 &&
+              rpc?.read?.status === "available" &&
+              rpc?.quorum?.status === "verified" &&
+              confirmedBlockNumber !== null &&
+              confirmedBlockNumber <= MAXIMUM_UINT64 &&
+              confirmedBlockNumber >= healthBlock &&
+              confirmedBlockNumber >= refreshBlock &&
+              HEX32.test(confirmedBlock?.hash) &&
+              confirmedBlock.hash !== `0x${"00".repeat(32)}` &&
+              rpc?.freshness?.maxHeadAgeSeconds === 300 &&
+              primary?.status === "available" &&
+              secondary?.status === "available" &&
+              primaryHead !== null &&
+              secondaryHead !== null &&
+              primaryHead <= MAXIMUM_UINT64 &&
+              secondaryHead <= MAXIMUM_UINT64 &&
+              primaryHead >= confirmedBlockNumber &&
+              secondaryHead >= confirmedBlockNumber &&
+              Number.isSafeInteger(primary?.headAgeSeconds) &&
+              Number.isSafeInteger(secondary?.headAgeSeconds) &&
+              primary.headAgeSeconds >= 0 &&
+              secondary.headAgeSeconds >= 0 &&
+              primary.headAgeSeconds <= rpc.freshness.maxHeadAgeSeconds &&
+              secondary.headAgeSeconds <= rpc.freshness.maxHeadAgeSeconds
             ) {
               proof = {
                 blockNumber: index.blockNumber,
                 tokenCount: index.tokenCount,
                 ageSeconds: index.ageSeconds,
+                confirmedBlockNumber: confirmedBlock.number,
+                confirmedBlockHash: confirmedBlock.hash,
               };
               break;
             }
@@ -208,6 +248,8 @@ jobs:
             target: targetOrigin,
             refreshBlockNumber: refresh.body.blockNumber,
             visibleBlockNumber: proof.blockNumber,
+            confirmedBlockNumber: proof.confirmedBlockNumber,
+            confirmedBlockHash: proof.confirmedBlockHash,
             tokenCount: proof.tokenCount,
             ageSeconds: proof.ageSeconds,
             updated: refresh.body.updated,
@@ -223,6 +265,8 @@ jobs:
                 `- Target: \`${safeResult.target}\``,
                 `- Refreshed block: \`${safeResult.refreshBlockNumber}\``,
                 `- Visible block: \`${safeResult.visibleBlockNumber}\``,
+                `- RPC-confirmed block: \`${safeResult.confirmedBlockNumber}\``,
+                `- RPC-confirmed hash: \`${safeResult.confirmedBlockHash}\``,
                 `- Freshness: \`${safeResult.ageSeconds}s\``,
                 `- Tokens: \`${safeResult.tokenCount}\``,
                 `- Durable write advanced: \`${safeResult.updated}\``,

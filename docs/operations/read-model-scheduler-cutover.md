@@ -22,10 +22,16 @@ concurrency group prevents two watchdog runs from overlapping.
 
 The watchdog succeeds only after the public health route exposes a durable
 snapshot at the same or a newer block, no more than ten minutes old, while the
-Ethereum RPC read and independent quorum are healthy. The target origin is
+Ethereum RPC read and independent quorum are healthy. It additionally requires
+the concrete nonzero hash of an RPC-confirmed block at or beyond the durable
+snapshot, plus both independent provider heads at or beyond that confirmed
+block and no more than five minutes old. A status-only quorum response is not
+accepted. The target origin is
 fixed in reviewed source, redirects and oversized or non-JSON responses are
-rejected, and no Vercel token or deployment-protection bypass is available to
-the job. This repairs delivery of the existing generic public read model; it
+rejected, and the exact health route plus its dual-RPC implementation are
+content-bound in the operations manifest. No Vercel token or
+deployment-protection bypass is available to the job. This repairs delivery of
+the existing generic public read model; it
 does not activate the staged Postgres projectors, promote a deployment, or
 publish any third-party submission.
 

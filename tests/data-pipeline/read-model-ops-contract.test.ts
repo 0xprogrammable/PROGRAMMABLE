@@ -328,7 +328,24 @@ describe("read-model operations source contract", () => {
           status: "healthy",
           chainId: 1,
           read: { status: "available" },
+          providers: {
+            primary: {
+              status: "available",
+              head: "25740014",
+              headAgeSeconds: 3,
+            },
+            secondary: {
+              status: "available",
+              head: "25740013",
+              headAgeSeconds: 4,
+            },
+          },
+          freshness: { maxHeadAgeSeconds: 300 },
           quorum: { status: "verified" },
+          confirmedBlock: {
+            number: "25740012",
+            hash: `0x${"12".repeat(32)}`,
+          },
         },
       });
     };
@@ -356,8 +373,105 @@ describe("read-model operations source contract", () => {
     expect(JSON.parse(logged.at(-1) ?? "{}")).toMatchObject({
       refreshBlockNumber: "25740000",
       visibleBlockNumber: "25740001",
+      confirmedBlockNumber: "25740012",
+      confirmedBlockHash: `0x${"12".repeat(32)}`,
       ageSeconds: 2,
     });
+  });
+
+  it.each([
+    ["missing confirmed block", (rpc: Record<string, unknown>) => {
+      const { confirmedBlock: _removed, ...remaining } = rpc;
+      return remaining;
+    }],
+    ["zero confirmed block hash", (rpc: Record<string, unknown>) => ({
+      ...rpc,
+      confirmedBlock: { number: "25740012", hash: `0x${"00".repeat(32)}` },
+    })],
+    ["confirmed block behind visible index", (rpc: Record<string, unknown>) => ({
+      ...rpc,
+      confirmedBlock: { number: "25740000", hash: `0x${"12".repeat(32)}` },
+    })],
+    ["secondary provider behind confirmed block", (rpc: Record<string, unknown>) => ({
+      ...rpc,
+      providers: {
+        ...(rpc.providers as Record<string, unknown>),
+        secondary: {
+          status: "available",
+          head: "25740011",
+          headAgeSeconds: 4,
+        },
+      },
+    })],
+  ])("fails closed on %s", async (_label, mutateRpc) => {
+    let attempts = 0;
+    const validRpc = {
+      status: "healthy",
+      chainId: 1,
+      read: { status: "available" },
+      providers: {
+        primary: {
+          status: "available",
+          head: "25740014",
+          headAgeSeconds: 3,
+        },
+        secondary: {
+          status: "available",
+          head: "25740013",
+          headAgeSeconds: 4,
+        },
+      },
+      freshness: { maxHeadAgeSeconds: 300 },
+      quorum: { status: "verified" },
+      confirmedBlock: {
+        number: "25740012",
+        hash: `0x${"12".repeat(32)}`,
+      },
+    };
+    const fetch = async (input: string | URL | Request) => {
+      if (String(input).endsWith("/api/ops/index-v2")) {
+        return jsonResponse({
+          ok: true,
+          blockNumber: "25740000",
+          tokenCount: 343,
+          updated: true,
+          portfolioHistory: {
+            status: "recorded",
+            blockNumber: "25740000",
+            tokenCount: 343,
+            path: "portfolio-history/1/2026-08-13T05.json",
+          },
+        });
+      }
+      attempts += 1;
+      return jsonResponse({
+        status: "healthy",
+        chainId: 1,
+        index: {
+          ageSeconds: 2,
+          blockNumber: "25740001",
+          tokenCount: 343,
+        },
+        indexSource: "durable",
+        indexedReadModel: { status: "disabled" },
+        rpc: mutateRpc(validRpc),
+      });
+    };
+    await expect(
+      watchdogProgram()(
+        watchdogProcessEnvironment(),
+        fetch,
+        Buffer,
+        AbortSignal,
+        URL,
+        (callback: () => void) => {
+          callback();
+          return 0;
+        },
+        { log: () => undefined },
+      ),
+    ).rejects.toThrow("production read-model freshness proof failed");
+    expect(attempts).toBe(18);
   });
 
   it("executes the exact watchdog program fail-closed on stale public health", async () => {
@@ -530,8 +644,12 @@ describe("read-model operations source contract", () => {
     ["durable public source", 'health.body.indexSource === "durable"'],
     ["visible block binding", "healthBlock >= refreshBlock"],
     ["freshness ceiling", "index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS"],
-    ["healthy RPC read", 'health.body.rpc?.read?.status === "available"'],
-    ["verified RPC quorum", 'health.body.rpc?.quorum?.status === "verified"'],
+    ["healthy RPC read", 'rpc?.read?.status === "available"'],
+    ["verified RPC quorum", 'rpc?.quorum?.status === "verified"'],
+    ["confirmed RPC block number", "confirmedBlockNumber >= healthBlock"],
+    ["confirmed RPC block hash", "HEX32.test(confirmedBlock?.hash)"],
+    ["primary provider head", "primaryHead >= confirmedBlockNumber"],
+    ["secondary provider head", "secondaryHead >= confirmedBlockNumber"],
   ])("rejects a production watchdog missing %s", (_label, needle) => {
     const workflowPath =
       ".github/workflows/refresh-production-read-model.yml";
@@ -568,6 +686,22 @@ describe("read-model operations source contract", () => {
       sourceOverrides: {
         ...integratedOverrides(),
         [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
+    );
+  });
+
+  it.each([
+    ["health route", "app/api/ops/health/route.ts"],
+    ["RPC health runtime", "lib/onchain/rpc-health.ts"],
+  ])("rejects unreviewed %s bytes", (_label, path) => {
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [path]: `${readFileSync(resolve(ROOT, path), "utf8")}\n// drift`,
       },
       expectedSha256Overrides: fixtureDigests(),
     });
