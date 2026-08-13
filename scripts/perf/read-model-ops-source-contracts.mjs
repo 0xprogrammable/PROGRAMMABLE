@@ -14,19 +14,25 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "3581757ab1d7da697a8fd1bd6c615b66dd248273c4be9f577cd08540e98d7926",
+        sha256: "73c99640515732c975600b5e9a8cd4ffb7fafbc04536a563126c76ea60b27fe6",
       }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/onchain/parallel-reads.ts",
+          sha256: "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e",
+        }),
+      ]),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "e4fde83cd69fd222a7500d4fea46a41d2b7687808f540199c9b80d8bb785d7c2",
+          sha256: "c97c6f5875bf089b8545bfc55bd20f26c1520bdbe0c640e873f70ca08b4cc4a3",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "690a1d3fa1a00273df482c54a4a56fcec3807c7f191608ab3b0a739b0d9c211b",
+          sha256: "9c9badce8d6dfb000a29fd4abcc013701f5a81736ce9ad9fd1e72816b3a75b2f",
           eventFiltersPerRange: 3,
         }),
       ]),
@@ -1486,16 +1492,21 @@ export function evaluateReadModelOperationsSourceContracts(
   const boundedRefresh = operations?.legacyIndexer?.boundedRefresh;
   const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
   const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
+  const parallelReadsSource = source(boundedRefresh?.dependencies?.[0]?.path);
   const releaseRuntimes = boundedRefresh?.releaseRuntimes;
   const classicV3RefreshSource = source(releaseRuntimes?.[0]?.path);
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
   const hasAdaptiveCompleteRangeScan = (runtimeSource) =>
     runtimeSource?.includes("allSettledOrThrow([") &&
+    runtimeSource?.includes("const MINIMUM_LOG_BLOCK_RANGE = 1n;") &&
+    runtimeSource?.includes("const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;") &&
+    runtimeSource?.includes("transientRetries < transientRetryLimit") &&
     runtimeSource?.includes("error instanceof TimeoutError") &&
     runtimeSource?.includes("error instanceof LimitExceededRpcError") &&
     runtimeSource?.includes("error instanceof HttpRequestError") &&
     runtimeSource?.includes("error instanceof ResponseBodyTooLargeError") &&
     runtimeSource?.includes("logBlockRange > MINIMUM_LOG_BLOCK_RANGE") &&
+    runtimeSource?.includes("logBlockRange * 2n") &&
     runtimeSource?.includes("continue;");
   check(
     "ops-legacy-bounded-refresh",
@@ -1508,6 +1519,20 @@ export function evaluateReadModelOperationsSourceContracts(
         boundedRefresh?.runtime,
         expectedSha256Overrides,
       ) &&
+      boundedRefresh?.dependencies?.length === 1 &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh.dependencies[0],
+        expectedSha256Overrides,
+      ) &&
+      refreshRuntimeSource?.includes(
+        'import { settleParallelReadsInOrder } from "./parallel-reads";',
+      ) &&
+      refreshRuntimeSource?.includes(
+        "await settleParallelReadsInOrder([",
+      ) &&
+      parallelReadsSource?.includes("Promise.allSettled(") &&
+      parallelReadsSource?.includes("for (const result of results)") &&
       Array.isArray(releaseRuntimes) &&
       releaseRuntimes.length === 2 &&
       releaseRuntimes[0]?.release === "classic-v3" &&
@@ -1545,7 +1570,7 @@ export function evaluateReadModelOperationsSourceContracts(
       stockPairedRefreshSource?.includes("events: STOCK_LAUNCHER_EVENTS") &&
       stockPairedRefreshSource?.includes("assertCanonicalStockEventSource(") &&
       stockPairedRefreshSource?.includes("clients.map((candidate) =>"),
-    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections and compare two provider passes before the platform deadline",
+    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two provider passes and settle registry slices in parallel before deterministic merging and the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(

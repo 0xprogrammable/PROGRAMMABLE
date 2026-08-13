@@ -7,6 +7,7 @@ import {
   LimitExceededRpcError,
   parseAbiItem,
   ResponseBodyTooLargeError,
+  RpcRequestError,
   TimeoutError,
   type Address,
   type Hex,
@@ -93,7 +94,27 @@ const EMPTY_VOLUME: FeeVolume = {
 const RPC_PROVENANCE_BATCH_SIZE = 1;
 const TOKEN_HYDRATION_BATCH_SIZE = 6;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
-const MINIMUM_LOG_BLOCK_RANGE = 100n;
+const MINIMUM_LOG_BLOCK_RANGE = 1n;
+const TRANSIENT_RETRIES_PER_WINDOW = 1;
+const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;
+
+function isTransientLogReadError(error: unknown) {
+  if (error instanceof TimeoutError) return true;
+  if (error instanceof HttpRequestError) {
+    return (
+      error.status === undefined ||
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+  return (
+    error instanceof RpcRequestError &&
+    error.code === -32603 &&
+    error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
 
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
@@ -256,9 +277,11 @@ export async function readClassicV3Events(
     fromBlockFloor > release.startBlock
       ? fromBlockFloor
       : release.startBlock;
-  let logBlockRange = toBlock >= fromBlock
+  const configuredLogBlockRange = toBlock >= fromBlock
     ? toBlock - fromBlock + 1n
     : config.logBlockRange;
+  let logBlockRange = configuredLogBlockRange;
+  let transientRetries = 0;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
@@ -285,10 +308,25 @@ export async function readClassicV3Events(
     try {
       logs = await readLogs();
     } catch (error) {
+      const transient = isTransientLogReadError(error);
+      const transientRetryLimit =
+        logBlockRange === MINIMUM_LOG_BLOCK_RANGE
+          ? MINIMUM_RANGE_TRANSIENT_RETRIES
+          : TRANSIENT_RETRIES_PER_WINDOW;
+      if (transient && transientRetries < transientRetryLimit) {
+        transientRetries += 1;
+        console.warn("Classic V3 log window retried after transient RPC rejection", {
+          fromBlock: fromBlock.toString(),
+          attemptedToBlock: rangeEnd.toString(),
+          retry: transientRetries,
+          retryLimit: transientRetryLimit,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+        continue;
+      }
       if (
-        (error instanceof TimeoutError ||
+        (transient ||
           error instanceof LimitExceededRpcError ||
-          error instanceof HttpRequestError ||
           error instanceof ResponseBodyTooLargeError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
@@ -298,13 +336,14 @@ export async function readClassicV3Events(
           reducedRange < MINIMUM_LOG_BLOCK_RANGE
             ? MINIMUM_LOG_BLOCK_RANGE
             : reducedRange;
+        transientRetries = 0;
         console.warn(
           "Classic V3 log range reduced after RPC rejection",
           {
             fromBlock: fromBlock.toString(),
             attemptedToBlock: rangeEnd.toString(),
             nextRange: logBlockRange.toString(),
-            errorName: error.name,
+            errorName: error instanceof Error ? error.name : "UnknownError",
           },
         );
         continue;
@@ -353,6 +392,13 @@ export async function readClassicV3Events(
       volumes.set(key, current);
     }
     fromBlock = rangeEnd + 1n;
+    transientRetries = 0;
+    if (logBlockRange < configuredLogBlockRange) {
+      logBlockRange = minimum(
+        configuredLogBlockRange,
+        logBlockRange * 2n,
+      );
+    }
   }
   return { launches, volumes };
 }
