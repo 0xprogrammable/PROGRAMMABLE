@@ -12,7 +12,7 @@ This inventory separates the Programmable launch platform from external applican
 
 ## Removed production surfaces
 
-- The disconnected legacy manual applicant component and its styles.
+- The disconnected legacy candidate component and its styles.
 - Legacy manual route APIs, authorities, stores, workers, configuration, release scripts, vendored closures, and tests.
 - Project-specific applicant identities, route compatibility, wallet senders, schemas, configuration, and presentation branches.
 - Project-specific source and route verification scripts that were reachable from the package release graph.
@@ -21,4 +21,4 @@ External projects can be reviewed and launched only through a current descriptor
 
 ## Release gate
 
-`npm run verify:candidate-neutrality` scans production source roots, package scripts, root deployment configuration, and build workflows. The build, interface test, and full test commands invoke it before accepting a release. A second `npm run verify:candidate-neutrality:build` pass scans the emitted `.next/server` and `.next/static` artifacts.
+`npm run verify:candidate-neutrality` scans the Website, contracts, tests, operations, package scripts, root deployment configuration, and build workflows. The build, interface test, and full test commands invoke it before accepting a release. A second `npm run verify:candidate-neutrality:build` pass scans the emitted `.next/server` and `.next/static` artifacts.

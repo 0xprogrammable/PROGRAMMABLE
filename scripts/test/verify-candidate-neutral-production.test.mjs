@@ -68,3 +68,34 @@ test("rejects a candidate identity in the compiled production bundle", async () 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /.next\/server\/app\/launch\/page\.js/u);
 });
+
+test("rejects a candidate identity in contract source", async () => {
+  const projectName = ["Sh", "ards"].join("");
+  const root = await fixture({
+    "contracts/src/ApplicantRoute.sol":
+      `contract ApplicantRoute { string constant PROJECT = "${projectName}"; }\n`,
+  });
+  const result = verify(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /contracts\/src\/ApplicantRoute\.sol/u);
+});
+
+test("rejects a stale candidate exception in root configuration", async () => {
+  const projectName = ["Hook", "emon"].join("");
+  const root = await fixture({
+    ".gitleaks.toml": `description = "${projectName} exception"\n`,
+  });
+  const result = verify(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /.gitleaks\.toml/u);
+});
+
+test("rejects an external applicant owner identity in tests", async () => {
+  const owner = ["jesse", "stahl"].join("-");
+  const root = await fixture({
+    "tests/wallet-state.test.ts": `export const owner = "${owner}";\n`,
+  });
+  const result = verify(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /tests\/wallet-state\.test\.ts/u);
+});

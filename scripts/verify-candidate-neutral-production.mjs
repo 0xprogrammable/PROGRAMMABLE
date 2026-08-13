@@ -15,12 +15,15 @@ const SOURCE_ROOTS = Object.freeze([
   "app",
   "components",
   "config",
+  "contracts",
   "docs",
   "indexer",
   "lib",
   "ops",
+  "public",
   "scripts",
   "supabase",
+  "tests",
 ]);
 const PACKAGE_FILES = Object.freeze([
   "package.json",
@@ -28,6 +31,8 @@ const PACKAGE_FILES = Object.freeze([
   "next.config.ts",
   "vercel.json",
   ".env.example",
+  ".gitleaks.toml",
+  "eslint.config.mjs",
 ]);
 const BUILD_ROOTS = Object.freeze([".next/server", ".next/static"]);
 const TEXT_EXTENSIONS = new Set([
@@ -38,12 +43,21 @@ const TEXT_EXTENSIONS = new Set([
   ".json",
   ".jsx",
   ".md",
+  ".mdx",
   ".mjs",
   ".map",
   ".mts",
+  ".py",
+  ".rs",
+  ".sh",
+  ".sol",
   ".sql",
+  ".svg",
+  ".toml",
   ".ts",
   ".tsx",
+  ".txt",
+  ".xml",
   ".yaml",
   ".yml",
 ]);
@@ -54,18 +68,19 @@ const projectNames = Object.freeze([
   ["hook", "emon"].join(""),
   ["sh", "ards"].join(""),
   ["random", "holder", "rewards"].join("[-_ ]?"),
+  ["jesse", "stahl"].join("[-_ ]?"),
 ]);
 const forbiddenContent = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
   new RegExp(["submit-launch", "pull", "13"].join("[/# ]+"), "iu"),
   /manual[-_ ]?router/iu,
-  /manual[-_ ]?applicant[-_ ]?launch/iu,
+  /manual[-_ ]?applicant/iu,
   /router[-_ ]?v2[-_ ]?shared[-_ ]?lifecycle/iu,
 ]);
 const forbiddenPath = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
   /manual[-_]?router/iu,
-  /manual[-_]?applicant[-_]?launch/iu,
+  /manual[-_]?applicant/iu,
   /router[-_]?v2[-_]?shared[-_]?lifecycle/iu,
 ]);
 

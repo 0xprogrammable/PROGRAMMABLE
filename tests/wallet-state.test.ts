@@ -66,10 +66,9 @@ type WalletProviderContract = {
 const subject = walletProvider as unknown as WalletProviderContract;
 
 const APPLICANT_PRIVY_USER_ID = "did:privy:approved";
-const APPLICANT_GITHUB_USER_ID = "155705664";
-const APPLICANT_GITHUB_LOGIN = "jesse-stahl";
-const APPLICANT_WALLET =
-  "0xceebb3a6543cebeb2ed66963897a0abea52a50cc" as const;
+const APPLICANT_GITHUB_USER_ID = "100000001";
+const APPLICANT_GITHUB_LOGIN = "applicant-alpha";
+const APPLICANT_WALLET = `0x${"a".repeat(40)}` as const;
 const OTHER_WALLET = `0x${"b".repeat(40)}` as const;
 const applicantRequirement = Object.freeze({
   githubUserId: APPLICANT_GITHUB_USER_ID,
