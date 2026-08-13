@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
@@ -15,6 +15,18 @@ test("broadcast CLI requires explicit broadcast intent", () => {
   const result = run("broadcast-custom-registry-v2-deployment.mjs");
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /explicit --broadcast is required/);
+});
+
+test("both production broadcasters use protected Keychain custody instead of private-key environment variables", async () => {
+  for (const name of [
+    "broadcast-custom-registry-v2-safe-controllers.mjs",
+    "broadcast-custom-registry-v2-deployment.mjs",
+  ]) {
+    const source = await readFile(path.join(scripts, name), "utf8");
+    assert.match(source, /find-generic-password/);
+    assert.doesNotMatch(source, /process\.env\.[A-Z0-9_]*PRIVATE_KEY/);
+    assert.doesNotMatch(source, /createWalletClient/);
+  }
 });
 
 test("broadcast CLI rejects a wrong authorization digest before any RPC or key use", async () => {

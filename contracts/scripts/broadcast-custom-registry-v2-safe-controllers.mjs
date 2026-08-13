@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { open, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createPublicClient,
-  createWalletClient,
   getAddress,
   http,
   keccak256,
@@ -109,9 +108,29 @@ assertSafePolicyBoundPlan({
     .digest("hex")}`,
 });
 
-const privateKey = process.env.REGISTRY_SAFE_DEPLOYER_PRIVATE_KEY;
-if (!privateKey || !/^0x[0-9a-fA-F]{64}$/u.test(privateKey))
-  throw new Error("Safe deployer key is missing");
+const deployerCustody = plan.custody.roles.find(
+  ({ role }) => role === "deployer",
+);
+if (
+  deployerCustody?.service !==
+    "programmable.custom-registry.v2.production-custody.20260813.deployer" ||
+  getAddress(deployerCustody?.publicAddress) !== getAddress(plan.deployer)
+)
+  throw new Error("reviewed Safe deployer Keychain custody is invalid");
+const privateKey = execFileSync(
+  "security",
+  [
+    "find-generic-password",
+    "-w",
+    "-s",
+    deployerCustody.service,
+    "-a",
+    getAddress(plan.deployer),
+  ],
+  { encoding: "utf8", maxBuffer: 4096 },
+).trim();
+if (!/^0x[0-9a-fA-F]{64}$/u.test(privateKey))
+  throw new Error("Safe deployer Keychain custody item is invalid");
 const account = privateKeyToAccount(privateKey);
 if (getAddress(account.address) !== getAddress(plan.deployer))
   throw new Error("Safe deployer key mismatch");
@@ -191,11 +210,26 @@ const live = await Promise.all(
   }),
 );
 const [a, b] = live;
+const commonFinalizedNumber =
+  a.finalized.number < b.finalized.number
+    ? a.finalized.number
+    : b.finalized.number;
+const [commonFinalizedA, commonFinalizedB, reviewedAnchorA, reviewedAnchorB] =
+  await Promise.all([
+    clients[0].getBlock({ blockNumber: commonFinalizedNumber }),
+    clients[1].getBlock({ blockNumber: commonFinalizedNumber }),
+    clients[0].getBlock({
+      blockNumber: BigInt(plan.commonFinalizedAnchor.blockNumber),
+    }),
+    clients[1].getBlock({
+      blockNumber: BigInt(plan.commonFinalizedAnchor.blockNumber),
+    }),
+  ]);
 if (
-  a.finalized.number.toString() !== plan.commonFinalizedAnchor.blockNumber ||
-  a.finalized.hash !== plan.commonFinalizedAnchor.blockHash ||
-  b.finalized.number !== a.finalized.number ||
-  b.finalized.hash !== a.finalized.hash ||
+  commonFinalizedNumber < BigInt(plan.commonFinalizedAnchor.blockNumber) ||
+  commonFinalizedA.hash !== commonFinalizedB.hash ||
+  reviewedAnchorA.hash !== plan.commonFinalizedAnchor.blockHash ||
+  reviewedAnchorB.hash !== plan.commonFinalizedAnchor.blockHash ||
   a.nonce !== b.nonce ||
   a.nonce !== plan.exactPendingNonce ||
   a.balance !== b.balance ||
@@ -249,11 +283,6 @@ if (
 )
   throw new Error("reviewed Safe priority fee is invalid");
 
-const wallet = createWalletClient({
-  account,
-  chain: mainnet,
-  transport: http(rpcA),
-});
 const evidence = {
   schemaVersion: SAFE_RECEIPTS_SCHEMA,
   status: "BROADCAST_IN_PROGRESS",
@@ -265,10 +294,19 @@ const evidence = {
   custodyProofSha256: plan.custodyProofSha256,
   controllers: [],
 };
-await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, {
-  flag: "wx",
-  mode: 0o600,
-});
+const writeEvidence = async ({ create = false } = {}) => {
+  await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, {
+    flag: create ? "wx" : "w",
+    mode: 0o600,
+  });
+  const handle = await open(outputPath, "r+");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+};
+await writeEvidence({ create: true });
 
 for (const controller of plan.controllers) {
   const expectedInput = safeTransactionInput({
@@ -340,17 +378,15 @@ for (const controller of plan.controllers) {
     role: controller.role,
     address: controller.predictedAddress,
     transactionHash,
+    serializedTransaction,
     expectedTransactionNonce: controller.expectedTransactionNonce,
     transactionStatus: "SIGNED_NOT_CONFIRMED",
     blockNumber: null,
     blockHash: null,
   };
   evidence.controllers.push(controllerEvidence);
-  await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, {
-    flag: "w",
-    mode: 0o600,
-  });
-  const broadcastHash = await wallet.sendRawTransaction({
+  await writeEvidence();
+  const broadcastHash = await clients[0].sendRawTransaction({
     serializedTransaction,
   });
   if (broadcastHash !== transactionHash)
@@ -364,16 +400,10 @@ for (const controller of plan.controllers) {
   controllerEvidence.transactionStatus = "RECEIPT_CONFIRMED_SUCCESS";
   controllerEvidence.blockNumber = receipt.blockNumber.toString();
   controllerEvidence.blockHash = receipt.blockHash;
-  await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, {
-    flag: "w",
-    mode: 0o600,
-  });
+  await writeEvidence();
 }
 evidence.status = "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION";
-await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, {
-  flag: "w",
-  mode: 0o600,
-});
+await writeEvidence();
 process.stdout.write(
   `CUSTOM_REGISTRY_V2_SAFE_CONTROLLER_RECEIPTS ${outputPath}\n`,
 );

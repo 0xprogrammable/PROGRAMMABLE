@@ -135,11 +135,19 @@ requireDistinctRpcOrigins(rpcA, rpcB);
 const clients = [rpcA, rpcB].map((url) =>
   createPublicClient({ chain: mainnet, transport: http(url) }),
 );
-const finalized = await Promise.all(
+const finalizedHeads = await Promise.all(
   clients.map((client) => client.getBlock({ blockTag: "finalized" })),
 );
+const commonFinalizedNumber =
+  finalizedHeads[0].number < finalizedHeads[1].number
+    ? finalizedHeads[0].number
+    : finalizedHeads[1].number;
+const finalized = await Promise.all(
+  clients.map((client) =>
+    client.getBlock({ blockNumber: commonFinalizedNumber }),
+  ),
+);
 if (
-  finalized[0].number !== finalized[1].number ||
   finalized[0].hash !== finalized[1].hash
 )
   throw new Error("independent finalized anchors disagree");
@@ -204,6 +212,8 @@ for (const controller of plan.controllers) {
   });
   if (
     !evidence ||
+    !/^0x[0-9a-f]+$/u.test(evidence.serializedTransaction ?? "") ||
+    keccak256(evidence.serializedTransaction) !== evidence.transactionHash ||
     getAddress(evidence.address) !== getAddress(controller.predictedAddress) ||
     evidence.expectedTransactionNonce !== controller.expectedTransactionNonce ||
     evidence.transactionStatus !== "RECEIPT_CONFIRMED_SUCCESS" ||
