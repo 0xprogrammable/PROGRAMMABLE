@@ -789,7 +789,7 @@ function normalizePersistenceMarketState(
     value.providerIdentities[1] !== bundle.providerIdentities[1] ||
     !Array.isArray(value.providerVendorGroups) ||
     value.providerVendorGroups.length !== 2 ||
-    value.providerVendorGroups[0] !== "alchemy" ||
+    value.providerVendorGroups[0] !== "drpc" ||
     value.providerVendorGroups[1] !== "quicknode" ||
     !Array.isArray(value.providerEndpointCommitments) ||
     value.providerEndpointCommitments.length !== 2 ||
@@ -1238,7 +1238,7 @@ function validatePersistenceBundle(
     bundle.providerIdentities[0] === bundle.providerIdentities[1] ||
     !Array.isArray(bundle.providerVendorGroups) ||
     bundle.providerVendorGroups.length !== 2 ||
-    bundle.providerVendorGroups[0] !== "alchemy" ||
+    bundle.providerVendorGroups[0] !== "drpc" ||
     bundle.providerVendorGroups[1] !== "quicknode" ||
     !Array.isArray(bundle.providerEndpointCommitments) ||
     bundle.providerEndpointCommitments.length !== 2 ||
@@ -1819,7 +1819,7 @@ function parseNormalizedPayload(value: unknown): NormalizedOptimisticEventPayloa
       providerIdentities[0] === providerIdentities[1] ||
       !Array.isArray(providerVendorGroups) ||
       providerVendorGroups.length !== 2 ||
-      providerVendorGroups[0] !== "alchemy" ||
+      providerVendorGroups[0] !== "drpc" ||
       providerVendorGroups[1] !== "quicknode" ||
       !Array.isArray(endpoints) || endpoints.length !== 2 ||
       !Array.isArray(origins) || origins.length !== 2 ||

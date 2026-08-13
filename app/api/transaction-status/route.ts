@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, isHex, type Hex } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 
-import { getOnchainDeployment } from "@/lib/onchain/config";
+import { getWebsiteReadOnchainDeployment } from "@/lib/onchain/config";
 import { stockPairedActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 
 export const dynamic = "force-dynamic";
@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
     return json({ status: "pending", blockNumber: null });
   }
 
-  const deployment = getOnchainDeployment();
+  const deployment = getWebsiteReadOnchainDeployment();
   if (deployment.chainId !== requestedChainId) {
     return json({ error: "Transaction network does not match" }, 409);
   }

@@ -26,29 +26,29 @@ const MARKET_COMMITMENT = `0x${"22".repeat(32)}`;
 const TOKEN_ADDRESS = `0x${"12".repeat(20)}`;
 const NOW = Date.parse("2026-08-02T12:00:08.500Z");
 
-function provider(providerId: "alchemy" | "quicknode") {
-  const alchemy = providerId === "alchemy";
+function provider(providerId: "drpc" | "quicknode") {
+  const drpc = providerId === "drpc";
   return {
     providerId,
-    providerDeploymentId: alchemy
+    providerDeploymentId: drpc
       ? "11111111-1111-4111-8111-111111111111"
       : "22222222-2222-4222-8222-222222222222",
-    endpointHost: alchemy
-      ? "eth-mainnet.g.alchemy.com"
-      : "hidden-name.quiknode.pro",
-    endpointUrlSha256: alchemy
+    endpointHost: drpc
+      ? "lb.drpc.live"
+      : "hidden-name.ethereum-mainnet.quiknode.pro",
+    endpointUrlSha256: drpc
       ? `0x${"33".repeat(32)}`
       : `0x${"44".repeat(32)}`,
     blockEvidenceHead: {
-      blockNumber: alchemy ? "22000001" : "22000002",
-      blockHash: alchemy
+      blockNumber: drpc ? "22000001" : "22000002",
+      blockHash: drpc
         ? `0x${"55".repeat(32)}`
         : `0x${"66".repeat(32)}`,
       observedAt: "2026-08-02T12:00:06.500Z",
     },
     marketStateHead: {
-      blockNumber: alchemy ? "22000002" : "22000003",
-      blockHash: alchemy
+      blockNumber: drpc ? "22000002" : "22000003",
+      blockHash: drpc
         ? `0x${"12".repeat(32)}`
         : `0x${"13".repeat(32)}`,
       observedAt: "2026-08-02T12:00:07.500Z",
@@ -152,7 +152,7 @@ function payload() {
         blockTimestamp: "2026-08-02T12:00:00.000Z",
         logsCommitment: `0x${"cc".repeat(32)}`,
       },
-      alchemy: provider("alchemy"),
+      drpc: provider("drpc"),
       quicknode: provider("quicknode"),
     },
     optimisticDatabase,
@@ -304,7 +304,7 @@ describe("real block SLA release gate", () => {
     );
 
     const staleProvider = mutateAndRecommit((candidate) => {
-      candidate.dualRpc.alchemy.blockEvidenceHead.observedAt =
+      candidate.dualRpc.drpc.blockEvidenceHead.observedAt =
         "2026-08-02T11:59:00.000Z";
     });
     expect(() => verifyRealBlockSlaEvidence(staleProvider, expected())).toThrow(
@@ -357,14 +357,14 @@ describe("real block SLA release gate", () => {
     );
 
     const safe = mutateAndRecommit((candidate) => {
-      candidate.dualRpc.alchemy.marketStateHead.blockNumber = "22000012";
+      candidate.dualRpc.drpc.marketStateHead.blockNumber = "22000012";
       candidate.dualRpc.quicknode.marketStateHead.blockNumber = "22000012";
       candidate.dualRpc.quicknode.marketStateHead.blockHash =
-        candidate.dualRpc.alchemy.marketStateHead.blockHash;
+        candidate.dualRpc.drpc.marketStateHead.blockHash;
       candidate.api.observations[0]!.confirmations = 11;
     });
     expect(() => verifyRealBlockSlaEvidence(safe, expected())).toThrow(
-      "alchemy market state confirmations",
+      "drpc market state confirmations",
     );
   });
 

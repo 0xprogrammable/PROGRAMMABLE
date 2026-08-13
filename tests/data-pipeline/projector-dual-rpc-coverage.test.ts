@@ -594,7 +594,7 @@ function verify(firstLogs: readonly CandidateRpcLog[], secondLogs = firstLogs) {
       candidateId: candidate().candidateId,
     },
     providers: [
-      provider("alchemy-mainnet", client(firstLogs)),
+      provider("drpc-mainnet", client(firstLogs)),
       provider("quicknode-mainnet", client(secondLogs)),
     ],
     rpcPolicy: { maxAttempts: 1 },
@@ -635,7 +635,7 @@ describe("dual-RPC exact Envio window coverage", () => {
           candidateId: "empty-page",
         },
         providers: [
-          provider("alchemy-mainnet", client([canonicalLog()])),
+          provider("drpc-mainnet", client([canonicalLog()])),
           provider("quicknode-mainnet", client([canonicalLog()])),
         ],
         rpcPolicy: { maxAttempts: 1 },
@@ -673,7 +673,7 @@ describe("dual-RPC exact Envio window coverage", () => {
           candidateId: "empty-page",
         },
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
         rpcPolicy: { maxAttempts: 1 },
@@ -685,7 +685,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const parentCandidate = dynamicParentCandidate();
@@ -734,7 +734,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const items = Array.from({ length: 101 }, (_, index) => {
@@ -850,7 +850,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const parentCandidate = dynamicParentCandidate();
@@ -883,7 +883,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([]);
     const second = client([]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const parentCandidate = dynamicParentCandidate();
@@ -935,7 +935,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([]);
     const second = client([]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const launchCandidate = dynamicLaunchCandidate({
@@ -973,7 +973,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([]);
     const second = client([]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const originalParent = dynamicParentCandidate();
@@ -1014,7 +1014,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([]);
     const second = client([]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const originalParent = dynamicParentCandidate();
@@ -1054,7 +1054,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     const first = client([]);
     const second = client([]);
     const providers = [
-      provider("alchemy-mainnet", first),
+      provider("drpc-mainnet", first),
       provider("quicknode-mainnet", second),
     ] as const;
     const originalParent = dynamicParentCandidate();
@@ -1136,7 +1136,7 @@ describe("dual-RPC exact Envio window coverage", () => {
           candidateId: candidate().candidateId,
         },
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
         rpcPolicy: { maxAttempts: 1 },
@@ -1160,7 +1160,7 @@ describe("dual-RPC exact Envio window coverage", () => {
         candidateId: candidate().candidateId,
       },
       providers: [
-        provider("alchemy-mainnet", first),
+        provider("drpc-mainnet", first),
         provider("quicknode-mainnet", second),
       ],
       coveragePolicy: { maximumBlockSpan: 500, maximumRequests: 8 },
@@ -1200,7 +1200,7 @@ describe("dual-RPC exact Envio window coverage", () => {
           candidateId: candidate().candidateId,
         },
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
         rpcPolicy: { maxAttempts: 1, maxProviderCalls: 5 },
@@ -1236,7 +1236,7 @@ describe("dual-RPC exact Envio window coverage", () => {
           candidateId: candidate().candidateId,
         },
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
         rpcPolicy: {
@@ -1273,7 +1273,7 @@ describe("dual-RPC exact Envio window coverage", () => {
           candidateId: candidate().candidateId,
         },
         providers: [
-          provider("alchemy-mainnet", hanging),
+          provider("drpc-mainnet", hanging),
           provider("quicknode-mainnet", client([canonicalLog()])),
         ],
         rpcPolicy: {

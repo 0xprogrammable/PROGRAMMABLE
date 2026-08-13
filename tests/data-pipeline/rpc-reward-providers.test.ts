@@ -15,10 +15,15 @@ vi.mock("viem", async (importOriginal) => {
 });
 
 import { createProductionDualRpcProviders } from "../../lib/data-pipeline/rpc-providers.server";
+import { productionMainnetRpcEnvironment } from "../../lib/onchain/website-rpc-providers.server";
 
-const ALCHEMY = "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
+const DRPC = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE =
-  "https://programmable.ethereum.quiknode.pro/quicknode-test-token/";
+  "https://programmable.ethereum-mainnet.quiknode.pro/quicknode-test-token/";
+const PRODUCTION_RPC_ENVIRONMENT = productionMainnetRpcEnvironment(
+  DRPC,
+  QUICKNODE,
+);
 const address = (digit: string) =>
   `0x${digit.repeat(40)}` as `0x${string}`;
 const bytes32 = (digit: string) =>
@@ -57,10 +62,9 @@ describe("production reward-vault RPC reader", () => {
       }
       throw new Error("unexpected function");
     });
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(
+      PRODUCTION_RPC_ENVIRONMENT,
+    );
 
     const snapshot = await providers[0].client.readRewardSnapshot!({
       model: "classic-v3",
@@ -138,10 +142,9 @@ describe("production reward-vault RPC reader", () => {
       }
       throw new Error("unexpected function");
     });
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(
+      PRODUCTION_RPC_ENVIRONMENT,
+    );
 
     const snapshot = await providers[0].client.readRewardSnapshot!({
       model: "classic-v3",
@@ -199,10 +202,9 @@ describe("production reward-vault RPC reader", () => {
       .mockReturnValueOnce(batchClient)
       .mockReturnValueOnce(singleClient)
       .mockReturnValueOnce(batchClient);
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(
+      PRODUCTION_RPC_ENVIRONMENT,
+    );
     const blockNumbers = Array.from({ length: 20 }, (_value, index) =>
       BigInt(101 + index)
     );
@@ -260,10 +262,9 @@ describe("production reward-vault RPC reader", () => {
       if (functionName === "predict") return vault;
       throw new Error("unexpected function");
     });
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(
+      PRODUCTION_RPC_ENVIRONMENT,
+    );
 
     await expect(
       providers[0].client.readClassicRewardFactorySnapshot!({

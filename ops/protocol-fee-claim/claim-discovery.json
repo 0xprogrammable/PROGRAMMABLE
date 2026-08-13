@@ -38,12 +38,9 @@
     "legacyAssetCount": 7
   },
   "customV1": {
-    "discoveryMode": "complete_registry_event_replay_plus_current_state",
-    "registry": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
-    "startBlock": "25701139",
-    "futureFinalizedStandardSourcesAutoAdded": true,
-    "supportedProgrammableFeeBps": [5, 10],
-    "unknownOrMismatchedSources": "block_all_claims"
+    "status": "HOLD",
+    "futureFinalizedStandardSourcesAutoAdded": false,
+    "reason": "Registry V1 is retired and is not an authorized claim-discovery source."
   },
   "customV2": {
     "status": "HOLD",

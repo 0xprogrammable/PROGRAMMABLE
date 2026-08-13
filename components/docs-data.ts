@@ -172,7 +172,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Creator earnings",
     description:
-      "Compare Classic rewards, public template shares and partner template shares.",
+      "Compare Classic rewards and public template shares.",
     href: "/docs/creators/earnings",
     keywords: ["fees", "rewards", "revenue"],
   },

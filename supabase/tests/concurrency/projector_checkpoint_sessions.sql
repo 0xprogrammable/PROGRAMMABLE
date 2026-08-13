@@ -182,7 +182,7 @@ select programmable_private.activate_release_epoch(
 
 select programmable_private.register_rpc_provider_deployment(
   '12000000-0000-0000-0000-000000000001',
-  1, 'alchemy', 'rpc-provider-v1',
+  1, 'drpc', 'rpc-provider-v1',
   decode(repeat('a1', 32), 'hex'), decode(repeat('a2', 32), 'hex'),
   'rpc-endpoint-commitments-v1', decode(repeat('a3', 32), 'hex'),
   decode(repeat('91', 32), 'hex'),
@@ -1023,7 +1023,7 @@ begin
   from programmable_private.get_projector_runtime_state_v1(
     1, 'race', 'classic-v3', 'core', 'checkpoint-v1',
     array['rpc_provider', 'rpc_provider', 'envio_deployment']::text[],
-    array['rpc:1:alchemy', 'rpc:1:quicknode', 'concurrency-envio']::text[],
+    array['rpc:1:drpc', 'rpc:1:quicknode', 'concurrency-envio']::text[],
     array[
       decode(repeat('91', 32), 'hex'),
       decode(repeat('94', 32), 'hex'),

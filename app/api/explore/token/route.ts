@@ -36,7 +36,7 @@ import {
 import type { TokenMarketDataV1 } from
   "../../../../lib/market-data/market-data-v1";
 import { readExploreReferenceHeadWithinRouteBudget } from "../../../../lib/explore-reference-head.server";
-import { getOnchainDeployment } from "../../../../lib/onchain/config";
+import { getWebsiteReadOnchainDeployment } from "../../../../lib/onchain/config";
 import { readDurableExploreModel } from "../../../../lib/onchain/durable-model";
 import { readProductionCustomExploreDirectoryV1 } from "../../../../lib/server/custom-launch/explore-directory-v1";
 import type { ExploreReadModel } from "../../../../lib/onchain/types";
@@ -59,7 +59,7 @@ async function readPrimaryTokenModel() {
 }
 
 async function readDurableTokenFallback() {
-  const deployment = getOnchainDeployment("production");
+  const deployment = getWebsiteReadOnchainDeployment("production");
   if (deployment.status !== "ready") {
     throw new Error("Production Explore deployment is not ready");
   }
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const deployment = getOnchainDeployment("production");
+    const deployment = getWebsiteReadOnchainDeployment("production");
     const currentMarketDeployment = deployment.status === "ready"
       ? currentMarketOnchainDeployment(deployment)
       : null;

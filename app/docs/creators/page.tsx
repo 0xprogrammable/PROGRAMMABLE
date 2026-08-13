@@ -128,9 +128,8 @@ export default function CreatorsDocsPage() {
         <h2>How creators earn</h2>
         <p>
           Classic creators receive the selected swap fee minus the 10 bps
-          Programmable share. Public templates use a 10/10 bps split, while
-          partner templates use 15 bps for the partner and 5 bps for
-          Programmable.
+          Programmable share. Public templates use a 10/10 bps split when
+          their separately documented payout path is active.
         </p>
         <p>
           Revenue depends on qualifying activity. Review, publication and

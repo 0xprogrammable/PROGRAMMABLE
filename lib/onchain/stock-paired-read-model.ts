@@ -3,10 +3,12 @@ import {
   formatUnits,
   getAddress,
   HttpRequestError,
-  http,
   keccak256,
+  LimitExceededRpcError,
   parseAbiItem,
   ResponseBodyTooLargeError,
+  RpcRequestError,
+  TimeoutError,
   type Address,
   type Hex,
   type PublicClient,
@@ -28,6 +30,10 @@ import {
 import type { LauncherToken } from "../tokens";
 import { stateViewReadAbi, uerc20ReadAbi } from "./abis";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
+import {
+  persistentRpcHttp,
+  withPersistentRpcIntegrityScope,
+} from "./persistent-rpc-cache.server";
 import {
   enrichStockPairedTokenWithUsd,
   readStockQuoteAssetUsdWad,
@@ -52,6 +58,11 @@ const initialBuyEvent = parseAbiItem(
 const feeEvent = parseAbiItem(
   "event QuoteSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,address indexed quoteAsset,bool isBuy,uint256 grossQuoteAmount,uint256 creatorFee,uint256 launcherFee)",
 );
+const STOCK_LAUNCHER_EVENTS = [
+  launchedEvent,
+  liquidityEvent,
+  initialBuyEvent,
+] as const;
 
 type StockLaunch = {
   deployer: Address;
@@ -128,7 +139,27 @@ const RPC_PROVENANCE_BATCH_SIZE = 1;
 const TOKEN_HYDRATION_BATCH_SIZE = 6;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
 const QUOTE_PRICE_BATCH_SIZE = 2;
-const MINIMUM_LOG_BLOCK_RANGE = 100n;
+const MINIMUM_LOG_BLOCK_RANGE = 1n;
+const TRANSIENT_RETRIES_PER_WINDOW = 1;
+const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;
+
+function isTransientLogReadError(error: unknown) {
+  if (error instanceof TimeoutError) return true;
+  if (error instanceof HttpRequestError) {
+    return (
+      error.status === undefined ||
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+  return (
+    error instanceof RpcRequestError &&
+    error.code === -32603 &&
+    error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
 
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
@@ -150,15 +181,75 @@ async function mapInBatches<Input, Output>(
   return output;
 }
 
+async function allSettledOrThrow<
+  const Values extends readonly unknown[],
+>(
+  values: Values,
+): Promise<{ -readonly [Key in keyof Values]: Awaited<Values[Key]> }> {
+  const results = await Promise.allSettled(values);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult =>
+      result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
+  return results.map(
+    (result) => (result as PromiseFulfilledResult<unknown>).value,
+  ) as { -readonly [Key in keyof Values]: Awaited<Values[Key]> };
+}
+
 function sameHex(left: string, right: string) {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function clientFor(endpoint: string) {
+function clientFor(
+  endpoint: string,
+  config: ReadyOnchainDeployment,
+  releases: readonly VerifiedStockPairedRelease[],
+) {
   return createPublicClient({
     chain: mainnet,
     batch: { multicall: true },
-    transport: http(endpoint, { retryCount: 1, timeout: 10_000 }),
+    transport: persistentRpcHttp(endpoint, {
+      chainId: 1,
+      maxLogBlockRange: config.logBlockRange,
+      http: { retryCount: 1, timeout: 10_000 },
+      immutableCodeBindings: [
+        {
+          address: config.stateView,
+          expectedRuntimeCodeHash: config.stateViewRuntimeCodeHash,
+          notBeforeBlock: BigInt(releases[0].startBlock),
+        },
+        ...releases.flatMap((release) => [
+          {
+            address: release.addresses.launcher,
+            expectedRuntimeCodeHash: release.runtimeCodeHashes.launcher,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.ethLaunchCoordinator,
+            expectedRuntimeCodeHash:
+              release.runtimeCodeHashes.ethLaunchCoordinator,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.feeHook,
+            expectedRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.quoteRegistry,
+            expectedRuntimeCodeHash: release.runtimeCodeHashes.quoteRegistry,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+          {
+            address: release.addresses.feeSplitVaultFactory,
+            expectedRuntimeCodeHash:
+              release.runtimeCodeHashes.feeSplitVaultFactory,
+            notBeforeBlock: BigInt(release.startBlock),
+          },
+        ]),
+      ],
+    }),
   });
 }
 
@@ -198,7 +289,34 @@ function stockPriceQuoteWad(input: {
     : (squared * tokenScale * WAD) / (Q192 * quoteScale);
 }
 
-async function readEvents(
+function assertCanonicalStockEventSource(
+  eventName: string,
+  actualAddress: Address,
+  release: VerifiedStockPairedRelease,
+) {
+  const expectedAddress =
+    eventName === "StockPairedTokenLaunched" ||
+    eventName === "StockPairedLiquidityConfigured" ||
+    eventName === "StockPairedCreatorInitialBuy"
+      ? release.addresses.launcher
+      : eventName === "StockPairedEthTokenLaunched"
+        ? release.addresses.ethLaunchCoordinator
+        : eventName === "QuoteSwapFeesAccrued"
+          ? release.addresses.feeHook
+          : null;
+  if (expectedAddress === null) {
+    throw new Error(
+      `RPC returned event outside the canonical ${release.internalContractRelease} filter: ${eventName}`,
+    );
+  }
+  if (!sameHex(actualAddress, expectedAddress)) {
+    throw new Error(
+      `RPC returned ${eventName} from a non-canonical ${release.internalContractRelease} contract`,
+    );
+  }
+}
+
+export async function readStockPairedEvents(
   client: PublicClient,
   config: ReadyOnchainDeployment,
   release: VerifiedStockPairedRelease,
@@ -216,17 +334,21 @@ async function readEvents(
     fromBlockFloor > releaseStartBlock
       ? fromBlockFloor
       : releaseStartBlock;
-  let logBlockRange = config.logBlockRange;
+  const configuredLogBlockRange = toBlock >= fromBlock
+    ? toBlock - fromBlock + 1n
+    : config.logBlockRange;
+  let logBlockRange = configuredLogBlockRange;
+  let transientRetries = 0;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
       fromBlock + logBlockRange - 1n,
     );
     const readLogs = () =>
-      Promise.all([
+      allSettledOrThrow([
         client.getLogs({
           address: release.addresses.launcher,
-          event: launchedEvent,
+          events: STOCK_LAUNCHER_EVENTS,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
@@ -239,33 +361,37 @@ async function readEvents(
           strict: true,
         }),
         client.getLogs({
-          address: release.addresses.launcher,
-          event: liquidityEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: release.addresses.launcher,
-          event: initialBuyEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
           address: release.addresses.feeHook,
           event: feeEvent,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
         }),
-      ]);
+      ] as const);
     let logs: Awaited<ReturnType<typeof readLogs>>;
     try {
       logs = await readLogs();
     } catch (error) {
+      const transient = isTransientLogReadError(error);
+      const transientRetryLimit =
+        logBlockRange === MINIMUM_LOG_BLOCK_RANGE
+          ? MINIMUM_RANGE_TRANSIENT_RETRIES
+          : TRANSIENT_RETRIES_PER_WINDOW;
+      if (transient && transientRetries < transientRetryLimit) {
+        transientRetries += 1;
+        console.warn("Stock-Paired log window retried after transient RPC rejection", {
+          release: release.internalContractRelease,
+          fromBlock: fromBlock.toString(),
+          attemptedToBlock: rangeEnd.toString(),
+          retry: transientRetries,
+          retryLimit: transientRetryLimit,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+        continue;
+      }
       if (
-        (error instanceof HttpRequestError ||
+        (transient ||
+          error instanceof LimitExceededRpcError ||
           error instanceof ResponseBodyTooLargeError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
@@ -275,6 +401,7 @@ async function readEvents(
           reducedRange < MINIMUM_LOG_BLOCK_RANGE
             ? MINIMUM_LOG_BLOCK_RANGE
             : reducedRange;
+        transientRetries = 0;
         console.warn(
           "Stock-Paired log range reduced after RPC rejection",
           {
@@ -282,39 +409,70 @@ async function readEvents(
             fromBlock: fromBlock.toString(),
             attemptedToBlock: rangeEnd.toString(),
             nextRange: logBlockRange.toString(),
-            errorName: error.name,
+            errorName: error instanceof Error ? error.name : "UnknownError",
           },
         );
         continue;
       }
       throw error;
     }
-    const [
-      launchLogs,
-      ethLaunchLogs,
-      liquidityLogs,
-      initialBuyLogs,
-      feeLogs,
-    ] = logs;
+    const [launcherLogs, ethLaunchLogs, feeLogs] = logs;
 
-    for (const log of launchLogs) {
+    for (const log of launcherLogs) {
+      assertCanonicalStockEventSource(log.eventName, log.address, release);
       if (log.removed || log.blockNumber === null) continue;
-      launches.push({
-        deployer: getAddress(log.args.deployer),
-        token: getAddress(log.args.token),
-        quoteAsset: getAddress(log.args.quoteAsset),
-        poolId: log.args.poolId,
-        rewardVault: getAddress(log.args.rewardVault),
-        positionRecipient: getAddress(log.args.positionRecipient),
-        positionTokenId: log.args.positionTokenId,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
+      switch (log.eventName) {
+        case "StockPairedTokenLaunched":
+          launches.push({
+            deployer: getAddress(log.args.deployer),
+            token: getAddress(log.args.token),
+            quoteAsset: getAddress(log.args.quoteAsset),
+            poolId: log.args.poolId,
+            rewardVault: getAddress(log.args.rewardVault),
+            positionRecipient: getAddress(log.args.positionRecipient),
+            positionTokenId: log.args.positionTokenId,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "StockPairedLiquidityConfigured":
+          liquidities.push({
+            token: getAddress(log.args.token),
+            quoteAsset: getAddress(log.args.quoteAsset),
+            totalSupply: log.args.totalSupply,
+            tokenLiquidityAmount: log.args.tokenLiquidityAmount,
+            lockedTokenDust: log.args.lockedTokenDust,
+            initialTick: log.args.initialTick,
+            tickLower: log.args.tickLower,
+            tickUpper: log.args.tickUpper,
+            lpFeePips: log.args.lpFeePips,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          });
+          break;
+        case "StockPairedCreatorInitialBuy":
+          initialBuys.push({
+            deployer: getAddress(log.args.deployer),
+            token: getAddress(log.args.token),
+            quoteAsset: getAddress(log.args.quoteAsset),
+            poolId: log.args.poolId,
+            quoteAmount: log.args.quoteAmount,
+            tokenAmount: log.args.tokenAmount,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          });
+          break;
+        default:
+          throw new Error("RPC returned an undecodable Stock-Paired event");
+      }
     }
     for (const log of ethLaunchLogs) {
+      assertCanonicalStockEventSource(log.eventName, log.address, release);
       if (log.removed || log.blockNumber === null) continue;
       ethLaunches.push({
         creator: getAddress(log.args.creator),
@@ -330,38 +488,8 @@ async function readEvents(
         logIndex: log.logIndex,
       });
     }
-    for (const log of liquidityLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      liquidities.push({
-        token: getAddress(log.args.token),
-        quoteAsset: getAddress(log.args.quoteAsset),
-        totalSupply: log.args.totalSupply,
-        tokenLiquidityAmount: log.args.tokenLiquidityAmount,
-        lockedTokenDust: log.args.lockedTokenDust,
-        initialTick: log.args.initialTick,
-        tickLower: log.args.tickLower,
-        tickUpper: log.args.tickUpper,
-        lpFeePips: log.args.lpFeePips,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-      });
-    }
-    for (const log of initialBuyLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      initialBuys.push({
-        deployer: getAddress(log.args.deployer),
-        token: getAddress(log.args.token),
-        quoteAsset: getAddress(log.args.quoteAsset),
-        poolId: log.args.poolId,
-        quoteAmount: log.args.quoteAmount,
-        tokenAmount: log.args.tokenAmount,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-      });
-    }
     for (const log of feeLogs) {
+      assertCanonicalStockEventSource(log.eventName, log.address, release);
       if (log.removed || log.blockNumber === null) continue;
       const key = log.args.poolId.toLowerCase();
       const current = volumes.get(key) ?? { ...EMPTY_VOLUME };
@@ -372,12 +500,21 @@ async function readEvents(
       volumes.set(key, current);
     }
     fromBlock = rangeEnd + 1n;
+    transientRetries = 0;
+    if (logBlockRange < configuredLogBlockRange) {
+      logBlockRange = minimum(
+        configuredLogBlockRange,
+        logBlockRange * 2n,
+      );
+    }
   }
 
   return { launches, ethLaunches, liquidities, initialBuys, volumes };
 }
 
-function eventFingerprint(value: Awaited<ReturnType<typeof readEvents>>) {
+function eventFingerprint(
+  value: Awaited<ReturnType<typeof readStockPairedEvents>>,
+) {
   return JSON.stringify(
     {
       launches: value.launches,
@@ -393,7 +530,7 @@ function eventFingerprint(value: Awaited<ReturnType<typeof readEvents>>) {
 }
 
 export function pairStockPairedLaunches(
-  events: Awaited<ReturnType<typeof readEvents>>,
+  events: Awaited<ReturnType<typeof readStockPairedEvents>>,
 ) {
   if (
     events.launches.length !== events.liquidities.length ||
@@ -730,8 +867,10 @@ export async function readStockPairedExploreModel(
   if (activeReleases.length === 0) return [];
 
   const clients = [
-    clientFor(config.rpcUrl),
-    ...(config.rpcUrlSecondary ? [clientFor(config.rpcUrlSecondary)] : []),
+    clientFor(config.rpcUrl, config, activeReleases),
+    ...(config.rpcUrlSecondary
+      ? [clientFor(config.rpcUrlSecondary, config, activeReleases)]
+      : []),
   ];
   await mapInBatches(
     clients,
@@ -790,17 +929,17 @@ export async function readStockPairedExploreModel(
     activeReleases,
     1,
     async (release) => {
-      const eventSets = await mapInBatches(
-        clients,
-        RPC_PROVENANCE_BATCH_SIZE,
-        (candidate) =>
-          readEvents(
-            candidate,
-            config,
-            release,
-            toBlock,
-            options.fromBlock ?? BigInt(release.startBlock),
-          ),
+      const eventSets = await allSettledOrThrow(
+        clients.map((candidate) =>
+          withPersistentRpcIntegrityScope(() =>
+            readStockPairedEvents(
+              candidate,
+              config,
+              release,
+              toBlock,
+              options.fromBlock ?? BigInt(release.startBlock),
+            ),
+          )),
       );
       const fingerprint = eventFingerprint(eventSets[0]);
       if (

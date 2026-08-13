@@ -36,7 +36,10 @@ import {
 } from "../../custom-launch/trade-v1";
 import type { PreparedTradeTransaction } from "../../prepared-transaction";
 import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
-import { isCustomLaunchPublicEnabled } from "./public-readiness";
+import {
+  isCustomLaunchPublicEnabled,
+  isCustomLaunchRegistryPublicReadEnabled,
+} from "./public-readiness";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const GAS_PRICE_BUFFER_BPS = 12_500n;
@@ -248,7 +251,7 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   client: CustomMarketTradeRuntimeClientV1;
   request: CustomMarketTradeRequestV1;
 }>): Promise<CustomMarketTradePreparationV1> {
-  if (!isCustomLaunchPublicEnabled()) {
+  if (!isCustomLaunchPublicEnabled() || !isCustomLaunchRegistryPublicReadEnabled()) {
     throw new CustomMarketTradeUnavailableErrorV1("Custom launches are not public");
   }
   const target = getProductionWebsiteProjectionTargetV1();

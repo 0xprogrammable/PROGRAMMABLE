@@ -331,7 +331,7 @@ describe("dual-RPC Envio candidate verification", () => {
     const batch = await verifyEnvioCandidateBatchWithDualRpc({
       candidates: [earlier, candidate()],
       providers: [
-        provider("alchemy-mainnet", firstClient),
+        provider("drpc-mainnet", firstClient),
         provider("quicknode-mainnet", secondClient),
       ],
     });
@@ -383,7 +383,7 @@ describe("dual-RPC Envio candidate verification", () => {
       candidates,
       maximumCandidateCount: 4_096,
       providers: [
-        provider("alchemy-mainnet", client({
+        provider("drpc-mainnet", client({
           getTransactionReceipt: async () => oversizedReceipt(),
         })),
         provider("quicknode-mainnet", client({
@@ -452,7 +452,7 @@ describe("dual-RPC Envio candidate verification", () => {
       candidates,
       maximumCandidateCount: 4_096,
       providers: [
-        provider("alchemy-mainnet", first),
+        provider("drpc-mainnet", first),
         provider("quicknode-mainnet", second),
       ],
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -560,7 +560,7 @@ describe("dual-RPC Envio candidate verification", () => {
       candidates,
       maximumCandidateCount: 4_096,
       providers: [
-        provider("alchemy-mainnet", first),
+        provider("drpc-mainnet", first),
         provider("quicknode-mainnet", second),
       ],
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -582,15 +582,15 @@ describe("dual-RPC Envio candidate verification", () => {
     const result = await verifyEnvioCandidateWithDualRpc({
       candidate: candidate(),
       providers: [
-        provider("alchemy-mainnet", client()),
+        provider("drpc-mainnet", client()),
         provider("quicknode-mainnet", client()),
       ],
     });
 
     expect(result).toMatchObject({
       chainId: 1,
-      providerIdentities: ["alchemy-mainnet", "quicknode-mainnet"],
-      providerVendorGroups: ["alchemy", "quicknode"],
+      providerIdentities: ["drpc-mainnet", "quicknode-mainnet"],
+      providerVendorGroups: ["drpc", "quicknode"],
       providerHeads: [PROVIDER_HEAD.toString(), PROVIDER_HEAD.toString()],
       safeBlockNumber: SAFE_BLOCK.toString(),
       safeBlockHash: SAFE_BLOCK_HASH,
@@ -615,7 +615,7 @@ describe("dual-RPC Envio candidate verification", () => {
     expect(result.providerEndpointCommitments).toEqual([
       rpcProviderCommitment(
         "endpoint",
-        "https://alchemy-mainnet.example",
+        "https://drpc-mainnet.example",
       ),
       rpcProviderCommitment(
         "endpoint",
@@ -623,7 +623,7 @@ describe("dual-RPC Envio candidate verification", () => {
       ),
     ]);
     expect(result.providerOriginCommitments).toEqual([
-      rpcProviderCommitment("origin", "https://alchemy-mainnet.example"),
+      rpcProviderCommitment("origin", "https://drpc-mainnet.example"),
       rpcProviderCommitment("origin", "https://quicknode-mainnet.example"),
     ]);
     expect(JSON.stringify(result)).not.toContain(".example");
@@ -654,7 +654,7 @@ describe("dual-RPC Envio candidate verification", () => {
     const result = await verifyEnvioCandidateWithDualRpc({
       candidate: candidate(),
       providers: [
-        provider("alchemy-mainnet", client({
+        provider("drpc-mainnet", client({
           getTransactionReceipt: async () => receiptWithAnonymousLog(),
         })),
         provider("quicknode-mainnet", client({
@@ -671,7 +671,7 @@ describe("dual-RPC Envio candidate verification", () => {
     const result = await verifyEnvioCandidateWithDualRpc({
       candidate: dynamicCandidate(),
       providers: [
-        provider("alchemy-mainnet", dynamicClient()),
+        provider("drpc-mainnet", dynamicClient()),
         provider("quicknode-mainnet", dynamicClient()),
       ],
     });
@@ -725,7 +725,7 @@ describe("dual-RPC Envio candidate verification", () => {
         }],
         requireDynamicLineage: true,
         providers: [
-          provider("alchemy-mainnet", dynamicClient()),
+          provider("drpc-mainnet", dynamicClient()),
           provider("quicknode-mainnet", dynamicClient()),
         ],
       }),
@@ -754,7 +754,7 @@ describe("dual-RPC Envio candidate verification", () => {
       const result = await verifyEnvioCandidateWithDualRpc({
         candidate: fixture,
         providers: [
-          provider("alchemy-mainnet", sharedStaticClient(fixture)),
+          provider("drpc-mainnet", sharedStaticClient(fixture)),
           provider("quicknode-mainnet", sharedStaticClient(fixture)),
         ],
       });
@@ -779,7 +779,7 @@ describe("dual-RPC Envio candidate verification", () => {
           verifyEnvioCandidateWithDualRpc({
             candidate: forged,
             providers: [
-              provider("alchemy-mainnet", sharedStaticClient(forged)),
+              provider("drpc-mainnet", sharedStaticClient(forged)),
               provider("quicknode-mainnet", sharedStaticClient(forged)),
             ],
           }),
@@ -790,7 +790,7 @@ describe("dual-RPC Envio candidate verification", () => {
 
   it("rejects caller-asserted, unknown, premature, or RPC-divergent dynamic vaults", async () => {
     const trustedProviders = () => [
-      provider("alchemy-mainnet", dynamicClient()),
+      provider("drpc-mainnet", dynamicClient()),
       provider("quicknode-mainnet", dynamicClient()),
     ] as const;
     for (const forged of [
@@ -822,7 +822,7 @@ describe("dual-RPC Envio candidate verification", () => {
       verifyEnvioCandidateWithDualRpc({
         candidate: dynamicCandidate(),
         providers: [
-          provider("alchemy-mainnet", dynamicClient()),
+          provider("drpc-mainnet", dynamicClient()),
           provider("quicknode-mainnet", dynamicClient("0x6002600055")),
         ],
       }),
@@ -840,7 +840,7 @@ describe("dual-RPC Envio candidate verification", () => {
       }),
     ).rejects.toMatchObject({ code: "invalid_input" });
 
-    const committedEndpoint = provider("alchemy-primary", client());
+    const committedEndpoint = provider("drpc-primary", client());
     await expect(
       verifyEnvioCandidateWithDualRpc({
         candidate: candidate(),
@@ -883,7 +883,7 @@ describe("dual-RPC Envio candidate verification", () => {
 
   it("rejects the same client, endpoint origin commitment, or vendor group under different labels", async () => {
     const sharedClient = client();
-    const first = provider("alchemy-primary", sharedClient);
+    const first = provider("drpc-primary", sharedClient);
     const second = provider("quicknode-secondary", sharedClient);
     await expect(
       verifyEnvioCandidateWithDualRpc({
@@ -909,10 +909,10 @@ describe("dual-RPC Envio candidate verification", () => {
       verifyEnvioCandidateWithDualRpc({
         candidate: candidate(),
         providers: [
-          provider("alchemy-primary", client()),
+          provider("drpc-primary", client()),
           {
             ...provider("quicknode-secondary", client()),
-            vendorGroup: "alchemy",
+            vendorGroup: "drpc",
           },
         ],
       }),
@@ -1090,7 +1090,7 @@ describe("dual-RPC Envio candidate verification", () => {
     const result = await verifyEnvioCandidateBatchWithDualRpc({
       candidates,
       providers: [
-        provider("alchemy-mainnet", first.rpcClient),
+        provider("drpc-mainnet", first.rpcClient),
         provider("quicknode-mainnet", second.rpcClient),
       ],
       rpcPolicy: {
@@ -1126,7 +1126,7 @@ describe("dual-RPC Envio candidate verification", () => {
           blockHash: BLOCK_HASH,
         },
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
         rpcPolicy: {
@@ -1168,7 +1168,7 @@ describe("dual-RPC Envio candidate verification", () => {
           blockHash: SAFE_BLOCK_HASH,
         },
         providers: [
-          provider("alchemy-mainnet", temporallyInconsistentClient()),
+          provider("drpc-mainnet", temporallyInconsistentClient()),
           provider("quicknode-mainnet", temporallyInconsistentClient()),
         ],
       }),
@@ -1204,7 +1204,7 @@ describe("dual-RPC Envio candidate verification", () => {
           blockHash: BLOCK_HASH,
         },
         providers: [
-          provider("alchemy-mainnet", orphanAwareClient()),
+          provider("drpc-mainnet", orphanAwareClient()),
           provider("quicknode-mainnet", orphanAwareClient()),
         ],
       }),
@@ -1240,7 +1240,7 @@ describe("dual-RPC Envio candidate verification", () => {
           blockHash: BLOCK_HASH,
         },
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
       }),
@@ -1270,7 +1270,7 @@ describe("dual-RPC Envio candidate verification", () => {
           blockHash: BLOCK_HASH,
         }],
         providers: [
-          provider("alchemy-mainnet", first),
+          provider("drpc-mainnet", first),
           provider("quicknode-mainnet", second),
         ],
         rpcPolicy: {
@@ -1316,7 +1316,7 @@ describe("dual-RPC Envio candidate verification", () => {
         blockHash: BLOCK_HASH,
       }],
       providers: [
-        provider("alchemy-mainnet", first),
+        provider("drpc-mainnet", first),
         provider("quicknode-mainnet", second),
       ],
       rpcPolicy: {
@@ -1355,7 +1355,7 @@ describe("dual-RPC Envio candidate verification", () => {
         verifyEnvioCandidateWithDualRpc({
           candidate: forged,
           providers: [
-            provider("alchemy-mainnet", client()),
+            provider("drpc-mainnet", client()),
             provider("quicknode-mainnet", client()),
           ],
         }),
@@ -1367,7 +1367,7 @@ describe("dual-RPC Envio candidate verification", () => {
         candidate: candidate(),
         providers: [
           provider(
-            "alchemy-mainnet",
+            "drpc-mainnet",
             client({ getBytecode: async () => "0x6002" }),
           ),
           provider(

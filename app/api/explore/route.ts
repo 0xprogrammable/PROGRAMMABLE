@@ -40,7 +40,7 @@ import {
   valueExploreEntriesWithCurrentEvidenceSnapshot,
 } from "../../../lib/market-data/current-valuation.server";
 import { readExploreReferenceHeadWithinRouteBudget } from "../../../lib/explore-reference-head.server";
-import { getOnchainDeployment } from "../../../lib/onchain/config";
+import { getWebsiteReadOnchainDeployment } from "../../../lib/onchain/config";
 import { readDurableExploreModel } from "../../../lib/onchain/durable-model";
 import {
   parseExploreSort,
@@ -88,7 +88,7 @@ async function readPrimaryExploreModel() {
 }
 
 async function readDurableExploreFallback() {
-  const deployment = getOnchainDeployment("production");
+  const deployment = getWebsiteReadOnchainDeployment("production");
   if (deployment.status !== "ready") {
     throw new Error("Production Explore deployment is not ready");
   }
@@ -730,7 +730,7 @@ export async function GET(request: NextRequest) {
         primary: () => readProductionCustomExploreDirectoryV1(request.signal),
       }),
     );
-    const deployment = getOnchainDeployment("production");
+    const deployment = getWebsiteReadOnchainDeployment("production");
     const currentMarketDeployment = deployment.status === "ready"
       ? currentMarketOnchainDeployment(deployment)
       : null;

@@ -26,6 +26,8 @@ import {
   canonicalProjectorRpcEndpoint,
   projectorRpcDeploymentCommitment,
 } from "./projector-provider-commitments";
+import { productionMainnetRpcPair } from
+  "../onchain/website-rpc-providers.server";
 import type {
   ReconcilerIndexedRouteStore,
   ReconcilerLiveSource,
@@ -1237,18 +1239,19 @@ export type ExactBlockRouteBuilder = (input: {
 }) => Promise<readonly ReconcilerRouteDto[]>;
 
 function endpointConfigurations(env: Environment) {
+  const pair = productionMainnetRpcPair(env);
   const values = [
     {
-      vendor: "alchemy" as const,
+      vendor: "drpc" as const,
       endpoint: canonicalProjectorRpcEndpoint(
-        env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-        "alchemy",
+        pair.primary.url,
+        "drpc",
       ),
     },
     {
       vendor: "quicknode" as const,
       endpoint: canonicalProjectorRpcEndpoint(
-        env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+        pair.secondary.url,
         "quicknode",
       ),
     },

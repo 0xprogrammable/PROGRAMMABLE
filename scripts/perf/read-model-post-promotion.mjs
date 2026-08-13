@@ -23,6 +23,8 @@ import { verifyBitqueryGoldenMarketExecutionV1 } from "./bitquery-golden-market-
 import {
   verifyBitqueryHistoricalGoldenReleaseV2,
 } from "./bitquery-historical-release-gate.mjs";
+import { runtimeProductionProviderEndpoints } from
+  "./read-model-provider-binding.mjs";
 
 const HEALTH_PATH = "/api/ops/health";
 const PRODUCTION_ORIGIN = "https://programmable.market";
@@ -1350,10 +1352,8 @@ export async function verifyPostPromotion(input) {
       ),
     detail: "the current public FDV token has live, untruncated Bitquery history for every public range",
   });
-  const marketParityRpcUrls = input.marketParityRpcUrls ?? [
-    process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-    process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
-  ];
+  const marketParityRpcUrls = input.marketParityRpcUrls ??
+    runtimeProductionProviderEndpoints(process.env);
   let currentOnchainProof = null;
   try {
     currentOnchainProof = await verifyCurrentPublicOnchainEvidenceV1({
@@ -1378,6 +1378,7 @@ export async function verifyPostPromotion(input) {
     goldenParity = await verifyBitqueryGoldenMarketExecutionV1({
       token: responses[4].body?.token,
       fetchImpl,
+      rpcUrls: marketParityRpcUrls,
     });
     historicalGoldenRelease = verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: responses[4].body?.token,

@@ -35,7 +35,7 @@ select programmable_private.activate_release_epoch(
 );
 select programmable_private.register_rpc_provider_deployment(
   'b6000000-0000-0000-0000-000000000001',
-  1, 'alchemy', 'rpc-provider-v1',
+  1, 'drpc', 'rpc-provider-v1',
   decode(repeat('a1', 32), 'hex'), decode(repeat('a2', 32), 'hex'),
   'rpc-endpoint-commitments-v1', decode(repeat('a3', 32), 'hex'),
   decode(repeat('21', 32), 'hex'), decode(repeat('22', 32), 'hex'),
@@ -82,7 +82,7 @@ select throws_ok(
   $sql$
     select programmable_private.register_rpc_provider_deployment(
       'b6000000-0000-0000-0000-0000000000fe',
-      10, 'alchemy', 'rpc-provider-v1',
+      10, 'drpc', 'rpc-provider-v1',
       decode(repeat('d1', 32), 'hex'), decode(repeat('d2', 32), 'hex'),
       'rpc-endpoint-commitments-v1', decode(repeat('d3', 32), 'hex'),
       decode(repeat('d4', 32), 'hex'), decode(repeat('d5', 32), 'hex'),
@@ -97,7 +97,7 @@ select throws_ok(
   $sql$
     select programmable_private.register_rpc_provider_deployment(
       'b6000000-0000-0000-0000-0000000000fd',
-      1, 'alchemy', 'rpc-provider-v1',
+      1, 'drpc', 'rpc-provider-v1',
       decode(repeat('00', 32), 'hex'), decode(repeat('e2', 32), 'hex'),
       'rpc-endpoint-commitments-v1', decode(repeat('e3', 32), 'hex'),
       decode(repeat('e4', 32), 'hex'), decode(repeat('e5', 32), 'hex'),
@@ -113,24 +113,24 @@ reset role;
 select ok(
   exists (
     select 1
-    from programmable_private.rpc_provider_deployment_metadata as alchemy
+    from programmable_private.rpc_provider_deployment_metadata as drpc
     join programmable_private.rpc_provider_deployment_metadata as quicknode
       on quicknode.provider_deployment_id =
         'b6000000-0000-0000-0000-000000000002'::uuid
-    where alchemy.provider_deployment_id =
+    where drpc.provider_deployment_id =
         'b6000000-0000-0000-0000-000000000001'::uuid
-      and alchemy.chain_id = 1
-      and alchemy.vendor = 'alchemy'
-      and alchemy.vendor_order = 1
+      and drpc.chain_id = 1
+      and drpc.vendor = 'drpc'
+      and drpc.vendor_order = 1
       and quicknode.chain_id = 1
       and quicknode.vendor = 'quicknode'
       and quicknode.vendor_order = 2
-      and alchemy.constructor_version = 'rpc-provider-v1'
+      and drpc.constructor_version = 'rpc-provider-v1'
       and quicknode.constructor_version = 'rpc-provider-v1'
-      and alchemy.endpoint_url_commitment = decode(repeat('a1', 32), 'hex')
-      and alchemy.endpoint_origin_commitment = decode(repeat('a2', 32), 'hex')
-      and alchemy.endpoint_evidence_domain = 'rpc-endpoint-commitments-v1'
-      and alchemy.endpoint_evidence_commitment = decode(repeat('a3', 32), 'hex')
+      and drpc.endpoint_url_commitment = decode(repeat('a1', 32), 'hex')
+      and drpc.endpoint_origin_commitment = decode(repeat('a2', 32), 'hex')
+      and drpc.endpoint_evidence_domain = 'rpc-endpoint-commitments-v1'
+      and drpc.endpoint_evidence_commitment = decode(repeat('a3', 32), 'hex')
   ),
   'RPC deployment metadata stores ordered vendors and commitment-only endpoint evidence'
 );
@@ -143,7 +143,7 @@ select is(
     from programmable_private.get_projector_runtime_state_v1(
       1, 'classic-v3', 'classic-v3', 'core', 'projector-v1',
       array['rpc_provider', 'rpc_provider', 'uniswap_subgraph']::text[],
-      array['rpc:1:alchemy', 'rpc:1:quicknode', 'market-subgraph']::text[],
+      array['rpc:1:drpc', 'rpc:1:quicknode', 'market-subgraph']::text[],
       array[
         decode(repeat('21', 32), 'hex'),
         decode(repeat('24', 32), 'hex'),
@@ -166,11 +166,11 @@ select ok(
        and state.reorg_generation = 0
        and state.checkpoint_id is null
        and state.provider_redacted_identities =
-         array['rpc:1:alchemy', 'rpc:1:quicknode', 'market-subgraph']::text[]
+         array['rpc:1:drpc', 'rpc:1:quicknode', 'market-subgraph']::text[]
     from programmable_private.get_projector_runtime_state_v1(
       1, 'classic-v3', 'classic-v3', 'core', 'projector-v1',
       array['rpc_provider', 'rpc_provider', 'uniswap_subgraph']::text[],
-      array['rpc:1:alchemy', 'rpc:1:quicknode', 'market-subgraph']::text[],
+      array['rpc:1:drpc', 'rpc:1:quicknode', 'market-subgraph']::text[],
       array[
         decode(repeat('21', 32), 'hex'),
         decode(repeat('24', 32), 'hex'),
@@ -190,7 +190,7 @@ select throws_ok(
     select *
     from programmable_private.get_projector_runtime_state_v1(
       1, 'classic-v3', 'classic-v3', 'core', 'projector-v1',
-      array['rpc_provider']::text[], array['rpc:1:alchemy']::text[],
+      array['rpc_provider']::text[], array['rpc:1:drpc']::text[],
       array[decode(repeat('ff', 32), 'hex')],
       array[decode(repeat('22', 32), 'hex')]
     )
@@ -203,7 +203,7 @@ select throws_ok(
   $sql$
     select programmable_private.register_rpc_provider_deployment(
       'b6000000-0000-0000-0000-000000000004',
-      1, 'alchemy', 'rpc-provider-v1',
+      1, 'drpc', 'rpc-provider-v1',
       decode(repeat('c1', 32), 'hex'), decode(repeat('c2', 32), 'hex'),
       'rpc-endpoint-commitments-v1', decode(repeat('c3', 32), 'hex'),
       decode(repeat('2a', 32), 'hex'), decode(repeat('2b', 32), 'hex'),
@@ -245,7 +245,7 @@ select throws_ok(
     )
   $sql$,
   '22023',
-  'safe-head evidence enforces Alchemy first and QuickNode second'
+  'safe-head evidence enforces dRPC first and QuickNode second'
 );
 select throws_ok(
   $sql$

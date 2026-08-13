@@ -805,73 +805,17 @@ async function readCustomLaunch(launch, blockTag) {
 }
 
 async function readCustomRegistry(blockTag) {
+  void blockTag;
   for (const key of state.claims.keys()) {
     if (key.startsWith("custom-v1-standard:")) state.claims.delete(key);
   }
   state.custom = {
-    status: "loading",
+    status: "failed",
     registryVerified: false,
     launches: [],
-    error: null,
+    error: "Custom Registry V1 ist außer Betrieb",
   };
   renderSummary();
-  try {
-    const [registryCode, registrationCountWord, logs] = await Promise.all([
-      request("eth_getCode", [CUSTOM_REGISTRY.address, blockTag]),
-      request("eth_call", [
-        {
-          to: CUSTOM_REGISTRY.address,
-          data: SELECTORS.customRegistrationCount,
-        },
-        blockTag,
-      ]),
-      readCustomRegistryLogs(blockTag),
-    ]);
-    const registryVerified =
-      keccak256Hex(registryCode).toLowerCase() ===
-      CUSTOM_REGISTRY.runtimeCodeHash.toLowerCase();
-    const launches = reduceCustomRegistryLogs(logs);
-    const registrationCount = decodeUint256(registrationCountWord);
-    const scopedLaunches = launches.every(
-      ({ chainId, registryGeneration }) =>
-        chainId === 1n && registryGeneration === 1n,
-    );
-    if (
-      !registryVerified ||
-      !scopedLaunches ||
-      BigInt(launches.length) !== registrationCount
-    )
-      throw new Error("Custom Registry oder Event-Historie stimmt nicht");
-
-    const verifiedLaunches = await Promise.all(
-      launches.map((launch) => readCustomLaunch(launch, blockTag)),
-    );
-    for (const launch of verifiedLaunches) {
-      if (launch.standardClaimBindingVerified !== true) continue;
-      state.claims.set(launch.id, {
-        amount: launch.amount,
-        recipient: launch.recipient,
-        recipientMatches: true,
-        status: "ready",
-      });
-    }
-    state.custom = {
-      status: "ready",
-      registryVerified: true,
-      launches: verifiedLaunches,
-      error: null,
-    };
-  } catch (error) {
-    state.custom = {
-      status: "failed",
-      registryVerified: false,
-      launches: [],
-      error:
-        error instanceof Error
-          ? error.message
-          : "Custom Registry konnte nicht gelesen werden",
-    };
-  }
 }
 
 async function readContractWord(address, data, blockTag) {

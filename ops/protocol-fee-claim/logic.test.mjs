@@ -92,14 +92,8 @@ test("keeps the public claim discovery manifest aligned with the scanner", () =>
     manifest.stock.claimLegCount,
     CLAIMS.filter(({ kind }) => kind === "asset").length,
   );
-  assert.equal(
-    manifest.customV1.registry.toLowerCase(),
-    CUSTOM_REGISTRY.address.toLowerCase(),
-  );
-  assert.equal(
-    manifest.customV1.startBlock,
-    CUSTOM_REGISTRY.startBlock.toString(),
-  );
+  assert.equal(manifest.customV1.status, "HOLD");
+  assert.equal(manifest.customV1.futureFinalizedStandardSourcesAutoAdded, false);
   assert.equal(manifest.execution.atomicRequired, true);
   assert.equal(manifest.execution.unsupportedWalletBehavior, "fail_closed");
 });
@@ -226,13 +220,11 @@ test("reduces canonical Classic V2 and V3 launch events newest first", () => {
   );
 });
 
-test("binds the deployed Custom Registry and canonical discovery topics", () => {
-  assert.equal(
-    CUSTOM_REGISTRY.address,
-    "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
-  );
-  assert.equal(CUSTOM_REGISTRY.startBlock, 25_701_139n);
-  assert.match(CUSTOM_REGISTRY.runtimeCodeHash, /^0x[0-9a-f]{64}$/);
+test("keeps retired Custom Registry V1 out of claim discovery", () => {
+  assert.equal(CUSTOM_REGISTRY.status, "retired");
+  assert.equal(CUSTOM_REGISTRY.address, "0x0000000000000000000000000000000000000000");
+  assert.equal(CUSTOM_REGISTRY.startBlock, 0n);
+  assert.equal(CUSTOM_REGISTRY.runtimeCodeHash, null);
   assert.deepEqual(Object.keys(CUSTOM_EVENT_TOPICS), [
     "registered",
     "provenance",

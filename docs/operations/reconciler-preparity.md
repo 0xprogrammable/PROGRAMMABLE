@@ -20,8 +20,8 @@ identities.
 The runtime then:
 
 1. Reads that narrow contract and closes the read transaction.
-2. Confirms the same block number and hash independently through Alchemy and
-   QuickNode. It does not read or compare latest heads.
+2. Confirms the same block number and hash independently through private dRPC
+   and QuickNode. It does not read or compare latest heads.
 3. Builds every applicable live DTO once per provider at that exact block.
 4. Builds the same indexed DTO set for the same checkpoint.
 5. Requires complete route coverage, non-empty comparisons and agreement

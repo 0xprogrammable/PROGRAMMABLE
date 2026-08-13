@@ -16,7 +16,7 @@ import {
   CreatorClaimInputError,
   CreatorClaimUnavailableError,
   buildPreparedCreatorClaim,
-  getOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
   parseCreatorClaimRequest,
   readExploreModel,
 } from "../../../../../lib/onchain";
@@ -82,7 +82,7 @@ function minimum(left: bigint, right: bigint) {
 }
 
 function claimClient(
-  deployment: ReturnType<typeof getOnchainDeployment>,
+  deployment: ReturnType<typeof getWebsiteReadOnchainDeployment>,
   endpoint: string,
 ) {
   return createPublicClient({
@@ -167,7 +167,7 @@ async function sharedVerifiedBlock(clients: readonly PublicClient[]) {
 
 async function sharedCurrentClaimState(input: {
   clients: readonly PublicClient[];
-  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>;
+  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>;
   token: CreatorClaimTokenIdentity;
   blockNumber: bigint;
 }) {
@@ -296,7 +296,7 @@ async function simulateCreatorClaim(input: {
 
 async function readCurrentClaimState(input: {
   client: PublicClient;
-  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>;
+  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>;
   token: CreatorClaimTokenIdentity;
   blockNumber: bigint;
 }) {
@@ -359,7 +359,7 @@ async function readCurrentClaimState(input: {
 
 function indexedClaimToken(
   token: ActionTokenLookup,
-  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>,
+  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>,
 ): CreatorClaimTokenIdentity {
   if (
     token.releaseVersion !== "classic-v2" ||
@@ -391,7 +391,7 @@ function indexedClaimToken(
 
 async function legacyClaimToken(
   request: ReturnType<typeof parseCreatorClaimRequest>,
-  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>,
+  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>,
 ): Promise<CreatorClaimTokenIdentity> {
   const model = await readExploreModel(deployment);
   if (model.status !== "ready" || model.snapshot.chainId !== deployment.chainId) {
@@ -529,7 +529,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const claimRequest = parseCreatorClaimRequest(input);
-    const deployment = getOnchainDeployment();
+    const deployment = getWebsiteReadOnchainDeployment();
     if (deployment.status !== "ready") {
       throw new CreatorClaimUnavailableError(
         "not-deployed",

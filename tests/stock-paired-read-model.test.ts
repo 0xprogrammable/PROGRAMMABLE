@@ -1,11 +1,21 @@
-import { getAddress, type Hex } from "viem";
-import { describe, expect, it } from "vitest";
+import {
+  getAddress,
+  LimitExceededRpcError,
+  TimeoutError,
+  type Hex,
+  type PublicClient,
+} from "viem";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   mergeStockPairedExploreModel,
   pairStockPairedLaunches,
+  readStockPairedEvents,
 } from "../lib/onchain/stock-paired-read-model";
-import type { ExploreReadModel } from "../lib/onchain/types";
+import type {
+  ExploreReadModel,
+  ReadyOnchainDeployment,
+} from "../lib/onchain/types";
 import {
   getStockPairedExpectedInitialTickForRelease,
   STOCK_QUOTE_ASSETS,
@@ -27,6 +37,143 @@ const vault = getAddress(
 const positionRecipient = getAddress(
   "0x6666666666666666666666666666666666666666",
 );
+
+const readyDeployment: ReadyOnchainDeployment = {
+  environment: "production",
+  releaseVersion: "classic-v2",
+  chainId: 1,
+  status: "ready",
+  launcher: "0x1111111111111111111111111111111111111111",
+  feeHook: "0x2222222222222222222222222222222222222222",
+  launcherRuntimeCodeHash: `0x${"11".repeat(32)}`,
+  feeHookRuntimeCodeHash: `0x${"22".repeat(32)}`,
+  deploymentBlock: 1n,
+  stateView: "0x3333333333333333333333333333333333333333",
+  stateViewRuntimeCodeHash: `0x${"33".repeat(32)}`,
+  rpcUrl: "https://primary.example.invalid",
+  rpcUrlSecondary: "https://secondary.example.invalid",
+  confirmations: 12n,
+  logBlockRange: 1_000n,
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("Stock-Paired event scan", () => {
+  it("combines launcher events into three concurrent scalar-address filters", async () => {
+    const release = stockPairedReleaseFixture();
+    const getLogs = vi.fn(
+      async (input: {
+        address: string;
+        events?: readonly { name: string }[];
+        strict: boolean;
+      }) => {
+        void input;
+        return [];
+      },
+    );
+    await expect(
+      readStockPairedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_099n,
+        100n,
+      ),
+    ).resolves.toMatchObject({ launches: [], ethLaunches: [] });
+
+    expect(getLogs).toHaveBeenCalledTimes(3);
+    const [[launcher], [coordinator], [feeHook]] = getLogs.mock.calls;
+    expect(launcher).toMatchObject({
+      address: release.addresses.launcher,
+      strict: true,
+    });
+    expect(launcher.events?.map((event) => event.name)).toEqual([
+      "StockPairedTokenLaunched",
+      "StockPairedLiquidityConfigured",
+      "StockPairedCreatorInitialBuy",
+    ]);
+    expect(coordinator.address).toBe(
+      release.addresses.ethLaunchCoordinator,
+    );
+    expect(feeHook.address).toBe(release.addresses.feeHook);
+  });
+
+  it("bisects the same complete Stock range on an RPC result limit", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const release = stockPairedReleaseFixture();
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new LimitExceededRpcError(new Error("too many results"));
+      }
+      return [];
+    });
+    await expect(
+      readStockPairedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_099n,
+        100n,
+      ),
+    ).resolves.toMatchObject({ launches: [], volumes: new Map() });
+    expect(getLogs).toHaveBeenCalledTimes(9);
+  });
+
+  it("retries the same complete Stock window after a transient", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const release = stockPairedReleaseFixture();
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new TimeoutError({
+          body: { method: "eth_getLogs" },
+          url: readyDeployment.rpcUrl,
+        });
+      }
+      return [];
+    });
+    await expect(
+      readStockPairedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_099n,
+        100n,
+      ),
+    ).resolves.toMatchObject({ launches: [], volumes: new Map() });
+    expect(getLogs).toHaveBeenCalledTimes(6);
+  });
+
+  it("fails closed on a decoded Stock event from the wrong contract", async () => {
+    const release = stockPairedReleaseFixture();
+    const getLogs = vi.fn(async (input: { address: string }) =>
+      input.address === release.addresses.launcher
+        ? [
+            {
+              eventName: "StockPairedTokenLaunched",
+              address: release.addresses.feeHook,
+              removed: true,
+              blockNumber: null,
+            },
+          ]
+        : [],
+    );
+    await expect(
+      readStockPairedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_099n,
+        100n,
+      ),
+    ).rejects.toThrow(/non-canonical stock-paired-v1 contract/);
+  });
+});
 
 function events() {
   const coordinator =

@@ -37,10 +37,14 @@ import {
   PROJECTOR_MAXIMUM_RPC_STARTS_PER_SECOND,
 } from "./projector-runtime-limits";
 import { rpcProviderCommitment } from "./rpc-provider-commitments";
+import { productionMainnetRpcPair } from
+  "../onchain/website-rpc-providers.server";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
 const BROWSER_FORBIDDEN_RPC_NAMES = [
+  "NEXT_PUBLIC_PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
 ] as const;
@@ -754,26 +758,30 @@ function productionRpcConfiguration(env: Environment) {
   if (BROWSER_FORBIDDEN_RPC_NAMES.some((name) => env[name])) {
     throw invalidInput("config", "browser-rpc-provider-url");
   }
-  const alchemyEndpoint = canonicalProjectorRpcEndpoint(
-    env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-    "alchemy",
-  );
-  const quicknodeEndpoint = canonicalProjectorRpcEndpoint(
-    env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+  let binding;
+  try {
+    binding = productionMainnetRpcPair(env);
+  } catch {
+    throw invalidInput("config", "production-rpc-provider-binding");
+  }
+  const drpc = new URL(canonicalProjectorRpcEndpoint(
+    binding.primary.url,
+    "drpc",
+  ));
+  const quicknode = new URL(canonicalProjectorRpcEndpoint(
+    binding.secondary.url,
     "quicknode",
-  );
-  const alchemy = new URL(alchemyEndpoint);
-  const quicknode = new URL(quicknodeEndpoint);
-  if (alchemy.origin === quicknode.origin) {
+  ));
+  if (drpc.origin === quicknode.origin) {
     throw invalidInput("config", "rpc-provider-independence");
   }
   const schemaCommitment = projectorRpcSchemaCommitment();
   return Object.freeze({
-    alchemy,
+    drpc,
     quicknode,
     schemaCommitment,
-    alchemyDeploymentCommitment: projectorRpcDeploymentCommitment(
-      alchemy.toString(),
+    drpcDeploymentCommitment: projectorRpcDeploymentCommitment(
+      drpc.toString(),
     ),
     quicknodeDeploymentCommitment: projectorRpcDeploymentCommitment(
       quicknode.toString(),
@@ -786,8 +794,8 @@ export function productionRpcProjectorCommitments(
 ) {
   const configuration = productionRpcConfiguration(env);
   return Object.freeze({
-    alchemy: Object.freeze({
-      deploymentCommitment: configuration.alchemyDeploymentCommitment,
+    drpc: Object.freeze({
+      deploymentCommitment: configuration.drpcDeploymentCommitment,
       schemaCommitment: configuration.schemaCommitment,
     }),
     quicknode: Object.freeze({
@@ -804,9 +812,9 @@ export function productionRpcEndpointEvidence(
   const configuration = productionRpcConfiguration(env);
   return Object.freeze([
     Object.freeze({
-      providerId: "alchemy" as const,
-      endpointHost: configuration.alchemy.hostname,
-      endpointUrlCommitment: configuration.alchemyDeploymentCommitment,
+      providerId: "drpc" as const,
+      endpointHost: configuration.drpc.hostname,
+      endpointUrlCommitment: configuration.drpcDeploymentCommitment,
     }),
     Object.freeze({
       providerId: "quicknode" as const,
@@ -825,13 +833,13 @@ export function createProductionDualRpcProviders(
   env: Environment = process.env,
 ): readonly [CandidateRpcProvider, CandidateRpcProvider] {
   const configuration = productionRpcConfiguration(env);
-  const { alchemy, quicknode } = configuration;
+  const { drpc, quicknode } = configuration;
 
-  const alchemyCommitment = configuration.alchemyDeploymentCommitment;
+  const drpcCommitment = configuration.drpcDeploymentCommitment;
   const quicknodeCommitment = configuration.quicknodeDeploymentCommitment;
-  const alchemyOriginCommitment = rpcProviderCommitment(
+  const drpcOriginCommitment = rpcProviderCommitment(
     "origin",
-    alchemy.origin,
+    drpc.origin,
   );
   const quicknodeOriginCommitment = rpcProviderCommitment(
     "origin",
@@ -840,11 +848,11 @@ export function createProductionDualRpcProviders(
 
   const providers = Object.freeze([
     Object.freeze({
-      identity: `alchemy-mainnet-${alchemyCommitment.slice(2, 34)}`,
-      vendorGroup: "alchemy",
-      endpointCommitment: alchemyCommitment,
-      endpointOriginCommitment: alchemyOriginCommitment,
-      client: candidateRpcClient(alchemy.toString()),
+      identity: `drpc-mainnet-${drpcCommitment.slice(2, 34)}`,
+      vendorGroup: "drpc",
+      endpointCommitment: drpcCommitment,
+      endpointOriginCommitment: drpcOriginCommitment,
+      client: candidateRpcClient(drpc.toString()),
     }),
     Object.freeze({
       identity: `quicknode-mainnet-${quicknodeCommitment.slice(2, 34)}`,

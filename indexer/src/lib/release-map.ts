@@ -90,21 +90,6 @@ export const SOURCE_REGISTRY = [
     address: "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
     startBlock: 25_642_745,
   },
-  {
-    contractName: "CustomRegistryV1",
-    address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
-    startBlock: 25_701_139,
-  },
-  {
-    contractName: "CustomPartnerFactoryRegistryV1",
-    address: "0xf8aef69201621ad20fa256da595426b7e6192dba",
-    startBlock: 25_701_136,
-  },
-  {
-    contractName: "CustomAtomicRegistrarV1",
-    address: "0xcc916e5200d2626edfd918dc219bc4296629e997",
-    startBlock: 25_701_142,
-  },
 ] as const satisfies readonly SourceRegistryEntry[];
 
 export function staticReleaseForContract(
@@ -124,9 +109,6 @@ export function staticReleaseForContract(
   }
   if (STOCK_V3_CONTRACTS.has(contractName)) {
     return { model: "stock-paired", releaseVersion: "stock-paired-v3" };
-  }
-  if (CUSTOM_REGISTRY_V1_CONTRACTS.has(contractName)) {
-    return { model: "custom", releaseVersion: "custom-registry-v1" };
   }
   return undefined;
 }
@@ -177,9 +159,4 @@ const STOCK_V2_CONTRACTS = new Set([
 const STOCK_V3_CONTRACTS = new Set([
   "StockV3Launcher",
   "StockV3EthCoordinator",
-]);
-const CUSTOM_REGISTRY_V1_CONTRACTS = new Set([
-  "CustomRegistryV1",
-  "CustomPartnerFactoryRegistryV1",
-  "CustomAtomicRegistrarV1",
 ]);

@@ -2,7 +2,6 @@ import {
   createPublicClient,
   formatUnits,
   getAddress,
-  http,
   keccak256,
   type Address,
   type AbiEvent,
@@ -47,6 +46,7 @@ import {
   nativePriceWadFromSqrtPriceX96,
 } from "./math";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
+import { persistentRpcHttp } from "./persistent-rpc-cache.server";
 import type {
   ExploreReadModel,
   ExploreSnapshot,
@@ -147,7 +147,10 @@ function createClient(config: OnchainDeployment, rpcUrl: string) {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(rpcUrl, { retryCount: 2, timeout: 12_000 }),
+    transport: persistentRpcHttp(rpcUrl, {
+      chainId: config.chainId,
+      http: { retryCount: 2, timeout: 12_000 },
+    }),
   });
 }
 

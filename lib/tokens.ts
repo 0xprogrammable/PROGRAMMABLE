@@ -408,7 +408,7 @@ export type LauncherToken = {
   launchTransactionHash?: `0x${string}`;
   launchTransactionIndex?: number;
   launchLogIndex?: number;
-  launchDiscoverySource?: "alchemy-launch-overlay";
+  launchDiscoverySource?: "operational-launch-overlay";
   launchedAt: string;
   totalSupply?: string;
   totalSupplyRaw?: string;

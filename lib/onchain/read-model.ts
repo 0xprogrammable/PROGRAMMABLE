@@ -3,9 +3,10 @@ import {
   formatUnits,
   getAddress,
   HttpRequestError,
-  http,
   keccak256,
+  LimitExceededRpcError,
   ResponseBodyTooLargeError,
+  RpcRequestError,
   TimeoutError,
   type Address,
   type Hex,
@@ -35,6 +36,10 @@ import {
   buildTokenLinks,
   sanitizeImageUrl,
 } from "./metadata";
+import {
+  persistentRpcHttp,
+  withPersistentRpcIntegrityScope,
+} from "./persistent-rpc-cache.server";
 import { enrichExploreModelWithUsd } from "./usd";
 import type {
   ExploreReadModel,
@@ -76,6 +81,7 @@ import {
   mergeStockPairedExploreModel,
   readStockPairedExploreModel,
 } from "./stock-paired-read-model";
+import { settleParallelReadsInOrder } from "./parallel-reads";
 
 const ZERO_FEE_VOLUME: FeeVolume = {
   grossNativeAmount: 0n,
@@ -87,7 +93,36 @@ const ZERO_FEE_VOLUME: FeeVolume = {
 const TOKEN_HYDRATION_BATCH_SIZE = 12;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
 const RPC_PROVENANCE_BATCH_SIZE = 1;
-const MINIMUM_LOG_BLOCK_RANGE = 100n;
+const MINIMUM_LOG_BLOCK_RANGE = 1n;
+const TRANSIENT_RETRIES_PER_WINDOW = 1;
+const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;
+const CLASSIC_LAUNCHER_EVENTS = [
+  memeTokenLaunchedEvent,
+  memeLiquidityConfiguredEvent,
+  memeCreatorInitialBuyEvent,
+] as const;
+const CLASSIC_FEE_HOOK_EVENTS = [
+  nativeSwapFeesAccruedEvent,
+  creatorFeesClaimedEvent,
+] as const;
+
+function isTransientLogReadError(error: unknown) {
+  if (error instanceof TimeoutError) return true;
+  if (error instanceof HttpRequestError) {
+    return (
+      error.status === undefined ||
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+  return (
+    error instanceof RpcRequestError &&
+    error.code === -32603 &&
+    error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
 
 type FeeDisclosure = readonly [
   buySwapFeeBps: number,
@@ -150,9 +185,34 @@ function createOnchainClient(
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(rpcUrl, {
-      retryCount: 1,
-      timeout: 10_000,
+    transport: persistentRpcHttp(rpcUrl, {
+      chainId: config.chainId,
+      maxLogBlockRange: config.logBlockRange,
+      http: {
+        retryCount: 1,
+        timeout: 10_000,
+      },
+      ...(config.status === "ready"
+        ? {
+            immutableCodeBindings: [
+              {
+                address: config.launcher,
+                expectedRuntimeCodeHash: config.launcherRuntimeCodeHash,
+                notBeforeBlock: config.deploymentBlock,
+              },
+              {
+                address: config.feeHook,
+                expectedRuntimeCodeHash: config.feeHookRuntimeCodeHash,
+                notBeforeBlock: config.deploymentBlock,
+              },
+              {
+                address: config.stateView,
+                expectedRuntimeCodeHash: config.stateViewRuntimeCodeHash,
+                notBeforeBlock: config.deploymentBlock,
+              },
+            ],
+          }
+        : {}),
     }),
   });
 }
@@ -219,7 +279,7 @@ async function assertRuntimeCode(
   }
 }
 
-type IndexedEvents = {
+export type IndexedEvents = {
   launches: LaunchEventRecord[];
   liquidities: LiquidityEventRecord[];
   initialBuys: InitialBuyEventRecord[];
@@ -227,7 +287,7 @@ type IndexedEvents = {
   creatorClaims: CreatorClaimEventRecord[];
 };
 
-function indexedEventsFingerprint(events: IndexedEvents) {
+export function indexedEventsFingerprint(events: IndexedEvents) {
   return JSON.stringify(
     {
       launches: events.launches,
@@ -243,6 +303,32 @@ function indexedEventsFingerprint(events: IndexedEvents) {
   );
 }
 
+function assertCanonicalClassicEventSource(
+  eventName: string,
+  actualAddress: Address,
+  config: ReadyOnchainDeployment,
+) {
+  const expectedAddress =
+    eventName === "MemeTokenLaunched" ||
+    eventName === "MemeLiquidityConfigured" ||
+    eventName === "MemeCreatorInitialBuy"
+      ? config.launcher
+      : eventName === "NativeSwapFeesAccrued" ||
+          eventName === "CreatorFeesClaimed"
+        ? config.feeHook
+        : null;
+  if (expectedAddress === null) {
+    throw new Error(
+      `RPC returned event outside the canonical Classic filter: ${eventName}`,
+    );
+  }
+  if (actualAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error(
+      `RPC returned ${eventName} from a non-canonical contract`,
+    );
+  }
+}
+
 export async function indexVerifiedEvents(
   client: PublicClient,
   config: ReadyOnchainDeployment,
@@ -255,7 +341,11 @@ export async function indexVerifiedEvents(
   const creatorClaims: CreatorClaimEventRecord[] = [];
 
   let fromBlock = config.deploymentBlock;
-  let logBlockRange = config.logBlockRange;
+  const configuredLogBlockRange = toBlock >= fromBlock
+    ? toBlock - fromBlock + 1n
+    : config.logBlockRange;
+  let logBlockRange = configuredLogBlockRange;
+  let transientRetries = 0;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
@@ -265,35 +355,14 @@ export async function indexVerifiedEvents(
       allSettledOrThrow([
         client.getLogs({
           address: config.launcher,
-          event: memeTokenLaunchedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.launcher,
-          event: memeLiquidityConfiguredEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.launcher,
-          event: memeCreatorInitialBuyEvent,
+          events: CLASSIC_LAUNCHER_EVENTS,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
         }),
         client.getLogs({
           address: config.feeHook,
-          event: nativeSwapFeesAccruedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.feeHook,
-          event: creatorFeesClaimedEvent,
+          events: CLASSIC_FEE_HOOK_EVENTS,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
@@ -303,10 +372,26 @@ export async function indexVerifiedEvents(
     try {
       logs = await readLogs();
     } catch (error) {
+      const transient = isTransientLogReadError(error);
+      const transientRetryLimit =
+        logBlockRange === MINIMUM_LOG_BLOCK_RANGE
+          ? MINIMUM_RANGE_TRANSIENT_RETRIES
+          : TRANSIENT_RETRIES_PER_WINDOW;
+      if (transient && transientRetries < transientRetryLimit) {
+        transientRetries += 1;
+        console.warn("Explore log window retried after transient RPC rejection", {
+          fromBlock: fromBlock.toString(),
+          attemptedToBlock: rangeEnd.toString(),
+          retry: transientRetries,
+          retryLimit: transientRetryLimit,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+        continue;
+      }
       if (
-        (error instanceof TimeoutError ||
-          error instanceof ResponseBodyTooLargeError ||
-          error instanceof HttpRequestError) &&
+        (transient ||
+          error instanceof LimitExceededRpcError ||
+          error instanceof ResponseBodyTooLargeError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
       ) {
@@ -315,105 +400,114 @@ export async function indexVerifiedEvents(
           reducedRange < MINIMUM_LOG_BLOCK_RANGE
             ? MINIMUM_LOG_BLOCK_RANGE
             : reducedRange;
+        transientRetries = 0;
         console.warn("Explore log range reduced after RPC rejection", {
           fromBlock: fromBlock.toString(),
           attemptedToBlock: rangeEnd.toString(),
           nextRange: logBlockRange.toString(),
-          errorName: error.name,
+          errorName: error instanceof Error ? error.name : "UnknownError",
         });
         continue;
       }
       throw error;
     }
-    const [
-      launchLogs,
-      liquidityLogs,
-      initialBuyLogs,
-      feeLogs,
-      claimLogs,
-    ] = logs;
-
-    for (const log of launchLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      launches.push({
-        creator: getAddress(log.args.creator),
-        token: getAddress(log.args.token),
-        poolId: log.args.poolId,
-        feeHook: getAddress(log.args.feeHook),
-        positionRecipient: getAddress(log.args.positionRecipient),
-        positionTokenId: log.args.positionTokenId,
-        totalSwapFeeBps: log.args.totalSwapFeeBps,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
-    }
-
-    for (const log of liquidityLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      liquidities.push({
-        token: getAddress(log.args.token),
-        totalSupply: log.args.totalSupply,
-        tokenLiquidityAmount: log.args.tokenLiquidityAmount,
-        lockedTokenDust: log.args.lockedTokenDust,
-        initialTick: log.args.initialTick,
-        tickLower: log.args.tickLower,
-        tickUpper: log.args.tickUpper,
-        lpFeePips: log.args.lpFeePips,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
-    }
-
-    for (const log of initialBuyLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      initialBuys.push({
-        creator: getAddress(log.args.creator),
-        token: getAddress(log.args.token),
-        poolId: log.args.poolId,
-        nativeAmount: log.args.nativeAmount,
-        tokenAmount: log.args.tokenAmount,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
-    }
-
-    for (const log of feeLogs) {
+    for (const log of logs.flat()) {
+      assertCanonicalClassicEventSource(
+        log.eventName,
+        log.address,
+        config,
+      );
       if (log.removed) continue;
-      const poolKey = log.args.poolId.toLowerCase();
-      const current = volumes.get(poolKey) ?? ZERO_FEE_VOLUME;
-      volumes.set(poolKey, {
-        grossNativeAmount:
-          current.grossNativeAmount + log.args.grossNativeAmount,
-        creatorFees: current.creatorFees + log.args.creatorFee,
-        launcherFees: current.launcherFees + log.args.launcherFee,
-        swapCount: current.swapCount + 1,
-      });
-    }
 
-    for (const log of claimLogs) {
-      if (log.removed || log.blockNumber === null) continue;
-      creatorClaims.push({
-        poolId: log.args.poolId,
-        creator: getAddress(log.args.creator),
-        recipient: getAddress(log.args.recipient),
-        caller: getAddress(log.args.caller),
-        amount: log.args.amount,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
+      switch (log.eventName) {
+        case "MemeTokenLaunched":
+          if (log.blockNumber === null) continue;
+          launches.push({
+            creator: getAddress(log.args.creator),
+            token: getAddress(log.args.token),
+            poolId: log.args.poolId,
+            feeHook: getAddress(log.args.feeHook),
+            positionRecipient: getAddress(log.args.positionRecipient),
+            positionTokenId: log.args.positionTokenId,
+            totalSwapFeeBps: log.args.totalSwapFeeBps,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "MemeLiquidityConfigured":
+          if (log.blockNumber === null) continue;
+          liquidities.push({
+            token: getAddress(log.args.token),
+            totalSupply: log.args.totalSupply,
+            tokenLiquidityAmount: log.args.tokenLiquidityAmount,
+            lockedTokenDust: log.args.lockedTokenDust,
+            initialTick: log.args.initialTick,
+            tickLower: log.args.tickLower,
+            tickUpper: log.args.tickUpper,
+            lpFeePips: log.args.lpFeePips,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "MemeCreatorInitialBuy":
+          if (log.blockNumber === null) continue;
+          initialBuys.push({
+            creator: getAddress(log.args.creator),
+            token: getAddress(log.args.token),
+            poolId: log.args.poolId,
+            nativeAmount: log.args.nativeAmount,
+            tokenAmount: log.args.tokenAmount,
+            launchHash: log.args.launchHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        case "NativeSwapFeesAccrued": {
+          const poolKey = log.args.poolId.toLowerCase();
+          const current = volumes.get(poolKey) ?? ZERO_FEE_VOLUME;
+          volumes.set(poolKey, {
+            grossNativeAmount:
+              current.grossNativeAmount + log.args.grossNativeAmount,
+            creatorFees: current.creatorFees + log.args.creatorFee,
+            launcherFees: current.launcherFees + log.args.launcherFee,
+            swapCount: current.swapCount + 1,
+          });
+          break;
+        }
+        case "CreatorFeesClaimed":
+          if (log.blockNumber === null) continue;
+          creatorClaims.push({
+            poolId: log.args.poolId,
+            creator: getAddress(log.args.creator),
+            recipient: getAddress(log.args.recipient),
+            caller: getAddress(log.args.caller),
+            amount: log.args.amount,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+          });
+          break;
+        default:
+          throw new Error("RPC returned an undecodable Classic event");
+      }
     }
     fromBlock = rangeEnd + 1n;
+    transientRetries = 0;
+    if (logBlockRange < configuredLogBlockRange) {
+      logBlockRange = minimum(
+        configuredLogBlockRange,
+        logBlockRange * 2n,
+      );
+    }
   }
 
   return {
@@ -725,13 +819,14 @@ async function readReadyModel(
     ),
   );
 
-  const indexedEventSets = await mapInBatches(
-    clients,
-    RPC_PROVENANCE_BATCH_SIZE,
-    (candidate) =>
+  const indexedEventSets = await allSettledOrThrow(
+    clients.map((candidate) =>
       withReadStage("classic-events", () =>
-        indexVerifiedEvents(candidate, config, toBlock),
+        withPersistentRpcIntegrityScope(() =>
+          indexVerifiedEvents(candidate, config, toBlock),
+        ),
       ),
+    ),
   );
   const launcherFeeValues = await withReadStage(
     "launcher-fee-accounting",
@@ -1046,45 +1141,54 @@ async function readReadyRegistryModel(
     throw new Error("The Classic registry has no confirmed snapshot");
   }
   const snapshotBlockNumber = registry.snapshot.blockNumber;
-  if (isClassicV3ExploreReleaseReady(config)) {
-    registry = mergeClassicV3ExploreModel(
-      registry,
-      await withReadStage("classic-v3", () =>
-        readClassicV3ExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  const [classicV3, deepV1, deepV2, deepV3, stockPaired] =
+    await settleParallelReadsInOrder([
+      () =>
+        isClassicV3ExploreReleaseReady(config)
+          ? withReadStage("classic-v3", () =>
+              readClassicV3ExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isDeepExploreReleaseReady(config)
+          ? withReadStage("deep-v1", () =>
+              readDeepExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isDeepV2ExploreReleaseReady(config)
+          ? withReadStage("deep-v2", () =>
+              readDeepV2ExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isDeepV3ExploreReleaseReady(config)
+          ? withReadStage("deep-v3", () =>
+              readDeepV3ExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+      () =>
+        isStockPairedExploreReleaseReady(config)
+          ? withReadStage("stock-paired", () =>
+              readStockPairedExploreModel(config, snapshotBlockNumber),
+            )
+          : Promise.resolve(null),
+    ] as const);
+
+  if (classicV3 !== null) {
+    registry = mergeClassicV3ExploreModel(registry, classicV3);
   }
-  if (isDeepExploreReleaseReady(config)) {
-    registry = mergeDeepExploreModel(
-      registry,
-      await withReadStage("deep-v1", () =>
-        readDeepExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (deepV1 !== null) {
+    registry = mergeDeepExploreModel(registry, deepV1);
   }
-  if (isDeepV2ExploreReleaseReady(config)) {
-    registry = mergeDeepExploreModel(
-      registry,
-      await withReadStage("deep-v2", () =>
-        readDeepV2ExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (deepV2 !== null) {
+    registry = mergeDeepExploreModel(registry, deepV2);
   }
-  if (isDeepV3ExploreReleaseReady(config)) {
-    registry = mergeDeepV3ExploreModel(
-      registry,
-      await withReadStage("deep-v3", () =>
-        readDeepV3ExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (deepV3 !== null) {
+    registry = mergeDeepV3ExploreModel(registry, deepV3);
   }
-  if (isStockPairedExploreReleaseReady(config)) {
-    registry = mergeStockPairedExploreModel(
-      registry,
-      await withReadStage("stock-paired", () =>
-        readStockPairedExploreModel(config, snapshotBlockNumber),
-      ),
-    );
+  if (stockPaired !== null) {
+    registry = mergeStockPairedExploreModel(registry, stockPaired);
   }
   return registry;
 }
@@ -1096,6 +1200,24 @@ let cachedRead:
       value: Promise<ExploreReadModel>;
     }
   | undefined;
+
+const liveReadFlights = new Map<string, Promise<ExploreReadModel>>();
+
+function liveReadFlightKey(config: OnchainDeployment) {
+  return [
+    config.environment,
+    config.status,
+    config.chainId,
+    config.releaseVersion,
+    config.launcher,
+    config.feeHook,
+    config.deploymentBlock,
+    config.rpcUrl,
+    config.rpcUrlSecondary,
+    config.confirmations,
+    config.logBlockRange,
+  ].join(":");
+}
 
 function emptyReadModel(): ExploreReadModel {
   return {
@@ -1111,19 +1233,32 @@ function emptyReadModel(): ExploreReadModel {
 export async function readLiveExploreModel(
   config: OnchainDeployment = getPublicOnchainDeployment(),
 ): Promise<ExploreReadModel> {
-  const model = config.status === "ready"
-    ? readReadyRegistryModel(config)
-    : emptyReadModel();
-  const resolvedModel = await model;
-  if (config.status !== "ready") return resolvedModel;
+  const key = liveReadFlightKey(config);
+  const existing = liveReadFlights.get(key);
+  if (existing) return existing;
+  const value = (async () => {
+    const model = config.status === "ready"
+      ? readReadyRegistryModel(config)
+      : emptyReadModel();
+    const resolvedModel = await model;
+    if (config.status !== "ready") return resolvedModel;
 
+    try {
+      return await enrichExploreModelWithUsd(resolvedModel, config);
+    } catch (error) {
+      console.error("ETH/USD enrichment failed", {
+        name: error instanceof Error ? error.name : "UnknownError",
+      });
+      return resolvedModel;
+    }
+  })();
+  liveReadFlights.set(key, value);
   try {
-    return await enrichExploreModelWithUsd(resolvedModel, config);
-  } catch (error) {
-    console.error("ETH/USD enrichment failed", {
-      name: error instanceof Error ? error.name : "UnknownError",
-    });
-    return resolvedModel;
+    return await value;
+  } finally {
+    if (liveReadFlights.get(key) === value) {
+      liveReadFlights.delete(key);
+    }
   }
 }
 

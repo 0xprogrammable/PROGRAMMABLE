@@ -20,7 +20,7 @@ Classic creators select buy and sell transaction fees from 1% through 10%. Progr
 
 ## Custom releases
 
-Custom fees are specific to each release. The standard Native Custom policy assigns 0.1% of the gross amount exchanged to Programmable. A named partner release can define a different total and division. The accepted release must state the complete transaction fee rather than showing only one recipient's share.
+Custom fees are specific to each release. The only accepted production policy assigns 0.1% of the gross amount exchanged on the exact reviewed market path to Programmable. A release without a qualifying market has no fee legs. Every other Custom fee mode fails closed.
 
 ## Protocol revenue
 

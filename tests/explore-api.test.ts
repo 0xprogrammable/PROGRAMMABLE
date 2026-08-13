@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   readAlchemyExploreModel: vi.fn(),
   readProductionCustomExploreDirectoryV1: vi.fn(),
   readExploreReferenceHeadWithinRouteBudget: vi.fn(),
-  getOnchainDeployment: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
   currentMarketOnchainDeployment: vi.fn(),
@@ -63,7 +63,7 @@ vi.mock("../lib/explore-reference-head.server", () => ({
 }));
 
 vi.mock("../lib/onchain/config", () => ({
-  getOnchainDeployment: mocks.getOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getWebsiteReadOnchainDeployment,
 }));
 
 vi.mock("../lib/onchain/durable-model", () => ({
@@ -319,7 +319,7 @@ describe("Explore API Bitquery market boundary", () => {
       indexedAt: "2026-08-10T17:55:45.000Z",
       finality: "confirmed",
     });
-    mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.getAlchemyOnchainDeployment.mockReturnValue({
       status: "ready",
       rpcUrlSecondary: "https://secondary.example",

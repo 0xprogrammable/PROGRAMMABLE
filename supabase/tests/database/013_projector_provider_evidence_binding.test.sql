@@ -21,8 +21,8 @@ as $function$
     'calls', pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object(
         'providerIdentity',
-          'alchemy-mainnet-11111111111111111111111111111111',
-        'providerVendorGroup', 'alchemy',
+          'drpc-mainnet-11111111111111111111111111111111',
+        'providerVendorGroup', 'drpc',
         'providerEndpointCommitment', '0x' || pg_catalog.repeat('33', 32),
         'providerOriginCommitment', '0x' || pg_catalog.repeat('44', 32),
         'operation', 'getTransactionReceipt',
@@ -52,8 +52,8 @@ as $function$
     'calls', pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object(
         'providerIdentity',
-          'alchemy-mainnet-11111111111111111111111111111111',
-        'providerVendorGroup', 'alchemy',
+          'drpc-mainnet-11111111111111111111111111111111',
+        'providerVendorGroup', 'drpc',
         'providerEndpointCommitment', '0x' || pg_catalog.repeat('33', 32),
         'providerOriginCommitment', '0x' || pg_catalog.repeat('44', 32),
         'operation', 'readRewardSnapshot',
@@ -102,12 +102,12 @@ as $function$
         pg_catalog.jsonb_build_object(
           'providerIdentity', case provider_ordinal
             when 1 then
-              'alchemy-mainnet-11111111111111111111111111111111'
+              'drpc-mainnet-11111111111111111111111111111111'
             else
               'quicknode-mainnet-55555555555555555555555555555555'
           end,
           'providerVendorGroup', case provider_ordinal
-            when 1 then 'alchemy' else 'quicknode'
+            when 1 then 'drpc' else 'quicknode'
           end,
           'providerEndpointCommitment', '0x' || case provider_ordinal
             when 1 then pg_catalog.repeat('33', 32)
@@ -137,7 +137,7 @@ set local role programmable_projector;
 
 select programmable_private.register_rpc_provider_deployment(
   '10000000-0000-4000-8000-000000000002', 1,
-  'alchemy', 'provider-evidence-test-v1',
+  'drpc', 'provider-evidence-test-v1',
   pg_catalog.decode(pg_catalog.repeat('33', 32), 'hex'),
   pg_catalog.decode(pg_catalog.repeat('44', 32), 'hex'),
   'rpc-endpoint-commitments-v1',
@@ -196,7 +196,7 @@ select is(
       public.projection_trace_fixture_v1()
     ), 'hex'
   ),
-  '466d9059a360712fd7d40fc9a4fd326cf58ed7d8f4a7f93a31da4edd9bbdc620',
+  '9514e7eb430c305ad89a84268123b225c14554759bd357bfe459635a974539ab',
   'SQL and TypeScript freeze the same structural projection trace'
 );
 
@@ -206,7 +206,7 @@ select is(
       public.reward_trace_fixture_v1()
     ), 'hex'
   ),
-  '387a035634613b9c1fcf9369aeea587e325815bef91d3d3945e56136d0472043',
+  '31ba49fc53411f6712ce58597d5281fdbf9b99e2a3352c7340b1df4054187b48',
   'reward trace binds two logical reads and their raw provider call counts'
 );
 
@@ -215,7 +215,7 @@ select ok(
     programmable_private.projection_execution_trace_commitment_v1(
       public.projection_trace_fixture_v1(1, 1)
     ), 'hex'
-  ) <> '466d9059a360712fd7d40fc9a4fd326cf58ed7d8f4a7f93a31da4edd9bbdc620',
+  ) <> '9514e7eb430c305ad89a84268123b225c14554759bd357bfe459635a974539ab',
   'changing a trace duration changes its commitment'
 );
 
@@ -256,9 +256,9 @@ select is(
       '80000000-0000-4000-8000-000000000001',
       '10000000-0000-4000-8000-000000000002',
       '10000000-0000-4000-8000-000000000003',
-      'alchemy-mainnet-11111111111111111111111111111111',
+      'drpc-mainnet-11111111111111111111111111111111',
       'quicknode-mainnet-55555555555555555555555555555555',
-      'alchemy', 'quicknode',
+      'drpc', 'quicknode',
       pg_catalog.decode(pg_catalog.repeat('33', 32), 'hex'),
       pg_catalog.decode(pg_catalog.repeat('55', 32), 'hex'),
       pg_catalog.decode(pg_catalog.repeat('44', 32), 'hex'),
@@ -267,7 +267,7 @@ select is(
       pg_catalog.decode(pg_catalog.repeat('77', 32), 'hex')
     ), 'hex'
   ),
-  '70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7633000600000000000000010000000a636c61737369632d763300000007636c617373696300000004636f726570000000000040008000000000000020000000000000000180000000000040008000000000000001100000000000400080000000000000021000000000004000800000000000000300000030616c6368656d792d6d61696e6e65742d313131313131313131313131313131313131313131313131313131313131313100000032717569636b6e6f64652d6d61696e6e65742d353535353535353535353535353535353535353535353535353535353535353500000007616c6368656d7900000009717569636b6e6f64653333333333333333333333333333333333333333333333333333333333333333555555555555555555555555555555555555555555555555555555555555555544444444444444444444444444444444444444444444444444444444444444446666666666666666666666666666666666666666666666666666666666666666000000060000000600000028000124f800000080000000027777777777777777777777777777777777777777777777777777777777777777',
+  '70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7633000600000000000000010000000a636c61737369632d763300000007636c617373696300000004636f72657000000000004000800000000000002000000000000000018000000000004000800000000000000110000000000040008000000000000002100000000000400080000000000000030000002d647270632d6d61696e6e65742d313131313131313131313131313131313131313131313131313131313131313100000032717569636b6e6f64652d6d61696e6e65742d3535353535353535353535353535353535353535353535353535353535353535000000046472706300000009717569636b6e6f64653333333333333333333333333333333333333333333333333333333333333333555555555555555555555555555555555555555555555555555555555555555544444444444444444444444444444444444444444444444444444444444444446666666666666666666666666666666666666666666666666666666666666666000000060000000600000028000124f800000080000000027777777777777777777777777777777777777777777777777777777777777777',
   'projection evidence SQL preimage exactly matches the TypeScript fixture'
 );
 

@@ -53,7 +53,7 @@ function client(
 }
 
 function provider(
-  identity: "alchemy-mainnet" | "quicknode-mainnet",
+  identity: "drpc-mainnet" | "quicknode-mainnet",
   rpcClient: CandidateRpcClient,
 ): CandidateRpcProvider {
   const origin = `https://${identity}.example`;
@@ -78,7 +78,7 @@ function providers(
   second = first,
 ) {
   return [
-    provider("alchemy-mainnet", client(first)),
+    provider("drpc-mainnet", client(first)),
     provider("quicknode-mainnet", client(second)),
   ] as const;
 }
@@ -141,7 +141,7 @@ describe("projector reorg recovery", () => {
     await expect(
       findCanonicalAncestorWithDualRpc({
         providers: [
-          provider("alchemy-mainnet", driftingClient()),
+          provider("drpc-mainnet", driftingClient()),
           provider("quicknode-mainnet", driftingClient()),
         ],
         ancestors: [ancestor("4", "90", HASH_90)],
@@ -225,7 +225,7 @@ describe("projector reorg recovery", () => {
       genesisPointId: "70000000-0000-0000-0000-000000000008",
       expectedReorgGeneration: "2",
       nextReorgGeneration: "3",
-      providerIdentities: ["alchemy-mainnet", "quicknode-mainnet"],
+      providerIdentities: ["drpc-mainnet", "quicknode-mainnet"],
       providerEndpointCommitments: [
         pair[0].endpointCommitment,
         pair[1].endpointCommitment,
@@ -361,7 +361,7 @@ describe("projector reorg recovery", () => {
     await expect(
       findCanonicalAncestorWithDualRpc({
         providers: [
-          provider("alchemy-mainnet", hanging),
+          provider("drpc-mainnet", hanging),
           provider("quicknode-mainnet", client({})),
         ],
         ancestors: [ancestor("5", "100", HASH_100)],

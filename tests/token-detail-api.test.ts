@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   readAlchemyExploreModel: vi.fn(),
   readProductionCustomExploreDirectoryV1: vi.fn(),
   readExploreReferenceHeadWithinRouteBudget: vi.fn(),
-  getOnchainDeployment: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
   currentMarketOnchainDeployment: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock("../lib/explore-reference-head.server", () => ({
 }));
 
 vi.mock("../lib/onchain/config", () => ({
-  getOnchainDeployment: mocks.getOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getWebsiteReadOnchainDeployment,
 }));
 
 vi.mock("../lib/onchain/durable-model", () => ({
@@ -190,7 +190,7 @@ describe("token detail Bitquery market read", () => {
       rpcUrl: "https://current-primary.example",
       rpcUrlSecondary: "https://current-secondary.example",
     });
-    mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
     mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
       blockNumber: launchDiscoverySnapshot.blockNumber,

@@ -76,9 +76,9 @@ function principalList() {
       pullRequestNumber: 1,
       commitOid: "b".repeat(40),
       treeOid: "c".repeat(40),
-      intakeContract: "aeon-v1",
-      providerId: "aeon",
-      controlRepositoryId: "1325324453",
+      intakeContract: "registry-v3",
+      providerId: "programmable-registry",
+      controlRepositoryId: "1320171831",
       controlRepositoryOwnerId: "309941960",
       state: "approved",
       reasonCodes: [],
@@ -163,20 +163,7 @@ function launchDescriptor() {
           },
         }],
       },
-      manualClaimPolicy: {
-        schemaVersion: "programmable.custom-manual-claim-policy.v1",
-        discoveryMode: "custom-registry-v1-primary-contract",
-        sourceRole: "primary-contract",
-        asset: "0x0000000000000000000000000000000000000000",
-        recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-        claimSelector: "0xb9d2fad0",
-        accruedSelector: "0x3129853d",
-        totalClaimedSelector: "0x4a383b32",
-        recipientSelector: "0x424ff2a5",
-        feeBpsSelector: "0x32c0314d",
-        sourceInterfaceId: "0x808cb67a",
-        expectedProgrammableFeeBps: 10,
-      },
+      manualClaimPolicy: null,
     }],
     defaultChoiceId: "canonical",
   };
@@ -502,12 +489,9 @@ describe("custom launch deployment probe", () => {
       ...launchDescriptor(),
       routes: launchDescriptor().routes.map((route) => ({
         ...route,
-        manualClaimPolicy: {
-          ...route.manualClaimPolicy,
-          expectedProgrammableFeeBps: 5,
-        },
+        manualClaimPolicy: { retired: true },
       })),
-    })).rejects.toThrow("manual claim policy is invalid");
+    })).rejects.toThrow("manual claim policy is retired");
 
     await expect(run(principalList(), launchEligibility(), {
       ...launchDescriptor(),
