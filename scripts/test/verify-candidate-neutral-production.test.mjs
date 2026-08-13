@@ -69,6 +69,58 @@ test("rejects a candidate identity in the compiled production bundle", async () 
   assert.match(result.stderr, /.next\/server\/app\/launch\/page\.js/u);
 });
 
+test("rejects applicant cards in source and emitted production bundles", async () => {
+  const applicant = ["a", "eon"].join("");
+  const secondApplicant = ["based", "bid"].join("");
+  const sourceRoot = await fixture({
+    "components/launch-console.tsx":
+      `export const card = "launch-model-${applicant}";\n`,
+  });
+  const sourceResult = verify(sourceRoot);
+  assert.equal(sourceResult.status, 1);
+  assert.match(sourceResult.stderr, /components\/launch-console\.tsx/u);
+
+  const buildRoot = await fixture({
+    ".next/static/chunks/launch.js":
+      `export const profile = "https://x.com/${secondApplicant}x";\n`,
+  });
+  const buildResult = verify(buildRoot, "--include-build");
+  assert.equal(buildResult.status, 1);
+  assert.match(buildResult.stderr, /.next\/static\/chunks\/launch\.js/u);
+});
+
+test("rejects retired applicant fee and Registry V1 bindings", async () => {
+  const retiredMode = ["custom-registry-v1", "primary-contract"].join("-");
+  const oldRegistry = [
+    "0x17e18c88bda9bfb73924cdc989c07b070",
+    "7e72671",
+  ].join("");
+  for (const [path, source] of [
+    ["lib/custom-launch/route.ts", `export const mode = "${retiredMode}";\n`],
+    ["config/release.json", JSON.stringify({ registry: oldRegistry })],
+  ]) {
+    const root = await fixture({ [path]: source });
+    const result = verify(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, new RegExp(path.replaceAll("/", "\\/"), "u"));
+  }
+});
+
+test("rejects the retired Solidity identity and intake markers", async () => {
+  const providerIdentifier = ["AEON", "PROVIDER", "ID"].join("_");
+  const intake = ["aeon", "-v1"].join("");
+  for (const [path, source] of [
+    ["contracts/src/FeePolicy.sol", `bytes32 constant ${providerIdentifier} = 0x00;\n`],
+    [".next/server/app/launch.js", `export const intake = "${intake}";\n`],
+    [".next/static/chunks/launch.js", `export const asset = "${["based", "bid", "_v1"].join("")}";\n`],
+  ]) {
+    const root = await fixture({ [path]: source });
+    const result = verify(root, ...(path.startsWith(".next/") ? ["--include-build"] : []));
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, new RegExp(path.replaceAll("/", "\\/"), "u"));
+  }
+});
+
 test("rejects a candidate identity in contract source", async () => {
   const projectName = ["Sh", "ards"].join("");
   const root = await fixture({

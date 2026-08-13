@@ -7,8 +7,6 @@ import type {
 import { getProductionWebsiteRegistryCustomPublicReadTargetV1 } from
   "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
-import { withGenesisCanaryRegistryCustomStoreV1 } from
-  "./genesis-canary-public-v1";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
@@ -84,9 +82,7 @@ async function production() {
   const target = getProductionWebsiteRegistryCustomPublicReadTargetV1();
   await target.assertProductionReadiness();
   productionHandlers ??= createCustomLaunchProjectReadHandlersV2({
-    store: withGenesisCanaryRegistryCustomStoreV1(
-      target.store,
-    ),
+    store: target.store,
   });
   return productionHandlers;
 }

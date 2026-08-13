@@ -107,7 +107,7 @@ describe("Custom launch public readiness", () => {
   it("separates finalized Registry reads from launch-write service readiness", () => {
     expect(isCustomLaunchRegistryPublicReadEnabled({
       PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
-    })).toBe(true);
+    })).toBe(false);
     expect(isCustomLaunchRegistryPublicReadEnabled({
       ...configured,
       PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "false",

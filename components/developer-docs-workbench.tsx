@@ -135,8 +135,7 @@ export function buildDeveloperAgentPrompt(
   "- Validate representative responses against the published JSON Schemas.",
   `- Read ${CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}; treat the open Custom Registry as ${registryManifest.status} and ingest it only when every published binding is non-null.`,
   `- Native Custom policy is ${PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS on the verified official market path only.`,
-  `- Partner and template attribution are independent from market and fee state; ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.status} may report ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.partnerShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.programmableShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps} BPS.`,
-  `- An active fee-bearing partner-template path must prove ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total: ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} partner and ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps} Programmable, with no added native fee.`,
+  "- Production Custom fees are either the exact 10 BPS Programmable market-path policy or zero for no qualifying market; all partner fee modes fail closed.",
   `- Programmable fee recipient: ${PROGRAMMABLE_FEE_RECIPIENT}.`,
   `- Programmable Verified means: ${PROGRAMMABLE_VERIFIED_DEFINITION}`,
   ].join("\n");

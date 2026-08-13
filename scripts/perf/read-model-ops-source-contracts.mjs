@@ -1980,6 +1980,9 @@ export function evaluateReadModelOperationsSourceContracts(
       "Capture sensitive production environment metadata",
     ) &&
       deployWorkflow.includes(
+        "set -o pipefail",
+      ) &&
+      deployWorkflow.includes(
         'test ! -e "$RUNNER_TEMP/vercel-production-env-metadata.json"',
       ) &&
       deployWorkflow.includes(

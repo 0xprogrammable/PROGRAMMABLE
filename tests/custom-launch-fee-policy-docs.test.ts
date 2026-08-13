@@ -10,15 +10,12 @@ const documentation = readFileSync(
 );
 
 describe("Custom launch fee policy documentation", () => {
-  it("documents the exact standard, AEON, and no-market policies", () => {
-    expect(documentation).toContain("Standard Programmable Custom");
-    expect(documentation).toContain("10 bps Programmable");
-    expect(documentation).toContain("15 bps AEON, 5 bps Programmable");
+  it("documents only the exact standard and no-market policies", () => {
+    expect(documentation).toContain("Standard Custom");
+    expect(documentation).toContain("10 bps");
     expect(documentation).toContain("No qualifying market");
-    expect(documentation).toContain(
-      "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    );
-    expect(documentation).toContain("must never invent a partner recipient");
+    expect(documentation).toContain("canonical Programmable recipient");
+    expect(documentation).toContain("special template");
   });
 
   it("removes the universal Custom fee claim from the public contract and UI", () => {

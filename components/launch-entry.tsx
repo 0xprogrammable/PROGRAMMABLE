@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   lazy,
@@ -13,7 +12,6 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
-import { XBrandIcon } from "@/components/brand-icons";
 import { CreateGuide } from "@/components/create-guide";
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -373,106 +371,6 @@ export function LaunchModelPicker({
           </span>
         </button>
 
-        <Link
-          href="https://x.com/aeonframework"
-          target="_blank"
-          rel="noreferrer"
-          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-          data-launch-model-option="aeon"
-          data-launch-model-available="false"
-          data-launch-model-launchable="false"
-          aria-labelledby="launch-model-aeon-title"
-          aria-describedby="launch-model-aeon-description"
-        >
-          <span
-            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.aeonArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              className={launchExperience.artImage}
-              src="/brand/create/aeon-framework-v1.webp"
-              alt=""
-              fill
-              loading="lazy"
-              fetchPriority="low"
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
-            />
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong id="launch-model-aeon-title">AI and Framework</strong>
-              <small data-status="pending">Available soon</small>
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-aeon-description"
-            >
-              The most autonomous agent framework. AEON launch models are
-              coming to Programmable Custom.
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              <XBrandIcon />
-              @aeonframework
-            </span>
-          </span>
-        </Link>
-
-        <Link
-          href="https://x.com/basedbidx"
-          target="_blank"
-          rel="noreferrer"
-          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-          data-launch-model-option="basedbid"
-          data-launch-model-available="false"
-          data-launch-model-launchable="false"
-          aria-labelledby="launch-model-basedbid-title"
-          aria-describedby="launch-model-basedbid-description"
-        >
-          <span
-            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.basedBidArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              className={launchExperience.artImage}
-              src="/brand/create/basedbid-v2.png"
-              alt=""
-              fill
-              loading="lazy"
-              fetchPriority="low"
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
-            />
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong id="launch-model-basedbid-title">BasedBid</strong>
-              <small data-status="pending">Available soon</small>
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-basedbid-description"
-            >
-              BasedBid launch models are coming to Programmable Custom.
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              <XBrandIcon />
-              @basedbidx
-            </span>
-          </span>
-        </Link>
       </div>
     </div>
   );

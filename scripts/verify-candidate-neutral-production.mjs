@@ -70,8 +70,28 @@ const projectNames = Object.freeze([
   ["random", "holder", "rewards"].join("[-_ ]?"),
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
+const applicantIdentityPatterns = Object.freeze([
+  new RegExp(`(?:^|[^A-Za-z0-9])${["a", "eon"].join("")}(?:$|[^A-Za-z0-9])|${["aeon", "framework"].join("")}`, "iu"),
+  new RegExp(`(?:^|[^A-Za-z0-9])${["based", "bid"].join("")}(?:$|[^A-Za-z0-9])|\\b${["based", "bid", "x"].join("")}\\b`, "iu"),
+]);
+const applicantCardMarkers = Object.freeze([
+  ["13253", "24453"].join(""),
+  ["AEON", "PROVIDER", "ID"].join("_"),
+  ["aeon", "-v1"].join(""),
+  ["aeon", "-partner-custom"].join(""),
+  ["aeon-launch", "-models"].join(""),
+  ["custom-registry-v1", "primary-contract"].join("-"),
+  ["included-in", "partner-total"].join("-"),
+  ["0x6a57bf3e092626be760d417986e6103c2", "0fdbc3e"].join(""),
+  ["0x17e18c88bda9bfb73924cdc989c07b070", "7e72671"].join(""),
+  ["0xf8aef69201621ad20fa256da595426b7e", "6192dba"].join(""),
+  ["0xcc916e5200d2626edfd918dc219bc4296", "629e997"].join(""),
+  ["0x7a814ecb2d2b8be2debb29481f25f06e", "976559eec41fa7c8d92e030ec69fc9ff"].join(""),
+]);
 const forbiddenContent = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...applicantIdentityPatterns,
+  ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   new RegExp(["submit-launch", "pull", "13"].join("[/# ]+"), "iu"),
   /manual[-_ ]?router/iu,
   /manual[-_ ]?applicant/iu,
@@ -79,6 +99,8 @@ const forbiddenContent = Object.freeze([
 ]);
 const forbiddenPath = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...applicantIdentityPatterns,
+  ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   /manual[-_]?router/iu,
   /manual[-_]?applicant/iu,
   /router[-_]?v2[-_]?shared[-_]?lifecycle/iu,
@@ -120,11 +142,11 @@ const failures = [];
 for (const absolutePath of discovered) {
   const repositoryPath = relative(repositoryRoot, absolutePath).replaceAll("\\", "/");
   if (repositoryPath === SELF_PATH || repositoryPath === TEST_PATH) continue;
-  if (!TEXT_EXTENSIONS.has(extname(repositoryPath)) && !PACKAGE_FILES.includes(repositoryPath)) {
-    continue;
-  }
   if (forbiddenPath.some((pattern) => pattern.test(repositoryPath))) {
     failures.push(`${repositoryPath}: forbidden candidate or legacy route path`);
+    continue;
+  }
+  if (!TEXT_EXTENSIONS.has(extname(repositoryPath)) && !PACKAGE_FILES.includes(repositoryPath)) {
     continue;
   }
   const source = await readFile(absolutePath, "utf8");
