@@ -34,6 +34,83 @@ const LIFECYCLE_OBSERVATION = Object.freeze({
 });
 
 describe("Generic launch V2 Postgres materialization/read store", () => {
+  it("rejects regressed or conflicting observation heads under the lifecycle lock", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      await insertApproval(pool);
+      const store = createPostgresGenericLaunchMaterializationStoreV2(pool);
+      const signal = new AbortController().signal;
+      await store.putApprovalReconciliation({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        outcome: "unconsumed",
+        observationCommonHead: "120",
+        observationCommonHeadHash: hash("e"),
+        signal,
+      });
+      await expect(store.putApprovalReconciliation({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        outcome: "unconsumed",
+        observationCommonHead: "119",
+        observationCommonHeadHash: hash("d"),
+        signal,
+      })).rejects.toThrow(/observation head regressed/u);
+      await expect(store.putApprovalReconciliation({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        outcome: "unconsumed",
+        observationCommonHead: "120",
+        observationCommonHeadHash: hash("f"),
+        signal,
+      })).rejects.toThrow(/observation head conflicted/u);
+
+      await store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("a"),
+        state: "finalized",
+        record: launchRecord(),
+        observationCommonHead: "121",
+        observationCommonHeadHash: hash("1"),
+        signal,
+      });
+      await expect(store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("b"),
+        state: "revoked",
+        record: null,
+        observationCommonHead: "120",
+        observationCommonHeadHash: hash("e"),
+        signal,
+      })).rejects.toThrow(/observation head regressed/u);
+      await expect(store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("b"),
+        state: "revoked",
+        record: null,
+        observationCommonHead: "121",
+        observationCommonHeadHash: hash("2"),
+        signal,
+      })).rejects.toThrow(/observation head conflicted/u);
+
+      expect(await store.getLatestLifecycle({ launchId: LAUNCH_ID, signal }))
+        .toMatchObject({ state: "finalized", lifecycleEvidenceHash: sha("a") });
+    } finally {
+      await database.close();
+    }
+  });
+
   it("appends lifecycle generations and hides finalized bytes after revocation", async () => {
     const database = new PGlite();
     try {
@@ -230,6 +307,48 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         GRANT TRUNCATE
           ON programmable_website_projection_v1.generic_launch_materializations_v2
           TO PUBLIC;
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .rejects.toThrow(/storage posture/u);
+      await database.exec(`
+        RESET ROLE;
+        CREATE SCHEMA alternate_capacity;
+        CREATE FUNCTION alternate_capacity.enforce_approval_v3_capacity_v1()
+        RETURNS trigger LANGUAGE plpgsql AS $alternate$
+        BEGIN
+          RETURN NEW;
+        END
+        $alternate$;
+        DROP TRIGGER projection_records_approval_v3_capacity_v1
+          ON programmable_website_projection_v1.projection_records;
+        CREATE TRIGGER projection_records_approval_v3_capacity_v1
+        BEFORE INSERT ON programmable_website_projection_v1.projection_records
+        FOR EACH ROW EXECUTE FUNCTION
+          alternate_capacity.enforce_approval_v3_capacity_v1();
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .rejects.toThrow(/storage posture/u);
+      await database.exec(`
+        RESET ROLE;
+        DROP TRIGGER projection_records_approval_v3_capacity_v1
+          ON programmable_website_projection_v1.projection_records;
+        DROP FUNCTION alternate_capacity.enforce_approval_v3_capacity_v1();
+        DROP SCHEMA alternate_capacity;
+        CREATE OR REPLACE FUNCTION
+          programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
+        RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+        SET search_path = pg_catalog AS $no_op$
+        BEGIN
+          -- website.approval-v3 >= 48 pg_advisory_xact_lock
+          RETURN NEW;
+        END
+        $no_op$;
+        CREATE TRIGGER projection_records_approval_v3_capacity_v1
+        BEFORE INSERT ON programmable_website_projection_v1.projection_records
+        FOR EACH ROW EXECUTE FUNCTION
+          programmable_website_projection_v1.enforce_approval_v3_capacity_v1();
         SET ROLE programmable_website_projection_runtime;
       `);
       await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))

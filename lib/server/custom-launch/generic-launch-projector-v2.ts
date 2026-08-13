@@ -120,6 +120,7 @@ export interface GenericLaunchMaterializationStoreV2 {
     recordHash: Sha256Digest | null;
     record: GenericLaunchRecordV2 | null;
     lastFinalizedRecord: GenericLaunchRecordV2 | null;
+    lastFinalizedLifecycleEvidenceHash: Sha256Digest | null;
     observationCommonHead: string;
     observationCommonHeadHash: `0x${string}`;
   }> | null>;
@@ -247,7 +248,8 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
       let record: GenericLaunchRecordV2 | null = null;
       if (lifecycle.status === "finalized") {
         if (previous?.lastFinalizedRecord !== null
-          && previous?.lastFinalizedRecord !== undefined) {
+          && previous?.lastFinalizedRecord !== undefined
+          && previous.lastFinalizedLifecycleEvidenceHash === lifecycleEvidenceHash) {
           record = previous.lastFinalizedRecord;
         } else {
           const { chainId: _chainId, ...publicDescriptor } = approval.descriptor;

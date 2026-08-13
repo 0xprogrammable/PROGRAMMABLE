@@ -120,7 +120,7 @@
     },
     "store": {
       "path": "lib/server/custom-launch/generic-launch-postgres-v2.ts",
-      "sha256": "5cdc8a5765816c3336d7af0aa490aaf420ec59ed65ffd16e8af25f170c8696c7"
+      "sha256": "a35d911098359f970c4f49007760c8081fc0cbb94c45bdaa73a7884968c907c5"
     },
     "registryReader": {
       "path": "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",

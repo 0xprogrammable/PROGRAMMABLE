@@ -26,6 +26,32 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]{0,77})$/u;
 const MAXIMUM_CANONICAL_RECORD_BYTES = 2_097_152;
 const MAXIMUM_SUPPORTED_APPROVAL_INVENTORY = 48n;
+const APPROVAL_V3_CAPACITY_FUNCTION_SOURCE = `
+BEGIN
+  IF NEW.lane <> 'website.approval-v3' THEN
+    RETURN NEW;
+  END IF;
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('programmable.website.approval-v3.capacity.v1', 0)
+  );
+  IF EXISTS (
+    SELECT 1
+      FROM programmable_website_projection_v1.projection_records existing
+     WHERE (existing.lane = NEW.lane
+       AND existing.projection_key = NEW.projection_key)
+        OR existing.idempotency_key = NEW.idempotency_key
+  ) THEN
+    RETURN NEW;
+  END IF;
+  IF (SELECT count(*)
+        FROM programmable_website_projection_v1.projection_records existing
+       WHERE existing.lane = 'website.approval-v3') >= 48 THEN
+    RAISE EXCEPTION 'website Approval v3 release capacity is exhausted'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+`;
 
 interface ApprovalRow extends Record<string, unknown> {
   canonical_readback: unknown;
@@ -41,6 +67,7 @@ interface LifecycleRow extends Record<string, unknown> {
   record_hash: unknown;
   canonical_record: unknown;
   last_finalized_record: unknown;
+  last_finalized_lifecycle_evidence_hash: unknown;
   observation_common_head: unknown;
   observation_common_head_hash: unknown;
 }
@@ -150,6 +177,8 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
                m.lifecycle_generation::text, m.lifecycle_evidence_hash,
                m.lifecycle_state, m.record_hash, m.canonical_record,
                finalized.canonical_record AS last_finalized_record,
+               finalized.lifecycle_evidence_hash
+                 AS last_finalized_lifecycle_evidence_hash,
                r.observation_common_head::text, r.observation_common_head_hash
           FROM programmable_website_projection_v1.generic_launch_materializations_v2 m
           LEFT JOIN programmable_website_projection_v1.generic_launch_reconciliations_v2 r
@@ -158,7 +187,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
            AND r.descriptor_hash = m.descriptor_hash
            AND r.outcome = 'consumed'
           LEFT JOIN LATERAL (
-            SELECT canonical_record
+            SELECT canonical_record, lifecycle_evidence_hash
               FROM programmable_website_projection_v1.generic_launch_materializations_v2 f
              WHERE f.launch_id = m.launch_id
                AND f.lifecycle_state = 'finalized'
@@ -184,27 +213,48 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
         input.observationCommonHeadHash,
         "observation common head hash",
       );
-      const result = await pool.query(`
-        INSERT INTO programmable_website_projection_v1.generic_launch_reconciliations_v2
-          (approval_id, launch_id, descriptor_hash, outcome,
-           observation_common_head, observation_common_head_hash)
-        VALUES ($1, $2, $3, $4, $5::numeric, $6)
-        ON CONFLICT (approval_id) DO UPDATE SET
-          outcome = EXCLUDED.outcome,
-          observation_common_head = EXCLUDED.observation_common_head,
-          observation_common_head_hash = EXCLUDED.observation_common_head_hash,
-          observed_at = clock_timestamp()
-        WHERE generic_launch_reconciliations_v2.launch_id = EXCLUDED.launch_id
-          AND generic_launch_reconciliations_v2.descriptor_hash = EXCLUDED.descriptor_hash
-          AND (generic_launch_reconciliations_v2.outcome = EXCLUDED.outcome
-            OR (generic_launch_reconciliations_v2.outcome = 'unconsumed'
-              AND EXCLUDED.outcome = 'consumed'))
-        RETURNING approval_id
-      `, [approvalId, launchId, descriptorHash, input.outcome, head, headHash]);
-      input.signal.throwIfAborted();
-      if (result.rowCount !== 1) {
-        throw new TypeError("Generic launch reconciliation identity conflicted");
+      const client = await pool.connect();
+      let open = false;
+      try {
+        await client.query("BEGIN");
+        open = true;
+        await client.query(`
+          SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+        `, [launchId]);
+        await assertMonotonicObservation(client, {
+          launchId,
+          observationCommonHead: head,
+          observationCommonHeadHash: headHash,
+        });
+        const result = await client.query(`
+          INSERT INTO programmable_website_projection_v1.generic_launch_reconciliations_v2
+            (approval_id, launch_id, descriptor_hash, outcome,
+             observation_common_head, observation_common_head_hash)
+          VALUES ($1, $2, $3, $4, $5::numeric, $6)
+          ON CONFLICT (approval_id) DO UPDATE SET
+            outcome = EXCLUDED.outcome,
+            observation_common_head = EXCLUDED.observation_common_head,
+            observation_common_head_hash = EXCLUDED.observation_common_head_hash,
+            observed_at = clock_timestamp()
+          WHERE generic_launch_reconciliations_v2.launch_id = EXCLUDED.launch_id
+            AND generic_launch_reconciliations_v2.descriptor_hash = EXCLUDED.descriptor_hash
+            AND (generic_launch_reconciliations_v2.outcome = EXCLUDED.outcome
+              OR (generic_launch_reconciliations_v2.outcome = 'unconsumed'
+                AND EXCLUDED.outcome = 'consumed'))
+          RETURNING approval_id
+        `, [approvalId, launchId, descriptorHash, input.outcome, head, headHash]);
+        if (result.rowCount !== 1) {
+          throw new TypeError("Generic launch reconciliation identity conflicted");
+        }
+        await client.query("COMMIT");
+        open = false;
+      } catch (error) {
+        if (open) await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
       }
+      input.signal.throwIfAborted();
     },
     async putIfNewLifecycle(
       input: Parameters<GenericLaunchMaterializationStoreV2["putIfNewLifecycle"]>[0],
@@ -253,6 +303,11 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
         await client.query(`
           SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
         `, [launchId]);
+        await assertMonotonicObservation(client, {
+          launchId,
+          observationCommonHead,
+          observationCommonHeadHash,
+        });
         const already = await client.query<LifecycleIdentityRow>(`
           SELECT approval_id, descriptor_hash, lifecycle_evidence_hash,
                  lifecycle_state, record_hash
@@ -333,6 +388,42 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
       }
     },
   });
+}
+
+async function assertMonotonicObservation(
+  client: ProjectionTargetPostgresClientV1,
+  input: Readonly<{
+    launchId: `0x${string}`;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
+  }>,
+): Promise<void> {
+  const result = await client.query<{
+    observation_common_head: unknown;
+    observation_common_head_hash: unknown;
+  }>(`
+    SELECT observation_common_head::text, observation_common_head_hash
+      FROM programmable_website_projection_v1.generic_launch_reconciliations_v2
+     WHERE launch_id = $1
+     LIMIT 1
+  `, [input.launchId]);
+  const row = result.rows[0];
+  if (row === undefined) return;
+  const storedHead = decimal(
+    row.observation_common_head,
+    "stored observation common head",
+  );
+  const storedHash = hash32(
+    row.observation_common_head_hash,
+    "stored observation common head hash",
+  );
+  if (BigInt(input.observationCommonHead) < BigInt(storedHead)) {
+    throw new TypeError("Generic launch observation head regressed");
+  }
+  if (input.observationCommonHead === storedHead
+    && input.observationCommonHeadHash !== storedHash) {
+    throw new TypeError("Generic launch observation head conflicted");
+  }
 }
 
 async function putConsumedReconciliation(
@@ -677,12 +768,17 @@ async function assertGenericLaunchMaterializationStorageV2(
         JOIN pg_class table_class ON table_class.oid = trigger.tgrelid
         JOIN pg_namespace table_schema ON table_schema.oid = table_class.relnamespace
         JOIN pg_proc function ON function.oid = trigger.tgfoid
+        JOIN pg_namespace function_schema ON function_schema.oid = function.pronamespace
        WHERE table_schema.nspname = 'programmable_website_projection_v1'
          AND table_class.relname = 'projection_records'
          AND trigger.tgname = 'projection_records_approval_v3_capacity_v1'
          AND trigger.tgenabled = 'O'
          AND trigger.tgtype = 7
+         AND function_schema.nspname = 'programmable_website_projection_v1'
          AND function.proname = 'enforce_approval_v3_capacity_v1'
+         AND pg_get_function_identity_arguments(function.oid) = ''
+         AND function.prorettype = 'trigger'::regtype
+         AND function.prosrc = $1
     ) AS trigger_count,
     (
       SELECT count(*)::text
@@ -691,15 +787,15 @@ async function assertGenericLaunchMaterializationStorageV2(
         JOIN pg_class owner_table
           ON owner_table.relname = 'generic_launch_materializations_v2'
         JOIN pg_namespace owner_schema ON owner_schema.oid = owner_table.relnamespace
-       WHERE function_schema.nspname = 'programmable_website_projection_v1'
+         WHERE function_schema.nspname = 'programmable_website_projection_v1'
          AND function.proname = 'enforce_approval_v3_capacity_v1'
+         AND pg_get_function_identity_arguments(function.oid) = ''
+         AND function.prorettype = 'trigger'::regtype
          AND owner_schema.nspname = 'programmable_website_projection_v1'
          AND function.proowner = owner_table.relowner
          AND function.prosecdef = false
          AND function.proconfig = ARRAY['search_path=pg_catalog']::text[]
-         AND position('website.approval-v3' in function.prosrc) > 0
-         AND position('>= 48' in function.prosrc) > 0
-         AND position('pg_advisory_xact_lock' in function.prosrc) > 0
+         AND function.prosrc = $1
          AND has_function_privilege(current_user, function.oid, 'EXECUTE')
          AND NOT EXISTS (
            SELECT 1 FROM aclexplode(function.proacl) acl
@@ -721,7 +817,7 @@ async function assertGenericLaunchMaterializationStorageV2(
          AND function_schema.nspname = 'programmable_website_projection_v1'
          AND has_function_privilege(provider.rolname, function.oid, 'EXECUTE')
     ) AS provider_execute_count
-  `);
+  `, [APPROVAL_V3_CAPACITY_FUNCTION_SOURCE]);
   if (decimal(admissionPosture.rows[0]?.trigger_count,
       "Generic launch capacity trigger count") !== "1"
     || decimal(admissionPosture.rows[0]?.function_count,
@@ -827,6 +923,17 @@ function lifecycleRow(row: LifecycleRow) {
       row.last_finalized_record,
       "last finalized lifecycle record",
     ));
+  const lastFinalizedLifecycleEvidenceHash =
+    row.last_finalized_lifecycle_evidence_hash === null
+      ? null
+      : digest(
+        row.last_finalized_lifecycle_evidence_hash,
+        "last finalized lifecycle evidence",
+      );
+  if ((lastFinalizedRecord === null)
+    !== (lastFinalizedLifecycleEvidenceHash === null)) {
+    throw new TypeError("stored finalized lifecycle evidence is inconsistent");
+  }
   const observationCommonHead = row.observation_common_head === null
     ? record?.sourceProjection.lifecycle.latestCommonHead
     : decimal(row.observation_common_head, "lifecycle observation common head");
@@ -851,6 +958,7 @@ function lifecycleRow(row: LifecycleRow) {
       : digest(row.record_hash, "lifecycle record hash"),
     record,
     lastFinalizedRecord,
+    lastFinalizedLifecycleEvidenceHash,
     observationCommonHead,
     observationCommonHeadHash,
   });

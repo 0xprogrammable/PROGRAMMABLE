@@ -123,6 +123,9 @@ function memoryStore(): GenericLaunchMaterializationStoreV2 & {
         record: row.record,
         lastFinalizedRecord: rows.findLast((candidate) =>
           candidate.launchId === launchId && candidate.record !== null)?.record ?? null,
+        lastFinalizedLifecycleEvidenceHash: rows.findLast((candidate) =>
+          candidate.launchId === launchId && candidate.record !== null)
+          ?.lifecycleEvidenceHash ?? null,
         observationCommonHead: observation?.observationCommonHead ?? "112",
         observationCommonHeadHash:
           observation?.observationCommonHeadHash ?? hash("e"),
@@ -334,6 +337,46 @@ describe("Generic launch V2 Registry projector", () => {
     expect(recovered.recordHash).toBe(first.recordHash);
     expect(store.rows).toHaveLength(2);
     expect(store.rows[0]?.record?.recordHash).toBe(first.recordHash);
+  });
+
+  it("does not reuse stale finalized evidence after a lifecycle reorg", async () => {
+    const store = memoryStore();
+    let current: VerifiedRegistryLifecycleV2 = lifecycle;
+    const projector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact: () => approval,
+      readRegistryLifecycle: async () => current,
+      readModelBindingHash: sha("f"),
+    });
+    const first = await projector.project({ approvalId: approval.approvalId });
+    current = {
+      status: "invalidated",
+      latestCommonHead: "121",
+      latestCommonHeadHash: hash("f"),
+      registryStatus: "1",
+      invalidationEvidenceHash: sha("e"),
+      observationCommonHead: "121",
+      observationCommonHeadHash: hash("f"),
+    };
+    await projector.project({ approvalId: approval.approvalId });
+    current = {
+      ...lifecycle,
+      finalization: {
+        ...lifecycle.finalization,
+        transactionHash: hash("d"),
+        blockHash: hash("1"),
+      },
+      latestCommonHead: "130",
+      latestCommonHeadHash: hash("9"),
+      observationCommonHead: "130",
+      observationCommonHeadHash: hash("9"),
+    };
+    const recovered = await projector.project({ approvalId: approval.approvalId });
+    expect(recovered.kind).toBe("created");
+    expect(recovered.recordHash).not.toBe(first.recordHash);
+    expect(store.rows).toHaveLength(3);
+    expect(store.rows[2]?.record?.sourceProjection.lifecycle.finalization)
+      .toMatchObject({ transactionHash: hash("d"), blockHash: hash("1") });
   });
 
   it("fails closed on approval identity or lifecycle drift", async () => {
