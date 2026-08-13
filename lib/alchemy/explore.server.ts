@@ -7,6 +7,8 @@ import {
   safeOperationalRpcError,
   withOperationalRpcFailover,
 } from "../onchain/operational-rpc-failover.server";
+import { safeOfficialV4LiquidityEvidenceReadError } from
+  "../onchain/uniswap-v4-subgraph";
 import { readDurableExploreModel } from "../onchain/durable-model";
 import { advanceExploreLaunchDiscovery } from "../onchain/read-model";
 import type {
@@ -484,6 +486,9 @@ export async function refreshAlchemyExploreRegistry(
 }
 
 export function safeAlchemyError(error: unknown) {
+  const officialV4LiquidityError =
+    safeOfficialV4LiquidityEvidenceReadError(error);
+  if (officialV4LiquidityError) return officialV4LiquidityError;
   return safeOperationalRpcError(error);
 }
 

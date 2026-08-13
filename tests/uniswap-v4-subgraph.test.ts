@@ -8,9 +8,11 @@ import type { ExplorePage } from "../lib/onchain/types";
 import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 import {
   enrichExplorePageWithOfficialV4Subgraph,
+  OfficialV4LiquidityEvidenceReadError,
   parseOfficialV4SubgraphResponse,
   readOfficialV4LiquidityEvidence,
   readOfficialV4LiquidityEvidenceSnapshot,
+  safeOfficialV4LiquidityEvidenceReadError,
 } from "../lib/onchain/uniswap-v4-subgraph";
 
 const POOL_ID =
@@ -420,7 +422,10 @@ describe("official Uniswap v4 subgraph adapter", () => {
           fetcher: mismatchFetcher,
         },
       ),
-    ).rejects.toMatchObject({ code: "coverage-incomplete" });
+    ).rejects.toMatchObject({
+      code: "coverage-incomplete",
+      category: "response-hash",
+    });
     expect(mismatchFetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -556,7 +561,10 @@ describe("official Uniswap v4 subgraph adapter", () => {
         ...options,
         fetcher: mismatchFetcher,
       }),
-    ).rejects.toMatchObject({ code: "coverage-incomplete" });
+    ).rejects.toMatchObject({
+      code: "coverage-incomplete",
+      category: "response-hash",
+    });
     expect(mismatchFetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -681,30 +689,35 @@ describe("official Uniswap v4 subgraph adapter", () => {
     stale.data.pools[0].totalValueLockedUSD = "10000";
     await expect(read(stale)).rejects.toMatchObject({
       code: "coverage-incomplete",
+      category: "response-freshness",
     });
 
     const futureTime = exactOfficialResponse(1_786_577_101);
     futureTime.data.pools[0].totalValueLockedUSD = "10000";
     await expect(read(futureTime)).rejects.toMatchObject({
       code: "coverage-incomplete",
+      category: "response-freshness",
     });
 
     const ahead = officialResponse(25_630_001);
     ahead.data.pools[0].totalValueLockedUSD = "10000";
     await expect(read(ahead)).rejects.toMatchObject({
       code: "coverage-incomplete",
+      category: "response-ahead",
     });
 
     const lagged = officialResponse(25_629_935);
     lagged.data.pools[0].totalValueLockedUSD = "10000";
     await expect(read(lagged)).rejects.toMatchObject({
       code: "coverage-incomplete",
+      category: "response-lag",
     });
 
     const conflicting = officialResponse(25_630_000);
     conflicting.data.pools[0].totalValueLockedUSD = "10000";
     await expect(read(conflicting)).rejects.toMatchObject({
       code: "coverage-incomplete",
+      category: "response-hash",
     });
 
     const emptyPrincipal = exactOfficialResponse();
@@ -713,6 +726,7 @@ describe("official Uniswap v4 subgraph adapter", () => {
     emptyPrincipal.data.pools[0].totalValueLockedToken1 = "0.000";
     await expect(read(emptyPrincipal)).rejects.toMatchObject({
       code: "coverage-incomplete",
+      category: "pool-identity",
     });
 
     const exactPool = exactOfficialResponse();
@@ -806,6 +820,79 @@ describe("official Uniswap v4 subgraph adapter", () => {
     expect(unsupportedFetcher).not.toHaveBeenCalled();
   });
 
+  it("emits fixed secret-free diagnostic categories for official liquidity failures", async () => {
+    const diagnosticFor = async (
+      fetcher: (input: string, init?: RequestInit) => Promise<Response>,
+    ) => {
+      try {
+        await readOfficialV4LiquidityEvidence(
+          {
+            tokens: [canonicalToken()],
+            referenceHead: {
+              chainId: 1,
+              blockNumber: REFERENCE_BLOCK_NUMBER,
+              blockHash: REFERENCE_BLOCK_HASH,
+            },
+            now: new Date("2026-08-12T23:21:00.000Z"),
+          },
+          {
+            apiKey: "graph-secret-that-must-not-be-logged",
+            endpoint: OFFICIAL_ENDPOINT,
+            fetcher,
+          },
+        );
+        throw new Error("expected official liquidity read to fail");
+      } catch (error) {
+        return safeOfficialV4LiquidityEvidenceReadError(error);
+      }
+    };
+
+    await expect(
+      diagnosticFor(async () => new Response("unavailable", { status: 503 })),
+    ).resolves.toEqual({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      category: "request-http",
+    });
+    await expect(
+      diagnosticFor(async () => new Response("not-json")),
+    ).resolves.toEqual({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      category: "response-schema",
+    });
+    const deploymentDrift = exactOfficialResponse();
+    deploymentDrift.data._meta.deployment = "secret-provider-deployment";
+    await expect(
+      diagnosticFor(async () => jsonResponse(deploymentDrift)),
+    ).resolves.toEqual({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      category: "response-deployment",
+    });
+    const indexingError = exactOfficialResponse();
+    indexingError.data._meta.hasIndexingErrors = true;
+    await expect(
+      diagnosticFor(async () => jsonResponse(indexingError)),
+    ).resolves.toEqual({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      category: "response-indexing-error",
+    });
+
+    const error = new OfficialV4LiquidityEvidenceReadError(
+      "coverage-incomplete",
+      "request-http",
+    ) as OfficialV4LiquidityEvidenceReadError & { cause?: unknown };
+    error.cause = new Error(
+      "https://gateway.thegraph.com/api/secret-key query pool 0x1234",
+    );
+    const safe = safeOfficialV4LiquidityEvidenceReadError(error);
+    expect(safe).toEqual({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      category: "request-http",
+    });
+    expect(JSON.stringify(safe)).not.toContain("secret");
+    expect(safeOfficialV4LiquidityEvidenceReadError(new Error("raw secret")))
+      .toBeNull();
+  });
+
   it("batches more than 24 exact pools without silently truncating evidence", async () => {
     const tokensAndPools = batchedTokensAndPools(25);
     const pools = new Map(tokensAndPools.map(({ pool }) => [pool.id, pool]));
@@ -896,6 +983,7 @@ describe("official Uniswap v4 subgraph adapter", () => {
     ).rejects.toMatchObject({
       name: "OfficialV4LiquidityEvidenceReadError",
       code: "coverage-incomplete",
+      category: "request-http",
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
@@ -928,6 +1016,7 @@ describe("official Uniswap v4 subgraph adapter", () => {
     ).rejects.toMatchObject({
       name: "OfficialV4LiquidityEvidenceReadError",
       code: "coverage-incomplete",
+      category: "exact-pool-coverage",
     });
   });
 
