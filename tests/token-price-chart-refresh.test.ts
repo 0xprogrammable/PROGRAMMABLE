@@ -5,56 +5,55 @@ import {
   createSerializedChartRefresh,
   createChartGeometry,
   getChartKeyboardInspectionIndex,
-  getChartFdvAtPoint,
   isAuthoritativeChartPayload,
   isAuthoritativeChartPayloadStatus,
   nearestChartPointIndex,
+  parseAuthoritativeChartPayload,
   preserveChartPayloadOnFailure,
   shouldClearChartInspectionAfterPointerUp,
 } from "../components/token-price-chart";
+import type { MarketChartV1 } from "../lib/market-data/market-data-v1";
 
-const CURRENT_DATA_QUALITY = {
-  schemaVersion: "programmable.explore-chart-data-quality.v1",
-  status: "current",
-  asOfBlock: "100",
-  blockHash: `0x${"11".repeat(32)}`,
-  finality: "confirmed",
-  history: { status: "current", throughBlock: "100" },
-  price: { status: "current", asOfBlock: "100", lagBlocks: "0" },
-  valuation: {
-    status: "current",
-    metric: "fdv",
-    asOfBlock: "100",
-    lagBlocks: "0",
+const MARKET_CHART = {
+  schemaVersion: "programmable.market-chart.v1",
+  source: "bitquery",
+  readStatus: "live",
+  status: "ready",
+  generatedAt: "2026-08-11T14:02:00.000Z",
+  identity: {
+    chainId: "1",
+    tokenAddress: "0x1111111111111111111111111111111111111111",
+    quoteAddress: "0x0000000000000000000000000000000000000000",
+    poolId: `0x${"22".repeat(32)}`,
+    protocol: "uniswap_v4",
   },
-} as const;
-
-const STALE_VALUATION_DATA_QUALITY = {
-  ...CURRENT_DATA_QUALITY,
-  status: "partial",
-  valuation: {
-    status: "stale",
-    metric: "fdv",
-    asOfBlock: "99",
-    lagBlocks: "1",
-  },
-} as const;
-
-const UNAVAILABLE_VALUATION_DATA_QUALITY = {
-  ...CURRENT_DATA_QUALITY,
-  status: "partial",
-  valuation: {
-    status: "unavailable",
-    metric: "fdv",
-  },
-} as const;
-
-const STALE_PRICE_DATA_QUALITY = {
-  ...CURRENT_DATA_QUALITY,
-  status: "partial",
-  price: { status: "stale", asOfBlock: "99", lagBlocks: "1" },
-  valuation: { status: "unavailable", metric: "fdv" },
-} as const;
+  range: "1d",
+  points: [{
+    blockNumber: "99",
+    time: "2026-08-11T14:01:00.000Z",
+    bucketStart: "2026-08-11T14:00:00.000Z",
+    bucketEnd: "2026-08-11T14:01:00.000Z",
+    observedAt: "2026-08-11T14:00:59.000Z",
+    valueSemantics: "period-median",
+    priceQuote: "0.1",
+    quoteSymbol: "ETH",
+    tradeCount: 1,
+  }, {
+    blockNumber: "100",
+    time: "2026-08-11T14:02:00.000Z",
+    bucketStart: "2026-08-11T14:01:00.000Z",
+    bucketEnd: "2026-08-11T14:02:00.000Z",
+    observedAt: "2026-08-11T14:01:59.000Z",
+    valueSemantics: "period-median",
+    priceQuote: "0.2",
+    quoteSymbol: "ETH",
+    tradeCount: 1,
+  }],
+  swapCount: 2,
+  valuation: { status: "unavailable", reason: "source-unavailable" },
+  asOfTime: "2026-08-11T14:01:59.000Z",
+  truncated: false,
+} as const satisfies MarketChartV1;
 
 describe("token price chart inspection", () => {
   it("maps the pointer to the nearest plotted price point", () => {
@@ -90,81 +89,14 @@ describe("token price chart inspection", () => {
     expect(shouldClearChartInspectionAfterPointerUp("")).toBe(true);
   });
 
-  it("updates historical FDV only from matching ETH and USD evidence", () => {
-    expect(
-      getChartFdvAtPoint(
-        {
-          status: "ready",
-          points: [],
-          swapCount: 2,
-          volumeWei: "0",
-          volumeEth: "0",
-          fdvEthWei: "1000000000000000000000",
-          fdvEth: "1000",
-          fdvUsdWad: "2000000000000000000000000",
-        },
-        { blockNumber: "1", priceEth: "0.5", priceUsd: "1250" },
-        { blockNumber: "2", priceEth: "1", priceUsd: "2500" },
-      ),
-    ).toEqual({
-      fdvEthWei: "500000000000000000000",
-      fdvEth: "500",
-      fdvUsdWad: "1000000000000000000000000",
-    });
-  });
-
-  it("does not substitute current FDV when historical scaling underflows", () => {
-    expect(
-      getChartFdvAtPoint(
-        {
-          status: "ready",
-          points: [],
-          swapCount: 2,
-          volumeWei: "0",
-          volumeEth: "0",
-          fdvEthWei: "1",
-          fdvEth: "0.000000000000000001",
-          fdvUsdWad: "1",
-        },
-        { blockNumber: "1", priceEth: "0.5" },
-        { blockNumber: "2", priceEth: "1" },
-      ),
-    ).toEqual({});
-  });
-
-  it("never derives historical USD FDV from ETH or arbitrary quote ratios", () => {
-    const payload = {
-      status: "ready" as const,
-      points: [],
-      swapCount: 2,
-      fdvEthWei: "1000000000000000000000",
-      fdvEth: "1000",
-      fdvUsdWad: "2000000000000000000000000",
-    };
-
-    expect(getChartFdvAtPoint(
-      payload,
-      { blockNumber: "1", priceQuote: "5", quoteSymbol: "USDC" },
-      { blockNumber: "2", priceQuote: "10", quoteSymbol: "USDC" },
-    )).toEqual({});
-    expect(getChartFdvAtPoint(
-      payload,
-      { blockNumber: "1", priceEth: "0.5" },
-      { blockNumber: "2", priceEth: "1", priceUsd: "2500" },
-    )).toEqual({
-      fdvEthWei: "500000000000000000000",
-      fdvEth: "500",
-    });
-  });
-
-  it("keeps a current one-point series as an accessible inspectable value", () => {
+  it("keeps a one-point series as an accessible inspectable value", () => {
     const chart = createChartGeometry([
       { blockNumber: "100", priceEth: "1", priceUsd: "3500" },
     ]);
 
     expect(chart).toMatchObject({
       unit: "USD",
-      current: 3500,
+      latestValue: 3500,
       path: "",
       areaPath: "",
       points: [
@@ -185,293 +117,50 @@ describe("token price chart refresh", () => {
     vi.useRealTimers();
   });
 
-  it("treats source readiness as unavailable instead of authoritative zero data", () => {
+  it("accepts only quote-bound period-median chart DTOs", () => {
     expect(isAuthoritativeChartPayloadStatus("ready")).toBe(true);
     expect(isAuthoritativeChartPayloadStatus("insufficient-history")).toBe(true);
-    expect(isAuthoritativeChartPayloadStatus("not-deployed")).toBe(false);
     expect(isAuthoritativeChartPayloadStatus("partial")).toBe(true);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [
-          { blockNumber: "99", priceEth: "0.1", priceUsd: "350" },
-          { blockNumber: "100", priceEth: "0.2", priceUsd: "700" },
-        ],
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        fdvEthWei: "1000000000000000000000",
-        fdvEth: "1000",
-        fdvUsdWad: "3000000000000000000000000",
-        valuationMetric: "fdv",
-        dataQuality: CURRENT_DATA_QUALITY,
-      }),
-    ).toBe(true);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [{ blockNumber: "1", priceEth: "0.1" }],
-        swapCount: 1,
-        volumeWei: "1",
-        volumeEth: "0.000000000000000001",
-        marketCapEthWei: "1000000000000000000000",
-        marketCapEth: "1000",
-        marketCapUsdWad: "3000000000000000000000000",
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "insufficient-history",
-        points: [{ blockNumber: "100", priceEth: "0.1" }],
-        swapCount: 1,
-        volumeWei: "1",
-        volumeEth: "0.000000000000000001",
-        valuationMetric: "fdv",
-        dataQuality: CURRENT_DATA_QUALITY,
-      }),
-    ).toBe(true);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [{ blockNumber: "1", priceEth: "0.1" }],
-        swapCount: 1,
-        volumeWei: "1",
-        volumeEth: "0.000000000000000001",
-        valuationMetric: "fdv",
-        dataQuality: CURRENT_DATA_QUALITY,
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [
-          { blockNumber: "99", priceEth: "0.1" },
-          { blockNumber: "100", priceEth: "0.2" },
-        ],
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        valuationMetric: "fdv",
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "insufficient-history",
-        points: [
-          { blockNumber: "1", priceEth: "0.1" },
-          { blockNumber: "2", priceEth: "0.2" },
-        ],
-        swapCount: 2,
-        volumeWei: "2",
-        volumeEth: "0.000000000000000002",
-        valuationMetric: "fdv",
-        dataQuality: CURRENT_DATA_QUALITY,
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [{ blockNumber: "1", priceEth: "0" }],
-        swapCount: 1,
-        volumeWei: "0",
-        volumeEth: "0",
-        fdvEthWei: "0",
-        fdvEth: "0",
-        fdvUsdWad: "0",
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "not-deployed",
-        points: [],
-        swapCount: 0,
-        volumeWei: "0",
-        volumeEth: "0",
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "partial",
-        points: [],
-        swapCount: 0,
-        volumeWei: "0",
-        volumeEth: "0",
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [{ blockNumber: "2", priceEth: "NaN" }],
-        swapCount: 1,
-        volumeWei: "0",
-        volumeEth: "Infinity",
-      }),
-    ).toBe(false);
-  });
+    expect(isAuthoritativeChartPayloadStatus("not-deployed")).toBe(false);
+    expect(isAuthoritativeChartPayload(MARKET_CHART)).toBe(true);
 
-  it("keeps current history but strips stale FDV before acceptance", () => {
-    const partialValuation = {
-      status: "ready" as const,
-      points: [
-        { blockNumber: "99", priceEth: "0.1" },
-        { blockNumber: "100", priceEth: "0.2" },
-      ],
-      swapCount: 2,
-      volumeWei: "3",
-      volumeEth: "0.000000000000000003",
-      fdvEthWei: "1000000000000000000000",
-      fdvEth: "1000",
-      fdvUsdWad: "3000000000000000000000000",
-      valuationMetric: "fdv" as const,
-      dataQuality: STALE_VALUATION_DATA_QUALITY,
-    };
-
-    expect(isAuthoritativeChartPayload(partialValuation)).toBe(true);
-    expect(acceptChartPayload("token:1d", partialValuation)).toEqual({
-      key: "token:1d",
-      payload: {
-        status: "ready",
-        points: partialValuation.points,
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        valuationMetric: "fdv",
-        dataQuality: STALE_VALUATION_DATA_QUALITY,
-      },
-      failed: false,
-    });
-  });
-
-  it("keeps current history but strips unavailable FDV before acceptance", () => {
-    const partialValuation = {
-      status: "ready" as const,
-      points: [
-        { blockNumber: "99", priceEth: "0.1" },
-        { blockNumber: "100", priceEth: "0.2" },
-      ],
-      swapCount: 2,
-      volumeWei: "3",
-      volumeEth: "0.000000000000000003",
-      fdvEthWei: "1000000000000000000000",
-      fdvEth: "1000",
-      fdvUsdWad: "3000000000000000000000000",
-      valuationMetric: "fdv" as const,
-      dataQuality: UNAVAILABLE_VALUATION_DATA_QUALITY,
-    };
-
-    expect(isAuthoritativeChartPayload(partialValuation)).toBe(true);
-    expect(acceptChartPayload("token:1d", partialValuation).payload).toEqual({
+    const payload = parseAuthoritativeChartPayload(MARKET_CHART);
+    expect(payload).toMatchObject({
       status: "ready",
-      points: partialValuation.points,
+      points: MARKET_CHART.points,
       swapCount: 2,
-      volumeWei: "3",
-      volumeEth: "0.000000000000000003",
-      valuationMetric: "fdv",
-      dataQuality: UNAVAILABLE_VALUATION_DATA_QUALITY,
+      marketData: MARKET_CHART,
     });
+    expect(acceptChartPayload("token:1d", payload!).payload).toBe(payload);
   });
 
-  it("accepts an exact stale price as limited history without caching FDV", () => {
-    expect(
-      isAuthoritativeChartPayload({
-        status: "partial",
-        points: [
-          { blockNumber: "98", priceEth: "0.1" },
-          { blockNumber: "99", priceEth: "0.2" },
-        ],
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        valuationMetric: "fdv",
-        dataQuality: STALE_PRICE_DATA_QUALITY,
-      }),
-    ).toBe(true);
-  });
-
-  it("rejects forged stale-price provenance", () => {
-    expect(
-      isAuthoritativeChartPayload({
-        status: "partial",
-        points: [
-          { blockNumber: "98", priceEth: "0.1" },
-          { blockNumber: "99", priceEth: "0.2" },
-        ],
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        valuationMetric: "fdv",
-        dataQuality: {
-          ...STALE_PRICE_DATA_QUALITY,
-          price: { status: "stale", asOfBlock: "99", lagBlocks: "2" },
-        },
-      }),
-    ).toBe(false);
-  });
-
-  it("rejects unordered, duplicate, future, or noncanonical points before caching", () => {
-    for (const points of [
-      [
-        { blockNumber: "100", priceEth: "0.1" },
-        { blockNumber: "99", priceEth: "0.2" },
-      ],
-      [
-        { blockNumber: "100", priceEth: "0.1" },
-        { blockNumber: "100", priceEth: "0.2" },
-      ],
-      [
-        { blockNumber: "99", priceEth: "0.1" },
-        { blockNumber: "101", priceEth: "0.2" },
-      ],
-      [
-        { blockNumber: "099", priceEth: "0.1" },
-        { blockNumber: "100", priceEth: "0.2" },
-      ],
-    ]) {
-      expect(
-        isAuthoritativeChartPayload({
-          status: "ready",
-          points,
-          swapCount: 2,
-          volumeWei: "3",
-          volumeEth: "0.000000000000000003",
-          valuationMetric: "fdv",
-          dataQuality: CURRENT_DATA_QUALITY,
-        }),
-      ).toBe(false);
-    }
-  });
-
-  it("rejects noncanonical quality block numbers before caching", () => {
-    const noncanonicalBlock = "0100";
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [
-          { blockNumber: "99", priceEth: "0.1" },
-          { blockNumber: noncanonicalBlock, priceEth: "0.2" },
-        ],
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        valuationMetric: "fdv",
-        dataQuality: {
-          ...CURRENT_DATA_QUALITY,
-          asOfBlock: noncanonicalBlock,
-          history: { status: "current", throughBlock: noncanonicalBlock },
-          price: {
-            status: "current",
-            asOfBlock: noncanonicalBlock,
-            lagBlocks: "0",
-          },
-          valuation: {
-            status: "current",
-            metric: "fdv",
-            asOfBlock: noncanonicalBlock,
-            lagBlocks: "0",
-          },
-        },
-      }),
-    ).toBe(false);
+  it("rejects every chart-owned valuation path", () => {
+    expect(isAuthoritativeChartPayload({
+      ...MARKET_CHART,
+      fdvUsdWad: "3000000000000000000000000",
+    })).toBe(false);
+    expect(isAuthoritativeChartPayload({
+      ...MARKET_CHART,
+      valuationMetric: "fdv",
+    })).toBe(false);
+    expect(isAuthoritativeChartPayload({
+      ...MARKET_CHART,
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        valueUsdWad: "3000000000000000000000000",
+        fdvUsdWad: "3000000000000000000000000",
+        totalSupply: "1000000",
+        asOfTime: MARKET_CHART.asOfTime,
+        freshness: "current",
+      },
+    })).toBe(false);
+    expect(isAuthoritativeChartPayload({
+      status: "ready",
+      points: MARKET_CHART.points,
+      swapCount: 2,
+    })).toBe(false);
   });
 
   it("preserves last-known-good data through failure and replaces it on recovery", () => {

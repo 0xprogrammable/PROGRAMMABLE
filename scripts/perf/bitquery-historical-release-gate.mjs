@@ -2,6 +2,8 @@ const GOLDEN_TOKEN_ADDRESS =
   "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const GOLDEN_QUOTE_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
 const MAXIMUM_FUTURE_SKEW_MS = 60_000;
 const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000;
 const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000;
@@ -100,8 +102,10 @@ export function classifyBitqueryStaleMarketReleaseV1(input) {
 /**
  * Resolve the direct-address PCAN canary after the independent parity read.
  * PCAN is intentionally absent from public Explore discovery. Its detail,
- * exact-pool valuation, chart close and parity receipt are bound to one token,
- * pool, block, time, price and FDV. The only older-than-24h value admitted by
+ * exact-pool valuation, chart observation and parity receipt are bound to one
+ * token, pool, block, observation time and FDV. The chart value remains an
+ * explicitly labelled period median and is never treated as the latest trade.
+ * The only older-than-24h value admitted by
  * this function is the exact PCAN candidate classified above.
  */
 export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
@@ -112,7 +116,6 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
   const detailPool = exactGoldenPool(detailToken);
   const detailValuation = detailToken?.valuation;
   const poolValuation = detailPool?.valuation;
-  const chartValuation = chart?.valuation;
   const trade = detailPool?.latestTrade;
   const lastPoint = Array.isArray(chart?.points) ? chart.points.at(-1) : null;
   const expectedValue = detailValuation?.valueWad;
@@ -121,7 +124,9 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
   const expectedPrice = positiveInteger(trade?.priceUsdWad)
     ? BigInt(trade.priceUsdWad)
     : null;
-  const chartPrice = positiveDecimalToWad(lastPoint?.priceUsd);
+  const periodMedian = positiveDecimalToWad(
+    lastPoint?.priceUsd ?? lastPoint?.priceQuote,
+  );
   let temporalStatus;
   if (detailValuation?.freshness === "current") {
     if (!currentMarketTime(detailValuation.asOfTime, nowMs)) {
@@ -147,18 +152,15 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
     poolValuation.metric !== "fdv" ||
     poolValuation.supplyBasis !== "total" ||
     poolValuation.freshness !== detailValuation.freshness ||
-    chartValuation?.status !== "available" ||
-    chartValuation.metric !== "fdv" ||
-    chartValuation.supplyBasis !== "total" ||
-    chartValuation.freshness !== detailValuation.freshness ||
     !positiveInteger(expectedValue) ||
     !validMarketTime(expectedTime, nowMs) ||
     poolValuation.valueUsdWad !== expectedValue ||
     poolValuation.fdvUsdWad !== expectedValue ||
     poolValuation.asOfTime !== expectedTime ||
-    chartValuation.valueUsdWad !== expectedValue ||
-    chartValuation.fdvUsdWad !== expectedValue ||
-    chartValuation.asOfTime !== expectedTime ||
+    chart?.valuation?.status !== "unavailable" ||
+    chart.valuation.reason !== "source-unavailable" ||
+    "fdvUsdWad" in chart ||
+    "valuationMetric" in chart ||
     chart?.schemaVersion !== "programmable.market-chart.v1" ||
     chart.source !== "bitquery" ||
     chart.readStatus !== "live" ||
@@ -168,14 +170,22 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
     chart?.identity?.chainId !== "1" ||
     chart?.identity?.tokenAddress?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
     chart?.identity?.poolId !== GOLDEN_POOL_ID ||
+    chart?.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS ||
     chart?.identity?.protocol !== "uniswap_v4" ||
     !Array.isArray(chart?.points) ||
     chart.points.length < 1 ||
-    chart.asOfTime !== lastPoint?.time ||
-    lastPoint?.time !== trade?.time ||
+    chart.asOfTime !== lastPoint?.observedAt ||
+    lastPoint?.observedAt !== trade?.time ||
+    lastPoint?.valueSemantics !== "period-median" ||
+    lastPoint?.time !== lastPoint?.bucketEnd ||
+    !validMarketTime(lastPoint?.bucketStart, nowMs) ||
+    !validMarketTime(lastPoint?.bucketEnd, nowMs) ||
+    Date.parse(lastPoint.bucketStart) >= Date.parse(lastPoint.bucketEnd) ||
+    Date.parse(lastPoint.observedAt) < Date.parse(lastPoint.bucketStart) ||
+    Date.parse(lastPoint.observedAt) > Date.parse(lastPoint.bucketEnd) ||
     lastPoint?.blockNumber !== expectedBlock ||
     expectedPrice === null ||
-    chartPrice !== expectedPrice ||
+    periodMedian === null ||
     parity?.schemaVersion !== "programmable.bitquery-golden-market-parity.v1" ||
     parity.tokenAddress !== GOLDEN_TOKEN_ADDRESS ||
     parity.poolId !== GOLDEN_POOL_ID ||
@@ -210,6 +220,7 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
 export const BITQUERY_HISTORICAL_RELEASE_V1 = Object.freeze({
   tokenAddress: GOLDEN_TOKEN_ADDRESS,
   poolId: GOLDEN_POOL_ID,
+  quoteAddress: GOLDEN_QUOTE_ADDRESS,
   maximumStaleAgeMs: MAXIMUM_STALE_AGE_MS,
   maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS,
   minimumConfirmations: MINIMUM_CONFIRMATIONS,

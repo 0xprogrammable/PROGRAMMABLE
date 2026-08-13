@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { HttpRequestError } from "viem";
 
 import { resolveExploreReadSource } from "../lib/onchain/explore-read-source";
 import type {
@@ -129,5 +130,40 @@ describe("Explore read source", () => {
     expect(result).toBe(liveModel);
     expect(readLive).not.toHaveBeenCalled();
     expect(enrichWithUsd).toHaveBeenCalledWith(liveModel, config);
+  });
+
+  it("does not retain authenticated RPC details when USD enrichment fails", async () => {
+    const error = vi.fn();
+    const sentinel = "FAKE_SECRET_SENTINEL";
+    const enrichWithUsd = vi.fn().mockRejectedValue(
+      new HttpRequestError({
+        status: 503,
+        url: `https://eth-mainnet.g.alchemy.com/v2/${sentinel}`,
+        body: { method: "eth_call", params: [] },
+      }),
+    );
+
+    const result = await resolveExploreReadSource(config, {
+      readDurable: vi.fn().mockResolvedValue({
+        status: "ready",
+        envelope: {} as never,
+        ageMs: 1_000,
+      }),
+      selectFreshDurable: vi.fn().mockReturnValue(liveModel),
+      readLive: vi.fn(),
+      enrichWithUsd,
+      warn: vi.fn(),
+      error,
+    });
+
+    expect(result).toBe(liveModel);
+    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith("ETH/USD enrichment failed", {
+      name: "HttpRequestError",
+    });
+    const serialized = JSON.stringify(error.mock.calls);
+    expect(serialized).not.toContain(sentinel);
+    expect(serialized).not.toContain("eth-mainnet.g.alchemy.com");
+    expect(serialized).not.toContain("eth_call");
   });
 });

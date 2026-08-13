@@ -9,10 +9,8 @@ export const PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION =
 
 export const MARKET_DATA_CURRENT_MAX_AGE_MS = 5 * 60 * 1_000;
 
-// A public current FDV needs enough exact-pool depth to make a single dust
-// trade an insufficient price signal. This is deliberately conservative: a
-// launch remains discoverable when it is below the threshold, but its USD FDV
-// is unavailable instead of being ranked from an unsafe observation.
+// This threshold is an eligibility rule for publishing a current FDV. It does
+// not claim executable depth, manipulation resistance or price-impact bounds.
 export const MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD =
   "10000000000000000000000" as const;
 export const MARKET_DATA_MAXIMUM_RAW_INDEXED_PRICE_DEVIATION_BPS = 1_000 as const;
@@ -24,6 +22,10 @@ export type MarketDataIdentityV1 = Readonly<{
   tokenAddress: `0x${string}`;
   poolId: `0x${string}`;
   protocol: "uniswap_v4";
+}>;
+
+export type MarketChartIdentityV1 = MarketDataIdentityV1 & Readonly<{
+  quoteAddress: `0x${string}`;
 }>;
 
 export type MarketDataFreshnessV1 = "current" | "stale";
@@ -111,6 +113,10 @@ export type TokenMarketDataV1 = Readonly<{
 export type MarketChartPointV1 = Readonly<{
   blockNumber: string;
   time: string;
+  bucketStart: string;
+  bucketEnd: string;
+  observedAt: string;
+  valueSemantics: "period-median";
   priceUsd?: string;
   priceQuote?: string;
   quoteSymbol?: string;
@@ -138,12 +144,12 @@ export type MarketChartV1 = Readonly<{
     | "waiting-for-first-trade"
     | "unavailable";
   generatedAt: string;
-  identity: MarketDataIdentityV1;
+  identity: MarketChartIdentityV1;
   range: "1h" | "1d" | "1w" | "all";
   points: readonly MarketChartPointV1[];
   swapCount: number;
   volumeUsdWad?: string;
-  valuation: MarketValuationV1;
+  valuation: Extract<MarketValuationV1, { status: "unavailable" }>;
   asOfTime?: string;
   truncated: boolean;
 }>;
@@ -176,6 +182,19 @@ export function isMarketDataIdentityV1(
     BYTES32.test(value.poolId) &&
     value.poolId === value.poolId.toLowerCase() &&
     value.protocol === "uniswap_v4";
+}
+
+export function isMarketChartIdentityV1(
+  value: unknown,
+): value is MarketChartIdentityV1 {
+  if (!isMarketDataIdentityV1(value) || !("quoteAddress" in value)) {
+    return false;
+  }
+  const quoteAddress = value.quoteAddress;
+  return typeof quoteAddress === "string" &&
+    ADDRESS.test(quoteAddress) &&
+    quoteAddress === quoteAddress.toLowerCase() &&
+    quoteAddress !== value.tokenAddress;
 }
 
 export function isMarketValuationV1(
@@ -261,7 +280,7 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
       "unavailable",
     ].includes(String(value.status)) ||
     !validIsoTime(value.generatedAt) ||
-    !isMarketDataIdentityV1(value.identity) ||
+    !isMarketChartIdentityV1(value.identity) ||
     !["1h", "1d", "1w", "all"].includes(String(value.range)) ||
     !Array.isArray(value.points) ||
     !Number.isSafeInteger(value.swapCount) ||
@@ -278,15 +297,19 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
   const typedPoints = points as MarketChartPointV1[];
   let previousBlock: bigint | null = null;
   let previousTime = Number.NEGATIVE_INFINITY;
+  let previousBucketEnd = Number.NEGATIVE_INFINITY;
   for (const point of typedPoints) {
     const block = BigInt(point.blockNumber);
     const time = Date.parse(point.time);
+    const bucketStart = Date.parse(point.bucketStart);
     if (
       (previousBlock !== null && block <= previousBlock) ||
-      time < previousTime
+      time < previousTime ||
+      bucketStart < previousBucketEnd
     ) return false;
     previousBlock = block;
     previousTime = time;
+    previousBucketEnd = Date.parse(point.bucketEnd);
   }
   const observedTrades = typedPoints.reduce(
     (total, point) => total + point.tradeCount,
@@ -309,7 +332,7 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
       value.volumeUsdWad !== undefined ||
       value.asOfTime !== undefined
     ) return false;
-  } else if (value.asOfTime !== typedPoints.at(-1)?.time) {
+  } else if (value.asOfTime !== typedPoints.at(-1)?.observedAt) {
     return false;
   }
   if (value.status === "ready") {
@@ -453,7 +476,18 @@ function isMarketLiquidityV1(value: unknown): value is MarketLiquidityV1 {
 }
 
 function isMarketChartPointV1(value: unknown): value is MarketChartPointV1 {
-  return isRecord(value) &&
+  if (!isRecord(value)) return false;
+  if (
+    value.valueSemantics !== "period-median" ||
+    !validIsoTime(value.bucketStart) ||
+    !validIsoTime(value.bucketEnd) ||
+    !validIsoTime(value.observedAt) ||
+    value.time !== value.bucketEnd ||
+    Date.parse(value.bucketStart) >= Date.parse(value.bucketEnd) ||
+    Date.parse(value.observedAt) < Date.parse(value.bucketStart) ||
+    Date.parse(value.observedAt) > Date.parse(value.bucketEnd)
+  ) return false;
+  return (
     CANONICAL_UNSIGNED_INTEGER.test(String(value.blockNumber)) &&
     validIsoTime(value.time) &&
     optionalPositiveDecimal(value.priceUsd) &&
@@ -468,7 +502,8 @@ function isMarketChartPointV1(value: unknown): value is MarketChartPointV1 {
     Number.isSafeInteger(value.tradeCount) &&
     Number(value.tradeCount) > 0 &&
     (value.quoteSymbol === undefined ||
-      (typeof value.quoteSymbol === "string" && value.quoteSymbol.trim() !== ""));
+      (typeof value.quoteSymbol === "string" && value.quoteSymbol.trim() !== ""))
+  );
 }
 
 function isMarketOhlcV1(value: unknown): value is MarketOhlcV1 {

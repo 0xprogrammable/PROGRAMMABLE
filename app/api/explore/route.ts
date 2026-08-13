@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../lib/alchemy/explore.server";
+import { readVerifiedOperationalMarketSnapshot } from
+  "../../../lib/alchemy/live-market.server";
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
@@ -13,10 +16,10 @@ import {
 } from "../../../lib/explore-consumer.server";
 import { canonicalTokenExploreEntryV1 } from "../../../lib/explore-entry-v1";
 import {
+  EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
   buildExploreDataQuality,
   publicExploreEntryV1,
   valuationSortValue,
-  withPublicExploreBitqueryMarketData,
   type ValuedExploreEntry,
 } from "../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
@@ -25,8 +28,12 @@ import { hydrateMissingCanonicalTokenSupplyV1 } from
   "../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntriesMarketIdentitiesV1 } from
   "../../../lib/market-data/explore-market-identities";
-import type { TokenMarketDataV1 } from
-  "../../../lib/market-data/market-data-v1";
+import {
+  CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+  settleCurrentEvidenceSnapshot,
+  type CurrentEvidenceSnapshotOutcome,
+  valueExploreEntriesWithCurrentEvidence,
+} from "../../../lib/market-data/current-valuation.server";
 import { readExploreReferenceHeadWithinRouteBudget } from "../../../lib/explore-reference-head.server";
 import { getOnchainDeployment } from "../../../lib/onchain/config";
 import { readDurableExploreModel } from "../../../lib/onchain/durable-model";
@@ -54,7 +61,6 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
   "socials",
   "sort",
 ]);
-const TOP_VALUATION_LIMIT = 20;
 const readCanonicalExploreSource = createExploreConsumerSource<ExploreReadModel>({});
 const readCustomExploreSource = createExploreConsumerSource<
   readonly CustomProjectExploreEntry[]
@@ -130,6 +136,10 @@ function integerQuery(value: string | null, fallback: number) {
 function positiveInteger(value: number, fallback: number, maximum: number) {
   if (!Number.isSafeInteger(value) || value < 1) return fallback;
   return Math.min(value, maximum);
+}
+
+function requiresCompleteCurrentValuation(sort: ExploreSort): boolean {
+  return sort === "market-cap" || sort === "market-cap-asc";
 }
 
 function entryLaunchTime(entry: ExploreEntry): number {
@@ -297,30 +307,6 @@ export function dedupeExploreEntriesV1(
   return output;
 }
 
-function valueExploreEntriesWithMarketData(
-  entries: readonly ExploreEntry[],
-  marketByToken: ReadonlyMap<string, TokenMarketDataV1>,
-  nowMs: number,
-): ValuedExploreEntry[] {
-  return entries.map((entry) => {
-    const address = entry.tokenAddress?.toLowerCase();
-    const marketData = address ? marketByToken.get(address) : undefined;
-    if (marketData) {
-      return withPublicExploreBitqueryMarketData(entry, marketData, nowMs);
-    }
-    return {
-      ...entry,
-      valuation: {
-        status: "unavailable" as const,
-        reason:
-          entry.exploreKind === "custom-project" && entry.markets.length === 0
-            ? "no-market" as const
-            : "source-unavailable" as const,
-      },
-    };
-  });
-}
-
 function hasVerifiedBitqueryPrice(entries: readonly ValuedExploreEntry[]): boolean {
   return entries.some((entry) => {
     const primary = entry.marketData?.pools.find(
@@ -389,19 +375,10 @@ export function paginateExploreEntriesV1(
     query: string;
     socials: "yes" | "no" | null;
     sort: ExploreSort;
-    topThenNewest: boolean;
   }>,
 ) {
   const filtered = filterExploreEntries(entries, input.query, input.socials);
-  if (!input.topThenNewest) {
-    return paginateEntries(sortExploreEntries(filtered, input.sort), input);
-  }
-  const top = sortExploreEntries(filtered, "market-cap")
-    .slice(0, TOP_VALUATION_LIMIT);
-  const topIds = new Set(top.map(({ id }) => id));
-  const newest = sortExploreEntries(filtered, "newest")
-    .filter(({ id }) => !topIds.has(id));
-  return paginateEntries([...top, ...newest], input);
+  return paginateEntries(sortExploreEntries(filtered, input.sort), input);
 }
 
 async function valueExplorePage(input: Readonly<{
@@ -414,48 +391,50 @@ async function valueExplorePage(input: Readonly<{
     sort: ExploreSort;
   }>;
   signal: AbortSignal;
+  deployment: ReturnType<typeof getAlchemyOnchainDeployment>;
+  operationalSnapshot: Promise<CurrentEvidenceSnapshotOutcome>;
+  currentEvidenceDeadlineAt: number;
 }>) {
   const requiresGlobalMarketRanking =
-    input.options.sort === "market-cap" ||
-    input.options.sort === "market-cap-asc";
+    requiresCompleteCurrentValuation(input.options.sort);
   const identityPage = requiresGlobalMarketRanking
     ? null
     : paginateExploreEntriesV1(input.identityEntries, {
         ...input.options,
         query: "",
         socials: null,
-        topThenNewest: false,
       });
   const entriesToValue = identityPage?.tokens ?? input.identityEntries;
-  const [hydratedEntries, marketByToken] = await Promise.all([
-    hydrateMissingCanonicalTokenSupplyV1(entriesToValue),
-    readBitqueryTokenMarketDataV1(
-      exploreEntriesMarketIdentitiesV1(entriesToValue),
-      { signal: input.signal },
-    ),
-  ]);
-  const valuedEntries = valueExploreEntriesWithMarketData(
-    hydratedEntries,
-    marketByToken,
-    Date.now(),
+  const marketByToken = readBitqueryTokenMarketDataV1(
+    exploreEntriesMarketIdentitiesV1(entriesToValue),
+    { signal: input.signal },
   );
+  const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(
+    entriesToValue,
+  );
+  const valuedEntries = await valueExploreEntriesWithCurrentEvidence({
+    entries: hydratedEntries,
+    marketByToken,
+    deployment: input.deployment.status === "ready" ? input.deployment : null,
+    operationalSnapshot: input.operationalSnapshot,
+    maximumValuationAgeMs: EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
+    now: new Date(),
+    requireCompleteLiquidityCoverage:
+      requiresCompleteCurrentValuation(input.options.sort),
+    timeoutMs: Math.max(0, input.currentEvidenceDeadlineAt - Date.now()),
+  });
   if (identityPage !== null) {
     return {
       entries: valuedEntries,
       paginated: { ...identityPage, tokens: valuedEntries },
     };
   }
-  const useTopValuationView =
-    input.options.sort === "market-cap" &&
-    input.options.query.length === 0 &&
-    input.options.socials === null;
   return {
     entries: valuedEntries,
     paginated: paginateExploreEntriesV1(valuedEntries, {
       ...input.options,
       query: "",
       socials: null,
-      topThenNewest: useTopValuationView,
     }),
   };
 }
@@ -495,6 +474,25 @@ export async function GET(request: NextRequest) {
       readCustomExploreSource({
         primary: () => readProductionCustomExploreDirectoryV1(request.signal),
       }),
+    );
+    const deployment = getAlchemyOnchainDeployment();
+    const currentEvidenceDeadlineAt =
+      Date.now() + CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
+    const requireCompleteCurrentValuation =
+      requiresCompleteCurrentValuation(options.sort);
+    const operationalSnapshotRead = deployment.status === "ready"
+      ? settleCurrentEvidenceSnapshot({
+          read: readVerifiedOperationalMarketSnapshot(deployment),
+          requireComplete: requireCompleteCurrentValuation,
+          timeoutMs: CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+        })
+      : Promise.resolve(null);
+    // Attach a rejection handler immediately; global ranking rethrows the
+    // settled error inside the valuation orchestrator rather than leaking an
+    // unhandled promise while identity reads complete.
+    const operationalSnapshotOutcome = operationalSnapshotRead.then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
     );
     const [
       canonicalAttempt,
@@ -541,14 +539,26 @@ export async function GET(request: NextRequest) {
       identityEntries: requestedIdentityEntries,
       options,
       signal: request.signal,
+      deployment,
+      operationalSnapshot: operationalSnapshotOutcome,
+      currentEvidenceDeadlineAt,
     });
     const pageEntries = paginated.tokens as ValuedExploreEntry[];
+    const currentOnchainEntry = pageEntries.find(
+      (entry) => entry.valuation.status === "available" &&
+        entry.valuation.source === "stateview-chainlink" &&
+        entry.valuation.freshness === "current",
+    );
+    const currentOnchainValuation =
+      currentOnchainEntry?.valuation.status === "available"
+        ? currentOnchainEntry.valuation
+        : null;
 
     const sourceAges = [canonicalSource?.ageMs, customSource?.ageMs].filter(
       (value): value is number => value !== undefined,
     );
     const dataQuality = buildExploreDataQuality({
-      entries,
+      entries: pageEntries,
       canonicalStatus: canonicalSource?.status ?? "unavailable",
       customStatus: customSource?.status ?? "unavailable",
       identityAsOfBlock,
@@ -617,19 +627,27 @@ export async function GET(request: NextRequest) {
           "Cache-Control":
             exploreResponseCacheControl({
               dataQuality,
-              entries,
+              entries: pageEntries,
               status: page.status,
             }),
           "X-Programmable-Data-Quality": dataQuality.status,
-          "X-Programmable-Market-Source": "bitquery",
+          "X-Programmable-Market-Source": currentOnchainValuation
+            ? "stateview-chainlink+official-uniswap-v4-subgraph+bitquery"
+            : "bitquery",
           ...(dataQuality.valuation.asOfTime
             ? {
                 "X-Programmable-Market-As-Of":
                   dataQuality.valuation.asOfTime,
               }
             : {}),
-          ...(hasVerifiedBitqueryPrice(entries)
-            ? { "X-Programmable-Price-Source": "bitquery" }
+          ...(currentOnchainValuation?.status === "available"
+            ? {
+                "X-Programmable-Price-Source": "stateview-chainlink",
+                "X-Programmable-Valuation-Block":
+                  currentOnchainValuation.asOfBlock ?? "",
+              }
+            : hasVerifiedBitqueryPrice(pageEntries)
+              ? { "X-Programmable-Price-Source": "bitquery" }
             : {}),
           ...sourceHeaders,
         },

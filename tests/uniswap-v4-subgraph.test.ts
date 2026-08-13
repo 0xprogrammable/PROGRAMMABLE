@@ -9,6 +9,7 @@ import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 import {
   enrichExplorePageWithOfficialV4Subgraph,
   parseOfficialV4SubgraphResponse,
+  readOfficialV4LiquidityEvidence,
 } from "../lib/onchain/uniswap-v4-subgraph";
 
 const POOL_ID =
@@ -31,7 +32,9 @@ function canonicalToken(overrides: Partial<LauncherToken> = {}): LauncherToken {
     grossVolumeWei: "900",
     grossVolumeEth: "0.0000000000000009",
     activeLiquidity: "700",
+    tokenDecimals: 18,
     totalSwapFeeBps: 100,
+    launchModel: "classic",
     liquidityPath: "meme",
     ...overrides,
   };
@@ -58,7 +61,10 @@ function page(tokens = [canonicalToken()]): ExplorePage {
   };
 }
 
-function officialResponse(indexedBlockNumber: number | string = 25_629_999) {
+function officialResponse(
+  indexedBlockNumber: number | string = 25_629_999,
+  indexedBlockTimestamp: number | string = 1_786_576_740,
+) {
   return {
     data: {
       _meta: {
@@ -66,6 +72,7 @@ function officialResponse(indexedBlockNumber: number | string = 25_629_999) {
         block: {
           number: indexedBlockNumber,
           hash: `0x${"55".repeat(32)}`,
+          timestamp: indexedBlockTimestamp,
         },
         hasIndexingErrors: false,
       },
@@ -74,8 +81,9 @@ function officialResponse(indexedBlockNumber: number | string = 25_629_999) {
           id: POOL_ID,
           token0: {
             id: "0x0000000000000000000000000000000000000000",
+            decimals: "18",
           },
-          token1: { id: TOKEN_ADDRESS },
+          token1: { id: TOKEN_ADDRESS, decimals: "18" },
           hooks: HOOK_ADDRESS,
           feeTier: "0",
           tickSpacing: "60",
@@ -84,6 +92,8 @@ function officialResponse(indexedBlockNumber: number | string = 25_629_999) {
           tick: "-120",
           txCount: "42",
           volumeUSD: "1234.56789012345678912345",
+          totalValueLockedToken0: "0.0141",
+          totalValueLockedToken1: "32100.25",
           totalValueLockedUSD: "98.7",
         },
       ],
@@ -104,8 +114,8 @@ function officialPool(input: {
       tickSpacing: 60,
       hooks: input.hooks,
     }),
-    token0: { id: input.token0 },
-    token1: { id: input.token1 },
+    token0: { id: input.token0, decimals: "18" },
+    token1: { id: input.token1, decimals: "18" },
     hooks: input.hooks,
     feeTier: "0",
     tickSpacing: "60",
@@ -114,6 +124,8 @@ function officialPool(input: {
     tick: "-120",
     txCount: "42",
     volumeUSD: "1234.56789012345678912345",
+    totalValueLockedToken0: "0.0141",
+    totalValueLockedToken1: "32100.25",
     totalValueLockedUSD: "98.7",
   };
 }
@@ -123,6 +135,26 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
     status: 200,
     headers: { "content-type": "application/json" },
     ...init,
+  });
+}
+
+function batchedTokensAndPools(count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const tokenAddress = `0x${(index + 1).toString(16).padStart(40, "0")}` as const;
+    const pool = officialPool({
+      token0: "0x0000000000000000000000000000000000000000",
+      token1: tokenAddress,
+      hooks: HOOK_ADDRESS,
+    });
+    pool.totalValueLockedUSD = "10000";
+    return {
+      token: canonicalToken({
+        id: `1:batch-${index}`,
+        tokenAddress,
+        poolId: pool.id,
+      }),
+      pool,
+    };
   });
 }
 
@@ -138,6 +170,8 @@ describe("official Uniswap v4 subgraph adapter", () => {
       expect(request.query).toContain("feeTier");
       expect(request.query).toContain("sqrtPrice");
       expect(request.query).toContain("tickSpacing");
+      expect(request.query).toContain("timestamp");
+      expect(request.query).toContain("totalValueLockedToken0");
       expect(request.query).not.toContain("isExternalLiquidity");
       expect(request.variables).toEqual({
         first: 24,
@@ -181,6 +215,366 @@ describe("official Uniswap v4 subgraph adapter", () => {
     expect(enriched.tokens[0]?.grossVolumeWei).toBe("900");
     expect(enriched.tokens[0]?.activeLiquidity).toBe("700");
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns current exact-pool TVL with independent provenance", async () => {
+    const response = officialResponse();
+    response.data.pools[0].totalValueLockedUSD = "12500.5";
+    const evidence = await readOfficialV4LiquidityEvidence(
+      {
+        tokens: [canonicalToken()],
+        referenceHead: {
+          chainId: 1,
+          blockNumber: "25630000",
+          blockHash: `0x${"44".repeat(32)}`,
+        },
+        now: new Date("2026-08-12T23:21:00.000Z"),
+      },
+      {
+        apiKey: "graph-secret",
+        endpoint: OFFICIAL_ENDPOINT,
+        fetcher: async () => jsonResponse(response),
+      },
+    );
+
+    expect(evidence).toEqual([
+      {
+        source: "official-uniswap-v4-subgraph",
+        identity: {
+          chainId: "1",
+          protocol: "uniswap_v4",
+          poolId: POOL_ID,
+          tokenAddress: TOKEN_ADDRESS,
+          quoteAddress: "0x0000000000000000000000000000000000000000",
+        },
+        valueBasis: "official-subgraph-pool-tvl-usd",
+        tvlUsdWad: "12500500000000000000000",
+        reportedPoolBalances: {
+          token0: {
+            address: "0x0000000000000000000000000000000000000000",
+            decimals: 18,
+            amountDecimal: "0.0141",
+          },
+          token1: {
+            address: TOKEN_ADDRESS,
+            decimals: 18,
+            amountDecimal: "32100.25",
+          },
+        },
+        freshness: "current",
+        provenance: {
+          subgraphId: "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G",
+          deployment: OFFICIAL_DEPLOYMENT,
+          indexedBlockNumber: "25629999",
+          indexedBlockHash: `0x${"55".repeat(32)}`,
+          indexedBlockTimestamp: "1786576740",
+          indexedBlockTime: "2026-08-12T23:19:00.000Z",
+          referenceHeadBlockNumber: "25630000",
+          referenceHeadBlockHash: `0x${"44".repeat(32)}`,
+          lagBlocks: "1",
+        },
+      },
+    ]);
+  });
+
+  it("distinguishes shallow pools from stale or internally conflicting evidence", async () => {
+    async function read(
+      response: unknown,
+      token = canonicalToken(),
+    ) {
+      return readOfficialV4LiquidityEvidence(
+        {
+          tokens: [token],
+          referenceHead: {
+            chainId: 1,
+            blockNumber: "25630000",
+            blockHash: `0x${"44".repeat(32)}`,
+          },
+          now: new Date("2026-08-12T23:21:00.000Z"),
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher: async () => jsonResponse(response),
+        },
+      );
+    }
+
+    const shallow = officialResponse();
+    shallow.data.pools[0].totalValueLockedUSD = "9999.999999999999999999";
+    await expect(read(shallow)).resolves.toEqual([]);
+
+    const stale = officialResponse(25_629_999, 1_786_576_499);
+    stale.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(stale)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+    });
+
+    const futureTime = officialResponse(25_629_999, 1_786_577_101);
+    futureTime.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(futureTime)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+    });
+
+    const ahead = officialResponse(25_630_001);
+    ahead.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(ahead)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+    });
+
+    const lagged = officialResponse(25_629_935);
+    lagged.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(lagged)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+    });
+
+    const conflicting = officialResponse(25_630_000);
+    conflicting.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(read(conflicting)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+    });
+
+    const emptyPrincipal = officialResponse();
+    emptyPrincipal.data.pools[0].totalValueLockedUSD = "10000";
+    emptyPrincipal.data.pools[0].totalValueLockedToken0 = "0";
+    emptyPrincipal.data.pools[0].totalValueLockedToken1 = "0.000";
+    await expect(read(emptyPrincipal)).rejects.toMatchObject({
+      code: "coverage-incomplete",
+    });
+
+    const exactPool = officialResponse();
+    exactPool.data.pools[0].totalValueLockedUSD = "10000";
+    await expect(
+      read(
+        exactPool,
+        canonicalToken({
+          tokenAddress: "0x4444444444444444444444444444444444444444",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "coverage-incomplete" });
+    await expect(
+      read(
+        exactPool,
+        canonicalToken({
+          hookAddress: "0x4444444444444444444444444444444444444444",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "coverage-incomplete" });
+    await expect(
+      read(exactPool, canonicalToken({ tokenDecimals: 17 })),
+    ).rejects.toMatchObject({ code: "coverage-incomplete" });
+
+    const quoteAsset =
+      "0x1111111111111111111111111111111111111111" as const;
+    const stockPool = officialPool({
+      token0: quoteAsset,
+      token1: TOKEN_ADDRESS,
+      hooks: HOOK_ADDRESS,
+    });
+    stockPool.totalValueLockedUSD = "10000";
+    await expect(
+      read(
+        {
+          data: {
+            ...officialResponse().data,
+            pools: [stockPool],
+          },
+        },
+        canonicalToken({
+          launchModel: "stock-paired",
+          poolId: stockPool.id,
+          quoteAssetAddress: quoteAsset,
+          quoteIsCurrency0: false,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "coverage-incomplete" });
+
+    const fetcher = vi.fn(async () => jsonResponse(officialResponse()));
+    await expect(
+      readOfficialV4LiquidityEvidence(
+        {
+          tokens: [canonicalToken()],
+          referenceHead: {
+            chainId: 1,
+            blockNumber: "025630000",
+            blockHash: `0x${"44".repeat(32)}`,
+          },
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher,
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      code: "invalid-input",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    const unsupportedFetcher = vi.fn(async () => jsonResponse(officialResponse()));
+    await expect(
+      readOfficialV4LiquidityEvidence(
+        {
+          tokens: [canonicalToken({ launchModel: "custom-graph" })],
+          referenceHead: {
+            chainId: 1,
+            blockNumber: "25630000",
+            blockHash: `0x${"44".repeat(32)}`,
+          },
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher: unsupportedFetcher,
+        },
+      ),
+    ).resolves.toEqual([]);
+    expect(unsupportedFetcher).not.toHaveBeenCalled();
+  });
+
+  it("batches more than 24 exact pools without silently truncating evidence", async () => {
+    const tokensAndPools = batchedTokensAndPools(25);
+    const pools = new Map(tokensAndPools.map(({ pool }) => [pool.id, pool]));
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        variables: { poolIds: string[] };
+      };
+      return jsonResponse({
+        data: {
+          ...officialResponse().data,
+          pools: request.variables.poolIds.map((poolId) =>
+            pools.get(poolId as `0x${string}`),
+          ),
+        },
+      });
+    });
+
+    const evidence = await readOfficialV4LiquidityEvidence(
+      {
+        tokens: tokensAndPools.map(({ token }) => token),
+        referenceHead: {
+          chainId: 1,
+          blockNumber: "25630000",
+          blockHash: `0x${"44".repeat(32)}`,
+        },
+        now: new Date("2026-08-12T23:21:00.000Z"),
+      },
+      {
+        apiKey: "graph-secret",
+        endpoint: OFFICIAL_ENDPOINT,
+        fetcher,
+      },
+    );
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(evidence).toHaveLength(25);
+  });
+
+  it("rejects the whole read when one of multiple pool batches fails", async () => {
+    const tokensAndPools = batchedTokensAndPools(25);
+    const pools = new Map(tokensAndPools.map(({ pool }) => [pool.id, pool]));
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        variables: { poolIds: string[] };
+      };
+      if (request.variables.poolIds.length === 1) {
+        return new Response("unavailable", { status: 503 });
+      }
+      return jsonResponse({
+        data: {
+          ...officialResponse().data,
+          pools: request.variables.poolIds.map((poolId) =>
+            pools.get(poolId as `0x${string}`),
+          ),
+        },
+      });
+    });
+
+    await expect(
+      readOfficialV4LiquidityEvidence(
+        {
+          tokens: tokensAndPools.map(({ token }) => token),
+          referenceHead: {
+            chainId: 1,
+            blockNumber: "25630000",
+            blockHash: `0x${"44".repeat(32)}`,
+          },
+          now: new Date("2026-08-12T23:21:00.000Z"),
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher,
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      code: "coverage-incomplete",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects coverage when a successful batch omits a requested canonical pool", async () => {
+    const tokensAndPools = batchedTokensAndPools(2);
+    await expect(
+      readOfficialV4LiquidityEvidence(
+        {
+          tokens: tokensAndPools.map(({ token }) => token),
+          referenceHead: {
+            chainId: 1,
+            blockNumber: "25630000",
+            blockHash: `0x${"44".repeat(32)}`,
+          },
+          now: new Date("2026-08-12T23:21:00.000Z"),
+        },
+        {
+          apiKey: "graph-secret",
+          endpoint: OFFICIAL_ENDPOINT,
+          fetcher: async () =>
+            jsonResponse({
+              data: {
+                ...officialResponse().data,
+                pools: [tokensAndPools[0]!.pool],
+              },
+            }),
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      code: "coverage-incomplete",
+    });
+  });
+
+  it("accepts complete pool coverage while omitting a returned shallow pool", async () => {
+    const tokensAndPools = batchedTokensAndPools(2);
+    tokensAndPools[1]!.pool.totalValueLockedUSD = "9999.99";
+
+    const evidence = await readOfficialV4LiquidityEvidence(
+      {
+        tokens: tokensAndPools.map(({ token }) => token),
+        referenceHead: {
+          chainId: 1,
+          blockNumber: "25630000",
+          blockHash: `0x${"44".repeat(32)}`,
+        },
+        now: new Date("2026-08-12T23:21:00.000Z"),
+      },
+      {
+        apiKey: "graph-secret",
+        endpoint: OFFICIAL_ENDPOINT,
+        fetcher: async () =>
+          jsonResponse({
+            data: {
+              ...officialResponse().data,
+              pools: tokensAndPools.map(({ pool }) => pool),
+            },
+          }),
+      },
+    );
+
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0]?.identity.poolId).toBe(tokensAndPools[0]!.pool.id);
   });
 
   it("adds an indexed display valuation from the compatible official pool snapshot", async () => {

@@ -53,10 +53,14 @@ describe("ETH/USD display enrichment", () => {
       actualBlockHash: `0x${"11".repeat(32)}` as `0x${string}`,
       blockTimestamp: 10_000n,
       roundId: 2n,
+      answeredInRound: 2n,
       answer: 3_500_00000000n,
       updatedAt: 9_000n,
     };
     expect(() => assertValidEthUsdSnapshot(valid)).not.toThrow();
+    expect(() =>
+      assertValidEthUsdSnapshot({ ...valid, answeredInRound: 1n }),
+    ).toThrow("invalid or stale");
     expect(() =>
       assertValidEthUsdSnapshot({ ...valid, updatedAt: 10_001n }),
     ).toThrow("invalid or stale");

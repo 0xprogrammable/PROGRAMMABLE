@@ -597,18 +597,27 @@ jobs:
           node scripts/verify-manual-applicant-staged-runtime.mjs
           --target-url "$STAGED_TARGET_URL"
 
-      - name: Smoke staged Bitquery market APIs
+      - name: Smoke staged public market APIs
         if: needs.release-gate.outputs.verified_read_model == 'true'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}
+          MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
         run: |
-          node --input-type=module <<'NODE'
+          node --env-file=.vercel/.env.production.local --input-type=module <<'NODE'
+          const { verifyCurrentPublicOnchainEvidenceV1 } = await import(
+            "./scripts/perf/read-model-post-promotion.mjs"
+          );
+          const { runtimeProductionProviderBindingsFromUrls } = await import(
+            "./scripts/perf/read-model-provider-binding.mjs"
+          );
           const { verifyBitqueryGoldenMarketParityV1 } = await import(
             "./scripts/perf/bitquery-golden-market-parity.mjs"
           );
           const {
-            boundedStaleMarketTimeV1,
             verifyBitqueryHistoricalGoldenReleaseV1,
           } = await import(
             "./scripts/perf/bitquery-historical-release-gate.mjs"
@@ -617,6 +626,46 @@ jobs:
             "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
           const goldenPoolId =
             "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+          const goldenQuoteAddress =
+            "0x0000000000000000000000000000000000000000";
+          const nativeCurrency =
+            "0x0000000000000000000000000000000000000000";
+          const mainnetStateView =
+            "0x7ffe42c4a5deea5b0fec41c94c136cf115597227";
+          const mainnetStateViewRuntimeCodeHash =
+            "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878";
+          const mainnetEthUsdFeed =
+            "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419";
+          const officialV4SubgraphDeployment =
+            "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
+          const officialV4SubgraphId =
+            "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
+          const currentPublicMarketSource =
+            "stateview-chainlink+official-uniswap-v4-subgraph+bitquery";
+          const independentRpcUrls = Object.freeze([
+            process.env.MAINNET_RPC_URL_A,
+            process.env.MAINNET_RPC_URL_B,
+          ]);
+          const independentRpcBindings =
+            runtimeProductionProviderBindingsFromUrls({
+              ETHEREUM_RPC_URL: independentRpcUrls[0],
+              ETHEREUM_RPC_URL_B: independentRpcUrls[1],
+            });
+          for (const binding of independentRpcBindings) {
+            const expectedCommitment =
+              binding.vendorGroup === "alchemy"
+                ? process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT
+                : process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT;
+            if (binding.endpointCommitment !== expectedCommitment) {
+              throw new Error(
+                "staged independent RPC witness does not match its pinned production commitment",
+              );
+            }
+          }
+          const minimumPublicFdvLiquidityUsdWad =
+            10_000n * 10n ** 18n;
+          const marketCapPageSize = 100;
+          const maximumMarketCapTokens = 400;
           const origin = new URL(process.env.STAGED_TARGET_URL);
           if (
             origin.protocol !== "https:" ||
@@ -645,10 +694,27 @@ jobs:
             Accept: "application/json",
             "x-vercel-protection-bypass": automationBypassSecret,
           });
-          const bitqueryMarketContract = Object.freeze({
+          const publicMarketContract = Object.freeze({
+            readSources: Object.freeze(["operational+durable+postgres"]),
+            rpcProviders: null,
+            marketSources: Object.freeze([
+              "bitquery",
+              currentPublicMarketSource,
+            ]),
+            dataQualities: Object.freeze(["complete", "partial", "stale"]),
+          });
+          const currentPublicMarketContract = Object.freeze({
+            readSources: Object.freeze(["operational+durable+postgres"]),
+            rpcProviders: null,
+            marketSources: Object.freeze([currentPublicMarketSource]),
+            priceSources: Object.freeze(["stateview-chainlink"]),
+            dataQualities: Object.freeze(["complete", "partial", "stale"]),
+          });
+          const historicalBitqueryMarketContract = Object.freeze({
             readSources: Object.freeze(["operational+durable+postgres"]),
             rpcProviders: null,
             marketSources: Object.freeze(["bitquery"]),
+            priceSources: null,
             dataQualities: Object.freeze(["complete", "partial", "stale"]),
           });
           const bitqueryChartContract = Object.freeze({
@@ -676,7 +742,58 @@ jobs:
               ? value === null
               : expected.includes(value ?? "");
           const positiveInteger = (value) =>
-            typeof value === "string" && /^[1-9][0-9]*$/.test(value);
+            typeof value === "string" &&
+            value.length <= 78 &&
+            /^[1-9][0-9]*$/.test(value);
+          const unsignedInteger = (value) =>
+            typeof value === "string" &&
+            value.length <= 78 &&
+            /^(?:0|[1-9][0-9]*)$/.test(value);
+          const unsignedDecimal = (value) =>
+            typeof value === "string" &&
+            value.length <= 160 &&
+            /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value);
+          const positiveDecimal = (value) =>
+            unsignedDecimal(value) && !/^0(?:\.0+)?$/.test(value);
+          const exactAddress = (value) =>
+            typeof value === "string" &&
+            /^0x[0-9a-f]{40}$/i.test(value);
+          const exactBytes32 = (value) =>
+            typeof value === "string" &&
+            /^0x[0-9a-f]{64}$/i.test(value);
+          const sameAddress = (left, right) =>
+            exactAddress(left) &&
+            exactAddress(right) &&
+            left.toLowerCase() === right.toLowerCase();
+          const sameBytes32 = (left, right) =>
+            exactBytes32(left) &&
+            exactBytes32(right) &&
+            left.toLowerCase() === right.toLowerCase();
+          const exactCanonicalClassicNativeToken = (
+            token,
+            tokenAddress,
+            poolId,
+          ) => {
+            if (
+              token?.exploreKind !== "token" ||
+              token.launchModel !== "classic"
+            ) return false;
+            if (token.liquidityPath === "meme") {
+              return token.launchStampProvenance === undefined;
+            }
+            const stamp = token.launchStampProvenance;
+            return token.liquidityPath === "programmable-v4" &&
+              stamp?.schemaVersion ===
+                "programmable.launch-stamp-provenance.v1" &&
+              stamp.kind === "classic" &&
+              stamp.chainId === 1 &&
+              sameBytes32(stamp.poolId, poolId) &&
+              sameAddress(stamp.poolKey?.currency0, nativeCurrency) &&
+              sameAddress(stamp.poolKey?.currency1, tokenAddress) &&
+              sameAddress(stamp.poolKey?.hooks, token?.hookAddress);
+          };
+          const exactUnixTimestamp = (value) =>
+            positiveInteger(value) && BigInt(value) <= 8_640_000_000n;
           const positiveDecimalToWad = (value) => {
             const match = /^(0|[1-9][0-9]*)(?:\.([0-9]+))?$/.exec(
               String(value ?? ""),
@@ -694,7 +811,34 @@ jobs:
           const currentMarketTime = (value) =>
             validMarketTime(value) &&
             Date.now() - Date.parse(value) <= 6 * 60_000;
-          const boundedStaleMarketTime = boundedStaleMarketTimeV1;
+          const currentMarketEvidenceTime = (value) =>
+            validMarketTime(value) &&
+            Date.now() - Date.parse(value) <= 5 * 60_000;
+          const hasUnevidencedBitqueryFdv = (
+            value,
+            depth = 0,
+            seen = new Set(),
+          ) => {
+            if (depth > 12) return true;
+            if (value === null || typeof value !== "object") return false;
+            if (seen.has(value)) return true;
+            seen.add(value);
+            if (Array.isArray(value)) {
+              return value.some((entry) =>
+                hasUnevidencedBitqueryFdv(entry, depth + 1, seen)
+              );
+            }
+            if (
+              value.fdvUsdWad !== undefined ||
+              value.marketCapUsdWad !== undefined ||
+              (value.metric === "fdv" &&
+                (value.status === "available" ||
+                  value.valueUsdWad !== undefined))
+            ) return true;
+            return Object.values(value).some((entry) =>
+              hasUnevidencedBitqueryFdv(entry, depth + 1, seen)
+            );
+          };
 
           const requestJson = async (path, contract) => {
             let lastError;
@@ -727,6 +871,9 @@ jobs:
                 const marketAsOf = response.headers.get(
                   "x-programmable-market-as-of",
                 );
+                const valuationBlock = response.headers.get(
+                  "x-programmable-valuation-block",
+                );
                 const dataQuality = response.headers.get(
                   "x-programmable-data-quality",
                 );
@@ -753,6 +900,7 @@ jobs:
                     marketAsOf,
                     marketSource,
                     priceSource,
+                    valuationBlock,
                   }),
                   enumerable: false,
                 });
@@ -767,25 +915,236 @@ jobs:
             throw lastError ?? new Error(`${path} failed`);
           };
 
+          const exactCurrentPublicFdvLiquidity = (token) => {
+            const tokenAddress = token?.tokenAddress?.toLowerCase();
+            const valuation = token?.valuation;
+            const market = token?.marketData;
+            const primary = market?.pools?.find(
+              (pool) => sameBytes32(
+                pool?.identity?.poolId,
+                market?.primaryPoolId,
+              ),
+            );
+            const price = valuation?.priceEvidence;
+            const quote = price?.ethUsdQuote;
+            const liquidity = token?.liquidityEvidence;
+            const provenance = liquidity?.provenance;
+            if (
+              !exactAddress(tokenAddress) ||
+              tokenAddress === goldenTokenAddress ||
+              valuation?.status !== "available" ||
+              valuation.metric !== "fdv" ||
+              valuation.supplyBasis !== "total" ||
+              valuation.currency !== "usd" ||
+              valuation.source !== "stateview-chainlink" ||
+              valuation.freshness !== "current" ||
+              !positiveInteger(valuation.valueWad) ||
+              token.fdvUsdWad !== valuation.valueWad ||
+              !positiveInteger(valuation.asOfBlock) ||
+              !exactBytes32(valuation.asOfBlockHash) ||
+              !currentMarketEvidenceTime(valuation.asOfTime) ||
+              valuation.lagBlocks !== "0" ||
+              price?.schemaVersion !==
+                "programmable.stateview-chainlink-price-evidence.v1" ||
+              price?.source !== "uniswap-v4-stateview-chainlink-v1" ||
+              price.chainId !== "1" ||
+              !sameAddress(price.tokenAddress, tokenAddress) ||
+              !sameAddress(price.quoteAddress, nativeCurrency) ||
+              !sameBytes32(price.poolId, market?.primaryPoolId) ||
+              price.stateViewAddress?.toLowerCase() !== mainnetStateView ||
+              price.stateViewRuntimeCodeHash !==
+                mainnetStateViewRuntimeCodeHash ||
+              price.blockNumber !== valuation.asOfBlock ||
+              !sameBytes32(price.blockHash, valuation.asOfBlockHash) ||
+              !exactUnixTimestamp(price.blockTimestamp) ||
+              price.blockTime !== valuation.asOfTime ||
+              price.blockTime !==
+                new Date(
+                  Number(BigInt(price.blockTimestamp)) * 1_000,
+                ).toISOString() ||
+              !positiveInteger(price.sqrtPriceX96) ||
+              !positiveInteger(price.activeLiquidity) ||
+              !positiveInteger(price.activeVirtualToken0Wei) ||
+              !positiveInteger(price.activeVirtualLiquidityUsdWad) ||
+              price.activeVirtualLiquidityValueBasis !==
+                "stateview-active-liquidity-virtual-depth-usd" ||
+              !positiveInteger(price.tokenPriceEthWei) ||
+              !positiveInteger(price.tokenPriceUsdWad) ||
+              price.totalSupplyRaw !== token.totalSupplyRaw ||
+              price.tokenDecimals !== token.tokenDecimals ||
+              price.fdvUsdWad !== valuation.valueWad ||
+              quote?.feedAddress?.toLowerCase() !== mainnetEthUsdFeed ||
+              !positiveInteger(quote.roundId) ||
+              !positiveInteger(quote.answeredInRound) ||
+              BigInt(quote.answeredInRound) < BigInt(quote.roundId) ||
+              !positiveInteger(quote.answer) ||
+              quote.decimals !== 8 ||
+              !exactUnixTimestamp(quote.updatedAt) ||
+              quote.updatedAtTime !==
+                new Date(Number(BigInt(quote.updatedAt)) * 1_000).toISOString() ||
+              !positiveInteger(token.totalSupplyRaw) ||
+              !exactCanonicalClassicNativeToken(
+                token,
+                tokenAddress,
+                market?.primaryPoolId,
+              ) ||
+              !Number.isSafeInteger(token.tokenDecimals) ||
+              token.tokenDecimals < 0 ||
+              token.tokenDecimals > 255 ||
+              market?.schemaVersion !== "programmable.market-data.v1" ||
+              market.source !== "bitquery" ||
+              market.status !== "current" ||
+              !currentMarketTime(market.generatedAt) ||
+              !exactBytes32(market.primaryPoolId) ||
+              !sameBytes32(token.poolId, market.primaryPoolId) ||
+              primary?.identity?.chainId !== "1" ||
+              !sameAddress(primary.identity.tokenAddress, tokenAddress) ||
+              !sameBytes32(primary.identity.poolId, market.primaryPoolId) ||
+              primary.identity.protocol !== "uniswap_v4" ||
+              primary.source !== "bitquery" ||
+              primary.status !== "current" ||
+              hasUnevidencedBitqueryFdv(market) ||
+              liquidity?.source !== "official-uniswap-v4-subgraph" ||
+              liquidity.identity?.chainId !== "1" ||
+              liquidity.identity.protocol !== "uniswap_v4" ||
+              !sameBytes32(liquidity.identity.poolId, market.primaryPoolId) ||
+              !sameAddress(liquidity.identity.tokenAddress, tokenAddress) ||
+              !sameAddress(
+                liquidity.identity.quoteAddress,
+                price.quoteAddress,
+              ) ||
+              liquidity.valueBasis !== "official-subgraph-pool-tvl-usd" ||
+              !sameAddress(
+                liquidity.reportedPoolBalances?.token0?.address,
+                price.quoteAddress,
+              ) ||
+              !sameAddress(
+                liquidity.reportedPoolBalances?.token1?.address,
+                tokenAddress,
+              ) ||
+              !Number.isSafeInteger(
+                liquidity.reportedPoolBalances.token0.decimals,
+              ) ||
+              liquidity.reportedPoolBalances.token0.decimals !== 18 ||
+              !Number.isSafeInteger(
+                liquidity.reportedPoolBalances.token1.decimals,
+              ) ||
+              liquidity.reportedPoolBalances.token1.decimals !==
+                token.tokenDecimals ||
+              !unsignedDecimal(
+                liquidity.reportedPoolBalances.token0.amountDecimal,
+              ) ||
+              !unsignedDecimal(
+                liquidity.reportedPoolBalances.token1.amountDecimal,
+              ) ||
+              (!positiveDecimal(
+                  liquidity.reportedPoolBalances.token0.amountDecimal,
+                ) &&
+                !positiveDecimal(
+                  liquidity.reportedPoolBalances.token1.amountDecimal,
+                )) ||
+              !positiveInteger(liquidity.tvlUsdWad) ||
+              BigInt(liquidity.tvlUsdWad) <
+                minimumPublicFdvLiquidityUsdWad ||
+              liquidity.freshness !== "current" ||
+              provenance?.subgraphId !== officialV4SubgraphId ||
+              provenance?.deployment !== officialV4SubgraphDeployment ||
+              !positiveInteger(provenance.indexedBlockNumber) ||
+              !exactBytes32(provenance.indexedBlockHash) ||
+              !exactUnixTimestamp(provenance.indexedBlockTimestamp) ||
+              !currentMarketEvidenceTime(provenance.indexedBlockTime) ||
+              !positiveInteger(provenance.referenceHeadBlockNumber) ||
+              !exactBytes32(provenance.referenceHeadBlockHash) ||
+              !unsignedInteger(provenance.lagBlocks)
+            ) return false;
+
+            const valuationTimeSeconds = BigInt(
+              Math.floor(Date.parse(valuation.asOfTime) / 1_000),
+            );
+            const indexedBlock = BigInt(provenance.indexedBlockNumber);
+            const referenceBlock = BigInt(provenance.referenceHeadBlockNumber);
+            const indexedTimestamp = BigInt(provenance.indexedBlockTimestamp);
+            const feedUpdatedAt = BigInt(quote.updatedAt);
+            const lagBlocks = BigInt(provenance.lagBlocks);
+            const totalSupplyRaw = BigInt(token.totalSupplyRaw);
+            const sqrtPriceX96 = BigInt(price.sqrtPriceX96);
+            const activeLiquidity = BigInt(price.activeLiquidity);
+            const marketCapNativeWad =
+              (totalSupplyRaw * (1n << 192n) * 10n ** 18n) /
+              (sqrtPriceX96 * sqrtPriceX96 * 10n ** 18n);
+            const expectedFdvUsdWad =
+              (marketCapNativeWad * BigInt(quote.answer)) /
+              10n ** BigInt(quote.decimals);
+            const expectedTokenPriceEthWei =
+              ((1n << 192n) * 10n ** BigInt(token.tokenDecimals) *
+                10n ** 18n) /
+              (sqrtPriceX96 * sqrtPriceX96 * 10n ** 18n);
+            const expectedTokenPriceUsdWad =
+              (expectedTokenPriceEthWei * BigInt(quote.answer)) /
+              10n ** BigInt(quote.decimals);
+            const activeVirtualToken0Wei =
+              (activeLiquidity * (1n << 96n)) / sqrtPriceX96;
+            const expectedActiveVirtualLiquidityUsdWad =
+              (2n * activeVirtualToken0Wei * BigInt(quote.answer)) /
+              10n ** BigInt(quote.decimals);
+            return indexedBlock <= referenceBlock &&
+              valuation.asOfBlock === provenance.referenceHeadBlockNumber &&
+              sameBytes32(
+                valuation.asOfBlockHash,
+                provenance.referenceHeadBlockHash,
+              ) &&
+              lagBlocks === referenceBlock - indexedBlock &&
+              lagBlocks <= 64n &&
+              (lagBlocks !== 0n ||
+                sameBytes32(
+                  provenance.indexedBlockHash,
+                  provenance.referenceHeadBlockHash,
+                )) &&
+              provenance.indexedBlockTime ===
+                new Date(Number(indexedTimestamp) * 1_000).toISOString() &&
+              indexedTimestamp <= valuationTimeSeconds &&
+              feedUpdatedAt <= valuationTimeSeconds &&
+              valuationTimeSeconds - feedUpdatedAt <= 7_200n &&
+              expectedFdvUsdWad > 0n &&
+              expectedFdvUsdWad.toString() === valuation.valueWad &&
+              expectedTokenPriceEthWei.toString() ===
+                price.tokenPriceEthWei &&
+              expectedTokenPriceUsdWad.toString() ===
+                price.tokenPriceUsdWad &&
+              activeVirtualToken0Wei.toString() ===
+                price.activeVirtualToken0Wei &&
+              expectedActiveVirtualLiquidityUsdWad >=
+                minimumPublicFdvLiquidityUsdWad &&
+              expectedActiveVirtualLiquidityUsdWad.toString() ===
+                price.activeVirtualLiquidityUsdWad;
+          };
+
           const explore = await requestJson(
-            "/api/explore?limit=20&page=1&sort=market-cap",
-            bitqueryMarketContract,
+            `/api/explore?limit=${marketCapPageSize}&page=1&sort=market-cap`,
+            currentPublicMarketContract,
           );
+          const marketCapTotal = Number(explore.total);
+          const marketCapTotalPages = Number(explore.totalPages);
           if (
-            explore.status !== "ready" ||
-            !Array.isArray(explore.tokens) ||
-            explore.tokens.length < 1 ||
-            explore.tokens.length > 20
+            !Number.isSafeInteger(marketCapTotal) ||
+            marketCapTotal < 1 ||
+            marketCapTotal > maximumMarketCapTokens ||
+            !Number.isSafeInteger(marketCapTotalPages) ||
+            marketCapTotalPages !==
+              Math.ceil(marketCapTotal / marketCapPageSize)
           ) {
-            throw new Error("staged Bitquery Explore is not a populated bounded page");
+            throw new Error("staged global market-cap ranking is not bounded");
           }
-          const releaseToken = explore.tokens.find(
-            (token) =>
-              /^0x[0-9a-fA-F]{40}$/.test(token?.tokenAddress ?? ""),
-          );
-          if (!releaseToken) {
-            throw new Error("staged Bitquery Explore has no token identity");
+          const marketCapPages = [explore];
+          for (let pageNumber = 2; pageNumber <= marketCapTotalPages; pageNumber += 1) {
+            marketCapPages.push(await requestJson(
+              `/api/explore?limit=${marketCapPageSize}&page=${pageNumber}&sort=market-cap`,
+              publicMarketContract,
+            ));
           }
+          const marketCapTokens = [];
+          const seenMarketCapIds = new Set();
+          const seenMarketCapAddresses = new Set();
           let previousCurrentFdv = null;
           let currentFdvCount = 0;
           let availableFdvCount = 0;
@@ -793,7 +1152,113 @@ jobs:
           let waitingForFirstTradeCount = 0;
           let sawNonCurrentFdv = false;
           let currentFdvToken = null;
-          for (const token of explore.tokens) {
+          for (let pageIndex = 0; pageIndex < marketCapPages.length; pageIndex += 1) {
+            const page = marketCapPages[pageIndex];
+            const expectedPageLength = Math.min(
+              marketCapPageSize,
+              marketCapTotal - pageIndex * marketCapPageSize,
+            );
+            const valuationQuality = page.dataQuality?.valuation;
+            const pageCurrentTokens = Array.isArray(page.tokens)
+              ? page.tokens.filter((token) =>
+                  token?.valuation?.status === "available" &&
+                  token.valuation.source === "stateview-chainlink" &&
+                  token.valuation.freshness === "current"
+                )
+              : [];
+            if (
+              page.status !== "ready" ||
+              page.sort !== "market-cap" ||
+              page.page !== pageIndex + 1 ||
+              page.pageSize !== marketCapPageSize ||
+              page.total !== marketCapTotal ||
+              page.totalPages !== marketCapTotalPages ||
+              !Array.isArray(page.tokens) ||
+              page.tokens.length !== expectedPageLength ||
+              page.dataQuality?.schemaVersion !==
+                "programmable.explore-data-quality.v1" ||
+              page.__marketHeaders?.dataQuality !== page.dataQuality.status ||
+              !["complete", "partial", "stale"].includes(
+                page.dataQuality.status,
+              ) ||
+              valuationQuality?.metric !== "fdv" ||
+              !Number.isSafeInteger(valuationQuality.available) ||
+              !Number.isSafeInteger(valuationQuality.unavailable) ||
+              valuationQuality.available + valuationQuality.unavailable !==
+                page.tokens.length ||
+              !Number.isSafeInteger(valuationQuality.stale) ||
+              valuationQuality.stale < 0 ||
+              valuationQuality.stale > valuationQuality.available ||
+              valuationQuality.unknown !== 0 ||
+              page.__marketHeaders?.marketAsOf !==
+                (valuationQuality.asOfTime ?? null)
+            ) {
+              throw new Error(
+                "staged global market-cap ranking has missing or inconsistent pages",
+              );
+            }
+            if (pageCurrentTokens.length > 0) {
+              if (
+                page.__marketHeaders?.marketSource !==
+                  currentPublicMarketSource ||
+                page.__marketHeaders?.priceSource !==
+                  "stateview-chainlink" ||
+                page.__marketHeaders?.valuationBlock !==
+                  valuationQuality.asOfBlock ||
+                !positiveInteger(valuationQuality.asOfBlock) ||
+                !currentMarketEvidenceTime(valuationQuality.asOfTime) ||
+                pageCurrentTokens.some((token) =>
+                  token.valuation.asOfTime !== valuationQuality.asOfTime ||
+                  token.valuation.asOfBlock !== valuationQuality.asOfBlock
+                )
+              ) {
+                throw new Error(
+                  "staged current ranking page has inconsistent market provenance",
+                );
+              }
+            } else if (
+              page.__marketHeaders?.marketSource !== "bitquery" ||
+              ![null, "bitquery"].includes(
+                page.__marketHeaders?.priceSource,
+              ) ||
+              page.__marketHeaders?.valuationBlock !== null
+            ) {
+              throw new Error(
+                "staged non-current ranking page forged current market provenance",
+              );
+            }
+            for (const token of page.tokens) {
+              if (
+                typeof token?.id !== "string" ||
+                token.id.length === 0 ||
+                seenMarketCapIds.has(token.id)
+              ) {
+                throw new Error("staged global market-cap ranking is not unique");
+              }
+              seenMarketCapIds.add(token.id);
+              if (token?.tokenAddress !== undefined) {
+                if (typeof token.tokenAddress !== "string") {
+                  throw new Error("staged global market-cap token has no address");
+                }
+                const address = token.tokenAddress.toLowerCase();
+                if (!exactAddress(address) || seenMarketCapAddresses.has(address)) {
+                  throw new Error("staged global market-cap ranking repeats a token");
+                }
+                seenMarketCapAddresses.add(address);
+              }
+              marketCapTokens.push(token);
+            }
+          }
+          if (marketCapTokens.length !== marketCapTotal) {
+            throw new Error("staged global market-cap ranking is incomplete");
+          }
+          const releaseToken = marketCapTokens.find(
+            (token) => exactAddress(token?.tokenAddress?.toLowerCase?.()),
+          );
+          if (!releaseToken) {
+            throw new Error("staged Bitquery Explore has no token identity");
+          }
+          for (const token of marketCapTokens) {
             const valuation = token?.valuation;
             if (valuation?.status === "unavailable") {
               if (!unavailableValuationReasons.has(valuation.reason)) {
@@ -803,9 +1268,12 @@ jobs:
                 waitingForFirstTradeCount += 1;
               }
               sawNonCurrentFdv = true;
-              if (token?.fdvUsdWad !== undefined) {
+              if (
+                token?.fdvUsdWad !== undefined ||
+                hasUnevidencedBitqueryFdv(token?.marketData)
+              ) {
                 throw new Error(
-                  "staged Bitquery Explore exposed stale or unavailable FDV as current",
+                  "staged Bitquery Explore exposed unevidenced numeric FDV",
                 );
               }
               continue;
@@ -816,31 +1284,21 @@ jobs:
               valuation.supplyBasis !== "total" ||
               valuation.currency !== "usd" ||
               !["current", "stale"].includes(valuation.freshness) ||
-              valuation.source !== "bitquery" ||
               !positiveInteger(valuation.valueWad) ||
               !validMarketTime(valuation.asOfTime)
             ) {
               throw new Error("staged Bitquery Explore has an invalid typed FDV");
             }
             availableFdvCount += 1;
-            if (valuation.freshness === "stale") {
-              if (!boundedStaleMarketTime(valuation.asOfTime)) {
-                throw new Error("staged Bitquery Explore stale FDV is too old");
-              }
-              staleFdvCount += 1;
-              sawNonCurrentFdv = true;
-              if (token?.fdvUsdWad !== undefined) {
-                throw new Error(
-                  "staged Bitquery Explore exposed stale or unavailable FDV as current",
-                );
-              }
-              continue;
+            if (valuation.source === "bitquery") {
+              throw new Error(
+                "staged Bitquery Explore exposed unevidenced top-level FDV",
+              );
             }
-            if (token.fdvUsdWad !== valuation.valueWad) {
-              throw new Error("staged Bitquery Explore did not expose its current FDV");
-            }
-            if (!currentMarketTime(valuation.asOfTime)) {
-              throw new Error("staged Bitquery Explore mislabeled stale FDV as current");
+            if (!exactCurrentPublicFdvLiquidity(token)) {
+              throw new Error(
+                "staged public current FDV lacks exact StateView, Chainlink and official v4 liquidity evidence",
+              );
             }
             if (sawNonCurrentFdv) {
               throw new Error(
@@ -853,87 +1311,19 @@ jobs:
                 "staged Bitquery Highest FDV is not monotonically descending",
               );
             }
-            const tokenAddress = token?.tokenAddress?.toLowerCase();
-            const primary = token.marketData?.pools?.find(
-              (pool) => pool.identity?.poolId === token.marketData?.primaryPoolId,
-            );
-            if (
-              !/^0x[0-9a-f]{40}$/.test(tokenAddress ?? "") ||
-              tokenAddress === goldenTokenAddress ||
-              token.marketData?.schemaVersion !==
-                "programmable.market-data.v1" ||
-              token.marketData.source !== "bitquery" ||
-              !currentMarketTime(token.marketData.generatedAt) ||
-              !/^0x[0-9a-f]{64}$/.test(
-                token.marketData.primaryPoolId ?? "",
-              ) ||
-              !primary ||
-              primary.identity?.chainId !== "1" ||
-              primary.identity?.tokenAddress !== tokenAddress ||
-              primary.identity?.poolId !== token.marketData.primaryPoolId ||
-              primary.identity?.protocol !== "uniswap_v4" ||
-              primary.source !== "bitquery" ||
-              primary.status !== "current" ||
-              primary.liquidity?.freshness !== "current" ||
-              !positiveInteger(primary.liquidity?.valueUsdWad) ||
-              !positiveInteger(primary.liquidity?.asOfBlock) ||
-              primary.liquidity?.asOfTime !== valuation.asOfTime ||
-              !currentMarketTime(primary.liquidity?.asOfTime) ||
-              primary.valuation?.status !== "available" ||
-              primary.valuation.metric !== "fdv" ||
-              primary.valuation.supplyBasis !== "total" ||
-              primary.valuation.freshness !== "current" ||
-              primary.valuation.valueUsdWad !== valuation.valueWad ||
-              primary.valuation.asOfTime !== valuation.asOfTime
-            ) {
-              throw new Error(
-                "staged Bitquery current public FDV lacks exact primary-pool liquidity evidence",
-              );
-            }
             previousCurrentFdv = value;
             currentFdvCount += 1;
             currentFdvToken ??= token;
           }
-          const exploreMarketAsOf =
-            explore.dataQuality?.valuation?.asOfTime ?? null;
-          const valuationQuality = explore.dataQuality?.valuation;
-          if (
-            explore.dataQuality?.schemaVersion !==
-              "programmable.explore-data-quality.v1" ||
-            explore.__marketHeaders?.dataQuality !== explore.dataQuality.status ||
-            !["complete", "partial", "stale"].includes(
-              explore.dataQuality.status,
-            ) ||
-            valuationQuality?.metric !== "fdv" ||
-            !Number.isSafeInteger(valuationQuality.available) ||
-            !Number.isSafeInteger(valuationQuality.unavailable) ||
-            valuationQuality.available + valuationQuality.unavailable !==
-              explore.total ||
-            !Number.isSafeInteger(valuationQuality.stale) ||
-            valuationQuality.stale > valuationQuality.available ||
-            valuationQuality.unknown !== 0 ||
-            ![null, "bitquery"].includes(
-              explore.__marketHeaders?.priceSource ?? null,
-            ) ||
-            (currentFdvCount > 0 &&
-              explore.__marketHeaders?.priceSource !== "bitquery") ||
-            explore.__marketHeaders?.marketAsOf !== exploreMarketAsOf ||
-            (exploreMarketAsOf !== null &&
-              !boundedStaleMarketTime(exploreMarketAsOf))
-          ) {
-            throw new Error(
-              "staged Bitquery Explore has inconsistent market provenance",
-            );
-          }
           if (currentFdvCount < 1) {
             throw new Error(
-              "staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence",
+              "staged public market path has no current non-PCAN FDV bound to fresh official v4 liquidity",
             );
           }
           const newestPageSize = 100;
           const newest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=newest`,
-            bitqueryMarketContract,
+            publicMarketContract,
           );
           const newestTotal = Number(newest.total);
           const newestTotalPages = Number(newest.totalPages);
@@ -960,7 +1350,7 @@ jobs:
               ? newest
               : await requestJson(
                    `/api/explore?limit=${newestPageSize}&page=${pageNumber}&sort=newest`,
-                   bitqueryMarketContract,
+                   publicMarketContract,
                  );
             if (
               page.status !== "ready" ||
@@ -1064,7 +1454,7 @@ jobs:
           }
           const oldest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=oldest`,
-            bitqueryMarketContract,
+            publicMarketContract,
           );
           const expectedOldestIds = newestTokens
             .slice(-newestPageSize)
@@ -1084,7 +1474,7 @@ jobs:
             "0x468505087c2dfec4779f2d6a5f8481f03e32e905";
           const incrementalDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(incrementalLaunchAddress)}`,
-            bitqueryMarketContract,
+            publicMarketContract,
           );
           const incrementalLaunch = incrementalDetail.token;
           const incrementalLaunchBlock = BigInt(
@@ -1113,7 +1503,7 @@ jobs:
           }
           const tokenDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(releaseToken.tokenAddress)}`,
-            bitqueryMarketContract,
+            publicMarketContract,
           );
           if (
             tokenDetail.status !== "ready" ||
@@ -1125,31 +1515,204 @@ jobs:
           if (currentFdvToken !== null) {
             const currentFdvDetail = await requestJson(
               `/api/explore/token?address=${encodeURIComponent(currentFdvToken.tokenAddress)}`,
-              bitqueryMarketContract,
+              currentPublicMarketContract,
             );
+            const exploreValuationBlock = BigInt(
+              currentFdvToken.valuation.asOfBlock,
+            );
+            const detailValuationBlock = positiveInteger(
+                currentFdvDetail.token?.valuation?.asOfBlock,
+              )
+              ? BigInt(currentFdvDetail.token.valuation.asOfBlock)
+              : null;
+            const sameValuationSnapshot =
+              detailValuationBlock === exploreValuationBlock;
             if (
-              currentFdvDetail.token?.valuation?.status !== "available" ||
-              currentFdvDetail.token.valuation.metric !== "fdv" ||
-              currentFdvDetail.token.valuation.supplyBasis !== "total" ||
-              currentFdvDetail.token.valuation.freshness !== "current" ||
-              currentFdvDetail.token.valuation.valueWad !==
-                currentFdvToken.valuation.valueWad ||
-              currentFdvDetail.token.valuation.asOfTime !==
-                currentFdvToken.valuation.asOfTime ||
-              currentFdvDetail.token.fdvUsdWad !==
-                currentFdvToken.fdvUsdWad ||
+              currentFdvDetail.status !== "ready" ||
+              !exactCurrentPublicFdvLiquidity(currentFdvDetail.token) ||
+              !sameAddress(
+                currentFdvDetail.token?.tokenAddress,
+                currentFdvToken.tokenAddress,
+              ) ||
+              !sameAddress(
+                currentFdvDetail.token?.hookAddress,
+                currentFdvToken.hookAddress,
+              ) ||
+              currentFdvDetail.token?.launchModel !==
+                currentFdvToken.launchModel ||
+              currentFdvDetail.token?.liquidityPath !==
+                currentFdvToken.liquidityPath ||
+              !sameBytes32(
+                currentFdvDetail.token?.marketData?.primaryPoolId,
+                currentFdvToken.marketData.primaryPoolId,
+              ) ||
+              !sameAddress(
+                currentFdvDetail.token?.valuation?.priceEvidence?.quoteAddress,
+                currentFdvToken.valuation.priceEvidence.quoteAddress,
+              ) ||
+              detailValuationBlock === null ||
+              detailValuationBlock < exploreValuationBlock ||
+              Date.parse(currentFdvDetail.token.valuation.asOfTime) <
+                Date.parse(currentFdvToken.valuation.asOfTime) ||
+              (sameValuationSnapshot &&
+                (!sameBytes32(
+                    currentFdvDetail.token.valuation.asOfBlockHash,
+                    currentFdvToken.valuation.asOfBlockHash,
+                  ) ||
+                  JSON.stringify(currentFdvDetail.token.valuation) !==
+                    JSON.stringify(currentFdvToken.valuation) ||
+                  JSON.stringify(currentFdvDetail.token.liquidityEvidence) !==
+                    JSON.stringify(currentFdvToken.liquidityEvidence))) ||
               currentFdvDetail.__marketHeaders?.marketAsOf !==
                 currentFdvDetail.token.valuation.asOfTime ||
-              currentFdvDetail.__marketHeaders?.priceSource !== "bitquery"
+              currentFdvDetail.__marketHeaders?.valuationBlock !==
+                currentFdvDetail.token.valuation.asOfBlock ||
+              currentFdvDetail.__marketHeaders?.marketSource !==
+                currentPublicMarketSource ||
+              currentFdvDetail.__marketHeaders?.priceSource !==
+                "stateview-chainlink"
             ) {
               throw new Error(
-                "staged Bitquery current Explore and detail FDV are not identical",
+                "staged current detail does not independently prove an equal or newer evidence bundle",
               );
+            }
+            const independentCurrentProof =
+              await verifyCurrentPublicOnchainEvidenceV1({
+                token: currentFdvDetail.token,
+                rpcUrls: independentRpcUrls,
+              });
+            if (
+              independentCurrentProof.schemaVersion !==
+                "programmable.current-market-independent-proof.v1" ||
+              independentCurrentProof.providerCount !== 2
+            ) {
+              throw new Error(
+                "staged current detail lacks two independent exact-block readers",
+              );
+            }
+            for (const range of ["1h", "1d", "1w", "all"]) {
+              const currentChart = await requestJson(
+                `/api/explore/token/chart?address=${encodeURIComponent(
+                  currentFdvToken.tokenAddress,
+                )}&range=${range}`,
+                bitqueryChartContract,
+              );
+              const chartPoints = currentChart.points;
+              if (
+                currentChart.schemaVersion !==
+                  "programmable.market-chart.v1" ||
+                currentChart.source !== "bitquery" ||
+                currentChart.readStatus !== "live" ||
+                !["ready", "insufficient-history"].includes(
+                  currentChart.status,
+                ) ||
+                currentChart.truncated !== false ||
+                currentChart.range !== range ||
+                !sameAddress(
+                  currentChart.address,
+                  currentFdvToken.tokenAddress,
+                ) ||
+                currentChart.identity?.chainId !== "1" ||
+                !sameAddress(
+                  currentChart.identity.tokenAddress,
+                  currentFdvToken.tokenAddress,
+                ) ||
+                !sameBytes32(
+                  currentChart.identity.poolId,
+                  currentFdvToken.marketData.primaryPoolId,
+                ) ||
+                !sameAddress(
+                  currentChart.identity.quoteAddress,
+                  currentFdvToken.valuation.priceEvidence.quoteAddress,
+                ) ||
+                currentChart.identity.protocol !== "uniswap_v4" ||
+                !Number.isSafeInteger(currentChart.swapCount) ||
+                currentChart.swapCount < 0 ||
+                !Array.isArray(chartPoints) ||
+                currentChart.valuation?.status !== "unavailable" ||
+                currentChart.valuation?.reason !== "source-unavailable" ||
+                "fdvUsdWad" in currentChart ||
+                "valuationMetric" in currentChart ||
+                currentChart.__marketHeaders?.priceSource !== "bitquery" ||
+                (currentChart.status === "ready"
+                  ? currentChart.swapCount <= 1 ||
+                    chartPoints.length < 2 ||
+                    currentChart.asOfTime !==
+                      chartPoints.at(-1)?.observedAt ||
+                    currentChart.__marketHeaders?.marketAsOf !==
+                      currentChart.asOfTime ||
+                    !currentMarketTime(currentChart.asOfTime)
+                  : currentChart.swapCount !== 1 ||
+                    chartPoints.length !== 1 ||
+                    currentChart.asOfTime !== chartPoints[0]?.observedAt ||
+                    currentChart.__marketHeaders?.marketAsOf !==
+                      currentChart.asOfTime ||
+                    !currentMarketTime(currentChart.asOfTime))
+              ) {
+                throw new Error(
+                  `staged current public ${range} chart is not live and untruncated`,
+                );
+              }
+              let previousTime = null;
+              let previousBucketEnd = null;
+              let previousBlock = null;
+              let observedTrades = 0;
+              for (const point of chartPoints) {
+                const pointTime = Date.parse(point?.time ?? "");
+                const bucketStart = Date.parse(point?.bucketStart ?? "");
+                const bucketEnd = Date.parse(point?.bucketEnd ?? "");
+                const observedAt = Date.parse(point?.observedAt ?? "");
+                const pointBlock = positiveInteger(point?.blockNumber)
+                  ? BigInt(point.blockNumber)
+                  : null;
+                if (
+                  !Number.isFinite(pointTime) ||
+                  point?.valueSemantics !== "period-median" ||
+                  !Number.isFinite(bucketStart) ||
+                  !Number.isFinite(bucketEnd) ||
+                  !Number.isFinite(observedAt) ||
+                  pointTime !== bucketEnd ||
+                  bucketStart >= bucketEnd ||
+                  observedAt < bucketStart ||
+                  observedAt > bucketEnd ||
+                  pointBlock === null ||
+                  !positiveDecimal(point?.priceQuote) ||
+                  typeof point?.quoteSymbol !== "string" ||
+                  point.quoteSymbol.trim().length === 0 ||
+                  point?.priceUsd !== undefined ||
+                  point?.ohlcUsd !== undefined ||
+                  point?.ohlcQuote !== undefined ||
+                  !Number.isSafeInteger(point?.tradeCount) ||
+                  point.tradeCount < 1 ||
+                  (previousTime !== null && pointTime <= previousTime) ||
+                  (previousBucketEnd !== null &&
+                    bucketStart < previousBucketEnd) ||
+                  (previousBlock !== null && pointBlock <= previousBlock)
+                ) {
+                  throw new Error(
+                    `staged current public ${range} chart is not strictly ordered`,
+                  );
+                }
+                observedTrades += point.tradeCount;
+                if (!Number.isSafeInteger(observedTrades)) {
+                  throw new Error(
+                    `staged current public ${range} chart trade count overflowed`,
+                  );
+                }
+                previousTime = pointTime;
+                previousBucketEnd = bucketEnd;
+                previousBlock = pointBlock;
+              }
+              if (observedTrades !== currentChart.swapCount) {
+                throw new Error(
+                  `staged current public ${range} chart trade count is inconsistent`,
+                );
+              }
             }
           }
           const goldenSearch = await requestJson(
             `/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap`,
-            bitqueryMarketContract,
+            historicalBitqueryMarketContract,
           );
           if (
             goldenSearch.status !== "ready" ||
@@ -1163,7 +1726,7 @@ jobs:
           }
           const goldenDetail = await requestJson(
             `/api/explore/token?address=${goldenTokenAddress}`,
-            bitqueryMarketContract,
+            historicalBitqueryMarketContract,
           );
           const goldenMarket = goldenDetail.token?.marketData;
           const goldenPool = goldenMarket?.pools?.find(
@@ -1218,9 +1781,7 @@ jobs:
             (goldenValuation.freshness === "current"
               ? goldenDetail.__marketHeaders?.priceSource !== "bitquery"
               : goldenDetail.__marketHeaders?.priceSource !== null) ||
-            (goldenValuation.freshness === "current"
-              ? goldenDetail.token.fdvUsdWad !== goldenValuation.valueWad
-              : goldenDetail.token.fdvUsdWad !== undefined)
+            goldenDetail.token.fdvUsdWad !== undefined
           ) {
             throw new Error("staged PCAN market valuation is not Bitquery-bound");
           }
@@ -1236,19 +1797,35 @@ jobs:
             goldenChart.source !== "bitquery" ||
             goldenChart.readStatus !== "live" ||
             !currentMarketTime(goldenChart.generatedAt) ||
-            goldenChart.address?.toLowerCase() !== goldenTokenAddress ||
-            goldenChart.identity?.poolId !== goldenPoolId ||
-            !["ready", "insufficient-history", "partial"].includes(
+            !sameAddress(goldenChart.address, goldenTokenAddress) ||
+            goldenChart.identity?.chainId !== "1" ||
+            !sameAddress(
+              goldenChart.identity?.tokenAddress,
+              goldenTokenAddress,
+            ) ||
+            !sameBytes32(goldenChart.identity?.poolId, goldenPoolId) ||
+            !sameAddress(
+              goldenChart.identity?.quoteAddress,
+              goldenQuoteAddress,
+            ) ||
+            goldenChart.identity?.protocol !== "uniswap_v4" ||
+            goldenChart.range !== "all" ||
+            !["ready", "insufficient-history"].includes(
               goldenChart.status,
             ) ||
             !Array.isArray(goldenChart.points) ||
-            goldenChart.points.length < 1 ||
-            goldenChart.valuation?.metric !== "fdv" ||
-            goldenChart.valuation?.supplyBasis !== "total" ||
-            !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
-            (goldenChart.valuation?.freshness === "current" &&
-              !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
-            goldenChart.asOfTime !== goldenChart.points.at(-1)?.time ||
+            !Number.isSafeInteger(goldenChart.swapCount) ||
+            goldenChart.swapCount < 1 ||
+            (goldenChart.status === "ready"
+              ? goldenChart.points.length < 2 || goldenChart.swapCount < 2
+              : goldenChart.points.length !== 1 ||
+                goldenChart.swapCount !== 1) ||
+            goldenChart.valuation?.status !== "unavailable" ||
+            goldenChart.valuation?.reason !== "source-unavailable" ||
+            "fdvUsdWad" in goldenChart ||
+            "valuationMetric" in goldenChart ||
+            goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt ||
+            goldenChart.truncated !== false ||
             goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
             goldenChart.__marketHeaders?.dataQuality !== goldenChart.status ||
             goldenChart.__marketHeaders?.priceSource !== "bitquery" ||
@@ -1257,28 +1834,55 @@ jobs:
             throw new Error("staged PCAN price history is not Bitquery-bound");
           }
           let previousChartTime = null;
+          let previousChartBucketEnd = null;
           let previousChartBlock = null;
+          let goldenObservedTrades = 0;
           for (const point of goldenChart.points) {
             const time = Date.parse(point?.time ?? "");
+            const bucketStart = Date.parse(point?.bucketStart ?? "");
+            const bucketEnd = Date.parse(point?.bucketEnd ?? "");
+            const observedAt = Date.parse(point?.observedAt ?? "");
             const block = positiveInteger(point?.blockNumber)
               ? BigInt(point.blockNumber)
               : null;
-            const price = point?.priceUsd ?? point?.priceQuote;
-            const numericPrice = Number(price);
             if (
               !Number.isFinite(time) ||
+              point?.valueSemantics !== "period-median" ||
+              !Number.isFinite(bucketStart) ||
+              !Number.isFinite(bucketEnd) ||
+              !Number.isFinite(observedAt) ||
+              time !== bucketEnd ||
+              bucketStart >= bucketEnd ||
+              observedAt < bucketStart ||
+              observedAt > bucketEnd ||
               block === null ||
-              !Number.isFinite(numericPrice) ||
-              numericPrice <= 0 ||
+              !positiveDecimal(point?.priceQuote) ||
+              typeof point?.quoteSymbol !== "string" ||
+              point.quoteSymbol.trim().length === 0 ||
+              point?.priceUsd !== undefined ||
+              point?.ohlcUsd !== undefined ||
+              point?.ohlcQuote !== undefined ||
+              !Number.isSafeInteger(point?.tradeCount) ||
+              point.tradeCount < 1 ||
               (previousChartTime !== null && time <= previousChartTime) ||
-              (previousChartBlock !== null && block < previousChartBlock)
+              (previousChartBucketEnd !== null &&
+                bucketStart < previousChartBucketEnd) ||
+              (previousChartBlock !== null && block <= previousChartBlock)
             ) {
               throw new Error(
                 "staged PCAN chart is not a strictly ordered positive history",
               );
             }
+            goldenObservedTrades += point.tradeCount;
+            if (!Number.isSafeInteger(goldenObservedTrades)) {
+              throw new Error("staged PCAN chart trade count overflowed");
+            }
             previousChartTime = time;
+            previousChartBucketEnd = bucketEnd;
             previousChartBlock = block;
+          }
+          if (goldenObservedTrades !== goldenChart.swapCount) {
+            throw new Error("staged PCAN chart trade count is inconsistent");
           }
           const historicalGoldenRelease =
             verifyBitqueryHistoricalGoldenReleaseV1({
@@ -1304,7 +1908,7 @@ jobs:
             goldenChart.__marketHeaders?.priceSource === "bitquery";
           process.stdout.write(
             `${JSON.stringify({
-              status: "verified-bitquery-staged-market-apis",
+              status: "verified-combined-staged-market-apis",
               tokenAddress: releaseToken.tokenAddress,
               goldenTokenAddress,
               goldenPoolId,
@@ -1322,14 +1926,14 @@ jobs:
           );
           NODE
 
-      - name: Record registry identity and Bitquery market path
+      - name: Record registry identity and combined market path
         if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'alchemy-only'
         run: |
           {
             echo "## Read-model release policy"
             echo
             echo "Router and Registry remain the launch-identity authority."
-            echo "Explore, token detail and charts use verified Bitquery market data; token identities do not disappear when market data is unavailable."
+            echo "Current public FDV uses exact-block StateView and Chainlink evidence, liquidity uses the official Uniswap v4 subgraph, and Bitquery remains the trade, volume and chart source; token identities do not disappear when market data is unavailable."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture staged read-model evidence
