@@ -750,6 +750,42 @@ export const STAGED_HEALTH_HANDOFF_SOURCE_GUARDS = Object.freeze([
 ]);
 const STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 =
   "b94c538699c23ad0099a177b3323a4bc055410d2c3ddd79b6bee44b84f51c0b1";
+const STAGED_HEALTH_HANDOFF_WORKFLOW_STEP = [
+  "      - name: Gate exact staged operational health",
+  "        env:",
+  "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+  "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+  "          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
+  "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+  "          EXPECTED_GIT_HEAD: ${{ github.sha }}",
+  "        run: >-",
+  "          npm run perf:read-model:staged-health --",
+  '          --target-url "$STAGED_TARGET_URL"',
+  '          --deployment-id "$STAGED_DEPLOYMENT_ID"',
+  '          --git-head "$EXPECTED_GIT_HEAD"',
+].join("\n");
+const POST_PROMOTION_PRODUCTION_ORIGIN_GUARD = [
+  "  if (target.origin !== PRODUCTION_ORIGIN) {",
+  "    throw new Error(",
+  '      "post-promotion target must be the programmable.market production origin",',
+  "    );",
+  "  }",
+].join("\n");
+const POST_PROMOTION_TARGET_GUARD_PREFIX = [
+  "export async function verifyPostPromotion(input) {",
+  "  const target = new URL(input.targetUrl);",
+  "  if (",
+  '    target.protocol !== "https:" ||',
+  '    target.username !== "" ||',
+  '    target.password !== "" ||',
+  '    target.pathname !== "/" ||',
+  '    target.search !== "" ||',
+  '    target.hash !== ""',
+  "  ) {",
+  '    throw new Error("post-promotion target must be an HTTPS origin");',
+  "  }",
+  POST_PROMOTION_PRODUCTION_ORIGIN_GUARD,
+].join("\n");
 
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
@@ -1542,6 +1578,25 @@ export function evaluateReadModelOperationsSourceContracts(
     "scripts/perf/read-model-staged-health.mjs",
   ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
+  const postPromotionVerifierStart = postPromotion.indexOf(
+    "export async function verifyPostPromotion(input) {",
+  );
+  const postPromotionOriginGuardStart = postPromotion.indexOf(
+    POST_PROMOTION_PRODUCTION_ORIGIN_GUARD,
+    postPromotionVerifierStart,
+  );
+  const postPromotionBindingGuardStart = postPromotion.indexOf(
+    "  if (\n    !/^dpl_",
+    postPromotionOriginGuardStart + POST_PROMOTION_PRODUCTION_ORIGIN_GUARD.length,
+  );
+  const postPromotionOriginGuardBlock =
+    postPromotionVerifierStart >= 0 &&
+      postPromotionOriginGuardStart > postPromotionVerifierStart &&
+      postPromotionBindingGuardStart > postPromotionOriginGuardStart
+      ? postPromotion
+        .slice(postPromotionOriginGuardStart, postPromotionBindingGuardStart)
+        .trimEnd()
+      : "";
   const postCurrentEvidenceStart = postPromotion.indexOf(
     "function exactCanonicalClassicNativeToken",
   );
@@ -2171,14 +2226,14 @@ export function evaluateReadModelOperationsSourceContracts(
     "Reverify staged candidate binding",
   );
   const stagedHealthGate = deployWorkflow.indexOf(
-    "Gate exact staged operational health",
+    "      - name: Gate exact staged operational health",
   );
   const stagedCandidateHandoff = deployWorkflow.indexOf(
-    "Record staged candidate handoff",
+    "      - name: Record staged candidate handoff",
   );
   const stagedHealthGateBlock =
     stagedHealthGate >= 0 && stagedCandidateHandoff > stagedHealthGate
-      ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff)
+      ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff).trimEnd()
       : "";
   check(
     "ops-staged-health-handoff-gate",
@@ -2192,6 +2247,7 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBindingReverification >= 0 &&
       stagedHealthGate > stagedBindingReverification &&
       stagedCandidateHandoff > stagedHealthGate &&
+      stagedHealthGateBlock === STAGED_HEALTH_HANDOFF_WORKFLOW_STEP &&
       stagedHealthGateBlock.includes(
         "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
       ) &&
@@ -2432,7 +2488,11 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes(
         'const PRODUCTION_ORIGIN = "https://programmable.market";',
       ) &&
-      postPromotion.includes("target.origin !== PRODUCTION_ORIGIN") &&
+      postPromotion.startsWith(
+        POST_PROMOTION_TARGET_GUARD_PREFIX,
+        postPromotionVerifierStart,
+      ) &&
+      postPromotionOriginGuardBlock === POST_PROMOTION_PRODUCTION_ORIGIN_GUARD &&
       postPromotion.includes('response.headers.get("x-programmable-market-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-price-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-market-as-of")') &&

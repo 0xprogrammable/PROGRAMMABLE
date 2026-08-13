@@ -247,4 +247,98 @@ describe("staged health handoff source contract", () => {
       "ops-staged-health-handoff-gate",
     );
   });
+
+  it.each([
+    [
+      "continues on error",
+      (workflow: string) =>
+        workflow.replace(
+          "      - name: Gate exact staged operational health\n        env:\n",
+          "      - name: Gate exact staged operational health\n        continue-on-error: true\n        env:\n",
+        ),
+    ],
+    [
+      "masks the command with OR true",
+      (workflow: string) =>
+        workflow.replace(
+          '          --git-head "$EXPECTED_GIT_HEAD"\n',
+          '          --git-head "$EXPECTED_GIT_HEAD" || true\n',
+        ),
+    ],
+    [
+      "masks the command with a successful final command",
+      (workflow: string) =>
+        workflow.replace(
+          '          --git-head "$EXPECTED_GIT_HEAD"\n',
+          '          --git-head "$EXPECTED_GIT_HEAD"; true\n',
+        ),
+    ],
+    [
+      "changes an exact environment binding",
+      (workflow: string) =>
+        workflow.replace(
+          "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+          "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.deployment_id }}",
+        ),
+    ],
+    [
+      "reorders the exact environment",
+      (workflow: string) =>
+        workflow.replace(
+          [
+            "          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
+            "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+          ].join("\n"),
+          [
+            "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+            "          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
+          ].join("\n"),
+        ),
+    ],
+    [
+      "reorders the exact arguments",
+      (workflow: string) =>
+        workflow.replace(
+          [
+            '          --target-url "$STAGED_TARGET_URL"',
+            '          --deployment-id "$STAGED_DEPLOYMENT_ID"',
+          ].join("\n"),
+          [
+            '          --deployment-id "$STAGED_DEPLOYMENT_ID"',
+            '          --target-url "$STAGED_TARGET_URL"',
+          ].join("\n"),
+        ),
+    ],
+    [
+      "changes an exact argument binding",
+      (workflow: string) =>
+        workflow.replace(
+          '          --git-head "$EXPECTED_GIT_HEAD"',
+          '          --git-head "$STAGED_DEPLOYMENT_ID"',
+        ),
+    ],
+  ] as const)("fails when the workflow %s", (_label, mutate) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const stepStart = workflow.indexOf(
+      "      - name: Gate exact staged operational health",
+    );
+    const stepEnd = workflow.indexOf(
+      "      - name: Record staged candidate handoff",
+    );
+    expect(stepStart).toBeGreaterThanOrEqual(0);
+    expect(stepEnd).toBeGreaterThan(stepStart);
+    const step = workflow.slice(stepStart, stepEnd);
+    const unsafeStep = mutate(step);
+    expect(unsafeStep).not.toBe(step);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]:
+          workflow.slice(0, stepStart) + unsafeStep + workflow.slice(stepEnd),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-staged-health-handoff-gate",
+    );
+  });
 });

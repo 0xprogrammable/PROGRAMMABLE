@@ -1082,6 +1082,68 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
+    "  if (false && target.origin !== PRODUCTION_ORIGIN) {",
+    "  if (target.origin !== PRODUCTION_ORIGIN && false) {",
+    "  if (Boolean(0) && target.origin !== PRODUCTION_ORIGIN) {",
+  ])(
+    "fails closed when post-promotion disables the production-origin guard as %s",
+    (disabledGuard) => {
+      const postPromotionPath =
+        "scripts/perf/read-model-post-promotion.mjs";
+      const postPromotion = readFileSync(
+        resolve(ROOT, postPromotionPath),
+        "utf8",
+      );
+      const unsafePostPromotion = postPromotion.replace(
+        "  if (target.origin !== PRODUCTION_ORIGIN) {",
+        disabledGuard,
+      );
+      expect(unsafePostPromotion).not.toBe(postPromotion);
+      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+        sourceOverrides: {
+          ...integratedOverrides(),
+          [postPromotionPath]: unsafePostPromotion,
+        },
+        expectedSha256Overrides: fixtureDigests(),
+      });
+      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+        "ops-post-promotion-binding",
+      );
+    },
+  );
+
+  it("fails closed when the exact production-origin throw is wrapped in a disabled branch", () => {
+    const postPromotionPath =
+      "scripts/perf/read-model-post-promotion.mjs";
+    const postPromotion = readFileSync(
+      resolve(ROOT, postPromotionPath),
+      "utf8",
+    );
+    const exactGuard = [
+      "  if (target.origin !== PRODUCTION_ORIGIN) {",
+      "    throw new Error(",
+      '      "post-promotion target must be the programmable.market production origin",',
+      "    );",
+      "  }",
+    ].join("\n");
+    const unsafePostPromotion = postPromotion.replace(
+      exactGuard,
+      ["  if (false) {", exactGuard, "  }"].join("\n"),
+    );
+    expect(unsafePostPromotion).not.toBe(postPromotion);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [postPromotionPath]: unsafePostPromotion,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it.each([
     ["StateView price source", 'price?.source !== "uniswap-v4-stateview-chainlink-v1"'],
     ["official liquidity source", 'liquidity?.source !== "official-uniswap-v4-subgraph"'],
     ["official subgraph deployment", "provenance?.deployment !== OFFICIAL_V4_SUBGRAPH_DEPLOYMENT"],
