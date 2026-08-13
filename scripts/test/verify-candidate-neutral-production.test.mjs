@@ -69,6 +69,24 @@ test("rejects a candidate identity in the compiled production bundle", async () 
   assert.match(result.stderr, /.next\/server\/app\/launch\/page\.js/u);
 });
 
+test("rejects applicant cards in source and emitted production bundles", async () => {
+  const sourceRoot = await fixture({
+    "components/launch-console.tsx":
+      'export const card = "launch-model-aeon";\n',
+  });
+  const sourceResult = verify(sourceRoot);
+  assert.equal(sourceResult.status, 1);
+  assert.match(sourceResult.stderr, /components\/launch-console\.tsx/u);
+
+  const buildRoot = await fixture({
+    ".next/static/chunks/launch.js":
+      'export const profile = "https://x.com/basedbidx";\n',
+  });
+  const buildResult = verify(buildRoot, "--include-build");
+  assert.equal(buildResult.status, 1);
+  assert.match(buildResult.stderr, /.next\/static\/chunks\/launch\.js/u);
+});
+
 test("rejects a candidate identity in contract source", async () => {
   const projectName = ["Sh", "ards"].join("");
   const root = await fixture({

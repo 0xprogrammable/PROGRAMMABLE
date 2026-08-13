@@ -150,6 +150,15 @@ function reviewedDeepBinding(manifest = eligibleDeepManifest()) {
 }
 
 describe("unreleased launch model gating", () => {
+  const removedPartnerMarkers = [
+    ["data-launch-model-option=\"", "aeon", "\""].join(""),
+    ["data-launch-model-option=\"", "basedbid", "\""].join(""),
+    ["aeon", "framework"].join(""),
+    ["based", "bidx"].join(""),
+    ["aeon-framework", "-v1.webp"].join(""),
+    ["basedbid", "-v2.png"].join(""),
+  ];
+
   it("keeps one Stock-Paired quote option in the tab order", () => {
     expect(
       Array.from({ length: 6 }, (_, index) =>
@@ -166,7 +175,7 @@ describe("unreleased launch model gating", () => {
       }),
     );
 
-    expect(html.match(/data-launch-model-option=/g)).toHaveLength(4);
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
     expect(html).toContain("<h1>Choose your launch model</h1>");
     expect(html).not.toContain("Choose a launch model, then configure");
     expect(html).toContain('data-launch-model-option="classic"');
@@ -191,39 +200,13 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain(">Ready</small>");
     expect(html).not.toContain("Build or resume");
     expect(html).not.toContain("Coming soon");
-    expect(html).toContain('data-launch-model-option="aeon"');
-    const aeonCard = html.match(
-      /<a[^>]*href="https:\/\/x\.com\/aeonframework"[^>]*>/,
-    )?.[0];
-    expect(aeonCard).toContain('target="_blank"');
-    expect(aeonCard).toContain('data-launch-model-available="false"');
-    expect(aeonCard).toContain('data-launch-model-launchable="false"');
-    expect(html).toContain(
-      'id="launch-model-aeon-title">AI and Framework</strong>',
-    );
-    expect(html).toContain("Available soon");
-    expect(html).toContain("The most autonomous agent framework");
-    expect(html).toContain("@aeonframework");
-    expect(html).toContain('data-launch-model-option="basedbid"');
-    const basedBidCard = html.match(
-      /<a[^>]*href="https:\/\/x\.com\/basedbidx"[^>]*>/,
-    )?.[0];
-    expect(basedBidCard).toContain('target="_blank"');
-    expect(basedBidCard).toContain('data-launch-model-available="false"');
-    expect(basedBidCard).toContain('data-launch-model-launchable="false"');
-    expect(html).toContain(
-      'id="launch-model-basedbid-title">BasedBid</strong>',
-    );
-    expect(html).toContain(
-      "BasedBid launch models are coming to Programmable Custom.",
-    );
-    expect(html).toContain("@basedbidx");
+    for (const marker of removedPartnerMarkers) {
+      expect(html).not.toContain(marker);
+    }
     // Next/Image may emit the source as an encoded optimizer URL. Assert the
     // asset identity without coupling this contract to that transport detail.
     expect(html).toContain("classic-botanical-v4.webp");
     expect(html).toContain("custom-galaxy-v3.webp");
-    expect(html).toContain("aeon-framework-v1.webp");
-    expect(html).toContain("basedbid-v2.png");
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");

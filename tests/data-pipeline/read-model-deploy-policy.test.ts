@@ -661,6 +661,15 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       'vercel env ls production --format json --token="$VERCEL_TOKEN"',
     );
+    expect(workflow).toContain(
+      'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
+    );
+    expect(workflow).toContain(
+      '--output-file "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+    );
+    expect(workflow).not.toContain(
+      '> "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+    );
     expect(workflow.match(/--sensitive-env-metadata/g)).toHaveLength(2);
     expect(workflow).toContain("staged-release-attestation.json");
     expect(workflow).toContain("attestation_sha256");

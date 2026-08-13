@@ -70,8 +70,18 @@ const projectNames = Object.freeze([
   ["random", "holder", "rewards"].join("[-_ ]?"),
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
+const applicantCardMarkers = Object.freeze([
+  "aeonframework",
+  "basedbidx",
+  "launch-model-aeon",
+  "launch-model-basedbid",
+  "aeon-framework-v1",
+  "basedbid-v1",
+  "basedbid-v2",
+]);
 const forbiddenContent = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   new RegExp(["submit-launch", "pull", "13"].join("[/# ]+"), "iu"),
   /manual[-_ ]?router/iu,
   /manual[-_ ]?applicant/iu,
@@ -79,6 +89,7 @@ const forbiddenContent = Object.freeze([
 ]);
 const forbiddenPath = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   /manual[-_]?router/iu,
   /manual[-_]?applicant/iu,
   /router[-_]?v2[-_]?shared[-_]?lifecycle/iu,
@@ -120,11 +131,11 @@ const failures = [];
 for (const absolutePath of discovered) {
   const repositoryPath = relative(repositoryRoot, absolutePath).replaceAll("\\", "/");
   if (repositoryPath === SELF_PATH || repositoryPath === TEST_PATH) continue;
-  if (!TEXT_EXTENSIONS.has(extname(repositoryPath)) && !PACKAGE_FILES.includes(repositoryPath)) {
-    continue;
-  }
   if (forbiddenPath.some((pattern) => pattern.test(repositoryPath))) {
     failures.push(`${repositoryPath}: forbidden candidate or legacy route path`);
+    continue;
+  }
+  if (!TEXT_EXTENSIONS.has(extname(repositoryPath)) && !PACKAGE_FILES.includes(repositoryPath)) {
     continue;
   }
   const source = await readFile(absolutePath, "utf8");
