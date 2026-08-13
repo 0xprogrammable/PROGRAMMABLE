@@ -621,6 +621,7 @@ type IntegrityScope = {
   requireCheckpointWindow: boolean;
   requiredInitialFromBlock?: string;
   requireContiguousCheckpointWindow: boolean;
+  allowCheckpointWindowExtension: boolean;
   checkpointGroupId: string;
   checkpointWindow?: IntegrityCheckpointWindow;
   cursorDrafts: Map<string, CursorReference>;
@@ -948,6 +949,7 @@ export async function withPersistentRpcIntegrityScope<T>(
     requireCheckpointWindow?: boolean;
     requiredInitialFromBlock?: bigint;
     requireContiguousCheckpointWindow?: boolean;
+    allowCheckpointWindowExtension?: boolean;
   }> = {},
 ) {
   if (integrityScopes.getStore()) return operation();
@@ -987,6 +989,8 @@ export async function withPersistentRpcIntegrityScope<T>(
       : {}),
     requireContiguousCheckpointWindow:
       input.requireContiguousCheckpointWindow === true,
+    allowCheckpointWindowExtension:
+      input.allowCheckpointWindowExtension === true,
     checkpointGroupId: digest({
       checkpointGroup: input.checkpointGroup ?? "isolated",
     }),
@@ -1084,7 +1088,20 @@ export async function withPersistentRpcIntegrityScope<T>(
           BigInt(scope.checkpointWindow.fromBlock) !==
             BigInt(previousWindow.toBlock) + 1n
         ) {
-          fail("Persistent RPC checkpoint window is not contiguous with its committed baseline");
+          const previousToBlock = BigInt(previousWindow.toBlock);
+          const requestedFromBlock = BigInt(scope.checkpointWindow.fromBlock);
+          const requestedToBlock = BigInt(scope.checkpointWindow.toBlock);
+          if (
+            !scope.allowCheckpointWindowExtension ||
+            requestedFromBlock > previousToBlock ||
+            requestedToBlock <= previousToBlock
+          ) {
+            fail("Persistent RPC checkpoint window is not contiguous with its committed baseline");
+          }
+          scope.checkpointWindow = {
+            ...scope.checkpointWindow,
+            fromBlock: (previousToBlock + 1n).toString(),
+          };
         }
       }
       if (scope.checkpointWindow) {
@@ -1101,6 +1118,20 @@ export async function withPersistentRpcIntegrityScope<T>(
             requestInput,
             binding.streamId,
           );
+          if (scope.requiredInitialFromBlock !== undefined) {
+            let nextCoveredBlock = BigInt(scope.requiredInitialFromBlock);
+            for (const segment of cursor.segments) {
+              if (BigInt(segment.fromBlock) !== nextCoveredBlock) {
+                fail("Persistent RPC checkpoint cursor has incomplete historical coverage");
+              }
+              nextCoveredBlock = BigInt(segment.toBlock) + 1n;
+            }
+            if (
+              nextCoveredBlock !== BigInt(scope.checkpointWindow.toBlock) + 1n
+            ) {
+              fail("Persistent RPC checkpoint cursor has incomplete historical coverage");
+            }
+          }
           if (
             BigInt(cursor.cursorBlock) !==
               BigInt(scope.checkpointWindow.toBlock) ||

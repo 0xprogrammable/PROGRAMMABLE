@@ -23,18 +23,18 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/onchain/historical-read-rpc.server.ts",
-          sha256: "725bde4016b635c77ed996e8b6d574b589f3cccd5778a7ed63ea9afbde4e77b7",
+          sha256: "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d",
         }),
         Object.freeze({
           path: "lib/onchain/persistent-rpc-cache.server.ts",
-          sha256: "867df30838d51522f677751b0238afe10c1db2949c53c89549ca0f3c46ede02f",
+          sha256: "4556161d79d49914f064a4df5ad2eb7f9777dfe1b3d188cf36a1e5b434b38f9b",
         }),
       ]),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "28fbbbacb927f966639d16b8c3adcde33ba9eaf309eef8ef90a130295b75ce82",
+          sha256: "4921b6869284d405976bc00f9426f1dbf05c5cf02f0354746a57c6ee8631cddd",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
@@ -1557,22 +1557,22 @@ export function evaluateReadModelOperationsSourceContracts(
         "historicalReadOnchainDeployment(deployment)",
       ) &&
       historicalRpcSource?.includes(
-        '"https://rpc.mevblocker.io/",',
+        "productionMainnetRpcPair(environment)",
       ) &&
       historicalRpcSource?.includes(
-        '"https://mainnet.gateway.tenderly.co/",',
+        "primary: binding.primary.url",
       ) &&
       historicalRpcSource?.includes(
-        "primary: ARCHIVE_WITNESSES[0]",
+        "secondary: binding.secondary.url",
       ) &&
       historicalRpcSource?.includes(
-        "secondary: ARCHIVE_WITNESSES[1]",
+        'primary?.vendorGroup !== "drpc"',
       ) &&
       historicalRpcSource?.includes(
-        'primary?.vendorGroup !== "mevblocker"',
+        'secondary?.vendorGroup !== "quicknode"',
       ) &&
       historicalRpcSource?.includes(
-        'secondary?.vendorGroup !== "tenderly"',
+        "primary.endpointCommitment !== binding.primary.endpointCommitment",
       ) &&
       persistentCacheSource?.includes(
         'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";',
@@ -1596,6 +1596,7 @@ export function evaluateReadModelOperationsSourceContracts(
       persistentCacheSource?.includes("requireCheckpointWindow") &&
       persistentCacheSource?.includes("requiredInitialFromBlock") &&
       persistentCacheSource?.includes("requireContiguousCheckpointWindow") &&
+      persistentCacheSource?.includes("allowCheckpointWindowExtension") &&
       persistentCacheSource?.includes(
         "bindPersistentRpcIntegrityCheckpointWindow",
       ) &&
@@ -1666,6 +1667,9 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       classicV3RefreshSource?.includes(
         "requireContiguousCheckpointWindow: true",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "allowCheckpointWindowExtension: true",
       ) &&
       classicV3RefreshSource?.includes(
         "const MAXIMUM_CHECKPOINT_BLOCK_RANGE = 1_000n",

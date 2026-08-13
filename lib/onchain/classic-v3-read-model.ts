@@ -530,6 +530,7 @@ export async function readClassicV3EventsQuorum(
         requireCheckpointWindow: true,
         requiredInitialFromBlock: release.startBlock,
         requireContiguousCheckpointWindow: true,
+        allowCheckpointWindowExtension: true,
       },
     );
     let eventSets: Awaited<ReturnType<typeof readCheckpoint>> | null = null;

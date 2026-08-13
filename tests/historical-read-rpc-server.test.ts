@@ -7,9 +7,15 @@ import {
   historicalReadOnchainDeployment,
 } from "../lib/onchain/historical-read-rpc.server";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
+import { productionMainnetRpcEnvironment } from
+  "../lib/onchain/website-rpc-providers.server";
 const DRPC_RPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_RPC_URL =
   "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
+const environment = productionMainnetRpcEnvironment(
+  DRPC_RPC_URL,
+  QUICKNODE_RPC_URL,
+);
 
 const deployment: ReadyOnchainDeployment = {
   environment: "production",
@@ -30,34 +36,30 @@ const deployment: ReadyOnchainDeployment = {
 };
 
 describe("historical read RPC deployment", () => {
-  it("uses two fixed independent archive witnesses", () => {
-    expect(historicalReadOnchainDeployment(deployment)).toMatchObject({
-      rpcUrl: "https://rpc.mevblocker.io/",
-      rpcUrlSecondary: "https://mainnet.gateway.tenderly.co/",
-      rpcProviderIds: undefined,
+  it("uses the exact commitment-bound production dRPC and QuickNode pair", () => {
+    expect(historicalReadOnchainDeployment(deployment, environment)).toMatchObject({
+      rpcUrl: DRPC_RPC_URL,
+      rpcUrlSecondary: QUICKNODE_RPC_URL,
+      rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
     });
   });
 
-  it("does not retain either private current-market reader", () => {
+  it("rejects the base deployment as authority and restores the bound pair", () => {
     const historical = historicalReadOnchainDeployment({
       ...deployment,
       rpcUrl: "https://eth.drpc.org",
       rpcUrlSecondary: null,
-    });
+    }, environment);
 
-    expect(historical.rpcUrl).toBe("https://rpc.mevblocker.io/");
-    expect(historical.rpcUrlSecondary).toBe(
-      "https://mainnet.gateway.tenderly.co/",
-    );
-    expect(historical.rpcUrl).not.toContain("drpc");
-    expect(historical.rpcUrl).not.toContain("quicknode");
+    expect(historical.rpcUrl).toBe(DRPC_RPC_URL);
+    expect(historical.rpcUrlSecondary).toBe(QUICKNODE_RPC_URL);
   });
 
   it("fails closed outside Ethereum Mainnet", () => {
     expect(() => historicalReadOnchainDeployment({
       ...deployment,
       chainId: 11_155_111,
-    }))
+    }, environment))
       .toThrow(HistoricalReadRpcBindingError);
   });
 });

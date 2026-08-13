@@ -569,6 +569,64 @@ describe("persistent RPC log cursor", () => {
     ).toBe(markersBeforeReplay);
   });
 
+  it("publishes repeated extensions of a partial final window as contiguous tails", async () => {
+    const inspected = inspectableMemoryStore();
+    const providers = [mockRpc(), mockRpc()].map((rpc, index) =>
+      cachedRequest(rpc, inspected.store, `provider-partial-${index}`)
+    );
+    const readWindow = (toBlock: number) =>
+      withPersistentRpcIntegrityScope(
+        async () => {
+          const result = await Promise.all(
+            providers.flatMap((cached) => [
+              logRequest(cached.request, 0, toBlock, bytes32(721)),
+              logRequest(cached.request, 0, toBlock, bytes32(722)),
+            ]),
+          );
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: 0n,
+            toBlock: BigInt(toBlock),
+            boundaryBlockHash: bytes32(10_000 + toBlock),
+          });
+          return result;
+        },
+        {
+          checkpointGroup: "partial-final-window-extension",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+          requiredInitialFromBlock: 0n,
+          requireContiguousCheckpointWindow: true,
+          allowCheckpointWindowExtension: true,
+        },
+      );
+
+    await expect(readWindow(4)).resolves.toHaveLength(4);
+    await expect(readWindow(9)).resolves.toHaveLength(4);
+    await expect(readWindow(14)).resolves.toHaveLength(4);
+
+    const windows = [...inspected.values]
+      .filter(([path]) => path.includes("/integrity/"))
+      .map(([, record]) => record.value as {
+        payload: {
+          status: string;
+          checkpointWindow: { fromBlock: string; toBlock: string };
+        };
+      })
+      .filter((marker) => marker.payload.status === "committed")
+      .map((marker) => ({
+        fromBlock: marker.payload.checkpointWindow.fromBlock,
+        toBlock: marker.payload.checkpointWindow.toBlock,
+      }))
+      .sort((left, right) => BigInt(left.fromBlock) < BigInt(right.fromBlock) ? -1 : 1);
+    expect(windows).toEqual([
+      { fromBlock: "0", toBlock: "4" },
+      { fromBlock: "5", toBlock: "9" },
+      { fromBlock: "10", toBlock: "14" },
+    ]);
+  });
+
   it("keeps the previous complete checkpoint when one of four participants fails", async () => {
     const inspected = inspectableMemoryStore();
     const primaryRpc = mockRpc();

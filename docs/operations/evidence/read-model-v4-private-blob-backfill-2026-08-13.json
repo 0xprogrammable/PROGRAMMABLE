@@ -2,12 +2,18 @@
   "schemaVersion": "programmable.read-model-private-blob-backfill-evidence.v1",
   "environment": "production-private-blob",
   "cacheSchema": "programmable-rpc-log-cursor-v4",
-  "sourceBaseCommit": "dd536a90439665ac63a426207abc460902d1ee52",
+  "sourceBaseCommit": "be0b5fdb1d0b7ab50bd16657db8677c29c4eab19",
+  "sourceBindings": {
+    "lib/onchain/classic-v3-read-model.ts": "4921b6869284d405976bc00f9426f1dbf05c5cf02f0354746a57c6ee8631cddd",
+    "lib/onchain/persistent-rpc-cache.server.ts": "4556161d79d49914f064a4df5ad2eb7f9777dfe1b3d188cf36a1e5b434b38f9b",
+    "lib/onchain/historical-read-rpc.server.ts": "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d"
+  },
   "checkpoint": {
     "chainId": 1,
     "groupDomain": "classic-v3-events-v2",
     "groupId": "417e71f686d80738a617f5904c22bea74e9b50694ba346b618b15aa53346cdfe",
-    "headCommitId": "c82a7ed0-a648-43a0-981b-f0f0216c657f",
+    "headCommitId": "60ae5fae-445f-40af-b871-b17242a89f70",
+    "providerRoles": ["drpc", "quicknode"],
     "providerIds": [
       "1ea1c2f6afc5dfeb337015523196009c66e4bd70aca6cc1f2b5f845126bcfbdf",
       "aff9065b48df62a3041df32ee22a260e6c5f14ce722042185f60fd4c237614d2"
@@ -16,18 +22,24 @@
     "streamIdentitiesPerProvider": 2,
     "cursorCount": 4
   },
+  "archiveProbe": {
+    "releaseStartBlock": "25639596",
+    "currentProbeBlock": "25747953",
+    "providerCount": 2,
+    "matchingBlockNumberAndHash": true
+  },
   "lineage": {
     "startBlock": "25639596",
-    "targetBlock": "25747604",
+    "targetBlock": "25747986",
     "maximumWindowBlocks": 1000,
-    "committedWindows": 109,
+    "committedWindows": 110,
     "firstWindow": {
       "fromBlock": "25639596",
       "toBlock": "25640595"
     },
     "lastWindow": {
-      "fromBlock": "25747596",
-      "toBlock": "25747604"
+      "fromBlock": "25747605",
+      "toBlock": "25747986"
     },
     "gaps": 0,
     "overlaps": 0,
@@ -37,36 +49,40 @@
   "activeReferences": {
     "segmentsPerCursor": [8, 8, 8, 8],
     "uniqueSegments": 32,
-    "declaredBytes": 18649356
+    "declaredBytes": 18651152
   },
-  "restartReplay": {
-    "windows": 109,
-    "blobReads": 1744,
-    "blobCreates": 0,
-    "blobReplaces": 0,
-    "rpcGetLogs": 0,
-    "rpcGetBlockByNumber": 654,
-    "otherRpcRequests": 0
+  "fullReplayAndPartialTailExtension": {
+    "requestedWindows": 109,
+    "blobReads": 1757,
+    "blobCreates": 13,
+    "blobReplaces": 2,
+    "rpcGetLogs": 4,
+    "rpcGetBlockByNumber": 668,
+    "otherRpcRequests": 0,
+    "committedTailFromBlock": "25747605",
+    "committedTailToBlock": "25747986"
   },
   "freshProcessResume": {
     "windowsWritten": 0,
     "blobReads": 2,
     "blobCreates": 0,
-    "blobReplaces": 0
+    "blobReplaces": 0,
+    "rpcRequests": 0
   },
   "physicalInventory": {
-    "objects": 1996,
-    "bytes": 130370497,
-    "checkpointHeads": 2,
-    "integrityMarkers": 214,
-    "cursorVersions": 890,
-    "segments": 890,
+    "objects": 2049,
+    "bytes": 131700430,
+    "checkpointHeads": 3,
+    "integrityMarkers": 219,
+    "cursorVersions": 913,
+    "segments": 914,
     "scope": "all v4 objects, including unreachable experimental checkpoint domains"
   },
   "safety": {
     "rpcUrlsRecorded": false,
     "credentialsRecorded": false,
     "retiredV3ReadDuringProof": false,
+    "publicRpcFallbackAllowed": false,
     "productionAliasChanged": false
   }
 }
