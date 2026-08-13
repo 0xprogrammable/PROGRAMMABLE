@@ -9,8 +9,8 @@ import {
   type Transport,
 } from "viem";
 
-const CACHE_SCHEMA = "programmable-rpc-log-cursor-v2";
-const CACHE_DIRECTORY = "indexes/rpc-log-cursors/v2";
+const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";
+const CACHE_DIRECTORY = "indexes/rpc-log-cursors/v3";
 const HEX_QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/iu;
 const BYTES32 = /^0x[0-9a-f]{64}$/iu;
 const ADDRESS = /^0x[0-9a-f]{40}$/iu;

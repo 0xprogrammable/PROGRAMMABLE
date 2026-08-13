@@ -829,7 +829,7 @@ describe("persistent RPC log cursor", () => {
     ).rejects.toBeInstanceOf(PersistentRpcCacheReorgError);
   });
 
-  it("isolates current runtime proofs from legacy runtime cache entries", async () => {
+  it("isolates the current cache generation from legacy cache entries", async () => {
     const code = "0x6001600055" as const;
     const expectedRuntimeCodeHash = keccak256(code);
     const backing = createMemoryPersistentRpcCacheStore();
@@ -874,6 +874,8 @@ describe("persistent RPC log cursor", () => {
     await expect(
       request({ method: "eth_getCode", params: [ADDRESS, quantity(100)] }),
     ).resolves.toBe(code);
+    expect(paths.every((path) => path.includes("/rpc-log-cursors/v3/"))).toBe(true);
+    expect(paths.some((path) => path.includes("/rpc-log-cursors/v2/"))).toBe(false);
     expect(paths.some((path) => path.includes("/runtime-v2/"))).toBe(true);
     expect(paths.some((path) => path.includes("/runtime/"))).toBe(false);
   });
