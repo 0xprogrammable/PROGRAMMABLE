@@ -84,50 +84,6 @@ const APPROVED_OPERATIONS = Object.freeze({
         sha256: "bb39f651c11e49173e5b07e42edd2bfa4a1c0e78e5b0345a47b338751e451787",
       }),
     }),
-    Object.freeze({
-      id: "manual-router-finality",
-      path: "/api/ops/manual-router-finality",
-      schedule: "* * * * *",
-      activationEnvironment: "PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED",
-      route: Object.freeze({
-        path: "app/api/ops/manual-router-finality/route.ts",
-        sha256: "73bb842a0bc9436d3a41ec9797a8ba82b71c7745c534a5cb5d5aea259e270656",
-      }),
-      auth: Object.freeze({
-        path: "lib/server/custom-launch/manual-router-cron-auth-v1.ts",
-        sha256: "21f03e26d47de05c678d77aedcefb93a57aad6ae8b5ad77c2374eb6c68391ead",
-      }),
-      runtime: Object.freeze({
-        path: "lib/server/custom-launch/manual-router-finality-worker-v1.ts",
-        sha256: "58b73adac414d26b46b6e868f63e1934c08901a1c4e20eac85f377926383f277",
-      }),
-      dependencies: Object.freeze([
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-discovery-v1.ts",
-          sha256: "12685b945d26d585eedb21212d4df7a57c89aa5e23b0594aa23e23e9be3fdc79",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-finality-v1.ts",
-          sha256: "f653ee2ea386740d4536445a86397ef527aa828d6e7f91f3741082d1b1f9833d",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-production-v1.ts",
-          sha256: "79915b2a03b39e457ea5fd1253a58f76242510170c46dbed95654b269e5af595",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-service-v1.ts",
-          sha256: "97a99851bc8eb0c60ad43d6548931da6faafb4f17f7857cdd31fd6767fe64412",
-        }),
-        Object.freeze({
-          path: "lib/server/custom-launch/manual-router-store-v1.ts",
-          sha256: "24a464017173af3bda97d6fc7d143dec27453a25315424a8348cbca2ad8acd66",
-        }),
-      ]),
-      policy: Object.freeze({
-        path: "lib/server/custom-launch/manual-router-finality-policy-v1.ts",
-        sha256: "c24082d7a27f1742c6c8b9e4e86088a9d9a5c260b44061a1c86b69b9ae989343",
-      }),
-    }),
   ]),
   workers: Object.freeze([
     Object.freeze({
@@ -893,7 +849,6 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
       (cutoverAuthorization &&
         /mode\s*===\s*["']cutover["']/u.test(source))) &&
     (/if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) ||
-      /if\s*\(\s*!isManualRouterFinalityCronAuthorizedV1\(request\)\s*\)/u.test(source) ||
       /if\s*\(\s*mode\s*===\s*null\s*\)/u.test(source)) &&
     /status\s*:\s*401\b/u.test(source) &&
     /status\s*:\s*503\b/u.test(source) &&

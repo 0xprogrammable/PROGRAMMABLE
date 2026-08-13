@@ -25,6 +25,7 @@
 /tmp/
 /var/
 /outputs/qa/
+/output/playwright/
 /artifacts/
 /.codex-temp-programmable-readme-gif/
 /.superpowers/

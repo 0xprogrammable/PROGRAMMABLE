@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
+
+const verifier = join(
+  process.cwd(),
+  "scripts/verify-candidate-neutral-production.mjs",
+);
+
+async function fixture(files) {
+  const root = await mkdtemp(join(tmpdir(), "programmable-neutral-source-"));
+  for (const [path, source] of Object.entries(files)) {
+    const target = join(root, path);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, source, "utf8");
+  }
+  return root;
+}
+
+function verify(root, ...args) {
+  return spawnSync(process.execPath, [verifier, "--root", root, ...args], {
+    encoding: "utf8",
+  });
+}
+
+test("accepts a descriptor-driven production surface", async () => {
+  const root = await fixture({
+    "app/launch/page.tsx": "export default function Page() { return null; }\n",
+    "lib/server/custom-launch/generic-launch-read-v1.ts":
+      "export const descriptorDriven = true;\n",
+    "package.json": JSON.stringify({ scripts: { build: "next build" } }),
+  });
+  const result = verify(root);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /CANDIDATE_NEUTRAL_PRODUCTION_SOURCE_VALID/u);
+});
+
+test("rejects candidate identities in production source", async () => {
+  const projectName = ["Hook", "emon"].join("");
+  const root = await fixture({
+    "components/launch-console.tsx": `export const identity = "${projectName}";\n`,
+  });
+  const result = verify(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /components\/launch-console\.tsx/u);
+});
+
+test("rejects legacy applicant route paths even when their source is generic", async () => {
+  const legacySegment = ["manual", "router"].join("-");
+  const root = await fixture({
+    [`lib/server/custom-launch/${legacySegment}-service.ts`]:
+      "export const service = true;\n",
+  });
+  const result = verify(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /forbidden candidate or legacy route path/u);
+});
+
+test("rejects a candidate identity in the compiled production bundle", async () => {
+  const projectName = ["Sh", "ards"].join("");
+  const root = await fixture({
+    ".next/server/app/launch/page.js": `export const identity = "${projectName}";\n`,
+  });
+  const result = verify(root, "--include-build");
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /.next\/server\/app\/launch\/page\.js/u);
+});

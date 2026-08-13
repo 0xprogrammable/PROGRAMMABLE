@@ -23,11 +23,6 @@ on:
         required: false
         default: ""
         type: string
-      manual_applicant_launch_enablement:
-        description: Stage the separately gated Applicant-owned Router launch lane
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -252,24 +247,6 @@ jobs:
           node scripts/bind-vercel-sensitive-production-metadata.mjs \
             --metadata-file "$RUNNER_TEMP/vercel-production-env-metadata.json" \
             --vercel-project-id "$VERCEL_PROJECT_ID"
-
-      - name: Resolve manual Applicant launch policy
-        id: manual-applicant-policy
-        env:
-          MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED: ${{ inputs.manual_applicant_launch_enablement }}
-          MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE: ${{ vars.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_MODE }}
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
-        run: >-
-          node scripts/resolve-manual-applicant-launch-policy.mjs
-          --env-file .vercel/.env.production.local
-          --manual-sensitive-metadata "$RUNNER_TEMP/vercel-production-env-metadata.json"
-          --vercel-project-id "$VERCEL_PROJECT_ID"
-          --alchemy-endpoint-commitment "$PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT"
-          --quicknode-endpoint-commitment "$PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT"
-          --requested "$MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED"
-          --protected-mode "$MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE"
-          --github-output "$GITHUB_OUTPUT"
 
       - name: Capture current production rollback target
         id: production-before
@@ -587,15 +564,6 @@ jobs:
           curl --fail --silent --show-error \
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
-
-      - name: Verify staged manual Applicant runtime
-        if: steps.manual-applicant-policy.outputs.enabled == 'true'
-        env:
-          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: >-
-          node scripts/verify-manual-applicant-staged-runtime.mjs
-          --target-url "$STAGED_TARGET_URL"
 
       - name: Smoke staged public market APIs
         if: needs.release-gate.outputs.verified_read_model == 'true'
