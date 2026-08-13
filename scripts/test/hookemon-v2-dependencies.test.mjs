@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -17,9 +17,15 @@ test("dependency lock has twelve sorted exact Git commit and tree pins", async (
   );
 });
 
-test("the raw lib symlink is ignored but rejected as verification evidence", () => {
-  assert.equal(execFileSync("git", ["check-ignore", "lib"], { cwd: root, encoding: "utf8" }).trim(), "lib");
-  const result = spawnSync(process.execPath, ["scripts/verify-hookemon-v2-dependencies.mjs"], {
+test("the raw lib symlink is ignored but rejected as verification evidence", async () => {
+  const ignoreLines = (await readFile(path.join(root, ".gitignore"), "utf8")).split(/\r?\n/u);
+  assert.ok(ignoreLines.includes("/lib"));
+  const parent = await mkdtemp(path.join(os.tmpdir(), "hookemon-v2-symlink-dependencies."));
+  const real = path.join(parent, "real");
+  const linked = path.join(parent, "lib");
+  await mkdir(real);
+  await symlink(real, linked);
+  const result = spawnSync(process.execPath, ["scripts/verify-hookemon-v2-dependencies.mjs", linked], {
     cwd: root,
     encoding: "utf8"
   });
