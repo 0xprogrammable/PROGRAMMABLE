@@ -288,7 +288,7 @@ describe("Classic V3 action identity activation", () => {
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
-        "ETHEREUM_RPC_URL_B",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
         "https://lb.drpc.live/ethereum/second-classic-secret",
       );
 
@@ -296,9 +296,7 @@ describe("Classic V3 action identity activation", () => {
       const serialized = JSON.stringify(await response.json());
 
       expect(response.status).toBe(502);
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(
-        indexedEnabled ? 0 : 1,
-      );
+      expect(mocks.createPublicClient).not.toHaveBeenCalled();
       expect(serialized).not.toContain("drpc-classic-key");
       expect(serialized).not.toContain("second-classic-secret");
     },

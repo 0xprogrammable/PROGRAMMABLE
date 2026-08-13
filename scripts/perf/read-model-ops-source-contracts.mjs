@@ -76,7 +76,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "50b7711e767439d703cd8f92829709efde8bfa59c46349134df69ca452c80e5d",
+          sha256: "398de34ff2965d89ee2c4b1cffeba043ebe2586eb08685e2a0ea7ff0d6cf18b9",
         }),
       ]),
       policy: Object.freeze({
@@ -263,7 +263,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       maximumDeliveryToFirstVisibleMs: 10_000,
       script: Object.freeze({
         path: "scripts/perf/read-model-real-block-sla-gate.mjs",
-        sha256: "ada7486c58647398a327d5e876e002356f559724eeae312984c60e93f5f38865",
+        sha256: "c6fa20ec8f4bbc18dc15da91328329f1822db31df66d6bd02e403f06e93fc28f",
       }),
       schema: Object.freeze({
         path: "config/read-model-real-block-sla-db-attestation.schema.json",

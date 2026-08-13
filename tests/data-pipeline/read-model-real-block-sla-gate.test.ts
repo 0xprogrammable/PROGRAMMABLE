@@ -35,7 +35,7 @@ function provider(providerId: "drpc" | "quicknode") {
       : "22222222-2222-4222-8222-222222222222",
     endpointHost: drpc
       ? "lb.drpc.live"
-      : "hidden-name.quiknode.pro",
+      : "hidden-name.ethereum-mainnet.quiknode.pro",
     endpointUrlSha256: drpc
       ? `0x${"33".repeat(32)}`
       : `0x${"44".repeat(32)}`,

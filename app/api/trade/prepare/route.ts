@@ -14,7 +14,7 @@ import {
 } from "../../../../lib/data-pipeline/action-lookup";
 import { indexedLaunchLookupEnabled } from "../../../../lib/data-pipeline/route-activation.server";
 import {
-  getOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
   readExploreModel,
 } from "../../../../lib/onchain";
 import {
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
           }),
         )
       : await readExploreModel(
-          getOnchainDeployment(
+          getWebsiteReadOnchainDeployment(
             tradeRequest.chainId === 1 ? "production" : "rehearsal",
           ),
         );

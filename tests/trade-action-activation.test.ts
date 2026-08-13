@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
+
 const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
@@ -57,7 +60,7 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
-    getOnchainDeployment: () => ({ status: "ready", chainId: 1 }),
+    getWebsiteReadOnchainDeployment: () => ({ status: "ready", chainId: 1 }),
     readExploreModel: mocks.readLegacy,
   };
 });
@@ -103,13 +106,26 @@ function request() {
 describe("trade action identity activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const drpc = "https://lb.drpc.live/ethereum/drpc-action-key";
+    const quicknode =
+      "https://action-node.ethereum-mainnet.quiknode.pro/quicknode-action-key/";
     vi.stubEnv(
-      "ETHEREUM_RPC_URL",
-      "https://eth-mainnet.g.alchemy.com/v2/alchemy-action-key",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+      "drpc",
+    );
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL", drpc);
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", drpc),
     );
     vi.stubEnv(
-      "ETHEREUM_RPC_URL_B",
-      "https://action-node.ethereum-mainnet.quiknode.pro/quicknode-action-key/",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+      "quicknode",
+    );
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL", quicknode);
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", quicknode),
     );
     mocks.lookup.mockResolvedValue({});
     mocks.readLegacy.mockResolvedValue(registry);
@@ -147,8 +163,8 @@ describe("trade action identity activation", () => {
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
-        "ETHEREUM_RPC_URL_B",
-        "https://eth-mainnet.g.alchemy.com/v2/second-secret-key",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+        "https://second-node.ethereum-mainnet.quiknode.pro/second-secret-key/",
       );
 
       const response = await POST(request());
@@ -157,7 +173,7 @@ describe("trade action identity activation", () => {
       expect(response.status).toBe(502);
       expect(mocks.prepare).not.toHaveBeenCalled();
       expect(mocks.createPublicClient).not.toHaveBeenCalled();
-      expect(serialized).not.toContain("alchemy-action-key");
+      expect(serialized).not.toContain("drpc-action-key");
       expect(serialized).not.toContain("second-secret-key");
     },
   );

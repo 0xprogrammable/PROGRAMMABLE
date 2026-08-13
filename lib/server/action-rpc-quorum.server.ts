@@ -3,6 +3,8 @@ import "server-only";
 import type { Hex } from "viem";
 
 import { rpcProviderCommitment } from "../data-pipeline/rpc-provider-commitments";
+import { productionMainnetRpcPair } from
+  "../onchain/website-rpc-providers.server";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 type SupportedChainId = 1 | 11_155_111;
@@ -279,25 +281,36 @@ export function createActionRpcQuorum(
   return Object.freeze(selected.slice(0, maximumProviders));
 }
 
+function productionActionRpcProviders(env: Environment) {
+  try {
+    const binding = productionMainnetRpcPair(env);
+    const providers = createActionRpcQuorum({
+      chainId: 1,
+      primary: binding.primary.url,
+      secondary: binding.secondary.url,
+      maximumProviders: 2,
+    });
+    const [primary, secondary] = providers;
+    if (
+      primary?.vendorGroup !== "drpc" ||
+      secondary?.vendorGroup !== "quicknode" ||
+      primary.endpointCommitment !== binding.primary.endpointCommitment ||
+      secondary.endpointCommitment !== binding.secondary.endpointCommitment
+    ) {
+      throw new ActionRpcQuorumError("quorum-unavailable");
+    }
+    return providers;
+  } catch {
+    throw new ActionRpcQuorumError("quorum-unavailable");
+  }
+}
+
 export function tradeActionRpcProviders(
   chainId: SupportedChainId,
   env: Environment = process.env,
 ) {
   if (chainId === 1) {
-    const primary =
-      env.ETHEREUM_RPC_URL ?? "https://ethereum-rpc.publicnode.com";
-    const secondary =
-      env.ETHEREUM_RPC_URL_B ??
-      env.ETHEREUM_RPC_URL_SECONDARY ??
-      (primary === "https://ethereum-rpc.publicnode.com"
-        ? "https://rpc.mevblocker.io"
-        : "https://ethereum-rpc.publicnode.com");
-    return createActionRpcQuorum({
-      chainId,
-      primary,
-      secondary,
-      maximumProviders: 2,
-    });
+    return productionActionRpcProviders(env);
   }
   const primary =
     env.SEPOLIA_RPC_URL ??
@@ -317,25 +330,13 @@ export function tradeActionRpcProviders(
 }
 
 /**
- * Keeps protocol-revenue execution isolated from the RPCs used by user-facing
- * trade preparation. The selected defaults are independently operated and
- * have both been verified against the live ERC-7715 delegation path.
+ * Production execution shares the same role-bound private pair as Website
+ * reads. This avoids an uncommitted public fallback in a money-moving path.
  */
 export function protocolRevenueRpcProviders(
   env: Environment = process.env,
 ) {
-  const primary =
-    env.PROTOCOL_REVENUE_RPC_URL_A ?? "https://eth.drpc.org";
-  const secondary =
-    env.PROTOCOL_REVENUE_RPC_URL_B ??
-    "https://ethereum-rpc.publicnode.com";
-  return createActionRpcQuorum({
-    chainId: 1,
-    primary,
-    secondary,
-    fallbacks: ["https://rpc.mevblocker.io"],
-    maximumProviders: 2,
-  });
+  return productionActionRpcProviders(env);
 }
 
 export function creatorClaimRpcProviders(
@@ -353,17 +354,13 @@ export function creatorClaimRpcProviders(
     chainId,
     primary: deployment.rpcUrl,
     secondary: deployment.rpcUrlSecondary,
-    fallbacks:
-      chainId === 1
-        ? [
-            "https://ethereum-rpc.publicnode.com",
-            "https://rpc.mevblocker.io",
-          ]
-        : [
-            "https://ethereum-sepolia-rpc.publicnode.com",
-            "https://rpc.sepolia.org",
-          ],
-    maximumProviders: 4,
+    fallbacks: chainId === 1
+      ? []
+      : [
+          "https://ethereum-sepolia-rpc.publicnode.com",
+          "https://rpc.sepolia.org",
+        ],
+    maximumProviders: chainId === 1 ? 2 : 4,
   });
 }
 
@@ -372,26 +369,20 @@ export function classicV3ActionRpcProviders(
   env: Environment = process.env,
 ) {
   const chainId = environment === "production" ? 1 : 11_155_111;
+  if (environment === "production") {
+    return productionActionRpcProviders(env);
+  }
   const primary =
-    environment === "production"
-      ? env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"
-      : env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org";
+    env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org";
   const secondary =
-    environment === "production"
-      ? env.ETHEREUM_RPC_URL_B ??
-        env.ETHEREUM_RPC_URL_SECONDARY ??
-        "https://ethereum-rpc.publicnode.com"
-      : env.SEPOLIA_RPC_URL_B ??
-        env.SEPOLIA_RPC_URL_SECONDARY ??
-        "https://ethereum-sepolia-rpc.publicnode.com";
+    env.SEPOLIA_RPC_URL_B ??
+    env.SEPOLIA_RPC_URL_SECONDARY ??
+    "https://ethereum-sepolia-rpc.publicnode.com";
   return createActionRpcQuorum({
     chainId,
     primary,
     secondary,
-    fallbacks:
-      environment === "production"
-        ? ["https://rpc.mevblocker.io"]
-        : ["https://rpc.sepolia.org"],
+    fallbacks: ["https://rpc.sepolia.org"],
     maximumProviders: 2,
   });
 }
@@ -399,23 +390,5 @@ export function classicV3ActionRpcProviders(
 export function stockPairedActionRpcProviders(
   env: Environment = process.env,
 ) {
-  const primary =
-    env.ETHEREUM_RPC_URL ?? "https://ethereum-rpc.publicnode.com";
-  const secondary =
-    env.ETHEREUM_RPC_URL_B ??
-    env.ETHEREUM_RPC_URL_SECONDARY ??
-    (primary === "https://ethereum-rpc.publicnode.com"
-      ? "https://rpc.mevblocker.io"
-      : "https://ethereum-rpc.publicnode.com");
-  return createActionRpcQuorum({
-    chainId: 1,
-    primary,
-    secondary,
-    fallbacks: [
-      "https://ethereum-rpc.publicnode.com",
-      "https://rpc.mevblocker.io",
-      "https://eth.drpc.org",
-    ],
-    maximumProviders: 5,
-  });
+  return productionActionRpcProviders(env);
 }

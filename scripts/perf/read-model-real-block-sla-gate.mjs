@@ -28,6 +28,8 @@ const UINT = /^(?:0|[1-9][0-9]{0,18})$/u;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const SAFE_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+const QUICKNODE_ETHEREUM_MAINNET_HOST =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
 
 function fail(label) {
   throw new Error(`real block SLA evidence ${label} is invalid`);
@@ -258,10 +260,7 @@ function assertProvider(value, providerId, block) {
   if (
     (providerId === "drpc" && endpointHost !== "lb.drpc.live") ||
     (providerId === "quicknode" &&
-      endpointHost !== "quicknode.com" &&
-      !endpointHost.endsWith(".quicknode.com") &&
-      endpointHost !== "quiknode.pro" &&
-      !endpointHost.endsWith(".quiknode.pro"))
+      !QUICKNODE_ETHEREUM_MAINNET_HOST.test(endpointHost))
   ) {
     fail(`${providerId} endpoint host`);
   }
@@ -912,10 +911,7 @@ export function verifyRealBlockSlaDatabaseAttestation(value, input) {
   );
   if (
     providerAHost !== "lb.drpc.live" ||
-    (providerBHost !== "quicknode.com" &&
-      !providerBHost.endsWith(".quicknode.com") &&
-      providerBHost !== "quiknode.pro" &&
-      !providerBHost.endsWith(".quiknode.pro")) ||
+    !QUICKNODE_ETHEREUM_MAINNET_HOST.test(providerBHost) ||
     providerAHost === providerBHost ||
     runtime.providerAEndpointUrlSha256 === runtime.providerBEndpointUrlSha256
   ) fail("provider endpoint independence");

@@ -232,7 +232,7 @@
       "maximumDeliveryToFirstVisibleMs": 10000,
       "script": {
         "path": "scripts/perf/read-model-real-block-sla-gate.mjs",
-        "sha256": "ada7486c58647398a327d5e876e002356f559724eeae312984c60e93f5f38865"
+        "sha256": "c6fa20ec8f4bbc18dc15da91328329f1822db31df66d6bd02e403f06e93fc28f"
       },
       "schema": {
         "path": "config/read-model-real-block-sla-db-attestation.schema.json",

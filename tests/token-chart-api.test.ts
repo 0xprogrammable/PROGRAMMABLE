@@ -12,7 +12,7 @@ import type {
 import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const mocks = vi.hoisted(() => ({
-  getOnchainDeployment: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
   isTokenChartRange: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
   readBitqueryMarketChartV1: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock("../lib/onchain/chart", () => ({
 }));
 
 vi.mock("../lib/onchain/config", () => ({
-  getOnchainDeployment: mocks.getOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getWebsiteReadOnchainDeployment,
 }));
 
 vi.mock("../lib/onchain/durable-model", () => ({
@@ -191,7 +191,7 @@ describe("token chart Bitquery API", () => {
     mocks.isTokenChartRange.mockImplementation((range) =>
       ["1h", "1d", "1w", "all"].includes(range),
     );
-    mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
       tokens: [token],
