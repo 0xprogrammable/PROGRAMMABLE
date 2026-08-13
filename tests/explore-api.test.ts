@@ -277,7 +277,13 @@ describe("Explore API Bitquery market boundary", () => {
     });
     mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(snapshot);
     mocks.settleCurrentEvidenceSnapshot.mockImplementation(
-      async ({ read }: { read: Promise<unknown> }) => await read,
+      async ({
+        read,
+        signal,
+      }: {
+        read: (signal: AbortSignal) => Promise<unknown>;
+        signal?: AbortSignal;
+      }) => await read(signal ?? new AbortController().signal),
     );
     mocks.withSameBlockEthUsdQuote.mockImplementation(
       async ({ snapshot: value }) => value,
@@ -703,14 +709,15 @@ describe("Explore API Bitquery market boundary", () => {
     expect(mocks.currentMarketOnchainDeployment).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "ready",
-        rpcUrlSecondary: "https://secondary.example",
       }),
     );
+    expect(mocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
     expect(mocks.readVerifiedOperationalMarketSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         rpcUrl: "https://current-primary.example",
         rpcUrlSecondary: "https://current-secondary.example",
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(mocks.valueExploreEntriesWithCurrentEvidence).toHaveBeenCalledWith(
       expect.objectContaining({

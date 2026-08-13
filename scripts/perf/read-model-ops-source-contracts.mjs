@@ -33,7 +33,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         rpcRuntime: Object.freeze({
           path: "lib/onchain/rpc-health.ts",
-          sha256: "4c8e5fb0f879ef72f2e8d742886b61b004de55fc59a440ef34893b352c33f865",
+          sha256: "48449348b4d7d91bea96ae583010a299e7c1a08ae04a3b50d28a28c8b5f495e3",
         }),
       }),
     }),

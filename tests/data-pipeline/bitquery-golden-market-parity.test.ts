@@ -313,4 +313,70 @@ describe("Bitquery golden execution proof", () => {
       fetchImpl: witness.fetchImpl,
     })).rejects.toThrow("does not match its receipt witness");
   });
+
+  it("rejects an oversized declared body without retrying deterministic framing", async () => {
+    let calls = 0;
+    let cancellations = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      const body = new ReadableStream<Uint8Array>({
+        pull() {
+          throw new Error("oversized declared responses must not be read");
+        },
+        cancel() {
+          cancellations += 1;
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-length": String(128 * 1024 + 1) },
+      });
+    };
+
+    await expect(verifyBitqueryGoldenMarketExecutionV1({
+      token: token(),
+      fetchImpl,
+    })).rejects.toThrow("oversized body");
+    expect(calls).toBe(6);
+    expect(cancellations).toBe(6);
+  });
+
+  it("cancels an oversized streaming body at the hard byte limit without retrying", async () => {
+    let calls = 0;
+    let cancellations = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(96 * 1024));
+          controller.enqueue(new Uint8Array(40 * 1024));
+        },
+        cancel() {
+          cancellations += 1;
+        },
+      });
+      return new Response(body, { status: 200 });
+    };
+
+    await expect(verifyBitqueryGoldenMarketExecutionV1({
+      token: token(),
+      fetchImpl,
+    })).rejects.toThrow("oversized body");
+    expect(calls).toBe(6);
+    expect(cancellations).toBe(6);
+  });
+
+  it("does not retry a deterministic invalid JSON-RPC response", async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return new Response("not-json", { status: 200 });
+    };
+
+    await expect(verifyBitqueryGoldenMarketExecutionV1({
+      token: token(),
+      fetchImpl,
+    })).rejects.toThrow("invalid JSON");
+    expect(calls).toBe(6);
+  });
 });

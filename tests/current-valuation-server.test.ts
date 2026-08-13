@@ -242,6 +242,70 @@ describe("current Explore valuation orchestration", () => {
     })).rejects.toThrow("deadline exceeded");
   });
 
+  it("actively aborts pending StateView and Chainlink work at the deadline", async () => {
+    const observedSignals: AbortSignal[] = [];
+    const pendingUntilAbort = ({ signal }: { signal?: AbortSignal }) => {
+      expect(signal).toBeInstanceOf(AbortSignal);
+      observedSignals.push(signal!);
+      return new Promise<never>((_resolve, reject) => {
+        signal!.addEventListener("abort", () => reject(signal!.reason), {
+          once: true,
+        });
+      });
+    };
+    mocks.withSameBlockEthUsdQuote.mockImplementation(pendingUntilAbort);
+    mocks.enrichTokensWithAlchemyPoolState.mockImplementation(pendingUntilAbort);
+
+    await expect(valueExploreEntriesWithCurrentEvidence({
+      entries: [token],
+      marketByToken: new Map([[tokenAddress, marketData]]),
+      deployment,
+      operationalSnapshot: snapshot,
+      now: new Date("2026-08-13T00:02:00.000Z"),
+      timeoutMs: 5,
+    })).resolves.toMatchObject([{
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    }]);
+
+    expect(observedSignals).toHaveLength(2);
+    expect(observedSignals.every((signal) => signal.aborted)).toBe(true);
+    expect(mocks.readOfficialV4LiquidityEvidence).not.toHaveBeenCalled();
+  });
+
+  it("actively aborts a pending official subgraph read at the deadline", async () => {
+    let subgraphSignal: AbortSignal | undefined;
+    mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([
+      tokenWithState("2000000000000000000", "10000000000000000000000"),
+    ]);
+    mocks.readOfficialV4LiquidityEvidence.mockImplementation(
+      (_input: unknown, options?: { signal?: AbortSignal }) => {
+        subgraphSignal = options?.signal;
+        return new Promise<never>((_resolve, reject) => {
+          subgraphSignal?.addEventListener(
+            "abort",
+            () => reject(subgraphSignal?.reason),
+            { once: true },
+          );
+        });
+      },
+    );
+
+    await expect(valueExploreEntriesWithCurrentEvidence({
+      entries: [token],
+      marketByToken: new Map([[tokenAddress, marketData]]),
+      deployment,
+      operationalSnapshot: snapshot,
+      now: new Date("2026-08-13T00:02:00.000Z"),
+      timeoutMs: 5,
+    })).resolves.toMatchObject([{
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    }]);
+
+    expect(subgraphSignal).toBeInstanceOf(AbortSignal);
+    expect(subgraphSignal?.aborted).toBe(true);
+  });
+
   it("bounds an unresolved operational snapshot and never starts downstream reads", async () => {
     const unresolvedSnapshot = new Promise<null>(() => undefined);
     const input = {

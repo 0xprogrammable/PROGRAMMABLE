@@ -15,19 +15,27 @@ export class CurrentMarketRpcBindingError extends Error {
   }
 }
 
+function quickNodeRpcUrl() {
+  const preferred = process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL;
+  return preferred === undefined || preferred === ""
+    ? process.env.ETHEREUM_RPC_URL_B
+    : preferred;
+}
+
 /**
- * Derives a current-market-only quorum from the Website deployment. The
- * Website deployment has already commitment-verified its Alchemy/QuickNode
- * pair; only its QuickNode secondary is eligible here. A fixed, independently
- * operated MEV Blocker endpoint supplies the second exact-block observation.
+ * Derives a current-market-only quorum from the production deployment
+ * manifest. Its QuickNode endpoint is independently configured and
+ * commitment-verified here; current evidence therefore does not depend on an
+ * Alchemy endpoint being configured. A fixed, independently operated MEV
+ * Blocker endpoint supplies the second exact-block observation.
  */
 export function currentMarketOnchainDeployment(
-  websiteDeployment: ReadyOnchainDeployment,
+  baseDeployment: ReadyOnchainDeployment,
 ): ReadyOnchainDeployment {
   const expectedQuickNodeCommitment =
     process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT;
   if (
-    websiteDeployment.chainId !== 1 ||
+    baseDeployment.chainId !== 1 ||
     !expectedQuickNodeCommitment ||
     !RPC_ENDPOINT_COMMITMENT.test(expectedQuickNodeCommitment)
   ) {
@@ -37,7 +45,7 @@ export function currentMarketOnchainDeployment(
   try {
     const providers = createActionRpcQuorum({
       chainId: 1,
-      primary: websiteDeployment.rpcUrlSecondary,
+      primary: quickNodeRpcUrl(),
       secondary: CURRENT_MARKET_RPC_SECONDARY,
       maximumProviders: 2,
     });
@@ -52,7 +60,7 @@ export function currentMarketOnchainDeployment(
     }
 
     return {
-      ...websiteDeployment,
+      ...baseDeployment,
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
     };

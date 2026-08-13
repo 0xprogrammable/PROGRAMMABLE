@@ -82,34 +82,70 @@ function withoutUnevidencedCurrentBitqueryValuation(
   return marketData ? { ...entry, marketData } : entry;
 }
 
-function deadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+function deadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  upstreamSignal?: AbortSignal,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Current market evidence deadline exceeded")),
-      timeoutMs,
+    const controller = new AbortController();
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+    };
+    const settle = (
+      complete: (value: T | PromiseLike<T>) => void,
+      value: T,
+    ) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      complete(value);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const abort = (reason: unknown) => {
+      if (!controller.signal.aborted) controller.abort(reason);
+      fail(reason);
+    };
+    const abortFromUpstream = () => abort(
+      upstreamSignal?.reason ?? new Error("Current market evidence aborted"),
     );
-    promise.then(
+    const timer = setTimeout(() => abort(
+      new Error("Current market evidence deadline exceeded"),
+    ), timeoutMs);
+    if (upstreamSignal?.aborted) {
+      abortFromUpstream();
+      return;
+    }
+    upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+    Promise.resolve().then(() => operation(controller.signal)).then(
       (value) => {
-        clearTimeout(timer);
-        resolve(value);
+        settle(resolve, value);
       },
       (error) => {
-        clearTimeout(timer);
-        reject(error);
+        fail(error);
       },
     );
   });
 }
 
 export async function settleCurrentEvidenceSnapshot<T>(input: Readonly<{
-  read: Promise<T | null>;
+  read: (signal: AbortSignal) => Promise<T | null>;
   requireComplete: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }>): Promise<T | null> {
   try {
     const snapshot = await deadline(
       input.read,
       input.timeoutMs ?? CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+      input.signal,
     );
     if (snapshot === null && input.requireComplete) {
       throw new Error("Current market evidence reference head is unavailable");
@@ -240,6 +276,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
   requireCompleteLiquidityCoverage?: boolean;
   allowHistoricalBitqueryFallback?: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }>): Promise<ValuedExploreEntry[]> {
   const candidates = input.entries.filter(classicNativeToken);
   const timeoutMs = input.timeoutMs ?? CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
@@ -261,7 +298,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
     deployment !== null;
 
   const currentEvidenceOutcome = canReadCurrentEvidence
-    ? deadline((async () => {
+    ? deadline(async (signal) => {
         const operationalSnapshotOutcome = await operationalSnapshotRead;
         if (operationalSnapshotOutcome.status === "rejected") {
           throw operationalSnapshotOutcome.error;
@@ -275,6 +312,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
         const pricedSnapshotRead = withSameBlockEthUsdQuote({
           deployment,
           snapshot: operationalSnapshot,
+          signal,
         });
         // StateView and Chainlink are both bound to the same confirmed block.
         // Start them together; the first StateView pass deliberately carries
@@ -284,6 +322,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
           deployment,
           snapshot: operationalSnapshot,
           tokens: candidates,
+          signal,
         });
         const [pricedSnapshot, stateTokens] = await Promise.all([
           input.requireCompleteLiquidityCoverage
@@ -316,6 +355,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
           deployment,
           snapshot: pricedSnapshot,
           tokens: candidates,
+          signal,
         }).catch((error) => {
           if (input.requireCompleteLiquidityCoverage) throw error;
           return [] as LauncherToken[];
@@ -361,7 +401,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
                 blockHash: operationalSnapshot.blockHash,
               },
               now: input.now,
-            }).catch((error) => {
+            }, { signal }).catch((error) => {
               if (input.requireCompleteLiquidityCoverage) throw error;
               liquidityCoverageFailed = true;
               return [] as readonly OfficialV4LiquidityEvidenceV1[];
@@ -381,7 +421,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
           liquidityRequestedPools,
           pricedByToken,
         };
-      })(), timeoutMs).then(
+      }, timeoutMs, input.signal).then(
       (value) => ({ status: "fulfilled" as const, value }),
       (error: unknown) => ({ status: "rejected" as const, error }),
     )

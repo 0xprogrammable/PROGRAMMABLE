@@ -21,6 +21,7 @@ const MINIMUM_CONFIRMATIONS = 12n;
 const MAXIMUM_FEED_AGE_SECONDS = 7_200n;
 const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n;
 const RUNTIME_CONFIDENCE_DEVIATION_BPS = 1_000n;
+const MAXIMUM_RPC_RESPONSE_BYTES = 128 * 1024;
 
 const poolManagerSwapAbi = parseAbi([
   "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
@@ -103,21 +104,91 @@ function withinDeviation(reference, observed, maximumBps) {
   return difference * 10_000n <= reference * maximumBps;
 }
 
-async function jsonRpc(fetchImpl, rpcUrl, method, params, id) {
-  const response = await fetchImpl(rpcUrl, {
-    method: "POST",
-    redirect: "error",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  const text = await response.text();
-  if (!response.ok || Buffer.byteLength(text, "utf8") > 128 * 1024) {
-    throw new Error("independent execution witness RPC was unavailable");
+class RetryableExecutionWitnessRpcError extends Error {
+  constructor() {
+    super("independent execution witness RPC was unavailable");
+    this.name = "RetryableExecutionWitnessRpcError";
   }
+}
+
+function declaredResponseBytes(response) {
+  const value = response.headers.get("content-length");
+  if (value === null) return null;
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    throw new Error("independent execution witness RPC returned invalid framing");
+  }
+  const bytes = Number(value);
+  if (!Number.isSafeInteger(bytes) || bytes > MAXIMUM_RPC_RESPONSE_BYTES) {
+    throw new Error("independent execution witness RPC returned an oversized body");
+  }
+  return bytes;
+}
+
+async function readBoundedResponseBody(response) {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("independent execution witness RPC returned no body");
+  }
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const chunks = [];
+  let bytesRead = 0;
+  let completed = false;
+  try {
+    declaredResponseBytes(response);
+    while (true) {
+      let chunk;
+      try {
+        chunk = await reader.read();
+      } catch {
+        throw new RetryableExecutionWitnessRpcError();
+      }
+      if (chunk.done) break;
+      bytesRead += chunk.value.byteLength;
+      if (bytesRead > MAXIMUM_RPC_RESPONSE_BYTES) {
+        throw new Error(
+          "independent execution witness RPC returned an oversized body",
+        );
+      }
+      try {
+        chunks.push(decoder.decode(chunk.value, { stream: true }));
+      } catch {
+        throw new Error("independent execution witness RPC returned invalid JSON");
+      }
+    }
+    try {
+      chunks.push(decoder.decode());
+    } catch {
+      throw new Error("independent execution witness RPC returned invalid JSON");
+    }
+    completed = true;
+    return chunks.join("");
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
+async function jsonRpc(fetchImpl, rpcUrl, method, params, id) {
+  let response;
+  try {
+    response = await fetchImpl(rpcUrl, {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new RetryableExecutionWitnessRpcError();
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new RetryableExecutionWitnessRpcError();
+  }
+  const text = await readBoundedResponseBody(response);
   let body;
   try {
     body = JSON.parse(text);
@@ -368,6 +439,7 @@ async function readProviderWithRetry(fetchImpl, rpcUrl, input) {
     try {
       return await readProvider(fetchImpl, rpcUrl, input);
     } catch (error) {
+      if (!(error instanceof RetryableExecutionWitnessRpcError)) throw error;
       lastError = error;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 500));
     }

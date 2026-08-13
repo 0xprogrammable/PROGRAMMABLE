@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../lib/alchemy/explore.server";
@@ -421,6 +420,7 @@ async function valueExplorePage(input: Readonly<{
       now: new Date(),
       requireCompleteLiquidityCoverage: true,
       timeoutMs: Math.max(0, input.currentEvidenceDeadlineAt - Date.now()),
+      signal: input.signal,
     });
     const currentPage = paginateExploreEntriesV1(currentEntries, {
       ...input.options,
@@ -458,6 +458,7 @@ async function valueExplorePage(input: Readonly<{
     now: new Date(),
     requireCompleteLiquidityCoverage: false,
     timeoutMs: Math.max(0, input.currentEvidenceDeadlineAt - Date.now()),
+    signal: input.signal,
   });
   if (identityPage === null) {
     throw new Error("Explore identity page is unavailable");
@@ -504,7 +505,7 @@ export async function GET(request: NextRequest) {
         primary: () => readProductionCustomExploreDirectoryV1(request.signal),
       }),
     );
-    const deployment = getAlchemyOnchainDeployment();
+    const deployment = getOnchainDeployment("production");
     const currentMarketDeployment = deployment.status === "ready"
       ? currentMarketOnchainDeployment(deployment)
       : null;
@@ -514,11 +515,13 @@ export async function GET(request: NextRequest) {
       requiresCompleteCurrentValuation(options.sort);
     const operationalSnapshotRead = currentMarketDeployment
       ? settleCurrentEvidenceSnapshot({
-          read: readVerifiedOperationalMarketSnapshot(
+          read: (signal) => readVerifiedOperationalMarketSnapshot(
             currentMarketDeployment,
+            { signal },
           ),
           requireComplete: requireCompleteCurrentValuation,
           timeoutMs: CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+          signal: request.signal,
         })
       : Promise.resolve(null);
     // Attach a rejection handler immediately; global ranking rethrows the

@@ -1353,8 +1353,8 @@ describe("read-model performance contract", () => {
         '"https://ethereum-rpc.publicnode.com/"',
       ),
       currentMarketRpcSource.replace(
-        "primary: websiteDeployment.rpcUrlSecondary",
-        "primary: websiteDeployment.rpcUrl",
+        "primary: quickNodeRpcUrl()",
+        "primary: baseDeployment.rpcUrl",
       ),
       currentMarketRpcSource.replace(
         'primary?.vendorGroup !== "quicknode"',

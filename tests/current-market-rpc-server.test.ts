@@ -40,6 +40,7 @@ function websiteDeployment(
 }
 
 function stubQuickNodeCommitment(value = QUICKNODE_RPC_URL) {
+  vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", value);
   vi.stubEnv(
     "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
     rpcProviderCommitment("endpoint", value),
@@ -51,7 +52,7 @@ describe("current market RPC deployment", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses only the commitment-bound Website QuickNode and fixed MEV Blocker pair", () => {
+  it("uses only the commitment-bound QuickNode and fixed MEV Blocker pair", () => {
     stubQuickNodeCommitment();
     const website = websiteDeployment();
 
@@ -66,6 +67,20 @@ describe("current market RPC deployment", () => {
     expect(website).toMatchObject({
       rpcUrl: ALCHEMY_RPC_URL,
       rpcUrlSecondary: QUICKNODE_RPC_URL,
+    });
+  });
+
+  it("does not require or retain an Alchemy endpoint for current evidence", () => {
+    stubQuickNodeCommitment();
+    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", "");
+    vi.stubEnv("ETHEREUM_RPC_URL", "");
+
+    expect(currentMarketOnchainDeployment(websiteDeployment({
+      rpcUrl: "https://eth.drpc.org",
+      rpcUrlSecondary: null,
+    }))).toMatchObject({
+      rpcUrl: QUICKNODE_RPC_URL,
+      rpcUrlSecondary: MEV_BLOCKER_RPC_URL,
     });
   });
 
@@ -94,29 +109,26 @@ describe("current market RPC deployment", () => {
     expect(JSON.stringify(error)).not.toContain("quicknode-test-key");
   });
 
-  it("does not let a legacy or reordered Website endpoint bypass QuickNode", () => {
+  it("does not let a base deployment endpoint bypass configured QuickNode", () => {
     stubQuickNodeCommitment();
 
-    expect(() =>
-      currentMarketOnchainDeployment(websiteDeployment({
-        rpcUrlSecondary: "https://ethereum-rpc.publicnode.com",
-      })),
-    ).toThrow(CurrentMarketRpcBindingError);
-    expect(() =>
-      currentMarketOnchainDeployment(websiteDeployment({
-        rpcUrl: QUICKNODE_RPC_URL,
-        rpcUrlSecondary: ALCHEMY_RPC_URL,
-      })),
-    ).toThrow(CurrentMarketRpcBindingError);
+    expect(currentMarketOnchainDeployment(websiteDeployment({
+      rpcUrl: "https://ethereum-rpc.publicnode.com",
+      rpcUrlSecondary: MEV_BLOCKER_RPC_URL,
+    }))).toMatchObject({
+      rpcUrl: QUICKNODE_RPC_URL,
+      rpcUrlSecondary: MEV_BLOCKER_RPC_URL,
+    });
+
+    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", "");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://ethereum-rpc.publicnode.com");
+    expect(() => currentMarketOnchainDeployment(websiteDeployment()))
+      .toThrow(CurrentMarketRpcBindingError);
   });
 
   it("requires independent providers in the fixed QuickNode-first order", () => {
     stubQuickNodeCommitment(MEV_BLOCKER_RPC_URL);
-
-    expect(() =>
-      currentMarketOnchainDeployment(websiteDeployment({
-        rpcUrlSecondary: MEV_BLOCKER_RPC_URL,
-      })),
-    ).toThrow(CurrentMarketRpcBindingError);
+    expect(() => currentMarketOnchainDeployment(websiteDeployment()))
+      .toThrow(CurrentMarketRpcBindingError);
   });
 });

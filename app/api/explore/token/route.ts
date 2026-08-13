@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
@@ -119,7 +118,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const deployment = getAlchemyOnchainDeployment();
+    const deployment = getOnchainDeployment("production");
     const currentMarketDeployment = deployment.status === "ready"
       ? currentMarketOnchainDeployment(deployment)
       : null;
@@ -127,11 +126,13 @@ export async function GET(request: NextRequest) {
       Date.now() + CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
     const operationalSnapshotRead = currentMarketDeployment
       ? settleCurrentEvidenceSnapshot({
-          read: readVerifiedOperationalMarketSnapshot(
+          read: (signal) => readVerifiedOperationalMarketSnapshot(
             currentMarketDeployment,
+            { signal },
           ),
           requireComplete: false,
           timeoutMs: CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+          signal: request.signal,
         })
       : Promise.resolve(null);
     const [
@@ -246,6 +247,7 @@ export async function GET(request: NextRequest) {
           now: new Date(),
           allowHistoricalBitqueryFallback: true,
           timeoutMs: Math.max(0, currentEvidenceDeadlineAt - Date.now()),
+          signal: request.signal,
         }))[0] ?? null
       : null;
     const primaryMarket = valuedEntry?.marketData?.pools.find(

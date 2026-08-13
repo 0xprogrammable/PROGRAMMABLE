@@ -351,8 +351,16 @@ export function evaluateAlchemyExploreSourceContracts(
       ) &&
       currentMarketRpcSource.includes("createActionRpcQuorum({") &&
       currentMarketRpcSource.includes(
-        "primary: websiteDeployment.rpcUrlSecondary",
+        "primary: quickNodeRpcUrl()",
       ) &&
+      currentMarketRpcSource.includes(
+        "process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+      ) &&
+      currentMarketRpcSource.includes("process.env.ETHEREUM_RPC_URL_B") &&
+      !currentMarketRpcSource.includes(
+        "process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+      ) &&
+      !/\bprocess\.env\.ETHEREUM_RPC_URL(?!_B)/u.test(currentMarketRpcSource) &&
       currentMarketRpcSource.includes(
         "secondary: CURRENT_MARKET_RPC_SECONDARY",
       ) &&
