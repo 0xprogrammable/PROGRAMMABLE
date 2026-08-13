@@ -25,14 +25,13 @@ import {
   currentSourceIdentity,
   loadRegistryDeploymentInputs,
 } from "./custom-registry-v2-deployment-plan.mjs";
-import {
-  assertCustomRegistryV2ProductionConstructor,
-} from "./custom-registry-v2-production-policy.mjs";
-import {
-  assertDistinctControllerOwners,
-} from "./custom-registry-v2-safe-controller-guards.mjs";
+import { assertCustomRegistryV2ProductionConstructor } from "./custom-registry-v2-production-policy.mjs";
+import { assertDistinctControllerOwners } from "./custom-registry-v2-safe-controller-guards.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
@@ -116,14 +115,18 @@ const {
   productionPolicyBytes,
 } = inputs;
 const source = currentSourceIdentity(root);
-if (!source.clean) throw new Error("deployment preflight requires a clean worktree");
+if (!source.clean)
+  throw new Error("deployment preflight requires a clean worktree");
 
 if (
   getAddress(safeVerification.deployer) !== deployer ||
   getAddress(safeVerification.admin) !== admin ||
   getAddress(safeVerification.releaseOwner) !== releaseOwner ||
   getAddress(manifest.releaseAuthorization.owner) !== releaseOwner ||
-  manifest.releaseAuthorization.maximumValiditySeconds !== 300
+  manifest.releaseAuthorization.maximumSigningAndFirstAttemptValiditySeconds !==
+    300 ||
+  manifest.releaseAuthorization.authorizationSemantics !==
+    "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED"
 ) {
   throw new Error("deployer, admin, or release owner evidence mismatch");
 }
@@ -135,7 +138,9 @@ const controllerEvidence = roleNames.map((role) => {
   if (!controller) throw new Error(`verified ${role} Safe is missing`);
   return controller;
 });
-const controllers = controllerEvidence.map(({ address }) => getAddress(address));
+const controllers = controllerEvidence.map(({ address }) =>
+  getAddress(address),
+);
 const config = {
   initialAdminDelay: BigInt(
     productionPolicy.constructorPolicy.initialAdminDelaySeconds,
@@ -187,14 +192,18 @@ const commonFinalizedNumber = heads.reduce(
   heads[0].finalized.number,
 );
 const anchors = await Promise.all(
-  clients.map((client) => client.getBlock({ blockNumber: commonFinalizedNumber })),
+  clients.map((client) =>
+    client.getBlock({ blockNumber: commonFinalizedNumber }),
+  ),
 );
 if (
   anchors[0].hash !== anchors[1].hash ||
   heads[0].nonce !== heads[1].nonce ||
   heads[0].balance !== heads[1].balance
 ) {
-  throw new Error("independent preflight chain, nonce, or balance observations disagree");
+  throw new Error(
+    "independent preflight chain, nonce, or balance observations disagree",
+  );
 }
 const exactPendingNonce = heads[0].nonce;
 if (!Number.isSafeInteger(exactPendingNonce)) {
@@ -206,18 +215,26 @@ const predictedAddress = getContractAddress({
 });
 const observations = await Promise.all(
   clients.map(async (client, index) => {
-    const [predictedCode, predictedNonce, predictedBalance, estimatedGas, call] =
-      await Promise.all([
-        client.getCode({ address: predictedAddress, blockTag: "latest" }),
-        client.getTransactionCount({ address: predictedAddress, blockTag: "latest" }),
-        client.getBalance({ address: predictedAddress, blockTag: "latest" }),
-        client.estimateGas({ account: deployer, data: deploymentData }),
-        client.call({
-          account: deployer,
-          data: deploymentData,
-          blockNumber: commonFinalizedNumber,
-        }),
-      ]);
+    const [
+      predictedCode,
+      predictedNonce,
+      predictedBalance,
+      estimatedGas,
+      call,
+    ] = await Promise.all([
+      client.getCode({ address: predictedAddress, blockTag: "latest" }),
+      client.getTransactionCount({
+        address: predictedAddress,
+        blockTag: "latest",
+      }),
+      client.getBalance({ address: predictedAddress, blockTag: "latest" }),
+      client.estimateGas({ account: deployer, data: deploymentData }),
+      client.call({
+        account: deployer,
+        data: deploymentData,
+        blockNumber: commonFinalizedNumber,
+      }),
+    ]);
     assertPredictedAddressUnoccupied({
       code: predictedCode,
       nonce: predictedNonce,
@@ -244,9 +261,7 @@ const expectedRuntimeCodeLength = (observations[0].runtime.length - 2) / 2;
 
 const gasEstimate = observations.reduce(
   (maximum, observation) =>
-    observation.estimatedGas > maximum
-      ? observation.estimatedGas
-      : maximum,
+    observation.estimatedGas > maximum ? observation.estimatedGas : maximum,
   0n,
 );
 const gasLimit = (gasEstimate * 120n + 99n) / 100n;
@@ -256,12 +271,13 @@ const minimumObservedBlockGasLimit = heads.reduce(
   heads[0].latest.gasLimit,
 );
 const maximumObservedPriorityFee = heads.reduce(
-  (maximum, { priorityFee }) =>
-    priorityFee > maximum ? priorityFee : maximum,
+  (maximum, { priorityFee }) => (priorityFee > maximum ? priorityFee : maximum),
   0n,
 );
 if (maximumObservedPriorityFee > maxPriorityFeePerGas) {
-  throw new Error("observed priority fee exceeds the reviewed priority ceiling");
+  throw new Error(
+    "observed priority fee exceeds the reviewed priority ceiling",
+  );
 }
 const maximumObservedFeePerGas = heads.reduce((maximum, { latest }) => {
   const candidate = (latest.baseFeePerGas ?? 0n) * 2n + maxPriorityFeePerGas;
@@ -327,8 +343,7 @@ const plan = {
     gasLimit: gasLimit.toString(),
     minimumObservedBlockGasLimit: minimumObservedBlockGasLimit.toString(),
     maximumObservedFeePerGas: maximumObservedFeePerGas.toString(),
-    maximumObservedPriorityFeePerGas:
-      maximumObservedPriorityFee.toString(),
+    maximumObservedPriorityFeePerGas: maximumObservedPriorityFee.toString(),
     reviewedMaxFeePerGas: maxFeePerGas.toString(),
     reviewedMaxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
     reviewedMaxTotalCostWei: maxTotalCostWei.toString(),
@@ -378,7 +393,9 @@ const plan = {
   },
   releaseAuthorization: {
     owner: releaseOwner,
-    maximumValiditySeconds: 300,
+    maximumSigningAndFirstAttemptValiditySeconds: 300,
+    authorizationSemantics:
+      manifest.releaseAuthorization.authorizationSemantics,
   },
   broadcastAllowed: false,
   signingAllowed: false,

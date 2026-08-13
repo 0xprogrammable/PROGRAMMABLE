@@ -23,6 +23,7 @@ import {
 } from "../custom-registry-v2-safe-controller-guards.mjs";
 import { encodeEventTopics, encodeAbiParameters, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { AUTHORIZATION_SEMANTICS } from "../custom-registry-v2-deployment-guards.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const root = path.resolve(
@@ -140,7 +141,8 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     source: { commit: "a", tree: "b" },
     releaseAuthorization: {
       owner: account.address,
-      maximumValiditySeconds: 300,
+      maximumSigningAndFirstAttemptValiditySeconds: 300,
+      authorizationSemantics: AUTHORIZATION_SEMANTICS,
     },
   };
   assertSafePreflightEnvelope(plan, 199);
@@ -165,12 +167,16 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
     policySha256: plan.policySha256,
     custodyProofSha256: plan.custodyProofSha256,
     ownerAuthorizationAddress: account.address,
-    expiresAtTimestamp: 190,
+    notBeforeTimestamp: 180,
+    firstAttemptExpiresAtTimestamp: 190,
+    authorizationSemantics: AUTHORIZATION_SEMANTICS,
   };
   authorization.reviewedPlanDigest = computeSafeReviewedPlanDigest({
     preflightSha256,
     ownerAuthorizationAddress: account.address,
-    expiresAtTimestamp: authorization.expiresAtTimestamp,
+    notBeforeTimestamp: authorization.notBeforeTimestamp,
+    firstAttemptExpiresAtTimestamp:
+      authorization.firstAttemptExpiresAtTimestamp,
     sourceCommit: plan.source.commit,
     sourceTree: plan.source.tree,
     policySha256: plan.policySha256,
@@ -261,7 +267,8 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     },
     releaseAuthorization: {
       owner: releaseOwner.address,
-      maximumValiditySeconds: 300,
+      maximumSigningAndFirstAttemptValiditySeconds: 300,
+      authorizationSemantics: AUTHORIZATION_SEMANTICS,
     },
   };
   const manifestBytes = Buffer.from(`${JSON.stringify(manifest)}\n`);
@@ -306,7 +313,8 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     admin: admin.address,
     releaseAuthorization: {
       owner: releaseOwner.address,
-      maximumValiditySeconds: 300,
+      maximumSigningAndFirstAttemptValiditySeconds: 300,
+      authorizationSemantics: AUTHORIZATION_SEMANTICS,
     },
     exactPendingNonce: 0,
     deployerBalanceWei: "2640000",

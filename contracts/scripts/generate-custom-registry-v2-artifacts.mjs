@@ -17,11 +17,15 @@ const sourcePaths = [
   "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol",
   "contracts/src/ProgrammableCustomRegistryV2.sol",
   "contracts/script/DeployProgrammableCustomRegistryV2.s.sol",
+  "contracts/scripts/generate-custom-registry-v2-artifacts.mjs",
+  "contracts/scripts/verify-custom-registry-v2-neutrality.mjs",
   "contracts/scripts/prepare-custom-registry-v2-deployment.mjs",
   "contracts/scripts/authorize-custom-registry-v2-deployment.mjs",
   "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
   "contracts/scripts/custom-registry-v2-deployment-plan.mjs",
   "contracts/scripts/custom-registry-v2-live-verification.mjs",
+  "contracts/scripts/custom-registry-v2-transaction-journal.mjs",
+  "contracts/scripts/custom-registry-v2-source-verification-core.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs",
   "contracts/scripts/verify-custom-registry-v2-deployment.mjs",
   "contracts/scripts/verify-custom-registry-v2-source.mjs",
@@ -36,6 +40,8 @@ const sourcePaths = [
   "contracts/scripts/test/custom-registry-v2-live-verification.test.mjs",
   "contracts/scripts/test/custom-registry-v2-production-policy.test.mjs",
   "contracts/scripts/test/custom-registry-v2-safe-controller-guards.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-transaction-journal.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-source-verification-core.test.mjs",
   "config/custom-registry-v2-release-policy.json",
   "config/custom-registry-v2-production-policy.json",
   "config/custom-registry-v2-production-constructor.json",
@@ -63,7 +69,9 @@ const releasePolicy = JSON.parse(
 if (
   releasePolicy.schemaVersion !==
     "programmable.custom-registry-release-policy.v2" ||
-  releasePolicy.maximumAuthorizationValiditySeconds !== 300 ||
+  releasePolicy.maximumSigningAndFirstAttemptValiditySeconds !== 300 ||
+  releasePolicy.authorizationSemantics !==
+    "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED" ||
   releasePolicy.activationAllowed !== false ||
   (releasePolicy.releaseOwner !== null &&
     !/^0x[0-9a-fA-F]{40}$/.test(releasePolicy.releaseOwner))
@@ -117,7 +125,9 @@ const manifest = {
   },
   releaseAuthorization: {
     owner: releasePolicy.releaseOwner,
-    maximumValiditySeconds: releasePolicy.maximumAuthorizationValiditySeconds,
+    maximumSigningAndFirstAttemptValiditySeconds:
+      releasePolicy.maximumSigningAndFirstAttemptValiditySeconds,
+    authorizationSemantics: releasePolicy.authorizationSemantics,
     status: releasePolicy.status,
   },
   sourceDigests,

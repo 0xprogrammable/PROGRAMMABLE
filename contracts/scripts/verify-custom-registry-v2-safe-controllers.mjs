@@ -26,6 +26,11 @@ import {
   verifySafeReviewedAuthorizationSignature,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import { requireDistinctRpcOrigins } from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  assertExactSerializedEip1559Transaction,
+  assertSignedAttemptWindow,
+  loadDurableJsonLines,
+} from "./custom-registry-v2-transaction-journal.mjs";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -58,14 +63,61 @@ const authorized = await readReviewed(
   "REGISTRY_SAFE_BROADCAST_AUTHORIZATION_SHA256",
   "Safe broadcast authorization",
 );
-const receiptEvidence = await readReviewed(
-  "REGISTRY_SAFE_DEPLOYMENT_RECEIPTS_PATH",
-  "REGISTRY_SAFE_DEPLOYMENT_RECEIPTS_SHA256",
-  "Safe deployment receipts",
+const receiptJournalPath = path.resolve(
+  process.env.REGISTRY_SAFE_DEPLOYMENT_RECEIPTS_PATH ?? "",
 );
+if (!receiptJournalPath.startsWith("/tmp/")) {
+  throw new Error("Safe deployment receipt journal must be under /tmp");
+}
+const receiptJournalBytes = await readFile(receiptJournalPath);
+const receiptJournalDigest = `0x${createHash("sha256")
+  .update(receiptJournalBytes)
+  .digest("hex")}`;
+if (
+  receiptJournalDigest !== process.env.REGISTRY_SAFE_DEPLOYMENT_RECEIPTS_SHA256
+) {
+  throw new Error("Safe deployment receipt journal digest mismatch");
+}
+const receiptRecords = await loadDurableJsonLines(receiptJournalPath);
+const [receiptHeader, signedSet, firstAttemptSet] = receiptRecords;
+const signedSets = receiptRecords.filter(
+  ({ event }) => event === "SIGNED_SET_NOT_CONFIRMED",
+);
+const firstAttemptSets = receiptRecords.filter(
+  ({ event }) => event === "FIRST_BROADCAST_ATTEMPT_SET",
+);
+const receiptSets = receiptRecords.filter(
+  ({ event }) => event === "RECEIPTS_SEEN_AWAITING_FINALIZED_VERIFICATION",
+);
+const receiptSet = receiptSets[0];
+const completed = receiptRecords.filter(
+  ({ event }) => event === "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION",
+);
+const receipts = {
+  ...receiptHeader,
+  status:
+    completed.length === 1
+      ? "BROADCAST_COMPLETE_AWAITING_FINALIZED_VERIFICATION"
+      : "INCOMPLETE",
+  controllers: signedSet?.controllers?.map((signed) => {
+    const receipt = receiptSet?.controllers?.find(
+      ({ role }) => role === signed.role,
+    );
+    return {
+      ...signed,
+      transactionStatus: receipt ? "RECEIPT_CONFIRMED_SUCCESS" : "UNKNOWN",
+      blockNumber: receipt?.blockNumber ?? null,
+      blockHash: receipt?.blockHash ?? null,
+    };
+  }),
+};
+const receiptEvidence = {
+  bytes: receiptJournalBytes,
+  digest: receiptJournalDigest,
+  value: receipts,
+};
 const plan = reviewed.value;
 const authorization = authorized.value;
-const receipts = receiptEvidence.value;
 assertSafePreflightEnvelope(plan, 0, { allowExpired: true });
 assertSafeReviewedAuthorization({
   authorization,
@@ -90,6 +142,27 @@ if (
     .size !== 4
 )
   throw new Error("Safe controller deployment evidence is invalid");
+if (
+  receiptHeader.event !== "JOURNAL_OPEN" ||
+  signedSet?.event !== "SIGNED_SET_NOT_CONFIRMED" ||
+  firstAttemptSet?.event !== "FIRST_BROADCAST_ATTEMPT_SET" ||
+  signedSets.length !== 1 ||
+  firstAttemptSets.length !== 1 ||
+  receiptSets.length !== 1 ||
+  completed.length !== 1 ||
+  receiptRecords.indexOf(completed[0]) !== receiptRecords.length - 1 ||
+  JSON.stringify(firstAttemptSet.transactionHashes) !==
+    JSON.stringify(
+      receipts.controllers.map(({ transactionHash }) => transactionHash),
+    )
+) {
+  throw new Error("Safe controller journal order or attempt set is invalid");
+}
+assertSignedAttemptWindow({
+  authorization,
+  signedAt: signedSet.signedAtTimestamp,
+  firstAttemptAt: firstAttemptSet.firstAttemptAtTimestamp,
+});
 
 const commit = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: root,
@@ -147,9 +220,7 @@ const finalized = await Promise.all(
     client.getBlock({ blockNumber: commonFinalizedNumber }),
   ),
 );
-if (
-  finalized[0].hash !== finalized[1].hash
-)
+if (finalized[0].hash !== finalized[1].hash)
   throw new Error("independent finalized anchors disagree");
 const officialBindings = await Promise.all(
   clients.map(async (client) => {
@@ -232,6 +303,11 @@ for (const controller of plan.controllers) {
     throw new Error(
       `reviewed Safe transaction is invalid for ${controller.role}`,
     );
+  await assertExactSerializedEip1559Transaction({
+    serializedTransaction: evidence.serializedTransaction,
+    transactionHash: evidence.transactionHash,
+    expected: controller.expectedTransaction,
+  });
 
   const observations = await Promise.all(
     clients.map(async (client) => {
@@ -267,17 +343,6 @@ for (const controller of plan.controllers) {
         proxy: controller.predictedAddress,
         singleton: plan.singleton.address,
       });
-      const receiptBlock = await client.getBlock({
-        blockNumber: receipt.blockNumber,
-      });
-      if (
-        receiptBlock.timestamp > BigInt(plan.expiresAtTimestamp) ||
-        receiptBlock.timestamp > BigInt(authorization.expiresAtTimestamp)
-      )
-        throw new Error(
-          `${controller.role} transaction missed authorization window`,
-        );
-
       const [
         code,
         version,

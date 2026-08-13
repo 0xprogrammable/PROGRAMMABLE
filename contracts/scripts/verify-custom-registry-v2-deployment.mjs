@@ -1,18 +1,15 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  createPublicClient,
-  getAddress,
-  http,
-  keccak256,
-  toHex,
-} from "viem";
+import { createPublicClient, getAddress, http, keccak256, toHex } from "viem";
 import { mainnet } from "viem/chains";
 
 import {
   REGISTRY_RECEIPT_SCHEMA,
+  REGISTRY_SOURCE_VERIFICATION_SCHEMA,
   REGISTRY_VERIFICATION_SCHEMA,
   ZERO_ADDRESS,
   assertFinalizedDeploymentTransaction,
@@ -23,15 +20,26 @@ import {
   sha256,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
-import {
-  assertRegistryDeploymentPlan,
-} from "./custom-registry-v2-deployment-plan.mjs";
+import { assertRegistryDeploymentPlan } from "./custom-registry-v2-deployment-plan.mjs";
 import {
   assertSafeControllersAtBlock,
   commonFinalizedBlock,
 } from "./custom-registry-v2-live-verification.mjs";
+import {
+  assertExactSerializedEip1559Transaction,
+  assertSignedAttemptWindow,
+  loadDurableJsonLines,
+} from "./custom-registry-v2-transaction-journal.mjs";
+import {
+  REGISTRY_FQCN,
+  compileReviewedRegistry,
+  verifyRegistrySourceProviders,
+} from "./custom-registry-v2-source-verification-core.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
@@ -47,92 +55,109 @@ const required = (name) => {
 };
 const readEvidence = async (pathName, digestName, label) => {
   const filePath = path.resolve(required(pathName));
-  if (!filePath.startsWith("/tmp/")) throw new Error(`${label} must be under /tmp`);
+  if (!filePath.startsWith("/tmp/"))
+    throw new Error(`${label} must be under /tmp`);
   const bytes = await readFile(filePath);
   const digest = sha256(bytes);
-  if (digest !== required(digestName)) throw new Error(`${label} digest mismatch`);
+  if (digest !== required(digestName))
+    throw new Error(`${label} digest mismatch`);
   return { bytes, digest, value: JSON.parse(bytes) };
 };
 
 if (process.argv.includes("--finalize-source")) {
-  const onchain = await readEvidence(
-    "REGISTRY_ONCHAIN_VERIFICATION_PATH",
-    "REGISTRY_ONCHAIN_VERIFICATION_SHA256",
-    "onchain verification",
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "registry-v2-finalize-"),
   );
-  const source = await readEvidence(
-    "REGISTRY_SOURCE_VERIFICATION_PATH",
-    "REGISTRY_SOURCE_VERIFICATION_SHA256",
-    "source verification",
+  const freshOnchainPath = path.join(directory, "fresh-onchain.json");
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(import.meta.url), "--output", freshOnchainPath],
+    {
+      cwd: root,
+      env: process.env,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    },
   );
-  assertSourceVerificationBinding({
-    onchain: onchain.value,
-    source: source.value,
+  if (result.status !== 0) {
+    await rm(directory, { recursive: true, force: true });
+    throw new Error("fresh full onchain release verification failed");
+  }
+  const freshOnchainBytes = await readFile(freshOnchainPath);
+  const freshOnchain = JSON.parse(freshOnchainBytes);
+  const reviewed = await readEvidence(
+    "REGISTRY_REVIEWED_PLAN_PATH",
+    "REGISTRY_REVIEWED_PLAN_SHA256",
+    "reviewed plan",
+  );
+  const compilation = await compileReviewedRegistry({
+    root,
+    source: freshOnchain.source,
   });
-  const standardJsonInputPath = path.resolve(
-    required("REGISTRY_STANDARD_JSON_INPUT_PATH"),
-  );
-  const standardJsonOutputPath = path.resolve(
-    required("REGISTRY_STANDARD_JSON_OUTPUT_PATH"),
-  );
   if (
-    !standardJsonInputPath.startsWith("/tmp/") ||
-    !standardJsonOutputPath.startsWith("/tmp/") ||
-    path.basename(standardJsonInputPath) !==
-      source.value.compiler.standardJsonInputEvidenceFile ||
-    path.basename(standardJsonOutputPath) !==
-      source.value.compiler.standardJsonOutputEvidenceFile
+    freshOnchain.schemaVersion !== REGISTRY_VERIFICATION_SCHEMA ||
+    freshOnchain.status !== "VERIFIED_FINALIZED_ONCHAIN_AWAITING_SOURCE" ||
+    freshOnchain.verified !== false ||
+    freshOnchain.chainId !== 1 ||
+    reviewed.value.source?.commit !== freshOnchain.source?.commit ||
+    reviewed.value.source?.tree !== freshOnchain.source?.tree ||
+    reviewed.value.expectedTransaction?.input !==
+      `${compilation.creationBytecode}${freshOnchain.constructorArguments.slice(2)}`
   ) {
-    throw new Error("exact standard-json evidence paths are invalid");
+    await rm(directory, { recursive: true, force: true });
+    throw new Error(
+      "fresh onchain evidence does not bind self-owned compilation",
+    );
   }
-  const [standardJsonInputBytes, standardJsonOutputBytes] = await Promise.all([
-    readFile(standardJsonInputPath),
-    readFile(standardJsonOutputPath),
-  ]);
-  if (
-    sha256(standardJsonInputBytes) !==
-      source.value.compiler.standardJsonInputSha256 ||
-    sha256(standardJsonOutputBytes) !==
-      source.value.compiler.standardJsonOutputSha256
-  ) {
-    throw new Error("exact standard-json evidence digest mismatch");
-  }
-  const standardJsonInput = JSON.parse(standardJsonInputBytes);
-  const standardJsonOutput = JSON.parse(standardJsonOutputBytes);
-  const reviewedArtifact = JSON.parse(
-    await readFile(
-      path.join(
-        root,
-        "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json",
-      ),
+  const providers = await verifyRegistrySourceProviders({
+    compilation,
+    finalized: freshOnchain,
+    plan: reviewed.value,
+    etherscanApiKey: required("ETHERSCAN_API_KEY"),
+  });
+  const sourceVerification = {
+    schemaVersion: REGISTRY_SOURCE_VERIFICATION_SCHEMA,
+    status: "FRESH_FULL_ONCHAIN_SELF_COMPILED_DUAL_PROVIDER_EXACT",
+    chainId: 1,
+    source: freshOnchain.source,
+    contractAddress: freshOnchain.contractAddress,
+    transactionHash: freshOnchain.transactionHash,
+    runtimeCodeKeccak256: freshOnchain.runtimeCodeKeccak256,
+    constructorArguments: freshOnchain.constructorArguments,
+    fqcn: REGISTRY_FQCN,
+    onchainVerificationSha256: sha256(freshOnchainBytes),
+    compiler: {
+      version: compilation.compiler.version,
+      platform: compilation.compiler.platform,
+      architecture: compilation.compiler.architecture,
+      binarySha256: compilation.compiler.sha256,
+      standardJsonInputSha256: sha256(compilation.inputBytes),
+      standardJsonOutputSha256: sha256(compilation.outputBytes),
+    },
+    sourceClosure: Object.fromEntries(
+      Object.entries(compilation.input.sources).map(([sourcePath, source]) => [
+        sourcePath,
+        sha256(Buffer.from(source.content)),
+      ]),
     ),
-  );
-  const compiled =
-    standardJsonOutput.contracts?.[
-      "src/ProgrammableCustomRegistryV2.sol"
-    ]?.ProgrammableCustomRegistryV2;
-  if (
-    standardJsonInput.language !== "Solidity" ||
-    standardJsonInput.settings?.optimizer?.enabled !== true ||
-    standardJsonInput.settings?.optimizer?.runs !== 1000 ||
-    standardJsonInput.settings?.evmVersion !== "cancun" ||
-    standardJsonInput.settings?.metadata?.bytecodeHash !== "none" ||
-    standardJsonInput.settings?.metadata?.appendCBOR !== false ||
-    standardJsonOutput.errors?.some(({ severity }) => severity === "error") ||
-    `0x${compiled?.evm?.bytecode?.object ?? ""}` !==
-      reviewedArtifact.bytecode.object ||
-    `0x${compiled?.evm?.deployedBytecode?.object ?? ""}` !==
-      reviewedArtifact.deployedBytecode.object
-  ) {
-    throw new Error("exact standard-json compiler evidence is invalid");
-  }
-  const final = {
-    ...onchain.value,
-    status: "VERIFIED_FINALIZED_AND_EXACT_SOURCE",
-    sourceVerificationSha256: source.digest,
-    sourceVerification: source.value,
+    ...providers,
     verified: true,
   };
+  const sourceVerificationSha256 = sha256(
+    Buffer.from(JSON.stringify(sourceVerification)),
+  );
+  assertSourceVerificationBinding({
+    onchain: freshOnchain,
+    source: sourceVerification,
+  });
+  const final = {
+    ...freshOnchain,
+    status: "VERIFIED_FINALIZED_AND_EXACT_SOURCE",
+    sourceVerificationSha256,
+    sourceVerification,
+    verified: true,
+  };
+  await rm(directory, { recursive: true, force: true });
   await writeFile(outputPath, `${JSON.stringify(final, null, 2)}\n`, {
     flag: "wx",
     mode: 0o600,
@@ -166,21 +191,30 @@ const journalBytes = await readFile(journalPath);
 if (sha256(journalBytes) !== required("REGISTRY_DEPLOYMENT_JOURNAL_SHA256")) {
   throw new Error("deployment journal digest mismatch");
 }
-const journal = journalBytes
-  .toString("utf8")
-  .trim()
-  .split("\n")
-  .map((line) => JSON.parse(line));
+const journal = await loadDurableJsonLines(journalPath);
 const header = journal[0];
-const signed = journal.find((entry) => entry.event === "SIGNED_NOT_CONFIRMED");
+const signedRecords = journal.filter(
+  (entry) => entry.event === "SIGNED_NOT_CONFIRMED",
+);
+const signed = signedRecords[0];
+const firstAttempts = journal.filter(
+  (entry) => entry.event === "FIRST_BROADCAST_ATTEMPT",
+);
+const firstAttempt = firstAttempts[0];
 if (
   header?.schemaVersion !== REGISTRY_RECEIPT_SCHEMA ||
   header.event !== "JOURNAL_OPEN" ||
   header.preflightSha256 !== reviewed.digest ||
   header.authorizationSha256 !== authorized.digest ||
   header.safeVerificationSha256 !== safeEvidence.digest ||
+  signedRecords.length !== 1 ||
+  firstAttempts.length !== 1 ||
+  journal.indexOf(signed) !== 1 ||
+  journal.indexOf(firstAttempt) !== 2 ||
   !signed?.serializedTransaction ||
   keccak256(signed.serializedTransaction) !== signed.transactionHash ||
+  firstAttempt.transactionHash !== signed.transactionHash ||
+  firstAttempt.firstAttemptAtTimestamp !== signed.firstAttemptAtTimestamp ||
   journal.some(
     (entry) =>
       entry.transactionHash !== undefined &&
@@ -207,6 +241,16 @@ assertReviewedAuthorization({
   allowExpired: true,
 });
 await verifyReviewedAuthorizationSignature(authorization);
+await assertExactSerializedEip1559Transaction({
+  serializedTransaction: signed.serializedTransaction,
+  transactionHash: signed.transactionHash,
+  expected: plan.expectedTransaction,
+});
+assertSignedAttemptWindow({
+  authorization,
+  signedAt: signed.signedAtTimestamp,
+  firstAttemptAt: firstAttempt.firstAttemptAtTimestamp,
+});
 
 const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
 const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
@@ -241,7 +285,12 @@ const chainObservations = await Promise.all(
     return { transaction, receipt, receiptBlock, runtime: runtime ?? "0x" };
   }),
 );
-const normalizedTransaction = ({ transaction, receipt, receiptBlock, runtime }) => ({
+const normalizedTransaction = ({
+  transaction,
+  receipt,
+  receiptBlock,
+  runtime,
+}) => ({
   hash: transaction.hash,
   blockNumber: transaction.blockNumber?.toString(),
   blockHash: transaction.blockHash,
@@ -275,7 +324,9 @@ const normalizedTransaction = ({ transaction, receipt, receiptBlock, runtime }) 
 const txA = normalizedTransaction(chainObservations[0]);
 const txB = normalizedTransaction(chainObservations[1]);
 if (JSON.stringify(txA) !== JSON.stringify(txB)) {
-  throw new Error("independent finalized transaction or receipt evidence disagrees");
+  throw new Error(
+    "independent finalized transaction or receipt evidence disagrees",
+  );
 }
 assertFinalizedDeploymentTransaction({
   actual: txA,
@@ -303,7 +354,12 @@ const readAll = async (client) => {
       ...(args === undefined ? {} : { args }),
       blockNumber: finalized.number,
     });
-  const roleNames = ["APPROVER_ROLE", "REGISTRAR_ROLE", "FINALIZER_ROLE", "REVOKER_ROLE"];
+  const roleNames = [
+    "APPROVER_ROLE",
+    "REGISTRAR_ROLE",
+    "FINALIZER_ROLE",
+    "REVOKER_ROLE",
+  ];
   const roleValues = await Promise.all(roleNames.map((name) => read(name)));
   const expectedControllers = [
     plan.constructor.initialApprover,
@@ -326,6 +382,7 @@ const readAll = async (client) => {
     adminDelay,
     admin,
     pendingAdminTuple,
+    pendingAdminDelayTuple,
     minimumFinalityBlocks,
     policy,
     approvalCount,
@@ -348,6 +405,7 @@ const readAll = async (client) => {
     read("defaultAdminDelay"),
     read("defaultAdmin"),
     read("pendingDefaultAdmin"),
+    read("pendingDefaultAdminDelay"),
     read("MINIMUM_FINALITY_BLOCKS"),
     read("REGISTRY_POLICY_COMMITMENT"),
     read("approvalCount"),
@@ -357,6 +415,7 @@ const readAll = async (client) => {
     ...roleValues.map((role) => read("operationalController", [role])),
   ]);
   const [pendingAdmin, pendingAdminSchedule] = pendingAdminTuple;
+  const [pendingAdminDelay, pendingAdminDelaySchedule] = pendingAdminDelayTuple;
   const pendingControllers = await Promise.all(
     roleValues.map(async (role) => {
       const pending = await read("pendingOperationalController", [role]);
@@ -385,20 +444,25 @@ const readAll = async (client) => {
             (negativeAccounts[candidateIndex] === expectedControllers[index]),
         )
       ) {
-        throw new Error(`unexpected positive or negative role assignment at ${index}`);
+        throw new Error(
+          `unexpected positive or negative role assignment at ${index}`,
+        );
       }
       const roleAdmin = await read("getRoleAdmin", [role]);
-      if (roleAdmin !== defaultAdminRole || defaultAdminRole !== `0x${"00".repeat(32)}`) {
+      if (
+        roleAdmin !== defaultAdminRole ||
+        defaultAdminRole !== `0x${"00".repeat(32)}`
+      ) {
         throw new Error(`operational role admin is invalid at ${index}`);
       }
       return {
-        expectedControllerHasRole: assignments[
-          negativeAccounts.indexOf(expectedControllers[index])
-        ],
+        expectedControllerHasRole:
+          assignments[negativeAccounts.indexOf(expectedControllers[index])],
         zeroAddressHasRole: assignments[negativeAccounts.indexOf(ZERO_ADDRESS)],
-        adminHasRole: assignments[
-          negativeAccounts.indexOf(getAddress(plan.constructor.initialAdmin))
-        ],
+        adminHasRole:
+          assignments[
+            negativeAccounts.indexOf(getAddress(plan.constructor.initialAdmin))
+          ],
       };
     }),
   );
@@ -425,6 +489,8 @@ const readAll = async (client) => {
     admin,
     pendingAdmin,
     pendingAdminSchedule,
+    pendingAdminDelay,
+    pendingAdminDelaySchedule,
     minimumFinalityBlocks,
     policy,
     approvalCount,
@@ -457,12 +523,8 @@ const expectedConstants = {
     ),
   ),
   launchIdDomain: keccak256(toHex("programmable.custom-launch-id.v2")),
-  standardPolicyId: keccak256(
-    toHex("programmable.custom.fee.standard10.v2"),
-  ),
-  noMarketPolicyId: keccak256(
-    toHex("programmable.custom.fee.no-market0.v2"),
-  ),
+  standardPolicyId: keccak256(toHex("programmable.custom.fee.standard10.v2")),
+  noMarketPolicyId: keccak256(toHex("programmable.custom.fee.no-market0.v2")),
 };
 for (const [field, expected] of Object.entries(expectedConstants)) {
   if (state[field] !== expected) {
@@ -491,8 +553,14 @@ const safeControllers = await assertSafeControllersAtBlock({
 });
 
 const creationBytecodeLength = planInputs.artifact.bytecode.object.length;
-if (!plan.expectedTransaction.input.startsWith(planInputs.artifact.bytecode.object)) {
-  throw new Error("deployment input does not begin with exact creation bytecode");
+if (
+  !plan.expectedTransaction.input.startsWith(
+    planInputs.artifact.bytecode.object,
+  )
+) {
+  throw new Error(
+    "deployment input does not begin with exact creation bytecode",
+  );
 }
 const constructorArguments = `0x${plan.expectedTransaction.input.slice(creationBytecodeLength)}`;
 const verification = {
@@ -508,11 +576,15 @@ const verification = {
   transactionHash: signed.transactionHash,
   deploymentBlockNumber: txA.receiptBlockNumber,
   deploymentBlockHash: txA.receiptBlockHash,
+  deploymentTransactionIndex: txA.receiptTransactionIndex,
+  deploymentBlockTimestamp: txA.receiptBlockTimestamp,
+  deployer: getAddress(plan.expectedTransaction.from),
   finalizedBlockNumber: finalized.number.toString(),
   finalizedBlockHash: finalized.hash,
   minimumFinalityBlocks: plan.constructor.minimumFinalityBlocks,
   runtimeCodeKeccak256: plan.expectedRuntime.codeKeccak256,
   runtimeCodeLength: plan.expectedRuntime.codeLength,
+  runtimeCode: runtimeA,
   constructorCommitment: plan.constructorCommitment,
   constructorArguments,
   registryPolicyCommitment: plan.constructor.registryPolicyCommitment,
@@ -525,11 +597,15 @@ const verification = {
     adminDelay: state.adminDelay.toString(),
     pendingAdmin: getAddress(state.pendingAdmin),
     pendingAdminSchedule: state.pendingAdminSchedule.toString(),
+    pendingAdminDelay: state.pendingAdminDelay.toString(),
+    pendingAdminDelaySchedule: state.pendingAdminDelaySchedule.toString(),
     controllers: expectedControllers,
-    pendingControllers: state.pendingControllers.map(({ controller, acceptAfter }) => ({
-      controller: getAddress(controller),
-      acceptAfter: acceptAfter.toString(),
-    })),
+    pendingControllers: state.pendingControllers.map(
+      ({ controller, acceptAfter }) => ({
+        controller: getAddress(controller),
+        acceptAfter: acceptAfter.toString(),
+      }),
+    ),
     counters: {
       approval: state.approvalCount.toString(),
       registration: state.registrationCount.toString(),

@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const paths = [
   "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol",
   "contracts/src/ProgrammableCustomRegistryV2.sol",
@@ -20,26 +23,50 @@ const paths = [
   "docs/security/CUSTOM_REGISTRY_EVENT_SET_V2.json",
   "config/custom-registry-v2-release-policy.json",
 ];
-const forbidden = [/providerId/i, /partnerId/i, /partnerFactoryRegistry/i, /repositoryId/i, /repositoryOwner/i];
+const universallyForbidden = [/partnerId/i, /partnerFactoryRegistry/i];
+const applicantMetadataForbidden = [
+  /providerId/i,
+  /repositoryId/i,
+  /repositoryOwner/i,
+];
 
 for (const relative of paths) {
   const contents = await readFile(path.join(root, relative), "utf8");
+  const forbidden = [
+    ...universallyForbidden,
+    ...(relative.includes("/src/") || relative.includes("/abi/")
+      ? applicantMetadataForbidden
+      : []),
+  ];
   for (const pattern of forbidden) {
-    if (pattern.test(contents)) throw new Error(`${relative} contains forbidden coupling ${pattern}`);
+    if (pattern.test(contents))
+      throw new Error(`${relative} contains forbidden coupling ${pattern}`);
   }
 }
 
-const manifest = JSON.parse(await readFile(path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"), "utf8"));
-const releasePolicy = JSON.parse(await readFile(path.join(root, "config/custom-registry-v2-release-policy.json"), "utf8"));
+const manifest = JSON.parse(
+  await readFile(
+    path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
+    "utf8",
+  ),
+);
+const releasePolicy = JSON.parse(
+  await readFile(
+    path.join(root, "config/custom-registry-v2-release-policy.json"),
+    "utf8",
+  ),
+);
 if (
   manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
   manifest.activationAllowed !== false ||
   Object.values(manifest.deployment).some((value) => value !== null) ||
   manifest.policy.market.protocolFeeBps !== 10 ||
-  manifest.policy.noMarket.protocolFeeBps !== 0
-  || releasePolicy.releaseOwner !== manifest.releaseAuthorization.owner
-  || releasePolicy.maximumAuthorizationValiditySeconds !== 300
-  || releasePolicy.activationAllowed !== false
+  manifest.policy.noMarket.protocolFeeBps !== 0 ||
+  releasePolicy.releaseOwner !== manifest.releaseAuthorization.owner ||
+  releasePolicy.maximumSigningAndFirstAttemptValiditySeconds !== 300 ||
+  releasePolicy.authorizationSemantics !==
+    "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED" ||
+  releasePolicy.activationAllowed !== false
 ) {
   throw new Error("neutral predeployment manifest is not fail-closed");
 }

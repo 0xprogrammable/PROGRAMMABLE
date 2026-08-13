@@ -1,14 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { open, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  createPublicClient,
-  getAddress,
-  http,
-  keccak256,
-} from "viem";
+import { createPublicClient, getAddress, http, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
 
@@ -19,21 +14,29 @@ import {
   sha256,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
+import { assertRegistryDeploymentPlan } from "./custom-registry-v2-deployment-plan.mjs";
+import { assertRegistryLivePreflight } from "./custom-registry-v2-live-verification.mjs";
 import {
-  assertRegistryDeploymentPlan,
-} from "./custom-registry-v2-deployment-plan.mjs";
-import {
-  assertRegistryLivePreflight,
-} from "./custom-registry-v2-live-verification.mjs";
+  appendDurableJsonLine,
+  assertExactSerializedEip1559Transaction,
+  assertSignedAttemptWindow,
+  loadDurableJsonLines,
+  trustedNetworkTime,
+} from "./custom-registry-v2-transaction-journal.mjs";
 
 const broadcast = process.argv.includes("--broadcast");
 const recover = process.argv.includes("--recover");
 const rebroadcast = process.argv.includes("--rebroadcast");
 if (!recover && !broadcast) throw new Error("explicit --broadcast is required");
 if (rebroadcast && (!recover || !broadcast)) {
-  throw new Error("recovery rebroadcast requires --recover --rebroadcast --broadcast");
+  throw new Error(
+    "recovery rebroadcast requires --recover --rebroadcast --broadcast",
+  );
 }
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const outputIndex = process.argv.indexOf("--output");
 if (outputIndex === -1 || !process.argv[outputIndex + 1]) {
   throw new Error("--output is required");
@@ -49,10 +52,12 @@ const required = (name) => {
 };
 const readReviewed = async (pathName, digestName, label) => {
   const filePath = path.resolve(required(pathName));
-  if (!filePath.startsWith("/tmp/")) throw new Error(`${label} must be under /tmp`);
+  if (!filePath.startsWith("/tmp/"))
+    throw new Error(`${label} must be under /tmp`);
   const bytes = await readFile(filePath);
   const digest = sha256(bytes);
-  if (digest !== required(digestName)) throw new Error(`${label} digest mismatch`);
+  if (digest !== required(digestName))
+    throw new Error(`${label} digest mismatch`);
   return { bytes, digest, value: JSON.parse(bytes) };
 };
 const reviewed = await readReviewed(
@@ -72,7 +77,7 @@ const safeEvidence = await readReviewed(
 );
 const plan = reviewed.value;
 const authorization = authorized.value;
-let nowTimestamp = Math.floor(Date.now() / 1000);
+let nowTimestamp = trustedNetworkTime().adjustedTimestamp;
 const planInputs = await assertRegistryDeploymentPlan({
   root,
   plan,
@@ -106,46 +111,47 @@ const clients = [rpcA, rpcB].map((url) =>
   createPublicClient({ chain: mainnet, transport: http(url) }),
 );
 
-const appendJournal = async (entry, create = false) => {
-  const line = `${JSON.stringify(entry)}\n`;
-  if (create) {
-    await writeFile(journalPath, line, { flag: "wx", mode: 0o600 });
-    const handle = await open(journalPath, "r+");
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    return;
-  }
-  const handle = await open(journalPath, "a", 0o600);
-  try {
-    await handle.write(line);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-};
-const loadJournal = async () =>
-  (await readFile(journalPath, "utf8"))
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
+const appendJournal = (entry, create = false) =>
+  appendDurableJsonLine(journalPath, entry, { create });
 
 if (recover) {
-  const entries = await loadJournal();
+  const entries = await loadDurableJsonLines(journalPath);
   const header = entries[0];
-  const signed = entries.find((entry) => entry.event === "SIGNED_NOT_CONFIRMED");
+  const signedRecords = entries.filter(
+    (entry) => entry.event === "SIGNED_NOT_CONFIRMED",
+  );
+  const signed = signedRecords[0];
+  const firstAttempts = entries.filter(
+    (entry) => entry.event === "FIRST_BROADCAST_ATTEMPT",
+  );
+  const firstAttempt = firstAttempts[0];
   if (
     header?.schemaVersion !== REGISTRY_RECEIPT_SCHEMA ||
     header.event !== "JOURNAL_OPEN" ||
     header.preflightSha256 !== reviewed.digest ||
     header.authorizationSha256 !== authorized.digest ||
+    signedRecords.length !== 1 ||
+    entries.indexOf(signed) !== 1 ||
+    firstAttempts.length !== 1 ||
+    entries.indexOf(firstAttempt) !== 2 ||
     !signed?.serializedTransaction ||
-    keccak256(signed.serializedTransaction) !== signed.transactionHash
+    keccak256(signed.serializedTransaction) !== signed.transactionHash ||
+    !firstAttempt ||
+    firstAttempt.transactionHash !== signed.transactionHash ||
+    firstAttempt.firstAttemptAtTimestamp !== signed.firstAttemptAtTimestamp
   ) {
     throw new Error("deployment recovery journal is invalid");
   }
+  await assertExactSerializedEip1559Transaction({
+    serializedTransaction: signed.serializedTransaction,
+    transactionHash: signed.transactionHash,
+    expected: plan.expectedTransaction,
+  });
+  assertSignedAttemptWindow({
+    authorization,
+    signedAt: signed.signedAtTimestamp,
+    firstAttemptAt: firstAttempt.firstAttemptAtTimestamp,
+  });
   const discovered = await Promise.all(
     clients.map(async (client) => {
       try {
@@ -176,12 +182,8 @@ if (recover) {
     );
     process.exit(2);
   }
-  if (
-    nowTimestamp + 60 > authorization.expiresAtTimestamp ||
-    nowTimestamp + 60 > plan.expiresAtTimestamp
-  ) {
-    throw new Error("recovery transaction lacks a safe inclusion window");
-  }
+  // After one timely first attempt, only these exact signed bytes may be
+  // idempotently rebroadcast. The authorization is not an inclusion deadline.
   const responses = await Promise.allSettled(
     clients.map((client) =>
       client.sendRawTransaction({
@@ -204,10 +206,13 @@ if (recover) {
   if (
     !responses.some(
       (result) =>
-        result.status === "fulfilled" && result.value === signed.transactionHash,
+        result.status === "fulfilled" &&
+        result.value === signed.transactionHash,
     )
   ) {
-    throw new Error("exact recovery transaction was not accepted by either RPC");
+    throw new Error(
+      "exact recovery transaction was not accepted by either RPC",
+    );
   }
   process.stdout.write(
     `CUSTOM_REGISTRY_V2_RECOVERY_REBROADCAST ${signed.transactionHash}\n`,
@@ -222,12 +227,13 @@ await assertRegistryLivePreflight({
   planInputs,
 });
 
-nowTimestamp = Math.floor(Date.now() / 1000);
+const signingTime = trustedNetworkTime();
+nowTimestamp = signingTime.adjustedTimestamp;
 if (
-  nowTimestamp + 60 > authorization.expiresAtTimestamp ||
+  nowTimestamp > authorization.firstAttemptExpiresAtTimestamp ||
   nowTimestamp + 60 > plan.expiresAtTimestamp
 ) {
-  throw new Error("authorization lacks a safe inclusion window before signing");
+  throw new Error("authorization or reviewed preflight expired before signing");
 }
 const keychainService =
   "programmable.custom-registry.v2.production-custody.20260813.deployer";
@@ -258,11 +264,20 @@ const serializedTransaction = await account.signTransaction({
   nonce: plan.expectedTransaction.nonce,
   gas: BigInt(plan.expectedTransaction.gasLimit),
   maxFeePerGas: BigInt(plan.expectedTransaction.maxFeePerGas),
-  maxPriorityFeePerGas: BigInt(
-    plan.expectedTransaction.maxPriorityFeePerGas,
-  ),
+  maxPriorityFeePerGas: BigInt(plan.expectedTransaction.maxPriorityFeePerGas),
 });
 const transactionHash = keccak256(serializedTransaction);
+await assertExactSerializedEip1559Transaction({
+  serializedTransaction,
+  transactionHash,
+  expected: plan.expectedTransaction,
+});
+const firstAttemptTime = trustedNetworkTime();
+assertSignedAttemptWindow({
+  authorization,
+  signedAt: signingTime.adjustedTimestamp,
+  firstAttemptAt: firstAttemptTime.adjustedTimestamp,
+});
 await appendJournal(
   {
     schemaVersion: REGISTRY_RECEIPT_SCHEMA,
@@ -274,15 +289,24 @@ await appendJournal(
     source: plan.source,
     predictedAddress: plan.create.predictedAddress,
     openedAtTimestamp: nowTimestamp,
+    authorizationSemantics: authorization.authorizationSemantics,
   },
   true,
 );
 await appendJournal({
   event: "SIGNED_NOT_CONFIRMED",
-  signedAtTimestamp: nowTimestamp,
-  authorizationExpiresAtTimestamp: authorization.expiresAtTimestamp,
+  signedAtTimestamp: signingTime.adjustedTimestamp,
+  firstAttemptAtTimestamp: firstAttemptTime.adjustedTimestamp,
+  trustedTime: signingTime,
+  firstAttemptTrustedTime: firstAttemptTime,
+  firstAttemptExpiresAtTimestamp: authorization.firstAttemptExpiresAtTimestamp,
   transactionHash,
   serializedTransaction,
+});
+await appendJournal({
+  event: "FIRST_BROADCAST_ATTEMPT",
+  firstAttemptAtTimestamp: firstAttemptTime.adjustedTimestamp,
+  transactionHash,
 });
 
 const responses = await Promise.allSettled(
@@ -310,7 +334,10 @@ if (
 }
 const receipt = await Promise.any(
   clients.map((client) =>
-    client.waitForTransactionReceipt({ hash: transactionHash, confirmations: 1 }),
+    client.waitForTransactionReceipt({
+      hash: transactionHash,
+      confirmations: 1,
+    }),
   ),
 );
 await appendJournal({
@@ -324,7 +351,8 @@ await appendJournal({
 });
 if (
   receipt.status !== "success" ||
-  getAddress(receipt.contractAddress) !== getAddress(plan.create.predictedAddress)
+  getAddress(receipt.contractAddress) !==
+    getAddress(plan.create.predictedAddress)
 ) {
   throw new Error("Registry deployment receipt failed or address mismatched");
 }

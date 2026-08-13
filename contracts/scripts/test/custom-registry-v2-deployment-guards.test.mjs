@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { keccak256 } from "viem";
+import { decodeAbiParameters, encodeAbiParameters, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import {
   REGISTRY_AUTHORIZATION_SCHEMA,
+  AUTHORIZATION_SEMANTICS,
   REGISTRY_PREFLIGHT_SCHEMA,
   REGISTRY_SOURCE_VERIFICATION_SCHEMA,
   REGISTRY_VERIFICATION_SCHEMA,
@@ -32,11 +33,18 @@ import {
 
 test("requires genuinely distinct RPC origins", () => {
   assert.throws(
-    () => requireDistinctRpcOrigins("https://rpc.example/a", "https://rpc.example/b"),
+    () =>
+      requireDistinctRpcOrigins(
+        "https://rpc.example/a",
+        "https://rpc.example/b",
+      ),
     /origins must be distinct/,
   );
   assert.deepEqual(
-    requireDistinctRpcOrigins("https://rpc-a.example/path", "https://rpc-b.example/path"),
+    requireDistinctRpcOrigins(
+      "https://rpc-a.example/path",
+      "https://rpc-b.example/path",
+    ),
     ["https://rpc-a.example", "https://rpc-b.example"],
   );
 });
@@ -52,11 +60,26 @@ test("fails closed on block gas, fee, priority, cost and balance ceilings", () =
     deployerBalance: 3_000_000n,
   };
   assert.equal(assessDeploymentCost(valid), 3_000_000n);
-  assert.throws(() => assessDeploymentCost({ ...valid, blockGasLimit: valid.gasLimit }), /block gas/);
-  assert.throws(() => assessDeploymentCost({ ...valid, observedFeePerGas: 4n }), /fee per gas/);
-  assert.throws(() => assessDeploymentCost({ ...valid, maxPriorityFeePerGas: 4n }), /priority fee/);
-  assert.throws(() => assessDeploymentCost({ ...valid, maxTotalCostWei: 2_999_999n }), /maximum cost/);
-  assert.throws(() => assessDeploymentCost({ ...valid, deployerBalance: 2_999_999n }), /balance is insufficient/);
+  assert.throws(
+    () => assessDeploymentCost({ ...valid, blockGasLimit: valid.gasLimit }),
+    /block gas/,
+  );
+  assert.throws(
+    () => assessDeploymentCost({ ...valid, observedFeePerGas: 4n }),
+    /fee per gas/,
+  );
+  assert.throws(
+    () => assessDeploymentCost({ ...valid, maxPriorityFeePerGas: 4n }),
+    /priority fee/,
+  );
+  assert.throws(
+    () => assessDeploymentCost({ ...valid, maxTotalCostWei: 2_999_999n }),
+    /maximum cost/,
+  );
+  assert.throws(
+    () => assessDeploymentCost({ ...valid, deployerBalance: 2_999_999n }),
+    /balance is insufficient/,
+  );
 });
 
 const planFixture = () => ({
@@ -70,9 +93,13 @@ const planFixture = () => ({
   source: { commit: "a", tree: "b" },
   releaseAuthorization: {
     owner: privateKeyToAccount(`0x${"22".repeat(32)}`).address,
-    maximumValiditySeconds: 300,
+    maximumSigningAndFirstAttemptValiditySeconds: 300,
+    authorizationSemantics: AUTHORIZATION_SEMANTICS,
   },
-  commonFinalizedAnchor: { blockNumber: "100", blockHash: `0x${"aa".repeat(32)}` },
+  commonFinalizedAnchor: {
+    blockNumber: "100",
+    blockHash: `0x${"aa".repeat(32)}`,
+  },
   create: { exactPendingNonce: 7 },
 });
 
@@ -88,13 +115,16 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
     preflightSha256,
     source: plan.source,
     ownerAuthorizationAddress: account.address,
-    createdAtTimestamp: 180,
-    expiresAtTimestamp: 190,
+    notBeforeTimestamp: 180,
+    firstAttemptExpiresAtTimestamp: 190,
+    authorizationSemantics: AUTHORIZATION_SEMANTICS,
   };
   authorization.reviewedPlanDigest = computeReviewedPlanDigest({
     preflightSha256,
     ownerAuthorizationAddress: account.address,
-    expiresAtTimestamp: authorization.expiresAtTimestamp,
+    notBeforeTimestamp: authorization.notBeforeTimestamp,
+    firstAttemptExpiresAtTimestamp:
+      authorization.firstAttemptExpiresAtTimestamp,
     sourceCommit: plan.source.commit,
     sourceTree: plan.source.tree,
   });
@@ -102,27 +132,67 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
     message: reviewedAuthorizationMessage(authorization.reviewedPlanDigest),
   });
   assert.doesNotThrow(() =>
-    assertReviewedAuthorization({ authorization, preflightSha256, plan, nowTimestamp: 180 }),
+    assertReviewedAuthorization({
+      authorization,
+      preflightSha256,
+      plan,
+      nowTimestamp: 180,
+    }),
   );
   await verifyReviewedAuthorizationSignature(authorization);
   assert.throws(
-    () => assertReviewedAuthorization({ authorization: { ...authorization, broadcastAllowed: false }, preflightSha256, plan, nowTimestamp: 180 }),
+    () =>
+      assertReviewedAuthorization({
+        authorization: { ...authorization, broadcastAllowed: false },
+        preflightSha256,
+        plan,
+        nowTimestamp: 180,
+      }),
     /authorization is stale or invalid/,
   );
   assert.throws(
-    () => assertReviewedAuthorization({ authorization: { ...authorization, expiresAtTimestamp: 181, createdAtTimestamp: 182 }, preflightSha256, plan, nowTimestamp: 180 }),
+    () =>
+      assertReviewedAuthorization({
+        authorization: {
+          ...authorization,
+          firstAttemptExpiresAtTimestamp: 181,
+          notBeforeTimestamp: 182,
+        },
+        preflightSha256,
+        plan,
+        nowTimestamp: 180,
+      }),
     /authorization is stale or invalid/,
   );
   assert.throws(
-    () => assertReviewedAuthorization({ authorization, preflightSha256, plan, nowTimestamp: 191 }),
+    () =>
+      assertReviewedAuthorization({
+        authorization,
+        preflightSha256,
+        plan,
+        nowTimestamp: 191,
+      }),
     /authorization is stale or invalid/,
   );
   assert.throws(
-    () => assertReviewedAuthorization({ authorization: { ...authorization, reviewedPlanDigest: `0x${"33".repeat(32)}` }, preflightSha256, plan, nowTimestamp: 180 }),
+    () =>
+      assertReviewedAuthorization({
+        authorization: {
+          ...authorization,
+          reviewedPlanDigest: `0x${"33".repeat(32)}`,
+        },
+        preflightSha256,
+        plan,
+        nowTimestamp: 180,
+      }),
     /reviewed plan digest mismatch/,
   );
   await assert.rejects(
-    () => verifyReviewedAuthorizationSignature({ ...authorization, ownerAuthorizationAddress: "0x0000000000000000000000000000000000000001" }),
+    () =>
+      verifyReviewedAuthorizationSignature({
+        ...authorization,
+        ownerAuthorizationAddress: "0x0000000000000000000000000000000000000001",
+      }),
     /signature mismatch/,
   );
 });
@@ -130,11 +200,27 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
 test("binds source, finalized anchor, nonce and live target state without brittle latest equality", () => {
   const plan = planFixture();
   assertPreflightEnvelope(plan, 199);
-  assert.throws(() => assertPreflightEnvelope({ ...plan, expiresAtTimestamp: 98 }, 99), /preflight plan/);
+  assert.throws(
+    () => assertPreflightEnvelope({ ...plan, expiresAtTimestamp: 98 }, 99),
+    /preflight plan/,
+  );
   assertSourceBinding({ commit: "a", tree: "b", clean: true, plan });
-  assert.throws(() => assertSourceBinding({ commit: "x", tree: "b", clean: true, plan }), /source identity/);
-  assertDeployerBinding("0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000001");
-  assert.throws(() => assertDeployerBinding("0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"), /deployer key/);
+  assert.throws(
+    () => assertSourceBinding({ commit: "x", tree: "b", clean: true, plan }),
+    /source identity/,
+  );
+  assertDeployerBinding(
+    "0x0000000000000000000000000000000000000001",
+    "0x0000000000000000000000000000000000000001",
+  );
+  assert.throws(
+    () =>
+      assertDeployerBinding(
+        "0x0000000000000000000000000000000000000001",
+        "0x0000000000000000000000000000000000000002",
+      ),
+    /deployer key/,
+  );
   const observation = {
     finalized: { number: 101n, hash: `0x${"bb".repeat(32)}` },
     nonce: 7,
@@ -144,7 +230,15 @@ test("binds source, finalized anchor, nonce and live target state without brittl
     predictedBalance: 0n,
   };
   assertLiveBinding({ first: observation, second: { ...observation }, plan });
-  assert.throws(() => assertLiveBinding({ first: observation, second: { ...observation, nonce: 8 }, plan }), /live broadcast state/);
+  assert.throws(
+    () =>
+      assertLiveBinding({
+        first: observation,
+        second: { ...observation, nonce: 8 },
+        plan,
+      }),
+    /live broadcast state/,
+  );
   assertFinalizedAnchor({
     anchor: plan.commonFinalizedAnchor,
     observations: [
@@ -153,7 +247,14 @@ test("binds source, finalized anchor, nonce and live target state without brittl
     ],
   });
   assert.throws(
-    () => assertFinalizedAnchor({ anchor: plan.commonFinalizedAnchor, observations: [{ number: 100n, hash: plan.commonFinalizedAnchor.blockHash }, { number: 100n, hash: `0x${"bb".repeat(32)}` }] }),
+    () =>
+      assertFinalizedAnchor({
+        anchor: plan.commonFinalizedAnchor,
+        observations: [
+          { number: 100n, hash: plan.commonFinalizedAnchor.blockHash },
+          { number: 100n, hash: `0x${"bb".repeat(32)}` },
+        ],
+      }),
     /not canonical/,
   );
 });
@@ -165,7 +266,8 @@ test("binds exact deployment data, policies, ABI, bytecode and transaction", () 
   const committedAbiBytes = Buffer.from("abi");
   const productionPolicyBytes = Buffer.from("policy");
   const safeVerificationBytes = Buffer.from("safe");
-  const sha = (bytes) => `0x${createHash("sha256").update(bytes).digest("hex")}`;
+  const sha = (bytes) =>
+    `0x${createHash("sha256").update(bytes).digest("hex")}`;
   const plan = {
     source: {
       creationBytecodeKeccak256: keccak256(artifactBytecode),
@@ -196,14 +298,40 @@ test("binds exact deployment data, policies, ABI, bytecode and transaction", () 
     maxPriorityFeePerGas: "1",
   };
   const manifest = { artifact: { abiSha256: sha(committedAbiBytes) } };
-  assertArtifactBinding({ artifactBytecode, deploymentData, manifestBytes, committedAbiBytes, productionPolicyBytes, safeVerificationBytes, manifest, plan });
+  assertArtifactBinding({
+    artifactBytecode,
+    deploymentData,
+    manifestBytes,
+    committedAbiBytes,
+    productionPolicyBytes,
+    safeVerificationBytes,
+    manifest,
+    plan,
+  });
   assertExpectedDeploymentTransaction({ plan, deploymentData });
   assert.throws(
-    () => assertExpectedDeploymentTransaction({ plan: { ...plan, expectedTransaction: { ...plan.expectedTransaction, nonce: 8 } }, deploymentData }),
+    () =>
+      assertExpectedDeploymentTransaction({
+        plan: {
+          ...plan,
+          expectedTransaction: { ...plan.expectedTransaction, nonce: 8 },
+        },
+        deploymentData,
+      }),
     /exact deployment transaction/,
   );
   assert.throws(
-    () => assertArtifactBinding({ artifactBytecode, deploymentData, manifestBytes, committedAbiBytes, productionPolicyBytes: Buffer.from("mutated"), safeVerificationBytes, manifest, plan }),
+    () =>
+      assertArtifactBinding({
+        artifactBytecode,
+        deploymentData,
+        manifestBytes,
+        committedAbiBytes,
+        productionPolicyBytes: Buffer.from("mutated"),
+        safeVerificationBytes,
+        manifest,
+        plan,
+      }),
     /drifted from plan/,
   );
 });
@@ -221,46 +349,80 @@ test("binds constructor order and exact empty initialized Registry state", () =>
   };
   assert.notEqual(
     computeConstructorCommitment(config),
-    computeConstructorCommitment({ ...config, initialApprover: config.initialRegistrar, initialRegistrar: config.initialApprover }),
+    computeConstructorCommitment({
+      ...config,
+      initialApprover: config.initialRegistrar,
+      initialRegistrar: config.initialApprover,
+    }),
   );
   const runtime = "0x6000";
   const expected = {
     ...config,
     runtimeCodeKeccak256: keccak256(runtime),
-    controllers: [config.initialApprover, config.initialRegistrar, config.initialFinalizer, config.initialRevoker],
+    controllers: [
+      config.initialApprover,
+      config.initialRegistrar,
+      config.initialFinalizer,
+      config.initialRevoker,
+    ],
   };
   const actual = {
     runtimeA: runtime,
     runtimeB: runtime,
     chainId: 1n,
     registryGeneration: 2n,
-    adminDelay: 172800n,
+    adminDelay: decodeAbiParameters(
+      [{ type: "uint48" }],
+      encodeAbiParameters([{ type: "uint48" }], [172800]),
+    )[0],
     admin: config.initialAdmin,
     pendingAdmin: ZERO_ADDRESS,
     pendingAdminSchedule: 0n,
+    pendingAdminDelay: 0,
+    pendingAdminDelaySchedule: 0,
     minimumFinalityBlocks: 12n,
     policy: config.registryPolicyCommitment,
     controllers: expected.controllers,
-    pendingControllers: expected.controllers.map(() => ({ controller: ZERO_ADDRESS, acceptAfter: 0n })),
-    roleAssignments: expected.controllers.map(() => ({ expectedControllerHasRole: true, zeroAddressHasRole: false, adminHasRole: false })),
+    pendingControllers: expected.controllers.map(() => ({
+      controller: ZERO_ADDRESS,
+      acceptAfter: 0n,
+    })),
+    roleAssignments: expected.controllers.map(() => ({
+      expectedControllerHasRole: true,
+      zeroAddressHasRole: false,
+      adminHasRole: false,
+    })),
     approvalCount: 0n,
     registrationCount: 0n,
     transitionCount: 0n,
   };
+  assert.equal(typeof actual.adminDelay, "number");
   assertPostDeploymentBinding({ actual, expected });
   assert.throws(
-    () => assertPostDeploymentBinding({ actual: { ...actual, transitionCount: 1n }, expected }),
+    () =>
+      assertPostDeploymentBinding({
+        actual: { ...actual, transitionCount: 1n },
+        expected,
+      }),
     /post-deployment/,
   );
   assert.throws(
-    () => assertPostDeploymentBinding({ actual: { ...actual, runtimeA: "0x6001", runtimeB: "0x6001" }, expected }),
+    () =>
+      assertPostDeploymentBinding({
+        actual: { ...actual, runtimeA: "0x6001", runtimeB: "0x6001" },
+        expected,
+      }),
     /post-deployment/,
   );
   assertPredictedAddressUnoccupied({ code: "0x", nonce: 0, balance: 0n });
-  assert.throws(() => assertPredictedAddressUnoccupied({ code: "0x", nonce: 1, balance: 0n }), /occupied/);
+  assert.throws(
+    () =>
+      assertPredictedAddressUnoccupied({ code: "0x", nonce: 1, balance: 0n }),
+    /occupied/,
+  );
 });
 
-test("rejects adversarial finalized receipt, nonce, input, fee, runtime and late inclusion mutations", () => {
+test("rejects adversarial finalized receipt, nonce, input, fee, and runtime while allowing later exact inclusion", () => {
   const transactionHash = `0x${"11".repeat(32)}`;
   const expectedRuntime = `0x${"22".repeat(32)}`;
   const plan = {
@@ -277,7 +439,7 @@ test("rejects adversarial finalized receipt, nonce, input, fee, runtime and late
     create: { predictedAddress: "0x0000000000000000000000000000000000000002" },
     expectedRuntime: { codeKeccak256: expectedRuntime },
   };
-  const authorization = { expiresAtTimestamp: 190 };
+  const authorization = {};
   const actual = {
     hash: transactionHash,
     blockNumber: "100",
@@ -302,17 +464,33 @@ test("rejects adversarial finalized receipt, nonce, input, fee, runtime and late
     receiptBlockTimestamp: "189",
     runtimeCodeKeccak256: expectedRuntime,
   };
-  assertFinalizedDeploymentTransaction({ actual, transactionHash, plan, authorization });
+  assertFinalizedDeploymentTransaction({
+    actual,
+    transactionHash,
+    plan,
+    authorization,
+  });
+  assertFinalizedDeploymentTransaction({
+    actual: { ...actual, receiptBlockTimestamp: "9999999999" },
+    transactionHash,
+    plan,
+    authorization,
+  });
   for (const [field, value] of [
     ["nonce", 8],
     ["input", "0x5678"],
     ["maxPriorityFeePerGas", "2"],
     ["receiptStatus", "reverted"],
-    ["receiptBlockTimestamp", "191"],
     ["runtimeCodeKeccak256", `0x${"44".repeat(32)}`],
   ]) {
     assert.throws(
-      () => assertFinalizedDeploymentTransaction({ actual: { ...actual, [field]: value }, transactionHash, plan, authorization }),
+      () =>
+        assertFinalizedDeploymentTransaction({
+          actual: { ...actual, [field]: value },
+          transactionHash,
+          plan,
+          authorization,
+        }),
       /exact signed plan/,
     );
   }
@@ -332,7 +510,7 @@ test("requires exact Etherscan and Sourcify evidence bound to finalized onchain 
   };
   const source = {
     schemaVersion: REGISTRY_SOURCE_VERIFICATION_SCHEMA,
-    status: "ETHERSCAN_EXACT_AND_SOURCIFY_MATCH",
+    status: "SELF_COMPILED_ETHERSCAN_EXACT_SOURCIFY_V2_EXACT",
     verified: true,
     chainId: 1,
     source: sourceIdentity,
@@ -343,33 +521,42 @@ test("requires exact Etherscan and Sourcify evidence bound to finalized onchain 
     fqcn: "src/ProgrammableCustomRegistryV2.sol:ProgrammableCustomRegistryV2",
     compiler: {
       version: "v0.8.26+commit.8a97fa7a",
-      optimizerEnabled: true,
-      optimizerRuns: 1000,
-      evmVersion: "cancun",
-      metadataBytecodeHash: "none",
-      appendCBOR: false,
-      localBinarySha256: `0x${"33".repeat(32)}`,
+      platform: "darwin",
+      architecture: "arm64",
+      binarySha256: `0x${"33".repeat(32)}`,
       standardJsonInputSha256: `0x${"44".repeat(32)}`,
       standardJsonOutputSha256: `0x${"55".repeat(32)}`,
-      standardJsonInputEvidenceFile: "registry.standard-json-input.json",
-      standardJsonOutputEvidenceFile: "registry.standard-json-output.json",
     },
+    sourceClosure: Object.fromEntries(
+      Array.from({ length: 13 }, (_, index) => [
+        `source-${index}.sol`,
+        `0x${"66".repeat(32)}`,
+      ]),
+    ),
     etherscan: {
       status: "exact-match",
       url: `https://etherscan.io/address/${onchain.contractAddress}#code`,
     },
     sourcify: {
-      status: "full-match",
-      url: `https://repo.sourcify.dev/contracts/full_match/1/${onchain.contractAddress}/`,
+      status: "exact-match",
+      url: `https://sourcify.dev/server/v2/contract/1/${onchain.contractAddress}`,
     },
   };
   assertSourceVerificationBinding({ onchain, source });
   assert.throws(
-    () => assertSourceVerificationBinding({ onchain, source: { ...source, runtimeCodeKeccak256: `0x${"33".repeat(32)}` } }),
+    () =>
+      assertSourceVerificationBinding({
+        onchain,
+        source: { ...source, runtimeCodeKeccak256: `0x${"33".repeat(32)}` },
+      }),
     /does not bind/,
   );
   assert.throws(
-    () => assertSourceVerificationBinding({ onchain, source: { ...source, sourcify: { status: "partial-match" } } }),
+    () =>
+      assertSourceVerificationBinding({
+        onchain,
+        source: { ...source, sourcify: { status: "partial-match" } },
+      }),
     /does not bind/,
   );
 });

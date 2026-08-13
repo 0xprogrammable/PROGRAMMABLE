@@ -6,6 +6,7 @@ import { mainnet } from "viem/chains";
 
 import {
   REGISTRY_AUTHORIZATION_SCHEMA,
+  AUTHORIZATION_SEMANTICS,
   assertReviewedAuthorization,
   computeReviewedPlanDigest,
   reviewedAuthorizationMessage,
@@ -13,14 +14,13 @@ import {
   sha256,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
-import {
-  assertRegistryDeploymentPlan,
-} from "./custom-registry-v2-deployment-plan.mjs";
-import {
-  assertRegistryLivePreflight,
-} from "./custom-registry-v2-live-verification.mjs";
+import { assertRegistryDeploymentPlan } from "./custom-registry-v2-deployment-plan.mjs";
+import { assertRegistryLivePreflight } from "./custom-registry-v2-live-verification.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const argument = (name) => {
   const index = process.argv.indexOf(name);
   if (index === -1 || !process.argv[index + 1]) {
@@ -87,16 +87,18 @@ if (
   ownerAuthorizationAddress.toLowerCase() !==
   plan.releaseAuthorization.owner.toLowerCase()
 ) {
-  throw new Error("REGISTRY_RELEASE_OWNER does not match the reviewed preflight");
+  throw new Error(
+    "REGISTRY_RELEASE_OWNER does not match the reviewed preflight",
+  );
 }
-const expiresAtTimestamp = Number(
+const firstAttemptExpiresAtTimestamp = Number(
   required("REGISTRY_AUTHORIZATION_EXPIRES_AT"),
 );
 if (
-  !Number.isSafeInteger(expiresAtTimestamp) ||
-  expiresAtTimestamp <= nowTimestamp ||
-  expiresAtTimestamp > nowTimestamp + 300 ||
-  expiresAtTimestamp > plan.expiresAtTimestamp
+  !Number.isSafeInteger(firstAttemptExpiresAtTimestamp) ||
+  firstAttemptExpiresAtTimestamp <= nowTimestamp ||
+  firstAttemptExpiresAtTimestamp > nowTimestamp + 300 ||
+  firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp
 ) {
   throw new Error(
     "REGISTRY_AUTHORIZATION_EXPIRES_AT is stale or outside the preflight window",
@@ -108,15 +110,17 @@ const authorization = {
   preflightSha256,
   source: plan.source,
   ownerAuthorizationAddress,
-  createdAtTimestamp: nowTimestamp,
-  expiresAtTimestamp,
+  notBeforeTimestamp: nowTimestamp,
+  firstAttemptExpiresAtTimestamp,
+  authorizationSemantics: AUTHORIZATION_SEMANTICS,
   signingAllowed: true,
   broadcastAllowed: true,
 };
 authorization.reviewedPlanDigest = computeReviewedPlanDigest({
   preflightSha256,
   ownerAuthorizationAddress,
-  expiresAtTimestamp,
+  notBeforeTimestamp: nowTimestamp,
+  firstAttemptExpiresAtTimestamp,
   sourceCommit: plan.source.commit,
   sourceTree: plan.source.tree,
 });

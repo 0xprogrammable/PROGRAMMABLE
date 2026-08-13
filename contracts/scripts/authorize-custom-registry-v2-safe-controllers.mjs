@@ -13,6 +13,7 @@ import {
   safeReviewedAuthorizationMessage,
   verifySafeReviewedAuthorizationSignature,
 } from "./custom-registry-v2-safe-controller-guards.mjs";
+import { AUTHORIZATION_SEMANTICS } from "./custom-registry-v2-deployment-guards.mjs";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -69,14 +70,14 @@ const ownerAuthorizationAddress = getAddress(
 );
 if (ownerAuthorizationAddress !== getAddress(plan.releaseAuthorization.owner))
   throw new Error("release owner does not match reviewed Safe preflight");
-const expiresAtTimestamp = Number(
+const firstAttemptExpiresAtTimestamp = Number(
   process.env.REGISTRY_SAFE_AUTHORIZATION_EXPIRES_AT,
 );
 if (
-  !Number.isSafeInteger(expiresAtTimestamp) ||
-  expiresAtTimestamp < nowTimestamp ||
-  expiresAtTimestamp > nowTimestamp + 300 ||
-  expiresAtTimestamp > plan.expiresAtTimestamp
+  !Number.isSafeInteger(firstAttemptExpiresAtTimestamp) ||
+  firstAttemptExpiresAtTimestamp < nowTimestamp ||
+  firstAttemptExpiresAtTimestamp > nowTimestamp + 300 ||
+  firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp
 )
   throw new Error("Safe authorization is stale or outside the reviewed window");
 
@@ -106,14 +107,17 @@ const authorization = {
   policySha256: plan.policySha256,
   custodyProofSha256: plan.custodyProofSha256,
   ownerAuthorizationAddress,
-  expiresAtTimestamp,
+  notBeforeTimestamp: nowTimestamp,
+  firstAttemptExpiresAtTimestamp,
+  authorizationSemantics: AUTHORIZATION_SEMANTICS,
   signingAllowed: true,
   broadcastAllowed: true,
 };
 authorization.reviewedPlanDigest = computeSafeReviewedPlanDigest({
   preflightSha256,
   ownerAuthorizationAddress,
-  expiresAtTimestamp,
+  notBeforeTimestamp: nowTimestamp,
+  firstAttemptExpiresAtTimestamp,
   sourceCommit: commit,
   sourceTree: tree,
   policySha256: plan.policySha256,

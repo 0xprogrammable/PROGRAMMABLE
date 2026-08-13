@@ -10,6 +10,7 @@ import {
   padHex,
   recoverMessageAddress,
 } from "viem";
+import { AUTHORIZATION_SEMANTICS } from "./custom-registry-v2-deployment-guards.mjs";
 
 export const SAFE_SETUP_ABI = [
   {
@@ -62,9 +63,9 @@ export const SAFE_FACTORY_ABI = [
 export const SAFE_PLAN_SCHEMA =
   "programmable.custom-registry-v2-safe-controller-preflight.v2";
 export const SAFE_AUTHORIZATION_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-authorization.v1";
+  "programmable.custom-registry-v2-safe-controller-authorization.v2";
 export const SAFE_RECEIPTS_SCHEMA =
-  "programmable.custom-registry-v2-safe-controller-receipts.v2";
+  "programmable.custom-registry-v2-safe-controller-receipts.v3";
 export const SAFE_VERIFICATION_SCHEMA =
   "programmable.custom-registry-v2-safe-controller-verification.v2";
 export const SAFE_CUSTODY_PROOF_SCHEMA =
@@ -92,7 +93,8 @@ export function safeTransactionInput({ singleton, initializer, saltNonce }) {
 export function computeSafeReviewedPlanDigest({
   preflightSha256,
   ownerAuthorizationAddress,
-  expiresAtTimestamp,
+  notBeforeTimestamp,
+  firstAttemptExpiresAtTimestamp,
   sourceCommit,
   sourceTree,
   policySha256,
@@ -105,6 +107,8 @@ export function computeSafeReviewedPlanDigest({
         { type: "bytes32" },
         { type: "address" },
         { type: "uint64" },
+        { type: "uint64" },
+        { type: "string" },
         { type: "string" },
         { type: "string" },
         { type: "bytes32" },
@@ -114,7 +118,9 @@ export function computeSafeReviewedPlanDigest({
         SAFE_AUTHORIZATION_SCHEMA,
         preflightSha256,
         getAddress(ownerAuthorizationAddress),
-        BigInt(expiresAtTimestamp),
+        BigInt(notBeforeTimestamp),
+        BigInt(firstAttemptExpiresAtTimestamp),
+        AUTHORIZATION_SEMANTICS,
         sourceCommit,
         sourceTree,
         policySha256,
@@ -214,10 +220,8 @@ export function assertSafePolicyBoundPlan({
     policy.safeVersion !== "1.4.1" ||
     policy.source?.repository !== "safe-fndn/safe-smart-account" ||
     policy.source?.tag !== "v1.4.1" ||
-    policy.source?.commit !==
-      "bf943f80fec5ac647159d26161446ac5d716a294" ||
-    policy.deploymentInventory?.repository !==
-      "safe-global/safe-deployments" ||
+    policy.source?.commit !== "bf943f80fec5ac647159d26161446ac5d716a294" ||
+    policy.deploymentInventory?.repository !== "safe-global/safe-deployments" ||
     policy.deploymentInventory?.commit !==
       "5bb0ebd7150a777f39bec4733e4d799c4b637b49" ||
     policy.deploymentInventory?.tree !==
@@ -242,9 +246,7 @@ export function assertSafePolicyBoundPlan({
     plan.exactPendingNonce < 0 ||
     !canonicalUint(plan.commonFinalizedAnchor?.blockNumber) ||
     BigInt(plan.commonFinalizedAnchor.blockNumber) === 0n ||
-    !/^0x[0-9a-f]{64}$/u.test(
-      plan.commonFinalizedAnchor?.blockHash ?? "",
-    ) ||
+    !/^0x[0-9a-f]{64}$/u.test(plan.commonFinalizedAnchor?.blockHash ?? "") ||
     !canonicalUint(plan.deployerBalanceWei) ||
     !canonicalUint(plan.totalGasLimit) ||
     !canonicalUint(plan.observedFeePerGas) ||
@@ -260,8 +262,14 @@ export function assertSafePolicyBoundPlan({
     ] !== plan.policySha256 ||
     getAddress(manifest.releaseAuthorization?.owner) !==
       getAddress(plan.releaseAuthorization?.owner) ||
-    manifest.releaseAuthorization?.maximumValiditySeconds !== 300 ||
-    plan.releaseAuthorization?.maximumValiditySeconds !== 300 ||
+    manifest.releaseAuthorization
+      ?.maximumSigningAndFirstAttemptValiditySeconds !== 300 ||
+    plan.releaseAuthorization?.maximumSigningAndFirstAttemptValiditySeconds !==
+      300 ||
+    manifest.releaseAuthorization?.authorizationSemantics !==
+      AUTHORIZATION_SEMANTICS ||
+    plan.releaseAuthorization?.authorizationSemantics !==
+      AUTHORIZATION_SEMANTICS ||
     plan.safeVersion !== policy.safeVersion ||
     getAddress(plan.singleton?.address) !==
       getAddress(policy.singleton?.address) ||
@@ -282,8 +290,7 @@ export function assertSafePolicyBoundPlan({
     !/^0x[0-9a-fA-F]+$/u.test(plan.proxyFactory?.proxyCreationCode ?? "") ||
     keccak256(plan.proxyFactory.proxyCreationCode) !==
       policy.proxyFactory.proxyCreationCodeKeccak256 ||
-    JSON.stringify(plan.storageSlots) !==
-      JSON.stringify(policy.storageSlots) ||
+    JSON.stringify(plan.storageSlots) !== JSON.stringify(policy.storageSlots) ||
     policy.setup?.threshold !== 1 ||
     getAddress(policy.setup?.to) !== getAddress(zero) ||
     policy.setup?.data !== "0x" ||
@@ -321,7 +328,10 @@ export function assertSafePolicyBoundPlan({
   let totalGasLimit = 0n;
   let reviewedPriorityFee;
   const predictedAddresses = new Set();
-  const isolatedAddresses = new Set([deployer.toLowerCase(), releaseOwner.toLowerCase()]);
+  const isolatedAddresses = new Set([
+    deployer.toLowerCase(),
+    releaseOwner.toLowerCase(),
+  ]);
   for (const [index, role] of SAFE_CONTROLLER_ROLES.entries()) {
     const controller = plan.controllers[index];
     const custody = custodyByRole.get(role);
@@ -391,9 +401,13 @@ export function assertSafePolicyBoundPlan({
     }
     reviewedPriorityFee = priorityFee;
     totalGasLimit += gasLimit;
-    predictedAddresses.add(getAddress(controller.predictedAddress).toLowerCase());
+    predictedAddresses.add(
+      getAddress(controller.predictedAddress).toLowerCase(),
+    );
     isolatedAddresses.add(getAddress(controller.owner).toLowerCase());
-    isolatedAddresses.add(getAddress(controller.predictedAddress).toLowerCase());
+    isolatedAddresses.add(
+      getAddress(controller.predictedAddress).toLowerCase(),
+    );
   }
 
   const adminCustody = custodyByRole.get("admin");
@@ -417,11 +431,10 @@ export function assertSafePolicyBoundPlan({
     totalGasLimit !== BigInt(plan.totalGasLimit) ||
     BigInt(plan.maximumTotalCostWei) !==
       totalGasLimit * BigInt(plan.reviewedMaxFeePerGas) ||
-    BigInt(plan.maximumTotalCostWei) >
-      BigInt(plan.reviewedMaxTotalCostWei) ||
+    BigInt(plan.maximumTotalCostWei) > BigInt(plan.reviewedMaxTotalCostWei) ||
     BigInt(plan.observedFeePerGas) > BigInt(plan.reviewedMaxFeePerGas) ||
     plan.fundingSufficient !==
-      (BigInt(plan.deployerBalanceWei) >= BigInt(plan.maximumTotalCostWei))
+      BigInt(plan.deployerBalanceWei) >= BigInt(plan.maximumTotalCostWei)
   ) {
     throw new Error("Safe plan aggregate cost or isolation binding failed");
   }
@@ -446,10 +459,22 @@ export function assertSafeReviewedAuthorization({
     authorization.custodyProofSha256 !== plan.custodyProofSha256 ||
     getAddress(authorization.ownerAuthorizationAddress) !==
       getAddress(plan.releaseAuthorization?.owner) ||
-    plan.releaseAuthorization?.maximumValiditySeconds !== 300 ||
-    !Number.isSafeInteger(authorization.expiresAtTimestamp) ||
-    (!allowExpired && authorization.expiresAtTimestamp < nowTimestamp) ||
-    authorization.expiresAtTimestamp > plan.expiresAtTimestamp
+    plan.releaseAuthorization?.maximumSigningAndFirstAttemptValiditySeconds !==
+      300 ||
+    plan.releaseAuthorization?.authorizationSemantics !==
+      AUTHORIZATION_SEMANTICS ||
+    authorization.authorizationSemantics !== AUTHORIZATION_SEMANTICS ||
+    !Number.isSafeInteger(authorization.notBeforeTimestamp) ||
+    !Number.isSafeInteger(authorization.firstAttemptExpiresAtTimestamp) ||
+    authorization.firstAttemptExpiresAtTimestamp <=
+      authorization.notBeforeTimestamp ||
+    authorization.firstAttemptExpiresAtTimestamp -
+      authorization.notBeforeTimestamp >
+      300 ||
+    (!allowExpired && authorization.notBeforeTimestamp > nowTimestamp) ||
+    (!allowExpired &&
+      authorization.firstAttemptExpiresAtTimestamp < nowTimestamp) ||
+    authorization.firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp
   ) {
     throw new Error(
       "reviewed Safe broadcast authorization is stale or invalid",
@@ -458,7 +483,9 @@ export function assertSafeReviewedAuthorization({
   const expected = computeSafeReviewedPlanDigest({
     preflightSha256,
     ownerAuthorizationAddress: authorization.ownerAuthorizationAddress,
-    expiresAtTimestamp: authorization.expiresAtTimestamp,
+    notBeforeTimestamp: authorization.notBeforeTimestamp,
+    firstAttemptExpiresAtTimestamp:
+      authorization.firstAttemptExpiresAtTimestamp,
     sourceCommit: authorization.source.commit,
     sourceTree: authorization.source.tree,
     policySha256: authorization.policySha256,

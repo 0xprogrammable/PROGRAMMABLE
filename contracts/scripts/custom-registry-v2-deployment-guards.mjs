@@ -9,14 +9,16 @@ import {
 export const REGISTRY_PREFLIGHT_SCHEMA =
   "programmable.custom-registry-deployment-preflight.v3";
 export const REGISTRY_AUTHORIZATION_SCHEMA =
-  "programmable.custom-registry-deployment-authorization.v3";
+  "programmable.custom-registry-deployment-authorization.v4";
 export const REGISTRY_RECEIPT_SCHEMA =
-  "programmable.custom-registry-deployment-receipt.v1";
+  "programmable.custom-registry-deployment-receipt.v2";
 export const REGISTRY_VERIFICATION_SCHEMA =
   "programmable.custom-registry-deployment-verification.v1";
 export const REGISTRY_SOURCE_VERIFICATION_SCHEMA =
-  "programmable.custom-registry-source-verification.v1";
+  "programmable.custom-registry-source-verification.v2";
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+export const AUTHORIZATION_SEMANTICS =
+  "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED";
 
 export const REGISTRY_CONFIG_PARAMETER = {
   type: "tuple",
@@ -42,7 +44,8 @@ export function computeConstructorCommitment(config) {
 export function computeReviewedPlanDigest({
   preflightSha256,
   ownerAuthorizationAddress,
-  expiresAtTimestamp,
+  notBeforeTimestamp,
+  firstAttemptExpiresAtTimestamp,
   sourceCommit,
   sourceTree,
 }) {
@@ -53,14 +56,18 @@ export function computeReviewedPlanDigest({
         { type: "bytes32" },
         { type: "address" },
         { type: "uint64" },
+        { type: "uint64" },
+        { type: "string" },
         { type: "string" },
         { type: "string" },
       ],
       [
-        "programmable.custom-registry-deployment-authorization.v3",
+        REGISTRY_AUTHORIZATION_SCHEMA,
         preflightSha256,
         getAddress(ownerAuthorizationAddress),
-        BigInt(expiresAtTimestamp),
+        BigInt(notBeforeTimestamp),
+        BigInt(firstAttemptExpiresAtTimestamp),
+        AUTHORIZATION_SEMANTICS,
         sourceCommit,
         sourceTree,
       ],
@@ -73,14 +80,21 @@ export function reviewedAuthorizationMessage(reviewedPlanDigest) {
 }
 
 export async function verifyReviewedAuthorizationSignature(authorization) {
-  if (!/^0x[0-9a-fA-F]{130}$/.test(authorization?.ownerAuthorizationSignature ?? "")) {
+  if (
+    !/^0x[0-9a-fA-F]{130}$/.test(
+      authorization?.ownerAuthorizationSignature ?? "",
+    )
+  ) {
     throw new Error("owner authorization signature is invalid");
   }
   const recovered = await recoverMessageAddress({
     message: reviewedAuthorizationMessage(authorization.reviewedPlanDigest),
     signature: authorization.ownerAuthorizationSignature,
   });
-  if (getAddress(recovered) !== getAddress(authorization.ownerAuthorizationAddress)) {
+  if (
+    getAddress(recovered) !==
+    getAddress(authorization.ownerAuthorizationAddress)
+  ) {
     throw new Error("owner authorization signature mismatch");
   }
 }
@@ -100,26 +114,37 @@ export function assertReviewedAuthorization({
     authorization.preflightSha256 !== preflightSha256 ||
     authorization.source?.commit !== plan.source?.commit ||
     authorization.source?.tree !== plan.source?.tree ||
-    !/^0x[0-9a-fA-F]{40}$/.test(authorization.ownerAuthorizationAddress ?? "") ||
+    !/^0x[0-9a-fA-F]{40}$/.test(
+      authorization.ownerAuthorizationAddress ?? "",
+    ) ||
     !/^0x[0-9a-fA-F]{40}$/.test(plan.releaseAuthorization?.owner ?? "") ||
     getAddress(authorization.ownerAuthorizationAddress) !==
       getAddress(plan.releaseAuthorization.owner) ||
-    plan.releaseAuthorization.maximumValiditySeconds !== 300 ||
-    !Number.isSafeInteger(authorization.createdAtTimestamp) ||
-    !Number.isSafeInteger(authorization.expiresAtTimestamp) ||
-    authorization.expiresAtTimestamp <= authorization.createdAtTimestamp ||
-    authorization.expiresAtTimestamp - authorization.createdAtTimestamp > 300 ||
-    authorization.expiresAtTimestamp > plan.expiresAtTimestamp ||
+    plan.releaseAuthorization.maximumSigningAndFirstAttemptValiditySeconds !==
+      300 ||
+    plan.releaseAuthorization.authorizationSemantics !==
+      AUTHORIZATION_SEMANTICS ||
+    authorization.authorizationSemantics !== AUTHORIZATION_SEMANTICS ||
+    !Number.isSafeInteger(authorization.notBeforeTimestamp) ||
+    !Number.isSafeInteger(authorization.firstAttemptExpiresAtTimestamp) ||
+    authorization.firstAttemptExpiresAtTimestamp <=
+      authorization.notBeforeTimestamp ||
+    authorization.firstAttemptExpiresAtTimestamp -
+      authorization.notBeforeTimestamp >
+      300 ||
+    authorization.firstAttemptExpiresAtTimestamp > plan.expiresAtTimestamp ||
     (!allowExpired &&
-      (authorization.createdAtTimestamp > nowTimestamp + 30 ||
-        authorization.expiresAtTimestamp < nowTimestamp))
+      (authorization.notBeforeTimestamp > nowTimestamp ||
+        authorization.firstAttemptExpiresAtTimestamp < nowTimestamp))
   ) {
     throw new Error("reviewed broadcast authorization is stale or invalid");
   }
   const expected = computeReviewedPlanDigest({
     preflightSha256,
     ownerAuthorizationAddress: authorization.ownerAuthorizationAddress,
-    expiresAtTimestamp: authorization.expiresAtTimestamp,
+    notBeforeTimestamp: authorization.notBeforeTimestamp,
+    firstAttemptExpiresAtTimestamp:
+      authorization.firstAttemptExpiresAtTimestamp,
     sourceCommit: authorization.source.commit,
     sourceTree: authorization.source.tree,
   });
@@ -201,10 +226,11 @@ export function assertExpectedDeploymentTransaction({ plan, deploymentData }) {
     expected.nonce !== plan.create?.exactPendingNonce ||
     expected.gasLimit !== plan.create?.gasLimit ||
     expected.maxFeePerGas !== plan.create?.reviewedMaxFeePerGas ||
-    expected.maxPriorityFeePerGas !==
-      plan.create?.reviewedMaxPriorityFeePerGas
+    expected.maxPriorityFeePerGas !== plan.create?.reviewedMaxPriorityFeePerGas
   ) {
-    throw new Error("exact deployment transaction does not match the reviewed plan");
+    throw new Error(
+      "exact deployment transaction does not match the reviewed plan",
+    );
   }
 }
 
@@ -242,7 +268,8 @@ export function assertLiveBinding({ first, second, plan }) {
     first.finalized.number === second.finalized.number &&
     first.finalized.hash === second.finalized.hash;
   const reviewedAnchorReached =
-    first.finalized.number >= BigInt(plan.commonFinalizedAnchor?.blockNumber ?? -1);
+    first.finalized.number >=
+    BigInt(plan.commonFinalizedAnchor?.blockNumber ?? -1);
   if (
     !sameFinalized ||
     !reviewedAnchorReached ||
@@ -279,10 +306,12 @@ export function assertPostDeploymentBinding({ actual, expected }) {
     keccak256(actual.runtimeA) !== expected.runtimeCodeKeccak256 ||
     actual.chainId !== 1n ||
     actual.registryGeneration !== 2n ||
-    actual.adminDelay !== BigInt(expected.initialAdminDelay) ||
+    BigInt(actual.adminDelay) !== BigInt(expected.initialAdminDelay) ||
     getAddress(actual.admin) !== getAddress(expected.initialAdmin) ||
     getAddress(actual.pendingAdmin) !== ZERO_ADDRESS ||
     BigInt(actual.pendingAdminSchedule) !== 0n ||
+    BigInt(actual.pendingAdminDelay) !== 0n ||
+    BigInt(actual.pendingAdminDelaySchedule) !== 0n ||
     actual.minimumFinalityBlocks !== BigInt(expected.minimumFinalityBlocks) ||
     actual.policy !== expected.registryPolicyCommitment ||
     actual.controllers.some(
@@ -305,7 +334,6 @@ export function assertFinalizedDeploymentTransaction({
   actual,
   transactionHash,
   plan,
-  authorization,
 }) {
   if (
     actual.hash !== transactionHash ||
@@ -326,13 +354,9 @@ export function assertFinalizedDeploymentTransaction({
     actual.receiptStatus !== "success" ||
     getAddress(actual.receiptContractAddress) !==
       getAddress(plan.create.predictedAddress) ||
-    BigInt(actual.receiptGasUsed) >
-      BigInt(plan.expectedTransaction.gasLimit) ||
+    BigInt(actual.receiptGasUsed) > BigInt(plan.expectedTransaction.gasLimit) ||
     BigInt(actual.receiptEffectiveGasPrice) >
       BigInt(plan.expectedTransaction.maxFeePerGas) ||
-    BigInt(actual.receiptBlockTimestamp) > BigInt(plan.expiresAtTimestamp) ||
-    BigInt(actual.receiptBlockTimestamp) >
-      BigInt(authorization.expiresAtTimestamp) ||
     actual.runtimeCodeKeccak256 !== plan.expectedRuntime.codeKeccak256
   ) {
     throw new Error(
@@ -347,10 +371,14 @@ export function assertSourceVerificationBinding({ onchain, source }) {
     onchain.status !== "VERIFIED_FINALIZED_ONCHAIN_AWAITING_SOURCE" ||
     onchain.verified !== false ||
     source?.schemaVersion !== REGISTRY_SOURCE_VERIFICATION_SCHEMA ||
-    source.status !== "ETHERSCAN_EXACT_AND_SOURCIFY_MATCH" ||
+    ![
+      "SELF_COMPILED_ETHERSCAN_EXACT_SOURCIFY_V2_EXACT",
+      "FRESH_FULL_ONCHAIN_SELF_COMPILED_DUAL_PROVIDER_EXACT",
+    ].includes(source.status) ||
     source.verified !== true ||
     source.chainId !== 1 ||
-    getAddress(source.contractAddress) !== getAddress(onchain.contractAddress) ||
+    getAddress(source.contractAddress) !==
+      getAddress(onchain.contractAddress) ||
     source.transactionHash !== onchain.transactionHash ||
     source.source?.commit !== onchain.source?.commit ||
     source.source?.tree !== onchain.source?.tree ||
@@ -359,34 +387,27 @@ export function assertSourceVerificationBinding({ onchain, source }) {
     source.fqcn !==
       "src/ProgrammableCustomRegistryV2.sol:ProgrammableCustomRegistryV2" ||
     source.compiler?.version !== "v0.8.26+commit.8a97fa7a" ||
-    source.compiler?.optimizerEnabled !== true ||
-    source.compiler?.optimizerRuns !== 1000 ||
-    source.compiler?.evmVersion !== "cancun" ||
-    source.compiler?.metadataBytecodeHash !== "none" ||
-    source.compiler?.appendCBOR !== false ||
-    !/^0x[0-9a-f]{64}$/u.test(
-      source.compiler?.localBinarySha256 ?? "",
-    ) ||
-    !/^0x[0-9a-f]{64}$/u.test(
-      source.compiler?.standardJsonInputSha256 ?? "",
-    ) ||
+    !["darwin", "linux"].includes(source.compiler?.platform) ||
+    !["arm64", "x64"].includes(source.compiler?.architecture) ||
+    !/^0x[0-9a-f]{64}$/u.test(source.compiler?.binarySha256 ?? "") ||
+    !/^0x[0-9a-f]{64}$/u.test(source.compiler?.standardJsonInputSha256 ?? "") ||
     !/^0x[0-9a-f]{64}$/u.test(
       source.compiler?.standardJsonOutputSha256 ?? "",
     ) ||
-    !/^.+\.standard-json-input\.json$/u.test(
-      source.compiler?.standardJsonInputEvidenceFile ?? "",
-    ) ||
-    !/^.+\.standard-json-output\.json$/u.test(
-      source.compiler?.standardJsonOutputEvidenceFile ?? "",
+    Object.keys(source.sourceClosure ?? {}).length !== 13 ||
+    Object.values(source.sourceClosure ?? {}).some(
+      (digest) => !/^0x[0-9a-f]{64}$/u.test(digest),
     ) ||
     source.etherscan?.status !== "exact-match" ||
     source.etherscan?.url !==
       `https://etherscan.io/address/${getAddress(onchain.contractAddress)}#code` ||
-    source.sourcify?.status !== "full-match" ||
+    source.sourcify?.status !== "exact-match" ||
     source.sourcify?.url !==
-      `https://repo.sourcify.dev/contracts/full_match/1/${getAddress(onchain.contractAddress)}/`
+      `https://sourcify.dev/server/v2/contract/1/${getAddress(onchain.contractAddress)}`
   ) {
-    throw new Error("source verification does not bind finalized onchain evidence");
+    throw new Error(
+      "source verification does not bind finalized onchain evidence",
+    );
   }
 }
 
@@ -423,7 +444,9 @@ export function assessDeploymentCost({
     }
   }
   if (gasLimit >= blockGasLimit) {
-    throw new Error("deployment gas limit does not fit the current block gas limit");
+    throw new Error(
+      "deployment gas limit does not fit the current block gas limit",
+    );
   }
   if (maxPriorityFeePerGas > maxFeePerGas) {
     throw new Error("deployment priority fee exceeds the reviewed fee ceiling");

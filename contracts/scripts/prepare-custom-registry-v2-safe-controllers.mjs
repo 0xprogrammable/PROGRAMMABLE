@@ -133,7 +133,10 @@ if (
     "config/custom-registry-v2-safe-controller-policy.json"
   ] !== policySha256 ||
   getAddress(manifest.releaseAuthorization?.owner) !== releaseOwner ||
-  manifest.releaseAuthorization?.maximumValiditySeconds !== 300
+  manifest.releaseAuthorization
+    ?.maximumSigningAndFirstAttemptValiditySeconds !== 300 ||
+  manifest.releaseAuthorization?.authorizationSemantics !==
+    "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED"
 )
   throw new Error("Safe policy or release owner is not source-manifest bound");
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -214,9 +217,16 @@ const baseObservations = await Promise.all(
   }),
 );
 const [a, b] = baseObservations;
+const commonFinalizedNumber =
+  a.finalized.number < b.finalized.number
+    ? a.finalized.number
+    : b.finalized.number;
+const [commonFinalizedA, commonFinalizedB] = await Promise.all([
+  clients[0].getBlock({ blockNumber: commonFinalizedNumber }),
+  clients[1].getBlock({ blockNumber: commonFinalizedNumber }),
+]);
 if (
-  a.finalized.number !== b.finalized.number ||
-  a.finalized.hash !== b.finalized.hash ||
+  commonFinalizedA.hash !== commonFinalizedB.hash ||
   a.nonce !== b.nonce ||
   a.balance !== b.balance ||
   a.proxyCreationCode !== b.proxyCreationCode
@@ -377,15 +387,18 @@ const plan = {
   },
   storageSlots: policy.storageSlots,
   commonFinalizedAnchor: {
-    blockNumber: a.finalized.number.toString(),
-    blockHash: a.finalized.hash,
+    blockNumber: commonFinalizedNumber.toString(),
+    blockHash: commonFinalizedA.hash,
   },
   deployer,
   admin,
   releaseAuthorization: {
     owner: releaseOwner,
-    maximumValiditySeconds:
-      manifest.releaseAuthorization.maximumValiditySeconds,
+    maximumSigningAndFirstAttemptValiditySeconds:
+      manifest.releaseAuthorization
+        .maximumSigningAndFirstAttemptValiditySeconds,
+    authorizationSemantics:
+      manifest.releaseAuthorization.authorizationSemantics,
   },
   exactPendingNonce: a.nonce,
   deployerBalanceWei: a.balance.toString(),

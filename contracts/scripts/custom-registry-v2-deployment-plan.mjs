@@ -38,17 +38,13 @@ export async function loadRegistryDeploymentInputs({
   root,
   safeVerificationBytes,
 }) {
-  const [
-    artifactBytes,
-    manifestBytes,
-    committedAbiBytes,
-    safePolicyBytes,
-  ] = await Promise.all([
-    readFile(path.join(root, ARTIFACT)),
-    readFile(path.join(root, MANIFEST)),
-    readFile(path.join(root, ABI)),
-    readFile(path.join(root, SAFE_POLICY)),
-  ]);
+  const [artifactBytes, manifestBytes, committedAbiBytes, safePolicyBytes] =
+    await Promise.all([
+      readFile(path.join(root, ARTIFACT)),
+      readFile(path.join(root, MANIFEST)),
+      readFile(path.join(root, ABI)),
+      readFile(path.join(root, SAFE_POLICY)),
+    ]);
   const artifact = JSON.parse(artifactBytes);
   const manifest = JSON.parse(manifestBytes);
   const committedAbiDocument = JSON.parse(committedAbiBytes);
@@ -172,7 +168,9 @@ export async function assertRegistryDeploymentPlan({
         guard !== "0x0000000000000000000000000000000000000000",
     )
   ) {
-    throw new Error("Safe controller verification is invalid or source-drifted");
+    throw new Error(
+      "Safe controller verification is invalid or source-drifted",
+    );
   }
 
   const roles = ["approver", "registrar", "finalizer", "revoker"];
@@ -200,9 +198,9 @@ export async function assertRegistryDeploymentPlan({
   for (const [field, value] of Object.entries(expectedConfig)) {
     const actual = plan.constructor?.[field];
     if (
-      (field.startsWith("initial") && field !== "initialAdminDelay"
+      field.startsWith("initial") && field !== "initialAdminDelay"
         ? getAddress(actual) !== value
-        : String(actual) !== value)
+        : String(actual) !== value
     ) {
       throw new Error(`reviewed constructor ${field} is invalid`);
     }
@@ -211,9 +209,7 @@ export async function assertRegistryDeploymentPlan({
     {
       ...plan.constructor,
       initialAdminDelay: BigInt(plan.constructor.initialAdminDelay),
-      minimumFinalityBlocks: BigInt(
-        plan.constructor.minimumFinalityBlocks,
-      ),
+      minimumFinalityBlocks: BigInt(plan.constructor.minimumFinalityBlocks),
     },
     productionPolicy,
   );
@@ -245,11 +241,15 @@ export async function assertRegistryDeploymentPlan({
     from: getAddress(plan.create.deployer),
     nonce: BigInt(plan.create.exactPendingNonce),
   });
-  if (getAddress(predictedAddress) !== getAddress(plan.create.predictedAddress)) {
+  if (
+    getAddress(predictedAddress) !== getAddress(plan.create.predictedAddress)
+  ) {
     throw new Error("reviewed CREATE address is invalid");
   }
   if (
-    !/^0x[0-9a-fA-F]{64}$/.test(plan.create?.expectedRuntimeCodeKeccak256 ?? "") ||
+    !/^0x[0-9a-fA-F]{64}$/.test(
+      plan.create?.expectedRuntimeCodeKeccak256 ?? "",
+    ) ||
     !Number.isSafeInteger(plan.create?.expectedRuntimeCodeLength) ||
     plan.create.expectedRuntimeCodeLength <= 0 ||
     plan.create.expectedRuntimeCodeKeccak256 !==
@@ -264,9 +264,7 @@ export async function assertRegistryDeploymentPlan({
     blockGasLimit: BigInt(plan.create.minimumObservedBlockGasLimit),
     observedFeePerGas: BigInt(plan.create.maximumObservedFeePerGas),
     maxFeePerGas: BigInt(plan.create.reviewedMaxFeePerGas),
-    maxPriorityFeePerGas: BigInt(
-      plan.create.reviewedMaxPriorityFeePerGas,
-    ),
+    maxPriorityFeePerGas: BigInt(plan.create.reviewedMaxPriorityFeePerGas),
     maxTotalCostWei: BigInt(plan.create.reviewedMaxTotalCostWei),
     deployerBalance: BigInt(plan.create.deployerBalanceWei),
   });
@@ -280,15 +278,20 @@ export async function assertRegistryDeploymentPlan({
     plan.productionPolicy.documentSha256 !== sha256(productionPolicyBytes) ||
     plan.productionPolicy.registryPolicyCommitment !==
       productionPolicy.registryPolicyCommitment ||
-    plan.safeControllers.verificationSha256 !==
-      sha256(safeVerificationBytes) ||
+    plan.safeControllers.verificationSha256 !== sha256(safeVerificationBytes) ||
     plan.safeControllers.policySha256 !== safePolicySha256 ||
     plan.safeControllers.custodyProofSha256 !==
       safeVerification.custodyProofSha256 ||
     JSON.stringify(plan.safeControllers.controllers) !==
       JSON.stringify(
         safeVerification.controllers.map(
-          ({ role, address, owner, transactionHash, runtimeCodeKeccak256 }) => ({
+          ({
+            role,
+            address,
+            owner,
+            transactionHash,
+            runtimeCodeKeccak256,
+          }) => ({
             role,
             address,
             owner,
@@ -305,9 +308,14 @@ export async function assertRegistryDeploymentPlan({
       getAddress(safeVerification.releaseOwner) ||
     getAddress(plan.releaseAuthorization.owner) !==
       getAddress(manifest.releaseAuthorization.owner) ||
-    plan.releaseAuthorization.maximumValiditySeconds !== 300
+    plan.releaseAuthorization.maximumSigningAndFirstAttemptValiditySeconds !==
+      300 ||
+    plan.releaseAuthorization.authorizationSemantics !==
+      "SIGN_AND_FIRST_BROADCAST_ATTEMPT_ONLY_LATER_EXACT_RAW_REBROADCAST_AND_INCLUSION_ALLOWED"
   ) {
-    throw new Error("policy, Safe, deployer, admin, or release binding is invalid");
+    throw new Error(
+      "policy, Safe, deployer, admin, or release binding is invalid",
+    );
   }
 
   assertDistinctControllerOwners({
