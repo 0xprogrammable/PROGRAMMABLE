@@ -5,7 +5,7 @@
     "schedule": "*/5 * * * *",
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
-    "sha256": "06235ff68203da970d51022fe0a9bbe3a7d0096c547ecd7fc31b1ce1d4f1da52",
+    "sha256": "763f093b6138bbb7bfaa175f2192798cabd9debbca641f4aefd14d59aff9ff55",
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
@@ -15,6 +15,10 @@
         {
           "path": "lib/onchain/parallel-reads.ts",
           "sha256": "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e"
+        },
+        {
+          "path": "lib/onchain/historical-read-rpc.server.ts",
+          "sha256": "98ccb2a6471a4e38ef521b1fd7e41d55bb19b904a9c1d5e8d6948976a628d63e"
         }
       ],
       "releaseRuntimes": [

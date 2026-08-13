@@ -10,7 +10,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "06235ff68203da970d51022fe0a9bbe3a7d0096c547ecd7fc31b1ce1d4f1da52",
+    sha256: "763f093b6138bbb7bfaa175f2192798cabd9debbca641f4aefd14d59aff9ff55",
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
@@ -20,6 +20,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "lib/onchain/parallel-reads.ts",
           sha256: "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e",
+        }),
+        Object.freeze({
+          path: "lib/onchain/historical-read-rpc.server.ts",
+          sha256: "98ccb2a6471a4e38ef521b1fd7e41d55bb19b904a9c1d5e8d6948976a628d63e",
         }),
       ]),
       releaseRuntimes: Object.freeze([
@@ -1010,7 +1014,7 @@ function legacySchedulerWatchdogIsFailClosed(
       "currentMarketOnchainDeployment(deployment)",
     ) &&
     source(APPROVED_OPERATIONS.legacyIndexer.route)?.includes(
-      "currentMarketOnchainDeployment(deployment)",
+      "historicalReadOnchainDeployment(deployment)",
     ) &&
     workflowSource.includes('name: Refresh production read model') &&
     workflowSource.includes('    - cron: "2-57/5 * * * *"') &&
@@ -1493,6 +1497,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
   const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
   const parallelReadsSource = source(boundedRefresh?.dependencies?.[0]?.path);
+  const historicalRpcSource = source(boundedRefresh?.dependencies?.[1]?.path);
   const releaseRuntimes = boundedRefresh?.releaseRuntimes;
   const classicV3RefreshSource = source(releaseRuntimes?.[0]?.path);
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
@@ -1519,10 +1524,15 @@ export function evaluateReadModelOperationsSourceContracts(
         boundedRefresh?.runtime,
         expectedSha256Overrides,
       ) &&
-      boundedRefresh?.dependencies?.length === 1 &&
+      boundedRefresh?.dependencies?.length === 2 &&
       sourceBindingMatches(
         source,
         boundedRefresh.dependencies[0],
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh.dependencies[1],
         expectedSha256Overrides,
       ) &&
       refreshRuntimeSource?.includes(
@@ -1533,6 +1543,24 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       parallelReadsSource?.includes("Promise.allSettled(") &&
       parallelReadsSource?.includes("for (const result of results)") &&
+      legacyRouteSource?.includes(
+        "historicalReadOnchainDeployment(deployment)",
+      ) &&
+      historicalRpcSource?.includes(
+        'const INDEPENDENT_ARCHIVE_WITNESS = "https://rpc.mevblocker.io/";',
+      ) &&
+      historicalRpcSource?.includes(
+        "primary: binding.secondary.url",
+      ) &&
+      historicalRpcSource?.includes(
+        'primary?.vendorGroup !== "quicknode"',
+      ) &&
+      historicalRpcSource?.includes(
+        'secondary?.vendorGroup !== "mevblocker"',
+      ) &&
+      historicalRpcSource?.includes(
+        "primary.endpointCommitment !== binding.secondary.endpointCommitment",
+      ) &&
       Array.isArray(releaseRuntimes) &&
       releaseRuntimes.length === 2 &&
       releaseRuntimes[0]?.release === "classic-v3" &&

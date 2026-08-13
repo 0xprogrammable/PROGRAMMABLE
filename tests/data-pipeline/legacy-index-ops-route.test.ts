@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getOperationalOnchainDeployment: vi.fn(),
-  currentMarketOnchainDeployment: vi.fn(),
+  historicalReadOnchainDeployment: vi.fn(),
   readLiveExploreModel: vi.fn(),
   writeDurableExploreModel: vi.fn(),
   writePortfolioHistorySnapshot: vi.fn(),
@@ -14,8 +14,8 @@ vi.mock("../../lib/onchain", () => ({
   writeDurableExploreModel: mocks.writeDurableExploreModel,
 }));
 
-vi.mock("../../lib/market-data/current-market-rpc.server", () => ({
-  currentMarketOnchainDeployment: mocks.currentMarketOnchainDeployment,
+vi.mock("../../lib/onchain/historical-read-rpc.server", () => ({
+  historicalReadOnchainDeployment: mocks.historicalReadOnchainDeployment,
 }));
 
 vi.mock("../../lib/profile/portfolio-history-storage.server", () => ({
@@ -53,7 +53,7 @@ describe("legacy index operations routes", () => {
     process.env.CRON_SECRET = SECRET;
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.getOperationalOnchainDeployment.mockReturnValue(deployment);
-    mocks.currentMarketOnchainDeployment.mockReturnValue(
+    mocks.historicalReadOnchainDeployment.mockReturnValue(
       durableRefreshDeployment,
     );
     mocks.readLiveExploreModel.mockResolvedValue({ status: "ready" });
@@ -108,7 +108,7 @@ describe("legacy index operations routes", () => {
       tokenCount: 265,
     });
     expect(mocks.readLiveExploreModel).toHaveBeenCalledTimes(1);
-    expect(mocks.currentMarketOnchainDeployment).toHaveBeenCalledWith(
+    expect(mocks.historicalReadOnchainDeployment).toHaveBeenCalledWith(
       deployment,
     );
     expect(mocks.readLiveExploreModel).toHaveBeenCalledWith(
