@@ -1341,6 +1341,12 @@ describe("ExactShards successor projection V1", () => {
   });
 
   it("rejects post-projection permits, clones, mixed records, cross-store capabilities and reuse", async () => {
+    const projectionModule = await import(
+      "../lib/server/custom-launch/exact-shards-successor-projection-v1"
+    );
+    expect(projectionModule).not.toHaveProperty(
+      "bindExactShardsCanonicalProjectionCapabilityV1",
+    );
     const pool = await exactShardsPGlitePool();
     const store = new PostgresExactShardsSuccessorStoreV1({
       pool,

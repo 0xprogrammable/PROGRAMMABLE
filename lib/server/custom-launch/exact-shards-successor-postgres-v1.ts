@@ -12,20 +12,19 @@ import type {
 } from "../projection-target/postgres-store";
 import {
   deriveExactShardsDescriptorBindingSha256V1,
+  deriveExactShardsRevocationBindingSha256V1,
+  issueExactShardsCanonicalProjectionCapabilityV1,
+  requireExactShardsCanonicalProjectionBindingV1,
   assertProjectedExactShardsRevocationV1,
   assertProjectedFinalizedExactShardsRecordV1,
   parseExactShardsSuccessorDescriptorV1,
   validateExactShardsPublicRecordV1,
   type BoundExactShardsSuccessorDescriptorV1,
+  type ExactShardsCanonicalProjectionCapabilityV1,
   type ExactShardsPublicRecordV1,
   type ExactShardsRevocationRecordV1,
   type ExactShardsSuccessorPublicReadStoreV1,
 } from "./exact-shards-successor-projection-v1";
-import {
-  issueExactShardsCanonicalProjectionCapabilityV1,
-  requireExactShardsCanonicalProjectionBindingV1,
-  type ExactShardsCanonicalProjectionCapabilityV1,
-} from "./exact-shards-canonical-projection-capability-v1";
 
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
@@ -151,6 +150,7 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
       descriptorBindingSha256: this.#descriptorBindingSha256,
       kind: "finalized",
       record,
+      recordBinding: record.recordBindingSha256,
       anchorBlockHashes: [
         record.launch.blockHash,
         record.finality.finalizedBlockHash,
@@ -274,6 +274,7 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
       descriptorBindingSha256: this.#descriptorBindingSha256,
       kind: "revoked",
       record,
+      recordBinding: deriveExactShardsRevocationBindingSha256V1(record),
       anchorBlockHashes: [record.blockHash],
     });
     const eventBinding = canonicalSha256(

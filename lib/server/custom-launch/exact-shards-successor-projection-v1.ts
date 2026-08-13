@@ -11,11 +11,100 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import {
-  assertExactShardsCanonicalProjectionCapabilityV1,
-  bindExactShardsCanonicalProjectionCapabilityV1,
-  type ExactShardsCanonicalProjectionCapabilityV1,
-} from "./exact-shards-canonical-projection-capability-v1";
+
+const CAPABILITY_BRAND: unique symbol = Symbol(
+  "registry.exact-shards-v2.canonical-projection-capability.v1",
+);
+
+export type ExactShardsCanonicalProjectionCapabilityV1 = Readonly<{
+  readonly [CAPABILITY_BRAND]: true;
+}>;
+
+type CanonicalProjectionCapabilityState = {
+  readonly issuer: object;
+  readonly canonicalGeneration: string;
+  readonly descriptorBindingSha256: string;
+  projection: Readonly<{
+    kind: "finalized" | "revoked";
+    inputBindingSha256: string;
+    projectionBindingSha256: string;
+    record: object;
+    recordBinding: string;
+    anchorBlockHashes: readonly string[];
+  }> | null;
+};
+
+const CANONICAL_PROJECTION_CAPABILITIES = new WeakMap<
+  object,
+  CanonicalProjectionCapabilityState
+>();
+const CANONICAL_RECORD_CAPABILITIES = new WeakMap<object, object>();
+
+/** Store-only issuer primitive. A forged issuer cannot satisfy another store. */
+export function issueExactShardsCanonicalProjectionCapabilityV1(input: Readonly<{
+  issuer: object;
+  canonicalGeneration: string;
+  descriptorBindingSha256: string;
+}>): ExactShardsCanonicalProjectionCapabilityV1 {
+  if (input.issuer === null || typeof input.issuer !== "object"
+    || !/^[1-9][0-9]*$/u.test(input.canonicalGeneration)
+    || !/^sha256:[0-9a-f]{64}$/u.test(input.descriptorBindingSha256)) {
+    throw new TypeError("ExactShards canonical capability input is invalid");
+  }
+  const target = Object.create(null) as object;
+  Object.defineProperty(target, "toJSON", {
+    configurable: false,
+    enumerable: false,
+    value: () => {
+      throw new TypeError("ExactShards canonical capability is not serializable");
+    },
+    writable: false,
+  });
+  Object.freeze(target);
+  const capability = new Proxy(target, Object.freeze({}));
+  CANONICAL_PROJECTION_CAPABILITIES.set(capability, {
+    issuer: input.issuer,
+    canonicalGeneration: input.canonicalGeneration,
+    descriptorBindingSha256: input.descriptorBindingSha256,
+    projection: null,
+  });
+  return capability as ExactShardsCanonicalProjectionCapabilityV1;
+}
+
+/** Read-only store verification; this cannot create or mutate provenance. */
+export function requireExactShardsCanonicalProjectionBindingV1(input: Readonly<{
+  capability: ExactShardsCanonicalProjectionCapabilityV1;
+  issuer: object;
+  descriptorBindingSha256: string;
+  kind: "finalized" | "revoked";
+  record: object;
+  recordBinding: string;
+  anchorBlockHashes: readonly string[];
+}>): Readonly<{ canonicalGeneration: string }> {
+  const state = canonicalProjectionCapabilityState(input.capability);
+  const projection = state.projection;
+  if (state.issuer !== input.issuer
+    || state.descriptorBindingSha256 !== input.descriptorBindingSha256
+    || projection === null
+    || projection.kind !== input.kind
+    || projection.record !== input.record
+    || projection.recordBinding !== input.recordBinding
+    || projection.projectionBindingSha256 !== sha256Canonical({
+      descriptorBindingSha256: input.descriptorBindingSha256,
+      kind: input.kind,
+      inputBindingSha256: projection.inputBindingSha256,
+      recordBinding: input.recordBinding,
+      anchorBlockHashes: input.anchorBlockHashes,
+    })
+    || CANONICAL_RECORD_CAPABILITIES.get(input.record) !== input.capability
+    || projection.anchorBlockHashes.length !== input.anchorBlockHashes.length
+    || projection.anchorBlockHashes.some(
+      (hash, index) => hash !== input.anchorBlockHashes[index],
+    )) {
+    throw new TypeError("ExactShards canonical projection provenance is invalid");
+  }
+  return Object.freeze({ canonicalGeneration: state.canonicalGeneration });
+}
 
 const HASH32 = /^0x[0-9a-fA-F]{64}$/u;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/u;
@@ -1390,10 +1479,16 @@ export function projectCanonicalExactShardsRevocationV1(input: Readonly<{
       observations: input.observations,
     }),
     record: projected,
-    recordBinding: sha256Canonical(projected),
+    recordBinding: deriveExactShardsRevocationBindingSha256V1(projected),
     anchorBlockHashes: [projected.blockHash],
   });
   return projected;
+}
+
+export function deriveExactShardsRevocationBindingSha256V1(
+  record: ExactShardsRevocationRecordV1,
+): `sha256:${string}` {
+  return sha256Canonical(record);
 }
 
 export type CanonicalExactShardsRevocationProjectionInputV1 = Parameters<
@@ -2446,6 +2541,68 @@ function positiveSafeInteger(value: unknown): value is number {
 function nonnegativeUint32(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value)
     && value >= 0 && value <= 0xffff_ffff;
+}
+
+function assertExactShardsCanonicalProjectionCapabilityV1(input: Readonly<{
+  capability: ExactShardsCanonicalProjectionCapabilityV1;
+  descriptorBindingSha256: string;
+}>): void {
+  const state = canonicalProjectionCapabilityState(input.capability);
+  if (state.descriptorBindingSha256 !== input.descriptorBindingSha256
+    || state.projection !== null) {
+    throw new TypeError("ExactShards canonical capability is invalid or consumed");
+  }
+}
+
+/** The sole provenance mutator is private to the authenticated projector. */
+function bindExactShardsCanonicalProjectionCapabilityV1(input: Readonly<{
+  capability: ExactShardsCanonicalProjectionCapabilityV1;
+  descriptorBindingSha256: string;
+  kind: "finalized" | "revoked";
+  inputBindingSha256: string;
+  record: object;
+  recordBinding: string;
+  anchorBlockHashes: readonly string[];
+}>): void {
+  assertExactShardsCanonicalProjectionCapabilityV1(input);
+  if (!/^sha256:[0-9a-f]{64}$/u.test(input.inputBindingSha256)
+    || input.record === null || typeof input.record !== "object"
+    || input.recordBinding.length === 0
+    || input.anchorBlockHashes.length === 0
+    || input.anchorBlockHashes.some((hash) => !/^0x[0-9a-f]{64}$/u.test(hash))
+    || CANONICAL_RECORD_CAPABILITIES.has(input.record)) {
+    throw new TypeError("ExactShards canonical projection binding is invalid");
+  }
+  const state = canonicalProjectionCapabilityState(input.capability);
+  state.projection = Object.freeze({
+    kind: input.kind,
+    inputBindingSha256: input.inputBindingSha256,
+    projectionBindingSha256: sha256Canonical({
+      descriptorBindingSha256: input.descriptorBindingSha256,
+      kind: input.kind,
+      inputBindingSha256: input.inputBindingSha256,
+      recordBinding: input.recordBinding,
+      anchorBlockHashes: input.anchorBlockHashes,
+    }),
+    record: input.record,
+    recordBinding: input.recordBinding,
+    anchorBlockHashes: Object.freeze([...input.anchorBlockHashes]),
+  });
+  CANONICAL_RECORD_CAPABILITIES.set(input.record, input.capability);
+}
+
+function canonicalProjectionCapabilityState(
+  capability: ExactShardsCanonicalProjectionCapabilityV1,
+): CanonicalProjectionCapabilityState {
+  if (capability === null
+    || (typeof capability !== "object" && typeof capability !== "function")) {
+    throw new TypeError("ExactShards canonical capability is invalid");
+  }
+  const state = CANONICAL_PROJECTION_CAPABILITIES.get(capability);
+  if (state === undefined) {
+    throw new TypeError("ExactShards canonical capability is invalid");
+  }
+  return state;
 }
 
 function sha256Canonical(value: unknown): `sha256:${string}` {
