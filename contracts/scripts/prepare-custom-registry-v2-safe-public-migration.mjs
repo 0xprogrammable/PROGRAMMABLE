@@ -548,8 +548,13 @@ if (continuation) {
       executionBundleSha256: completed.executionBundleSha256,
       migrationPlanDigest: inventory.migrationPlanDigest,
       source: dark.value.source,
+      darkSafeVerificationSha256: dark.digest,
       policySha256: sha256(policyBytes),
+      safeControllerPolicySha256: sha256(safePolicyBytes),
+      releasePolicySha256: sha256(releasePolicyBytes),
+      predeploymentManifestSha256: sha256(predeploymentBytes),
       hardwareInventorySha256: hardware.digest,
+      releaseAuthorization: predeployment.releaseAuthorization,
     });
     const journalReceipt = execution.journalRecords.find(
       ({ event }) => event === "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",

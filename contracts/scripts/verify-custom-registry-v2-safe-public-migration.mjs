@@ -294,8 +294,13 @@ for (const completed of plan.completedMigrations) {
     executionBundleSha256: completed.executionBundleSha256,
     migrationPlanDigest: plan.migrationPlanDigest,
     source: plan.source,
+    darkSafeVerificationSha256: plan.darkSafeVerificationSha256,
     policySha256: plan.policySha256,
+    safeControllerPolicySha256: plan.safeControllerPolicySha256,
+    releasePolicySha256: plan.releasePolicySha256,
+    predeploymentManifestSha256: plan.predeploymentManifestSha256,
     hardwareInventorySha256: plan.hardwareInventorySha256,
+    releaseAuthorization: plan.releaseAuthorization,
   });
   const journalReceipt = execution.journalRecords.find(
     ({ event }) => event === "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",

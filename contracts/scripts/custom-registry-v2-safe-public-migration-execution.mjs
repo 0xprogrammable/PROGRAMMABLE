@@ -856,8 +856,13 @@ export function assertSafeMigrationContinuationExecutionBinding({
   executionBundleSha256,
   migrationPlanDigest,
   source,
+  darkSafeVerificationSha256,
   policySha256,
+  safeControllerPolicySha256,
+  releasePolicySha256,
+  predeploymentManifestSha256,
   hardwareInventorySha256,
+  releaseAuthorization,
 }) {
   if (
     entry?.role !== execution?.bundle?.role ||
@@ -872,11 +877,23 @@ export function assertSafeMigrationContinuationExecutionBinding({
     execution.plan.migrationPlanDigest !== migrationPlanDigest ||
     execution.plan.source?.commit !== source?.commit ||
     execution.plan.source?.tree !== source?.tree ||
+    execution.plan.darkSafeVerificationSha256 !==
+      darkSafeVerificationSha256 ||
     execution.plan.policySha256 !== policySha256 ||
+    execution.plan.safeControllerPolicySha256 !==
+      safeControllerPolicySha256 ||
+    execution.plan.releasePolicySha256 !== releasePolicySha256 ||
+    execution.plan.predeploymentManifestSha256 !==
+      predeploymentManifestSha256 ||
     execution.plan.hardwareInventorySha256 !== hardwareInventorySha256
   ) {
     throw new Error("Safe migration continuation execution provenance is invalid");
   }
+  assertSafePublicMigrationReleaseAuthorization({
+    actual: execution.plan.releaseAuthorization,
+    expected: releaseAuthorization,
+    releaseOwner: releaseAuthorization?.owner,
+  });
   return true;
 }
 

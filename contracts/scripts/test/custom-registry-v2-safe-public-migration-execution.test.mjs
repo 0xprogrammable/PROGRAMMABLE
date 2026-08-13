@@ -88,6 +88,12 @@ async function fixture(migrationModule) {
       maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics:
         "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION",
+      stagedRawTransactionTrustBoundary:
+        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+      dispatchIntentFinalConfirmation:
+        "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
+      nonceScopedJournalExclusivity:
+        "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED",
     },
     remainingRoles: ["approver"],
     transactions: [
@@ -636,8 +642,14 @@ test("continuation provenance binds the original authorized execution bundle", a
         executionBundleSha256: entry.executionBundleSha256,
         migrationPlanDigest: value.plan.migrationPlanDigest,
         source: value.plan.source,
+        darkSafeVerificationSha256: value.plan.darkSafeVerificationSha256,
         policySha256: value.plan.policySha256,
+        safeControllerPolicySha256: value.plan.safeControllerPolicySha256,
+        releasePolicySha256: value.plan.releasePolicySha256,
+        predeploymentManifestSha256:
+          value.plan.predeploymentManifestSha256,
         hardwareInventorySha256: value.plan.hardwareInventorySha256,
+        releaseAuthorization: value.plan.releaseAuthorization,
       }),
       true,
     );
@@ -653,11 +665,62 @@ test("continuation provenance binds the original authorized execution bundle", a
           executionBundleSha256: entry.executionBundleSha256,
           migrationPlanDigest: value.plan.migrationPlanDigest,
           source: value.plan.source,
+          darkSafeVerificationSha256: value.plan.darkSafeVerificationSha256,
           policySha256: value.plan.policySha256,
+          safeControllerPolicySha256: value.plan.safeControllerPolicySha256,
+          releasePolicySha256: value.plan.releasePolicySha256,
+          predeploymentManifestSha256:
+            value.plan.predeploymentManifestSha256,
           hardwareInventorySha256: value.plan.hardwareInventorySha256,
+          releaseAuthorization: value.plan.releaseAuthorization,
         }),
       /continuation execution provenance/u,
     );
+    for (const mutate of [
+      (binding) => {
+        binding.darkSafeVerificationSha256 = `0x${"11".repeat(32)}`;
+      },
+      (binding) => {
+        binding.safeControllerPolicySha256 = `0x${"22".repeat(32)}`;
+      },
+      (binding) => {
+        binding.releasePolicySha256 = `0x${"33".repeat(32)}`;
+      },
+      (binding) => {
+        binding.predeploymentManifestSha256 = `0x${"44".repeat(32)}`;
+      },
+      (binding) => {
+        binding.releaseAuthorization = {
+          ...binding.releaseAuthorization,
+          owner: "0x0000000000000000000000000000000000000042",
+        };
+      },
+    ]) {
+      const binding = {
+        entry,
+        execution,
+        executionBundlePath: entry.executionBundlePath,
+        executionBundleSha256: entry.executionBundleSha256,
+        migrationPlanDigest: value.plan.migrationPlanDigest,
+        source: value.plan.source,
+        darkSafeVerificationSha256: value.plan.darkSafeVerificationSha256,
+        policySha256: value.plan.policySha256,
+        safeControllerPolicySha256: value.plan.safeControllerPolicySha256,
+        releasePolicySha256: value.plan.releasePolicySha256,
+        predeploymentManifestSha256:
+          value.plan.predeploymentManifestSha256,
+        hardwareInventorySha256: value.plan.hardwareInventorySha256,
+        releaseAuthorization: value.plan.releaseAuthorization,
+      };
+      mutate(binding);
+      assert.throws(
+        () =>
+          migrationModule.assertSafeMigrationContinuationExecutionBinding(
+            binding,
+          ),
+        /continuation execution provenance|release authorization/u,
+      );
+    }
   } finally {
     await rm(value.directory, { recursive: true, force: true });
   }
