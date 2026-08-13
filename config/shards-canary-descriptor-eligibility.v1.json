@@ -11,8 +11,7 @@
     "SHARDS_REGISTRY_V1_ROUTE_ADAPTER_MISSING",
     "SHARDS_LAUNCH_DESCRIPTOR_FEE_POLICY_PROFILE_MISSING",
     "SHARDS_REGISTRY_V1_FEE_POLICY_PROFILE_MISSING",
-    "SHARDS_REGISTRY_V1_AUTHORIZATION_AND_FINALITY_BYTES_MISSING",
-    "CUSTOM_LAUNCH_AUTHENTICATED_CANARY_FEE_POLICY_SCHEMA_DRIFT"
+    "SHARDS_REGISTRY_V1_AUTHORIZATION_AND_FINALITY_BYTES_MISSING"
   ],
   "reviewedApplicant": {
     "githubLogin": "jesse-stahl",
@@ -65,16 +64,16 @@
     }
   },
   "websiteBaseline": {
-    "commit": "32a79b53f99fcf4fa050b327db9a20fc96cf6c66",
-    "tree": "cb4cfea01ed72b5ec4aa11f85c62239f8869ccdc",
+    "commit": "c464abdb727228074208bd26bdffc871504e54bf",
+    "tree": "394c6e572edeeb36df9e31c5f8736483fcdfeb9d",
     "fileBindings": [
       {
         "path": "lib/custom-launch/contract-v2.ts",
-        "rawSha256": "dd100161ba26297dcd042c79abd1259167934983c49f6147f0426e84d4a77acc"
+        "rawSha256": "aecc823c5343563152d785334518d2ef2c676418d66077f81541a90d79a10e49"
       },
       {
         "path": "lib/custom-launch/response-contract-v2.ts",
-        "rawSha256": "30f0f3f04f6387b51b5aab0d5773cff3c4620f798c089b943f0c6fcf7e142dc8"
+        "rawSha256": "8e38b1e7f38d04eb4d99da61f5d5845241bc52fb89e7db14cac7fc5134bace85"
       },
       {
         "path": "lib/custom-launch/manual-router-bindings-v2.ts",
@@ -113,7 +112,7 @@
     "nestedFactorySlotId": "nested-factory-v1",
     "nestedFactoryState": "DENY_PENDING_CONTRACT_ARTIFACT",
     "feePolicyCompatibility": "ANALYSIS_PENDING_NO_100_BPS_INCLUSIVE_80_10_10_PROFILE",
-    "deploymentProbeFeePolicyFieldState": "MISSING_REQUIRED_ROUTE_FIELD",
+    "deploymentProbeFeePolicyFieldState": "PRESENT_VALIDATED_PROFILE_UNSUPPORTED",
     "shardsState": "DENY"
   },
   "registryV1": {
