@@ -16,7 +16,7 @@ import {
   buildExploreDataQuality,
   publicExploreEntryV1,
   valuationSortValue,
-  withBitqueryMarketData,
+  withPublicExploreBitqueryMarketData,
   type ValuedExploreEntry,
 } from "../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
@@ -300,11 +300,14 @@ export function dedupeExploreEntriesV1(
 function valueExploreEntriesWithMarketData(
   entries: readonly ExploreEntry[],
   marketByToken: ReadonlyMap<string, TokenMarketDataV1>,
+  nowMs: number,
 ): ValuedExploreEntry[] {
   return entries.map((entry) => {
     const address = entry.tokenAddress?.toLowerCase();
     const marketData = address ? marketByToken.get(address) : undefined;
-    if (marketData) return withBitqueryMarketData(entry, marketData);
+    if (marketData) {
+      return withPublicExploreBitqueryMarketData(entry, marketData, nowMs);
+    }
     return {
       ...entry,
       valuation: {
@@ -434,6 +437,7 @@ async function valueExplorePage(input: Readonly<{
   const valuedEntries = valueExploreEntriesWithMarketData(
     hydratedEntries,
     marketByToken,
+    Date.now(),
   );
   if (identityPage !== null) {
     return {
