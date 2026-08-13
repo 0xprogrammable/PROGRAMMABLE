@@ -7,6 +7,7 @@ import {
   bindPrivateBlobReadMetadata,
   createMemoryPersistentRpcCacheStore,
   createPersistentRpcRequest,
+  createVercelBlobPersistentRpcCacheStore,
   persistentRpcCachePathByteLimit,
   PERSISTENT_RPC_CACHE_LIMITS,
   PersistentRpcCacheError,
@@ -172,7 +173,130 @@ function reorgOnCreateStore(
   };
 }
 
+function weakEtagBlobClient() {
+  const values = new Map<string, { body: string; etag: string }>();
+  let generation = 0;
+  const nextEtag = () => {
+    generation += 1;
+    return `"${generation.toString(16).padStart(32, "0")}"`;
+  };
+  const client = {
+    async get(path: string) {
+      const current = values.get(path);
+      if (!current) return null;
+      const bytes = new TextEncoder().encode(current.body);
+      return {
+        statusCode: 200 as const,
+        stream: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(bytes);
+            controller.close();
+          },
+        }),
+        headers: new Headers({
+          "content-encoding": "gzip",
+          "content-length": "0",
+        }),
+        blob: {
+          etag: `W/${current.etag}`,
+          size: 0,
+        },
+      };
+    },
+    async head(path: string) {
+      const current = values.get(path);
+      if (!current) throw new Error("Vercel Blob: object is missing");
+      return {
+        etag: current.etag,
+        size: new TextEncoder().encode(current.body).byteLength,
+      };
+    },
+    async put(
+      path: string,
+      body: string,
+      options: Readonly<{ allowOverwrite: boolean; ifMatch?: string }>,
+    ) {
+      const current = values.get(path);
+      if (!options.allowOverwrite && current) {
+        throw new Error("Vercel Blob: object already exists");
+      }
+      if (
+        options.ifMatch !== undefined &&
+        current?.etag !== options.ifMatch
+      ) {
+        throw new Error("Vercel Blob: Precondition failed: ETag mismatch.");
+      }
+      const etag = nextEtag();
+      values.set(path, { body, etag });
+      return { etag };
+    },
+  };
+  return {
+    client,
+    paths: () => [...values.keys()],
+    value(path: string) {
+      const current = values.get(path);
+      return current ? JSON.parse(current.body) as unknown : null;
+    },
+  };
+}
+
 describe("persistent RPC log cursor", () => {
+  it("commits both provider cursors through weak Blob ETags and rejects a stale writer", async () => {
+    const blob = weakEtagBlobClient();
+    const store = createVercelBlobPersistentRpcCacheStore(
+      "test-read-write-token",
+      async () => blob.client,
+    );
+
+    for (const providerId of ["provider-primary", "provider-secondary"]) {
+      const rpc = mockRpc();
+      const cached = cachedRequest(rpc, store, providerId, 5n);
+      await withPersistentRpcIntegrityScope(() =>
+        Promise.all([
+          logRequest(cached.request, 0, 9, bytes32(101)),
+          logRequest(cached.request, 0, 9, bytes32(102)),
+        ]),
+      );
+
+      const providerPaths = blob.paths().filter((path) =>
+        path.includes(`/${providerId}/`),
+      );
+      const cursorPaths = providerPaths.filter((path) =>
+        path.endsWith("/cursor.json"),
+      );
+      const integrityPaths = providerPaths.filter((path) =>
+        path.includes("/integrity/"),
+      );
+      expect(cursorPaths).toHaveLength(2);
+      expect(integrityPaths).toHaveLength(1);
+      for (const path of cursorPaths) {
+        expect(
+          (blob.value(path) as { payload: { segments: unknown[] } }).payload
+            .segments,
+        ).toHaveLength(2);
+      }
+      expect(
+        (blob.value(integrityPaths[0] as string) as {
+          payload: { status: string };
+        }).payload.status,
+      ).toBe("committed");
+    }
+
+    const cursorPath = blob.paths().find(
+      (path) =>
+        path.includes("/provider-primary/") && path.endsWith("/cursor.json"),
+    ) as string;
+    const stale = await store.read(cursorPath);
+    expect(stale).not.toBeNull();
+    expect(
+      await store.replace(cursorPath, stale?.value, stale?.etag as string),
+    ).toBe("replaced");
+    expect(
+      await store.replace(cursorPath, stale?.value, stale?.etag as string),
+    ).toBe("conflict");
+  });
+
   it("survives a process restart and serves a canonical cursor without rescanning", async () => {
     const rpc = mockRpc();
     const first = cachedRequest(rpc);
