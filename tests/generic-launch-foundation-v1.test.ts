@@ -504,21 +504,24 @@ describe("generic launch V1 signed read boundary", () => {
       "/api/custom-launch/generic/v1/launches?limit=1",
     ))).status).toBe(503);
 
-    const initialRequestBindingHash = canonicalSha256(
-      "programmable.generic-launch-feed-request.v1",
-      Object.freeze({ limit: 1, cursor: null }),
-    );
-    const replayed = signedEnvelope(descriptor, initialRequestBindingHash, {
-      records: [record], nextCursor: null, total: "1",
-    });
     const replayStore = store(descriptor, [record]);
-    replayStore.findFinalizedLaunches = async () => replayed;
+    let replayed: SignedGenericLaunchReadEnvelopeV1 | null = null;
+    replayStore.findFinalizedLaunches = async ({ requestBindingHash }) => {
+      if (replayed !== null) return replayed;
+      replayed = signedEnvelope(descriptor, requestBindingHash, {
+        records: [record], nextCursor: null, total: "1",
+      });
+      return replayed;
+    };
     const replayHandlers = createGenericLaunchReadHandlersV1({
       descriptor,
       store: replayStore,
     });
     expect((await replayHandlers.feed(request(
-      "/api/custom-launch/generic/v1/launches?limit=1&cursor=c1",
+      "/api/custom-launch/generic/v1/launches?limit=1",
+    ))).status).toBe(200);
+    expect((await replayHandlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1",
     ))).status).toBe(503);
 
     const mutationStore = store(descriptor, [record]);
@@ -535,6 +538,38 @@ describe("generic launch V1 signed read boundary", () => {
     expect((await mutationHandlers.feed(request(
       "/api/custom-launch/generic/v1/launches?limit=1",
     ))).status).toBe(503);
+  });
+
+  it("uses only the deep snapshot reconstructed from verified canonical bytes", async () => {
+    const release = adapter();
+    const descriptor = activeDescriptor([release]);
+    const record = launchRecord(subject(), release);
+    const readStore = store(descriptor, [record]);
+    readStore.findFinalizedLaunches = async ({ requestBindingHash }) => {
+      const payload = {
+        records: [record], nextCursor: null, total: "1",
+      };
+      const envelope = signedEnvelope(descriptor, requestBindingHash, payload);
+      let signatureReads = 0;
+      return new Proxy(envelope, {
+        get(target, property, receiver) {
+          if (property === "signatureBase64Url") {
+            signatureReads += 1;
+            if (signatureReads === 3) payload.records = [];
+          }
+          return Reflect.get(target, property, receiver) as unknown;
+        },
+      });
+    };
+    const handlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: readStore,
+    });
+    const response = await handlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1",
+    ));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ records: [record] });
   });
 
   it("rejects descriptor, source, adapter, cursor and detail substitution", async () => {

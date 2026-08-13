@@ -3,6 +3,7 @@ import "server-only";
 import {
   createHash,
   createPublicKey,
+  randomBytes,
   verify as verifySignature,
 } from "node:crypto";
 import descriptorSource from
@@ -95,6 +96,7 @@ export function createGenericLaunchReadHandlersV1(
         Object.freeze({
           limit: query.limit,
           cursor: query.cursor ?? null,
+          requestChallengeBase64Url: randomBytes(32).toString("base64url"),
         }),
       );
       try {
@@ -137,7 +139,10 @@ export function createGenericLaunchReadHandlersV1(
       }
       const requestBindingHash = canonicalSha256(
         "programmable.generic-launch-detail-request.v1",
-        Object.freeze({ recordHash }),
+        Object.freeze({
+          recordHash,
+          requestChallengeBase64Url: randomBytes(32).toString("base64url"),
+        }),
       );
       try {
         const envelope = await readModel.store.findFinalizedLaunchByRecordHash({
@@ -277,7 +282,18 @@ function verifySignedEnvelope(
     Buffer.from(value.signatureBase64Url, "base64url"),
   );
   if (!valid) throw new TypeError("generic launch read signature is invalid");
-  return value.payload;
+  const snapshot = exactObject(JSON.parse(canonicalMessage) as unknown, [
+    "activationBindingHash", "payload", "readModelBindingHash",
+    "requestBindingHash", "schemaVersion",
+  ], "verified generic launch read signature message");
+  if (snapshot.schemaVersion
+      !== "programmable.generic-launch-read-signature-message.v1"
+    || snapshot.activationBindingHash !== descriptor.activationBindingHash
+    || snapshot.readModelBindingHash !== readModel.readModelBindingHash
+    || snapshot.requestBindingHash !== requestBindingHash) {
+    throw new TypeError("verified generic launch read snapshot is invalid");
+  }
+  return snapshot.payload;
 }
 
 function captureReadStore(
