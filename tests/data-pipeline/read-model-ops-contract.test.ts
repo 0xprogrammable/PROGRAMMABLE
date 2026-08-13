@@ -1488,7 +1488,7 @@ describe("read-model operations source contract", () => {
 
   it("binds the bounded exclusive real-block SLA operator before promotion", () => {
     const operatorPath = "scripts/perf/read-model-real-block-sla-operator.mjs";
-    const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
+    const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
     const unboundedOperator = readFileSync(
       resolve(ROOT, operatorPath),
       "utf8",
@@ -1567,12 +1567,14 @@ describe("read-model operations source contract", () => {
     ]);
   });
 
-  it("rejects an alternative promotion command in the canonical cutover runbook", () => {
+  it("keeps the historical candidate cutover retired and non-executable", () => {
     const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
-    const bypass = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
-      'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
-      'npx vercel promote "$UNREVIEWED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
-    );
+    const bypass = `${readFileSync(resolve(ROOT, runbookPath), "utf8")}
+\`\`\`sh
+node scripts/data-pipeline/cutover-operator.mjs bootstrap-plan
+vercel promote "$UNREVIEWED_DEPLOYMENT_ID"
+\`\`\`
+`;
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -1580,8 +1582,11 @@ describe("read-model operations source contract", () => {
       },
       expectedSha256Overrides: fixtureDigests(),
     });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-post-promotion-binding",
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-retired-candidate-cutover",
+        "ops-post-promotion-binding",
+      ]),
     );
   });
 });

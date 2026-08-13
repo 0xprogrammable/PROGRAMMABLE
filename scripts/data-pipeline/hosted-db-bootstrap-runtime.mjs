@@ -211,11 +211,21 @@ async function withRuntimeModules(run) {
   }
 }
 
+function historicalCandidateBootstrapIsRetired() {
+  return true;
+}
+
 export async function createBootstrapPlan({
   repositoryCommit,
   environment = process.env,
   createdAt,
 }) {
+  if (historicalCandidateBootstrapIsRetired()) {
+    throw new Error(
+      "historical candidate bootstrap is retired; use the canonical read-model release procedure",
+    );
+  }
+
   const [bindingBytes, catalogBytes, candidateBytes] = await Promise.all([
     readRepositoryFile(RELEASE_BINDING_PATH),
     readRepositoryFile(BOOTSTRAP_CATALOG_PATH),

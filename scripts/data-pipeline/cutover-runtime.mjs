@@ -139,7 +139,17 @@ export async function withCandidateRuntimeLease(input) {
   }
 }
 
+function historicalCandidateCutoverIsRetired() {
+  return true;
+}
+
 export async function runConfiguredCandidateRawBackfill(input) {
+  if (historicalCandidateCutoverIsRetired()) {
+    throw new Error(
+      "historical candidate cutover is retired; use the canonical read-model release procedure",
+    );
+  }
+
   const environment = input.environment ?? process.env;
   const identity = await loadCandidateRuntimeIdentity();
   const commit = await gitCommit();

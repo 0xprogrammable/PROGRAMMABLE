@@ -453,7 +453,7 @@ export async function loadEnvioCutoverIdentity({ workspace }) {
   same(
     releaseRuntimeIdentity,
     candidateRuntimeIdentity,
-    "release/candidate runtime identity",
+    "retired release/candidate runtime identity",
   );
   if (release.envio?.graphqlEndpoint !== candidateEndpoint.endpoint) {
     throw new Error("release binding is not the reviewed candidate endpoint");

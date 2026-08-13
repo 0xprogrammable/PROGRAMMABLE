@@ -5,19 +5,15 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { createBootstrapPlan } from "./hosted-db-bootstrap-runtime.mjs";
 import {
   assertNoSecretOutput,
   discoverMigrationPlan,
   safeFailure,
   validateMigrationPlan,
 } from "./hosted-db-operator-core.mjs";
-import { validateReviewedBootstrapPlan } from "./bootstrap-evidence.mjs";
 import {
-  applyReviewedBootstrap,
   applyPendingMigrations,
   closeHostedDatabase,
-  inspectBootstrapState,
   inspectMigrationState,
   openHostedDatabase,
 } from "./hosted-db-postgres.mjs";
@@ -32,13 +28,10 @@ const HELP = `Usage:
   node scripts/data-pipeline/hosted-db-operator.mjs dry-run --plan FILE --expected-project-ref REF
   node scripts/data-pipeline/hosted-db-operator.mjs verify --plan FILE --expected-project-ref REF
   node scripts/data-pipeline/hosted-db-operator.mjs apply --plan FILE --expected-project-ref REF --confirm-apply PLAN_SHA256
-  node scripts/data-pipeline/hosted-db-operator.mjs bootstrap-plan [--output FILE]
-  node scripts/data-pipeline/hosted-db-operator.mjs bootstrap-dry-run --plan FILE --expected-project-ref REF
-  node scripts/data-pipeline/hosted-db-operator.mjs bootstrap-verify --plan FILE --expected-project-ref REF
-  node scripts/data-pipeline/hosted-db-operator.mjs bootstrap-apply --plan FILE --expected-project-ref REF --confirm-apply PLAN_SHA256
 
 Database credentials are accepted only through PROGRAMMABLE_MIGRATOR_DATABASE_URL.
 The CA certificate is accepted only through PROGRAMMABLE_POSTGRES_SSL_CA_PEM.
+The historical candidate bootstrap commands are retired and fail closed.
 `;
 
 function parseArguments(argv) {
@@ -123,25 +116,6 @@ async function readReviewedPlan(planPath) {
   return plan;
 }
 
-async function readReviewedBootstrapPlan(planPath) {
-  if (!planPath) throw new Error("--plan is required");
-  const plan = validateReviewedBootstrapPlan(
-    JSON.parse(await readFile(planPath, "utf8")),
-  );
-  if ((await gitCommit()) !== plan.repositoryCommit) {
-    throw new Error("reviewed bootstrap plan does not match this checkout");
-  }
-  const rebuilt = await createBootstrapPlan({
-    repositoryCommit: plan.repositoryCommit,
-    environment: process.env,
-    createdAt: plan.createdAt,
-  });
-  if (rebuilt.planSha256 !== plan.planSha256) {
-    throw new Error("reviewed bootstrap evidence changed after planning");
-  }
-  return plan;
-}
-
 function outputSecrets(environment) {
   return Object.entries(environment)
     .filter(([name]) => CREDENTIAL_ENVIRONMENT_NAME.test(name))
@@ -206,53 +180,6 @@ async function runDatabaseCommand(command, flags) {
   }
 }
 
-async function runBootstrapDatabaseCommand(command, flags) {
-  const allowed = ["--plan", "--expected-project-ref"];
-  if (command === "bootstrap-apply") allowed.push("--confirm-apply");
-  exactFlags(flags, allowed);
-  const plan = await readReviewedBootstrapPlan(flags.get("--plan"));
-  if (
-    command === "bootstrap-apply" &&
-    flags.get("--confirm-apply") !== plan.planSha256
-  ) {
-    throw new Error("--confirm-apply must equal the reviewed plan commitment");
-  }
-  const connection = await openHostedDatabase({
-    databaseUrl: process.env.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
-    expectedProjectRef: flags.get("--expected-project-ref"),
-    sslCaPem: process.env.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
-  });
-  try {
-    const migrationPlan = await assertMigrationCheckoutIsTrackedAndClean();
-    const migrationState = await inspectMigrationState({
-      sql: connection.sql,
-      plan: migrationPlan,
-    });
-    if (migrationState.status !== "current") {
-      throw new Error("all reviewed migrations must be current before bootstrap");
-    }
-    const state = command === "bootstrap-apply"
-      ? await applyReviewedBootstrap({ sql: connection.sql, plan })
-      : await inspectBootstrapState({ sql: connection.sql, plan });
-    await writeOutput({
-      kind: "programmable-hosted-db-bootstrap-result",
-      schemaVersion: 1,
-      operation: command,
-      planSha256: plan.planSha256,
-      target: connection.target,
-      operatorIdentity: connection.operatorIdentity,
-      migrationPlanSha256: migrationPlan.planSha256,
-      state,
-      changed: state.changed === true,
-    });
-    if (command === "bootstrap-verify" && state.status !== "current") {
-      process.exitCode = 2;
-    }
-  } finally {
-    await closeHostedDatabase(connection.sql);
-  }
-}
-
 async function main() {
   const { command, flags } = parseArguments(process.argv.slice(2));
   if (command === "help") {
@@ -266,21 +193,18 @@ async function main() {
     return;
   }
   if (command === "bootstrap-plan") {
-    exactFlags(flags, ["--output"]);
-    const plan = await createBootstrapPlan({
-      repositoryCommit: await gitCommit(),
-      environment: process.env,
-    });
-    await writeOutput(plan, flags.get("--output"));
-    return;
+    throw new Error(
+      "historical candidate bootstrap is retired; use the canonical read-model release procedure",
+    );
   }
   if (["dry-run", "verify", "apply"].includes(command)) {
     await runDatabaseCommand(command, flags);
     return;
   }
   if (["bootstrap-dry-run", "bootstrap-verify", "bootstrap-apply"].includes(command)) {
-    await runBootstrapDatabaseCommand(command, flags);
-    return;
+    throw new Error(
+      "historical candidate bootstrap is retired; use the canonical read-model release procedure",
+    );
   }
   throw new Error("unknown operator command");
 }

@@ -1204,6 +1204,20 @@ function manualPromotionSequenceIsFailClosed(source) {
     activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION;
 }
 
+function retiredCandidateCutoverIsFailClosed(source) {
+  return typeof source === "string" &&
+    source.includes("# Historical candidate cutover retired") &&
+    source.includes("This document no longer authorizes a production cutover.") &&
+    source.includes("production-7f24e63") &&
+    source.includes("production-92f6373") &&
+    source.includes("scripts/data-pipeline/cutover-operator.mjs") &&
+    source.includes("docs/operations/read-model-scheduler-cutover.md") &&
+    source.includes("historical evidence, not current") &&
+    !source.includes("```sh") &&
+    !source.includes("vercel promote") &&
+    !source.includes("bootstrap-plan");
+}
+
 function migrationContract(id, source) {
   if (typeof source !== "string") return false;
   if (id === "source-projector-lease") {
@@ -1766,22 +1780,18 @@ export function evaluateReadModelOperationsSourceContracts(
       operationsRunbook.includes(
         "npm run perf:read-model:real-block-sla-operator --",
       ) &&
-      productionCutoverRunbook.includes(
-        "npm run perf:read-model:real-block-sla-operator --",
-      ) &&
       operationsRunbook.includes(
         `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
       ) &&
-      productionCutoverRunbook.includes(
-        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
-      ) &&
       operationsRunbook.includes(
-        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
-      ) &&
-      productionCutoverRunbook.includes(
         `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
       ),
     "the operator arms and polls the exact staged deployment before writing one private evidence file",
+  );
+  check(
+    "ops-retired-candidate-cutover",
+    retiredCandidateCutoverIsFailClosed(productionCutoverRunbook),
+    "the obsolete candidate cutover has no executable production authority",
   );
   check(
     "ops-quicknode-stream-env-contract",
@@ -2546,7 +2556,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !deployWorkflow.includes("vercel rollback") &&
       operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
       manualPromotionSequenceIsFailClosed(operationsRunbook) &&
-      manualPromotionSequenceIsFailClosed(productionCutoverRunbook) &&
+      retiredCandidateCutoverIsFailClosed(productionCutoverRunbook) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
@@ -2681,7 +2691,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes('response.headers.get("x-programmable-data-quality")') &&
       !postPromotion.includes("/api/indexers/v1/token-list") &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
-    "the workflow is stage-only and both operator runbooks require the exact SLA-gated deployment promotion sequence",
+    "the workflow is stage-only, the current runbook requires exact SLA-gated promotion and the historical cutover stays retired",
   );
   check(
     "ops-vercel-project-prerequisite",

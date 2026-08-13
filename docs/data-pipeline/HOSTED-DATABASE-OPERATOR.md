@@ -103,36 +103,18 @@ node scripts/data-pipeline/hosted-db-operator.mjs verify \
 It is not proof of a successful backfill, release bootstrap, provider health,
 projector run, parity result or public activation.
 
-## Separate bootstrap plan
+## Historical candidate bootstrap retired
 
-With the reviewed private dRPC-primary and QuickNode-secondary URLs plus their
-exact role/provider/commitment fields loaded only in server-side environment
-variables, generate the data-pipeline bootstrap plan separately:
+The old candidate-only bootstrap commands are no longer available. They bound
+the historical `production-7f24e63` Envio deployment, while the canonical
+release now binds `production-92f6373`. Reusing either identity as the other
+would create false promotion evidence.
 
-```sh
-node scripts/data-pipeline/hosted-db-operator.mjs bootstrap-plan \
-  > /secure/operator/bootstrap.json
-```
-
-This plan reads `config/data-pipeline-release.v1.json` through the production
-release parser and computes the exact Envio, dual-RPC and official Uniswap v4
-subgraph commitments with the same production modules used by the workers.
-Its output includes only redacted identities and commitments, never RPC URLs,
-API keys or database credentials.
-
-The current release binding does not contain semantic source roles, recovery
-selectors, ABI/event-set commitments, artifact creation-code commitments,
-dynamic-source template evidence, RPC endpoint-evidence attestations or the
-current database generation required for activation. The bootstrap plan lists
-those missing values per release and source and therefore reports
-`execution.ready=false`. That is intentional. Do not convert runtime-code
-hashes into creation-code commitments, infer roles from contract names or
-invent activation receipts.
-
-Bootstrap execution needs a separately reviewed manifest that supplies those
-exact inputs, a database-state read at execution time and a dedicated
-operator. Migration completion alone must never activate a release epoch or a
-worker.
+This operator remains authoritative only for the deterministic migration
+`plan`, `dry-run`, `apply` and `verify` commands above. A future candidate
+database rollout requires a new, separately reviewed candidate deployment,
+inventory and policy manifest. Migration completion alone never activates a
+release epoch or a worker.
 
 ## Failure handling
 

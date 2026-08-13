@@ -358,7 +358,8 @@ verification sequence are documented in
 [`HOSTED-DATABASE-OPERATOR.md`](./HOSTED-DATABASE-OPERATOR.md). Its plan scans
 the complete ordered `supabase/migrations/*.sql` set; no hand-maintained
 worker manifest is an authority for migration completeness. Migration and
-release bootstrap remain separate operations.
+release activation remain separate operations. The historical candidate-only
+bootstrap is retired and is not an input to the current production release.
 
 Backup and restore must copy the stored fingerprint triple byte-for-byte.
 Compare ordered exports of:

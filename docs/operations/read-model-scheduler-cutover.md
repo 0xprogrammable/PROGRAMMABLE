@@ -110,11 +110,15 @@ moved production to the candidate commit.
    verify every ordered `supabase/migrations/*.sql` file at the exact reviewed
    commit. `config/read-model-operations.v1.json` pins worker-specific release
    inputs; it is not the complete migration inventory. Follow
-   `docs/data-pipeline/HOSTED-DATABASE-OPERATOR.md` and keep bootstrap separate.
-2. Backfill Envio and Postgres at an exact, recorded checkpoint.
-3. Product-bind the Candidate database to the exact staged commit and
-   deployment ID using the reviewed database-promotion operator. This opens
-   the internal publication fence but does not move the production domain.
+   `docs/data-pipeline/HOSTED-DATABASE-OPERATOR.md`. The historical candidate
+   bootstrap is retired and must not be substituted for current release
+   evidence.
+2. Bind Envio and Postgres to the current canonical release at an exact,
+   recorded checkpoint. If current database activation evidence is absent,
+   stop: a staged website is not production-readiness evidence.
+3. Bind the current database release to the exact staged commit and deployment
+   ID through a separately reviewed current release authority. The retired
+   `production-7f24e63` candidate operator is not such an authority.
 4. Enable the source projector and prove it catches up without partial-block
    publication.
 5. Enable the market projector and prove its market lineage at the same source
@@ -187,7 +191,7 @@ QuickNode must be configured to retry a non-2xx webhook response after roughly
 one second. On the exact `vercel deploy --prebuilt --prod --skip-domain`
 candidate only, set
 `PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true`. Leave it false in
-normal builds. After the Candidate database is product-bound to this exact
+normal builds. After the current database release is product-bound to this exact
 staged commit and deployment ID, and the staged projectors have published a
 complete Classic launch, arm one five-minute, single-use probe against the
 exact unaliased deployment while the production domain still points to the
@@ -254,9 +258,9 @@ npm run perf:read-model:post-promotion -- \
 
 If the promotion command or post-promotion gate returns an uncertain result,
 first read the live production binding. Roll back only when it resolves to the
-candidate deployment, using the exact previous deployment recorded by the
+staged deployment, using the exact previous deployment recorded by the
 staging workflow, then reverify its deployment ID and Git commit. Keep the
-Candidate database and public-read flags fenced throughout that recovery.
+current database release and public-read flags fenced throughout that recovery.
 
 `PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` must also be present in the gate process
 so the exported HMAC can be verified without exposing the secret. The gate CLI
@@ -278,6 +282,6 @@ dependencies or incomplete evidence returns `503` with `Cache-Control:
 no-store`. A disabled worker does not open database or RPC connections. Public
 read flags stay on the legacy path until signed release evidence for the exact
 Vercel deployment is accepted. If any post-promotion binding or route check
-fails, the manual operator follows the exact rollback sequence above and in the
-production cutover runbook; the stage-only workflow never mutates production
-domains.
+fails, the manual operator follows the exact rollback sequence above. The
+retired historical candidate runbook grants no rollback or promotion authority,
+and the stage-only workflow never mutates production domains.
