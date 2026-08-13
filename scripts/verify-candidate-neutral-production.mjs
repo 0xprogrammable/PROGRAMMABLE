@@ -71,11 +71,15 @@ const projectNames = Object.freeze([
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
 const applicantIdentityPatterns = Object.freeze([
-  new RegExp(`(?:\\b${["a", "eon"].join("")}\\b|${["aeon", "framework"].join("")})`, "iu"),
-  new RegExp(`(?:\\b${["based", "bid"].join("")}\\b|\\b${["based", "bid", "x"].join("")}\\b)`, "iu"),
+  new RegExp(`(?:^|[^A-Za-z0-9])${["a", "eon"].join("")}(?:$|[^A-Za-z0-9])|${["aeon", "framework"].join("")}`, "iu"),
+  new RegExp(`(?:^|[^A-Za-z0-9])${["based", "bid"].join("")}(?:$|[^A-Za-z0-9])|\\b${["based", "bid", "x"].join("")}\\b`, "iu"),
 ]);
 const applicantCardMarkers = Object.freeze([
   ["13253", "24453"].join(""),
+  ["AEON", "PROVIDER", "ID"].join("_"),
+  ["aeon", "-v1"].join(""),
+  ["aeon", "-partner-custom"].join(""),
+  ["aeon-launch", "-models"].join(""),
   ["custom-registry-v1", "primary-contract"].join("-"),
   ["included-in", "partner-total"].join("-"),
   ["0x6a57bf3e092626be760d417986e6103c2", "0fdbc3e"].join(""),

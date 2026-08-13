@@ -47,15 +47,7 @@ export type CustomLaunchFeePolicyV1 = Readonly<
     })
 >;
 
-/**
- * Exact permissionless native-fee surface required on the Registry V1
- * `primaryContract` for every future fee-bearing Custom launch.
- *
- * The claim console discovers the source from the existing registry rather
- * than trusting a second, mutable index. The policy is null only when the
- * reviewed launch fee policy has no qualifying market and therefore no
- * Programmable fee leg.
- */
+/** Exact Ed25519 signer identity accepted for launch-permit verification. */
 export interface TrustedLaunchPermitSignerV2 {
   readonly keyId: string;
   readonly signerEpoch: string;

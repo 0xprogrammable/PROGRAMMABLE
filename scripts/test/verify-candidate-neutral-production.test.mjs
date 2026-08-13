@@ -106,6 +106,21 @@ test("rejects retired applicant fee and Registry V1 bindings", async () => {
   }
 });
 
+test("rejects the retired Solidity identity and intake markers", async () => {
+  const providerIdentifier = ["AEON", "PROVIDER", "ID"].join("_");
+  const intake = ["aeon", "-v1"].join("");
+  for (const [path, source] of [
+    ["contracts/src/FeePolicy.sol", `bytes32 constant ${providerIdentifier} = 0x00;\n`],
+    [".next/server/app/launch.js", `export const intake = "${intake}";\n`],
+    [".next/static/chunks/launch.js", `export const asset = "${["based", "bid", "_v1"].join("")}";\n`],
+  ]) {
+    const root = await fixture({ [path]: source });
+    const result = verify(root, ...(path.startsWith(".next/") ? ["--include-build"] : []));
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, new RegExp(path.replaceAll("/", "\\/"), "u"));
+  }
+});
+
 test("rejects a candidate identity in contract source", async () => {
   const projectName = ["Sh", "ards"].join("");
   const root = await fixture({
