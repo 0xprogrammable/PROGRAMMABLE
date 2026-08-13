@@ -57,7 +57,6 @@ const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const SENTINEL_MODULE = "0x0000000000000000000000000000000000000001";
 const sha256 = (bytes) =>
   `0x${createHash("sha256").update(bytes).digest("hex")}`;

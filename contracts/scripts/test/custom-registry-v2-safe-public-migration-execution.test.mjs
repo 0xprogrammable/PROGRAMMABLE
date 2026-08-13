@@ -42,7 +42,7 @@ async function executionModule() {
   }
 }
 
-async function fixture(module) {
+async function fixture(migrationModule) {
   const directory = await mkdtemp(
     path.join(os.homedir(), ".programmable-registry-v2-migration-test-"),
   );
@@ -121,7 +121,7 @@ async function fixture(module) {
     maxPriorityFeePerGas: BigInt(outerTransaction.maxPriorityFeePerGas),
   });
   const staged = {
-    schemaVersion: module.SAFE_PUBLIC_MIGRATION_STAGED_SCHEMA,
+    schemaVersion: migrationModule.SAFE_PUBLIC_MIGRATION_STAGED_SCHEMA,
     status: "SIGNED_RAW_TRANSACTION_STAGED_NO_RELEASE_WORKFLOW_AUTHORIZATION",
     chainId: 1,
     role: "approver",
@@ -143,7 +143,7 @@ async function fixture(module) {
   await writeFile(stagedPath, stagedBytes, { mode: 0o400 });
   const stagedSha256 = sha256(stagedBytes);
   const authorization = {
-    schemaVersion: module.SAFE_PUBLIC_MIGRATION_AUTHORIZATION_SCHEMA,
+    schemaVersion: migrationModule.SAFE_PUBLIC_MIGRATION_AUTHORIZATION_SCHEMA,
     status: "REVIEWED_REMAINING_ROLES_READY_FOR_EXPLICIT_DISPATCH_INTENTS",
     planSha256,
     source: plan.source,
@@ -168,9 +168,9 @@ async function fixture(module) {
     ],
   };
   authorization.reviewedPlanDigest =
-    module.computeSafeMigrationAuthorizationDigest(authorization);
+    migrationModule.computeSafeMigrationAuthorizationDigest(authorization);
   authorization.ownerAuthorizationSignature = await releaseOwner.signMessage({
-    message: module.safeMigrationAuthorizationMessage(
+    message: migrationModule.safeMigrationAuthorizationMessage(
       authorization.reviewedPlanDigest,
     ),
   });
@@ -182,7 +182,7 @@ async function fixture(module) {
   const authorizationSha256 = sha256(authorizationBytes);
   const journalRecords = [
     {
-      schemaVersion: module.SAFE_PUBLIC_MIGRATION_JOURNAL_SCHEMA,
+      schemaVersion: migrationModule.SAFE_PUBLIC_MIGRATION_JOURNAL_SCHEMA,
       event: "JOURNAL_OPEN",
       planSha256,
       authorizationSha256,
@@ -192,7 +192,7 @@ async function fixture(module) {
       nonce: outerTransaction.nonce,
     },
     {
-      event: module.SAFE_PUBLIC_MIGRATION_SIGNED_EVENT,
+      event: migrationModule.SAFE_PUBLIC_MIGRATION_SIGNED_EVENT,
       transactionHash: staged.transactionHash,
       stagedTransactionSha256: stagedSha256,
       serializedTransaction,
@@ -231,7 +231,7 @@ async function fixture(module) {
   });
   await writeFile(journalPath, journalBytes, { mode: 0o600 });
   const bundle = {
-    schemaVersion: module.SAFE_PUBLIC_MIGRATION_EXECUTION_BUNDLE_SCHEMA,
+    schemaVersion: migrationModule.SAFE_PUBLIC_MIGRATION_EXECUTION_BUNDLE_SCHEMA,
     status: "EXACT_ROLE_EXECUTION_EVIDENCE_AWAITING_FINALIZED_CHAIN_VERIFICATION",
     chainId: 1,
     role: "approver",
@@ -273,17 +273,17 @@ async function fixture(module) {
 }
 
 test("execution core exposes the migration bundle validation contract", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationExecutionBundle, "function");
-  assert.equal(typeof module.readSafeMigrationExecutionBundle, "function");
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationExecutionBundle, "function");
+  assert.equal(typeof migrationModule.readSafeMigrationExecutionBundle, "function");
 });
 
 test("execution bundle validates exact embedded and protected role artifacts", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationExecutionBundle, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationExecutionBundle, "function");
+  const value = await fixture(migrationModule);
   try {
-    const parsed = await module.assertSafeMigrationExecutionBundle({
+    const parsed = await migrationModule.assertSafeMigrationExecutionBundle({
       bundle: value.bundle,
       plan: value.plan,
       plannedRole: value.plan.transactions[0],
@@ -299,8 +299,8 @@ test("execution bundle validates exact embedded and protected role artifacts", a
 });
 
 test("execution bundle validates real two-provider broadcast response records", async () => {
-  const module = await executionModule();
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  const value = await fixture(migrationModule);
   try {
     const records = structuredClone(value.journalRecords);
     records.splice(3, 0, {
@@ -326,7 +326,7 @@ test("execution bundle validates real two-provider broadcast response records", 
     value.bundle.artifacts.transactionJournal.bytesBase64 =
       bytes.toString("base64");
     await assert.doesNotReject(
-      module.assertSafeMigrationExecutionBundle({
+      migrationModule.assertSafeMigrationExecutionBundle({
         bundle: value.bundle,
         plan: value.plan,
         plannedRole: value.plan.transactions[0],
@@ -346,7 +346,7 @@ test("execution bundle validates real two-provider broadcast response records", 
     value.bundle.artifacts.transactionJournal.bytesBase64 =
       changedBytes.toString("base64");
     await assert.rejects(
-      module.assertSafeMigrationExecutionBundle({
+      migrationModule.assertSafeMigrationExecutionBundle({
         bundle: value.bundle,
         plan: value.plan,
         plannedRole: value.plan.transactions[0],
@@ -360,9 +360,9 @@ test("execution bundle validates real two-provider broadcast response records", 
 });
 
 test("execution bundle rejects changed staged bytes even when hash-shaped metadata remains", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationExecutionBundle, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationExecutionBundle, "function");
+  const value = await fixture(migrationModule);
   try {
     const changed = structuredClone(value.bundle);
     const staged = JSON.parse(
@@ -373,7 +373,7 @@ test("execution bundle rejects changed staged bytes even when hash-shaped metada
       `${JSON.stringify(staged, null, 2)}\n`,
     ).toString("base64");
     await assert.rejects(
-      module.assertSafeMigrationExecutionBundle({
+      migrationModule.assertSafeMigrationExecutionBundle({
         bundle: changed,
         plan: value.plan,
         plannedRole: value.plan.transactions[0],
@@ -387,13 +387,13 @@ test("execution bundle rejects changed staged bytes even when hash-shaped metada
 });
 
 test("execution bundle rejects an activation-enabled or non-preflight source plan", async () => {
-  const module = await executionModule();
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  const value = await fixture(migrationModule);
   try {
     const changedPlan = structuredClone(value.plan);
     changedPlan.activationAllowed = true;
     assert.throws(
-      () => module.assertSafeMigrationSourcePlan(changedPlan),
+      () => migrationModule.assertSafeMigrationSourcePlan(changedPlan),
       /source plan is invalid/u,
     );
   } finally {
@@ -402,8 +402,8 @@ test("execution bundle rejects an activation-enabled or non-preflight source pla
 });
 
 test("pre-sign plan guard rejects forged target, calldata, value, owner, and gas", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationPlanTransactions, "function");
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationPlanTransactions, "function");
   const { safePublicMigrationTransaction, safeTransactionHash } = await import(
     "../custom-registry-v2-safe-public-migration-guards.mjs"
   );
@@ -465,7 +465,7 @@ test("pre-sign plan guard rejects forged target, calldata, value, owner, and gas
     { role: "approver", safe, legacyOwner, hardwareOwners },
   ];
   assert.equal(
-    module.assertSafeMigrationPlanTransactions({
+    migrationModule.assertSafeMigrationPlanTransactions({
       plan,
       intentRoles,
       multiSendCallOnly,
@@ -495,7 +495,7 @@ test("pre-sign plan guard rejects forged target, calldata, value, owner, and gas
     mutate(forged.transactions[0]);
     assert.throws(
       () =>
-        module.assertSafeMigrationPlanTransactions({
+        migrationModule.assertSafeMigrationPlanTransactions({
           plan: forged,
           intentRoles,
           multiSendCallOnly,
@@ -506,9 +506,9 @@ test("pre-sign plan guard rejects forged target, calldata, value, owner, and gas
 });
 
 test("execution bundle rejects an authorization that does not cover every remaining plan role", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationAuthorization, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationAuthorization, "function");
+  const value = await fixture(migrationModule);
   try {
     const plan = structuredClone(value.plan);
     plan.remainingRoles.push("registrar");
@@ -525,7 +525,7 @@ test("execution bundle rejects an authorization that does not cover every remain
     });
     assert.throws(
       () =>
-        module.assertSafeMigrationAuthorization({
+        migrationModule.assertSafeMigrationAuthorization({
           authorization: value.authorization,
           plan,
           planSha256: value.planSha256,
@@ -543,12 +543,12 @@ test("execution bundle rejects an authorization that does not cover every remain
 });
 
 test("expired authorization is accepted only for post-dispatch verification", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationExecutionBundle, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationExecutionBundle, "function");
+  const value = await fixture(migrationModule);
   try {
     await assert.rejects(
-      module.assertSafeMigrationExecutionBundle({
+      migrationModule.assertSafeMigrationExecutionBundle({
         bundle: value.bundle,
         plan: value.plan,
         plannedRole: value.plan.transactions[0],
@@ -557,7 +557,7 @@ test("expired authorization is accepted only for post-dispatch verification", as
       /stale or invalid/u,
     );
     await assert.doesNotReject(
-      module.assertSafeMigrationExecutionBundle({
+      migrationModule.assertSafeMigrationExecutionBundle({
         bundle: value.bundle,
         plan: value.plan,
         plannedRole: value.plan.transactions[0],
@@ -571,14 +571,14 @@ test("expired authorization is accepted only for post-dispatch verification", as
 });
 
 test("read helper binds the protected bundle file digest before parsing", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.readSafeMigrationExecutionBundle, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.readSafeMigrationExecutionBundle, "function");
+  const value = await fixture(migrationModule);
   try {
     const bundleBytes = Buffer.from(`${JSON.stringify(value.bundle, null, 2)}\n`);
     const bundlePath = path.join(value.directory, "bundle.json");
     await writeFile(bundlePath, bundleBytes, { mode: 0o600 });
-    const parsed = await module.readSafeMigrationExecutionBundle({
+    const parsed = await migrationModule.readSafeMigrationExecutionBundle({
       bundlePath,
       bundleSha256: sha256(bundleBytes),
       plan: value.plan,
@@ -587,7 +587,7 @@ test("read helper binds the protected bundle file digest before parsing", async 
     });
     assert.equal(parsed.bundle.role, "approver");
     await assert.rejects(
-      module.readSafeMigrationExecutionBundle({
+      migrationModule.readSafeMigrationExecutionBundle({
         bundlePath,
         bundleSha256: `0x${"00".repeat(32)}`,
         plan: value.plan,
@@ -603,14 +603,14 @@ test("read helper binds the protected bundle file digest before parsing", async 
 });
 
 test("continuation provenance binds the original authorized execution bundle", async () => {
-  const module = await executionModule();
+  const migrationModule = await executionModule();
   assert.equal(
-    typeof module.assertSafeMigrationContinuationExecutionBinding,
+    typeof migrationModule.assertSafeMigrationContinuationExecutionBinding,
     "function",
   );
-  const value = await fixture(module);
+  const value = await fixture(migrationModule);
   try {
-    const execution = await module.assertSafeMigrationExecutionBundle({
+    const execution = await migrationModule.assertSafeMigrationExecutionBundle({
       bundle: value.bundle,
       plan: value.plan,
       plannedRole: value.plan.transactions[0],
@@ -629,7 +629,7 @@ test("continuation provenance binds the original authorized execution bundle", a
       executionBundleSha256: `0x${"77".repeat(32)}`,
     };
     assert.equal(
-      module.assertSafeMigrationContinuationExecutionBinding({
+      migrationModule.assertSafeMigrationContinuationExecutionBinding({
         entry,
         execution,
         executionBundlePath: entry.executionBundlePath,
@@ -643,7 +643,7 @@ test("continuation provenance binds the original authorized execution bundle", a
     );
     assert.throws(
       () =>
-        module.assertSafeMigrationContinuationExecutionBinding({
+        migrationModule.assertSafeMigrationContinuationExecutionBinding({
           entry: {
             ...entry,
             transactionJournalSha256: `0x${"00".repeat(32)}`,
@@ -664,14 +664,14 @@ test("continuation provenance binds the original authorized execution bundle", a
 });
 
 test("finalized receipt must follow the durable dispatch-intent interval", async () => {
-  const module = await executionModule();
+  const migrationModule = await executionModule();
   assert.equal(
-    typeof module.assertSafeMigrationReceiptFollowsDispatchIntent,
+    typeof migrationModule.assertSafeMigrationReceiptFollowsDispatchIntent,
     "function",
   );
-  const value = await fixture(module);
+  const value = await fixture(migrationModule);
   try {
-    const execution = await module.assertSafeMigrationExecutionBundle({
+    const execution = await migrationModule.assertSafeMigrationExecutionBundle({
       bundle: value.bundle,
       plan: value.plan,
       plannedRole: value.plan.transactions[0],
@@ -680,14 +680,14 @@ test("finalized receipt must follow the durable dispatch-intent interval", async
     });
     assert.throws(
       () =>
-        module.assertSafeMigrationReceiptFollowsDispatchIntent({
+        migrationModule.assertSafeMigrationReceiptFollowsDispatchIntent({
           receiptBlockTimestamp: 1_011n,
           execution,
         }),
       /must follow durable dispatch intent/u,
     );
     assert.equal(
-      module.assertSafeMigrationReceiptFollowsDispatchIntent({
+      migrationModule.assertSafeMigrationReceiptFollowsDispatchIntent({
         receiptBlockTimestamp: 1_012n,
         execution,
       }),
@@ -699,9 +699,9 @@ test("finalized receipt must follow the durable dispatch-intent interval", async
 });
 
 test("migration nonce preflight rejects an existing canonical dispatch intent", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationSignerNonceAvailable, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationSignerNonceAvailable, "function");
+  const value = await fixture(migrationModule);
   try {
     const journalPath = canonicalTransactionJournalPath({
       chainId: 1,
@@ -710,7 +710,7 @@ test("migration nonce preflight rejects an existing canonical dispatch intent", 
     });
     await rm(journalPath, { force: true });
     assert.equal(
-      module.assertSafeMigrationSignerNonceAvailable({
+      migrationModule.assertSafeMigrationSignerNonceAvailable({
         signer: value.legacy.address,
         pendingNonces: [7, 7],
         finalizedNonces: [7, 7],
@@ -720,7 +720,7 @@ test("migration nonce preflight rejects an existing canonical dispatch intent", 
     await writeFile(journalPath, "durable-intent\n", { mode: 0o600 });
     assert.throws(
       () =>
-        module.assertSafeMigrationSignerNonceAvailable({
+        migrationModule.assertSafeMigrationSignerNonceAvailable({
           signer: value.legacy.address,
           pendingNonces: [7, 7],
           finalizedNonces: [7, 7],
@@ -733,14 +733,14 @@ test("migration nonce preflight rejects an existing canonical dispatch intent", 
 });
 
 test("context reader resolves the original plan and unique role without caller decoding", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.readSafeMigrationExecutionBundleContext, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.readSafeMigrationExecutionBundleContext, "function");
+  const value = await fixture(migrationModule);
   try {
     const bundleBytes = Buffer.from(`${JSON.stringify(value.bundle, null, 2)}\n`);
     const bundlePath = path.join(value.directory, "bundle-context.json");
     await writeFile(bundlePath, bundleBytes, { mode: 0o600 });
-    const parsed = await module.readSafeMigrationExecutionBundleContext({
+    const parsed = await migrationModule.readSafeMigrationExecutionBundleContext({
       bundlePath,
       bundleSha256: sha256(bundleBytes),
       nowTimestamp: 2_000,
@@ -754,11 +754,11 @@ test("context reader resolves the original plan and unique role without caller d
 });
 
 test("bundle creator content-addresses the four exact durable role artifacts", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.createSafeMigrationExecutionBundle, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.createSafeMigrationExecutionBundle, "function");
+  const value = await fixture(migrationModule);
   try {
-    const created = await module.createSafeMigrationExecutionBundle({
+    const created = await migrationModule.createSafeMigrationExecutionBundle({
       role: "approver",
       planPath: value.bundle.artifacts.plan.path,
       planSha256: value.bundle.artifacts.plan.sha256,
@@ -828,9 +828,9 @@ test("migration recovery forbids creating a new dispatch intent", () => {
 });
 
 test("receipt recovery appends only completion when receipt is already journaled", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.safeMigrationReceiptTailEvents, "function");
-  const events = module.safeMigrationReceiptTailEvents({
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.safeMigrationReceiptTailEvents, "function");
+  const events = migrationModule.safeMigrationReceiptTailEvents({
     existingReceipt: {
       event: "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
       transactionHash: `0x${"11".repeat(32)}`,
@@ -848,7 +848,7 @@ test("receipt recovery appends only completion when receipt is already journaled
   ]);
   assert.throws(
     () =>
-      module.safeMigrationReceiptTailEvents({
+      migrationModule.safeMigrationReceiptTailEvents({
         existingReceipt: {
           event: "RECEIPT_SEEN_AWAITING_FINALIZED_VERIFICATION",
           transactionHash: `0x${"11".repeat(32)}`,
@@ -866,9 +866,9 @@ test("receipt recovery appends only completion when receipt is already journaled
 });
 
 test("candidate migration journal record is fully validated before append", async () => {
-  const module = await executionModule();
-  assert.equal(typeof module.assertSafeMigrationJournalCandidate, "function");
-  const value = await fixture(module);
+  const migrationModule = await executionModule();
+  assert.equal(typeof migrationModule.assertSafeMigrationJournalCandidate, "function");
+  const value = await fixture(migrationModule);
   try {
     const badCandidate = {
       event: "BROADCAST_PROVIDER_RESPONSES",
@@ -885,7 +885,7 @@ test("candidate migration journal record is fully validated before append", asyn
     };
     assert.throws(
       () =>
-        module.assertSafeMigrationJournalCandidate({
+        migrationModule.assertSafeMigrationJournalCandidate({
           records: value.journalRecords.slice(0, 3),
           candidate: badCandidate,
           plan: value.plan,

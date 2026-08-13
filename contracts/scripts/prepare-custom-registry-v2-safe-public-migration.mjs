@@ -23,7 +23,6 @@ import {
 } from "./custom-registry-v2-safe-controller-guards.mjs";
 import {
   SAFE_PUBLIC_MIGRATION_ABI,
-  SAFE_PUBLIC_MIGRATION_CONTINUATION_SCHEMA,
   SAFE_PUBLIC_MIGRATION_PLAN_SCHEMA,
   assertHardwareMigrationInventory,
   assertSafePublicMigrationReleaseAuthorization,
