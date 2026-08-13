@@ -222,6 +222,20 @@ function signedEnvelope(
   });
 }
 
+function signedEnvelopeBytes(
+  descriptor: GenericLaunchFoundationDescriptorV1,
+  requestBindingHash: Sha256Digest,
+  payload: unknown,
+  privateKey: KeyObject = signingKeys.privateKey,
+): string {
+  return canonicalizeJson(signedEnvelope(
+    descriptor,
+    requestBindingHash,
+    payload,
+    privateKey,
+  ) as unknown as JsonValue);
+}
+
 function store(
   descriptor: GenericLaunchFoundationDescriptorV1,
   records: readonly GenericLaunchRecordV1[],
@@ -235,7 +249,7 @@ function store(
       const offset = cursor === undefined ? 0 : Number(cursor.slice(1));
       const page = records.slice(offset, offset + limit);
       const nextOffset = offset + page.length;
-      return signedEnvelope(descriptor, requestBindingHash, {
+      return signedEnvelopeBytes(descriptor, requestBindingHash, {
         records: page,
         nextCursor: nextOffset < records.length ? `c${nextOffset}` : null,
         total: String(records.length),
@@ -245,7 +259,7 @@ function store(
       recordHash,
       requestBindingHash,
     }) {
-      return signedEnvelope(
+      return signedEnvelopeBytes(
         descriptor,
         requestBindingHash,
         records.find((record) => record.recordHash === recordHash) ?? null,
@@ -505,10 +519,10 @@ describe("generic launch V1 signed read boundary", () => {
     ))).status).toBe(503);
 
     const replayStore = store(descriptor, [record]);
-    let replayed: SignedGenericLaunchReadEnvelopeV1 | null = null;
+    let replayed: string | null = null;
     replayStore.findFinalizedLaunches = async ({ requestBindingHash }) => {
       if (replayed !== null) return replayed;
-      replayed = signedEnvelope(descriptor, requestBindingHash, {
+      replayed = signedEnvelopeBytes(descriptor, requestBindingHash, {
         records: [record], nextCursor: null, total: "1",
       });
       return replayed;
@@ -529,7 +543,10 @@ describe("generic launch V1 signed read boundary", () => {
       const envelope = signedEnvelope(descriptor, requestBindingHash, {
         records: [record], nextCursor: null, total: "1",
       });
-      return { ...envelope, payload: { records: [], nextCursor: null, total: "0" } };
+      return canonicalizeJson({
+        ...envelope,
+        payload: { records: [], nextCursor: null, total: "0" },
+      } as unknown as JsonValue);
     };
     const mutationHandlers = createGenericLaunchReadHandlersV1({
       descriptor,
@@ -540,36 +557,32 @@ describe("generic launch V1 signed read boundary", () => {
     ))).status).toBe(503);
   });
 
-  it("uses only the deep snapshot reconstructed from verified canonical bytes", async () => {
+  it("accepts only bounded canonical signed-envelope wire bytes", async () => {
     const release = adapter();
     const descriptor = activeDescriptor([release]);
     const record = launchRecord(subject(), release);
-    const readStore = store(descriptor, [record]);
-    readStore.findFinalizedLaunches = async ({ requestBindingHash }) => {
-      const payload = {
+    const noncanonicalStore = store(descriptor, [record]);
+    noncanonicalStore.findFinalizedLaunches = async ({ requestBindingHash }) =>
+      ` ${signedEnvelopeBytes(descriptor, requestBindingHash, {
         records: [record], nextCursor: null, total: "1",
-      };
-      const envelope = signedEnvelope(descriptor, requestBindingHash, payload);
-      let signatureReads = 0;
-      return new Proxy(envelope, {
-        get(target, property, receiver) {
-          if (property === "signatureBase64Url") {
-            signatureReads += 1;
-            if (signatureReads === 3) payload.records = [];
-          }
-          return Reflect.get(target, property, receiver) as unknown;
-        },
-      });
-    };
-    const handlers = createGenericLaunchReadHandlersV1({
+      })}`;
+    const noncanonicalHandlers = createGenericLaunchReadHandlersV1({
       descriptor,
-      store: readStore,
+      store: noncanonicalStore,
     });
-    const response = await handlers.feed(request(
+    expect((await noncanonicalHandlers.feed(request(
       "/api/custom-launch/generic/v1/launches?limit=1",
-    ));
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ records: [record] });
+    ))).status).toBe(503);
+
+    const oversizedStore = store(descriptor, [record]);
+    oversizedStore.findFinalizedLaunches = async () => "x".repeat(2_097_153);
+    const oversizedHandlers = createGenericLaunchReadHandlersV1({
+      descriptor,
+      store: oversizedStore,
+    });
+    expect((await oversizedHandlers.feed(request(
+      "/api/custom-launch/generic/v1/launches?limit=1",
+    ))).status).toBe(503);
   });
 
   it("rejects descriptor, source, adapter, cursor and detail substitution", async () => {
@@ -613,7 +626,7 @@ describe("generic launch V1 signed read boundary", () => {
 
     const cursorStore = store(descriptor, [validRecord]);
     cursorStore.findFinalizedLaunches = async ({ requestBindingHash }) =>
-      signedEnvelope(descriptor, requestBindingHash, {
+      signedEnvelopeBytes(descriptor, requestBindingHash, {
         records: [validRecord], nextCursor: "c1", total: "1",
       });
     const cursorHandlers = createGenericLaunchReadHandlersV1({
@@ -632,7 +645,7 @@ describe("generic launch V1 signed read boundary", () => {
       const invalidPageStore = store(descriptor, [validRecord]);
       invalidPageStore.findFinalizedLaunches = async ({
         requestBindingHash,
-      }) => signedEnvelope(descriptor, requestBindingHash, invalidPage);
+      }) => signedEnvelopeBytes(descriptor, requestBindingHash, invalidPage);
       const invalidPageHandlers = createGenericLaunchReadHandlersV1({
         descriptor,
         store: invalidPageStore,
@@ -643,7 +656,7 @@ describe("generic launch V1 signed read boundary", () => {
     }
     const duplicateStore = store(descriptor, [validRecord]);
     duplicateStore.findFinalizedLaunches = async ({ requestBindingHash }) =>
-      signedEnvelope(descriptor, requestBindingHash, {
+      signedEnvelopeBytes(descriptor, requestBindingHash, {
         records: [validRecord, validRecord], nextCursor: null, total: "2",
       });
     const duplicateHandlers = createGenericLaunchReadHandlersV1({
@@ -657,7 +670,7 @@ describe("generic launch V1 signed read boundary", () => {
     const detailStore = store(descriptor, [validRecord]);
     detailStore.findFinalizedLaunchByRecordHash = async ({
       requestBindingHash,
-    }) => signedEnvelope(descriptor, requestBindingHash, validRecord);
+    }) => signedEnvelopeBytes(descriptor, requestBindingHash, validRecord);
     const detailHandlers = createGenericLaunchReadHandlersV1({
       descriptor,
       store: detailStore,

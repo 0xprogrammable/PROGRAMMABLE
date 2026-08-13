@@ -10,6 +10,7 @@ import descriptorSource from
   "@/config/generic-launch-foundation.prelaunch.v1.json";
 import {
   canonicalizeJson,
+  parseStrictJson,
   type JsonValue,
 } from "../projection-target/canonical-json";
 import {
@@ -60,12 +61,12 @@ export interface GenericLaunchReadStoreV1 {
     cursor?: string;
     requestBindingHash: Sha256Digest;
     signal: AbortSignal;
-  }>): Promise<SignedGenericLaunchReadEnvelopeV1>;
+  }>): Promise<string>;
   findFinalizedLaunchByRecordHash(input: Readonly<{
     recordHash: Sha256Digest;
     requestBindingHash: Sha256Digest;
     signal: AbortSignal;
-  }>): Promise<SignedGenericLaunchReadEnvelopeV1>;
+  }>): Promise<string>;
 }
 
 export function createGenericLaunchReadHandlersV1(
@@ -91,15 +92,15 @@ export function createGenericLaunchReadHandlersV1(
       if (descriptor.activation === false || readModel === null) {
         return errorResponse(503, "generic_launch_foundation_not_active");
       }
-      const requestBindingHash = canonicalSha256(
-        "programmable.generic-launch-feed-request.v1",
-        Object.freeze({
-          limit: query.limit,
-          cursor: query.cursor ?? null,
-          requestChallengeBase64Url: randomBytes(32).toString("base64url"),
-        }),
-      );
       try {
+        const requestBindingHash = canonicalSha256(
+          "programmable.generic-launch-feed-request.v1",
+          Object.freeze({
+            limit: query.limit,
+            cursor: query.cursor ?? null,
+            requestChallengeBase64Url: randomBytes(32).toString("base64url"),
+          }),
+        );
         const envelope = await readModel.store.findFinalizedLaunches({
           limit: query.limit,
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
@@ -137,14 +138,14 @@ export function createGenericLaunchReadHandlersV1(
       if (descriptor.activation === false || readModel === null) {
         return errorResponse(503, "generic_launch_foundation_not_active");
       }
-      const requestBindingHash = canonicalSha256(
-        "programmable.generic-launch-detail-request.v1",
-        Object.freeze({
-          recordHash,
-          requestChallengeBase64Url: randomBytes(32).toString("base64url"),
-        }),
-      );
       try {
+        const requestBindingHash = canonicalSha256(
+          "programmable.generic-launch-detail-request.v1",
+          Object.freeze({
+            recordHash,
+            requestChallengeBase64Url: randomBytes(32).toString("base64url"),
+          }),
+        );
         const envelope = await readModel.store.findFinalizedLaunchByRecordHash({
           recordHash: recordHash as Sha256Digest,
           requestBindingHash,
@@ -246,13 +247,24 @@ function verifySignedEnvelope(
     readModelBindingHash: Sha256Digest;
     publicKey: ReturnType<typeof createPublicKey>;
   }>,
-  raw: unknown,
+  raw: string,
   requestBindingHash: Sha256Digest,
 ): unknown {
   if (descriptor.activation !== true || descriptor.activationBindingHash === null) {
     throw new TypeError("generic launch foundation is not active");
   }
-  const value = exactObject(raw, [
+  if (typeof raw !== "string"
+    || Buffer.byteLength(raw, "utf8") > MAX_SIGNED_MESSAGE_BYTES) {
+    throw new TypeError("signed generic launch read envelope exceeds its bound");
+  }
+  const envelopeSnapshot = parseStrictJson(raw, {
+    maximumBytes: MAX_SIGNED_MESSAGE_BYTES,
+    maximumDepth: 128,
+  });
+  if (canonicalizeJson(envelopeSnapshot) !== raw) {
+    throw new TypeError("signed generic launch read envelope is not canonical");
+  }
+  const value = exactObject(envelopeSnapshot, [
     "activationBindingHash", "payload", "readModelBindingHash",
     "requestBindingHash", "schemaVersion", "signatureBase64Url",
   ], "signed generic launch read envelope");
@@ -282,7 +294,10 @@ function verifySignedEnvelope(
     Buffer.from(value.signatureBase64Url, "base64url"),
   );
   if (!valid) throw new TypeError("generic launch read signature is invalid");
-  const snapshot = exactObject(JSON.parse(canonicalMessage) as unknown, [
+  const snapshot = exactObject(parseStrictJson(canonicalMessage, {
+    maximumBytes: MAX_SIGNED_MESSAGE_BYTES,
+    maximumDepth: 128,
+  }), [
     "activationBindingHash", "payload", "readModelBindingHash",
     "requestBindingHash", "schemaVersion",
   ], "verified generic launch read signature message");
