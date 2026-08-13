@@ -35,7 +35,10 @@ import { createProductionGenericLaunchReadSignerV2 } from
 
 const MAXIMUM_CONFIGURATION_BYTES = 65_536;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
-const GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS = 180_000;
+const GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS = 300_000;
+const GENERIC_LAUNCH_LIFECYCLE_REFRESH_AFTER_MS = 60_000;
+const GENERIC_LAUNCH_RECONCILIATION_LEASE_MS = 55_000;
+const GENERIC_LAUNCH_RECONCILIATION_CONCURRENCY = 8;
 
 export async function projectProductionGenericLaunchV2(input: Readonly<{
   approvalId: `0x${string}`;
@@ -86,16 +89,31 @@ export async function reconcileProductionGenericLaunchesV2(input: Readonly<{
   const pool = getProductionApprovalV3ProjectionPoolV1();
   await pool.assertProductionReadiness();
   const approvalIds = await listStaleGenericLaunchApprovalsV2(pool, {
-    maximumLifecycleAgeMs: GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS,
+    refreshAfterMs: GENERIC_LAUNCH_LIFECYCLE_REFRESH_AFTER_MS,
+    leaseMs: GENERIC_LAUNCH_RECONCILIATION_LEASE_MS,
     limit: input.limit,
     signal,
   });
-  const results = [];
-  for (const approvalId of approvalIds) {
+  const results: Awaited<ReturnType<typeof projectProductionGenericLaunchV2>>[] = [];
+  let failed = 0;
+  for (let offset = 0; offset < approvalIds.length;
+    offset += GENERIC_LAUNCH_RECONCILIATION_CONCURRENCY) {
     signal.throwIfAborted();
-    results.push(await projectProductionGenericLaunchV2({ approvalId, signal }));
+    const settled = await Promise.allSettled(approvalIds.slice(
+      offset,
+      offset + GENERIC_LAUNCH_RECONCILIATION_CONCURRENCY,
+    ).map((approvalId) => projectProductionGenericLaunchV2({ approvalId, signal })));
+    for (const result of settled) {
+      if (result.status === "fulfilled") results.push(result.value);
+      else failed += 1;
+    }
   }
-  return Object.freeze({ scanned: approvalIds.length, results: Object.freeze(results) });
+  return Object.freeze({
+    scanned: approvalIds.length,
+    succeeded: results.length,
+    failed,
+    results: Object.freeze(results),
+  });
 }
 
 export async function handleProductionGenericLaunchFeedV2(
@@ -141,7 +159,7 @@ export async function handleProductionGenericLaunchReadinessV2(
     }>;
     if (feed.status !== 200
       || payload.schemaVersion !== "programmable.generic-launch-feed.v2"
-      || !Array.isArray(payload.records) || payload.records.length < 1) {
+      || !Array.isArray(payload.records)) {
       throw new TypeError("Generic launch feed is not materialized");
     }
     return Response.json({

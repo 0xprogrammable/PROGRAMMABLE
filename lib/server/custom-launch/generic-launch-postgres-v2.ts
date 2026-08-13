@@ -22,13 +22,28 @@ const HASH32 = /^0x[0-9a-f]{64}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]{0,77})$/u;
 const MAXIMUM_CANONICAL_RECORD_BYTES = 2_097_152;
+const MAXIMUM_SUPPORTED_APPROVAL_INVENTORY = 48n;
 
 interface ApprovalRow extends Record<string, unknown> {
   canonical_readback: unknown;
+  created_at: unknown;
 }
 
 interface LifecycleRow extends Record<string, unknown> {
+  approval_id: unknown;
+  descriptor_hash: unknown;
   lifecycle_generation: unknown;
+  lifecycle_evidence_hash: unknown;
+  lifecycle_state: unknown;
+  record_hash: unknown;
+  canonical_record: unknown;
+  observation_common_head: unknown;
+  observation_common_head_hash: unknown;
+}
+
+interface LifecycleIdentityRow extends Record<string, unknown> {
+  approval_id: unknown;
+  descriptor_hash: unknown;
   lifecycle_evidence_hash: unknown;
   lifecycle_state: unknown;
   record_hash: unknown;
@@ -44,11 +59,38 @@ interface ReadRow extends Record<string, unknown> {
   record_hash: unknown;
 }
 
-interface StoragePostureRow extends Record<string, unknown> {
+interface StorageTablePostureRow extends Record<string, unknown> {
+  relname: unknown;
   relrowsecurity: unknown;
   relforcerowsecurity: unknown;
-  policies: unknown;
-  privileges: unknown;
+  owner_name: unknown;
+  runtime_is_owner_member: unknown;
+  runtime_overprivileged: unknown;
+}
+
+interface StoragePolicyPostureRow extends Record<string, unknown> {
+  tablename: unknown;
+  policyname: unknown;
+  permissive: unknown;
+  roles: unknown;
+  cmd: unknown;
+  qual: unknown;
+  with_check: unknown;
+}
+
+interface StorageAclPostureRow extends Record<string, unknown> {
+  relname: unknown;
+  grantee: unknown;
+  privilege_type: unknown;
+  is_grantable: unknown;
+}
+
+interface StorageColumnAclPostureRow extends StorageAclPostureRow {
+  attname: unknown;
+}
+
+interface StorageProviderPostureRow extends Record<string, unknown> {
+  provider_access_count: unknown;
 }
 
 export function createPostgresGenericLaunchMaterializationStoreV2(
@@ -61,7 +103,7 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
       input.signal.throwIfAborted();
       const approvalId = hash32(input.approvalId, "Approval ID");
       const result = await pool.query<ApprovalRow>(`
-        SELECT canonical_readback
+        SELECT canonical_readback, created_at
           FROM programmable_website_projection_v1.projection_records
          WHERE lane = 'website.approval-v3'
            AND projection_key = $1
@@ -79,7 +121,10 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
         || readback.approvalId !== approvalId) {
         throw new TypeError("stored Approval readback identity is invalid");
       }
-      return readback.authorization ?? null;
+      return Object.freeze({
+        authorization: readback.authorization ?? null,
+        receivedAt: databaseTimestamp(row.created_at, "Approval delivery timestamp"),
+      });
     },
 
     async getLatestLifecycle(
@@ -87,15 +132,53 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
     ) {
       input.signal.throwIfAborted();
       const result = await pool.query<LifecycleRow>(`
-        SELECT lifecycle_generation::text, lifecycle_evidence_hash,
-               lifecycle_state, record_hash
-          FROM programmable_website_projection_v1.generic_launch_materializations_v2
-         WHERE launch_id = $1
-         ORDER BY lifecycle_generation DESC
+        SELECT m.approval_id, m.descriptor_hash,
+               m.lifecycle_generation::text, m.lifecycle_evidence_hash,
+               m.lifecycle_state, m.record_hash, m.canonical_record,
+               r.observation_common_head::text, r.observation_common_head_hash
+          FROM programmable_website_projection_v1.generic_launch_materializations_v2 m
+          JOIN programmable_website_projection_v1.generic_launch_reconciliations_v2 r
+            ON r.launch_id = m.launch_id
+           AND r.approval_id = m.approval_id
+           AND r.descriptor_hash = m.descriptor_hash
+           AND r.outcome = 'consumed'
+         WHERE m.launch_id = $1
+         ORDER BY m.lifecycle_generation DESC
          LIMIT 1
       `, [hash32(input.launchId, "launch ID")]);
       input.signal.throwIfAborted();
       return result.rows[0] === undefined ? null : lifecycleRow(result.rows[0]);
+    },
+    async putApprovalReconciliation(
+      input: Parameters<GenericLaunchMaterializationStoreV2["putApprovalReconciliation"]>[0],
+    ) {
+      input.signal.throwIfAborted();
+      const approvalId = hash32(input.approvalId, "Approval ID");
+      const launchId = hash32(input.launchId, "launch ID");
+      const descriptorHash = hash32(input.descriptorHash, "descriptor hash");
+      const head = decimal(input.observationCommonHead, "observation common head");
+      const headHash = hash32(
+        input.observationCommonHeadHash,
+        "observation common head hash",
+      );
+      const result = await pool.query(`
+        INSERT INTO programmable_website_projection_v1.generic_launch_reconciliations_v2
+          (approval_id, launch_id, descriptor_hash, outcome,
+           observation_common_head, observation_common_head_hash)
+        VALUES ($1, $2, $3, $4, $5::numeric, $6)
+        ON CONFLICT (approval_id) DO UPDATE SET
+          observation_common_head = EXCLUDED.observation_common_head,
+          observation_common_head_hash = EXCLUDED.observation_common_head_hash,
+          observed_at = clock_timestamp()
+        WHERE generic_launch_reconciliations_v2.launch_id = EXCLUDED.launch_id
+          AND generic_launch_reconciliations_v2.descriptor_hash = EXCLUDED.descriptor_hash
+          AND generic_launch_reconciliations_v2.outcome = EXCLUDED.outcome
+        RETURNING approval_id
+      `, [approvalId, launchId, descriptorHash, input.outcome, head, headHash]);
+      input.signal.throwIfAborted();
+      if (result.rowCount !== 1) {
+        throw new TypeError("Generic launch reconciliation identity conflicted");
+      }
     },
     async putIfNewLifecycle(
       input: Parameters<GenericLaunchMaterializationStoreV2["putIfNewLifecycle"]>[0],
@@ -136,18 +219,30 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
         await client.query(`
           SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
         `, [launchId]);
-        const already = await client.query<LifecycleRow>(`
-          SELECT lifecycle_generation::text, lifecycle_evidence_hash,
+        const already = await client.query<LifecycleIdentityRow>(`
+          SELECT approval_id, descriptor_hash, lifecycle_evidence_hash,
                  lifecycle_state, record_hash
             FROM programmable_website_projection_v1.generic_launch_materializations_v2
-           WHERE launch_id = $1 AND lifecycle_evidence_hash = $2
+           WHERE launch_id = $1
+           ORDER BY lifecycle_generation DESC
            LIMIT 1
-        `, [launchId, lifecycleEvidenceHash]);
+        `, [launchId]);
         const alreadyRow = already.rows[0];
-        if (alreadyRow !== undefined) {
-          const parsed = lifecycleRow(alreadyRow);
-          if (parsed.state !== input.state
-            || parsed.recordHash !== (record?.recordHash ?? null)) {
+        if (alreadyRow !== undefined
+          && (hash32(alreadyRow.approval_id, "stored lifecycle Approval ID")
+              !== approvalId
+            || hash32(alreadyRow.descriptor_hash, "stored descriptor hash")
+              !== descriptorHash)) {
+          throw new TypeError("Generic launch canonical lifecycle identity conflicted");
+        }
+        if (alreadyRow !== undefined
+          && digest(alreadyRow.lifecycle_evidence_hash,
+            "stored lifecycle evidence") === lifecycleEvidenceHash) {
+          if (alreadyRow.lifecycle_state !== input.state
+            || (alreadyRow.record_hash === null
+              ? null
+              : digest(alreadyRow.record_hash, "stored lifecycle record hash"))
+              !== (record?.recordHash ?? null)) {
             throw new TypeError("Generic launch lifecycle idempotency conflicted");
           }
           await client.query("COMMIT");
@@ -309,49 +404,170 @@ export async function assertPostgresGenericLaunchReadStoreReadyV2(
     lifecycleAge(maximumLifecycleAgeMs),
     new AbortController().signal,
   );
-  const result = await pool.query<{ total: unknown }>(`
-    WITH latest AS (
-      SELECT DISTINCT ON (launch_id) launch_id, lifecycle_state
-        FROM programmable_website_projection_v1.generic_launch_materializations_v2
-       ORDER BY launch_id, lifecycle_generation DESC
-    )
-    SELECT count(*)::text AS total FROM latest
-     WHERE lifecycle_state = 'finalized'
-  `);
-  if (decimal(result.rows[0]?.total, "Generic launch ready count") === "0") {
-    throw new TypeError("Generic launch read store has no finalized record");
-  }
 }
 
 async function assertGenericLaunchMaterializationStorageV2(
   pool: ProjectionTargetPostgresPoolV1,
 ): Promise<void> {
-  const result = await pool.query<StoragePostureRow>(`
-    SELECT c.relrowsecurity, c.relforcerowsecurity,
-           COALESCE((
-             SELECT string_agg(p.policyname || ':' || p.cmd, ',' ORDER BY p.policyname)
-               FROM pg_policies p
-              WHERE p.schemaname = 'programmable_website_projection_v1'
-                AND p.tablename = 'generic_launch_materializations_v2'
-           ), '') AS policies,
-           COALESCE((
-             SELECT string_agg(g.privilege_type, ',' ORDER BY g.privilege_type)
-               FROM information_schema.role_table_grants g
-              WHERE g.table_schema = 'programmable_website_projection_v1'
-                AND g.table_name = 'generic_launch_materializations_v2'
-                AND g.grantee = 'programmable_website_projection_runtime'
-           ), '') AS privileges
+  const tables = await pool.query<StorageTablePostureRow>(`
+    SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+           owner.rolname AS owner_name,
+           pg_has_role(current_user, owner.oid, 'MEMBER') AS runtime_is_owner_member,
+           (runtime.rolsuper OR runtime.rolcreaterole OR runtime.rolcreatedb
+             OR runtime.rolreplication OR runtime.rolbypassrls) AS runtime_overprivileged
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_roles owner ON owner.oid = c.relowner
+      JOIN pg_roles runtime ON runtime.rolname = current_user
      WHERE n.nspname = 'programmable_website_projection_v1'
-       AND c.relname = 'generic_launch_materializations_v2'
+       AND c.relname IN (
+         'generic_launch_materializations_v2',
+         'generic_launch_reconciliations_v2',
+         'generic_launch_reconciliation_attempts_v2'
+       )
        AND c.relkind = 'r'
+     ORDER BY c.relname
   `);
-  const row = result.rows[0];
-  if (result.rows.length !== 1 || row?.relrowsecurity !== true
-    || row.relforcerowsecurity !== true
-    || row.policies !== "generic_launch_materializations_v2_runtime_insert:INSERT,generic_launch_materializations_v2_runtime_select:SELECT"
-    || row.privileges !== "INSERT,SELECT") {
+  const expectedTables = [
+    "generic_launch_materializations_v2",
+    "generic_launch_reconciliation_attempts_v2",
+    "generic_launch_reconciliations_v2",
+  ];
+  const expectedOwner = tables.rows[0]?.owner_name;
+  if (tables.rows.length !== expectedTables.length
+    || tables.rows.some((row, index) => row.relname !== expectedTables[index]
+      || row.relrowsecurity !== true || row.relforcerowsecurity !== true
+      || typeof row.owner_name !== "string" || row.owner_name !== expectedOwner
+      || ["anon", "authenticated", "service_role"].includes(row.owner_name)
+      || row.runtime_is_owner_member !== false
+      || row.runtime_overprivileged !== false)) {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+  const policies = await pool.query<StoragePolicyPostureRow>(`
+    SELECT tablename, policyname, permissive,
+           array_to_string(roles, ',') AS roles, cmd,
+           COALESCE(qual, '') AS qual,
+           COALESCE(with_check, '') AS with_check
+      FROM pg_policies
+     WHERE schemaname = 'programmable_website_projection_v1'
+       AND tablename IN (
+         'generic_launch_materializations_v2',
+         'generic_launch_reconciliations_v2',
+         'generic_launch_reconciliation_attempts_v2'
+       )
+     ORDER BY tablename, policyname
+  `);
+  const actualPolicies = policies.rows.map((row) => [
+    row.tablename, row.policyname, row.permissive, row.roles, row.cmd,
+    row.qual, row.with_check,
+  ].join("|"));
+  const expectedPolicies = [
+    "generic_launch_materializations_v2|generic_launch_materializations_v2_runtime_insert|PERMISSIVE|programmable_website_projection_runtime|INSERT||true",
+    "generic_launch_materializations_v2|generic_launch_materializations_v2_runtime_select|PERMISSIVE|programmable_website_projection_runtime|SELECT|true|",
+    "generic_launch_reconciliation_attempts_v2|generic_launch_reconciliation_attempts_v2_runtime_insert|PERMISSIVE|programmable_website_projection_runtime|INSERT||true",
+    "generic_launch_reconciliation_attempts_v2|generic_launch_reconciliation_attempts_v2_runtime_select|PERMISSIVE|programmable_website_projection_runtime|SELECT|true|",
+    "generic_launch_reconciliation_attempts_v2|generic_launch_reconciliation_attempts_v2_runtime_update|PERMISSIVE|programmable_website_projection_runtime|UPDATE|true|true",
+    "generic_launch_reconciliations_v2|generic_launch_reconciliations_v2_runtime_insert|PERMISSIVE|programmable_website_projection_runtime|INSERT||true",
+    "generic_launch_reconciliations_v2|generic_launch_reconciliations_v2_runtime_select|PERMISSIVE|programmable_website_projection_runtime|SELECT|true|",
+    "generic_launch_reconciliations_v2|generic_launch_reconciliations_v2_runtime_update|PERMISSIVE|programmable_website_projection_runtime|UPDATE|true|true",
+  ];
+  if (actualPolicies.length !== expectedPolicies.length
+    || actualPolicies.some((value, index) => value !== expectedPolicies[index])) {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+  const acl = await pool.query<StorageAclPostureRow>(`
+    SELECT c.relname,
+           COALESCE(grantee_role.rolname, 'PUBLIC') AS grantee,
+           acl.privilege_type, acl.is_grantable
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      CROSS JOIN LATERAL aclexplode(
+        COALESCE(c.relacl, acldefault('r', c.relowner))
+      ) acl
+      LEFT JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
+     WHERE n.nspname = 'programmable_website_projection_v1'
+       AND c.relname IN (
+         'generic_launch_materializations_v2',
+         'generic_launch_reconciliations_v2',
+         'generic_launch_reconciliation_attempts_v2'
+       )
+       AND acl.grantee <> c.relowner
+     ORDER BY c.relname, grantee, acl.privilege_type
+  `);
+  const actualAcl = acl.rows.map((row) => [
+    row.relname, row.grantee, row.privilege_type, String(row.is_grantable),
+  ].join("|"));
+  const expectedAcl = [
+    "generic_launch_materializations_v2|programmable_website_projection_runtime|INSERT|false",
+    "generic_launch_materializations_v2|programmable_website_projection_runtime|SELECT|false",
+    "generic_launch_reconciliation_attempts_v2|programmable_website_projection_runtime|INSERT|false",
+    "generic_launch_reconciliation_attempts_v2|programmable_website_projection_runtime|SELECT|false",
+    "generic_launch_reconciliations_v2|programmable_website_projection_runtime|INSERT|false",
+    "generic_launch_reconciliations_v2|programmable_website_projection_runtime|SELECT|false",
+  ];
+  if (actualAcl.length !== expectedAcl.length
+    || actualAcl.some((value, index) => value !== expectedAcl[index])) {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+  const columnAcl = await pool.query<StorageColumnAclPostureRow>(`
+    SELECT c.relname, a.attname,
+           COALESCE(grantee_role.rolname, 'PUBLIC') AS grantee,
+           acl.privilege_type, acl.is_grantable
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.oid
+      CROSS JOIN LATERAL aclexplode(a.attacl) acl
+      LEFT JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
+     WHERE n.nspname = 'programmable_website_projection_v1'
+       AND c.relname IN (
+         'generic_launch_materializations_v2',
+         'generic_launch_reconciliations_v2',
+         'generic_launch_reconciliation_attempts_v2'
+       )
+       AND a.attnum > 0 AND NOT a.attisdropped
+       AND acl.grantee <> c.relowner
+     ORDER BY c.relname, a.attname, grantee, acl.privilege_type
+  `);
+  const actualColumnAcl = columnAcl.rows.map((row) => [
+    row.relname, row.attname, row.grantee, row.privilege_type,
+    String(row.is_grantable),
+  ].join("|"));
+  const expectedColumnAcl = [
+    "generic_launch_reconciliation_attempts_v2|attempted_at|programmable_website_projection_runtime|UPDATE|false",
+    "generic_launch_reconciliations_v2|observation_common_head|programmable_website_projection_runtime|UPDATE|false",
+    "generic_launch_reconciliations_v2|observation_common_head_hash|programmable_website_projection_runtime|UPDATE|false",
+    "generic_launch_reconciliations_v2|observed_at|programmable_website_projection_runtime|UPDATE|false",
+  ];
+  if (actualColumnAcl.length !== expectedColumnAcl.length
+    || actualColumnAcl.some((value, index) => value !== expectedColumnAcl[index])) {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+  const providerPosture = await pool.query<StorageProviderPostureRow>(`
+    SELECT count(*)::text AS provider_access_count
+      FROM pg_roles provider
+     WHERE provider.rolname IN ('anon', 'authenticated', 'service_role')
+       AND (
+         has_table_privilege(provider.rolname,
+           'programmable_website_projection_v1.generic_launch_materializations_v2',
+           'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+         OR has_table_privilege(provider.rolname,
+           'programmable_website_projection_v1.generic_launch_reconciliations_v2',
+           'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+         OR has_table_privilege(provider.rolname,
+           'programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2',
+           'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+         OR has_any_column_privilege(provider.rolname,
+           'programmable_website_projection_v1.generic_launch_reconciliations_v2',
+           'SELECT,INSERT,UPDATE,REFERENCES')
+         OR has_any_column_privilege(provider.rolname,
+           'programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2',
+           'SELECT,INSERT,UPDATE,REFERENCES')
+       )
+  `);
+  if (decimal(
+    providerPosture.rows[0]?.provider_access_count,
+    "Generic launch provider role access count",
+  ) !== "0") {
     throw new TypeError("Generic launch materialization storage posture is invalid");
   }
 }
@@ -359,33 +575,46 @@ async function assertGenericLaunchMaterializationStorageV2(
 export async function listStaleGenericLaunchApprovalsV2(
   pool: ProjectionTargetPostgresPoolV1,
   input: Readonly<{
-    maximumLifecycleAgeMs: number;
+    refreshAfterMs: number;
+    leaseMs: number;
     limit: number;
     signal: AbortSignal;
   }>,
 ): Promise<readonly `0x${string}`[]> {
   input.signal.throwIfAborted();
-  const maximumLifecycleAgeMs = lifecycleAge(input.maximumLifecycleAgeMs);
+  const refreshAfterMs = lifecycleAge(input.refreshAfterMs);
+  const leaseMs = lifecycleAge(input.leaseMs);
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 32) {
     throw new TypeError("Generic launch reconciliation limit is invalid");
   }
   const result = await pool.query<ApprovalIdRow>(`
-    WITH latest AS (
-      SELECT DISTINCT ON (launch_id)
-             approval_id, launch_id, lifecycle_generation, created_at
-        FROM programmable_website_projection_v1.generic_launch_materializations_v2
-       ORDER BY launch_id, lifecycle_generation DESC
+    WITH candidates AS MATERIALIZED (
+      SELECT substring(p.projection_key FROM 10) AS approval_id
+        FROM programmable_website_projection_v1.projection_records p
+        LEFT JOIN programmable_website_projection_v1.generic_launch_reconciliations_v2 r
+          ON r.approval_id = substring(p.projection_key FROM 10)
+        LEFT JOIN programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2 a
+          ON a.approval_id = substring(p.projection_key FROM 10)
+       WHERE p.lane = 'website.approval-v3'
+         AND (r.approval_id IS NULL OR r.observed_at < clock_timestamp()
+           - ($1::bigint * interval '1 millisecond'))
+         AND (a.approval_id IS NULL OR a.attempted_at < clock_timestamp()
+           - ($2::bigint * interval '1 millisecond'))
+       ORDER BY a.attempted_at ASC NULLS FIRST,
+                r.observed_at ASC NULLS FIRST, p.projection_key ASC
+       LIMIT $3
+    ), claimed AS (
+      INSERT INTO programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2
+        (approval_id, attempted_at)
+      SELECT approval_id, clock_timestamp() FROM candidates
+      ON CONFLICT (approval_id) DO UPDATE
+        SET attempted_at = EXCLUDED.attempted_at
+      WHERE generic_launch_reconciliation_attempts_v2.attempted_at
+        < clock_timestamp() - ($2::bigint * interval '1 millisecond')
+      RETURNING approval_id
     )
-    SELECT substring(p.projection_key FROM 10) AS approval_id
-      FROM programmable_website_projection_v1.projection_records p
-      LEFT JOIN latest l
-        ON l.approval_id = substring(p.projection_key FROM 10)
-     WHERE p.lane = 'website.approval-v3'
-       AND (l.approval_id IS NULL OR l.created_at < clock_timestamp()
-         - ($1::bigint * interval '1 millisecond'))
-     ORDER BY l.created_at ASC NULLS FIRST, p.projection_key ASC
-     LIMIT $2
-  `, [maximumLifecycleAgeMs, input.limit]);
+    SELECT approval_id FROM claimed ORDER BY approval_id
+  `, [refreshAfterMs, leaseMs, input.limit]);
   input.signal.throwIfAborted();
   return Object.freeze(result.rows.map((row) =>
     hash32(row.approval_id, "stale Generic launch Approval ID")));
@@ -397,20 +626,26 @@ async function assertFreshGenericLaunchLifecyclesV2(
   signal: AbortSignal,
 ): Promise<void> {
   signal.throwIfAborted();
-  const result = await pool.query<{ stale: unknown }>(`
-    WITH latest AS (
-      SELECT DISTINCT ON (launch_id)
-             launch_id, lifecycle_generation, created_at
-        FROM programmable_website_projection_v1.generic_launch_materializations_v2
-       ORDER BY launch_id, lifecycle_generation DESC
-    )
-    SELECT count(*)::text AS stale
-      FROM latest
-     WHERE created_at < clock_timestamp()
-       - ($1::bigint * interval '1 millisecond')
+  const result = await pool.query<{ stale: unknown; total: unknown }>(`
+    SELECT count(*) FILTER (
+             WHERE (r.approval_id IS NULL AND p.created_at < clock_timestamp()
+               - ($1::bigint * interval '1 millisecond'))
+                OR r.observed_at < clock_timestamp()
+               - ($1::bigint * interval '1 millisecond')
+           )::text AS stale,
+           count(*)::text AS total
+      FROM programmable_website_projection_v1.projection_records p
+      LEFT JOIN programmable_website_projection_v1.generic_launch_reconciliations_v2 r
+        ON r.approval_id = substring(p.projection_key FROM 10)
+     WHERE p.lane = 'website.approval-v3'
   `, [maximumLifecycleAgeMs]);
   signal.throwIfAborted();
-  if (decimal(result.rows[0]?.stale, "stale Generic launch count") !== "0") {
+  const stale = decimal(result.rows[0]?.stale, "stale Generic launch count");
+  const total = decimal(result.rows[0]?.total, "Generic launch Approval count");
+  if (BigInt(total) > MAXIMUM_SUPPORTED_APPROVAL_INVENTORY) {
+    throw new TypeError("Generic launch reconciliation capacity is exceeded");
+  }
+  if (stale !== "0") {
     throw new TypeError("Generic launch lifecycle snapshot is stale");
   }
 }
@@ -421,12 +656,28 @@ function lifecycleRow(row: LifecycleRow) {
     throw new TypeError("stored lifecycle state is invalid");
   }
   return Object.freeze({
+    approvalId: hash32(row.approval_id, "lifecycle Approval ID"),
+    descriptorHash: hash32(row.descriptor_hash, "lifecycle descriptor hash"),
     lifecycleGeneration: decimal(row.lifecycle_generation, "lifecycle generation"),
     lifecycleEvidenceHash: digest(row.lifecycle_evidence_hash, "lifecycle evidence"),
     state,
     recordHash: row.record_hash === null
       ? null
       : digest(row.record_hash, "lifecycle record hash"),
+    record: row.canonical_record === null
+      ? null
+      : parseGenericLaunchRecordV2(canonicalObject(
+        row.canonical_record,
+        "stored lifecycle record",
+      )),
+    observationCommonHead: decimal(
+      row.observation_common_head,
+      "lifecycle observation common head",
+    ),
+    observationCommonHeadHash: hash32(
+      row.observation_common_head_hash,
+      "lifecycle observation common head hash",
+    ),
   });
 }
 
@@ -520,4 +771,12 @@ function lifecycleAge(value: number): number {
     throw new TypeError("Generic launch lifecycle maximum age is invalid");
   }
   return value;
+}
+
+function databaseTimestamp(value: unknown, label: string): Date {
+  const parsed = value instanceof Date
+    ? new Date(value.getTime())
+    : typeof value === "string" ? new Date(value) : new Date(Number.NaN);
+  if (!Number.isFinite(parsed.getTime())) throw new TypeError(`${label} is invalid`);
+  return parsed;
 }

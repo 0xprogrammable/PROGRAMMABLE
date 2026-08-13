@@ -90,23 +90,47 @@ const lifecycle: VerifiedRegistryLifecycleV2 = {
   latestCommonHeadHash: hash("e"),
   revokedAtBlock: "0",
   revocationEvidenceHash: hash("0"),
+  observationCommonHead: "112",
+  observationCommonHeadHash: hash("e"),
 };
 
 function memoryStore(): GenericLaunchMaterializationStoreV2 & {
   rows: Array<Parameters<GenericLaunchMaterializationStoreV2["putIfNewLifecycle"]>[0]>;
 } {
   const rows: Array<Parameters<GenericLaunchMaterializationStoreV2["putIfNewLifecycle"]>[0]> = [];
+  const observations = new Map<string, Readonly<{
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
+  }>>();
   return {
     rows,
-    async getApprovalAuthorization() { return { accepted: true }; },
+    async getApprovalAuthorization() {
+      return {
+        authorization: { accepted: true },
+        receivedAt: new Date("2026-08-13T22:00:00.000Z"),
+      };
+    },
     async getLatestLifecycle({ launchId }) {
       const row = rows.findLast((candidate) => candidate.launchId === launchId);
+      const observation = observations.get(launchId);
       return row === undefined ? null : {
         lifecycleGeneration: String(rows.indexOf(row) + 1),
+        approvalId: row.approvalId,
+        descriptorHash: row.descriptorHash,
         lifecycleEvidenceHash: row.lifecycleEvidenceHash,
         state: row.state,
         recordHash: row.record?.recordHash ?? null,
+        record: row.record,
+        observationCommonHead: observation?.observationCommonHead ?? "112",
+        observationCommonHeadHash:
+          observation?.observationCommonHeadHash ?? hash("e"),
       };
+    },
+    async putApprovalReconciliation(input) {
+      observations.set(input.launchId, {
+        observationCommonHead: input.observationCommonHead,
+        observationCommonHeadHash: input.observationCommonHeadHash,
+      });
     },
     async putIfNewLifecycle(input) {
       const existing = rows.find((candidate) =>
@@ -145,6 +169,85 @@ describe("Generic launch V2 Registry projector", () => {
       .toBe("finalized");
   });
 
+  it("keeps the public record identity stable while advancing observation", async () => {
+    const store = memoryStore();
+    let current = lifecycle;
+    const projector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact: () => approval,
+      readRegistryLifecycle: async () => current,
+      readModelBindingHash: sha("f"),
+    });
+    const first = await projector.project({ approvalId: approval.approvalId });
+    current = {
+      ...lifecycle,
+      latestCommonHead: "120",
+      latestCommonHeadHash: hash("f"),
+      observationCommonHead: "120",
+      observationCommonHeadHash: hash("f"),
+    };
+    const refreshed = await projector.project({ approvalId: approval.approvalId });
+    expect(refreshed).toMatchObject({
+      kind: "existing",
+      recordHash: first.recordHash,
+      lifecycleEvidenceHash: first.lifecycleEvidenceHash,
+    });
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("reuses delivery-time Approval validity after the envelope expires", async () => {
+    const store = memoryStore();
+    const verifyApprovalArtifact = vi.fn((_raw: unknown, verifiedAt: Date) => {
+      expect(verifiedAt.toISOString()).toBe("2026-08-13T22:00:00.000Z");
+      return approval;
+    });
+    const projector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact,
+      readRegistryLifecycle: async () => lifecycle,
+      readModelBindingHash: sha("f"),
+      now: () => new Date("2026-08-14T22:00:00.000Z"),
+    });
+    await expect(projector.project({ approvalId: approval.approvalId }))
+      .resolves.toMatchObject({ state: "finalized" });
+    expect(verifyApprovalArtifact).toHaveBeenCalledOnce();
+  });
+
+  it("records an unconsumed competing Approval without hiding the launch", async () => {
+    const store = memoryStore();
+    const canonicalProjector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact: () => approval,
+      readRegistryLifecycle: async () => lifecycle,
+      readModelBindingHash: sha("f"),
+    });
+    const canonical = await canonicalProjector.project({
+      approvalId: approval.approvalId,
+    });
+    const competingApproval = {
+      ...approval,
+      approvalId: hash("f"),
+      authorization: { ...approval.authorization, approvalId: hash("f") },
+    };
+    const competingProjector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact: () => competingApproval,
+      readRegistryLifecycle: async () => ({
+        status: "unconsumed",
+        latestCommonHead: "120",
+        latestCommonHeadHash: hash("f"),
+        observationCommonHead: "120",
+        observationCommonHeadHash: hash("f"),
+      }),
+      readModelBindingHash: sha("f"),
+    });
+    await expect(competingProjector.project({
+      approvalId: competingApproval.approvalId,
+    })).resolves.toMatchObject({ state: "unconsumed", recordHash: null });
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]?.record?.recordHash).toBe(canonical.recordHash);
+  });
+
   it("appends a revocation tombstone and never publishes it as a record", async () => {
     const store = memoryStore();
     let current: VerifiedRegistryLifecycleV2 = lifecycle;
@@ -161,6 +264,8 @@ describe("Generic launch V2 Registry projector", () => {
       latestCommonHeadHash: hash("f"),
       revokedAtBlock: "118",
       revocationEvidenceHash: hash("a"),
+      observationCommonHead: "120",
+      observationCommonHeadHash: hash("f"),
     };
 
     expect((await projector.project({ approvalId: approval.approvalId })).kind)
@@ -185,6 +290,8 @@ describe("Generic launch V2 Registry projector", () => {
       latestCommonHeadHash: hash("f"),
       registryStatus: "1",
       invalidationEvidenceHash: sha("e"),
+      observationCommonHead: "121",
+      observationCommonHeadHash: hash("f"),
     };
 
     expect((await projector.project({ approvalId: approval.approvalId })).kind)
@@ -205,12 +312,15 @@ describe("Generic launch V2 Registry projector", () => {
       .rejects.toThrow(/Approval identity/u);
     expect(store.rows).toHaveLength(0);
 
+    const finalizedLifecycle = lifecycle.status === "finalized"
+      ? lifecycle
+      : (() => { throw new TypeError("fixture is not finalized"); })();
     const malformed = createGenericLaunchProjectorV2({
       store,
       verifyApprovalArtifact: () => approval,
       readRegistryLifecycle: async () => ({
         ...lifecycle,
-        primaryLaunch: { ...lifecycle.primaryLaunch, sender: address("f") },
+        primaryLaunch: { ...finalizedLifecycle.primaryLaunch, sender: address("f") },
       }),
       readModelBindingHash: sha("f"),
     });
@@ -230,7 +340,18 @@ describe("Generic launch V2 Registry projector", () => {
     await projector.project({ approvalId: approval.approvalId });
     expect(store.rows[0]?.lifecycleEvidenceHash).toBe(canonicalSha256(
       "programmable.generic-launch-registry-lifecycle-evidence.v2",
-      lifecycle,
+      {
+        approvalId: approval.approvalId,
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+        status: "finalized",
+        authorization: lifecycle.status === "finalized"
+          ? lifecycle.authorization : null,
+        registration: lifecycle.status === "finalized"
+          ? lifecycle.registration : null,
+        finalization: lifecycle.status === "finalized"
+          ? lifecycle.finalization : null,
+      },
     ));
   });
 
@@ -262,12 +383,13 @@ describe("Generic launch V2 Registry projector", () => {
       }),
     });
     const signal = new AbortController().signal;
-    await expect(reader({ approval, signal })).resolves.toEqual(lifecycle);
+    await expect(reader({ approval, previous: null, signal })).resolves.toEqual(lifecycle);
     secondary = {
       ...lifecycle,
       latestCommonHeadHash: hash("f"),
     };
-    await expect(reader({ approval, signal })).rejects.toThrow(/disagrees/u);
+    await expect(reader({ approval, previous: null, signal }))
+      .rejects.toThrow(/disagrees/u);
   });
 
   it("verifies the exact Approval Ed25519 artifact and current release epoch", () => {

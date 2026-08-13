@@ -23,6 +23,7 @@ import { canonicalizeJson, type JsonValue } from
   "../projection-target/canonical-json";
 import { canonicalSha256 } from "../projection-target/hashing";
 import type {
+  GenericLaunchMaterializationStoreV2,
   VerifiedApprovalArtifactV3,
   VerifiedRegistryLifecycleV2,
 } from "./generic-launch-projector-v2";
@@ -30,6 +31,7 @@ import type {
 const ABI = registryAbiArtifact.abi as Abi;
 const ZERO_HASH32 = `0x${"00".repeat(32)}` as const;
 const MAXIMUM_LOG_WINDOW_BLOCKS = 5_000n;
+const MAXIMUM_INITIAL_LOG_BLOCKS = 250_000n;
 
 export interface GenericLaunchRegistryReleaseV2 {
   readonly registryAddress: `0x${string}`;
@@ -57,6 +59,9 @@ interface RegistryProviderReaderV2 {
     release: GenericLaunchRegistryReleaseV2;
     commonHead: bigint;
     commonHeadHash: `0x${string}`;
+    previous: Awaited<ReturnType<
+      GenericLaunchMaterializationStoreV2["getLatestLifecycle"]
+    >>;
     signal: AbortSignal;
   }>): Promise<ProviderObservationV2>;
 }
@@ -67,6 +72,9 @@ export function createDualRpcGenericLaunchRegistryReaderV2(input: Readonly<{
   providerFactory?: (url: string) => RegistryProviderReaderV2;
 }>): (request: Readonly<{
   approval: VerifiedApprovalArtifactV3;
+  previous: Awaited<ReturnType<
+    GenericLaunchMaterializationStoreV2["getLatestLifecycle"]
+  >>;
   signal: AbortSignal;
 }>) => Promise<VerifiedRegistryLifecycleV2> {
   validateRelease(input.release);
@@ -95,6 +103,7 @@ export function createDualRpcGenericLaunchRegistryReaderV2(input: Readonly<{
         release: input.release,
         commonHead,
         commonHeadHash: hashes[0],
+        previous: request.previous,
         signal: request.signal,
       })));
     if (canonicalizeJson(observations[0] as unknown as JsonValue)
@@ -131,6 +140,9 @@ function createViemRegistryProviderV2(url: string): RegistryProviderReaderV2 {
       release: GenericLaunchRegistryReleaseV2;
       commonHead: bigint;
       commonHeadHash: `0x${string}`;
+      previous: Awaited<ReturnType<
+        GenericLaunchMaterializationStoreV2["getLatestLifecycle"]
+      >>;
       signal: AbortSignal;
     }>) {
       return await observeProvider(client, request);
@@ -145,6 +157,9 @@ async function observeProvider(
     release: GenericLaunchRegistryReleaseV2;
     commonHead: bigint;
     commonHeadHash: `0x${string}`;
+    previous: Awaited<ReturnType<
+      GenericLaunchMaterializationStoreV2["getLatestLifecycle"]
+    >>;
     signal: AbortSignal;
   }>,
 ): Promise<ProviderObservationV2> {
@@ -162,6 +177,15 @@ async function observeProvider(
     throw new TypeError("Approval artifact is not bound to the Registry release");
   }
   const fromBlock = BigInt(input.release.deploymentBlock);
+  const previousHead = input.previous === null
+    ? null
+    : BigInt(input.previous.observationCommonHead);
+  const previousBlock = previousHead === null || previousHead > input.commonHead
+    ? null
+    : await client.getBlock({
+      blockNumber: previousHead,
+      includeTransactions: false,
+    });
   const [approvalStateRaw, launchStateRaw, descriptorRaw, primaryTx,
     primaryReceipt, primaryBlock, primaryCode] = await Promise.all([
     client.readContract({
@@ -191,21 +215,70 @@ async function observeProvider(
       blockNumber: input.commonHead,
     }),
   ]);
-  const logs = await readBoundedLifecycleLogs(
+  const initialFromBlock = BigInt(input.approval.primaryFinality.blockNumber)
+    > fromBlock ? BigInt(input.approval.primaryFinality.blockNumber) : fromBlock;
+  let logs = await readBoundedLifecycleLogs(
     client,
     address,
-    BigInt(input.approval.primaryFinality.blockNumber) > fromBlock
-      ? BigInt(input.approval.primaryFinality.blockNumber)
-      : fromBlock,
+    previousHead === null
+      ? initialFromBlock
+      : previousHead + 1n,
     input.commonHead,
     input.approval,
+    previousHead !== null,
     input.signal,
   );
   input.signal.throwIfAborted();
   const approvalState = approvalStateEvidence(approvalStateRaw);
   const launchState = launchStateEvidence(launchStateRaw);
   const launchDescriptor = descriptorEvidence(descriptorRaw);
-  const events = decodeLifecycleLogs(logs, input.approval);
+  let events = decodeLifecycleLogs(logs, input.approval);
+  if (input.previous !== null
+    && input.previous.approvalId !== input.approval.approvalId
+    && approvalState.consumed === "true"
+    && launchState.approvalId === input.approval.approvalId) {
+    throw new TypeError("Canonical consumed Registry Approval identity changed");
+  }
+  if (approvalState.consumed !== "true"
+    || launchState.approvalId !== input.approval.approvalId) {
+    if (input.previous?.approvalId === input.approval.approvalId) {
+      return invalidatedObservation(input, {
+        approvalState,
+        launchState,
+        launchDescriptor,
+        eventArguments: events.arguments,
+        previousCanonicalApprovalId: input.previous.approvalId,
+      });
+    }
+    return Object.freeze({
+      lifecycle: Object.freeze({
+        status: "unconsumed" as const,
+        latestCommonHead: input.commonHead.toString(),
+        latestCommonHeadHash: input.commonHeadHash,
+        observationCommonHead: input.commonHead.toString(),
+        observationCommonHeadHash: input.commonHeadHash,
+      }),
+      bindingEvidence: Object.freeze({
+        approvalState, launchState, launchDescriptor,
+        eventArguments: events.arguments,
+      }),
+    });
+  }
+  if (input.previous !== null && (previousHead! > input.commonHead
+    || previousBlock?.hash?.toLowerCase()
+      !== input.previous.observationCommonHeadHash)) {
+    return invalidatedObservation(input, {
+      approvalState,
+      launchState,
+      launchDescriptor,
+      eventArguments: events.arguments,
+      previousObservation: {
+        blockNumber: input.previous.observationCommonHead,
+        expectedBlockHash: input.previous.observationCommonHeadHash,
+        actualBlockHash: previousBlock?.hash?.toLowerCase() ?? null,
+      },
+    });
+  }
   const primaryObservation = Object.freeze({
     transactionHash: primaryTx?.hash.toLowerCase() ?? null,
     sender: primaryTx?.from.toLowerCase() ?? null,
@@ -237,6 +310,19 @@ async function observeProvider(
       primaryObservation,
     });
   }
+  if (input.previous?.state === "invalidated"
+    && (launchState.status === "2" || launchState.status === "3")) {
+    logs = await readBoundedLifecycleLogs(
+      client,
+      address,
+      initialFromBlock,
+      input.commonHead,
+      input.approval,
+      false,
+      input.signal,
+    );
+    events = decodeLifecycleLogs(logs, input.approval);
+  }
   const primaryLaunch = Object.freeze({
     transactionHash: primaryReceipt.transactionHash.toLowerCase() as `0x${string}`,
     sender: primaryTx.from.toLowerCase() as `0x${string}`,
@@ -245,6 +331,45 @@ async function observeProvider(
     transactionIndex: primaryReceipt.transactionIndex.toString(),
     status: "success" as const,
   });
+  if (input.previous?.state === "revoked" && events.revocation === null
+    && launchState.status === "3"
+    && input.previous.approvalId === input.approval.approvalId
+    && input.previous.descriptorHash === input.approval.descriptorHash) {
+    assertApprovalState(approvalState, input.approval);
+    assertDescriptor(launchDescriptor, input.approval);
+    const stableEvidenceHash = canonicalSha256(
+      "programmable.generic-launch-registry-lifecycle-evidence.v2",
+      {
+        approvalId: input.approval.approvalId,
+        launchId: input.approval.launchId,
+        descriptorHash: input.approval.descriptorHash,
+        status: "revoked",
+        revokedAtBlock: launchState.revokedAtBlock,
+        revocationEvidenceHash: launchState.revocationEvidenceHash,
+      },
+    );
+    if (stableEvidenceHash !== input.previous.lifecycleEvidenceHash
+      || launchState.revokedAtBlock === "0"
+      || launchState.revocationEvidenceHash === ZERO_HASH32) {
+      throw new TypeError("Stored Registry revocation evidence is inconsistent");
+    }
+    return Object.freeze({
+      lifecycle: Object.freeze({
+        status: "revoked" as const,
+        latestCommonHead: input.previous.observationCommonHead,
+        latestCommonHeadHash: input.previous.observationCommonHeadHash,
+        revokedAtBlock: launchState.revokedAtBlock,
+        revocationEvidenceHash:
+          launchState.revocationEvidenceHash as `0x${string}`,
+        observationCommonHead: input.commonHead.toString(),
+        observationCommonHeadHash: input.commonHeadHash,
+      }),
+      bindingEvidence: Object.freeze({
+        approvalState, launchState, launchDescriptor,
+        eventArguments: events.arguments,
+      }),
+    });
+  }
   if (events.revocation !== null || launchState.status === "3") {
     assertApprovalState(approvalState, input.approval);
     assertDescriptor(launchDescriptor, input.approval);
@@ -264,6 +389,39 @@ async function observeProvider(
         revokedAtBlock: launchState.revokedAtBlock,
         revocationEvidenceHash:
           launchState.revocationEvidenceHash as `0x${string}`,
+        observationCommonHead: input.commonHead.toString(),
+        observationCommonHeadHash: input.commonHeadHash,
+      }),
+      bindingEvidence: Object.freeze({
+        approvalState, launchState, launchDescriptor,
+        eventArguments: events.arguments,
+      }),
+    });
+  }
+  if (input.previous?.state === "finalized" && input.previous.record !== null
+    && launchState.status === "2" && launchState.revokedAtBlock === "0"
+    && launchState.revocationEvidenceHash === ZERO_HASH32
+    && events.revocation === null) {
+    assertApprovalState(approvalState, input.approval);
+    assertDescriptor(launchDescriptor, input.approval);
+    const prior = input.previous.record.sourceProjection.lifecycle;
+    return Object.freeze({
+      lifecycle: Object.freeze({
+        status: "finalized" as const,
+        registryAddress: prior.registryAddress,
+        registryRuntimeCodeKeccak256: prior.registryRuntimeCodeKeccak256,
+        registryPolicyCommitment: prior.registryPolicyCommitment,
+        minimumFinalityBlocks: prior.minimumFinalityBlocks,
+        primaryLaunch: prior.primaryLaunch,
+        authorization: prior.authorization,
+        registration: prior.registration,
+        finalization: prior.finalization,
+        latestCommonHead: prior.latestCommonHead,
+        latestCommonHeadHash: prior.latestCommonHeadHash,
+        revokedAtBlock: "0" as const,
+        revocationEvidenceHash: ZERO_HASH32,
+        observationCommonHead: input.commonHead.toString(),
+        observationCommonHeadHash: input.commonHeadHash,
       }),
       bindingEvidence: Object.freeze({
         approvalState, launchState, launchDescriptor,
@@ -339,6 +497,8 @@ async function observeProvider(
       latestCommonHeadHash: input.commonHeadHash,
       revokedAtBlock: "0" as const,
       revocationEvidenceHash: ZERO_HASH32,
+      observationCommonHead: input.commonHead.toString(),
+      observationCommonHeadHash: input.commonHeadHash,
     }),
     bindingEvidence: Object.freeze({
       approvalState, launchState, launchDescriptor,
@@ -354,6 +514,8 @@ function invalidatedObservation(
   }>,
   bindingEvidence: ProviderObservationV2["bindingEvidence"] & Readonly<{
     primaryObservation?: unknown;
+    previousObservation?: unknown;
+    previousCanonicalApprovalId?: unknown;
   }>,
 ): ProviderObservationV2 {
   const invalidationEvidenceHash = canonicalSha256(
@@ -373,6 +535,8 @@ function invalidatedObservation(
       latestCommonHeadHash: input.commonHeadHash,
       registryStatus,
       invalidationEvidenceHash,
+      observationCommonHead: input.commonHead.toString(),
+      observationCommonHeadHash: input.commonHeadHash,
     }),
     bindingEvidence: Object.freeze(bindingEvidence),
   });
@@ -395,18 +559,25 @@ async function readBoundedLifecycleLogs(
   fromBlock: bigint,
   toBlock: bigint,
   approval: VerifiedApprovalArtifactV3,
+  incremental: boolean,
   signal: AbortSignal,
 ) {
-  if (fromBlock > toBlock) {
-    throw new TypeError("Registry lifecycle log range is invalid");
-  }
   const logs: Awaited<ReturnType<PublicClient["getLogs"]>> = [];
+  if (fromBlock > toBlock) return logs;
+  if (!incremental && toBlock - fromBlock + 1n > MAXIMUM_INITIAL_LOG_BLOCKS) {
+    throw new TypeError("Registry initial lifecycle evidence exceeds its bound");
+  }
   for (let start = fromBlock; start <= toBlock;) {
     signal.throwIfAborted();
     const end = start + MAXIMUM_LOG_WINDOW_BLOCKS - 1n < toBlock
       ? start + MAXIMUM_LOG_WINDOW_BLOCKS - 1n
       : toBlock;
-    const filters = [
+    const filters = (incremental ? [
+      ["CustomLaunchRevokedV2", {
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+      }],
+    ] : [
       ["CustomLaunchApprovalAuthorizedV2", {
         approvalId: approval.approvalId,
         descriptorHash: approval.descriptorHash,
@@ -434,7 +605,7 @@ async function readBoundedLifecycleLogs(
         launchId: approval.launchId,
         descriptorHash: approval.descriptorHash,
       }],
-    ] as const;
+    ]) as readonly (readonly [string, Readonly<Record<string, `0x${string}`>>])[];
     for (const [name, args] of filters) {
       const event = registryEvent(name);
       const window = await client.getLogs({

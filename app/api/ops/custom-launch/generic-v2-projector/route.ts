@@ -59,14 +59,14 @@ export async function GET(request: Request): Promise<Response> {
   }
   try {
     const result = await reconcileProductionGenericLaunchesV2({
-      limit: 8,
+      limit: 16,
       signal: request.signal,
     });
     return Response.json({
       schemaVersion: "programmable.generic-launch-reconciliation-result.v2",
-      status: "ok",
+      status: result.failed === 0 ? "ok" : "partial",
       ...result,
-    }, { status: 200, headers: headers() });
+    }, { status: result.failed === 0 ? 200 : 503, headers: headers() });
   } catch {
     return response(503, "reconciliation_unavailable");
   }

@@ -107,27 +107,32 @@ const APPROVED_OPERATIONS = Object.freeze({
     path: "/api/ops/custom-launch/generic-v2-projector",
     schedule: "* * * * *",
     authEnvironment: "CRON_SECRET",
-    maximumLifecycleAgeMs: 180_000,
-    batchLimit: 8,
+    maximumLifecycleAgeMs: 300_000,
+    refreshAfterMs: 60_000,
+    leaseMs: 55_000,
+    maximumApprovalInventory: 48,
+    batchLimit: 16,
+    concurrency: 8,
+    maximumInitialLogBlocks: 250_000,
     route: Object.freeze({
       path: "app/api/ops/custom-launch/generic-v2-projector/route.ts",
-      sha256: "ccf313d6f324391430d081254e4efa5cf7182ebbb812e2888dfd5d0add9bcc5e",
+      sha256: "d2f6509eba91dd5690e58d121daf4802aa1367b3807da31ed7ec060ba84b1f14",
     }),
     runtime: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-production-v2.ts",
-      sha256: "0eafd50e7d224302d8c2202c637c9571b4e3a5e31623a3b36de175f281bc3517",
+      sha256: "b70e8d1a904ed09b1161269b182af7b4e18c93d552acb6e94a5cc66d9d76a19b",
     }),
     store: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-postgres-v2.ts",
-      sha256: "5cbf187e029154dc23f0fcb1002602772494676560e79f596169ca5897718d21",
+      sha256: "8874c3277a518c189c000d05cddef400d2cb0b7884fa7d730e2c5b3456cf438f",
     }),
     registryReader: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",
-      sha256: "fb3cd5afe33795385bdf0c598687b3cea7cc99788275fca06c7b65529d8950a6",
+      sha256: "08be733d2f6735d3198ec078b22d365e36f783d7ca4e7c11b804aaad04760898",
     }),
     migration: Object.freeze({
       path: "ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
-      sha256: "65d2fcb192f56ab29f9621a3df19e79fcf9eaea7a5b6ec31d1b856124fc611d1",
+      sha256: "cbc8140b7956f5abb6631a608f4e919102b468faac8c0efe9ad6802354e69f8f",
     }),
   }),
   independentCrons: Object.freeze([
@@ -1523,9 +1528,20 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   check(
     "ops-custom-launch-reconciler-freshness",
-    /GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS\s*=\s*180_000/u
+    /GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS\s*=\s*300_000/u
       .test(customReconcilerRuntime) &&
-      customReconciler.maximumLifecycleAgeMs === 180_000 &&
+      /GENERIC_LAUNCH_LIFECYCLE_REFRESH_AFTER_MS\s*=\s*60_000/u
+        .test(customReconcilerRuntime) &&
+      /GENERIC_LAUNCH_RECONCILIATION_LEASE_MS\s*=\s*55_000/u
+        .test(customReconcilerRuntime) &&
+      /GENERIC_LAUNCH_RECONCILIATION_CONCURRENCY\s*=\s*8/u
+        .test(customReconcilerRuntime) &&
+      customReconciler.maximumLifecycleAgeMs === 300_000 &&
+      customReconciler.refreshAfterMs === 60_000 &&
+      customReconciler.leaseMs === 55_000 &&
+      customReconciler.maximumApprovalInventory === 48 &&
+      customReconciler.concurrency === 8 &&
+      customReconciler.maximumInitialLogBlocks === 250_000 &&
       customReconcilerRoute.includes(`limit: ${customReconciler.batchLimit}`),
     "Custom Launch V2 public reads fail closed on the reviewed lifecycle age and bounded sweep",
   );

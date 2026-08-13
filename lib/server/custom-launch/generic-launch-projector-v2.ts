@@ -67,7 +67,11 @@ export type VerifiedRegistryLifecycleV2 =
   | (GenericLaunchSourceProjectionV2["lifecycle"] extends infer Lifecycle
     ? Lifecycle extends Readonly<Record<string, unknown>>
       ? Omit<Lifecycle, "chainId" | "generation" | "latestStatus">
-        & Readonly<{ status: "finalized" }>
+        & Readonly<{
+          status: "finalized";
+          observationCommonHead: string;
+          observationCommonHeadHash: `0x${string}`;
+        }>
       : never
     : never)
   | Readonly<{
@@ -76,6 +80,8 @@ export type VerifiedRegistryLifecycleV2 =
     latestCommonHeadHash: `0x${string}`;
     revokedAtBlock: string;
     revocationEvidenceHash: `0x${string}`;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
   }>
   | Readonly<{
     status: "invalidated";
@@ -83,22 +89,48 @@ export type VerifiedRegistryLifecycleV2 =
     latestCommonHeadHash: `0x${string}`;
     registryStatus: string;
     invalidationEvidenceHash: Sha256Digest;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
+  }>
+  | Readonly<{
+    status: "unconsumed";
+    latestCommonHead: string;
+    latestCommonHeadHash: `0x${string}`;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
   }>;
 
 export interface GenericLaunchMaterializationStoreV2 {
   getApprovalAuthorization(input: Readonly<{
     approvalId: `0x${string}`;
     signal: AbortSignal;
-  }>): Promise<unknown | null>;
+  }>): Promise<Readonly<{
+    authorization: unknown;
+    receivedAt: Date;
+  }> | null>;
   getLatestLifecycle(input: Readonly<{
     launchId: `0x${string}`;
     signal: AbortSignal;
   }>): Promise<Readonly<{
     lifecycleGeneration: string;
+    approvalId: `0x${string}`;
+    descriptorHash: `0x${string}`;
     lifecycleEvidenceHash: Sha256Digest;
     state: "finalized" | "revoked" | "invalidated";
     recordHash: Sha256Digest | null;
+    record: GenericLaunchRecordV2 | null;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
   }> | null>;
+  putApprovalReconciliation(input: Readonly<{
+    approvalId: `0x${string}`;
+    launchId: `0x${string}`;
+    descriptorHash: `0x${string}`;
+    outcome: "consumed" | "unconsumed";
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
+    signal: AbortSignal;
+  }>): Promise<void>;
   putIfNewLifecycle(input: Readonly<{
     approvalId: `0x${string}`;
     launchId: `0x${string}`;
@@ -116,7 +148,7 @@ export interface GenericLaunchProjectorV2 {
     signal?: AbortSignal;
   }>): Promise<Readonly<{
     kind: "created" | "existing";
-    state: "finalized" | "revoked" | "invalidated";
+    state: "finalized" | "revoked" | "invalidated" | "unconsumed";
     launchId: `0x${string}`;
     recordHash: Sha256Digest | null;
     lifecycleEvidenceHash: Sha256Digest;
@@ -131,6 +163,9 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
   ) => VerifiedApprovalArtifactV3 | Promise<VerifiedApprovalArtifactV3>;
   readRegistryLifecycle: (input: Readonly<{
     approval: VerifiedApprovalArtifactV3;
+    previous: Awaited<ReturnType<
+      GenericLaunchMaterializationStoreV2["getLatestLifecycle"]
+    >>;
     signal: AbortSignal;
   }>) => Promise<VerifiedRegistryLifecycleV2>;
   readModelBindingHash: Sha256Digest;
@@ -149,23 +184,72 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
       const signal = request.signal ?? new AbortController().signal;
       signal.throwIfAborted();
       const approvalId = nonzeroHash32(request.approvalId, "Approval identity");
-      const raw = await input.store.getApprovalAuthorization({ approvalId, signal });
-      if (raw === null) throw new TypeError("Approval artifact is unavailable");
-      const approval = await input.verifyApprovalArtifact(raw, now());
+      const stored = await input.store.getApprovalAuthorization({ approvalId, signal });
+      if (stored === null) throw new TypeError("Approval artifact is unavailable");
+      const receivedAt = new Date(stored.receivedAt);
+      if (!Number.isFinite(receivedAt.getTime()) || receivedAt > now()) {
+        throw new TypeError("Approval delivery timestamp is invalid");
+      }
+      const approval = await input.verifyApprovalArtifact(
+        stored.authorization,
+        receivedAt,
+      );
       if (approval.approvalId !== approvalId) {
         throw new TypeError("Approval identity does not match the stored artifact");
       }
-      const lifecycle = await input.readRegistryLifecycle({ approval, signal });
+      const previous = await input.store.getLatestLifecycle({
+        launchId: approval.launchId,
+        signal,
+      });
+      const lifecycle = await input.readRegistryLifecycle({
+        approval,
+        previous,
+        signal,
+      });
+      if (lifecycle.status === "unconsumed") {
+        await input.store.putApprovalReconciliation({
+          approvalId,
+          launchId: approval.launchId,
+          descriptorHash: approval.descriptorHash,
+          outcome: "unconsumed",
+          observationCommonHead: lifecycle.observationCommonHead,
+          observationCommonHeadHash: lifecycle.observationCommonHeadHash,
+          signal,
+        });
+        return Object.freeze({
+          kind: "existing" as const,
+          state: "unconsumed" as const,
+          launchId: approval.launchId,
+          recordHash: null,
+          lifecycleEvidenceHash: canonicalSha256(
+            "programmable.generic-launch-unconsumed-evidence.v2",
+            {
+              approvalId,
+              launchId: approval.launchId,
+              descriptorHash: approval.descriptorHash,
+              status: "unconsumed",
+            } as unknown as JsonValue,
+          ),
+        });
+      }
       const lifecycleEvidenceHash = canonicalSha256(
         "programmable.generic-launch-registry-lifecycle-evidence.v2",
-        lifecycle as unknown as JsonValue,
+        stableLifecycleEvidence({
+          lifecycle,
+          approvalId,
+          launchId: approval.launchId,
+          descriptorHash: approval.descriptorHash,
+        }),
       );
       let record: GenericLaunchRecordV2 | null = null;
       if (lifecycle.status === "finalized") {
-        const { chainId: _chainId, ...publicDescriptor } = approval.descriptor;
-        void _chainId;
-        record = createGenericLaunchRecordV2({
-          sourceProjection: {
+        if (previous?.state === "finalized" && previous.record !== null) {
+          record = previous.record;
+        } else {
+          const { chainId: _chainId, ...publicDescriptor } = approval.descriptor;
+          void _chainId;
+          record = createGenericLaunchRecordV2({
+            sourceProjection: {
             schemaVersion: "programmable.generic-launch-source-projection.v2",
             sourceRevision: {
               repositoryId: approval.sourceRevision.repositoryId,
@@ -202,9 +286,10 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
               revokedAtBlock: "0",
               revocationEvidenceHash: lifecycle.revocationEvidenceHash,
             },
-          },
-          readModelBindingHash,
-        });
+            },
+            readModelBindingHash,
+          });
+        }
       } else if (lifecycle.status === "revoked") {
         nonzeroHash32(lifecycle.revocationEvidenceHash, "revocation evidence");
         positiveDecimal(lifecycle.revokedAtBlock, "revocation block");
@@ -225,6 +310,15 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
         record,
         signal,
       });
+      await input.store.putApprovalReconciliation({
+        approvalId,
+        launchId: approval.launchId,
+        descriptorHash: approval.descriptorHash,
+        outcome: "consumed",
+        observationCommonHead: lifecycle.observationCommonHead,
+        observationCommonHeadHash: lifecycle.observationCommonHeadHash,
+        signal,
+      });
       return Object.freeze({
         kind: persisted.kind,
         state: lifecycle.status,
@@ -234,6 +328,42 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
       });
     },
   });
+}
+
+function stableLifecycleEvidence(input: Readonly<{
+  lifecycle: Exclude<VerifiedRegistryLifecycleV2, Readonly<{ status: "unconsumed" }>>;
+  approvalId: `0x${string}`;
+  launchId: `0x${string}`;
+  descriptorHash: `0x${string}`;
+}>): JsonValue {
+  const identity = Object.freeze({
+    approvalId: input.approvalId,
+    launchId: input.launchId,
+    descriptorHash: input.descriptorHash,
+  });
+  if (input.lifecycle.status === "finalized") {
+    return Object.freeze({
+      ...identity,
+      status: "finalized",
+      authorization: input.lifecycle.authorization,
+      registration: input.lifecycle.registration,
+      finalization: input.lifecycle.finalization,
+    }) as unknown as JsonValue;
+  }
+  if (input.lifecycle.status === "revoked") {
+    return Object.freeze({
+      ...identity,
+      status: "revoked",
+      revokedAtBlock: input.lifecycle.revokedAtBlock,
+      revocationEvidenceHash: input.lifecycle.revocationEvidenceHash,
+    }) as unknown as JsonValue;
+  }
+  return Object.freeze({
+    ...identity,
+    status: "invalidated",
+    registryStatus: input.lifecycle.registryStatus,
+    invalidationEvidenceHash: input.lifecycle.invalidationEvidenceHash,
+  }) as unknown as JsonValue;
 }
 
 export interface ApprovalArtifactVerifierBindingV3 {
