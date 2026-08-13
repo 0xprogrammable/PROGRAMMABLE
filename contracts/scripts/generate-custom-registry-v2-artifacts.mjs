@@ -35,6 +35,10 @@ const functions = abi.filter((entry) => entry.type === "function").map((entry) =
   signature: `${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`,
   selector: toFunctionSelector(entry),
 })).sort((a, b) => a.signature.localeCompare(b.signature));
+const runtimeImmutableReferences = Object.values(artifact.deployedBytecode.immutableReferences)
+  .flat()
+  .map(({ start, length }) => ({ start, length }))
+  .sort((a, b) => a.start - b.start || a.length - b.length);
 
 const manifest = {
   schemaVersion: "programmable.custom-registry-predeployment.v2",
@@ -57,7 +61,7 @@ const manifest = {
   artifact: {
     creationBytecodeKeccak256: keccak256(artifact.bytecode.object),
     runtimeTemplateKeccak256: keccak256(artifact.deployedBytecode.object),
-    runtimeImmutableReferences: artifact.deployedBytecode.immutableReferences,
+    runtimeImmutableReferences,
     functions,
     events,
   },

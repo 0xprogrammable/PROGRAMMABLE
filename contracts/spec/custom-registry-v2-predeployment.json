@@ -29,46 +29,40 @@
   "artifact": {
     "creationBytecodeKeccak256": "0x3a000a89fe06d9c154f789efeb6377c3ceacf09b3c88ea67ea4f4482afe61651",
     "runtimeTemplateKeccak256": "0x8a2aac0e04e27a9c7beb51d5b1b231ab40979b14282b38df08c5721730ecc663",
-    "runtimeImmutableReferences": {
-      "40031": [
-        {
-          "start": 1725,
-          "length": 32
-        },
-        {
-          "start": 8171,
-          "length": 32
-        },
-        {
-          "start": 9058,
-          "length": 32
-        },
-        {
-          "start": 9141,
-          "length": 32
-        }
-      ],
-      "40033": [
-        {
-          "start": 882,
-          "length": 32
-        },
-        {
-          "start": 4628,
-          "length": 32
-        },
-        {
-          "start": 4820,
-          "length": 32
-        }
-      ],
-      "40035": [
-        {
-          "start": 1341,
-          "length": 32
-        }
-      ]
-    },
+    "runtimeImmutableReferences": [
+      {
+        "start": 882,
+        "length": 32
+      },
+      {
+        "start": 1341,
+        "length": 32
+      },
+      {
+        "start": 1725,
+        "length": 32
+      },
+      {
+        "start": 4628,
+        "length": 32
+      },
+      {
+        "start": 4820,
+        "length": 32
+      },
+      {
+        "start": 8171,
+        "length": 32
+      },
+      {
+        "start": 9058,
+        "length": 32
+      },
+      {
+        "start": 9141,
+        "length": 32
+      }
+    ],
     "functions": [
       {
         "name": "acceptDefaultAdminTransfer",
