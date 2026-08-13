@@ -381,6 +381,7 @@ const plan = {
     blockHash: a.finalized.hash,
   },
   deployer,
+  admin,
   releaseAuthorization: {
     owner: releaseOwner,
     maximumValiditySeconds:

@@ -408,6 +408,9 @@ const verification = {
     blockNumber: finalized[0].number.toString(),
     blockHash: finalized[0].hash,
   },
+  deployer: plan.deployer,
+  admin: plan.admin,
+  releaseOwner: plan.releaseAuthorization.owner,
   controllers: verifiedControllers,
   verified: true,
 };

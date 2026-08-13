@@ -301,6 +301,7 @@ export function assertSafePolicyBoundPlan({
   }
 
   const deployer = getAddress(plan.deployer);
+  const admin = getAddress(plan.admin);
   const releaseOwner = getAddress(plan.releaseAuthorization.owner);
   const custodyByRole = new Map(
     plan.custody.roles.map((entry) => [entry.role, entry]),
@@ -399,12 +400,13 @@ export function assertSafePolicyBoundPlan({
   if (
     adminCustody?.service !==
       "programmable.custom-registry.v2.production-custody.20260813.admin" ||
+    getAddress(adminCustody?.publicAddress) !== admin ||
     !/^0x[0-9a-f]{64}$/u.test(adminCustody?.readbackSha256 ?? "") ||
     getAddress(custodyByRole.get("deployer")?.publicAddress) !== deployer
   ) {
     throw new Error("Safe plan admin or deployer custody binding failed");
   }
-  isolatedAddresses.add(getAddress(adminCustody.publicAddress).toLowerCase());
+  isolatedAddresses.add(admin.toLowerCase());
   if (
     predictedAddresses.size !== SAFE_CONTROLLER_ROLES.length ||
     isolatedAddresses.size !==

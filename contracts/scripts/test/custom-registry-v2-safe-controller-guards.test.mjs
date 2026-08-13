@@ -303,6 +303,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
       blockHash: `0x${"66".repeat(32)}`,
     },
     deployer: deployer.address,
+    admin: admin.address,
     releaseAuthorization: {
       owner: releaseOwner.address,
       maximumValiditySeconds: 300,
