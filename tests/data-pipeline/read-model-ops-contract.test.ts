@@ -623,6 +623,12 @@ describe("read-model operations source contract", () => {
       "const readLogs = () =>\n      Promise.all([",
     ],
     [
+      "serialized Classic V2 provider passes",
+      "lib/onchain/read-model.ts",
+      "const indexedEventSets = await mapInBatches(",
+      "const indexedEventSets = await allSettledOrThrow(",
+    ],
+    [
       "parallel registry slices",
       "lib/onchain/read-model.ts",
       "await settleParallelReadsInOrder([",
@@ -669,6 +675,12 @@ describe("read-model operations source contract", () => {
       "lib/onchain/classic-v3-read-model.ts",
       "allSettledOrThrow([",
       "Promise.all([",
+    ],
+    [
+      "serialized Classic V3 provider passes",
+      "lib/onchain/classic-v3-read-model.ts",
+      "const sets = await mapInBatches(",
+      "const sets = await allSettledOrThrow(",
     ],
     [
       "Classic V3 result-limit range bisection",
@@ -735,6 +747,12 @@ describe("read-model operations source contract", () => {
       "lib/onchain/stock-paired-read-model.ts",
       "events: STOCK_LAUNCHER_EVENTS",
       "event: launchedEvent",
+    ],
+    [
+      "serialized Stock-Paired provider passes",
+      "lib/onchain/stock-paired-read-model.ts",
+      "const eventSets = await mapInBatches(",
+      "const eventSets = await allSettledOrThrow(",
     ],
     [
       "Stock result-limit range bisection",
