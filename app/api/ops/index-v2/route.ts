@@ -15,6 +15,23 @@ export const runtime = "nodejs";
 
 const INDEX_READ_ATTEMPTS = 2;
 
+function errorClassChain(error: unknown) {
+  const names: string[] = [];
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && !seen.has(current) && names.length < 6) {
+    seen.add(current);
+    names.push(
+      current instanceof Error ? current.name : "UnknownIndexError",
+    );
+    current =
+      typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  return names;
+}
+
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
@@ -71,6 +88,7 @@ export async function GET(request: NextRequest) {
             attempt,
             errorName:
               error instanceof Error ? error.name : "UnknownIndexError",
+            errorClassChain: errorClassChain(error),
           });
         }
       }
@@ -118,6 +136,7 @@ export async function GET(request: NextRequest) {
     console.error("Programmable index refresh failed", {
       errorName:
         error instanceof Error ? error.name : "UnknownIndexError",
+      errorClassChain: errorClassChain(error),
       durationMs: Date.now() - startedAt,
     });
     return NextResponse.json(
