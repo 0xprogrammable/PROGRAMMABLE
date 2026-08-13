@@ -9,7 +9,7 @@
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "168e440ffbaa78f24c55cf4a484c8735443251071eb2794ccc3321d0b708f0cb"
+        "sha256": "76e5c5a6bebb697e842572a730e38e3423d6448f661119a2b31a0760b64ace58"
       },
       "dependencies": [
         {
@@ -22,7 +22,7 @@
         },
         {
           "path": "lib/onchain/persistent-rpc-cache.server.ts",
-          "sha256": "4556161d79d49914f064a4df5ad2eb7f9777dfe1b3d188cf36a1e5b434b38f9b"
+          "sha256": "11cdf402ccb7985a215064dc445ca638bf597eb0c4949a000a0ce509642ae459"
         }
       ],
       "releaseRuntimes": [
@@ -35,7 +35,7 @@
         {
           "release": "stock-paired-v1-v3",
           "path": "lib/onchain/stock-paired-read-model.ts",
-          "sha256": "2074bff385c644f6bd9dfb2879e52e713457a3b04cedfe858dc297ad19baee74",
+          "sha256": "0f1a0713aa02b617f1ae9df6463140640d1217cdbb38964b56fc9d2b59e1d054",
           "eventFiltersPerRange": 3
         }
       ],

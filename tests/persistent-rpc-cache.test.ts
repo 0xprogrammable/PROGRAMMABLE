@@ -283,6 +283,14 @@ function weakEtagBlobClient() {
 }
 
 describe("persistent RPC log cursor", () => {
+  it("keeps a bounded sixteen-segment replay budget for the measured Classic fee stream", () => {
+    expect(PERSISTENT_RPC_CACHE_LIMITS).toMatchObject({
+      maxCursorSegments: 16,
+      maxSegmentBytes: 4 * 1024 * 1024,
+      maxSegmentReadsPerOperation: 16,
+    });
+  });
+
   it("retries transient truncated private Blob reads within a strict budget", async () => {
     const blob = weakEtagBlobClient();
     const store = createVercelBlobPersistentRpcCacheStore(

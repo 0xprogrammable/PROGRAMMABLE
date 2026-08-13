@@ -12,6 +12,8 @@ import {
   pairStockPairedLaunches,
   readStockPairedEvents,
 } from "../lib/onchain/stock-paired-read-model";
+import { PersistentRpcCacheError } from
+  "../lib/onchain/persistent-rpc-cache.server";
 import type {
   ExploreReadModel,
   ReadyOnchainDeployment,
@@ -108,6 +110,31 @@ describe("Stock-Paired event scan", () => {
       if (firstRequest) {
         firstRequest = false;
         throw new LimitExceededRpcError(new Error("too many results"));
+      }
+      return [];
+    });
+    await expect(
+      readStockPairedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_099n,
+        100n,
+      ),
+    ).resolves.toMatchObject({ launches: [], volumes: new Map() });
+    expect(getLogs).toHaveBeenCalledTimes(9);
+  });
+
+  it("bisects the complete Stock range when its durable segment exceeds the byte cap", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const release = stockPairedReleaseFixture();
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new PersistentRpcCacheError(
+          "Persistent RPC cache log segment exceeds 4194304 bytes",
+        );
       }
       return [];
     });

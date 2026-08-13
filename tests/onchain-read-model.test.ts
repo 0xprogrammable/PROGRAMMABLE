@@ -496,6 +496,29 @@ describe("Explore verified event indexing", () => {
     );
   });
 
+  it("bisects the complete range when its durable segment exceeds the byte cap", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new PersistentRpcCacheError(
+          "Persistent RPC cache log segment exceeds 4194304 bytes",
+        );
+      }
+      return [];
+    });
+
+    await expect(
+      indexVerifiedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        1_000n,
+      ),
+    ).resolves.toMatchObject({ launches: [], creatorClaims: [] });
+    expect(getLogs).toHaveBeenCalledTimes(6);
+  });
+
   it("fails closed when a result limit persists at the minimum range", async () => {
     const getLogs = vi.fn(async () => {
       throw new LimitExceededRpcError(

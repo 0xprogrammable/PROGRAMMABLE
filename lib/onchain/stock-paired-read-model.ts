@@ -31,6 +31,7 @@ import type { LauncherToken } from "../tokens";
 import { stateViewReadAbi, uerc20ReadAbi } from "./abis";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
 import {
+  PersistentRpcCacheError,
   persistentRpcHttp,
   persistentRpcProviderId,
   withPersistentRpcIntegrityScope,
@@ -159,6 +160,13 @@ function isTransientLogReadError(error: unknown) {
     error instanceof RpcRequestError &&
     error.code === -32603 &&
     error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
+
+function isPersistentCacheRangeLimitError(error: unknown) {
+  return (
+    error instanceof PersistentRpcCacheError &&
+    /^Persistent RPC cache log segment exceeds \d+ bytes$/u.test(error.message)
   );
 }
 
@@ -393,7 +401,8 @@ export async function readStockPairedEvents(
       if (
         (transient ||
           error instanceof LimitExceededRpcError ||
-          error instanceof ResponseBodyTooLargeError) &&
+          error instanceof ResponseBodyTooLargeError ||
+          isPersistentCacheRangeLimitError(error)) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
       ) {
