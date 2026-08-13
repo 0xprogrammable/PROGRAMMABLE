@@ -691,8 +691,8 @@ export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
   "JSON.stringify(currentFdvDetail.token.liquidityEvidence)",
   'for (const range of ["1h", "1d", "1w", "all"])',
   "verifyCurrentPublicOnchainEvidenceV1({",
-  "process.env.MAINNET_RPC_URL_A",
-  "process.env.MAINNET_RPC_URL_B",
+  '"https://ethereum-rpc.publicnode.com"',
+  '"https://rpc.mevblocker.io"',
   '"programmable.current-market-independent-proof.v1"',
   "independentCurrentProof.providerCount !== 2",
   'currentChart.readStatus !== "live"',
@@ -1667,36 +1667,24 @@ export function evaluateReadModelOperationsSourceContracts(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}",
+        '"https://ethereum-rpc.publicnode.com"',
       ) &&
-      stagedBitquerySmokeBlock.includes(
-        "MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}",
+      stagedBitquerySmokeBlock.includes('"https://rpc.mevblocker.io"') &&
+      stagedBitquerySmokeBlock.includes("rpcUrls: independentRpcUrls") &&
+      !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_A") &&
+      !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_B") &&
+      !stagedBitquerySmokeBlock.includes(
+        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
       ) &&
-      stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
+      !stagedBitquerySmokeBlock.includes(
+        "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
       ) &&
-      stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
+      !stagedBitquerySmokeBlock.includes(
+        "runtimeProductionProviderBindingsFromUrls",
       ) &&
-      stagedBitquerySmokeBlock.includes(
+      !stagedBitquerySmokeBlock.includes(
         '"./scripts/perf/read-model-provider-binding.mjs"',
       ) &&
-      stagedBitquerySmokeBlock.includes(
-        "runtimeProductionProviderBindingsFromUrls({",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "ETHEREUM_RPC_URL: independentRpcUrls[0]",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "ETHEREUM_RPC_URL_B: independentRpcUrls[1]",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "binding.endpointCommitment !== expectedCommitment",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "staged independent RPC witness does not match its pinned production commitment",
-      ) &&
-      stagedBitquerySmokeBlock.includes("rpcUrls: independentRpcUrls") &&
       stagedBitquerySmokeBlock.includes(
         "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
       ) &&
@@ -1902,28 +1890,71 @@ export function evaluateReadModelOperationsSourceContracts(
         '"./scripts/perf/bitquery-historical-release-gate.mjs"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "await verifyBitqueryGoldenMarketParityV1({",
+        "await verifyBitqueryGoldenMarketExecutionV1({",
       ) &&
       bitqueryGoldenParity.includes(
-        '"https://ethereum-rpc.publicnode.com"',
+        '"https://rpc.mevblocker.io"',
       ) &&
-      bitqueryGoldenParity.includes('"https://rpc.mevblocker.io"') &&
-      bitqueryGoldenParity.includes("const MAXIMUM_DEVIATION_BPS = 1_500n") &&
+      bitqueryGoldenParity.includes(
+        '"https://mainnet.gateway.tenderly.co"',
+      ) &&
+      !bitqueryGoldenParity.includes("ethereum-rpc.publicnode.com") &&
+      !bitqueryGoldenParity.includes("MAINNET_STATE_VIEW") &&
+      !bitqueryGoldenParity.includes("Q192") &&
+      bitqueryGoldenParity.includes(
+        "const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n",
+      ) &&
       bitqueryGoldenParity.includes("const MINIMUM_CONFIRMATIONS = 12n") &&
+      bitqueryGoldenParity.includes(
+        '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
+      ) &&
+      bitqueryGoldenParity.includes(
+        'const MAINNET_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90"',
+      ) &&
+      bitqueryGoldenParity.includes(
+        '"eth_getTransactionReceipt"',
+      ) &&
+      bitqueryGoldenParity.includes("swapLogs.length !== 1") &&
+      bitqueryGoldenParity.includes('eventName: "Swap"') &&
+      bitqueryGoldenParity.includes("strict: true") &&
+      bitqueryGoldenParity.includes(
+        "observation.poolId !== expected.poolId",
+      ) &&
+      bitqueryGoldenParity.includes(
+        "rpcQuantity(receipt?.status, \"receipt status\") !== 1n",
+      ) &&
+      bitqueryGoldenParity.includes("blockHash,") &&
+      bitqueryGoldenParity.includes("requireCanonical: true") &&
       bitqueryGoldenParity.includes("sameObservation(first, second)") &&
       bitqueryGoldenParity.includes(
-        'function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)',
+        "first.amount0 >= 0n",
       ) &&
-      bitqueryGoldenParity.includes("observation.poolLiquidity <= 0n") &&
       bitqueryGoldenParity.includes(
-        "historicalPoolLiquidity: first.poolLiquidity.toString()",
+        "first.amount1 !== tokenAmountRaw",
+      ) &&
+      bitqueryGoldenParity.includes("provider-local trade ordinal") &&
+      bitqueryGoldenParity.includes("bitqueryTradeOrdinal,") &&
+      bitqueryGoldenParity.includes(
+        "receiptLogIndex: Number(first.logIndex)",
+      ) &&
+      bitqueryGoldenParity.includes(
+        "executionPriceQuoteWad !== priceQuoteWad",
+      ) &&
+      bitqueryGoldenParity.includes(
+        "executionNativeAmountWei * 10n ** BigInt(tokenDecimals)",
+      ) &&
+      bitqueryGoldenParity.includes(
+        "executionPriceQuoteWad * first.answer",
+      ) &&
+      bitqueryGoldenParity.includes(
+        "observation.answeredInRound < observation.roundId",
       ) &&
       bitqueryGoldenParity.includes(
         "tradeTime !== Number(first.blockTimestamp) * 1_000",
       ) &&
       !bitqueryGoldenParity.includes("pool?.liquidity?.valueUsdWad") &&
       bitqueryGoldenParity.includes(
-        "Bitquery golden price is outside independent onchain tolerance",
+        "Bitquery golden execution does not match its receipt witness",
       ) &&
       bitqueryHistoricalRelease.includes(
         "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
@@ -1944,10 +1975,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "export function classifyBitqueryStaleMarketReleaseV1",
       ) &&
       bitqueryHistoricalRelease.includes(
-        "export function verifyBitqueryHistoricalGoldenReleaseV1",
+        "export function verifyBitqueryHistoricalGoldenReleaseV2",
       ) &&
       bitqueryHistoricalRelease.includes(
-        'parity?.schemaVersion !== "programmable.bitquery-golden-market-parity.v1"',
+        'parity?.schemaVersion !== "programmable.bitquery-golden-market-execution.v1"',
       ) &&
       bitqueryHistoricalRelease.includes(
         'market?.schemaVersion !== "programmable.market-data.v1"',
@@ -1968,7 +1999,19 @@ export function evaluateReadModelOperationsSourceContracts(
         '"valuationMetric" in chart',
       ) &&
       bitqueryHistoricalRelease.includes(
-        "!positiveInteger(parity.historicalPoolLiquidity)",
+        "parity.transactionHash !== trade?.transactionHash?.toLowerCase()",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "parity.bitqueryTradeOrdinal !== trade?.logIndex",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "parity.executionPriceQuoteWad !== trade?.priceQuoteWad",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId)",
       ) &&
       bitqueryHistoricalRelease.includes(
         "chart?.identity?.poolId !== GOLDEN_POOL_ID",
@@ -1982,7 +2025,7 @@ export function evaluateReadModelOperationsSourceContracts(
       bitqueryHistoricalRelease.includes(
         "chart.asOfTime !== lastPoint?.observedAt",
       ) &&
-      bitqueryHistoricalRelease.includes("periodMedian === null") &&
+      bitqueryHistoricalRelease.includes("!periodMedianIsPositive") &&
       bitqueryHistoricalRelease.includes(
         'lastPoint?.valueSemantics !== "period-median"',
       ) &&
@@ -1991,10 +2034,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "const historicalPaidPathVerified =",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "verifyBitqueryHistoricalGoldenReleaseV1({",
+        "verifyBitqueryHistoricalGoldenReleaseV2({",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"programmable.bitquery-historical-release.v1"',
+        '"programmable.bitquery-historical-release.v2"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         "historicalGoldenRelease.confirmations >= 12",
@@ -2193,8 +2236,11 @@ export function evaluateReadModelOperationsSourceContracts(
         POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS,
       ) &&
       postPromotion.includes('chart.readStatus !== "live"') &&
-      postPromotion.includes("verifyBitqueryGoldenMarketParityV1") &&
-      postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV1") &&
+      postPromotion.includes("verifyBitqueryGoldenMarketExecutionV1") &&
+      postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV2") &&
+      !postPromotion.includes(
+        "verifyBitqueryGoldenMarketExecutionV1({\n      token: responses[4].body?.token,\n      fetchImpl,\n      rpcUrls:",
+      ) &&
       postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
       postPromotion.includes(
         "return currentCount > 0 ? { currentToken, tokens } : null;",

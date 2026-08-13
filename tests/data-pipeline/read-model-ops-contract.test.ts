@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { encodeFunctionData, encodeFunctionResult, parseAbi } from "viem";
+import {
+  encodeAbiParameters,
+  encodeFunctionData,
+  encodeFunctionResult,
+  parseAbi,
+  parseAbiParameters,
+} from "viem";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
@@ -22,6 +28,10 @@ const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
 const GOLDEN_QUOTE_ADDRESS =
   "0x0000000000000000000000000000000000000000";
+const GOLDEN_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
+const GOLDEN_SWAP_TOPIC =
+  "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+const GOLDEN_TRANSACTION_HASH = `0x${"22".repeat(32)}`;
 const PUBLIC_TOKEN_ADDRESS =
   "0x1111111111111111111111111111111111111111";
 const PUBLIC_POOL_ID = `0x${"44".repeat(32)}`;
@@ -828,28 +838,12 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
-      "first independent RPC secret",
-      "          MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}\n",
+      "PublicNode witness",
+      '            "https://ethereum-rpc.publicnode.com",\n',
     ],
     [
-      "second independent RPC secret",
-      "          MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}\n",
-    ],
-    [
-      "Alchemy commitment",
-      "          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}\n",
-    ],
-    [
-      "QuickNode commitment",
-      "          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}\n",
-    ],
-    [
-      "provider binding",
-      "            runtimeProductionProviderBindingsFromUrls({\n",
-    ],
-    [
-      "commitment comparison",
-      "            if (binding.endpointCommitment !== expectedCommitment) {\n",
+      "MEV Blocker witness",
+      '            "https://rpc.mevblocker.io",\n',
     ],
     ["independent reader handoff", "                rpcUrls: independentRpcUrls,\n"],
   ])("fails closed when staged market proof drops the %s", (_label, needle) => {
@@ -1086,18 +1080,53 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("fails closed when independent PCAN parity drops exact-block liquidity", () => {
+  it.each([
+    '"https://mainnet.gateway.tenderly.co"',
+    '"eth_getTransactionReceipt"',
+    '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
+    "swapLogs.length !== 1",
+    'rpcQuantity(receipt?.status, "receipt status") !== 1n',
+    "requireCanonical: true",
+    "sameObservation(first, second)",
+    "first.amount0 >= 0n",
+    "first.amount1 !== tokenAmountRaw",
+    "executionPriceQuoteWad !== priceQuoteWad",
+    "executionPriceQuoteWad * first.answer",
+    "observation.answeredInRound < observation.roundId",
+    "const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n",
+  ])("fails closed when the PCAN execution proof drops %s", (needle) => {
     const parityPath = "scripts/perf/bitquery-golden-market-parity.mjs";
     const parity = readFileSync(resolve(ROOT, parityPath), "utf8");
-    const unsafeParity = parity.replace(
-      '  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",\n',
-      "",
-    );
+    expect(parity).toContain(needle);
+    const unsafeParity = parity.replace(needle, "MUTATED_EXECUTION_PROOF");
     expect(unsafeParity).not.toBe(parity);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
         [parityPath]: unsafeParity,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it.each([
+    "parity.transactionHash !== trade?.transactionHash?.toLowerCase()",
+    "parity.bitqueryTradeOrdinal !== trade?.logIndex",
+    "parity.executionPriceQuoteWad !== trade?.priceQuoteWad",
+    "parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED",
+    "BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId)",
+  ])("fails closed when historical PCAN binding drops %s", (needle) => {
+    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
+    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
+    expect(helper).toContain(needle);
+    const unsafeHelper = helper.replace(needle, "MUTATED_EXECUTION_BINDING");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [helperPath]: unsafeHelper,
       },
       expectedSha256Overrides: fixtureDigests(),
     });
@@ -1740,7 +1769,12 @@ function publicFetch(
 
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
-    if (url.hostname === "rpc-a.invalid" || url.hostname === "rpc-b.invalid") {
+    if (
+      url.hostname === "rpc-a.invalid" ||
+      url.hostname === "rpc-b.invalid" ||
+      url.hostname === "rpc.mevblocker.io" ||
+      url.hostname === "mainnet.gateway.tenderly.co"
+    ) {
       const request = JSON.parse(String(init?.body ?? "{}")) as {
         id: number;
         method: string;
@@ -1758,6 +1792,34 @@ function publicFetch(
           timestamp: `0x${BigInt(Math.floor(Date.parse(
             current ? publicMarketAsOf : goldenMarketAsOf,
           ) / 1_000)).toString(16)}`,
+        };
+      } else if (request.method === "eth_getTransactionReceipt") {
+        result = {
+          transactionHash: GOLDEN_TRANSACTION_HASH,
+          transactionIndex: "0x1",
+          blockHash: `0x${"11".repeat(32)}`,
+          blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
+          status: "0x1",
+          logs: [{
+            address: GOLDEN_POOL_MANAGER,
+            topics: [
+              GOLDEN_SWAP_TOPIC,
+              GOLDEN_POOL_ID,
+              `0x${"0".repeat(24)}${"33".repeat(20)}`,
+            ],
+            data: encodeAbiParameters(
+              parseAbiParameters(
+                "int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee",
+              ),
+              [-(10n ** 18n), 10n ** 18n, 2n ** 96n, 1_000_000n, 0, 3_000],
+            ),
+            blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
+            transactionHash: GOLDEN_TRANSACTION_HASH,
+            transactionIndex: "0x1",
+            blockHash: `0x${"11".repeat(32)}`,
+            logIndex: "0x7a",
+            removed: false,
+          }],
         };
       } else if (request.method === "eth_getCode") {
         result = TEST_STATE_VIEW_RUNTIME_CODE;
@@ -1928,11 +1990,16 @@ function publicFetch(
               quality: "partial",
               asOfTime: goldenMarketAsOf,
               latestTrade: {
-                transactionHash: `0x${"22".repeat(32)}`,
+                transactionHash: GOLDEN_TRANSACTION_HASH,
+                transactionIndex: 1,
                 logIndex: 1,
                 blockNumber: TEST_PARITY_BLOCK.toString(),
                 time: goldenMarketAsOf,
-                tokenSide: "buy",
+                tokenSide: "sell",
+                tokenAmount: "1",
+                priceQuoteWad: (10n ** 18n).toString(),
+                quoteAddress: GOLDEN_QUOTE_ADDRESS,
+                quoteSymbol: "ETH",
                 priceUsdWad: TEST_PRICE_USD_WAD.toString(),
                 rawPriceUsdWad: TEST_PRICE_USD_WAD.toString(),
                 priceUsdAsOfTime: goldenMarketAsOf,
@@ -2440,38 +2507,21 @@ describe("post-promotion route verification", () => {
     );
   });
 
-  it("rejects historical PCAN evidence when exact-block pool liquidity is zero", async () => {
+  it("rejects historical PCAN evidence when its archive receipt reverted", async () => {
     const base = publicFetch("healthy", 58 * 60 * 60_000);
-    const liquiditySelector = encodeFunctionData({
-      abi: testStateViewAbi,
-      functionName: "getLiquidity",
-      args: [GOLDEN_POOL_ID],
-    }).slice(0, 10);
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
-      if (url.hostname !== "rpc-a.invalid" && url.hostname !== "rpc-b.invalid") {
-        return base(input, init);
-      }
-      const request = JSON.parse(String(init?.body ?? "{}")) as {
-        id: number;
-        method: string;
-        params: readonly [{ data?: string }];
-      };
+      const response = await base(input, init);
       if (
-        request.method === "eth_call" &&
-        request.params[0]?.data?.startsWith(liquiditySelector)
-      ) {
-        return Response.json({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: encodeFunctionResult({
-            abi: testStateViewAbi,
-            functionName: "getLiquidity",
-            result: 0n,
-          }),
-        });
-      }
-      return base(input, init);
+        !["rpc.mevblocker.io", "mainnet.gateway.tenderly.co"].includes(
+          url.hostname,
+        )
+      ) return response;
+      const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
+      if (request.method !== "eth_getTransactionReceipt") return response;
+      const body = await response.json();
+      body.result.status = "0x0";
+      return Response.json(body);
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
     expect(result.ok).toBe(false);
@@ -2552,12 +2602,12 @@ describe("post-promotion route verification", () => {
     );
   });
 
-  it("rejects two market parity readers that disagree on the exact block", async () => {
+  it("rejects two archive execution witnesses that disagree on the exact block", async () => {
     const base = publicFetch();
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (url.hostname !== "rpc-b.invalid") return response;
+      if (url.hostname !== "mainnet.gateway.tenderly.co") return response;
       const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
       if (request.method !== "eth_getBlockByNumber") return response;
       const body = await response.json();

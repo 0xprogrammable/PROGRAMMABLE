@@ -17,11 +17,14 @@ vi.mock("../lib/alchemy/live-market.server", () => ({
   enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
-import { valueExploreEntriesWithCurrentEvidence } from
+import {
+  attachBitqueryMarketDataToValuedEntries,
+  valueExploreEntriesWithCurrentEvidence,
+} from
   "../lib/market-data/current-valuation.server";
 import type { TokenMarketDataV1 } from
   "../lib/market-data/market-data-v1";
-import type { ExploreEntry } from "../lib/tokens";
+import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const tokenAddress = "0x1111111111111111111111111111111111111111";
 const poolId = `0x${"22".repeat(32)}` as const;
@@ -117,6 +120,63 @@ const snapshot = {
   confirmations: 12,
 } as const;
 
+function tokenWithState(
+  activeLiquidity: string,
+  activeVirtualLiquidityUsdWad?: string,
+): LauncherToken {
+  const blockTimestamp = "1786579320";
+  const blockTime = new Date(Number(blockTimestamp) * 1_000).toISOString();
+  return {
+    ...token,
+    liveMarketStateEvidence: {
+      source: "uniswap-v4-stateview-v1",
+      blockNumber: snapshot.blockNumber,
+      blockHash: snapshot.blockHash,
+      sqrtPriceX96: (1n << 96n).toString(),
+      activeLiquidity,
+    },
+    ...(activeVirtualLiquidityUsdWad === undefined
+      ? {}
+      : {
+          liveMarketPriceEvidence: {
+            schemaVersion:
+              "programmable.stateview-chainlink-price-evidence.v1",
+            source: "uniswap-v4-stateview-chainlink-v1",
+            chainId: "1",
+            poolId,
+            tokenAddress,
+            quoteAddress: "0x0000000000000000000000000000000000000000",
+            stateViewAddress: deployment.stateView,
+            stateViewRuntimeCodeHash: deployment.stateViewRuntimeCodeHash,
+            blockNumber: snapshot.blockNumber,
+            blockHash: snapshot.blockHash,
+            blockTimestamp,
+            blockTime,
+            sqrtPriceX96: (1n << 96n).toString(),
+            activeLiquidity,
+            activeVirtualToken0Wei: activeLiquidity,
+            activeVirtualLiquidityUsdWad,
+            activeVirtualLiquidityValueBasis:
+              "stateview-active-liquidity-virtual-depth-usd",
+            tokenPriceEthWei: "1000000000000000000",
+            tokenPriceUsdWad: "2500000000000000000000",
+            totalSupplyRaw: "1000000000000000000000000",
+            tokenDecimals: 18,
+            fdvUsdWad: "2500000000000000000000000000",
+            ethUsdQuote: {
+              feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+              roundId: "1",
+              answeredInRound: "1",
+              answer: "250000000000",
+              decimals: 8,
+              updatedAt: blockTimestamp,
+              updatedAtTime: blockTime,
+            },
+          },
+        }),
+  } as LauncherToken;
+}
+
 describe("current Explore valuation orchestration", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -125,6 +185,9 @@ describe("current Explore valuation orchestration", () => {
   it("keeps current Bitquery nested but unavailable at top level when dual evidence fails", async () => {
     mocks.readOfficialV4LiquidityEvidence.mockResolvedValue([]);
     mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([
+      tokenWithState("2000000000000000000", "10000000000000000000000"),
+    ]);
 
     const [valued] = await valueExploreEntriesWithCurrentEvidence({
       entries: [token],
@@ -227,6 +290,9 @@ describe("current Explore valuation orchestration", () => {
     );
     mocks.readOfficialV4LiquidityEvidence.mockResolvedValue([]);
     mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([
+      tokenWithState("2000000000000000000", "10000000000000000000000"),
+    ]);
 
     const read = valueExploreEntriesWithCurrentEvidence({
       entries: [token],
@@ -236,59 +302,20 @@ describe("current Explore valuation orchestration", () => {
       now: new Date("2026-08-13T00:02:00.000Z"),
     });
     await vi.waitFor(() => {
-      expect(mocks.readOfficialV4LiquidityEvidence).toHaveBeenCalledOnce();
       expect(mocks.withSameBlockEthUsdQuote).toHaveBeenCalledOnce();
+      expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalled();
     });
     resolveMarket(new Map([[tokenAddress, marketData]]));
 
     await expect(read).resolves.toHaveLength(1);
+    expect(mocks.readOfficialV4LiquidityEvidence).toHaveBeenCalledOnce();
   });
 
   it("treats exact zero active liquidity as known ineligibility, not missing coverage", async () => {
-    const blockTimestamp = "1786579320";
-    mocks.readOfficialV4LiquidityEvidence.mockResolvedValue([{
-      source: "official-uniswap-v4-subgraph",
-      identity: {
-        chainId: "1",
-        protocol: "uniswap_v4",
-        poolId,
-        tokenAddress,
-        quoteAddress: "0x0000000000000000000000000000000000000000",
-      },
-      valueBasis: "official-subgraph-pool-tvl-usd",
-      tvlUsdWad: "10000000000000000000000",
-      reportedPoolBalances: {
-        token0: {
-          address: "0x0000000000000000000000000000000000000000",
-          decimals: 18,
-          amountDecimal: "10",
-        },
-        token1: { address: tokenAddress, decimals: 18, amountDecimal: "10" },
-      },
-      freshness: "current",
-      provenance: {
-        subgraphId: "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G",
-        deployment: "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK",
-        indexedBlockNumber: snapshot.blockNumber,
-        indexedBlockHash: snapshot.blockHash,
-        indexedBlockTimestamp: blockTimestamp,
-        indexedBlockTime: new Date(Number(blockTimestamp) * 1_000).toISOString(),
-        referenceHeadBlockNumber: snapshot.blockNumber,
-        referenceHeadBlockHash: snapshot.blockHash,
-        lagBlocks: "0",
-      },
-    }]);
     mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
-    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([{
-      ...token,
-      liveMarketStateEvidence: {
-        source: "uniswap-v4-stateview-v1",
-        blockNumber: snapshot.blockNumber,
-        blockHash: snapshot.blockHash,
-        sqrtPriceX96: (1n << 96n).toString(),
-        activeLiquidity: "0",
-      },
-    }]);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([
+      tokenWithState("0"),
+    ]);
 
     const [valued] = await valueExploreEntriesWithCurrentEvidence({
       entries: [token],
@@ -299,7 +326,8 @@ describe("current Explore valuation orchestration", () => {
       requireCompleteLiquidityCoverage: true,
     });
 
-    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledOnce();
+    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledTimes(2);
+    expect(mocks.readOfficialV4LiquidityEvidence).not.toHaveBeenCalled();
     expect(valued?.exploreKind === "token" && valued.liveMarketStateEvidence)
       .toMatchObject({
       activeLiquidity: "0",
@@ -364,6 +392,52 @@ describe("current Explore valuation orchestration", () => {
       now: new Date("2026-08-13T00:02:00.000Z"),
       requireCompleteLiquidityCoverage: true,
     })).rejects.toThrow("StateView market evidence is incomplete");
+    expect(mocks.readOfficialV4LiquidityEvidence).not.toHaveBeenCalled();
+  });
+
+  it("does not query the subgraph for exact active depth below the floor", async () => {
+    mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([
+      tokenWithState("1", "9999999999999999999999"),
+    ]);
+
+    const [valued] = await valueExploreEntriesWithCurrentEvidence({
+      entries: [token],
+      marketByToken: new Map([[tokenAddress, marketData]]),
+      deployment,
+      operationalSnapshot: snapshot,
+      now: new Date("2026-08-13T00:02:00.000Z"),
+      requireCompleteLiquidityCoverage: true,
+    });
+
+    expect(mocks.readOfficialV4LiquidityEvidence).not.toHaveBeenCalled();
+    expect(valued?.valuation).toEqual({
+      status: "unavailable",
+      reason: "liquidity-unavailable",
+    });
+  });
+
+  it("attaches page market data without replacing the exact sort valuation", async () => {
+    const currentEntry = {
+      ...token,
+      valuation: {
+        status: "unavailable" as const,
+        reason: "liquidity-unavailable" as const,
+      },
+    };
+
+    const [attached] = await attachBitqueryMarketDataToValuedEntries({
+      entries: [currentEntry],
+      marketByToken: new Map([[tokenAddress, marketData]]),
+      now: new Date("2026-08-13T00:02:00.000Z"),
+    });
+
+    expect(attached?.valuation).toEqual(currentEntry.valuation);
+    expect(attached?.marketData?.pools[0]?.latestTrade).toBeDefined();
+    expect(attached?.marketData?.pools[0]?.valuation).toEqual({
+      status: "unavailable",
+      reason: "inconsistent-market-data",
+    });
   });
 
   it("preserves only the exact stale historical PCAN detail valuation", async () => {

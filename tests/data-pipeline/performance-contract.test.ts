@@ -1292,7 +1292,7 @@ describe("read-model performance contract", () => {
         process.cwd(),
       );
     expect(alchemyResult.ok).toBe(true);
-    expect(alchemyResult.checks).toHaveLength(18);
+    expect(alchemyResult.checks).toHaveLength(19);
 
     const exploreRoutePath = "app/api/explore/route.ts";
     const exploreRouteSource = readFileSync(
@@ -1340,6 +1340,42 @@ describe("read-model performance contract", () => {
         (failure: { id: string }) => failure.id,
       ),
     ).toContain("canonical-token-supply-quorum");
+
+    const currentMarketRpcPath =
+      "lib/market-data/current-market-rpc.server.ts";
+    const currentMarketRpcSource = readFileSync(
+      resolve(process.cwd(), currentMarketRpcPath),
+      "utf8",
+    );
+    for (const mutation of [
+      currentMarketRpcSource.replace(
+        '"https://rpc.mevblocker.io/"',
+        '"https://ethereum-rpc.publicnode.com/"',
+      ),
+      currentMarketRpcSource.replace(
+        "primary: websiteDeployment.rpcUrlSecondary",
+        "primary: websiteDeployment.rpcUrl",
+      ),
+      currentMarketRpcSource.replace(
+        'primary?.vendorGroup !== "quicknode"',
+        'primary?.vendorGroup !== "alchemy"',
+      ),
+      currentMarketRpcSource.replace(
+        "primary.endpointCommitment !== expectedQuickNodeCommitment",
+        "false",
+      ),
+    ]) {
+      const mutatedCurrentMarket =
+        alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+          process.cwd(),
+          { sourceOverrides: { [currentMarketRpcPath]: mutation } },
+        );
+      expect(
+        mutatedCurrentMarket.failures.map(
+          (failure: { id: string }) => failure.id,
+        ),
+      ).toContain("current-market-rpc-quorum");
+    }
 
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),

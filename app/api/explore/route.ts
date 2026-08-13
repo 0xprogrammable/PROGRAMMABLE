@@ -24,12 +24,15 @@ import {
 } from "../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
   "../../../lib/market-data/bitquery.server";
+import { currentMarketOnchainDeployment } from
+  "../../../lib/market-data/current-market-rpc.server";
 import { hydrateMissingCanonicalTokenSupplyV1 } from
   "../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntriesMarketIdentitiesV1 } from
   "../../../lib/market-data/explore-market-identities";
 import {
   CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+  attachBitqueryMarketDataToValuedEntries,
   settleCurrentEvidenceSnapshot,
   type CurrentEvidenceSnapshotOutcome,
   valueExploreEntriesWithCurrentEvidence,
@@ -391,7 +394,7 @@ async function valueExplorePage(input: Readonly<{
     sort: ExploreSort;
   }>;
   signal: AbortSignal;
-  deployment: ReturnType<typeof getAlchemyOnchainDeployment>;
+  deployment: ReturnType<typeof currentMarketOnchainDeployment> | null;
   operationalSnapshot: Promise<CurrentEvidenceSnapshotOutcome>;
   currentEvidenceDeadlineAt: number;
 }>) {
@@ -405,6 +408,40 @@ async function valueExplorePage(input: Readonly<{
         socials: null,
       });
   const entriesToValue = identityPage?.tokens ?? input.identityEntries;
+  if (requiresGlobalMarketRanking) {
+    const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(
+      entriesToValue,
+    );
+    const currentEntries = await valueExploreEntriesWithCurrentEvidence({
+      entries: hydratedEntries,
+      marketByToken: new Map(),
+      deployment: input.deployment,
+      operationalSnapshot: input.operationalSnapshot,
+      maximumValuationAgeMs: EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
+      now: new Date(),
+      requireCompleteLiquidityCoverage: true,
+      timeoutMs: Math.max(0, input.currentEvidenceDeadlineAt - Date.now()),
+    });
+    const currentPage = paginateExploreEntriesV1(currentEntries, {
+      ...input.options,
+      query: "",
+      socials: null,
+    });
+    const marketByToken = readBitqueryTokenMarketDataV1(
+      exploreEntriesMarketIdentitiesV1(currentPage.tokens),
+      { signal: input.signal },
+    );
+    const pageEntries = await attachBitqueryMarketDataToValuedEntries({
+      entries: currentPage.tokens as ValuedExploreEntry[],
+      marketByToken,
+      maximumValuationAgeMs: EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
+      now: new Date(),
+    });
+    return {
+      entries: currentEntries,
+      paginated: { ...currentPage, tokens: pageEntries },
+    };
+  }
   const marketByToken = readBitqueryTokenMarketDataV1(
     exploreEntriesMarketIdentitiesV1(entriesToValue),
     { signal: input.signal },
@@ -415,27 +452,19 @@ async function valueExplorePage(input: Readonly<{
   const valuedEntries = await valueExploreEntriesWithCurrentEvidence({
     entries: hydratedEntries,
     marketByToken,
-    deployment: input.deployment.status === "ready" ? input.deployment : null,
+    deployment: input.deployment,
     operationalSnapshot: input.operationalSnapshot,
     maximumValuationAgeMs: EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
     now: new Date(),
-    requireCompleteLiquidityCoverage:
-      requiresCompleteCurrentValuation(input.options.sort),
+    requireCompleteLiquidityCoverage: false,
     timeoutMs: Math.max(0, input.currentEvidenceDeadlineAt - Date.now()),
   });
-  if (identityPage !== null) {
-    return {
-      entries: valuedEntries,
-      paginated: { ...identityPage, tokens: valuedEntries },
-    };
+  if (identityPage === null) {
+    throw new Error("Explore identity page is unavailable");
   }
   return {
     entries: valuedEntries,
-    paginated: paginateExploreEntriesV1(valuedEntries, {
-      ...input.options,
-      query: "",
-      socials: null,
-    }),
+    paginated: { ...identityPage, tokens: valuedEntries },
   };
 }
 
@@ -476,13 +505,18 @@ export async function GET(request: NextRequest) {
       }),
     );
     const deployment = getAlchemyOnchainDeployment();
+    const currentMarketDeployment = deployment.status === "ready"
+      ? currentMarketOnchainDeployment(deployment)
+      : null;
     const currentEvidenceDeadlineAt =
       Date.now() + CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
     const requireCompleteCurrentValuation =
       requiresCompleteCurrentValuation(options.sort);
-    const operationalSnapshotRead = deployment.status === "ready"
+    const operationalSnapshotRead = currentMarketDeployment
       ? settleCurrentEvidenceSnapshot({
-          read: readVerifiedOperationalMarketSnapshot(deployment),
+          read: readVerifiedOperationalMarketSnapshot(
+            currentMarketDeployment,
+          ),
           requireComplete: requireCompleteCurrentValuation,
           timeoutMs: CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
         })
@@ -539,7 +573,7 @@ export async function GET(request: NextRequest) {
       identityEntries: requestedIdentityEntries,
       options,
       signal: request.signal,
-      deployment,
+      deployment: currentMarketDeployment,
       operationalSnapshot: operationalSnapshotOutcome,
       currentEvidenceDeadlineAt,
     });

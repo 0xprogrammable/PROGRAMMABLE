@@ -128,6 +128,13 @@ export function evaluateAlchemyExploreSourceContracts(
     "lib/market-data/bitquery.server.ts",
     sourceOverrides,
   );
+  const currentMarketRpcPath =
+    "lib/market-data/current-market-rpc.server.ts";
+  const currentMarketRpcSource = readSource(
+    rootDirectory,
+    currentMarketRpcPath,
+    sourceOverrides,
+  );
   const canonicalSupplyPath =
     "lib/market-data/canonical-token-supply.server.ts";
   const canonicalSupplySource = readSource(
@@ -267,7 +274,41 @@ export function evaluateAlchemyExploreSourceContracts(
       canonicalSupplySource.includes("if (!agreed) return entry;") &&
       routeSources
         .filter(({ id }) => ["explore", "token-detail"].includes(id))
-        .every(({ source }) => {
+        .every(({ id, source }) => {
+          if (id === "explore") {
+            const globalHydration = source.indexOf(
+              "const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(",
+            );
+            const globalValuation = source.indexOf(
+              "const currentEntries = await valueExploreEntriesWithCurrentEvidence({",
+              globalHydration,
+            );
+            const globalMarketRead = source.indexOf(
+              "const marketByToken = readBitqueryTokenMarketDataV1(",
+              globalValuation,
+            );
+            const pageMarketRead = source.indexOf(
+              "const marketByToken = readBitqueryTokenMarketDataV1(",
+              globalMarketRead + 1,
+            );
+            const pageHydration = source.indexOf(
+              "const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(",
+              pageMarketRead,
+            );
+            const pageValuation = source.indexOf(
+              "const valuedEntries = await valueExploreEntriesWithCurrentEvidence({",
+              pageHydration,
+            );
+            return globalHydration >= 0 &&
+              globalValuation > globalHydration &&
+              source.slice(globalValuation, globalMarketRead).includes(
+                "marketByToken: new Map()",
+              ) &&
+              globalMarketRead > globalValuation &&
+              pageMarketRead > globalMarketRead &&
+              pageHydration > pageMarketRead &&
+              pageValuation > pageHydration;
+          }
           const supplyHydration = source.indexOf(
             "hydrateMissingCanonicalTokenSupplyV1(",
           );
@@ -300,6 +341,48 @@ export function evaluateAlchemyExploreSourceContracts(
             (supplyCompletesFirst || inputsJoinBeforeValuation);
         }),
     "missing supply is hydrated on valuation-bearing routes only after fixed readers agree on block hash, decimals and total supply",
+  );
+
+  check(
+    "current-market-rpc-quorum",
+    currentMarketRpcSource.includes('import "server-only"') &&
+      currentMarketRpcSource.includes(
+        'const CURRENT_MARKET_RPC_SECONDARY = "https://rpc.mevblocker.io/";',
+      ) &&
+      currentMarketRpcSource.includes("createActionRpcQuorum({") &&
+      currentMarketRpcSource.includes(
+        "primary: websiteDeployment.rpcUrlSecondary",
+      ) &&
+      currentMarketRpcSource.includes(
+        "secondary: CURRENT_MARKET_RPC_SECONDARY",
+      ) &&
+      currentMarketRpcSource.includes("maximumProviders: 2") &&
+      currentMarketRpcSource.includes(
+        'primary?.vendorGroup !== "quicknode"',
+      ) &&
+      currentMarketRpcSource.includes(
+        'secondary?.vendorGroup !== "mevblocker"',
+      ) &&
+      currentMarketRpcSource.includes(
+        "primary.endpointCommitment !== expectedQuickNodeCommitment",
+      ) &&
+      routeSources
+        .filter(({ id }) => ["explore", "token-detail"].includes(id))
+        .every(
+          ({ source }) =>
+            source.includes("currentMarketOnchainDeployment(deployment)") &&
+            source.includes(
+              "readVerifiedOperationalMarketSnapshot(\n            currentMarketDeployment,",
+            ) &&
+            source.includes("deployment: currentMarketDeployment"),
+        ) &&
+      routeSources
+        .filter(({ id }) => ["token-chart", "token-list"].includes(id))
+        .every(
+          ({ source }) =>
+            !source.includes("currentMarketOnchainDeployment"),
+        ),
+    "current StateView and Chainlink evidence alone uses commitment-bound QuickNode plus fixed independent MEV Blocker",
   );
 
   for (const route of routeSources) {

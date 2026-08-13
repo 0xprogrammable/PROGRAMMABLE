@@ -22,7 +22,9 @@ const mocks = vi.hoisted(() => ({
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
+  currentMarketOnchainDeployment: vi.fn(),
   hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
+  attachBitqueryMarketDataToValuedEntries: vi.fn(),
   valueExploreEntriesWithCurrentEvidence: vi.fn(),
   settleCurrentEvidenceSnapshot: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
@@ -71,6 +73,11 @@ vi.mock("../lib/market-data/bitquery.server", () => ({
   readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
 }));
 
+vi.mock("../lib/market-data/current-market-rpc.server", () => ({
+  currentMarketOnchainDeployment:
+    mocks.currentMarketOnchainDeployment,
+}));
+
 vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
   hydrateMissingCanonicalTokenSupplyV1:
     mocks.hydrateMissingCanonicalTokenSupplyV1,
@@ -78,6 +85,8 @@ vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
 
 vi.mock("../lib/market-data/current-valuation.server", () => ({
   CURRENT_EVIDENCE_ROUTE_DEADLINE_MS: 4_500,
+  attachBitqueryMarketDataToValuedEntries:
+    mocks.attachBitqueryMarketDataToValuedEntries,
   settleCurrentEvidenceSnapshot: mocks.settleCurrentEvidenceSnapshot,
   valueExploreEntriesWithCurrentEvidence:
     mocks.valueExploreEntriesWithCurrentEvidence,
@@ -86,6 +95,7 @@ vi.mock("../lib/market-data/current-valuation.server", () => ({
 import {
   valuationSortValue,
   withBitqueryMarketData,
+  type ValuedExploreEntry,
 } from "../lib/explore-financial-data";
 
 import {
@@ -260,6 +270,11 @@ describe("Explore API Bitquery market boundary", () => {
       status: "ready",
       rpcUrlSecondary: "https://secondary.example",
     });
+    mocks.currentMarketOnchainDeployment.mockReturnValue({
+      status: "ready",
+      rpcUrl: "https://current-primary.example",
+      rpcUrlSecondary: "https://current-secondary.example",
+    });
     mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(snapshot);
     mocks.settleCurrentEvidenceSnapshot.mockImplementation(
       async ({ read }: { read: Promise<unknown> }) => await read,
@@ -277,6 +292,46 @@ describe("Explore API Bitquery market boundary", () => {
     mocks.hydrateMissingCanonicalTokenSupplyV1.mockImplementation(
       async (entries: readonly ExploreEntry[]) => [...entries],
     );
+    mocks.attachBitqueryMarketDataToValuedEntries.mockImplementation(
+      async ({
+        entries,
+        marketByToken,
+        maximumValuationAgeMs,
+        now,
+      }: {
+        entries: readonly ValuedExploreEntry[];
+        marketByToken: Promise<ReadonlyMap<string, TokenMarketDataV1>>;
+        maximumValuationAgeMs?: number;
+        now?: Date;
+      }) => {
+        const markets = await marketByToken;
+        return entries.map((entry) => {
+          const market = entry.tokenAddress
+            ? markets.get(entry.tokenAddress.toLowerCase())
+            : undefined;
+          if (!market) {
+            return entry.valuation.status === "available" &&
+                entry.valuation.source === "bitquery"
+              ? {
+                  ...entry,
+                  valuation: {
+                    status: "unavailable" as const,
+                    reason: "source-unavailable" as const,
+                  },
+                }
+              : entry;
+          }
+          const withMarketData = withBitqueryMarketData(entry, market, {
+            maximumValuationAgeMs,
+            now,
+          });
+          return entry.valuation.status === "available" &&
+              entry.valuation.source !== "bitquery"
+            ? { ...withMarketData, valuation: entry.valuation }
+            : withMarketData;
+        });
+      },
+    );
     mocks.valueExploreEntriesWithCurrentEvidence.mockImplementation(
       async ({
         entries,
@@ -289,7 +344,21 @@ describe("Explore API Bitquery market boundary", () => {
         maximumValuationAgeMs?: number;
         now?: Date;
       }) => {
-        const markets = await marketByToken;
+        const receivedMarkets = await marketByToken;
+        const markets = receivedMarkets.size > 0
+          ? receivedMarkets
+          : bitqueryMarketData(entries.flatMap((entry) =>
+              entry.exploreKind === "token"
+                ? [{
+                    chainId: "1" as const,
+                    tokenAddress: entry.tokenAddress,
+                    poolId: entry.poolId,
+                    quoteAddress:
+                      "0x0000000000000000000000000000000000000000" as const,
+                    protocol: "uniswap_v4" as const,
+                  }]
+                : []
+            ));
         return entries.map((entry) => {
           const market = entry.tokenAddress
             ? markets.get(entry.tokenAddress.toLowerCase())
@@ -631,6 +700,26 @@ describe("Explore API Bitquery market boundary", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mocks.currentMarketOnchainDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "ready",
+        rpcUrlSecondary: "https://secondary.example",
+      }),
+    );
+    expect(mocks.readVerifiedOperationalMarketSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rpcUrl: "https://current-primary.example",
+        rpcUrlSecondary: "https://current-secondary.example",
+      }),
+    );
+    expect(mocks.valueExploreEntriesWithCurrentEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deployment: expect.objectContaining({
+          rpcUrl: "https://current-primary.example",
+          rpcUrlSecondary: "https://current-secondary.example",
+        }),
+      }),
+    );
     expect(body).toMatchObject({
       status: "ready",
       page: 1,
@@ -715,6 +804,67 @@ describe("Explore API Bitquery market boundary", () => {
     expect(
       mocks.readBitqueryTokenMarketDataV1.mock.calls[0]?.[0],
     ).toHaveLength(30);
+  });
+
+  it("sorts global current evidence before reading Bitquery for only the page", async () => {
+    let currentInputEntries: readonly ExploreEntry[] = [];
+    let resolveCurrent!: (value: ValuedExploreEntry[]) => void;
+    mocks.valueExploreEntriesWithCurrentEvidence.mockImplementationOnce(
+      ({
+        entries,
+        marketByToken,
+        requireCompleteLiquidityCoverage,
+      }: {
+        entries: readonly ExploreEntry[];
+        marketByToken: ReadonlyMap<string, TokenMarketDataV1>;
+        requireCompleteLiquidityCoverage: boolean;
+      }) => {
+        currentInputEntries = entries;
+        expect(marketByToken.size).toBe(0);
+        expect(requireCompleteLiquidityCoverage).toBe(true);
+        return new Promise<ValuedExploreEntry[]>((resolve) => {
+          resolveCurrent = resolve;
+        });
+      },
+    );
+
+    const responseRead = GET(
+      new NextRequest("http://localhost/api/explore?sort=market-cap"),
+    );
+    await vi.waitFor(() => {
+      expect(mocks.valueExploreEntriesWithCurrentEvidence).toHaveBeenCalledOnce();
+    });
+    expect(currentInputEntries).toHaveLength(30);
+    expect(mocks.readBitqueryTokenMarketDataV1).not.toHaveBeenCalled();
+
+    resolveCurrent(currentInputEntries.map((entry) => ({
+      ...entry,
+      valuation: {
+        status: "unavailable" as const,
+        reason: "liquidity-unavailable" as const,
+      },
+    })));
+    const response = await responseRead;
+
+    expect(response.status).toBe(200);
+    expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledOnce();
+    expect(
+      mocks.readBitqueryTokenMarketDataV1.mock.calls[0]?.[0],
+    ).toHaveLength(9);
+  });
+
+  it("fails a global current-evidence read before starting Bitquery", async () => {
+    mocks.valueExploreEntriesWithCurrentEvidence.mockRejectedValueOnce(
+      new Error("Current market evidence reference head is unavailable"),
+    );
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=market-cap"),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(mocks.readBitqueryTokenMarketDataV1).not.toHaveBeenCalled();
   });
 
   it.each([

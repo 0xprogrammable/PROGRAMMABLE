@@ -19,9 +19,9 @@ import {
   fetchVercelDeployment,
   verifyLiveCacheAndKeyContracts,
 } from "./read-model-live-verifier.mjs";
-import { verifyBitqueryGoldenMarketParityV1 } from "./bitquery-golden-market-parity.mjs";
+import { verifyBitqueryGoldenMarketExecutionV1 } from "./bitquery-golden-market-parity.mjs";
 import {
-  verifyBitqueryHistoricalGoldenReleaseV1,
+  verifyBitqueryHistoricalGoldenReleaseV2,
 } from "./bitquery-historical-release-gate.mjs";
 
 const HEALTH_PATH = "/api/ops/health";
@@ -1250,12 +1250,11 @@ export async function verifyPostPromotion(input) {
   let goldenParity = null;
   let historicalGoldenRelease = null;
   try {
-    goldenParity = await verifyBitqueryGoldenMarketParityV1({
+    goldenParity = await verifyBitqueryGoldenMarketExecutionV1({
       token: responses[4].body?.token,
       fetchImpl,
-      rpcUrls: marketParityRpcUrls,
     });
-    historicalGoldenRelease = verifyBitqueryHistoricalGoldenReleaseV1({
+    historicalGoldenRelease = verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: responses[4].body?.token,
       chart: responses[5].body,
       parity: goldenParity,
@@ -1266,9 +1265,9 @@ export async function verifyPostPromotion(input) {
   checks.push({
     id: "production-bitquery-golden-independent-parity",
     condition: historicalGoldenRelease?.schemaVersion ===
-        "programmable.bitquery-historical-release.v1" &&
+        "programmable.bitquery-historical-release.v2" &&
       historicalGoldenRelease.confirmations >= 12,
-    detail: "the direct PCAN history matches two independent same-block price, supply and liquidity reads",
+    detail: "the direct PCAN history matches two fixed archive receipts and same-block Chainlink execution pricing",
   });
 
   if (input.evidencePath) {

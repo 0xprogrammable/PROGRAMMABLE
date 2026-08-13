@@ -8,7 +8,9 @@ const MAXIMUM_FUTURE_SKEW_MS = 60_000;
 const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000;
 const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000;
 const MINIMUM_CONFIRMATIONS = 12;
-const MAXIMUM_DEVIATION_BPS = 1_500;
+const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25;
+const MAINNET_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
+const MAINNET_ETH_USD_FEED = "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419";
 
 function validMarketTime(value, nowMs) {
   const parsed = Date.parse(value ?? "");
@@ -19,14 +21,11 @@ function positiveInteger(value) {
   return typeof value === "string" && /^[1-9][0-9]*$/u.test(value);
 }
 
-function positiveDecimalToWad(value) {
-  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,18}))?$/u.exec(
-    String(value ?? ""),
-  );
-  if (!match) return null;
-  const wad = BigInt(match[1]) * 10n ** 18n +
-    BigInt((match[2] ?? "").slice(0, 18).padEnd(18, "0") || "0");
-  return wad > 0n ? wad : null;
+function positiveDecimal(value) {
+  return typeof value === "string" &&
+    value.length <= 160 &&
+    /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u.test(value) &&
+    !/^0(?:\.0+)?$/u.test(value);
 }
 
 function exactGoldenPool(token) {
@@ -66,7 +65,7 @@ function currentMarketTime(value, nowMs) {
  * pool identity and is capped at 96 hours. That fixed window keeps this
  * historical correctness canary finite; it is never evidence that the current
  * provider path is fresh. Deferral is not acceptance: the release must
- * subsequently pass verifyBitqueryHistoricalGoldenReleaseV1.
+ * subsequently pass verifyBitqueryHistoricalGoldenReleaseV2.
  */
 export function classifyBitqueryStaleMarketReleaseV1(input) {
   const nowMs = input?.nowMs ?? Date.now();
@@ -100,15 +99,15 @@ export function classifyBitqueryStaleMarketReleaseV1(input) {
 }
 
 /**
- * Resolve the direct-address PCAN canary after the independent parity read.
+ * Resolve the direct-address PCAN canary after the independent execution read.
  * PCAN is intentionally absent from public Explore discovery. Its detail,
- * exact-pool valuation, chart observation and parity receipt are bound to one
+ * exact-pool valuation, chart observation and execution receipt are bound to one
  * token, pool, block, observation time and FDV. The chart value remains an
  * explicitly labelled period median and is never treated as the latest trade.
  * The only older-than-24h value admitted by
  * this function is the exact PCAN candidate classified above.
  */
-export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
+export function verifyBitqueryHistoricalGoldenReleaseV2(input) {
   const nowMs = input?.nowMs ?? Date.now();
   const detailToken = input?.detailToken;
   const chart = input?.chart;
@@ -124,7 +123,7 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
   const expectedPrice = positiveInteger(trade?.priceUsdWad)
     ? BigInt(trade.priceUsdWad)
     : null;
-  const periodMedian = positiveDecimalToWad(
+  const periodMedianIsPositive = positiveDecimal(
     lastPoint?.priceUsd ?? lastPoint?.priceQuote,
   );
   let temporalStatus;
@@ -185,44 +184,70 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
     Date.parse(lastPoint.observedAt) > Date.parse(lastPoint.bucketEnd) ||
     lastPoint?.blockNumber !== expectedBlock ||
     expectedPrice === null ||
-    periodMedian === null ||
-    parity?.schemaVersion !== "programmable.bitquery-golden-market-parity.v1" ||
+    !periodMedianIsPositive ||
+    parity?.schemaVersion !== "programmable.bitquery-golden-market-execution.v1" ||
+    parity.providerCount !== 2 ||
     parity.tokenAddress !== GOLDEN_TOKEN_ADDRESS ||
     parity.poolId !== GOLDEN_POOL_ID ||
+    parity.quoteAddress !== GOLDEN_QUOTE_ADDRESS ||
+    parity.poolManager !== MAINNET_POOL_MANAGER ||
+    parity.transactionHash !== trade?.transactionHash?.toLowerCase() ||
+    parity.transactionIndex !== trade?.transactionIndex ||
+    parity.bitqueryTradeOrdinal !== trade?.logIndex ||
+    !Number.isSafeInteger(parity.receiptLogIndex) ||
+    parity.receiptLogIndex < 0 ||
     parity.blockNumber !== expectedBlock ||
     parity.blockTime !== trade?.time ||
     !/^0x[0-9a-f]{64}$/u.test(parity.blockHash ?? "") ||
-    !positiveInteger(parity.historicalPoolLiquidity) ||
+    parity.executionTokenSide !== trade?.tokenSide ||
+    !/^-?[1-9][0-9]*$/u.test(parity.executionAmount0 ?? "") ||
+    !positiveInteger(parity.executionAmount1) ||
+    !positiveInteger(parity.executionNativeAmountWei) ||
+    !positiveInteger(parity.executionTokenAmountRaw) ||
+    parity.executionPriceQuoteWad !== trade?.priceQuoteWad ||
+    !positiveInteger(parity.executionSqrtPriceX96) ||
+    !positiveInteger(parity.executionLiquidity) ||
+    parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED ||
+    !Number.isSafeInteger(parity.chainlink?.decimals) ||
+    parity.chainlink.decimals < 0 ||
+    parity.chainlink.decimals > 36 ||
+    !positiveInteger(parity.chainlink?.roundId) ||
+    !positiveInteger(parity.chainlink?.answer) ||
+    !positiveInteger(parity.chainlink?.updatedAt) ||
+    !positiveInteger(parity.chainlink?.answeredInRound) ||
+    BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId) ||
     !Number.isSafeInteger(parity.confirmations) ||
     parity.confirmations < MINIMUM_CONFIRMATIONS ||
     parity.bitqueryFdvUsdWad !== expectedValue ||
-    !positiveInteger(parity.onchainFdvUsdWad) ||
-    !Number.isSafeInteger(parity.deviationBps) ||
-    parity.deviationBps < 0 ||
-    parity.deviationBps > MAXIMUM_DEVIATION_BPS
+    !positiveInteger(parity.chainlinkExecutionFdvUsdWad) ||
+    !Number.isSafeInteger(parity.executionUsdDeviationBps) ||
+    parity.executionUsdDeviationBps < 0 ||
+    parity.executionUsdDeviationBps > MAXIMUM_EXECUTION_USD_DEVIATION_BPS
   ) {
     throw new Error("historical PCAN release evidence is not exactly bound");
   }
 
   return Object.freeze({
-    schemaVersion: "programmable.bitquery-historical-release.v1",
+    schemaVersion: "programmable.bitquery-historical-release.v2",
     tokenAddress: GOLDEN_TOKEN_ADDRESS,
     poolId: GOLDEN_POOL_ID,
+    transactionHash: parity.transactionHash,
+    receiptLogIndex: parity.receiptLogIndex,
     blockNumber: expectedBlock,
     asOfTime: expectedTime,
     bitqueryFdvUsdWad: expectedValue,
-    historicalPoolLiquidity: parity.historicalPoolLiquidity,
+    chainlinkExecutionFdvUsdWad: parity.chainlinkExecutionFdvUsdWad,
     confirmations: parity.confirmations,
     temporalStatus,
   });
 }
 
-export const BITQUERY_HISTORICAL_RELEASE_V1 = Object.freeze({
+export const BITQUERY_HISTORICAL_RELEASE_V2 = Object.freeze({
   tokenAddress: GOLDEN_TOKEN_ADDRESS,
   poolId: GOLDEN_POOL_ID,
   quoteAddress: GOLDEN_QUOTE_ADDRESS,
   maximumStaleAgeMs: MAXIMUM_STALE_AGE_MS,
   maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS,
   minimumConfirmations: MINIMUM_CONFIRMATIONS,
-  maximumDeviationBps: MAXIMUM_DEVIATION_BPS,
+  maximumExecutionUsdDeviationBps: MAXIMUM_EXECUTION_USD_DEVIATION_BPS,
 });
