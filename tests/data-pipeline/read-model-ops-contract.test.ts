@@ -1043,7 +1043,6 @@ describe("read-model operations source contract", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const bitqueryStep =
       "      - name: Smoke staged public market APIs\n" +
-      "        if: needs.release-gate.outputs.verified_read_model == 'true'\n" +
       "        env:\n" +
       "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
@@ -1060,6 +1059,36 @@ describe("read-model operations source contract", () => {
     expect(unsafeWorkflow).not.toBe(
       readFileSync(resolve(ROOT, workflowPath), "utf8"),
     );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it.each([
+    [
+      "uses alternate YAML condition spacing",
+      "        if : needs.release-gate.outputs.verified_read_model == 'true'\n",
+    ],
+    ["masks failures", "        continue-on-error: true\n"],
+  ])("fails closed when staged market smoke %s", (_label, unsafeControl) => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unconditionalStep =
+      "      - name: Smoke staged public market APIs\n" +
+      "        env:\n";
+    const conditionalStep =
+      "      - name: Smoke staged public market APIs\n" +
+      unsafeControl +
+      "        env:\n";
+    const unsafeWorkflow = workflow.replace(unconditionalStep, conditionalStep);
+    expect(unsafeWorkflow).not.toBe(workflow);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),

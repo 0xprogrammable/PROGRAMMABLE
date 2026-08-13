@@ -865,9 +865,10 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
 ]);
 const STAGED_DURABLE_REFRESH_SCRIPT_SHA256 =
   "da794e41cc86d8d36ff8d945cba279fa0282477aaaecad0259efab9411023701";
+const STAGED_MARKET_SMOKE_WORKFLOW_STEP_SHA256 =
+  "4a11231a2401a72cb90c6545b6d0dc8ae014c80f0212a0121e84316c372eb962";
 const STAGED_DURABLE_REFRESH_WORKFLOW_STEP = [
   "      - name: Refresh and prove exact staged durable read model",
-  "        if: needs.release-gate.outputs.verified_read_model == 'true'",
   "        env:",
   "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
   "          CRON_SECRET: ${{ secrets.CRON_SECRET }}",
@@ -2213,25 +2214,26 @@ export function evaluateReadModelOperationsSourceContracts(
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
   const stagedBitquerySmoke = deployWorkflow.indexOf(
-    "Smoke staged public market APIs",
+    "      - name: Smoke staged public market APIs",
   );
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
-    "Record registry identity and combined market path",
+    "      - name: Record registry identity and combined market path",
+    stagedBitquerySmoke + 1,
   );
   const stagedBitquerySmokeBlock =
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
-      ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
+      ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd).trimEnd()
       : "";
   check(
     "ops-protected-bitquery-stage-smoke",
     stagedBitquerySmoke > stagedWakeGateEnd &&
+      sha256(stagedBitquerySmokeBlock) ===
+      STAGED_MARKET_SMOKE_WORKFLOW_STEP_SHA256 &&
       includesEverySourceFragment(
         stagedBitquerySmokeBlock,
         STAGED_MARKET_EVIDENCE_SOURCE_GUARDS,
       ) &&
-      stagedBitquerySmokeBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true'",
-      ) &&
+      !/^ {8}(?:if|continue-on-error)\s*:/mu.test(stagedBitquerySmokeBlock) &&
       stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&

@@ -383,6 +383,14 @@ describe("exact staged durable refresh source contract", () => {
 
   it.each([
     [
+      "makes the staged refresh conditional on latest-commit scope",
+      (step: string) =>
+        step.replace(
+          "        env:\n",
+          "        if: needs.release-gate.outputs.verified_read_model == 'true'\n        env:\n",
+        ),
+    ],
+    [
       "drops the cron secret",
       (step: string) =>
         step.replace("          CRON_SECRET: ${{ secrets.CRON_SECRET }}\n", ""),

@@ -567,7 +567,6 @@ jobs:
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
 
       - name: Refresh and prove exact staged durable read model
-        if: needs.release-gate.outputs.verified_read_model == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -582,7 +581,6 @@ jobs:
           --git-head "$EXPECTED_GIT_HEAD"
 
       - name: Smoke staged public market APIs
-        if: needs.release-gate.outputs.verified_read_model == 'true'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -1985,11 +1983,11 @@ jobs:
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Read model: ${{ steps.read-model-policy.outputs.mode }}"
-            echo "- Read-model verification required by this commit: \`$READ_MODEL_REQUIRED\`"
+            echo "- Read-model source Verify lane required by this commit: \`$READ_MODEL_REQUIRED\`"
             echo
             echo "Stage-only: no production promotion was attempted."
             if [ "$READ_MODEL_REQUIRED" != "true" ]; then
-              echo "This source-only UI/docs candidate leaves read-model bytes unchanged; the provider-specific release lane was not rerun."
+              echo "This source-only UI/docs candidate leaves read-model bytes unchanged; exact staged durable refresh and public market smoke still ran."
               echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."
             elif [ "$POLICY_MODE" = "indexed-or-shadow" ]; then
               echo "The manual operator must next capture and verify the DB-authored real-block SLA attestation, reverify this exact staged binding, promote this exact deployment ID, and run the post-promotion binding gate."
