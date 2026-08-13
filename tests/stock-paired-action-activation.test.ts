@@ -307,7 +307,7 @@ describe("Stock-Paired action identity activation", () => {
     );
     vi.stubEnv(
       "ETHEREUM_RPC_URL_B",
-      "https://stock-node.quiknode.pro/quicknode-stock-key/",
+      "https://stock-node.ethereum-mainnet.quiknode.pro/quicknode-stock-key/",
     );
     mocks.lookup.mockResolvedValue(actionReward);
     mocks.readLegacy.mockResolvedValue(legacyModel);

@@ -19,9 +19,9 @@ const ALCHEMY_MAINNET_B =
 const ALCHEMY_SEPOLIA =
   "https://eth-sepolia.g.alchemy.com/v2/alchemy-sepolia-key";
 const QUICKNODE_MAINNET =
-  "https://quiet-mainnet.quiknode.pro/quicknode-key-one/";
+  "https://quiet-mainnet.ethereum-mainnet.quiknode.pro/quicknode-key-one/";
 const QUICKNODE_SEPOLIA_ALIAS =
-  "https://quiet-sepolia.quiknode.pro/quicknode-key-two/";
+  "https://quiet-sepolia.ethereum-mainnet.quiknode.pro/quicknode-key-two/";
 const INFURA_MAINNET_A =
   "https://mainnet.infura.io/v3/infura-key-one";
 const INFURA_MAINNET_B =

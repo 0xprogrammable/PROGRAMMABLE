@@ -70,8 +70,8 @@ function event(
       releaseVersion,
       payloadHash: PAYLOAD_HASH,
       rawLogCommitment: `0x${"aa".repeat(32)}`,
-      providerIdentities: ["alchemy", "quicknode"],
-      providerVendorGroups: ["alchemy", "quicknode"],
+      providerIdentities: ["drpc", "quicknode"],
+      providerVendorGroups: ["drpc", "quicknode"],
       providerEndpointCommitments: [
         `0x${"ab".repeat(32)}`,
         `0x${"ac".repeat(32)}`,

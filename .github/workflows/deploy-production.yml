@@ -372,8 +372,8 @@ jobs:
       - name: Resolve read-model release policy
         id: read-model-policy
         env:
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}
         run: >-
           npm run perf:read-model:deploy-policy --
           --env-file .vercel/.env.production.local
@@ -389,10 +389,10 @@ jobs:
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT="$PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT" --env PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT="$PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT" --token="$VERCEL_TOKEN")"
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT="$PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT" --env PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT="$PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT" --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)
@@ -521,8 +521,8 @@ jobs:
       - name: Attest exact staged release policy
         id: release-attestation
         env:
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}
           STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           POLICY_MODE: ${{ steps.read-model-policy.outputs.mode }}
@@ -583,6 +583,9 @@ jobs:
           } = await import(
             "./scripts/perf/bitquery-historical-release-gate.mjs"
           );
+          const { runtimeProductionProviderEndpoints } = await import(
+            "./scripts/perf/read-model-provider-binding.mjs"
+          );
           const goldenTokenAddress =
             "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
           const goldenPoolId =
@@ -603,10 +606,8 @@ jobs:
             "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
           const currentPublicMarketSource =
             "stateview-chainlink+official-uniswap-v4-subgraph+bitquery";
-          const independentRpcUrls = Object.freeze([
-            "https://ethereum-rpc.publicnode.com",
-            "https://rpc.mevblocker.io",
-          ]);
+          const independentRpcUrls =
+            runtimeProductionProviderEndpoints(process.env);
           const minimumPublicFdvLiquidityUsdWad =
             10_000n * 10n ** 18n;
           const marketCapPageSize = 100;
@@ -1732,6 +1733,7 @@ jobs:
           }
           const goldenParity = await verifyBitqueryGoldenMarketExecutionV1({
             token: goldenDetail.token,
+            rpcUrls: independentRpcUrls,
           });
           const goldenChart = await requestJson(
             `/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,
@@ -1872,7 +1874,7 @@ jobs:
           NODE
 
       - name: Record registry identity and combined market path
-        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'alchemy-only'
+        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'direct-rpc'
         run: |
           {
             echo "## Read-model release policy"
@@ -1913,8 +1915,8 @@ jobs:
           PROGRAMMABLE_READ_MODEL_PERF_EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
           PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npm run perf:read-model:gate
 
@@ -1971,7 +1973,7 @@ jobs:
               echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."
             elif [ "$POLICY_MODE" = "indexed-or-shadow" ]; then
               echo "The manual operator must next capture and verify the DB-authored real-block SLA attestation, reverify this exact staged binding, promote this exact deployment ID, and run the post-promotion binding gate."
-            elif [ "$POLICY_MODE" = "alchemy-only" ]; then
+            elif [ "$POLICY_MODE" = "direct-rpc" ]; then
               echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."
             else
               echo "Unrecognized staged release policy mode" >&2

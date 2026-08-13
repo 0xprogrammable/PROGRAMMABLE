@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import * as deployPolicy from "../../scripts/perf/read-model-deploy-policy.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { runtimeProductionProviderBindingsFromUrls } from "../../scripts/perf/read-model-provider-binding.mjs";
+import { PRODUCTION_RPC_ENV, runtimeProductionProviderBindingsFromUrls } from "../../scripts/perf/read-model-provider-binding.mjs";
 
 const {
   createStagedReleaseAttestation,
@@ -25,19 +25,24 @@ const {
 } = deployPolicy;
 
 const ROOT = process.cwd();
-const ALCHEMY_URL = "https://eth-mainnet.g.alchemy.com/v2/abcdefgh";
-const QUICKNODE_URL = "https://programmable.quiknode.pro/abcdefgh";
+const DRPC_URL = "https://lb.drpc.live/ethereum/abcdefgh";
+const QUICKNODE_URL = "https://programmable.ethereum-mainnet.quiknode.pro/abcdefgh";
 const EXPECTATIONS = readReleasePolicyExpectations(ROOT);
-const PROVIDER_BINDINGS = runtimeProductionProviderBindingsFromUrls({
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
-  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
+const PROVIDER_ENVIRONMENT = Object.freeze({
+  [PRODUCTION_RPC_ENV.primaryProvider]: "drpc",
+  [PRODUCTION_RPC_ENV.primaryUrl]: DRPC_URL,
+  [PRODUCTION_RPC_ENV.secondaryProvider]: "quicknode",
+  [PRODUCTION_RPC_ENV.secondaryUrl]: QUICKNODE_URL,
 });
+const PROVIDER_BINDINGS = runtimeProductionProviderBindingsFromUrls(
+  PROVIDER_ENVIRONMENT,
+);
 const COMMITMENTS = Object.freeze({
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+  [PRODUCTION_RPC_ENV.primaryCommitment]:
     PROVIDER_BINDINGS.find(
-      ({ vendorGroup }: { vendorGroup: string }) => vendorGroup === "alchemy",
+      ({ vendorGroup }: { vendorGroup: string }) => vendorGroup === "drpc",
     ).endpointCommitment,
-  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+  [PRODUCTION_RPC_ENV.secondaryCommitment]:
     PROVIDER_BINDINGS.find(
       ({ vendorGroup }: { vendorGroup: string }) => vendorGroup === "quicknode",
     ).endpointCommitment,
@@ -57,11 +62,11 @@ function environmentFile(input: {
   nonSecret?: Partial<Record<string, string | undefined>>;
   serverSecrets?: Partial<Record<string, string | undefined>>;
   includeRuntimeProviders?: boolean;
-  alchemyRuntime?: string | null;
+  drpcRuntime?: string | null;
 } = {}) {
-  const alchemyRuntime = input.alchemyRuntime === undefined
-    ? ALCHEMY_URL
-    : input.alchemyRuntime;
+  const drpcRuntime = input.drpcRuntime === undefined
+    ? DRPC_URL
+    : input.drpcRuntime;
   const values: Record<string, string | undefined> = {
     ...Object.fromEntries(
       RELEASE_GATED_FLAG_NAMES.map((name: string) => [name, "false"]),
@@ -70,19 +75,20 @@ function environmentFile(input: {
       WORKER_ACTIVATION_FLAG_NAMES.map((name: string) => [name, "false"]),
     ),
     ...EXPECTATIONS,
+    ...COMMITMENTS,
     ...Object.fromEntries(
       REQUIRED_SERVER_SECRET_ENV_NAMES.map((name: string) => [
         name,
         name === BITQUERY_MARKET_SECRET_ENV_NAME ? "[Sensitive]" : "",
       ]),
     ),
-    ...(alchemyRuntime === null
+    [PRODUCTION_RPC_ENV.primaryProvider]: "drpc",
+    [PRODUCTION_RPC_ENV.secondaryProvider]: "quicknode",
+    ...(drpcRuntime === null
       ? {}
-      : { PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: alchemyRuntime }),
-    ...(input.includeRuntimeProviders
-      ? {
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
-        }
+      : { [PRODUCTION_RPC_ENV.primaryUrl]: drpcRuntime }),
+    ...((input.includeRuntimeProviders ?? true)
+      ? { [PRODUCTION_RPC_ENV.secondaryUrl]: QUICKNODE_URL }
       : {}),
     ...input.indexed,
     ...input.workers,
@@ -99,20 +105,21 @@ describe("read-model production deploy policy", () => {
   it("attests current Vercel empty sensitive values from exact production metadata", () => {
     const contents = environmentFile({
       workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
-      alchemyRuntime: null,
+      drpcRuntime: null,
+      includeRuntimeProviders: false,
       serverSecrets: { [BITQUERY_MARKET_SECRET_ENV_NAME]: "" },
     }).concat(
-      "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL=",
+      "\nPROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL=\nPROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL=",
     );
     const metadata = JSON.stringify({
       envs: [
         {
-          key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+          key: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
           type: "sensitive",
           target: ["production"],
         },
         {
-          key: "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+          key: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
           type: "sensitive",
           target: ["production"],
         },
@@ -124,7 +131,7 @@ describe("read-model production deploy policy", () => {
       metadata,
     );
     expect(materialized).toContain(
-      'PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[Sensitive]"',
+      'PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL="[Sensitive]"',
     );
     expect(materialized).toContain(
       `${QUICKNODE_STREAM_SECRET_ENV_NAME}="[Sensitive]"`,
@@ -139,23 +146,23 @@ describe("read-model production deploy policy", () => {
   });
 
   it("rejects missing, non-sensitive, preview or value-bearing Vercel metadata", () => {
-    const contents = environmentFile({ alchemyRuntime: null }).concat(
-      "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=",
+    const contents = environmentFile({ drpcRuntime: null }).concat(
+      "\nPROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL=",
     );
     for (const entry of [
       undefined,
       {
-        key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        key: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
         type: "plain",
         target: ["production"],
       },
       {
-        key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        key: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
         type: "sensitive",
         target: ["preview"],
       },
       {
-        key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        key: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
         type: "sensitive",
         target: ["production"],
         value: "must-not-be-present",
@@ -242,16 +249,16 @@ describe("read-model production deploy policy", () => {
     );
     expect(materialized).toContain('BITQUERY_OAUTH_TOKEN="[Sensitive]"');
     expect(
-      evaluateReadModelDeployPolicy(materialized, {}, EXPECTATIONS),
+      evaluateReadModelDeployPolicy(materialized, COMMITMENTS, EXPECTATIONS),
     ).toMatchObject({
-      mode: "alchemy-only",
+      mode: "direct-rpc",
       policyReady: true,
       invalidServerSecretEnvironmentNames: [],
     });
 
     const missingRuntimeToken = evaluateReadModelDeployPolicy(
       withoutBitqueryLine,
-      {},
+      COMMITMENTS,
       EXPECTATIONS,
     );
     expect(missingRuntimeToken.policyReady).toBe(false);
@@ -276,16 +283,16 @@ describe("read-model production deploy policy", () => {
     ).toBe(contents);
   });
 
-  it("binds Alchemy-only to exact false indexed flags and disabled workers", () => {
+  it("binds dRPC-only to exact false indexed flags and disabled workers", () => {
     const policy = evaluateReadModelDeployPolicy(
       environmentFile({
         workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: undefined },
       }),
-      {},
+      COMMITMENTS,
       EXPECTATIONS,
     );
     expect(policy).toMatchObject({
-      mode: "alchemy-only",
+      mode: "direct-rpc",
       evidenceRequired: false,
       policyReady: true,
       commitmentsReady: true,
@@ -299,35 +306,40 @@ describe("read-model production deploy policy", () => {
     });
   });
 
-  it("requires one exact Alchemy Mainnet RPC for Alchemy-only", () => {
-    for (const alchemyRuntime of [
+  it("requires one exact dRPC Mainnet RPC for dRPC-only", () => {
+    for (const drpcRuntime of [
       null,
       "",
-      "https://programmable.quiknode.pro/abcdefgh",
-      "https://eth-mainnet.g.alchemy.com/v2/docs-demo",
+      "https://programmable.ethereum-mainnet.quiknode.pro/abcdefgh",
+      "https://lb.drpc.live/ethereum/docs-demo",
     ]) {
       const policy = evaluateReadModelDeployPolicy(
-        environmentFile({ alchemyRuntime }),
-        {},
+        environmentFile({ drpcRuntime }),
+        COMMITMENTS,
         EXPECTATIONS,
       );
       expect(policy).toMatchObject({
-        mode: "alchemy-only",
+        mode: "direct-rpc",
         policyReady: false,
-        invalidAlchemyRuntimeEnvironmentNames: [
-          "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-        ],
       });
+      expect(policy.invalidProductionRpcRuntimeEnvironmentNames).toContain(
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+      );
     }
 
     expect(
       evaluateReadModelDeployPolicy(
-        environmentFile({ alchemyRuntime: "[Sensitive]" }),
-        {},
+        environmentFile({
+          drpcRuntime: "[Sensitive]",
+          includeRuntimeProviders: false,
+        }).concat(
+          '\nPROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL="[Sensitive]"',
+        ),
+        COMMITMENTS,
         EXPECTATIONS,
       ),
     ).toMatchObject({
-      mode: "alchemy-only",
+      mode: "direct-rpc",
       policyReady: true,
       runtimeProviderBinding: "deferred-stage",
     });
@@ -424,7 +436,7 @@ describe("read-model production deploy policy", () => {
       .join("\n");
     const missing = evaluateReadModelDeployPolicy(
       missingIndexedFlag,
-      {},
+      COMMITMENTS,
       EXPECTATIONS,
     );
     expect(missing.policyReady).toBe(false);
@@ -463,7 +475,7 @@ describe("read-model production deploy policy", () => {
   it("creates a canonical non-secret attestation for the exact staged target", () => {
     const policy = evaluateReadModelDeployPolicy(
       environmentFile(),
-      {},
+      COMMITMENTS,
       EXPECTATIONS,
     );
     const result = createStagedReleaseAttestation({
@@ -473,7 +485,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
       productionOrigin: "https://programmable.market",
-      expectedMode: "alchemy-only",
+      expectedMode: "direct-rpc",
       timestamp: "2026-08-01T12:34:56.000Z",
     });
     expect(JSON.parse(result.json)).toEqual({
@@ -483,7 +495,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
       productionOrigin: "https://programmable.market",
-      policyMode: "alchemy-only",
+      policyMode: "direct-rpc",
       indexedFlags: policy.indexedFlags,
       workerActivationFlags: policy.workerActivationFlags,
       timestamp: "2026-08-01T12:34:56.000Z",
@@ -575,7 +587,7 @@ describe("read-model production deploy policy", () => {
   it("rejects an attestation for a different mode, target or project", () => {
     const policy = evaluateReadModelDeployPolicy(
       environmentFile(),
-      {},
+      COMMITMENTS,
       EXPECTATIONS,
     );
     const valid = {
@@ -585,7 +597,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
       productionOrigin: "https://programmable.market",
-      expectedMode: "alchemy-only",
+      expectedMode: "direct-rpc",
       timestamp: "2026-08-01T12:34:56.000Z",
     };
     expect(() =>
@@ -654,7 +666,7 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain("attestation_sha256");
     expect(workflow).toContain("Smoke staged public market APIs");
     expect(workflow).toContain(
-      "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'alchemy-only'",
+      "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'direct-rpc'",
     );
     expect(workflow).toContain(
       '"x-vercel-protection-bypass": automationBypassSecret',
@@ -673,7 +685,7 @@ describe("read-model production deploy policy", () => {
       'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
     );
     expect(workflow).toContain("rpcProviders: null");
-    expect(workflow).not.toContain("alchemyIdentityContract");
+    expect(workflow).not.toContain("drpcIdentityContract");
     expect(workflow).toContain('"x-programmable-market-source",');
     expect(workflow).toContain('"x-programmable-price-source",');
     expect(workflow).toContain('"x-programmable-market-as-of",');
@@ -688,7 +700,7 @@ describe("read-model production deploy policy", () => {
       "!headerMatches(priceSource, contract.priceSources)",
     );
     expect(workflow).not.toContain(
-      'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
+      'response.headers.get("x-programmable-rpc-provider") !== "drpc"',
     );
     expect(workflow).not.toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain(
@@ -827,25 +839,22 @@ describe("read-model production deploy policy", () => {
       workflow.indexOf("Smoke staged public market APIs"),
       workflow.indexOf("Record registry identity and combined market path"),
     );
-    expect(bitquerySmoke).toContain(
-      '"https://ethereum-rpc.publicnode.com"',
-    );
-    expect(bitquerySmoke).toContain(
-      '"https://rpc.mevblocker.io"',
-    );
+    expect(bitquerySmoke).toContain("runtimeProductionProviderEndpoints");
+    expect(bitquerySmoke).not.toContain("ethereum-rpc.publicnode.com");
+    expect(bitquerySmoke).not.toContain("rpc.mevblocker.io");
     expect(bitquerySmoke).toContain("rpcUrls: independentRpcUrls");
     expect(bitquerySmoke).not.toContain("MAINNET_RPC_URL_A");
     expect(bitquerySmoke).not.toContain("MAINNET_RPC_URL_B");
     expect(bitquerySmoke).not.toContain(
-      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
     );
     expect(bitquerySmoke).not.toContain(
-      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
     );
     expect(bitquerySmoke).not.toContain(
       "runtimeProductionProviderBindingsFromUrls",
     );
-    expect(bitquerySmoke).not.toContain(
+    expect(bitquerySmoke).toContain(
       '"./scripts/perf/read-model-provider-binding.mjs"',
     );
     expect(bitquerySmoke).toContain(
@@ -853,7 +862,7 @@ describe("read-model production deploy policy", () => {
     );
     expect(bitquerySmoke.match(/historicalBitqueryMarketContract/g)).toHaveLength(3);
     expect(bitquerySmoke.match(/bitqueryChartContract/g)).toHaveLength(3);
-    expect(bitquerySmoke).not.toContain("alchemyIdentityContract");
+    expect(bitquerySmoke).not.toContain("drpcIdentityContract");
     expect(bitquerySmoke).not.toContain("/api/ops/health");
     expect(bitquerySmoke).not.toContain("/api/explore/profile");
     expect(bitquerySmoke).not.toMatch(

@@ -45,6 +45,7 @@ import {
 } from "../../lib/data-pipeline/optimistic-market-state.server";
 import { createProductionDualRpcProviders } from "../../lib/data-pipeline/rpc-providers.server";
 import { getDataPipelineReleaseBinding } from "../../lib/data-pipeline/release-binding.server";
+import { productionMainnetRpcEnvironment } from "../../lib/onchain/website-rpc-providers.server";
 
 const BLOCK_NUMBER = 25_650_000n;
 const BLOCK_HASH = `0x${"11".repeat(32)}` as const;
@@ -109,7 +110,7 @@ type ProviderFixture = Readonly<{
 }>;
 
 function providerFixture(
-  vendor: "alchemy" | "quicknode",
+  vendor: "drpc" | "quicknode",
   input: Readonly<{
     state?: ReturnType<typeof rawState>;
     headers?: readonly CandidateRpcBlock[];
@@ -119,7 +120,7 @@ function providerFixture(
     logs?: readonly CandidateRpcLog[];
   }> = {},
 ): ProviderFixture {
-  const marker = vendor === "alchemy" ? "a" : "b";
+  const marker = vendor === "drpc" ? "a" : "b";
   const headers = input.headers ?? [block(), block()];
   let headerIndex = 0;
   const getBlock = vi.fn(async () =>
@@ -127,7 +128,7 @@ function providerFixture(
   );
   const getChainId = vi.fn(async () => input.chainId ?? 1);
   const getBlockNumber = vi.fn(async () =>
-    input.head ?? BLOCK_NUMBER + (vendor === "alchemy" ? 5n : 3n)
+    input.head ?? BLOCK_NUMBER + (vendor === "drpc" ? 5n : 3n)
   );
   const getBlocks = vi.fn(async ({ blockNumbers }: { blockNumbers: readonly bigint[] }) => {
     const target = await getBlock();
@@ -185,7 +186,7 @@ function providerPair(input: Readonly<{
   secondHeadHash?: Hex;
   logs?: readonly CandidateRpcLog[];
 }> = {}) {
-  const first = providerFixture("alchemy", {
+  const first = providerFixture("drpc", {
     state: input.firstState,
     headers: input.firstHeaders,
     head: input.firstHead,
@@ -1056,12 +1057,12 @@ describe("optimistic dual-RPC market state", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     try {
-      const providers = createProductionDualRpcProviders({
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-          "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key",
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-          "https://programmable.ethereum.quiknode.pro/quicknode-test-token/",
-      });
+      const providers = createProductionDualRpcProviders(
+        productionMainnetRpcEnvironment(
+          "https://lb.drpc.live/ethereum/drpc-test-key",
+          "https://programmable.ethereum-mainnet.quiknode.pro/quicknode-test-token/",
+        ),
+      );
       const readState = providers[0].client.readOptimisticPoolState!;
 
       await expect(readState({

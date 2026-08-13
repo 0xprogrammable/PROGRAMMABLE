@@ -44,11 +44,11 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         deploymentConfig: Object.freeze({
           path: "lib/onchain/config.ts",
-          sha256: "715ee5b492d8ec7ed9d3870286f09debb344f9cdb05556a41ab8e50d0aa23cb2",
+          sha256: "0e75c3d55b54933504c702977c0d7972a788fe89d63cc3c2a7d19138ae7fbcb7",
         }),
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
-          sha256: "b6c35adf7598b53989fc68e82affcdc5b75559125e387a03afd6468933888fb3",
+          sha256: "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7",
         }),
       }),
     }),
@@ -76,7 +76,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "0cb84ff2a409980e84383699f73bfc1941dfe328f39e94d8e3658cc4aa4ed6f3",
+          sha256: "50b7711e767439d703cd8f92829709efde8bfa59c46349134df69ca452c80e5d",
         }),
       ]),
       policy: Object.freeze({
@@ -97,7 +97,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "78483bf9b1110b4a97b719c6bb9bf9256285729e6002deb3621a9d1987373010",
+        sha256: "25c5427bd24714262e04d3eb14b6b31c71820e9b4070817d4146fe1309bb7fb5",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -146,6 +146,10 @@ const APPROVED_OPERATIONS = Object.freeze({
           path: "supabase/migrations/20260801204500_reuse_dual_rpc_block_evidence_constraint.sql",
           sha256: "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11",
         }),
+        Object.freeze({
+          path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          sha256: "58cc558607aa45fb5e6cc2f10d7a9d1d43ba3ca166b178e4d5bf291cd8e80aa6",
+        }),
       ]),
     }),
     Object.freeze({
@@ -159,7 +163,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/market-projector-runtime.server.ts",
-        sha256: "5ce3b98d0a373c45b309011b59cc6ec7eeaef54bc112f2b55d32dca433566da0",
+        sha256: "170138d1d3cc8de5cacb0b2b7a8f587d83e75d6e4031c314b226b673cc9dac6b",
       }),
       migrations: Object.freeze([
         Object.freeze({
@@ -173,6 +177,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260803000100_market_projector_health_view.sql",
           sha256: "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          sha256: "58cc558607aa45fb5e6cc2f10d7a9d1d43ba3ca166b178e4d5bf291cd8e80aa6",
         }),
       ]),
     }),
@@ -211,11 +219,11 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-market-state.server.ts",
-          sha256: "88e55d7311c40ada819820c665fbe54247eb605373b5028346889e247dc790e3",
+          sha256: "e608497bc890bf2fbaf8f6af056fe91a5a4c84bae04c1a4fd80dccd04b779d9e",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-live-runtime.server.ts",
-          sha256: "817b4563eb503aa761efc922c264cf1699fd2264160adfd1a5294308750533f6",
+          sha256: "9cfc38593e10acdbb4206c93f7eea403ae32b944fd875cd2da8b330f6929bcd4",
         }),
         Object.freeze({
           path: "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
@@ -227,7 +235,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/data-pipeline/rpc-providers.server.ts",
-          sha256: "d6694f99366226a64a07b28ef3646cc05556048bc1ce790f9fbac4929c3ce77c",
+          sha256: "8901014d3f4beab60ff324efc90d2d57a3e034399942e9b42c2f01a0d7ef9b5d",
         }),
         Object.freeze({
           path: "app/api/ops/read-model-real-block-sla/route.ts",
@@ -236,6 +244,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
           sha256: "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          sha256: "58cc558607aa45fb5e6cc2f10d7a9d1d43ba3ca166b178e4d5bf291cd8e80aa6",
         }),
       ]),
     }),
@@ -251,7 +263,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       maximumDeliveryToFirstVisibleMs: 10_000,
       script: Object.freeze({
         path: "scripts/perf/read-model-real-block-sla-gate.mjs",
-        sha256: "68cb5f77d3891070cba84f6b69f13eabb177016823f9baed6decdf62aa1a0c3a",
+        sha256: "ada7486c58647398a327d5e876e002356f559724eeae312984c60e93f5f38865",
       }),
       schema: Object.freeze({
         path: "config/read-model-real-block-sla-db-attestation.schema.json",
@@ -723,8 +735,8 @@ export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
   "JSON.stringify(currentFdvDetail.token.liquidityEvidence)",
   'for (const range of ["1h", "1d", "1w", "all"])',
   "verifyCurrentPublicOnchainEvidenceV1({",
-  '"https://ethereum-rpc.publicnode.com"',
-  '"https://rpc.mevblocker.io"',
+  "runtimeProductionProviderEndpoints",
+  "rpcUrls: independentRpcUrls",
   '"programmable.current-market-independent-proof.v1"',
   "independentCurrentProof.providerCount !== 2",
   'currentChart.readStatus !== "live"',
@@ -1523,7 +1535,7 @@ export function evaluateReadModelOperationsSourceContracts(
       source(sourceWorker.dependencies[0]?.path)?.includes(
         "verify_candidate_database_promoted_v2",
       ) &&
-      sourceWorker?.migrations?.length === 10 &&
+      sourceWorker?.migrations?.length === 11 &&
       migrationContract(
         "source-projector-lease",
         source(sourceWorker.migrations[0]?.path),
@@ -1563,12 +1575,15 @@ export function evaluateReadModelOperationsSourceContracts(
       migrationContract(
         "source-projector-block-evidence-conflict-fence",
         source(sourceWorker.migrations[9]?.path),
+      ) &&
+      source(sourceWorker.migrations[10]?.path)?.includes(
+        "rpc_provider_deployment_metadata_production_vendor_v2_check",
       ),
     "the source worker is byte-bound to its runtime selector, database fence and provider evidence",
   );
   check(
     "ops-market-projector-migration",
-    marketWorker?.migrations?.length === 3 &&
+    marketWorker?.migrations?.length === 4 &&
       migrationContract(
         "market-projector",
         source(marketWorker.migrations[0]?.path),
@@ -1579,6 +1594,9 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       source(marketWorker.migrations[2]?.path)?.includes(
         "market_projector_health_v1",
+      ) &&
+      source(marketWorker.migrations[3]?.path)?.includes(
+        "rpc_provider_deployment_metadata_production_vendor_v2_check",
       ),
     "the market worker is bound to exact lineage, terminal checkpoint and lease SQL",
   );
@@ -1804,10 +1822,15 @@ export function evaluateReadModelOperationsSourceContracts(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"https://ethereum-rpc.publicnode.com"',
+        '"./scripts/perf/read-model-provider-binding.mjs"',
       ) &&
-      stagedBitquerySmokeBlock.includes('"https://rpc.mevblocker.io"') &&
-      stagedBitquerySmokeBlock.includes("rpcUrls: independentRpcUrls") &&
+      stagedBitquerySmokeBlock.includes(
+        "runtimeProductionProviderEndpoints(process.env)",
+      ) &&
+      !stagedBitquerySmokeBlock.includes("ethereum-rpc.publicnode.com") &&
+      !stagedBitquerySmokeBlock.includes("rpc.mevblocker.io") &&
+      stagedBitquerySmokeBlock.split("rpcUrls: independentRpcUrls").length - 1 ===
+        2 &&
       !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_A") &&
       !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_B") &&
       !stagedBitquerySmokeBlock.includes(
@@ -1818,9 +1841,6 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       !stagedBitquerySmokeBlock.includes(
         "runtimeProductionProviderBindingsFromUrls",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/read-model-provider-binding.mjs"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
@@ -2030,11 +2050,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "await verifyBitqueryGoldenMarketExecutionV1({",
       ) &&
       bitqueryGoldenParity.includes(
-        '"https://rpc.mevblocker.io"',
+        "runtimeProductionProviderEndpoints(process.env)",
       ) &&
-      bitqueryGoldenParity.includes(
-        '"https://mainnet.gateway.tenderly.co"',
-      ) &&
+      !bitqueryGoldenParity.includes("rpc.mevblocker.io") &&
+      !bitqueryGoldenParity.includes("mainnet.gateway.tenderly.co") &&
       !bitqueryGoldenParity.includes("ethereum-rpc.publicnode.com") &&
       !bitqueryGoldenParity.includes("MAINNET_STATE_VIEW") &&
       !bitqueryGoldenParity.includes("Q192") &&
@@ -2447,7 +2466,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes('chart.readStatus !== "live"') &&
       postPromotion.includes("verifyBitqueryGoldenMarketExecutionV1") &&
       postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV2") &&
-      !postPromotion.includes(
+      postPromotion.includes(
         "verifyBitqueryGoldenMarketExecutionV1({\n      token: responses[4].body?.token,\n      fetchImpl,\n      rpcUrls:",
       ) &&
       postPromotion.includes('id: "production-bitquery-canary-hidden"') &&

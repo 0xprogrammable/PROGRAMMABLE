@@ -109,7 +109,7 @@ describe("trade action identity activation", () => {
     );
     vi.stubEnv(
       "ETHEREUM_RPC_URL_B",
-      "https://action-node.quiknode.pro/quicknode-action-key/",
+      "https://action-node.ethereum-mainnet.quiknode.pro/quicknode-action-key/",
     );
     mocks.lookup.mockResolvedValue({});
     mocks.readLegacy.mockResolvedValue(registry);

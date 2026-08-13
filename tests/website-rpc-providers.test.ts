@@ -4,6 +4,7 @@ import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 import {
   WEBSITE_MAINNET_RPC_ENV,
+  productionMainnetRpcPair,
   websiteMainnetRpcPair,
 } from "../lib/onchain/website-rpc-providers.server";
 
@@ -11,9 +12,7 @@ const ALCHEMY_URL =
   "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
 const DRPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_URL =
-  "https://programmable-mainnet.quiknode.pro/quicknode-test-key/";
-const MULTI_LABEL_QUICKNODE_URL =
-  "https://programmable.base-mainnet.quiknode.pro/quicknode-test-key/";
+  "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
 
 function environment(input?: Readonly<{
   primaryProvider?: string;
@@ -62,6 +61,19 @@ describe("Website Mainnet RPC provider bindings", () => {
     });
   });
 
+  it("binds the authoritative production pair to fixed provider roles", () => {
+    expect(productionMainnetRpcPair(environment())).toMatchObject({
+      primary: { provider: "drpc" },
+      secondary: { provider: "quicknode" },
+    });
+    expect(() => productionMainnetRpcPair(environment({
+      primaryProvider: "quicknode",
+      primaryUrl: QUICKNODE_URL,
+      secondaryProvider: "alchemy",
+      secondaryUrl: ALCHEMY_URL,
+    }))).toThrow("Production RPC provider roles are invalid");
+  });
+
   it("keeps provider roles interchangeable across the reviewed vendors", () => {
     const selected = websiteMainnetRpcPair(environment({
       primaryProvider: "quicknode",
@@ -74,20 +86,6 @@ describe("Website Mainnet RPC provider bindings", () => {
       source: "role-bound-v1",
       primary: { provider: "quicknode", url: QUICKNODE_URL },
       secondary: { provider: "alchemy", url: ALCHEMY_URL },
-    });
-  });
-
-  it("accepts commitment-bound QuickNode endpoints with valid subdomains", () => {
-    const selected = websiteMainnetRpcPair(environment({
-      secondaryProvider: "quicknode",
-      secondaryUrl: MULTI_LABEL_QUICKNODE_URL,
-    }));
-
-    expect(selected.secondary).toEqual({
-      provider: "quicknode",
-      url: MULTI_LABEL_QUICKNODE_URL,
-      endpointCommitment:
-        rpcProviderCommitment("endpoint", MULTI_LABEL_QUICKNODE_URL),
     });
   });
 
@@ -126,16 +124,26 @@ describe("Website Mainnet RPC provider bindings", () => {
       primaryProvider: "drpc",
       primaryUrl: "https://eth.drpc.org/",
     }))).toThrow("Website primary RPC binding is invalid");
-    for (const secondaryUrl of [
-      "https://quiknode.pro/quicknode-test-key/",
-      "https://programmable.quiknode.pro.evil.example/quicknode-test-key/",
-      "https://evilquiknode.pro/quicknode-test-key/",
-    ]) {
-      expect(() => websiteMainnetRpcPair(environment({
-        secondaryProvider: "quicknode",
-        secondaryUrl,
-      }))).toThrow("Website secondary RPC binding is invalid");
-    }
+    expect(() => websiteMainnetRpcPair(environment({
+      secondaryProvider: "quicknode",
+      secondaryUrl:
+        "https://programmable.base-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/",
+    }))).toThrow("Website secondary RPC binding is invalid");
+    expect(() => websiteMainnetRpcPair(environment({
+      secondaryProvider: "quicknode",
+      secondaryUrl:
+        "https://programmable.base-mainnet.quiknode.pro/quicknode-test-key/",
+    }))).toThrow("Website secondary RPC binding is invalid");
+    expect(() => websiteMainnetRpcPair(environment({
+      secondaryProvider: "quicknode",
+      secondaryUrl:
+        "https://programmable.ethereum.quiknode.pro/quicknode-test-key/",
+    }))).toThrow("Website secondary RPC binding is invalid");
+    expect(() => websiteMainnetRpcPair(environment({
+      secondaryProvider: "quicknode",
+      secondaryUrl:
+        "https://programmable.quiknode.pro/quicknode-test-key/",
+    }))).toThrow("Website secondary RPC binding is invalid");
   });
 
   it("requires independent vendor identities, not only distinct URLs", () => {

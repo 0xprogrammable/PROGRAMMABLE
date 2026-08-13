@@ -11,7 +11,7 @@ const environment = Object.freeze({
   PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
     "https://eth-mainnet.g.alchemy.com/v2/abcdefgh",
   PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-    "https://example.quiknode.pro/abcdefgh",
+    "https://example.ethereum-mainnet.quiknode.pro/abcdefgh",
 });
 
 test("builds a complete deterministic candidate-only bootstrap plan", async () => {

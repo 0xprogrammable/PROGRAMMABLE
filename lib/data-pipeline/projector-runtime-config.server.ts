@@ -70,6 +70,8 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_BINDING_MODE",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
+  "NEXT_PUBLIC_PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
 ] as const);
 
 type StagedDynamicParentResult = Readonly<{
@@ -185,7 +187,7 @@ export function assertProjectorRuntimeProviderCommitments(
     providers.length !== 2 ||
     bindings[1]?.type !== "rpc_provider" ||
     bindings[2]?.type !== "rpc_provider" ||
-    providers[0].vendorGroup !== "alchemy" ||
+    providers[0].vendorGroup !== "drpc" ||
     providers[1].vendorGroup !== "quicknode" ||
     providers[0].endpointCommitment !== bindings[1].deploymentCommitment ||
     providers[1].endpointCommitment !== bindings[2].deploymentCommitment ||
@@ -228,8 +230,8 @@ export function loadProjectorRuntimeConfigForBinding(
       binding,
     }),
     envioSchema: projectorEnvioSchemaCommitment(binding),
-    alchemyDeployment: rpcCommitments.alchemy.deploymentCommitment,
-    alchemySchema: rpcCommitments.alchemy.schemaCommitment,
+    drpcDeployment: rpcCommitments.drpc.deploymentCommitment,
+    drpcSchema: rpcCommitments.drpc.schemaCommitment,
     quicknodeDeployment: rpcCommitments.quicknode.deploymentCommitment,
     quicknodeSchema: rpcCommitments.quicknode.schemaCommitment,
   });
@@ -242,9 +244,9 @@ export function loadProjectorRuntimeConfigForBinding(
     }),
     Object.freeze({
       type: "rpc_provider" as const,
-      redactedIdentity: "rpc:1:alchemy",
-      deploymentCommitment: derivedCommitments.alchemyDeployment,
-      schemaCommitment: derivedCommitments.alchemySchema,
+      redactedIdentity: "rpc:1:drpc",
+      deploymentCommitment: derivedCommitments.drpcDeployment,
+      schemaCommitment: derivedCommitments.drpcSchema,
     }),
     Object.freeze({
       type: "rpc_provider" as const,

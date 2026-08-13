@@ -30,10 +30,10 @@ const factory = getAddress("0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a");
 const poolId = `0x${"44".repeat(32)}` as Hex;
 const blockHash = `0x${"55".repeat(32)}` as Hex;
 const launchTransactionHash = `0x${"66".repeat(32)}` as Hex;
-const alchemyRpcUrl =
-  "https://eth-mainnet.g.alchemy.com/v2/alchemy-classic-key";
+const drpcRpcUrl =
+  "https://lb.drpc.live/ethereum/drpc-classic-key";
 const quickNodeRpcUrl =
-  "https://classic-mainnet.quiknode.pro/quicknode-classic-key/";
+  "https://classic-mainnet.ethereum-mainnet.quiknode.pro/quicknode-classic-key/";
 
 const indexedToken = {
   chainId: 1 as const,
@@ -222,16 +222,24 @@ function request() {
 describe("Classic V3 action identity activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("ETHEREUM_RPC_URL", alchemyRpcUrl);
+    vi.stubEnv("ETHEREUM_RPC_URL", drpcRpcUrl);
     vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
-    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", alchemyRpcUrl);
-    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", quickNodeRpcUrl);
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL", drpcRpcUrl);
     vi.stubEnv(
-      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
-      rpcProviderCommitment("endpoint", alchemyRpcUrl),
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", drpcRpcUrl),
     );
     vi.stubEnv(
-      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+      "quicknode",
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+      quickNodeRpcUrl,
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
       rpcProviderCommitment("endpoint", quickNodeRpcUrl),
     );
     mocks.lookup.mockResolvedValue(actionReward);
@@ -281,7 +289,7 @@ describe("Classic V3 action identity activation", () => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
         "ETHEREUM_RPC_URL_B",
-        "https://eth-mainnet.g.alchemy.com/v2/second-classic-secret",
+        "https://lb.drpc.live/ethereum/second-classic-secret",
       );
 
       const response = await POST(request());
@@ -291,7 +299,7 @@ describe("Classic V3 action identity activation", () => {
       expect(mocks.createPublicClient).toHaveBeenCalledTimes(
         indexedEnabled ? 0 : 1,
       );
-      expect(serialized).not.toContain("alchemy-classic-key");
+      expect(serialized).not.toContain("drpc-classic-key");
       expect(serialized).not.toContain("second-classic-secret");
     },
   );

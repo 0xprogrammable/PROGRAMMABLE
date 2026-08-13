@@ -19,11 +19,13 @@ import {
   projectorRpcSchemaCommitment,
 } from "../../lib/data-pipeline/projector-provider-commitments";
 import { getDataPipelineReleaseBinding } from "../../lib/data-pipeline/release-binding.server";
+import { productionMainnetRpcEnvironment } from
+  "../../lib/onchain/website-rpc-providers.server";
 
 const bytes32 = (byte: string) => `0x${byte.repeat(64)}`;
 const TEST_CA = rootCertificates[0]!;
-const ALCHEMY_URL = "https://eth-mainnet.g.alchemy.com/v2/abcdefgh";
-const QUICKNODE_URL = "https://example.quiknode.pro/abcdefgh/";
+const DRPC_URL = "https://lb.drpc.live/ethereum/abcdefgh";
+const QUICKNODE_URL = "https://example.ethereum-mainnet.quiknode.pro/abcdefgh/";
 const ENVIO_URL = "https://indexer.hyperindex.xyz/f6714ef/v1/graphql";
 const ENVIO_IDENTITY = "envio:production-92f6373";
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
@@ -35,13 +37,13 @@ const EXPECTED_COMMITMENTS = Object.freeze({
     binding: RELEASE_BINDING,
   }),
   envioSchema: projectorEnvioSchemaCommitment(RELEASE_BINDING),
-  alchemyDeployment: projectorRpcDeploymentCommitment(ALCHEMY_URL),
+  drpcDeployment: projectorRpcDeploymentCommitment(DRPC_URL),
   quicknodeDeployment: projectorRpcDeploymentCommitment(QUICKNODE_URL),
 });
 const RUNTIME_PROVIDERS = Object.freeze([
   Object.freeze({
-    vendorGroup: "alchemy",
-    endpointCommitment: EXPECTED_COMMITMENTS.alchemyDeployment,
+    vendorGroup: "drpc",
+    endpointCommitment: EXPECTED_COMMITMENTS.drpcDeployment,
   }),
   Object.freeze({
     vendorGroup: "quicknode",
@@ -61,8 +63,7 @@ function environment(
     PROGRAMMABLE_POSTGRES_SSL_CA_PEM: TEST_CA,
     PROGRAMMABLE_ENVIO_GRAPHQL_URL: ENVIO_URL,
     PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN: "envio-token",
-    PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
-    PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
+    ...productionMainnetRpcEnvironment(DRPC_URL, QUICKNODE_URL),
     PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY: ENVIO_IDENTITY,
     PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
       "0a064ec0a32a0e48bf6751fa18f025504267c6b7",
@@ -219,8 +220,8 @@ describe("configured projector runtime", () => {
       },
       {
         type: "rpc_provider",
-        redactedIdentity: "rpc:1:alchemy",
-        deploymentCommitment: EXPECTED_COMMITMENTS.alchemyDeployment,
+        redactedIdentity: "rpc:1:drpc",
+        deploymentCommitment: EXPECTED_COMMITMENTS.drpcDeployment,
         schemaCommitment: RPC_SCHEMA_COMMITMENT,
       },
       {
@@ -419,8 +420,8 @@ describe("configured projector runtime", () => {
     "PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL",
     "PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
     "PROGRAMMABLE_ENVIO_GRAPHQL_URL",
-    "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-    "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
     "PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY",
   ])("fails closed when %s is absent", (name) => {
     expect(() =>
@@ -470,7 +471,7 @@ describe("configured projector runtime", () => {
         config.providers,
         Object.freeze([
           Object.freeze({
-            vendorGroup: "alchemy",
+            vendorGroup: "drpc",
             endpointCommitment: bytes32("f"),
           }),
           Object.freeze({

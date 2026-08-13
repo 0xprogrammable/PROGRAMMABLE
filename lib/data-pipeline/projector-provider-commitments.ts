@@ -65,11 +65,11 @@ const RPC_METHOD_CONTRACT_V1 = Object.freeze({
     "reward_vault_snapshot",
   ]),
 });
-const ALCHEMY_HOST = "eth-mainnet.g.alchemy.com";
-const ALCHEMY_API_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
+const DRPC_HOST = "lb.drpc.live";
+const DRPC_API_PATH = /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u;
 const QUICKNODE_API_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
 const QUICKNODE_HOST =
-  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u;
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
 
 function invalidEndpoint(): never {
   throw invalidInput("config", "projector-provider-endpoint");
@@ -77,7 +77,7 @@ function invalidEndpoint(): never {
 
 export function canonicalProjectorRpcEndpoint(
   value: unknown,
-  provider: "alchemy" | "quicknode",
+  provider: "drpc" | "quicknode",
 ): string {
   if (typeof value !== "string" || value.length < 1 || value.length > 1_024) {
     return invalidEndpoint();
@@ -95,17 +95,19 @@ export function canonicalProjectorRpcEndpoint(
     parsed.port !== "" ||
     parsed.search !== "" ||
     parsed.hash !== "" ||
-    ((provider === "alchemy" &&
-      (parsed.hostname !== ALCHEMY_HOST ||
-        !ALCHEMY_API_PATH.test(parsed.pathname))) ||
+    ((provider === "drpc" &&
+      (parsed.hostname !== DRPC_HOST ||
+        !DRPC_API_PATH.test(parsed.pathname))) ||
       (provider === "quicknode" &&
         (!QUICKNODE_HOST.test(parsed.hostname) ||
           !QUICKNODE_API_PATH.test(parsed.pathname))))
   ) {
     return invalidEndpoint();
   }
-  const credential = provider === "alchemy"
-    ? parsed.pathname.slice("/v2/".length)
+  const credential = provider === "drpc"
+    ? parsed.pathname
+      .replace(/^\/ethereum\//u, "")
+      .replace(/\/$/u, "")
     : parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "");
   if (credential === "docs-demo") return invalidEndpoint();
   return parsed.toString();

@@ -1144,7 +1144,7 @@ export function computeOptimisticMarketStateCommitments(input: Readonly<{
 
 /**
  * Reads the exact StateView slot0/liquidity bytes from the same independent
- * Alchemy + QuickNode pair that produced the optimistic block evidence. Each
+ * dRPC + QuickNode pair that produced the optimistic block evidence. Each
  * provider is fenced by matching header reads before and after its EIP-1898
  * calls. No latest state, subgraph, Graph or single-provider fallback exists.
  */

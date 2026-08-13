@@ -876,12 +876,8 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
-      "PublicNode witness",
-      '            "https://ethereum-rpc.publicnode.com",\n',
-    ],
-    [
-      "MEV Blocker witness",
-      '            "https://rpc.mevblocker.io",\n',
+      "private production witness resolver",
+      "runtimeProductionProviderEndpoints(process.env)",
     ],
     ["independent reader handoff", "                rpcUrls: independentRpcUrls,\n"],
   ])("fails closed when staged market proof drops the %s", (_label, needle) => {
@@ -1205,7 +1201,7 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
-    '"https://mainnet.gateway.tenderly.co"',
+    "runtimeProductionProviderEndpoints(process.env)",
     '"eth_getTransactionReceipt"',
     '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
     "swapLogs.length !== 1",
@@ -2814,7 +2810,7 @@ describe("post-promotion route verification", () => {
       const url = new URL(String(input));
       const response = await base(input, init);
       if (
-        !["rpc.mevblocker.io", "mainnet.gateway.tenderly.co"].includes(
+        !["rpc-a.invalid", "rpc-b.invalid"].includes(
           url.hostname,
         )
       ) return response;
@@ -2908,7 +2904,7 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (url.hostname !== "mainnet.gateway.tenderly.co") return response;
+      if (url.hostname !== "rpc-b.invalid") return response;
       const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
       if (request.method !== "eth_getBlockByNumber") return response;
       const body = await response.json();

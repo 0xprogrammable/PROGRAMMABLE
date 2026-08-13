@@ -167,7 +167,7 @@ set local role programmable_projector;
 
 select programmable_private.register_rpc_provider_deployment(
   '51000000-0000-4000-8000-000000000001', 1,
-  'alchemy', 'optimistic-market-state-test-v1',
+  'drpc', 'optimistic-market-state-test-v1',
   pg_catalog.decode(pg_catalog.repeat('13', 32), 'hex'),
   pg_catalog.decode(pg_catalog.repeat('14', 32), 'hex'),
   'rpc-endpoint-commitments-v1',
@@ -274,7 +274,7 @@ begin
       ),
       '51000000-0000-4000-8000-000000000001',
       '52000000-0000-4000-8000-000000000002',
-      'alchemy-mainnet-11111111111111111111111111111111',
+      'drpc-mainnet-11111111111111111111111111111111',
       'quicknode-mainnet-21212121212121212121212121212121',
       pg_catalog.decode(pg_catalog.repeat('13', 32), 'hex'),
       pg_catalog.decode(pg_catalog.repeat('23', 32), 'hex'),
@@ -351,7 +351,7 @@ select is(
     pg_catalog.decode(pg_catalog.repeat('96', 32), 'hex'),
     '51000000-0000-4000-8000-000000000001',
     '52000000-0000-4000-8000-000000000002',
-    'alchemy-mainnet-11111111111111111111111111111111',
+    'drpc-mainnet-11111111111111111111111111111111',
     'quicknode-mainnet-21212121212121212121212121212121',
     pg_catalog.decode(pg_catalog.repeat('13', 32), 'hex'),
     pg_catalog.decode(pg_catalog.repeat('23', 32), 'hex'),
@@ -383,7 +383,7 @@ select throws_ok(
       decode(repeat('ff', 32), 'hex'),
       '51000000-0000-4000-8000-000000000001',
       '52000000-0000-4000-8000-000000000002',
-      'alchemy-mainnet-11111111111111111111111111111111',
+      'drpc-mainnet-11111111111111111111111111111111',
       'quicknode-mainnet-21212121212121212121212121212121',
       decode(repeat('13', 32), 'hex'), decode(repeat('23', 32), 'hex'),
       decode(repeat('14', 32), 'hex'), decode(repeat('24', 32), 'hex'),
@@ -414,7 +414,7 @@ select throws_ok(
       '52000000-0000-4000-8000-000000000002',
       '51000000-0000-4000-8000-000000000001',
       'quicknode-mainnet-21212121212121212121212121212121',
-      'alchemy-mainnet-11111111111111111111111111111111',
+      'drpc-mainnet-11111111111111111111111111111111',
       decode(repeat('23', 32), 'hex'), decode(repeat('13', 32), 'hex'),
       decode(repeat('24', 32), 'hex'), decode(repeat('14', 32), 'hex'),
       22000005, 22000005,
@@ -443,7 +443,7 @@ select throws_ok(
       decode(repeat('a3', 32), 'hex'),
       '51000000-0000-4000-8000-000000000001',
       '52000000-0000-4000-8000-000000000002',
-      'alchemy-mainnet-11111111111111111111111111111111',
+      'drpc-mainnet-11111111111111111111111111111111',
       'quicknode-mainnet-21212121212121212121212121212121',
       decode(repeat('13', 32), 'hex'), decode(repeat('23', 32), 'hex'),
       decode(repeat('14', 32), 'hex'), decode(repeat('24', 32), 'hex'),
@@ -473,7 +473,7 @@ select throws_ok(
       decode(repeat('a5', 32), 'hex'),
       '51000000-0000-4000-8000-000000000001',
       '52000000-0000-4000-8000-000000000002',
-      'alchemy-mainnet-11111111111111111111111111111111',
+      'drpc-mainnet-11111111111111111111111111111111',
       'quicknode-mainnet-21212121212121212121212121212121',
       decode(repeat('13', 32), 'hex'), decode(repeat('23', 32), 'hex'),
       decode(repeat('14', 32), 'hex'), decode(repeat('24', 32), 'hex'),
@@ -603,7 +603,7 @@ select programmable_private.append_optimistic_market_state_v1(
   pg_catalog.decode(pg_catalog.repeat('e2', 32), 'hex'),
   '51000000-0000-4000-8000-000000000001',
   '52000000-0000-4000-8000-000000000002',
-  'alchemy-mainnet-11111111111111111111111111111111',
+  'drpc-mainnet-11111111111111111111111111111111',
   'quicknode-mainnet-21212121212121212121212121212121',
   pg_catalog.decode(pg_catalog.repeat('13', 32), 'hex'),
   pg_catalog.decode(pg_catalog.repeat('23', 32), 'hex'),
@@ -644,7 +644,7 @@ select ok(
       and state_row.market_provider_a_head = 22000017
       and state_row.market_provider_b_head = 22000017
       and state_row.provider_a_identity =
-        'alchemy-mainnet-11111111111111111111111111111111'
+        'drpc-mainnet-11111111111111111111111111111111'
       and state_row.provider_b_identity =
         'quicknode-mainnet-21212121212121212121212121212121'
   ),

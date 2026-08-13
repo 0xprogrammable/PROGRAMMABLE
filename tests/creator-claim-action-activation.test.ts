@@ -47,7 +47,7 @@ const deployment = {
   stateViewRuntimeCodeHash: `0x${"77".repeat(32)}` as Hex,
   rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/alchemy-claim-key",
   rpcUrlSecondary:
-    "https://claim-node.quiknode.pro/quicknode-claim-key/",
+    "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/",
   confirmations: 12n,
   logBlockRange: 10_000n,
 };
@@ -197,7 +197,7 @@ describe("creator claim action identity activation", () => {
     deployment.rpcUrl =
       "https://eth-mainnet.g.alchemy.com/v2/alchemy-claim-key";
     deployment.rpcUrlSecondary =
-      "https://claim-node.quiknode.pro/quicknode-claim-key/";
+      "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/";
     mocks.lookup.mockResolvedValue(indexedToken);
     mocks.readLegacy.mockResolvedValue(legacyModel);
     const clients = [

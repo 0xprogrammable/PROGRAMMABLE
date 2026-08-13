@@ -56,7 +56,7 @@ export class ActionRpcQuorumError extends Error {
 
 const CREDENTIAL = /^[A-Za-z0-9_-]{8,256}$/u;
 const QUICKNODE_HOST =
-  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u;
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
 const BLAST_API_HOST =
   /^(?:eth-mainnet|eth-sepolia)(?:\.public)?\.blastapi\.io$/u;
 
@@ -65,6 +65,14 @@ function hasOnlySearchParameters(value: URL, allowed: readonly string[]) {
 }
 
 function paidDrpcMatches(value: URL, chainId: SupportedChainId) {
+  if (
+    chainId === 1 &&
+    value.hostname === "lb.drpc.live" &&
+    /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u.test(value.pathname) &&
+    value.search === ""
+  ) {
+    return true;
+  }
   if (
     value.hostname !== "lb.drpc.org" ||
     value.pathname !== "/ogrpc" ||

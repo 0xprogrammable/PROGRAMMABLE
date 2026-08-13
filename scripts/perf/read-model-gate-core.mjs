@@ -1788,7 +1788,7 @@ export function evaluateReadModelReleaseEvidence(bundle, input) {
       providerTraceChecks.every(Boolean) &&
       rpcTrace.calls.length === aggregateCalls &&
       aggregateCalls <= profile.projector.rpc.maxAggregateCallsPerRun,
-    `${aggregateCalls} raw calls bound to exact Alchemy and QuickNode commitments`,
+    `${aggregateCalls} raw calls bound to exact dRPC and QuickNode commitments`,
   );
 
   return {

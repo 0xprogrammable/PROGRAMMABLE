@@ -362,34 +362,36 @@ export function evaluateAlchemyExploreSourceContracts(
     "current-market-rpc-quorum",
     currentMarketRpcSource.includes('import "server-only"') &&
       currentMarketRpcSource.includes(
-        'const CURRENT_MARKET_RPC_SECONDARY = "https://rpc.mevblocker.io/";',
+        'productionMainnetRpcPair',
       ) &&
       currentMarketRpcSource.includes("createActionRpcQuorum({") &&
       currentMarketRpcSource.includes(
-        "primary: quickNodeRpcUrl()",
+        "primary: binding.primary.url",
       ) &&
       currentMarketRpcSource.includes(
-        "process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+        "secondary: binding.secondary.url",
       ) &&
-      currentMarketRpcSource.includes("process.env.ETHEREUM_RPC_URL_B") &&
+      !currentMarketRpcSource.includes("rpc.mevblocker.io") &&
+      !currentMarketRpcSource.includes("ethereum-rpc.publicnode.com") &&
+      !currentMarketRpcSource.includes("mainnet.gateway.tenderly.co") &&
       !currentMarketRpcSource.includes(
-        "process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-      ) &&
-      !/\bprocess\.env\.ETHEREUM_RPC_URL(?!_B)/u.test(currentMarketRpcSource) &&
-      currentMarketRpcSource.includes(
-        "secondary: CURRENT_MARKET_RPC_SECONDARY",
+        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
       ) &&
       currentMarketRpcSource.includes("maximumProviders: 2") &&
       currentMarketRpcSource.includes(
-        'primary?.vendorGroup !== "quicknode"',
+        'primary?.vendorGroup !== "drpc"',
       ) &&
       currentMarketRpcSource.includes(
-        'secondary?.vendorGroup !== "mevblocker"',
+        'secondary?.vendorGroup !== "quicknode"',
       ) &&
       currentMarketRpcSource.includes(
-        "primary.endpointCommitment !== expectedQuickNodeCommitment",
+        "primary.endpointCommitment !== binding.primary.endpointCommitment",
       ) &&
-      currentMarketRpcSource.includes("rpcProviderIds: undefined") &&
+      currentMarketRpcSource.includes(
+        "secondary.endpointCommitment !== binding.secondary.endpointCommitment",
+      ) &&
+      currentMarketRpcSource.includes('primary: "drpc"') &&
+      currentMarketRpcSource.includes('secondary: "quicknode"') &&
       routeSources
         .filter(({ id }) => ["explore", "token-detail"].includes(id))
         .every(
@@ -406,7 +408,7 @@ export function evaluateAlchemyExploreSourceContracts(
           ({ source }) =>
             !source.includes("currentMarketOnchainDeployment"),
         ),
-    "current StateView and Chainlink evidence alone uses commitment-bound QuickNode plus fixed independent MEV Blocker",
+    "current StateView and Chainlink evidence uses the shared commitment-bound private dRPC and QuickNode quorum",
   );
 
   for (const route of routeSources) {

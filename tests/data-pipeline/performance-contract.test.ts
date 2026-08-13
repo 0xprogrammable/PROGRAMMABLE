@@ -38,11 +38,14 @@ const TARGET_URL = "https://programmable-perf-abc.vercel.app/";
 const RUNTIME_CAPTURE_PATH_FIXTURE =
   "/api/ops/read-model-performance-capture";
 const CAPTURE_NONCE = `0x${"55".repeat(32)}`;
+const DRPC_URL = "https://lb.drpc.live/ethereum/abcdefgh";
+const QUICKNODE_URL =
+  "https://programmable.ethereum-mainnet.quiknode.pro/abcdefgh";
 const RUNTIME_RPC_ENVIRONMENT = {
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-    "https://eth-mainnet.g.alchemy.com/v2/abcdefgh",
-  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-    "https://programmable.quiknode.pro/abcdefgh",
+  [providerBinding.PRODUCTION_RPC_ENV.primaryProvider]: "drpc",
+  [providerBinding.PRODUCTION_RPC_ENV.primaryUrl]: DRPC_URL,
+  [providerBinding.PRODUCTION_RPC_ENV.secondaryProvider]: "quicknode",
+  [providerBinding.PRODUCTION_RPC_ENV.secondaryUrl]: QUICKNODE_URL,
 };
 const RUNTIME_PROVIDER_BINDINGS =
   providerBinding.runtimeProductionProviderBindingsFromUrls(
@@ -56,8 +59,24 @@ const ENDPOINT_COMMITMENTS = Object.fromEntries(
     ],
   ),
 );
+const PINNED_RPC_COMMITMENTS = {
+  [providerBinding.PRODUCTION_RPC_ENV.primaryCommitment]:
+    ENDPOINT_COMMITMENTS.drpc,
+  [providerBinding.PRODUCTION_RPC_ENV.secondaryCommitment]:
+    ENDPOINT_COMMITMENTS.quicknode,
+};
+const productionRpcDotenv = (
+  urls: Readonly<{ primary?: string; secondary?: string }> = {},
+) => [
+  `${providerBinding.PRODUCTION_RPC_ENV.primaryProvider}="drpc"`,
+  `${providerBinding.PRODUCTION_RPC_ENV.primaryUrl}="${urls.primary ?? DRPC_URL}"`,
+  `${providerBinding.PRODUCTION_RPC_ENV.primaryCommitment}="${ENDPOINT_COMMITMENTS.drpc}"`,
+  `${providerBinding.PRODUCTION_RPC_ENV.secondaryProvider}="quicknode"`,
+  `${providerBinding.PRODUCTION_RPC_ENV.secondaryUrl}="${urls.secondary ?? QUICKNODE_URL}"`,
+  `${providerBinding.PRODUCTION_RPC_ENV.secondaryCommitment}="${ENDPOINT_COMMITMENTS.quicknode}"`,
+].join("\n");
 const ORIGIN_COMMITMENTS = {
-  alchemy: `0x${"aa".repeat(32)}`,
+  drpc: `0x${"aa".repeat(32)}`,
   quicknode: `0x${"bb".repeat(32)}`,
 };
 
@@ -83,7 +102,7 @@ function profileFixture(release = false) {
 }
 
 function expectedProviders() {
-  return ["alchemy", "quicknode"].map((vendorGroup) => {
+  return ["drpc", "quicknode"].map((vendorGroup) => {
     const endpointCommitment =
       ENDPOINT_COMMITMENTS[vendorGroup as keyof typeof ENDPOINT_COMMITMENTS];
     return {
@@ -936,17 +955,17 @@ describe("read-model performance contract", () => {
     );
   });
 
-  it("enforces the exact Alchemy-only deployment boundary", () => {
+  it("enforces the exact private dRPC and QuickNode deployment boundary", () => {
     const exactFalse = deployPolicy.RELEASE_GATED_FLAG_NAMES.map(
       (name: string) => `${name}="false"`,
     ).join("\n");
     const bitquerySecret = '\nBITQUERY_OAUTH_TOKEN="[Sensitive]"';
-    const alchemy = deployPolicy.evaluateReadModelDeployPolicy(
-      `${exactFalse}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"${bitquerySecret}`,
-      {},
+    const direct = deployPolicy.evaluateReadModelDeployPolicy(
+      `${exactFalse}\n${productionRpcDotenv()}${bitquerySecret}`,
+      PINNED_RPC_COMMITMENTS,
     );
-    expect(alchemy).toMatchObject({
-      mode: "alchemy-only",
+    expect(direct).toMatchObject({
+      mode: "direct-rpc",
       evidenceRequired: false,
       commitmentsReady: true,
       policyReady: true,
@@ -955,15 +974,10 @@ describe("read-model performance contract", () => {
     const indexedEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"true\"",
-    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"${bitquerySecret}`;
+    )}\n${productionRpcDotenv()}${bitquerySecret}`;
     const indexed = deployPolicy.evaluateReadModelDeployPolicy(
       indexedEnvironment,
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-          ENDPOINT_COMMITMENTS.alchemy,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-          ENDPOINT_COMMITMENTS.quicknode,
-      },
+      PINNED_RPC_COMMITMENTS,
     );
     expect(indexed).toMatchObject({
       mode: "indexed-or-shadow",
@@ -974,16 +988,14 @@ describe("read-model performance contract", () => {
     const sensitiveRuntimeEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"[sensitive]\"",
-    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[sensitive]"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="[sensitive]"${bitquerySecret}`;
+    )}\n${productionRpcDotenv({
+      primary: "[sensitive]",
+      secondary: "[sensitive]",
+    })}${bitquerySecret}`;
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(
         sensitiveRuntimeEnvironment,
-        {
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-            ENDPOINT_COMMITMENTS.alchemy,
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-            ENDPOINT_COMMITMENTS.quicknode,
-        },
+        PINNED_RPC_COMMITMENTS,
       ),
     ).toMatchObject({
       mode: "indexed-or-shadow",
@@ -993,13 +1005,8 @@ describe("read-model performance contract", () => {
     });
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(
-        `${sensitiveRuntimeEnvironment}\nETHEREUM_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/abcdefgh"`,
-        {
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-            ENDPOINT_COMMITMENTS.alchemy,
-          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-            ENDPOINT_COMMITMENTS.quicknode,
-        },
+        `${sensitiveRuntimeEnvironment}\n${providerBinding.PRODUCTION_RPC_ENV.primaryProvider}="quicknode"`,
+        PINNED_RPC_COMMITMENTS,
       ),
     ).toMatchObject({
       evidenceRequired: true,
@@ -1009,14 +1016,12 @@ describe("read-model performance contract", () => {
     const publicFeedEnvironment = `${exactFalse.replace(
       "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"false\"",
       "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"true\"",
-    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"${bitquerySecret}`;
+    )}\n${productionRpcDotenv()}${bitquerySecret}`;
     expect(
-      deployPolicy.evaluateReadModelDeployPolicy(publicFeedEnvironment, {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-          ENDPOINT_COMMITMENTS.alchemy,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-          ENDPOINT_COMMITMENTS.quicknode,
-      }),
+      deployPolicy.evaluateReadModelDeployPolicy(
+        publicFeedEnvironment,
+        PINNED_RPC_COMMITMENTS,
+      ),
     ).toMatchObject({
       mode: "indexed-or-shadow",
       evidenceRequired: true,
@@ -1024,10 +1029,9 @@ describe("read-model performance contract", () => {
     });
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(indexedEnvironment, {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        ...PINNED_RPC_COMMITMENTS,
+        [providerBinding.PRODUCTION_RPC_ENV.primaryCommitment]:
           `0x${"77".repeat(32)}`,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-          ENDPOINT_COMMITMENTS.quicknode,
       }),
     ).toMatchObject({
       evidenceRequired: true,
@@ -1043,33 +1047,34 @@ describe("read-model performance contract", () => {
   });
 
   it("derives release identities from two pinned non-secret commitments", () => {
-    const bindings = providerBinding.expectedProductionProviderBindings({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-        ENDPOINT_COMMITMENTS.alchemy,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-        ENDPOINT_COMMITMENTS.quicknode,
-    });
-    expect(bindings).toEqual(expectedProviders());
+    const bindings = providerBinding.expectedProductionProviderBindings(
+      PINNED_RPC_COMMITMENTS,
+    );
+    expect(
+      bindings.map((binding: Record<string, string>) => ({
+        vendorGroup: binding.vendorGroup,
+        identity: binding.identity,
+        endpointCommitment: binding.endpointCommitment,
+      })),
+    ).toEqual(expectedProviders());
     expect(() =>
       providerBinding.expectedProductionProviderBindings({
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-          ENDPOINT_COMMITMENTS.alchemy,
+        [providerBinding.PRODUCTION_RPC_ENV.primaryCommitment]:
+          ENDPOINT_COMMITMENTS.drpc,
       }),
     ).toThrow("both pinned provider commitments");
   });
 
-  it("binds approved Alchemy and QuickNode server-only endpoints", async () => {
+  it("binds approved dRPC and QuickNode server-only endpoints", async () => {
     const environment = {
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-        "https://eth-mainnet.g.alchemy.com/v2/abcdefgh",
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-        "https://example.quiknode.pro/abcdefgh",
+      ...RUNTIME_RPC_ENVIRONMENT,
+      ...PINNED_RPC_COMMITMENTS,
     };
     const bindings = providerBinding.expectedProductionProviderBindings({
       ...environment,
     });
     expect(bindings.map((binding: { vendorGroup: string }) => binding.vendorGroup)).toEqual([
-      "alchemy",
+      "drpc",
       "quicknode",
     ]);
     expect(bindings[0].endpointCommitment).not.toBe(
@@ -1080,7 +1085,7 @@ describe("read-model performance contract", () => {
     );
     const providers = createProductionDualRpcProviders(environment);
     expect(providers.map(({ vendorGroup }) => vendorGroup)).toEqual([
-      "alchemy",
+      "drpc",
       "quicknode",
     ]);
     expect(
@@ -1089,7 +1094,13 @@ describe("read-model performance contract", () => {
         vendorGroup,
         endpointCommitment,
       })),
-    ).toEqual(bindings);
+    ).toEqual(
+      bindings.map((binding: Record<string, string>) => ({
+        vendorGroup: binding.vendorGroup,
+        identity: binding.identity,
+        endpointCommitment: binding.endpointCommitment,
+      })),
+    );
     expect(JSON.stringify(providers)).not.toContain("abcdefgh");
   });
 
@@ -1306,7 +1317,7 @@ describe("read-model performance contract", () => {
           sourceOverrides: {
             [exploreRoutePath]: exploreRouteSource.replaceAll(
               '"stateview-chainlink+official-uniswap-v4-subgraph+bitquery"',
-              '"X-Programmable-Market-Source": "alchemy"',
+              '"X-Programmable-Market-Source": "drpc"',
             ),
           },
         },
@@ -1374,25 +1385,25 @@ describe("read-model performance contract", () => {
       "utf8",
     );
     for (const mutation of [
-      currentMarketRpcSource.replace(
-        '"https://rpc.mevblocker.io/"',
-        '"https://ethereum-rpc.publicnode.com/"',
+      currentMarketRpcSource.replaceAll(
+        "productionMainnetRpcPair",
+        "websiteMainnetRpcPair",
       ),
       currentMarketRpcSource.replace(
-        "primary: quickNodeRpcUrl()",
+        "primary: binding.primary.url",
         "primary: baseDeployment.rpcUrl",
       ),
       currentMarketRpcSource.replace(
+        'primary?.vendorGroup !== "drpc"',
         'primary?.vendorGroup !== "quicknode"',
-        'primary?.vendorGroup !== "alchemy"',
       ),
       currentMarketRpcSource.replace(
-        "primary.endpointCommitment !== expectedQuickNodeCommitment",
+        "primary.endpointCommitment !== binding.primary.endpointCommitment",
         "false",
       ),
       currentMarketRpcSource.replace(
-        "rpcProviderIds: undefined",
-        "rpcProviderIds: baseDeployment.rpcProviderIds",
+        'primary: "drpc"',
+        'primary: "quicknode"',
       ),
     ]) {
       const mutatedCurrentMarket =

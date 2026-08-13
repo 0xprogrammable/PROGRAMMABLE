@@ -252,8 +252,8 @@ describe("read-model performance capture binding", () => {
     const readCandidatesAfter = vi.fn(async () => candidates);
     const providers = [
       {
-        identity: "alchemy-provider",
-        vendorGroup: "alchemy",
+        identity: "drpc-provider",
+        vendorGroup: "drpc",
         endpointCommitment: bytes32("a"),
         endpointOriginCommitment: bytes32("b"),
       },
@@ -372,8 +372,8 @@ describe("read-model performance capture binding", () => {
     const readCandidate = vi.fn(async (id: string) => ({ candidateId: id }));
     const providers = [
       {
-        identity: "alchemy-provider",
-        vendorGroup: "alchemy",
+        identity: "drpc-provider",
+        vendorGroup: "drpc",
         endpointCommitment: bytes32("a"),
         endpointOriginCommitment: bytes32("b"),
       },

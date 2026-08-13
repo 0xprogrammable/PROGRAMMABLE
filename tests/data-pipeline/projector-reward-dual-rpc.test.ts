@@ -258,8 +258,8 @@ function provider(
   return {
     identity,
     vendorGroup,
-    endpointCommitment: bytes32(vendorGroup === "alchemy" ? "5" : "6"),
-    endpointOriginCommitment: bytes32(vendorGroup === "alchemy" ? "7" : "8"),
+    endpointCommitment: bytes32(vendorGroup === "drpc" ? "5" : "6"),
+    endpointOriginCommitment: bytes32(vendorGroup === "drpc" ? "7" : "8"),
     client: {
       readRewardSnapshot,
       readClassicRewardFactorySnapshot: async (
@@ -523,7 +523,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
       blockNumber: "100",
       blockHash,
       providers: [
-        provider("alchemy-reward", "alchemy", left),
+        provider("drpc-reward", "drpc", left),
         provider("quicknode-reward", "quicknode", right),
       ],
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -549,7 +549,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
 
   it("fails closed on provider disagreement or an uncommitted hidden call", async () => {
     const baseProviders = (right: CandidateRpcRewardSnapshot) => [
-      provider("alchemy-reward", "alchemy", async () => result()),
+      provider("drpc-reward", "drpc", async () => result()),
       provider("quicknode-reward", "quicknode", async () => right),
     ] as const;
 
@@ -591,7 +591,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
         blockNumber: "100",
         blockHash,
         providers: [
-          provider("alchemy-reward", "alchemy", left),
+          provider("drpc-reward", "drpc", left),
           provider("quicknode-reward", "quicknode", right),
         ],
         rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -639,7 +639,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
       blockNumber: "100",
       blockHash,
       providers: [
-        provider("alchemy-reward", "alchemy", read),
+        provider("drpc-reward", "drpc", read),
         provider("quicknode-reward", "quicknode", read),
       ],
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -665,7 +665,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
         blockNumber: "100",
         blockHash,
         providers: [
-          provider("alchemy-reward", "alchemy", read),
+          provider("drpc-reward", "drpc", read),
           provider("quicknode-reward", "quicknode", read),
         ],
         rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -710,7 +710,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
       blockNumber: "100",
       blockHash,
       providers: [
-        provider("alchemy-reward", "alchemy", left),
+        provider("drpc-reward", "drpc", left),
         provider("quicknode-reward", "quicknode", right),
       ],
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -744,7 +744,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
         blockNumber: "100",
         blockHash,
         providers: [
-          provider("alchemy-reward", "alchemy", malformed),
+          provider("drpc-reward", "drpc", malformed),
           provider("quicknode-reward", "quicknode", sound),
         ],
         rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
@@ -825,7 +825,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
     const left = vi.fn(async () => raw);
     const right = vi.fn(async () => raw);
     const providers = [
-      provider("alchemy-seed", "alchemy", left, factoryConfigurationHash),
+      provider("drpc-seed", "drpc", left, factoryConfigurationHash),
       provider(
         "quicknode-seed",
         "quicknode",
@@ -909,7 +909,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
     );
 
     const disagreeingProviders = [
-      provider("alchemy-seed", "alchemy", left, factoryConfigurationHash),
+      provider("drpc-seed", "drpc", left, factoryConfigurationHash),
       provider(
         "quicknode-seed",
         "quicknode",
@@ -939,7 +939,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
     });
 
     const authorityDisagreement = [
-      provider("alchemy-seed", "alchemy", left, factoryConfigurationHash),
+      provider("drpc-seed", "drpc", left, factoryConfigurationHash),
       provider(
         "quicknode-seed",
         "quicknode",
@@ -1113,7 +1113,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
       ),
     }));
     const providers = [
-      provider("alchemy-seed", "alchemy", read, factoryConfigurationHash),
+      provider("drpc-seed", "drpc", read, factoryConfigurationHash),
       provider(
         "quicknode-seed",
         "quicknode",
@@ -1239,7 +1239,7 @@ describe("dual-RPC exact-block reward snapshots", () => {
     });
 
     const providers = [
-      provider("alchemy-seed", "alchemy", async () => raw),
+      provider("drpc-seed", "drpc", async () => raw),
       provider("quicknode-seed", "quicknode", async () => raw),
     ] as const;
     await expect(readDualRpcInitialRewardConfiguration({

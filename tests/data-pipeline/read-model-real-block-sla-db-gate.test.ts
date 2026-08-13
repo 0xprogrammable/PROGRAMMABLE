@@ -56,7 +56,7 @@ function attestation(exportedAt = "2026-08-02T12:00:00.500Z") {
     logsCommitment: `0x${"23".repeat(32)}`,
     providerADeploymentId: "11111111-1111-4111-8111-111111111111",
     providerBDeploymentId: "22222222-2222-4222-8222-222222222222",
-    providerAEndpointHost: "eth-mainnet.g.alchemy.com",
+    providerAEndpointHost: "lb.drpc.live",
     providerBEndpointHost: "programmable.quiknode.pro",
     providerAEndpointUrlSha256: `0x${"31".repeat(32)}`,
     providerBEndpointUrlSha256: `0x${"32".repeat(32)}`,

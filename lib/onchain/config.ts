@@ -7,7 +7,7 @@ import type {
   DeploymentEnvironment,
   OnchainDeployment,
 } from "./types";
-import { websiteMainnetRpcPair } from
+import { productionMainnetRpcPair } from
   "./website-rpc-providers.server";
 
 type DeploymentEntry = {
@@ -243,7 +243,7 @@ export function getWebsiteReadOnchainDeployment(
 ): OnchainDeployment {
   const deployment = resolveOnchainDeployment(environment, true);
   if (deployment.environment !== "production") return deployment;
-  const rpc = websiteMainnetRpcPair();
+  const rpc = productionMainnetRpcPair();
 
   return {
     ...deployment,
