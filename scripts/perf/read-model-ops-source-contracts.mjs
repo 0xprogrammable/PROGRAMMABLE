@@ -14,19 +14,19 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "654eb383431ce6518deda90db07b2c083be0bc7bfb5f66c80b476dd853120244",
+        sha256: "c3207b24610229a044ed886dc20654b57c1121e448e4a18c440b82c8d1d59015",
       }),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "1f9c711c8df4159a7b391e95880f7a9e5aa88191572d043b86fba9baa2b3f11b",
+          sha256: "8659e109910f89e7f67ab48772e1c88854757b3cd443119bb01410f46da17d15",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "6b5b5def718509f954e54a11849daf4584e3e048a3607b0a0126b5fe61ac7ec2",
+          sha256: "02530f837f91c7bacb8922397d7f16bfbb773166ad4992186b15eacfd43125c7",
           eventFiltersPerRange: 3,
         }),
       ]),
@@ -1489,11 +1489,15 @@ export function evaluateReadModelOperationsSourceContracts(
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
   const hasAdaptiveCompleteRangeScan = (runtimeSource) =>
     runtimeSource?.includes("allSettledOrThrow([") &&
+    runtimeSource?.includes("const MINIMUM_LOG_BLOCK_RANGE = 1n;") &&
+    runtimeSource?.includes("const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;") &&
+    runtimeSource?.includes("transientRetries < transientRetryLimit") &&
     runtimeSource?.includes("error instanceof TimeoutError") &&
     runtimeSource?.includes("error instanceof LimitExceededRpcError") &&
     runtimeSource?.includes("error instanceof HttpRequestError") &&
     runtimeSource?.includes("error instanceof ResponseBodyTooLargeError") &&
     runtimeSource?.includes("logBlockRange > MINIMUM_LOG_BLOCK_RANGE") &&
+    runtimeSource?.includes("logBlockRange * 2n") &&
     runtimeSource?.includes("continue;");
   check(
     "ops-legacy-bounded-refresh",

@@ -7,6 +7,7 @@ import {
   keccak256,
   LimitExceededRpcError,
   ResponseBodyTooLargeError,
+  RpcRequestError,
   TimeoutError,
   type Address,
   type Hex,
@@ -88,7 +89,9 @@ const ZERO_FEE_VOLUME: FeeVolume = {
 const TOKEN_HYDRATION_BATCH_SIZE = 12;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
 const RPC_PROVENANCE_BATCH_SIZE = 1;
-const MINIMUM_LOG_BLOCK_RANGE = 100n;
+const MINIMUM_LOG_BLOCK_RANGE = 1n;
+const TRANSIENT_RETRIES_PER_WINDOW = 1;
+const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;
 const CLASSIC_LAUNCHER_EVENTS = [
   memeTokenLaunchedEvent,
   memeLiquidityConfiguredEvent,
@@ -98,6 +101,24 @@ const CLASSIC_FEE_HOOK_EVENTS = [
   nativeSwapFeesAccruedEvent,
   creatorFeesClaimedEvent,
 ] as const;
+
+function isTransientLogReadError(error: unknown) {
+  if (error instanceof TimeoutError) return true;
+  if (error instanceof HttpRequestError) {
+    return (
+      error.status === undefined ||
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+  return (
+    error instanceof RpcRequestError &&
+    error.code === -32603 &&
+    error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
 
 type FeeDisclosure = readonly [
   buySwapFeeBps: number,
@@ -291,7 +312,9 @@ export async function indexVerifiedEvents(
   const creatorClaims: CreatorClaimEventRecord[] = [];
 
   let fromBlock = config.deploymentBlock;
-  let logBlockRange = config.logBlockRange;
+  const configuredLogBlockRange = config.logBlockRange;
+  let logBlockRange = configuredLogBlockRange;
+  let transientRetries = 0;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
@@ -318,11 +341,26 @@ export async function indexVerifiedEvents(
     try {
       logs = await readLogs();
     } catch (error) {
+      const transient = isTransientLogReadError(error);
+      const transientRetryLimit =
+        logBlockRange === MINIMUM_LOG_BLOCK_RANGE
+          ? MINIMUM_RANGE_TRANSIENT_RETRIES
+          : TRANSIENT_RETRIES_PER_WINDOW;
+      if (transient && transientRetries < transientRetryLimit) {
+        transientRetries += 1;
+        console.warn("Explore log window retried after transient RPC rejection", {
+          fromBlock: fromBlock.toString(),
+          attemptedToBlock: rangeEnd.toString(),
+          retry: transientRetries,
+          retryLimit: transientRetryLimit,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+        continue;
+      }
       if (
-        (error instanceof TimeoutError ||
+        (transient ||
           error instanceof LimitExceededRpcError ||
-          error instanceof ResponseBodyTooLargeError ||
-          error instanceof HttpRequestError) &&
+          error instanceof ResponseBodyTooLargeError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
       ) {
@@ -331,11 +369,12 @@ export async function indexVerifiedEvents(
           reducedRange < MINIMUM_LOG_BLOCK_RANGE
             ? MINIMUM_LOG_BLOCK_RANGE
             : reducedRange;
+        transientRetries = 0;
         console.warn("Explore log range reduced after RPC rejection", {
           fromBlock: fromBlock.toString(),
           attemptedToBlock: rangeEnd.toString(),
           nextRange: logBlockRange.toString(),
-          errorName: error.name,
+          errorName: error instanceof Error ? error.name : "UnknownError",
         });
         continue;
       }
@@ -431,6 +470,13 @@ export async function indexVerifiedEvents(
       }
     }
     fromBlock = rangeEnd + 1n;
+    transientRetries = 0;
+    if (logBlockRange < configuredLogBlockRange) {
+      logBlockRange = minimum(
+        configuredLogBlockRange,
+        logBlockRange * 2n,
+      );
+    }
   }
 
   return {

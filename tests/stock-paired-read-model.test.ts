@@ -1,6 +1,7 @@
 import {
   getAddress,
   LimitExceededRpcError,
+  TimeoutError,
   type Hex,
   type PublicClient,
 } from "viem";
@@ -120,6 +121,32 @@ describe("Stock-Paired event scan", () => {
       ),
     ).resolves.toMatchObject({ launches: [], volumes: new Map() });
     expect(getLogs).toHaveBeenCalledTimes(9);
+  });
+
+  it("retries the same complete Stock window after a transient", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const release = stockPairedReleaseFixture();
+    let firstRequest = true;
+    const getLogs = vi.fn(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        throw new TimeoutError({
+          body: { method: "eth_getLogs" },
+          url: readyDeployment.rpcUrl,
+        });
+      }
+      return [];
+    });
+    await expect(
+      readStockPairedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        release,
+        1_099n,
+        100n,
+      ),
+    ).resolves.toMatchObject({ launches: [], volumes: new Map() });
+    expect(getLogs).toHaveBeenCalledTimes(6);
   });
 
   it("fails closed on a decoded Stock event from the wrong contract", async () => {
