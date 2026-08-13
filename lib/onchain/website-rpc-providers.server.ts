@@ -1,0 +1,217 @@
+import { rpcProviderCommitment } from
+  "../data-pipeline/rpc-provider-commitments";
+
+import type { MainnetRpcProviderId } from "./types";
+
+const RPC_ENDPOINT_COMMITMENT = /^0x[0-9a-f]{64}$/u;
+const ALCHEMY_MAINNET_RPC_HOST = "eth-mainnet.g.alchemy.com";
+const ALCHEMY_MAINNET_RPC_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
+const DRPC_MAINNET_RPC_HOST = "lb.drpc.live";
+const DRPC_MAINNET_RPC_PATH = /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u;
+const QUICKNODE_MAINNET_RPC_HOST =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.quiknode\.pro$/u;
+const QUICKNODE_MAINNET_RPC_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
+
+export const WEBSITE_MAINNET_RPC_ENV = Object.freeze({
+  primaryProvider: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+  primaryUrl: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+  primaryCommitment:
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+  secondaryProvider: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+  secondaryUrl: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+  secondaryCommitment:
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
+} as const);
+
+type WebsiteRpcBinding = Readonly<{
+  provider: MainnetRpcProviderId;
+  url: string;
+  endpointCommitment: string;
+}>;
+
+type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
+
+export type WebsiteMainnetRpcPair = Readonly<{
+  source: "role-bound-v1" | "legacy-alchemy-quicknode";
+  primary: WebsiteRpcBinding;
+  secondary: WebsiteRpcBinding;
+}>;
+
+function selectedLegacyValue(
+  preferred: string | undefined,
+  legacy: string | undefined,
+) {
+  return preferred === undefined || preferred === ""
+    ? legacy
+    : preferred;
+}
+
+function providerId(
+  value: string | undefined,
+  role: "primary" | "secondary",
+): MainnetRpcProviderId {
+  if (value === "alchemy" || value === "drpc" || value === "quicknode") {
+    return value;
+  }
+  throw new Error(`Website ${role} RPC provider binding is invalid`);
+}
+
+function providerPathIsValid(parsed: URL, provider: MainnetRpcProviderId) {
+  if (provider === "alchemy") {
+    return parsed.hostname === ALCHEMY_MAINNET_RPC_HOST &&
+      ALCHEMY_MAINNET_RPC_PATH.test(parsed.pathname) &&
+      parsed.pathname.slice("/v2/".length) !== "docs-demo";
+  }
+  if (provider === "drpc") {
+    return parsed.hostname === DRPC_MAINNET_RPC_HOST &&
+      DRPC_MAINNET_RPC_PATH.test(parsed.pathname) &&
+      parsed.pathname
+        .replace(/^\/ethereum\//u, "")
+        .replace(/\/$/u, "") !== "docs-demo";
+  }
+  return QUICKNODE_MAINNET_RPC_HOST.test(parsed.hostname) &&
+    QUICKNODE_MAINNET_RPC_PATH.test(parsed.pathname) &&
+    parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "") !==
+      "docs-demo";
+}
+
+function strictRpcUrl(
+  value: string | undefined,
+  provider: MainnetRpcProviderId,
+  role: "primary" | "secondary",
+) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 1_024 ||
+    value !== value.trim()
+  ) {
+    throw new Error(`Website ${role} RPC binding is unavailable`);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`Website ${role} RPC binding is invalid`);
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== "" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    !providerPathIsValid(parsed, provider)
+  ) {
+    throw new Error(`Website ${role} RPC binding is invalid`);
+  }
+  return parsed.href;
+}
+
+function requiredCommitment(
+  value: string | undefined,
+  role: "primary" | "secondary",
+) {
+  if (!value || !RPC_ENDPOINT_COMMITMENT.test(value)) {
+    throw new Error(
+      `Website ${role} RPC endpoint commitment is unavailable`,
+    );
+  }
+  return value;
+}
+
+function binding(
+  provider: MainnetRpcProviderId,
+  rawUrl: string | undefined,
+  rawCommitment: string | undefined,
+  role: "primary" | "secondary",
+): WebsiteRpcBinding {
+  const url = strictRpcUrl(rawUrl, provider, role);
+  const endpointCommitment = requiredCommitment(rawCommitment, role);
+  if (rpcProviderCommitment("endpoint", url) !== endpointCommitment) {
+    throw new Error(`Website ${role} RPC endpoint commitment mismatch`);
+  }
+  return Object.freeze({ provider, url, endpointCommitment });
+}
+
+function pair(
+  source: WebsiteMainnetRpcPair["source"],
+  primary: WebsiteRpcBinding,
+  secondary: WebsiteRpcBinding,
+): WebsiteMainnetRpcPair {
+  if (
+    primary.provider === secondary.provider ||
+    primary.url === secondary.url ||
+    primary.endpointCommitment === secondary.endpointCommitment
+  ) {
+    throw new Error("Website RPC providers are not independent");
+  }
+  return Object.freeze({ source, primary, secondary });
+}
+
+function roleBoundPair(environment: RuntimeEnvironment) {
+  const primaryProvider = providerId(
+    environment[WEBSITE_MAINNET_RPC_ENV.primaryProvider],
+    "primary",
+  );
+  const secondaryProvider = providerId(
+    environment[WEBSITE_MAINNET_RPC_ENV.secondaryProvider],
+    "secondary",
+  );
+  return pair(
+    "role-bound-v1",
+    binding(
+      primaryProvider,
+      environment[WEBSITE_MAINNET_RPC_ENV.primaryUrl],
+      environment[WEBSITE_MAINNET_RPC_ENV.primaryCommitment],
+      "primary",
+    ),
+    binding(
+      secondaryProvider,
+      environment[WEBSITE_MAINNET_RPC_ENV.secondaryUrl],
+      environment[WEBSITE_MAINNET_RPC_ENV.secondaryCommitment],
+      "secondary",
+    ),
+  );
+}
+
+function legacyPair(environment: RuntimeEnvironment) {
+  return pair(
+    "legacy-alchemy-quicknode",
+    binding(
+      "alchemy",
+      selectedLegacyValue(
+        environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
+        environment.ETHEREUM_RPC_URL,
+      ),
+      environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT,
+      "primary",
+    ),
+    binding(
+      "quicknode",
+      selectedLegacyValue(
+        environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+        environment.ETHEREUM_RPC_URL_B,
+      ),
+      environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT,
+      "secondary",
+    ),
+  );
+}
+
+/**
+ * Resolves the fixed Website read quorum. Once any role-bound v1 field is
+ * configured, all six fields become mandatory and legacy values are ignored.
+ * This prevents a partial provider migration from silently mixing releases.
+ */
+export function websiteMainnetRpcPair(
+  environment: RuntimeEnvironment = process.env,
+): WebsiteMainnetRpcPair {
+  const roleBoundConfigured = Object.values(WEBSITE_MAINNET_RPC_ENV).some(
+    (name) => environment[name] !== undefined && environment[name] !== "",
+  );
+  return roleBoundConfigured
+    ? roleBoundPair(environment)
+    : legacyPair(environment);
+}

@@ -14,6 +14,7 @@ const ALCHEMY_RPC_URL =
   "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
 const QUICKNODE_RPC_URL =
   "https://programmable-mainnet.quiknode.pro/quicknode-test-key/";
+const DRPC_RPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 
 function stubWebsiteRpcBindings() {
   vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", ALCHEMY_RPC_URL);
@@ -126,6 +127,10 @@ describe("onchain deployment manifest boundary", () => {
       status: "ready",
       rpcUrl: ALCHEMY_RPC_URL,
       rpcUrlSecondary: QUICKNODE_RPC_URL,
+      rpcProviderIds: {
+        primary: "alchemy",
+        secondary: "quicknode",
+      },
     });
     expect(getWebsiteChartOnchainDeployment("production")).toMatchObject({
       status: "ready",
@@ -168,7 +173,7 @@ describe("onchain deployment manifest boundary", () => {
     );
     expect(() =>
       getWebsiteReadOnchainDeployment("production"),
-    ).toThrow("Website Alchemy RPC binding is unavailable");
+    ).toThrow("Website primary RPC binding is unavailable");
   });
 
   it("accepts only the bounded legacy aliases when they match both provider commitments", () => {
@@ -201,7 +206,7 @@ describe("onchain deployment manifest boundary", () => {
 
     expect(() =>
       getWebsiteReadOnchainDeployment("production"),
-    ).toThrow("Website Alchemy RPC binding is invalid");
+    ).toThrow("Website primary RPC binding is invalid");
   });
 
   it("fails closed on a mismatched commitment without retaining endpoint secrets", () => {
@@ -221,10 +226,45 @@ describe("onchain deployment manifest boundary", () => {
     })();
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe(
-      "Website RPC endpoint commitment mismatch",
+      "Website secondary RPC endpoint commitment mismatch",
     );
     expect(JSON.stringify(error)).not.toContain("alchemy-test-key");
     expect(JSON.stringify(error)).not.toContain("quicknode-test-key");
+  });
+
+  it("uses a complete role-bound dRPC and QuickNode pair for Website reads", () => {
+    stubWebsiteRpcBindings();
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+      "drpc",
+    );
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL", DRPC_RPC_URL);
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", DRPC_RPC_URL),
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+      "quicknode",
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+      QUICKNODE_RPC_URL,
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", QUICKNODE_RPC_URL),
+    );
+
+    expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: DRPC_RPC_URL,
+      rpcUrlSecondary: QUICKNODE_RPC_URL,
+      rpcProviderIds: {
+        primary: "drpc",
+        secondary: "quicknode",
+      },
+    });
   });
 
   it("keeps public reads fail-closed when the dual-RPC environment is absent", () => {
