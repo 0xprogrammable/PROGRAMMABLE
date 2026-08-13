@@ -18,6 +18,7 @@ import {
   canonicalJson,
   sha256,
 } from "./hosted-db-operator-core.mjs";
+import { validateBootstrapProviderRoles } from "./bootstrap-provider-roles.mjs";
 
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
@@ -463,25 +464,7 @@ function validateCanonicalReleaseCandidate(binding, candidateEnvioEvidence) {
 
 function validateProviderSet(providers, candidateEnvioEvidence) {
   validateCandidateEnvioEvidence(candidateEnvioEvidence);
-  if (!Array.isArray(providers) || providers.length !== 4) {
-    throw new Error("bootstrap provider set is incomplete");
-  }
-  if (
-    canonicalJson(
-      providers.map(({ providerType, vendor = null }) => ({
-        providerType,
-        vendor,
-      })),
-    ) !==
-      canonicalJson([
-        { providerType: "envio_deployment", vendor: null },
-        { providerType: "rpc_provider", vendor: "drpc" },
-        { providerType: "rpc_provider", vendor: "quicknode" },
-        { providerType: "uniswap_subgraph", vendor: null },
-      ])
-  ) {
-    throw new Error("bootstrap provider order is not canonical");
-  }
+  validateBootstrapProviderRoles(providers);
   const envio = providers.filter(
     ({ providerType }) => providerType === "envio_deployment",
   );
@@ -2069,6 +2052,7 @@ export function validateReviewedBootstrapPlan(plan) {
   ) {
     throw new Error("reviewed bootstrap plan is invalid");
   }
+  validateBootstrapProviderRoles(plan.providerBindings);
   exactIsoTimestamp(plan.createdAt, "reviewed bootstrap creation time");
   const { planSha256, ...payload } = plan;
   if (sha256(canonicalJson(payload)) !== planSha256) {
