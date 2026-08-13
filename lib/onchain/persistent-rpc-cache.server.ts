@@ -9,8 +9,8 @@ import {
   type Transport,
 } from "viem";
 
-const CACHE_SCHEMA = "programmable-rpc-log-cursor-v2";
-const CACHE_DIRECTORY = "indexes/rpc-log-cursors/v2";
+const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";
+const CACHE_DIRECTORY = "indexes/rpc-log-cursors/v3";
 const HEX_QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/iu;
 const BYTES32 = /^0x[0-9a-f]{64}$/iu;
 const ADDRESS = /^0x[0-9a-f]{40}$/iu;
@@ -1651,14 +1651,14 @@ function blobToken(environment: NodeJS.ProcessEnv = process.env) {
   );
 }
 
-function cachePathByteLimit(path: string) {
+export function persistentRpcCachePathByteLimit(path: string) {
   if (path.endsWith("/cursor.json")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes;
   }
   if (path.includes("/segments/")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxSegmentBytes;
   }
-  if (path.includes("/runtime/")) {
+  if (path.includes("/runtime-v2/")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxRuntimeBytes;
   }
   if (path.includes("/integrity/")) {
@@ -1768,7 +1768,7 @@ function blobStore(token: string): PersistentRpcCacheStore {
         useCache: false,
       });
       if (!result || result.statusCode !== 200 || !result.stream) return null;
-      const maximumBytes = cachePathByteLimit(path);
+      const maximumBytes = persistentRpcCachePathByteLimit(path);
       return {
         etag: result.blob.etag,
         value: await readBoundedBlobJson({
