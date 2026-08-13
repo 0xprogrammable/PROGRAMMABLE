@@ -637,7 +637,7 @@ describe("read-model production deploy policy", () => {
     expect(PROJECTOR_WAKE_ROUTE).toBe("/api/ops/projector-wake");
   });
 
-  it("smokes registry identity plus Bitquery market APIs and stops at a staged candidate", () => {
+  it("smokes combined current market evidence and stops at a staged candidate", () => {
     const workflow = readFileSync(
       resolve(ROOT, ".github/workflows/deploy-production.yml"),
       "utf8",
@@ -652,7 +652,7 @@ describe("read-model production deploy policy", () => {
     expect(workflow.match(/--sensitive-env-metadata/g)).toHaveLength(2);
     expect(workflow).toContain("staged-release-attestation.json");
     expect(workflow).toContain("attestation_sha256");
-    expect(workflow).toContain("Smoke staged Bitquery market APIs");
+    expect(workflow).toContain("Smoke staged public market APIs");
     expect(workflow).toContain(
       "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'alchemy-only'",
     );
@@ -664,7 +664,10 @@ describe("read-model production deploy policy", () => {
       'readSources: Object.freeze(["operational+durable+postgres"]),',
     );
     expect(workflow).toContain(
-      'marketSources: Object.freeze(["bitquery"]),',
+      'marketSources: Object.freeze([currentPublicMarketSource]),',
+    );
+    expect(workflow).toContain(
+      'priceSources: Object.freeze(["stateview-chainlink"]),',
     );
     expect(workflow).toContain(
       'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
@@ -689,8 +692,12 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).not.toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain(
-      '"/api/explore?limit=20&page=1&sort=market-cap",\n            bitqueryMarketContract,',
+      '`/api/explore?limit=${marketCapPageSize}&page=1&sort=market-cap`,\n            currentPublicMarketContract,',
     );
+    expect(workflow).toContain("marketCapTotal > maximumMarketCapTokens");
+    expect(workflow).toContain("marketCapTokens.length !== marketCapTotal");
+    expect(workflow).toContain("seenMarketCapIds.has(token.id)");
+    expect(workflow).toContain("seenMarketCapAddresses.has(address)");
     expect(workflow).toContain("entry.launchCategoryProvenance.blockNumber");
     expect(workflow).toContain(
       "entry.launchCategoryProvenance.transactionIndex",
@@ -729,49 +736,48 @@ describe("read-model production deploy policy", () => {
       'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
     );
     expect(workflow).toContain(
-      "goldenChart.identity?.quoteAddress !== goldenQuoteAddress",
+      "goldenChart.identity?.quoteAddress,\n              goldenQuoteAddress",
     );
     expect(workflow).toContain(
       "staged Bitquery Highest FDV is not monotonically descending",
     );
     expect(workflow).toContain(
-      "staged Bitquery Explore exposed stale or unavailable FDV as current",
+      "staged Bitquery Explore exposed unevidenced numeric FDV",
     );
-    expect(workflow).toContain(
-      "staged Bitquery Explore mislabeled stale FDV as current",
-    );
-    expect(workflow).toContain('valuation.freshness === "stale"');
     expect(workflow).toContain(
       'valuation.reason === "waiting-for-first-trade"',
     );
     expect(workflow).toContain("if (currentFdvCount < 1) {");
     expect(workflow).toContain(
-      "staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence",
+      "staged public market path has no current non-PCAN FDV bound to fresh official v4 liquidity",
     );
     expect(workflow).toContain(
-      "primary.liquidity?.asOfTime !== valuation.asOfTime",
-    );
-    expect(workflow).toContain('!/^0x[0-9a-f]{64}$/.test(');
-    expect(workflow).toContain(
-      'token.marketData.primaryPoolId ?? ""',
+      'valuation.source !== "stateview-chainlink"',
     );
     expect(workflow).toContain(
-      "primary.identity?.poolId !== token.marketData.primaryPoolId",
+      'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
     );
     expect(workflow).toContain(
-      'primary.identity?.protocol !== "uniswap_v4"',
+      'liquidity?.source !== "official-uniswap-v4-subgraph"',
     );
     expect(workflow).toContain(
-      "!positiveInteger(primary.liquidity?.valueUsdWad)",
+      "provenance?.subgraphId !== officialV4SubgraphId",
     );
     expect(workflow).toContain(
-      "!positiveInteger(primary.liquidity?.asOfBlock)",
+      "provenance?.deployment !== officialV4SubgraphDeployment",
     );
     expect(workflow).toContain(
-      "!currentMarketTime(primary.liquidity?.asOfTime)",
+      "BigInt(liquidity.tvlUsdWad) <",
     );
     expect(workflow).toContain(
-      "staged Bitquery current Explore and detail FDV are not identical",
+      'token.launchModel !== "classic"',
+    );
+    expect(workflow).toContain(
+      "staged current detail does not independently prove an equal or newer evidence bundle",
+    );
+    expect(workflow).toContain("price.activeVirtualToken0Wei");
+    expect(workflow).toContain(
+      '"stateview-active-liquidity-virtual-depth-usd"',
     );
     expect(workflow).toContain(
       'goldenValuation.metric !== "fdv"',
@@ -818,14 +824,14 @@ describe("read-model production deploy policy", () => {
       "staged PCAN chart is not a strictly ordered positive history",
     );
     const bitquerySmoke = workflow.slice(
-      workflow.indexOf("Smoke staged Bitquery market APIs"),
-      workflow.indexOf("Record registry identity and Bitquery market path"),
+      workflow.indexOf("Smoke staged public market APIs"),
+      workflow.indexOf("Record registry identity and combined market path"),
     );
     expect(bitquerySmoke).toContain(
       "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
     );
-    expect(bitquerySmoke.match(/bitqueryMarketContract/g)).toHaveLength(10);
-    expect(bitquerySmoke.match(/bitqueryChartContract/g)).toHaveLength(2);
+    expect(bitquerySmoke.match(/historicalBitqueryMarketContract/g)).toHaveLength(3);
+    expect(bitquerySmoke.match(/bitqueryChartContract/g)).toHaveLength(3);
     expect(bitquerySmoke).not.toContain("alchemyIdentityContract");
     expect(bitquerySmoke).not.toContain("/api/ops/health");
     expect(bitquerySmoke).not.toContain("/api/explore/profile");

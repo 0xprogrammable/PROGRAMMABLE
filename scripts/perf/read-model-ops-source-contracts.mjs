@@ -309,6 +309,390 @@ function exactJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function includesEverySourceFragment(source, fragments) {
+  return typeof source === "string" &&
+    fragments.every((fragment) => source.includes(fragment));
+}
+
+export const POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS = Object.freeze([
+  "function hasUnevidencedBitqueryFdv",
+  "if (depth > 12) return true",
+  "if (seen.has(value)) return true",
+  "object.fdvUsdWad !== undefined",
+  "object.marketCapUsdWad !== undefined",
+  'object.metric === "fdv"',
+  'object.status === "available" || object.valueUsdWad !== undefined',
+  "function exactCanonicalClassicNativeToken",
+  'token?.exploreKind !== "token"',
+  'token.launchModel !== "classic"',
+  'token.liquidityPath === "meme"',
+  "token.launchStampProvenance === undefined",
+  'token.liquidityPath === "programmable-v4"',
+  'stamp?.schemaVersion === "programmable.launch-stamp-provenance.v1"',
+  'stamp.kind === "classic"',
+  "stamp.chainId === 1",
+  "sameBytes32(stamp.poolId, poolId)",
+  "sameAddress(stamp.poolKey?.currency0, NATIVE_CURRENCY)",
+  "sameAddress(stamp.poolKey?.currency1, tokenAddress)",
+  "sameAddress(stamp.poolKey?.hooks, token?.hookAddress)",
+  "tokenAddress === GOLDEN_TOKEN_ADDRESS",
+  'valuation?.status !== "available"',
+  'valuation.metric !== "fdv"',
+  'valuation.supplyBasis !== "total"',
+  'valuation.currency !== "usd"',
+  'valuation.source !== "stateview-chainlink"',
+  'valuation.freshness !== "current"',
+  "token.fdvUsdWad !== valuation.valueWad",
+  "!positiveInteger(valuation.asOfBlock)",
+  "!exactBytes32(valuation.asOfBlockHash)",
+  "!currentMarketEvidenceTime(valuation.asOfTime)",
+  'valuation.lagBlocks !== "0"',
+  '"programmable.stateview-chainlink-price-evidence.v1"',
+  'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
+  'price.chainId !== "1"',
+  "!sameAddress(price.tokenAddress, tokenAddress)",
+  "!sameAddress(price.quoteAddress, NATIVE_CURRENCY)",
+  "!sameBytes32(price.poolId, market?.primaryPoolId)",
+  "price.stateViewAddress?.toLowerCase() !== MAINNET_STATE_VIEW",
+  "MAINNET_STATE_VIEW_RUNTIME_CODE_HASH",
+  "price.blockNumber !== valuation.asOfBlock",
+  "!sameBytes32(price.blockHash, valuation.asOfBlockHash)",
+  "!exactUnixTimestamp(price.blockTimestamp)",
+  "price.blockTime !== valuation.asOfTime",
+  "Number(BigInt(price.blockTimestamp)) * 1_000",
+  "!positiveInteger(price.sqrtPriceX96)",
+  "!positiveInteger(price.activeLiquidity)",
+  "!positiveInteger(price.activeVirtualToken0Wei)",
+  "!positiveInteger(price.activeVirtualLiquidityUsdWad)",
+  '"stateview-active-liquidity-virtual-depth-usd"',
+  "!positiveInteger(price.tokenPriceEthWei)",
+  "!positiveInteger(price.tokenPriceUsdWad)",
+  "price.totalSupplyRaw !== token.totalSupplyRaw",
+  "price.tokenDecimals !== token.tokenDecimals",
+  "price.fdvUsdWad !== valuation.valueWad",
+  "quote?.feedAddress?.toLowerCase() !== MAINNET_ETH_USD_FEED",
+  "!positiveInteger(quote.roundId)",
+  "!positiveInteger(quote.answeredInRound)",
+  "BigInt(quote.answeredInRound) < BigInt(quote.roundId)",
+  "!positiveInteger(quote.answer)",
+  "quote.decimals !== 8",
+  "!exactUnixTimestamp(quote.updatedAt)",
+  "Number(BigInt(quote.updatedAt)) * 1_000",
+  "!positiveInteger(token.totalSupplyRaw)",
+  "token.tokenDecimals < 0",
+  "token.tokenDecimals > 255",
+  'market?.schemaVersion !== "programmable.market-data.v1"',
+  'market.source !== "bitquery"',
+  'market.status !== "current"',
+  "!currentMarketTime(market.generatedAt)",
+  "!exactBytes32(market.primaryPoolId)",
+  "!sameBytes32(token.poolId, market.primaryPoolId)",
+  'primary?.identity?.chainId !== "1"',
+  "!sameAddress(primary.identity.tokenAddress, tokenAddress)",
+  "!sameBytes32(primary.identity.poolId, market.primaryPoolId)",
+  'primary.identity.protocol !== "uniswap_v4"',
+  'primary.source !== "bitquery"',
+  'primary.status !== "current"',
+  "hasUnevidencedBitqueryFdv(market)",
+  'liquidity?.source !== "official-uniswap-v4-subgraph"',
+  'liquidity.identity?.chainId !== "1"',
+  'liquidity.identity.protocol !== "uniswap_v4"',
+  "!sameBytes32(liquidity.identity.poolId, market.primaryPoolId)",
+  "!sameAddress(liquidity.identity.tokenAddress, tokenAddress)",
+  "liquidity.identity.quoteAddress, price.quoteAddress",
+  'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
+  "liquidity.reportedPoolBalances?.token0?.address",
+  "liquidity.reportedPoolBalances?.token1?.address",
+  "liquidity.reportedPoolBalances.token0.decimals !== 18",
+  "liquidity.reportedPoolBalances.token1.decimals !== token.tokenDecimals",
+  "!unsignedDecimal(liquidity.reportedPoolBalances.token0.amountDecimal)",
+  "!unsignedDecimal(liquidity.reportedPoolBalances.token1.amountDecimal)",
+  "!positiveDecimal(liquidity.reportedPoolBalances.token0.amountDecimal)",
+  "!positiveDecimal(liquidity.reportedPoolBalances.token1.amountDecimal)",
+  "BigInt(liquidity.tvlUsdWad) < MINIMUM_PUBLIC_FDV_LIQUIDITY_USD_WAD",
+  'liquidity.freshness !== "current"',
+  "provenance?.subgraphId !== OFFICIAL_V4_SUBGRAPH_ID",
+  "provenance?.deployment !== OFFICIAL_V4_SUBGRAPH_DEPLOYMENT",
+  "!positiveInteger(provenance.indexedBlockNumber)",
+  "!exactBytes32(provenance.indexedBlockHash)",
+  "!exactUnixTimestamp(provenance.indexedBlockTimestamp)",
+  "!currentMarketEvidenceTime(provenance.indexedBlockTime)",
+  "!positiveInteger(provenance.referenceHeadBlockNumber)",
+  "!exactBytes32(provenance.referenceHeadBlockHash)",
+  "!unsignedInteger(provenance.lagBlocks)",
+  "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
+  "valuation.asOfBlockHash, provenance.referenceHeadBlockHash",
+  "lagBlocks === referenceBlock - indexedBlock",
+  "lagBlocks <= OFFICIAL_V4_LIQUIDITY_MAXIMUM_LAG_BLOCKS",
+  "provenance.indexedBlockHash,",
+  "provenance.indexedBlockTime ===",
+  "indexedTimestamp <= valuationTimeSeconds",
+  "feedUpdatedAt <= valuationTimeSeconds",
+  "valuationTimeSeconds - feedUpdatedAt <= 7_200n",
+  "expectedFdvUsdWad.toString() === valuation.valueWad",
+  "expectedTokenPriceEthWei.toString() === price.tokenPriceEthWei",
+  "expectedTokenPriceUsdWad.toString() === price.tokenPriceUsdWad",
+  "activeVirtualToken0Wei.toString() === price.activeVirtualToken0Wei",
+  "expectedActiveVirtualLiquidityUsdWad >=",
+  "price.activeVirtualLiquidityUsdWad",
+  "verifyCurrentPublicOnchainEvidenceV1",
+  '"eth_getBlockByNumber"',
+  '"eth_getCode"',
+  '"eth_call"',
+  "requireCanonical: true",
+  "keccak256(stateViewCode)",
+  "sameCurrentEvidenceObservation(first, second)",
+  "first.blockHash !== valuation.asOfBlockHash.toLowerCase()",
+  "first.stateViewRuntimeCodeHash !== MAINNET_STATE_VIEW_RUNTIME_CODE_HASH",
+  "first.sqrtPriceX96.toString() !== price.sqrtPriceX96",
+  "first.activeLiquidity.toString() !== price.activeLiquidity",
+  "first.totalSupplyRaw.toString() !== price.totalSupplyRaw",
+  "first.feedDecimals !== quote.decimals",
+  "first.roundId.toString() !== quote.roundId",
+  "first.answeredInRound.toString() !== quote.answeredInRound",
+  "providerCount: observations.length",
+]);
+
+export const POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS = Object.freeze([
+  "total > MAXIMUM_EXPLORE_TOKENS",
+  "totalPages !== Math.ceil(total / EXPLORE_PAGE_SIZE)",
+  "responses.length !== totalPages",
+  'page?.status !== "ready"',
+  'page?.sort !== "market-cap"',
+  "page?.page !== index + 1",
+  "page?.pageSize !== EXPLORE_PAGE_SIZE",
+  "page?.total !== total",
+  "page?.totalPages !== totalPages",
+  "pageTokens.length !== expectedLength",
+  '"programmable.explore-data-quality.v1"',
+  "quality.available + quality.unavailable !== pageTokens.length",
+  "quality.stale > quality.available",
+  "quality.unknown !== 0",
+  'response.headers.readSource !== "operational+durable+postgres"',
+  "response.headers.rpcProvider !== null",
+  "response.headers.marketAsOf !== (quality.asOfTime ?? null)",
+  "!exactCurrentPublicMarketHeaders(response)",
+  "!currentMarketEvidenceTime(quality.asOfTime)",
+  "token.valuation.asOfBlock !== quality.asOfBlock",
+  'response.headers.marketSource !== "bitquery"',
+  "response.headers.valuationBlock !== null",
+  "ids.has(token.id)",
+  "addresses.has(address)",
+  "tokens.length !== total",
+  "!UNAVAILABLE_VALUATION_REASONS.has(valuation.reason)",
+  "token?.fdvUsdWad !== undefined",
+  "hasUnevidencedBitqueryFdv(token?.marketData)",
+  'valuation.source === "bitquery"',
+  "return null;",
+  'valuation.source !== "stateview-chainlink"',
+  "sawNonCurrent",
+  "!exactCurrentPublicFdvLiquidity(token)",
+  "value > previousCurrentFdv",
+  "return currentCount > 0 ? { currentToken, tokens } : null;",
+]);
+
+export const POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS = Object.freeze([
+  "!sameAddress(detailToken?.tokenAddress, exploreToken?.tokenAddress)",
+  "!sameAddress(detailToken?.hookAddress, exploreToken?.hookAddress)",
+  "detailToken?.launchModel !== exploreToken?.launchModel",
+  "detailToken?.liquidityPath !== exploreToken?.liquidityPath",
+  "detailToken?.marketData?.primaryPoolId,",
+  "exploreToken?.marketData?.primaryPoolId,",
+  "detailToken?.valuation?.priceEvidence?.quoteAddress,",
+  "exploreToken?.valuation?.priceEvidence?.quoteAddress,",
+  "!exactCurrentPublicMarketHeaders(response)",
+  "!exactCurrentPublicFdvLiquidity(detailToken)",
+  "detailBlock < exploreBlock",
+  "Date.parse(detailToken.valuation.asOfTime) <",
+  "detailBlock !== exploreBlock",
+  "JSON.stringify(detailToken.valuation)",
+  "JSON.stringify(detailToken.liquidityEvidence)",
+  'response.headers.marketSource !== "bitquery"',
+  'response.headers.priceSource !== "bitquery"',
+  'chart.readStatus !== "live"',
+  '["ready", "insufficient-history"].includes(chart.status)',
+  "chart.truncated !== false",
+  "chart.identity?.chainId !== \"1\"",
+  "!sameAddress(chart.identity?.tokenAddress, tokenAddress)",
+  "!sameBytes32(chart.identity?.poolId, poolId)",
+  "!sameAddress(chart.identity?.quoteAddress, quoteAddress)",
+  'chart.identity?.protocol !== "uniswap_v4"',
+  "chart.range !== range",
+  "chart.points.length < 2 || chart.swapCount < 2",
+  "chart.points.length !== 1 || chart.swapCount !== 1",
+  'chart.valuation?.status !== "unavailable"',
+  'chart.valuation?.reason !== "source-unavailable"',
+  '"fdvUsdWad" in chart',
+  '"valuationMetric" in chart',
+  "chart.asOfTime !== chart.points.at(-1)?.observedAt",
+  "response.headers.marketAsOf !== chart.asOfTime",
+  "requireCurrentAsOf && !currentMarketTime(chart.asOfTime)",
+  'point?.valueSemantics !== "period-median"',
+  "time !== bucketEnd",
+  "bucketStart >= bucketEnd",
+  "observedAt < bucketStart",
+  "observedAt > bucketEnd",
+  "!positiveDecimal(point?.priceQuote)",
+  'typeof point?.quoteSymbol !== "string"',
+  "point?.priceUsd !== undefined",
+  "point?.ohlcUsd !== undefined",
+  "point?.ohlcQuote !== undefined",
+  "point.tradeCount < 1",
+  "bucketStart < previousBucketEnd",
+  "block <= previousBlock",
+  "totalTrades === chart.swapCount",
+]);
+
+export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
+  "const hasUnevidencedBitqueryFdv = (",
+  "if (depth > 12) return true",
+  "if (seen.has(value)) return true",
+  "value.fdvUsdWad !== undefined",
+  "value.marketCapUsdWad !== undefined",
+  'value.metric === "fdv"',
+  'value.status === "available" ||',
+  "const exactCanonicalClassicNativeToken = (",
+  'token?.exploreKind !== "token"',
+  'token.launchModel !== "classic"',
+  'token.liquidityPath === "meme"',
+  "token.launchStampProvenance === undefined",
+  'token.liquidityPath === "programmable-v4"',
+  '"programmable.launch-stamp-provenance.v1"',
+  'stamp.kind === "classic"',
+  "stamp.chainId === 1",
+  "sameBytes32(stamp.poolId, poolId)",
+  "sameAddress(stamp.poolKey?.currency0, nativeCurrency)",
+  "sameAddress(stamp.poolKey?.currency1, tokenAddress)",
+  "sameAddress(stamp.poolKey?.hooks, token?.hookAddress)",
+  'valuation.source !== "stateview-chainlink"',
+  'valuation.freshness !== "current"',
+  "token.fdvUsdWad !== valuation.valueWad",
+  "!positiveInteger(valuation.asOfBlock)",
+  "!exactBytes32(valuation.asOfBlockHash)",
+  "!currentMarketEvidenceTime(valuation.asOfTime)",
+  'valuation.lagBlocks !== "0"',
+  '"programmable.stateview-chainlink-price-evidence.v1"',
+  'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
+  "!sameAddress(price.tokenAddress, tokenAddress)",
+  "!sameAddress(price.quoteAddress, nativeCurrency)",
+  "!sameBytes32(price.poolId, market?.primaryPoolId)",
+  "price.stateViewAddress?.toLowerCase() !== mainnetStateView",
+  "mainnetStateViewRuntimeCodeHash",
+  "price.blockNumber !== valuation.asOfBlock",
+  "!sameBytes32(price.blockHash, valuation.asOfBlockHash)",
+  "!exactUnixTimestamp(price.blockTimestamp)",
+  "price.blockTime !== valuation.asOfTime",
+  "!positiveInteger(price.sqrtPriceX96)",
+  "!positiveInteger(price.activeLiquidity)",
+  "!positiveInteger(price.activeVirtualToken0Wei)",
+  "!positiveInteger(price.activeVirtualLiquidityUsdWad)",
+  '"stateview-active-liquidity-virtual-depth-usd"',
+  "!positiveInteger(price.tokenPriceEthWei)",
+  "!positiveInteger(price.tokenPriceUsdWad)",
+  "price.totalSupplyRaw !== token.totalSupplyRaw",
+  "price.tokenDecimals !== token.tokenDecimals",
+  "price.fdvUsdWad !== valuation.valueWad",
+  "quote?.feedAddress?.toLowerCase() !== mainnetEthUsdFeed",
+  "!positiveInteger(quote.roundId)",
+  "!positiveInteger(quote.answeredInRound)",
+  "BigInt(quote.answeredInRound) < BigInt(quote.roundId)",
+  "!positiveInteger(quote.answer)",
+  "quote.decimals !== 8",
+  "quote.updatedAtTime !==",
+  "!exactCanonicalClassicNativeToken(",
+  'market.source !== "bitquery"',
+  'market.status !== "current"',
+  "!currentMarketTime(market.generatedAt)",
+  "!sameBytes32(token.poolId, market.primaryPoolId)",
+  "!sameAddress(primary.identity.tokenAddress, tokenAddress)",
+  "!sameBytes32(primary.identity.poolId, market.primaryPoolId)",
+  'primary.identity.protocol !== "uniswap_v4"',
+  'primary.source !== "bitquery"',
+  'primary.status !== "current"',
+  "hasUnevidencedBitqueryFdv(market)",
+  'liquidity?.source !== "official-uniswap-v4-subgraph"',
+  'liquidity.identity.protocol !== "uniswap_v4"',
+  "!sameBytes32(liquidity.identity.poolId, market.primaryPoolId)",
+  "!sameAddress(liquidity.identity.tokenAddress, tokenAddress)",
+  'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
+  "liquidity.reportedPoolBalances?.token0?.address",
+  "liquidity.reportedPoolBalances?.token1?.address",
+  "BigInt(liquidity.tvlUsdWad) <",
+  'liquidity.freshness !== "current"',
+  "provenance?.subgraphId !== officialV4SubgraphId",
+  "provenance?.deployment !== officialV4SubgraphDeployment",
+  "!currentMarketEvidenceTime(provenance.indexedBlockTime)",
+  "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
+  "valuation.asOfBlockHash,",
+  "lagBlocks === referenceBlock - indexedBlock",
+  "lagBlocks <= 64n",
+  "indexedTimestamp <= valuationTimeSeconds",
+  "feedUpdatedAt <= valuationTimeSeconds",
+  "valuationTimeSeconds - feedUpdatedAt <= 7_200n",
+  "expectedFdvUsdWad.toString() === valuation.valueWad",
+  "expectedTokenPriceEthWei.toString() ===",
+  "expectedTokenPriceUsdWad.toString() ===",
+  "activeVirtualToken0Wei.toString() ===",
+  "expectedActiveVirtualLiquidityUsdWad >=",
+  "marketCapTotal > maximumMarketCapTokens",
+  "marketCapTotalPages !==",
+  "marketCapPages.push(await requestJson(",
+  "page.total !== marketCapTotal",
+  "page.totalPages !== marketCapTotalPages",
+  "page.tokens.length !== expectedPageLength",
+  "valuationQuality.available + valuationQuality.unavailable !==",
+  "valuationQuality.unknown !== 0",
+  "page.__marketHeaders?.marketSource !==",
+  "page.__marketHeaders?.valuationBlock !== null",
+  "seenMarketCapIds.has(token.id)",
+  "seenMarketCapAddresses.has(address)",
+  "marketCapTokens.length !== marketCapTotal",
+  "hasUnevidencedBitqueryFdv(token?.marketData)",
+  'valuation.source === "bitquery"',
+  "sawNonCurrentFdv",
+  "value > previousCurrentFdv",
+  "if (currentFdvCount < 1) {",
+  "!sameAddress(",
+  "currentFdvDetail.token?.hookAddress",
+  "currentFdvDetail.token?.launchModel !==",
+  "currentFdvDetail.token?.liquidityPath !==",
+  "currentFdvDetail.token?.marketData?.primaryPoolId",
+  "currentFdvDetail.token?.valuation?.priceEvidence?.quoteAddress",
+  "detailValuationBlock < exploreValuationBlock",
+  "Date.parse(currentFdvDetail.token.valuation.asOfTime) <",
+  "sameValuationSnapshot",
+  "JSON.stringify(currentFdvDetail.token.valuation)",
+  "JSON.stringify(currentFdvDetail.token.liquidityEvidence)",
+  'for (const range of ["1h", "1d", "1w", "all"])',
+  "verifyCurrentPublicOnchainEvidenceV1({",
+  "process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+  "process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+  '"programmable.current-market-independent-proof.v1"',
+  "independentCurrentProof.providerCount !== 2",
+  'currentChart.readStatus !== "live"',
+  '["ready", "insufficient-history"].includes(',
+  "currentChart.truncated !== false",
+  "currentChart.identity.quoteAddress",
+  "currentFdvToken.valuation.priceEvidence.quoteAddress",
+  'currentChart.valuation?.status !== "unavailable"',
+  'currentChart.valuation?.reason !== "source-unavailable"',
+  '"fdvUsdWad" in currentChart',
+  '"valuationMetric" in currentChart',
+  "chartPoints.at(-1)?.observedAt",
+  "!currentMarketTime(currentChart.asOfTime)",
+  'point?.valueSemantics !== "period-median"',
+  "pointTime !== bucketEnd",
+  "observedAt < bucketStart",
+  "observedAt > bucketEnd",
+  "!positiveDecimal(point?.priceQuote)",
+  'typeof point?.quoteSymbol !== "string"',
+  "point?.priceUsd !== undefined",
+  "point?.ohlcUsd !== undefined",
+  "point?.ohlcQuote !== undefined",
+  "bucketStart < previousBucketEnd",
+  "observedTrades !== currentChart.swapCount",
+]);
+
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
 }
@@ -974,6 +1358,30 @@ export function evaluateReadModelOperationsSourceContracts(
     "scripts/perf/read-model-real-block-sla-operator.mjs",
   ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
+  const postCurrentEvidenceStart = postPromotion.indexOf(
+    "function exactCanonicalClassicNativeToken",
+  );
+  const postCurrentEvidenceEnd = postPromotion.indexOf(
+    "function exactExploreRanking",
+  );
+  const postCurrentEvidenceBlock =
+    postCurrentEvidenceStart >= 0 &&
+      postCurrentEvidenceEnd > postCurrentEvidenceStart
+      ? postPromotion.slice(postCurrentEvidenceStart, postCurrentEvidenceEnd)
+      : "";
+  const postGlobalRankingEnd = postPromotion.indexOf(
+    "function exactCurrentPublicDetail",
+  );
+  const postGlobalRankingBlock =
+    postCurrentEvidenceEnd >= 0 &&
+      postGlobalRankingEnd > postCurrentEvidenceEnd
+      ? postPromotion.slice(postCurrentEvidenceEnd, postGlobalRankingEnd)
+      : "";
+  const postDetailChartEnd = postPromotion.indexOf("function publicChecks");
+  const postDetailChartBlock =
+    postGlobalRankingEnd >= 0 && postDetailChartEnd > postGlobalRankingEnd
+      ? postPromotion.slice(postGlobalRankingEnd, postDetailChartEnd)
+      : "";
   const bitqueryGoldenParity = source(
     "scripts/perf/bitquery-golden-market-parity.mjs",
   ) ?? "";
@@ -1116,10 +1524,10 @@ export function evaluateReadModelOperationsSourceContracts(
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
   const stagedBitquerySmoke = deployWorkflow.indexOf(
-    "Smoke staged Bitquery market APIs",
+    "Smoke staged public market APIs",
   );
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
-    "Record registry identity and Bitquery market path",
+    "Record registry identity and combined market path",
   );
   const stagedBitquerySmokeBlock =
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
@@ -1128,6 +1536,10 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-protected-bitquery-stage-smoke",
     stagedBitquerySmoke > stagedWakeGateEnd &&
+      includesEverySourceFragment(
+        stagedBitquerySmokeBlock,
+        STAGED_MARKET_EVIDENCE_SOURCE_GUARDS,
+      ) &&
       stagedBitquerySmokeBlock.includes(
         "if: needs.release-gate.outputs.verified_read_model == 'true'",
       ) &&
@@ -1157,7 +1569,10 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       stagedBitquerySmokeBlock.includes("rpcProviders: null") &&
       stagedBitquerySmokeBlock.includes(
-        'marketSources: Object.freeze(["bitquery"]),',
+        'marketSources: Object.freeze([currentPublicMarketSource]),',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'priceSources: Object.freeze(["stateview-chainlink"]),',
       ) &&
       stagedBitquerySmokeBlock.includes(
         'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
@@ -1189,10 +1604,19 @@ export function evaluateReadModelOperationsSourceContracts(
       !stagedBitquerySmokeBlock.includes("alchemyIdentityContract") &&
       !stagedBitquerySmokeBlock.includes("/api/indexers/v1/token-list") &&
       stagedBitquerySmokeBlock.includes(
-        '"/api/explore?limit=20&page=1&sort=market-cap",\n            bitqueryMarketContract,',
+        '`/api/explore?limit=${marketCapPageSize}&page=1&sort=market-cap`,\n            currentPublicMarketContract,',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"/api/explore?limit=20&page=1&sort=market-cap"',
+        "marketCapTotal > maximumMarketCapTokens",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "marketCapTokens.length !== marketCapTotal",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "seenMarketCapIds.has(token.id)",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "seenMarketCapAddresses.has(address)",
       ) &&
       stagedBitquerySmokeBlock.includes(
         "entry.launchCategoryProvenance.blockNumber",
@@ -1242,19 +1666,13 @@ export function evaluateReadModelOperationsSourceContracts(
         'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "goldenChart.identity?.quoteAddress !== goldenQuoteAddress",
+        "goldenChart.identity?.quoteAddress,\n              goldenQuoteAddress",
       ) &&
       stagedBitquerySmokeBlock.includes(
         '"staged Bitquery Highest FDV is not monotonically descending"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery Explore exposed stale or unavailable FDV as current"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery Explore mislabeled stale FDV as current"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'valuation.freshness === "stale"',
+        '"staged Bitquery Explore exposed unevidenced numeric FDV"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         'valuation.reason === "waiting-for-first-trade"',
@@ -1263,41 +1681,62 @@ export function evaluateReadModelOperationsSourceContracts(
         'tokenAddress === goldenTokenAddress',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '!/^0x[0-9a-f]{64}$/.test(',
+        'valuation.source !== "stateview-chainlink"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        'token.marketData.primaryPoolId ?? ""',
+        'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        'primary.identity?.poolId !== token.marketData.primaryPoolId',
+        'liquidity?.source !== "official-uniswap-v4-subgraph"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        'primary.identity?.protocol !== "uniswap_v4"',
+        "provenance?.subgraphId !== officialV4SubgraphId",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '!positiveInteger(primary.liquidity?.valueUsdWad)',
+        "provenance?.deployment !== officialV4SubgraphDeployment",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '!positiveInteger(primary.liquidity?.asOfBlock)',
+        "BigInt(liquidity.tvlUsdWad) <",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        'primary.valuation.valueUsdWad !== valuation.valueWad',
+        "minimumPublicFdvLiquidityUsdWad",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        'primary.liquidity?.asOfTime !== valuation.asOfTime',
+        'token.launchModel !== "classic"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '!currentMarketTime(primary.liquidity?.asOfTime)',
+        'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery current public FDV lacks exact primary-pool liquidity evidence"',
+        "lagBlocks <= 64n",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "expectedFdvUsdWad.toString() === valuation.valueWad",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "expectedActiveVirtualLiquidityUsdWad >=",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "price.activeVirtualLiquidityUsdWad",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "price.activeVirtualToken0Wei",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"stateview-active-liquidity-virtual-depth-usd"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged public current FDV lacks exact StateView, Chainlink and official v4 liquidity evidence"',
       ) &&
       stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
       stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence"',
+        '"staged public market path has no current non-PCAN FDV bound to fresh official v4 liquidity"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery current Explore and detail FDV are not identical"',
+        '"staged current detail does not independently prove an equal or newer evidence bundle"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         'goldenValuation.metric !== "fdv"',
@@ -1310,9 +1749,6 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       stagedBitquerySmokeBlock.includes(
         '"./scripts/perf/bitquery-historical-release-gate.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "const boundedStaleMarketTime = boundedStaleMarketTimeV1",
       ) &&
       stagedBitquerySmokeBlock.includes(
         "await verifyBitqueryGoldenMarketParityV1({",
@@ -1422,9 +1858,6 @@ export function evaluateReadModelOperationsSourceContracts(
         "currentFdvCount < 1 && !historicalPaidPathVerified",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "staged Bitquery Explore stale FDV is too old",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
         "goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt",
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1444,7 +1877,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       !stagedBitquerySmokeBlock.includes("${automationBypassSecret}") &&
       !stagedBitquerySmokeBlock.includes("console."),
-    "the staged API smoke proves registry identity plus Bitquery-only market provenance without exposing its deployment bypass",
+    "the staged API smoke binds current StateView and Chainlink FDV to official v4 liquidity while retaining Bitquery trade and chart provenance",
   );
   const stagedReadModelCapture = deployWorkflow.indexOf(
     "Capture staged read-model evidence",
@@ -1577,7 +2010,9 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
-      postPromotion.includes('"/api/explore?limit=6&page=1&sort=market-cap"') &&
+      postPromotion.includes(
+        "`/api/explore?limit=${EXPLORE_PAGE_SIZE}&page=1&sort=market-cap`",
+      ) &&
       postPromotion.includes(
         '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
       ) &&
@@ -1585,50 +2020,98 @@ export function evaluateReadModelOperationsSourceContracts(
         '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
       ) &&
       postPromotion.includes("exactBitqueryHeaders") &&
-      postPromotion.includes("honestExploreValuations") &&
+      postPromotion.includes("exactExploreRanking") &&
       postPromotion.includes("exactCurrentPublicFdvLiquidity") &&
       postPromotion.includes("exactGoldenDetail") &&
       postPromotion.includes("exactGoldenSearch") &&
       postPromotion.includes("exactGoldenChart") &&
+      postPromotion.includes("quoteAddress: GOLDEN_QUOTE_ADDRESS") &&
       postPromotion.includes(
-        "chart.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS",
+        'Object.freeze(["1h", "1d", "1w", "all"])',
       ) &&
-      postPromotion.includes(
-        "const boundedStaleMarketTime = boundedStaleMarketTimeV1",
+      includesEverySourceFragment(
+        postCurrentEvidenceBlock,
+        POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS,
+      ) &&
+      includesEverySourceFragment(
+        postGlobalRankingBlock,
+        POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS,
+      ) &&
+      includesEverySourceFragment(
+        postDetailChartBlock,
+        POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS,
       ) &&
       postPromotion.includes('chart.readStatus !== "live"') &&
       postPromotion.includes("verifyBitqueryGoldenMarketParityV1") &&
       postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV1") &&
       postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
       postPromotion.includes(
-        "return currentCount > 0 &&",
+        "return currentCount > 0 ? { currentToken, tokens } : null;",
       ) &&
       postPromotion.includes(
-        'tokenAddress !== GOLDEN_TOKEN_ADDRESS',
+        'tokenAddress === GOLDEN_TOKEN_ADDRESS',
       ) &&
       postPromotion.includes(
-        'primary.identity.poolId === market.primaryPoolId',
+        '!sameBytes32(primary.identity.poolId, market.primaryPoolId)',
       ) &&
       postPromotion.includes(
-        'primary.identity.protocol === "uniswap_v4"',
+        'primary.identity.protocol !== "uniswap_v4"',
       ) &&
       postPromotion.includes(
-        'positiveInteger(liquidity.valueUsdWad)',
+        'liquidity?.source !== "official-uniswap-v4-subgraph"',
       ) &&
       postPromotion.includes(
-        'positiveInteger(liquidity.asOfBlock)',
+        "provenance?.subgraphId !== OFFICIAL_V4_SUBGRAPH_ID",
       ) &&
       postPromotion.includes(
-        'poolValuation.valueUsdWad === valuation.valueWad',
+        "provenance?.deployment !== OFFICIAL_V4_SUBGRAPH_DEPLOYMENT",
       ) &&
       postPromotion.includes(
-        'liquidity.asOfTime === valuation.asOfTime',
+        "BigInt(liquidity.tvlUsdWad) < MINIMUM_PUBLIC_FDV_LIQUIDITY_USD_WAD",
       ) &&
       postPromotion.includes(
-        'currentMarketTime(liquidity.asOfTime)',
+        'token.launchModel !== "classic"',
       ) &&
       postPromotion.includes(
-        'currentMarketTime(marketAsOf)',
+        'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
+      ) &&
+      postPromotion.includes(
+        "lagBlocks <= OFFICIAL_V4_LIQUIDITY_MAXIMUM_LAG_BLOCKS",
+      ) &&
+      postPromotion.includes(
+        "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
+      ) &&
+      postPromotion.includes(
+        "expectedFdvUsdWad.toString() === valuation.valueWad",
+      ) &&
+      postPromotion.includes(
+        "expectedActiveVirtualLiquidityUsdWad >=",
+      ) &&
+      postPromotion.includes(
+        "price.activeVirtualLiquidityUsdWad",
+      ) &&
+      postPromotion.includes(
+        "price.activeVirtualToken0Wei",
+      ) &&
+      postPromotion.includes(
+        '"stateview-active-liquidity-virtual-depth-usd"',
+      ) &&
+      postPromotion.includes(
+        'id: "production-current-public-detail"',
+      ) &&
+      postPromotion.includes(
+        'id: "production-current-public-bitquery-charts"',
+      ) &&
+      postPromotion.includes("MAXIMUM_EXPLORE_TOKENS") &&
+      postPromotion.includes("responses.length !== totalPages") &&
+      postPromotion.includes(
+        'valuation.source !== "stateview-chainlink"',
+      ) &&
+      postPromotion.includes(
+        'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
+      ) &&
+      postPromotion.includes(
+        'currentMarketEvidenceTime(quality.asOfTime)',
       ) &&
       postPromotion.includes(
         'id: "production-bitquery-golden-independent-parity"',
@@ -1636,6 +2119,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes('response.headers.get("x-programmable-market-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-price-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-market-as-of")') &&
+      postPromotion.includes('"x-programmable-valuation-block"') &&
       postPromotion.includes('response.headers.get("x-programmable-data-quality")') &&
       !postPromotion.includes("/api/indexers/v1/token-list") &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
