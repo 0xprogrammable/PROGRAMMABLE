@@ -216,7 +216,7 @@ test("binds exact Safe transaction input, reviewed authorization, and cost-only 
       maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics: AUTHORIZATION_SEMANTICS,
       stagedRawTransactionTrustBoundary:
-        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+        "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
       dispatchIntentFinalConfirmation:
         "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
       nonceScopedJournalExclusivity:
@@ -333,9 +333,21 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     };
   });
   const manifest = {
-    schemaVersion: "programmable.custom-registry-predeployment.v3",
+    schemaVersion: "programmable.custom-registry-predeployment.v4",
     status: "SOURCE_ONLY_NOT_DEPLOYED",
-    activationAllowed: false,
+    activationAllowed: true,
+    controllerCustody: {
+      model:
+        "FOUR_DISTINCT_SAFE_ONE_OF_ONE_CURRENT_USER_KEYCHAIN_CONTROLLERS_OWNER_ACCEPTED",
+      controllerSafes: 4,
+      ownersPerSafe: 1,
+      threshold: 1,
+      sameHostConcentrationAccepted: true,
+      restartReadbackRequiredForPublicActivation: false,
+      encryptedBackupRequiredForPublicActivation: false,
+      hardwareTwoOfThreeMigrationRequiredForPublicActivation: false,
+      hardwareTwoOfThreeMigrationDeferred: true,
+    },
     sourceDigests: {
       "config/custom-registry-v2-safe-controller-policy.json": policySha256,
       "config/custom-registry-v2-production-policy.json":
@@ -346,7 +358,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
       maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics: AUTHORIZATION_SEMANTICS,
       stagedRawTransactionTrustBoundary:
-        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+        "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
       dispatchIntentFinalConfirmation:
         "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
       nonceScopedJournalExclusivity:
@@ -412,7 +424,7 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
       maximumDispatchIntentAuthorizationValiditySeconds: 300,
       authorizationSemantics: AUTHORIZATION_SEMANTICS,
       stagedRawTransactionTrustBoundary:
-        "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+        "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
       dispatchIntentFinalConfirmation:
         "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
       nonceScopedJournalExclusivity:
@@ -457,6 +469,38 @@ test("binds every Safe plan transaction to official policy and CREATE2 provenanc
     manifest,
     sourceManifestSha256,
   });
+  assert.throws(
+    () =>
+      assertSafePolicyBoundPlan({
+        plan,
+        policy,
+        manifest: {
+          ...manifest,
+          controllerCustody: {
+            ...manifest.controllerCustody,
+            threshold: 2,
+          },
+        },
+        sourceManifestSha256,
+      }),
+    /committed policy/u,
+  );
+  assert.throws(
+    () =>
+      assertSafePolicyBoundPlan({
+        plan,
+        policy: {
+          ...policy,
+          temporaryPublicCustody: {
+            ...policy.temporaryPublicCustody,
+            sameHostConcentrationAccepted: false,
+          },
+        },
+        manifest,
+        sourceManifestSha256,
+      }),
+    /committed policy/u,
+  );
   assert.throws(
     () =>
       assertSafePolicyBoundPlan({
@@ -513,10 +557,11 @@ test("binds per-role Keychain readback custody proof", () => {
     secretValuesPrinted: false,
     inventorySha256: `0x${"99".repeat(32)}`,
     plaintextRetention: "NO_DURABLE_PLAINTEXT_FINAL_KEYS",
-    restartReadbackVerified: true,
-    encryptedBackupStrategyVerified: true,
+    restartReadbackVerified: false,
+    encryptedBackupStrategyVerified: false,
+    ownerAcceptedUnbackedSingleHostCustody: true,
     temporaryGovernance:
-      "SAME_HOST_ONE_OF_ONE_DARK_DEPLOYMENT_ONLY_MIGRATE_TO_DISTINCT_HARDWARE_TWO_OF_THREE_BEFORE_PUBLIC_ACTIVATION",
+      "SAME_HOST_ONE_OF_ONE_PUBLIC_ACTIVATION_OWNER_ACCEPTED_HARDWARE_TWO_OF_THREE_MIGRATION_DEFERRED",
     roles: roles.map((role, index) => ({
       role,
       publicAddress: addresses[index],
@@ -540,6 +585,26 @@ test("binds per-role Keychain readback custody proof", () => {
     admin: "0xd60858E400460aE6EDEe06504FC4eb7BB94d3De6",
     owners: addresses.slice(2),
   });
+  assert.throws(
+    () =>
+      assertSafeCustodyProof({
+        proof: { ...proof, ownerAcceptedUnbackedSingleHostCustody: false },
+        owners: addresses.slice(2),
+        deployer: addresses[0],
+        admin: addresses[1],
+      }),
+    /custody proof is invalid/u,
+  );
+  assert.throws(
+    () =>
+      assertSafeCustodyProof({
+        proof: { ...proof, restartReadbackVerified: true },
+        owners: addresses.slice(2),
+        deployer: addresses[0],
+        admin: addresses[1],
+      }),
+    /custody proof is invalid/u,
+  );
   assert.throws(
     () =>
       assertSafeCustodyProof({

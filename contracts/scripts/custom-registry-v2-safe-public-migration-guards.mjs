@@ -73,7 +73,7 @@ export function assertSafePublicMigrationReleaseAuthorization({
     actual.authorizationSemantics !== AUTHORIZATION_SEMANTICS ||
     expected.authorizationSemantics !== AUTHORIZATION_SEMANTICS ||
     actual.stagedRawTransactionTrustBoundary !==
-      "OWNER_ONLY_0400_CURRENT_USER_DARK_DEPLOYMENT_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
+      "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE" ||
     actual.stagedRawTransactionTrustBoundary !==
       expected.stagedRawTransactionTrustBoundary ||
     actual.dispatchIntentFinalConfirmation !==

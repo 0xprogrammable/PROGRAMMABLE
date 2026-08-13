@@ -114,7 +114,7 @@ export async function loadCustomRegistryV2ProductionPolicy(root) {
   const policy = JSON.parse(documentBytes);
   if (
     policy.schemaVersion !==
-      "programmable.custom-registry-v2-production-policy.v3" ||
+      "programmable.custom-registry-v2-production-policy.v4" ||
     policy.registryGeneration !== 2 ||
     policy.chainId !== "1" ||
     policy.registrySource?.repositoryId !== "1314365508" ||
@@ -141,7 +141,17 @@ export async function loadCustomRegistryV2ProductionPolicy(root) {
     policy.profiles?.NoMarket0?.marketMode !== 0 ||
     policy.profiles?.NoMarket0?.protocolFeeBps !== 0 ||
     policy.controllerPolicy?.defaultAdminDelaySeconds !== 172800 ||
-    policy.controllerPolicy?.operationalControllersMustHaveRuntimeCode !== true
+    policy.controllerPolicy?.operationalControllersMustHaveRuntimeCode !== true ||
+    policy.controllerPolicy?.temporaryPublicCustody !==
+      "FOUR_DISTINCT_SAFE_ONE_OF_ONE_CURRENT_USER_KEYCHAIN_CONTROLLERS_OWNER_ACCEPTED" ||
+    policy.controllerPolicy?.sameHostConcentrationAccepted !== true ||
+    policy.controllerPolicy?.restartReadbackRequiredForPublicActivation !==
+      false ||
+    policy.controllerPolicy?.encryptedBackupRequiredForPublicActivation !==
+      false ||
+    policy.controllerPolicy
+      ?.hardwareTwoOfThreeMigrationRequiredForPublicActivation !== false ||
+    policy.controllerPolicy?.hardwareTwoOfThreeMigrationDeferred !== true
   )
     throw new Error("Custom Registry V2 production policy document is invalid");
 

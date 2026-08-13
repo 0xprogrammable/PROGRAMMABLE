@@ -222,7 +222,7 @@ const { approvalPolicyCommitment, productionPolicySha256 } =
   });
 if (
   policy.schemaVersion !==
-    "programmable.custom-registry-v2-safe-controller-policy.v2" ||
+    "programmable.custom-registry-v2-safe-controller-policy.v3" ||
   policy.chainId !== "1" ||
   policy.safeVersion !== "1.4.1" ||
   policy.source?.repository !== "safe-fndn/safe-smart-account" ||
@@ -278,6 +278,19 @@ if (
   policy.predictionPrivacy?.publicPredictionsRetired !== true ||
   policy.predictionPrivacy?.leakageFallback !==
     "ABANDON_LEAKED_PREDICTIONS_ROTATE_OWNERS_AND_SALTS_GENERATE_FRESH_PLAN_AND_AUTHORIZATION" ||
+  policy.temporaryPublicCustody?.controllerSafes !== 4 ||
+  policy.temporaryPublicCustody?.ownersPerSafe !== 1 ||
+  policy.temporaryPublicCustody?.threshold !== 1 ||
+  policy.temporaryPublicCustody?.ownerStorage !==
+    "CURRENT_USER_DEFAULT_KEYCHAIN_DISTINCT_GENERIC_PASSWORD_ITEM_PER_ROLE" ||
+  policy.temporaryPublicCustody?.sameHostConcentrationAccepted !== true ||
+  policy.temporaryPublicCustody?.restartReadbackRequired !== false ||
+  policy.temporaryPublicCustody?.encryptedBackupRequired !== false ||
+  policy.temporaryPublicCustody
+    ?.hardwareTwoOfThreeMigrationRequiredBeforePublicActivation !== false ||
+  policy.temporaryPublicCustody?.hardwareTwoOfThreeMigrationDeferred !== true ||
+  policy.temporaryPublicCustody?.ownerDecision !==
+    "TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_EXPLICITLY_ACCEPTED" ||
   policy.setup?.threshold !== 1 ||
   policy.setup?.to !== "0x0000000000000000000000000000000000000000" ||
   policy.setup?.data !== "0x" ||
@@ -293,7 +306,8 @@ const manifestBytes = await readFile(
 const manifest = JSON.parse(manifestBytes);
 if (
   manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
-  manifest.activationAllowed !== false ||
+  manifest.schemaVersion !== "programmable.custom-registry-predeployment.v4" ||
+  manifest.activationAllowed !== true ||
   manifest.sourceDigests?.[
     "config/custom-registry-v2-safe-controller-policy.json"
   ] !== policySha256 ||

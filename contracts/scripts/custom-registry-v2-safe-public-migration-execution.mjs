@@ -216,12 +216,12 @@ export async function assertSafeMigrationPlanAgainstEvidence({
     releasePolicySha256 !== plan.releasePolicySha256 ||
     predeploymentManifestSha256 !== plan.predeploymentManifestSha256 ||
     releasePolicy?.schemaVersion !==
-      "programmable.custom-registry-release-policy.v3" ||
-    releasePolicy.activationAllowed !== false ||
+      "programmable.custom-registry-release-policy.v4" ||
+    releasePolicy.activationAllowed !== true ||
     predeployment?.schemaVersion !==
-      "programmable.custom-registry-predeployment.v3" ||
+      "programmable.custom-registry-predeployment.v4" ||
     predeployment.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
-    predeployment.activationAllowed !== false ||
+    predeployment.activationAllowed !== true ||
     plan.source?.commit !== darkSafeVerification.source?.commit ||
     plan.source?.tree !== darkSafeVerification.source?.tree ||
     plan.feeReview?.reviewedMaxFeePerGas !==
