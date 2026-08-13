@@ -271,7 +271,10 @@ export function evaluateAlchemyExploreSourceContracts(
       canonicalSupplySource.includes("observation.decimals") &&
       canonicalSupplySource.includes("observation.totalSupplyRaw") &&
       canonicalSupplySource.includes("group.length >= 2") &&
-      canonicalSupplySource.includes("if (!agreed) return entry;") &&
+      canonicalSupplySource.includes("!agreed ||") &&
+      canonicalSupplySource.includes(
+        "agreed.blockHash.toLowerCase() !== requestedSnapshot.blockHash",
+      ) &&
       routeSources
         .filter(({ id }) => ["explore", "token-detail"].includes(id))
         .every(({ id, source }) => {
@@ -280,7 +283,7 @@ export function evaluateAlchemyExploreSourceContracts(
               "const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(",
             );
             const globalValuation = source.indexOf(
-              "const currentEntries = await valueExploreEntriesWithCurrentEvidence({",
+              "const currentValuation = await valueExploreEntriesWithCurrentEvidenceSnapshot({",
               globalHydration,
             );
             const globalMarketRead = source.indexOf(
@@ -301,8 +304,20 @@ export function evaluateAlchemyExploreSourceContracts(
             );
             return globalHydration >= 0 &&
               globalValuation > globalHydration &&
+              source.slice(globalHydration, globalValuation).includes(
+                "deployment: input.deployment ?? undefined",
+              ) &&
+              source.slice(globalHydration, globalValuation).includes(
+                "blockNumber: operationalSnapshot.blockNumber",
+              ) &&
+              source.slice(globalHydration, globalValuation).includes(
+                "blockHash: operationalSnapshot.blockHash",
+              ) &&
               source.slice(globalValuation, globalMarketRead).includes(
                 "marketByToken: new Map()",
+              ) &&
+              source.slice(globalValuation, globalMarketRead).includes(
+                "operationalSnapshot,",
               ) &&
               globalMarketRead > globalValuation &&
               pageMarketRead > globalMarketRead &&
