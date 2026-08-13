@@ -246,7 +246,7 @@ function receiptFixture() {
     dependencyLockSha256: "e".repeat(64),
     foundryConfigSha256: "f".repeat(64),
     remappingsSha256: "0".repeat(64),
-    provenanceSha256: "1".repeat(64)
+    sourceBundleCommitmentSha256: "1".repeat(64)
   };
   const receipt = {
     receiptClass: "LOCAL_ISOLATED_INTEGRATION_NOT_PRODUCTION_AUTHORITY_PROOF",
@@ -273,7 +273,7 @@ function receiptFixture() {
       dependencyLock: { path: expected.dependencyLockPath, sha256: expected.dependencyLockSha256 },
       foundryConfigSha256: expected.foundryConfigSha256,
       remappingsSha256: expected.remappingsSha256,
-      frozenSharedAuthorityProvenanceSha256: expected.provenanceSha256
+      frozenSharedAuthoritySourceBundleCommitmentSha256: expected.sourceBundleCommitmentSha256
     },
     rawLog: {
       path: `security/receipts/hookemon-v2-actual-e2e-${rawLogSha256.slice(0, 8)}.log`,
@@ -301,6 +301,7 @@ test("content-addressed actual V2 receipt validates command, toolchain, source b
     (receipt) => { receipt.rawLog.sha256 = "3".repeat(64); },
     (receipt) => { receipt.testedSourceRevision.commit = "4".repeat(40); },
     (receipt) => { receipt.sourceBoundary.dependencyLock.sha256 = "5".repeat(64); },
+    (receipt) => { receipt.sourceBoundary.frozenSharedAuthoritySourceBundleCommitmentSha256 = "6".repeat(64); },
     (receipt) => { receipt.isolatedCheckout.preexistingLibPresent = true; },
     (receipt) => { receipt.limitations = []; }
   ]) {

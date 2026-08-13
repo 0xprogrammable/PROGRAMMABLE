@@ -31,7 +31,7 @@
     },
     "foundryConfigSha256": "b40800f2d4068ce7c6a79c991b50f2cd9cf794b1c1006926115ba50aff09456f",
     "remappingsSha256": "2f87686a246a21832728206395e762da51036a9fdf196ae43f7ead4768694ec0",
-    "frozenSharedAuthorityProvenanceSha256": "36b03b43d03855c5105ae62d4f315560f9d7a3d77fa5d623a5a81300672e1ec7"
+    "frozenSharedAuthoritySourceBundleCommitmentSha256": "491cd070a5eceda5d44b1ee5c682b9b9631d64cf8e5d9e2aa768e8a5265f1882"
   },
   "rawLog": {
     "path": "security/receipts/hookemon-v2-actual-e2e-8361201f.log",

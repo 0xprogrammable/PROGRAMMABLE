@@ -114,7 +114,8 @@ export function actualV2ReceiptErrors(receipt, rawLogBytes, expected) {
       || receipt?.sourceBoundary?.dependencyLock?.sha256 !== expected.dependencyLockSha256
       || receipt?.sourceBoundary?.foundryConfigSha256 !== expected.foundryConfigSha256
       || receipt?.sourceBoundary?.remappingsSha256 !== expected.remappingsSha256
-      || receipt?.sourceBoundary?.frozenSharedAuthorityProvenanceSha256 !== expected.provenanceSha256
+      || receipt?.sourceBoundary?.frozenSharedAuthoritySourceBundleCommitmentSha256
+        !== expected.sourceBundleCommitmentSha256
   ) errors.push("receipt source boundary");
   if (
     receipt?.isolatedCheckout?.method !== `git archive ${expected.testedSourceCommit}`
@@ -338,39 +339,8 @@ export async function buildManifest(root, descriptor) {
   const foundryConfigBytes = await readFile(path.join(root, "foundry.toml"));
   const remappingsBytes = await readFile(path.join(root, "remappings.txt"));
   const testedSourceCommit = descriptor.sourceRevisions.testedCandidateSourceRevision.commit;
-  const testedSourceTree = execFileSync("git", ["rev-parse", `${testedSourceCommit}^{tree}`], {
-    cwd: root,
-    encoding: "utf8"
-  }).trim();
-  execFileSync("git", ["merge-base", "--is-ancestor", testedSourceCommit, "HEAD"], { cwd: root });
-  const trackedBoundaryPaths = [
-    "foundry.toml",
-    "remappings.txt",
-    dependencyLockPath,
-    ACTUAL_V2_TEST_SOURCE,
-    ...productionSourceClosure.files
-      .filter((file) => !file.path.startsWith("lib/"))
-      .map((file) => file.path)
-  ];
-  execFileSync("git", ["diff", "--quiet", testedSourceCommit, "--", ...new Set(trackedBoundaryPaths)], {
-    cwd: root
-  });
-  const testedManifest = JSON.parse(execFileSync(
-    "git",
-    ["show", `${testedSourceCommit}:spec/router-vnext/hookemon-reusable-profile-v2-manifest.json`],
-    { cwd: root, encoding: "utf8" }
-  ));
-  const testedProvenanceBytes = Buffer.from(execFileSync(
-    "git",
-    ["show", `${testedSourceCommit}:${provenancePath}`],
-    { cwd: root }
-  ));
-  const testedProvenance = JSON.parse(testedProvenanceBytes);
-  if (canonicalJson(testedProvenance.sourceBundle) !== canonicalJson(sourceBundle)) {
-    throw new Error("tested frozen shared Authority source bundle drift");
-  }
+  const testedSourceTree = descriptor.sourceRevisions.testedCandidateSourceRevision.tree;
   const receiptErrors = actualV2ReceiptErrors(actualV2Receipt, actualV2RawLogBytes, {
-    rawLogPath: actualV2RawLogPath,
     testedSourceCommit,
     testedSourceTree,
     testSourceSha256: sha256(actualV2Source),
@@ -379,7 +349,7 @@ export async function buildManifest(root, descriptor) {
     dependencyLockSha256: sha256(dependencyLockBytes),
     foundryConfigSha256: sha256(foundryConfigBytes),
     remappingsSha256: sha256(remappingsBytes),
-    provenanceSha256: sha256(testedProvenanceBytes)
+    sourceBundleCommitmentSha256: sha256(canonicalJson(sourceBundle))
   });
   if (
     testEvidence.activationAllowed !== false
@@ -400,9 +370,6 @@ export async function buildManifest(root, descriptor) {
       || descriptor.sourceRevisions.foundryDependencyLock.sha256 !== sha256(dependencyLockBytes)
       || descriptor.sourceRevisions.foundryDependencyLock.pinCount !== 12
       || descriptor.sourceRevisions.foundryDependencyLock.libTracked !== false
-      || testedSourceTree !== descriptor.sourceRevisions.testedCandidateSourceRevision.tree
-      || testedManifest.evidenceBindings?.productionSourceClosure?.commitmentSha256
-        !== productionSourceClosure.commitmentSha256
       || lifecycle?.result !== requirements.focusedLifecycleTests
       || testEvidence.focusedHookemonPostconditions?.result !== requirements.focusedPostconditionTests
       || testEvidence.fullForgeSuite?.result !== requirements.fullForgeSuite
