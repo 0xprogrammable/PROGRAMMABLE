@@ -1292,7 +1292,7 @@ describe("read-model performance contract", () => {
         process.cwd(),
       );
     expect(alchemyResult.ok).toBe(true);
-    expect(alchemyResult.checks).toHaveLength(18);
+    expect(alchemyResult.checks).toHaveLength(19);
 
     const exploreRoutePath = "app/api/explore/route.ts";
     const exploreRouteSource = readFileSync(
@@ -1323,23 +1323,89 @@ describe("read-model performance contract", () => {
       resolve(process.cwd(), canonicalSupplyPath),
       "utf8",
     );
-    const singleProviderSupply =
-      alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
-        process.cwd(),
-        {
-          sourceOverrides: {
-            [canonicalSupplyPath]: canonicalSupplySource.replace(
-              "group.length >= 2",
-              "group.length >= 1",
-            ),
-          },
-        },
-      );
-    expect(
-      singleProviderSupply.failures.map(
-        (failure: { id: string }) => failure.id,
+    for (const unsafeSupply of [
+      canonicalSupplySource.replace(
+        "group.length >= 2",
+        "group.length >= 1",
       ),
-    ).toContain("canonical-token-supply-quorum");
+      canonicalSupplySource.replace(
+        "agreed.blockHash.toLowerCase() !== requestedSnapshot.blockHash",
+        "false",
+      ),
+    ]) {
+      const unboundSupply =
+        alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+          process.cwd(),
+          { sourceOverrides: { [canonicalSupplyPath]: unsafeSupply } },
+        );
+      expect(
+        unboundSupply.failures.map(
+          (failure: { id: string }) => failure.id,
+        ),
+      ).toContain("canonical-token-supply-quorum");
+    }
+
+    for (const unsafeExploreRoute of [
+      exploreRouteSource.replace(
+        "valueExploreEntriesWithCurrentEvidenceSnapshot({",
+        "valueExploreEntriesWithCurrentEvidence({",
+      ),
+      exploreRouteSource.replace(
+        "blockHash: operationalSnapshot.blockHash",
+        "blockHash: referenceHead.blockHash",
+      ),
+    ]) {
+      const unboundSupply =
+        alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+          process.cwd(),
+          { sourceOverrides: { [exploreRoutePath]: unsafeExploreRoute } },
+        );
+      expect(
+        unboundSupply.failures.map(
+          (failure: { id: string }) => failure.id,
+        ),
+      ).toContain("canonical-token-supply-quorum");
+    }
+
+    const currentMarketRpcPath =
+      "lib/market-data/current-market-rpc.server.ts";
+    const currentMarketRpcSource = readFileSync(
+      resolve(process.cwd(), currentMarketRpcPath),
+      "utf8",
+    );
+    for (const mutation of [
+      currentMarketRpcSource.replace(
+        '"https://rpc.mevblocker.io/"',
+        '"https://ethereum-rpc.publicnode.com/"',
+      ),
+      currentMarketRpcSource.replace(
+        "primary: quickNodeRpcUrl()",
+        "primary: baseDeployment.rpcUrl",
+      ),
+      currentMarketRpcSource.replace(
+        'primary?.vendorGroup !== "quicknode"',
+        'primary?.vendorGroup !== "alchemy"',
+      ),
+      currentMarketRpcSource.replace(
+        "primary.endpointCommitment !== expectedQuickNodeCommitment",
+        "false",
+      ),
+      currentMarketRpcSource.replace(
+        "rpcProviderIds: undefined",
+        "rpcProviderIds: baseDeployment.rpcProviderIds",
+      ),
+    ]) {
+      const mutatedCurrentMarket =
+        alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+          process.cwd(),
+          { sourceOverrides: { [currentMarketRpcPath]: mutation } },
+        );
+      expect(
+        mutatedCurrentMarket.failures.map(
+          (failure: { id: string }) => failure.id,
+        ),
+      ).toContain("current-market-rpc-quorum");
+    }
 
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),

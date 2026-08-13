@@ -4,6 +4,7 @@ import type { LauncherToken } from "../tokens";
 
 export type DeploymentEnvironment = "production" | "rehearsal";
 export type ClassicReleaseVersion = "classic-v1" | "classic-v2";
+export type MainnetRpcProviderId = "alchemy" | "drpc" | "quicknode";
 
 type OnchainDeploymentBase = {
   environment: DeploymentEnvironment;
@@ -13,6 +14,10 @@ type OnchainDeploymentBase = {
   stateViewRuntimeCodeHash: Hex;
   rpcUrl: string;
   rpcUrlSecondary: string | null;
+  rpcProviderIds?: Readonly<{
+    primary: MainnetRpcProviderId;
+    secondary: MainnetRpcProviderId;
+  }>;
   confirmations: bigint;
   logBlockRange: bigint;
 };

@@ -119,6 +119,20 @@ describe("Developer documentation experience", () => {
     );
   });
 
+  it("documents the complete protocol fee claim inventory separately", () => {
+    expect(indexingPage).toContain('id="claims"');
+    expect(indexingPage).toContain("complete canonical Launcher");
+    expect(indexingPage).toContain("complete Registry history");
+    expect(indexingPage).toContain("fixed release asset set");
+    expect(indexingPage).toContain(
+      "https://claimhazard.vercel.app/claim-discovery.json",
+    );
+    expect(developerDocsMarkdown).toContain("## Protocol fee claim discovery");
+    expect(programmableLlmsIndex).toContain(
+      "Protocol fee claim discovery is a separate index",
+    );
+  });
+
   it("keeps the complete stamped verification gate explicit", () => {
     for (const field of [
       "poolId",

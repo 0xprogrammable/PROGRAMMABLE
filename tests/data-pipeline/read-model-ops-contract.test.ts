@@ -2,13 +2,19 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { encodeFunctionData, encodeFunctionResult, parseAbi } from "viem";
+import {
+  encodeAbiParameters,
+  encodeFunctionData,
+  encodeFunctionResult,
+  parseAbi,
+  parseAbiParameters,
+} from "viem";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { evaluateReadModelOperationsSourceContracts, POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS, POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS, POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS, STAGED_MARKET_EVIDENCE_SOURCE_GUARDS } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
+import { evaluateReadModelOperationsSourceContracts, POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS, POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS, POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS, POST_PROMOTION_PAGINATION_SOURCE_GUARDS, STAGED_MARKET_EVIDENCE_SOURCE_GUARDS } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { exactCurrentPublicFdvLiquidity, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
+import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { resolveProductionBinding } from "../../scripts/perf/read-model-production-binding.mjs";
 
@@ -22,6 +28,10 @@ const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
 const GOLDEN_QUOTE_ADDRESS =
   "0x0000000000000000000000000000000000000000";
+const GOLDEN_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
+const GOLDEN_SWAP_TOPIC =
+  "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+const GOLDEN_TRANSACTION_HASH = `0x${"22".repeat(32)}`;
 const PUBLIC_TOKEN_ADDRESS =
   "0x1111111111111111111111111111111111111111";
 const PUBLIC_POOL_ID = `0x${"44".repeat(32)}`;
@@ -123,6 +133,7 @@ const stagedMarketEvidenceGuardCases: ReadonlyArray<readonly [number, string]> =
 const postPromotionGuardCases: ReadonlyArray<readonly [number, string]> = [
   ...(POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS as readonly string[]),
   ...(POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS as readonly string[]),
+  ...(POST_PROMOTION_PAGINATION_SOURCE_GUARDS as readonly string[]),
   ...(POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS as readonly string[]),
 ].map((needle: string, index: number) => [index, needle] as const);
 const testStateViewAbi = parseAbi([
@@ -632,13 +643,50 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
+    [
+      "the pre-platform deadline",
+      "app/api/ops/index-v2/route.ts",
+      "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
+      "const INDEX_REFRESH_DEADLINE_MS = 300_000;",
+    ],
+    [
+      "settled concurrent event filters",
+      "lib/onchain/read-model.ts",
+      "const readLogs = () =>\n      allSettledOrThrow([",
+      "const readLogs = () =>\n      Promise.all([",
+    ],
+    [
+      "timeout range bisection",
+      "lib/onchain/read-model.ts",
+      "error instanceof TimeoutError ||",
+      "false ||",
+    ],
+  ])(
+    "rejects a legacy refresh missing %s",
+    (_label, path, needle, replacement) => {
+      const source = readFileSync(resolve(ROOT, path), "utf8");
+      expect(source).toContain(needle);
+      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+        sourceOverrides: {
+          ...integratedOverrides(),
+          [path]: source.replace(needle, replacement),
+        },
+        expectedSha256Overrides: fixtureDigests(),
+      });
+      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+        "ops-legacy-bounded-refresh",
+      );
+    },
+  );
+
+  it.each([
     ["unprotected branch", "github.ref == 'refs/heads/production'"],
     [
       "pinned Node setup action",
       "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
     ],
     ["Node 24 runtime", "node-version: 24.14.0"],
-    ["disabled dependency cache", "cache: false"],
+    ["disabled package-manager auto-cache", "package-manager-cache: false"],
     ["fixed public origin", 'targetOrigin !== "https://programmable.market"'],
     ["bounded cron secret", "secretBytes < 32"],
     ["canonical writer route", '"/api/ops/index-v2"'],
@@ -763,6 +811,15 @@ describe("read-model operations source contract", () => {
   it.each([
     ["health route", "app/api/ops/health/route.ts"],
     ["RPC health runtime", "lib/onchain/rpc-health.ts"],
+    ["RPC deployment config", "lib/onchain/config.ts"],
+    [
+      "RPC provider config",
+      "lib/onchain/website-rpc-providers.server.ts",
+    ],
+    [
+      "current-market RPC quorum",
+      "lib/market-data/current-market-rpc.server.ts",
+    ],
   ])("rejects unreviewed %s bytes", (_label, path) => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
@@ -894,28 +951,12 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
-      "first independent RPC secret",
-      "          MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}\n",
+      "PublicNode witness",
+      '            "https://ethereum-rpc.publicnode.com",\n',
     ],
     [
-      "second independent RPC secret",
-      "          MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}\n",
-    ],
-    [
-      "Alchemy commitment",
-      "          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}\n",
-    ],
-    [
-      "QuickNode commitment",
-      "          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}\n",
-    ],
-    [
-      "provider binding",
-      "            runtimeProductionProviderBindingsFromUrls({\n",
-    ],
-    [
-      "commitment comparison",
-      "            if (binding.endpointCommitment !== expectedCommitment) {\n",
+      "MEV Blocker witness",
+      '            "https://rpc.mevblocker.io",\n',
     ],
     ["independent reader handoff", "                rpcUrls: independentRpcUrls,\n"],
   ])("fails closed when staged market proof drops the %s", (_label, needle) => {
@@ -1042,8 +1083,94 @@ describe("read-model operations source contract", () => {
       "utf8",
     );
     const unsafePostPromotion = postPromotion.replace(
-      "  return currentCount > 0 ? { currentToken, tokens } : null;",
-      "  return currentCount >= 0 ? { currentToken, tokens } : null;",
+      "  return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
+      "  return currentCount >= 0 ? { currentToken, tokens, valuationSnapshot } : null;",
+    );
+    expect(unsafePostPromotion).not.toBe(postPromotion);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [postPromotionPath]: unsafePostPromotion,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it("fails closed when post-promotion drops the fixed production origin", () => {
+    const postPromotionPath =
+      "scripts/perf/read-model-post-promotion.mjs";
+    const postPromotion = readFileSync(
+      resolve(ROOT, postPromotionPath),
+      "utf8",
+    );
+    const unsafePostPromotion = postPromotion.replace(
+      "target.origin !== PRODUCTION_ORIGIN",
+      "false",
+    );
+    expect(unsafePostPromotion).not.toBe(postPromotion);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [postPromotionPath]: unsafePostPromotion,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it.each([
+    "  if (false && target.origin !== PRODUCTION_ORIGIN) {",
+    "  if (target.origin !== PRODUCTION_ORIGIN && false) {",
+    "  if (Boolean(0) && target.origin !== PRODUCTION_ORIGIN) {",
+  ])(
+    "fails closed when post-promotion disables the production-origin guard as %s",
+    (disabledGuard) => {
+      const postPromotionPath =
+        "scripts/perf/read-model-post-promotion.mjs";
+      const postPromotion = readFileSync(
+        resolve(ROOT, postPromotionPath),
+        "utf8",
+      );
+      const unsafePostPromotion = postPromotion.replace(
+        "  if (target.origin !== PRODUCTION_ORIGIN) {",
+        disabledGuard,
+      );
+      expect(unsafePostPromotion).not.toBe(postPromotion);
+      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+        sourceOverrides: {
+          ...integratedOverrides(),
+          [postPromotionPath]: unsafePostPromotion,
+        },
+        expectedSha256Overrides: fixtureDigests(),
+      });
+      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+        "ops-post-promotion-binding",
+      );
+    },
+  );
+
+  it("fails closed when the exact production-origin throw is wrapped in a disabled branch", () => {
+    const postPromotionPath =
+      "scripts/perf/read-model-post-promotion.mjs";
+    const postPromotion = readFileSync(
+      resolve(ROOT, postPromotionPath),
+      "utf8",
+    );
+    const exactGuard = [
+      "  if (target.origin !== PRODUCTION_ORIGIN) {",
+      "    throw new Error(",
+      '      "post-promotion target must be the programmable.market production origin",',
+      "    );",
+      "  }",
+    ].join("\n");
+    const unsafePostPromotion = postPromotion.replace(
+      exactGuard,
+      ["  if (false) {", exactGuard, "  }"].join("\n"),
     );
     expect(unsafePostPromotion).not.toBe(postPromotion);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
@@ -1152,18 +1279,53 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("fails closed when independent PCAN parity drops exact-block liquidity", () => {
+  it.each([
+    '"https://mainnet.gateway.tenderly.co"',
+    '"eth_getTransactionReceipt"',
+    '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
+    "swapLogs.length !== 1",
+    'rpcQuantity(receipt?.status, "receipt status") !== 1n',
+    "requireCanonical: true",
+    "sameObservation(first, second)",
+    "first.amount0 >= 0n",
+    "first.amount1 !== tokenAmountRaw",
+    "executionPriceQuoteWad !== priceQuoteWad",
+    "executionPriceQuoteWad * first.answer",
+    "observation.answeredInRound < observation.roundId",
+    "const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n",
+  ])("fails closed when the PCAN execution proof drops %s", (needle) => {
     const parityPath = "scripts/perf/bitquery-golden-market-parity.mjs";
     const parity = readFileSync(resolve(ROOT, parityPath), "utf8");
-    const unsafeParity = parity.replace(
-      '  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",\n',
-      "",
-    );
+    expect(parity).toContain(needle);
+    const unsafeParity = parity.replace(needle, "MUTATED_EXECUTION_PROOF");
     expect(unsafeParity).not.toBe(parity);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
         [parityPath]: unsafeParity,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it.each([
+    "parity.transactionHash !== trade?.transactionHash?.toLowerCase()",
+    "parity.bitqueryTradeOrdinal !== trade?.logIndex",
+    "parity.executionPriceQuoteWad !== trade?.priceQuoteWad",
+    "parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED",
+    "BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId)",
+  ])("fails closed when historical PCAN binding drops %s", (needle) => {
+    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
+    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
+    expect(helper).toContain(needle);
+    const unsafeHelper = helper.replace(needle, "MUTATED_EXECUTION_BINDING");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [helperPath]: unsafeHelper,
       },
       expectedSha256Overrides: fixtureDigests(),
     });
@@ -1665,6 +1827,73 @@ function currentPublicHeaders(
   };
 }
 
+const EXPLORE_VALUATION_SNAPSHOT_FIELDS = [
+  "schemaVersion",
+  "chainId",
+  "blockNumber",
+  "blockHash",
+  "liquidityBlockNumber",
+  "liquidityBlockHash",
+  "rankingCommitment",
+  "sort",
+  "query",
+  "socials",
+  "pageSize",
+] as const;
+type ExploreValuationSnapshotField =
+  typeof EXPLORE_VALUATION_SNAPSHOT_FIELDS[number];
+type ExploreValuationSnapshotMutation = Readonly<{
+  page: 1 | 2;
+  field: ExploreValuationSnapshotField;
+  operation: "removed" | "changed";
+}>;
+
+function valuationSnapshotFixture() {
+  return {
+    schemaVersion: "programmable.explore-valuation-snapshot.v1",
+    chainId: 1,
+    blockNumber: TEST_CURRENT_BLOCK.toString(),
+    blockHash: TEST_PUBLIC_BLOCK_HASH,
+    liquidityBlockNumber: (TEST_CURRENT_BLOCK - 1n).toString(),
+    liquidityBlockHash: TEST_PUBLIC_INDEXED_BLOCK_HASH,
+    rankingCommitment: `sha256:${"88".repeat(32)}`,
+    sort: "market-cap",
+    query: "",
+    socials: null,
+    pageSize: 100,
+  } as const;
+}
+
+const EXPLORE_VALUATION_SNAPSHOT_CHANGED_VALUES = {
+  schemaVersion: "programmable.explore-valuation-snapshot.v2",
+  chainId: 2,
+  blockNumber: (TEST_CURRENT_BLOCK + 1n).toString(),
+  blockHash: `0x${"77".repeat(32)}`,
+  liquidityBlockNumber: (TEST_CURRENT_BLOCK - 2n).toString(),
+  liquidityBlockHash: `0x${"99".repeat(32)}`,
+  rankingCommitment: `sha256:${"aa".repeat(32)}`,
+  sort: "market-cap-asc",
+  query: "changed",
+  socials: "yes",
+  pageSize: 99,
+} satisfies Readonly<Record<ExploreValuationSnapshotField, unknown>>;
+
+function mutateValuationSnapshot(
+  mutation?: Pick<ExploreValuationSnapshotMutation, "field" | "operation">,
+) {
+  const snapshot: Record<string, unknown> = {
+    ...valuationSnapshotFixture(),
+  };
+  if (!mutation) return snapshot;
+  if (mutation.operation === "removed") {
+    delete snapshot[mutation.field];
+  } else {
+    snapshot[mutation.field] =
+      EXPLORE_VALUATION_SNAPSHOT_CHANGED_VALUES[mutation.field];
+  }
+  return snapshot;
+}
+
 function unavailablePublicTokenFixture(index: number) {
   const address = `0x${index.toString(16).padStart(40, "0")}`;
   return {
@@ -1677,6 +1906,7 @@ function unavailablePublicTokenFixture(index: number) {
 
 function paginatedMarketCapFetch(
   mode: "complete" | "hidden-current" | "missing-page" = "complete",
+  mutation?: ExploreValuationSnapshotMutation,
 ) {
   const base = publicFetch();
   const publicMarketAsOf = new Date(
@@ -1693,6 +1923,12 @@ function paginatedMarketCapFetch(
   const secondPageToken = mode === "hidden-current"
     ? publicToken
     : unavailable[99];
+  const firstPageSnapshot = mutateValuationSnapshot(
+    mutation?.page === 1 ? mutation : undefined,
+  );
+  const secondPageSnapshot = mutateValuationSnapshot(
+    mutation?.page === 2 ? mutation : undefined,
+  );
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
     if (
@@ -1710,6 +1946,8 @@ function paginatedMarketCapFetch(
         total: 101,
         totalPages: 2,
         sort: "market-cap",
+        query: "",
+        valuationSnapshot: firstPageSnapshot,
         dataQuality: hasCurrent
           ? currentExploreDataQuality(publicMarketAsOf, 1, 99)
           : {
@@ -1737,6 +1975,28 @@ function paginatedMarketCapFetch(
             },
       });
     }
+    const expectedContinuationParameters = [
+      ["valuationBlock", firstPageSnapshot.blockNumber],
+      ["valuationBlockHash", firstPageSnapshot.blockHash],
+      ["liquidityBlock", firstPageSnapshot.liquidityBlockNumber],
+      ["liquidityBlockHash", firstPageSnapshot.liquidityBlockHash],
+      ["rankingCommitment", firstPageSnapshot.rankingCommitment],
+    ] as const;
+    if (
+      url.searchParams.get("limit") !== "100" ||
+      url.searchParams.get("page") !== "2" ||
+      url.searchParams.get("sort") !== "market-cap" ||
+      expectedContinuationParameters.some(([name, value]) =>
+        typeof value !== "string" ||
+        url.searchParams.get(name) !== value ||
+        url.searchParams.getAll(name).length !== 1
+      )
+    ) {
+      return Response.json(
+        { error: "incomplete valuation snapshot continuation" },
+        { status: 400 },
+      );
+    }
     const pageTokens = mode === "missing-page" ? [] : [secondPageToken];
     const hasCurrent = mode === "hidden-current";
     return Response.json({
@@ -1747,6 +2007,8 @@ function paginatedMarketCapFetch(
       total: 101,
       totalPages: 2,
       sort: "market-cap",
+      query: "",
+      valuationSnapshot: secondPageSnapshot,
       dataQuality: hasCurrent
         ? currentExploreDataQuality(publicMarketAsOf, 1, 0)
         : {
@@ -1775,6 +2037,13 @@ function paginatedMarketCapFetch(
     });
   };
 }
+
+const exploreValuationSnapshotMutationCases: ReadonlyArray<
+  readonly [ExploreValuationSnapshotField, "removed" | "changed"]
+> = EXPLORE_VALUATION_SNAPSHOT_FIELDS.flatMap((field) => [
+  [field, "removed"] as const,
+  [field, "changed"] as const,
+]);
 
 function publicFetch(
   healthStatus = "healthy",
@@ -1806,7 +2075,12 @@ function publicFetch(
 
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
-    if (url.hostname === "rpc-a.invalid" || url.hostname === "rpc-b.invalid") {
+    if (
+      url.hostname === "rpc-a.invalid" ||
+      url.hostname === "rpc-b.invalid" ||
+      url.hostname === "rpc.mevblocker.io" ||
+      url.hostname === "mainnet.gateway.tenderly.co"
+    ) {
       const request = JSON.parse(String(init?.body ?? "{}")) as {
         id: number;
         method: string;
@@ -1824,6 +2098,34 @@ function publicFetch(
           timestamp: `0x${BigInt(Math.floor(Date.parse(
             current ? publicMarketAsOf : goldenMarketAsOf,
           ) / 1_000)).toString(16)}`,
+        };
+      } else if (request.method === "eth_getTransactionReceipt") {
+        result = {
+          transactionHash: GOLDEN_TRANSACTION_HASH,
+          transactionIndex: "0x1",
+          blockHash: `0x${"11".repeat(32)}`,
+          blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
+          status: "0x1",
+          logs: [{
+            address: GOLDEN_POOL_MANAGER,
+            topics: [
+              GOLDEN_SWAP_TOPIC,
+              GOLDEN_POOL_ID,
+              `0x${"0".repeat(24)}${"33".repeat(20)}`,
+            ],
+            data: encodeAbiParameters(
+              parseAbiParameters(
+                "int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee",
+              ),
+              [-(10n ** 18n), 10n ** 18n, 2n ** 96n, 1_000_000n, 0, 3_000],
+            ),
+            blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
+            transactionHash: GOLDEN_TRANSACTION_HASH,
+            transactionIndex: "0x1",
+            blockHash: `0x${"11".repeat(32)}`,
+            logIndex: "0x7a",
+            removed: false,
+          }],
         };
       } else if (request.method === "eth_getCode") {
         result = TEST_STATE_VIEW_RUNTIME_CODE;
@@ -1949,6 +2251,8 @@ function publicFetch(
         total: 1,
         totalPages: 1,
         sort: "market-cap",
+        query: "",
+        valuationSnapshot: valuationSnapshotFixture(),
         dataQuality: currentExploreDataQuality(publicMarketAsOf),
       }, { headers: currentPublicHeaders(publicMarketAsOf) });
     }
@@ -1994,11 +2298,16 @@ function publicFetch(
               quality: "partial",
               asOfTime: goldenMarketAsOf,
               latestTrade: {
-                transactionHash: `0x${"22".repeat(32)}`,
+                transactionHash: GOLDEN_TRANSACTION_HASH,
+                transactionIndex: 1,
                 logIndex: 1,
                 blockNumber: TEST_PARITY_BLOCK.toString(),
                 time: goldenMarketAsOf,
-                tokenSide: "buy",
+                tokenSide: "sell",
+                tokenAmount: "1",
+                priceQuoteWad: (10n ** 18n).toString(),
+                quoteAddress: GOLDEN_QUOTE_ADDRESS,
+                quoteSymbol: "ETH",
                 priceUsdWad: TEST_PRICE_USD_WAD.toString(),
                 rawPriceUsdWad: TEST_PRICE_USD_WAD.toString(),
                 priceUsdAsOfTime: goldenMarketAsOf,
@@ -2166,6 +2475,40 @@ function postPromotionInput(fetchImpl = publicFetch()) {
 }
 
 describe("post-promotion route verification", () => {
+  it("accepts only paired concrete or none liquidity snapshot commitments", () => {
+    const concrete = valuationSnapshotFixture();
+    expect(exactExploreValuationSnapshot(concrete)).toEqual(concrete);
+    const none = {
+      ...concrete,
+      liquidityBlockNumber: "none",
+      liquidityBlockHash: "none",
+    };
+    expect(exactExploreValuationSnapshot(none)).toEqual(none);
+    expect(exactExploreValuationSnapshot({
+      ...none,
+      liquidityBlockHash: concrete.liquidityBlockHash,
+    })).toBeNull();
+    expect(exactExploreValuationSnapshot({
+      ...none,
+      liquidityBlockNumber: concrete.liquidityBlockNumber,
+    })).toBeNull();
+
+    const continuation = new URL(
+      exploreContinuationPath(none, 2),
+      "https://programmable.test",
+    );
+    expect([...continuation.searchParams.entries()]).toEqual([
+      ["limit", "100"],
+      ["page", "2"],
+      ["sort", "market-cap"],
+      ["valuationBlock", concrete.blockNumber],
+      ["valuationBlockHash", concrete.blockHash],
+      ["liquidityBlock", "none"],
+      ["liquidityBlockHash", "none"],
+      ["rankingCommitment", concrete.rankingCommitment],
+    ]);
+  });
+
   it("accepts the exact legacy and stamped Classic native/token branches", () => {
     const asOfTime = new Date(
       Math.floor((Date.now() - 2 * 60_000) / 1_000) * 1_000,
@@ -2379,6 +2722,40 @@ describe("post-promotion route verification", () => {
     expect(result.failures).toEqual([]);
   });
 
+  it.each(exploreValuationSnapshotMutationCases)(
+    "rejects page-one valuation snapshot field %s when %s",
+    async (field, operation) => {
+      const result = await verifyPostPromotion(
+        postPromotionInput(paginatedMarketCapFetch("complete", {
+          page: 1,
+          field,
+          operation,
+        })),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.failures).toContainEqual(
+        expect.objectContaining({ id: "production-explore" }),
+      );
+    },
+  );
+
+  it.each(exploreValuationSnapshotMutationCases)(
+    "rejects page-two valuation snapshot field %s when %s",
+    async (field, operation) => {
+      const result = await verifyPostPromotion(
+        postPromotionInput(paginatedMarketCapFetch("complete", {
+          page: 2,
+          field,
+          operation,
+        })),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.failures).toContainEqual(
+        expect.objectContaining({ id: "production-explore" }),
+      );
+    },
+  );
+
   it("rejects a higher current FDV hidden after unavailable page-one entries", async () => {
     const result = await verifyPostPromotion(
       postPromotionInput(paginatedMarketCapFetch("hidden-current")),
@@ -2506,38 +2883,21 @@ describe("post-promotion route verification", () => {
     );
   });
 
-  it("rejects historical PCAN evidence when exact-block pool liquidity is zero", async () => {
+  it("rejects historical PCAN evidence when its archive receipt reverted", async () => {
     const base = publicFetch("healthy", 58 * 60 * 60_000);
-    const liquiditySelector = encodeFunctionData({
-      abi: testStateViewAbi,
-      functionName: "getLiquidity",
-      args: [GOLDEN_POOL_ID],
-    }).slice(0, 10);
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
-      if (url.hostname !== "rpc-a.invalid" && url.hostname !== "rpc-b.invalid") {
-        return base(input, init);
-      }
-      const request = JSON.parse(String(init?.body ?? "{}")) as {
-        id: number;
-        method: string;
-        params: readonly [{ data?: string }];
-      };
+      const response = await base(input, init);
       if (
-        request.method === "eth_call" &&
-        request.params[0]?.data?.startsWith(liquiditySelector)
-      ) {
-        return Response.json({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: encodeFunctionResult({
-            abi: testStateViewAbi,
-            functionName: "getLiquidity",
-            result: 0n,
-          }),
-        });
-      }
-      return base(input, init);
+        !["rpc.mevblocker.io", "mainnet.gateway.tenderly.co"].includes(
+          url.hostname,
+        )
+      ) return response;
+      const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
+      if (request.method !== "eth_getTransactionReceipt") return response;
+      const body = await response.json();
+      body.result.status = "0x0";
+      return Response.json(body);
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
     expect(result.ok).toBe(false);
@@ -2618,12 +2978,12 @@ describe("post-promotion route verification", () => {
     );
   });
 
-  it("rejects two market parity readers that disagree on the exact block", async () => {
+  it("rejects two archive execution witnesses that disagree on the exact block", async () => {
     const base = publicFetch();
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (url.hostname !== "rpc-b.invalid") return response;
+      if (url.hostname !== "mainnet.gateway.tenderly.co") return response;
       const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
       if (request.method !== "eth_getBlockByNumber") return response;
       const body = await response.json();
@@ -2656,6 +3016,16 @@ describe("post-promotion route verification", () => {
         targetUrl: "https://programmable.market/untrusted",
       }),
     ).rejects.toThrow("HTTPS origin");
+  });
+
+  it("rejects an exact staged origin before any production proof runs", async () => {
+    await expect(
+      verifyPostPromotion({
+        ...postPromotionInput(),
+        targetUrl:
+          "https://launcher-v4-example-aficialais-projects.vercel.app",
+      }),
+    ).rejects.toThrow("programmable.market production origin");
   });
 
   it("fails if production does not resolve to the staged deployment", async () => {

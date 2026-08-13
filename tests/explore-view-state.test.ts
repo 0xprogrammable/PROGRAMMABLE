@@ -12,6 +12,7 @@ import {
   getExplorePaginationItems,
   getExploreValuationMetric,
   loadExploreModelDataset,
+  loadExplorePageWithValuationSnapshot,
   loadExplorePayload,
   paginateTokensByExploreFilters,
   paginateTokensBySocialPresence,
@@ -103,9 +104,38 @@ const payload = {
   tokens: [],
   page: 1,
   pageSize: 9,
-  total: 1,
-  totalPages: 1,
+  total: 18,
+  totalPages: 2,
 };
+
+function valuationSnapshot(
+  overrides: Partial<{
+    blockNumber: string;
+    blockHash: `0x${string}`;
+    liquidityBlockNumber: string;
+    liquidityBlockHash: `0x${string}` | "none";
+    rankingCommitment: `sha256:${string}`;
+    sort: "market-cap" | "market-cap-asc";
+    query: string;
+    socials: "yes" | "no" | null;
+    pageSize: number;
+  }> = {},
+) {
+  return {
+    schemaVersion: "programmable.explore-valuation-snapshot.v1" as const,
+    chainId: 1 as const,
+    blockNumber: "25740001",
+    blockHash: `0x${"11".repeat(32)}` as `0x${string}`,
+    liquidityBlockNumber: "25739999",
+    liquidityBlockHash: `0x${"22".repeat(32)}` as `0x${string}`,
+    rankingCommitment: `sha256:${"33".repeat(32)}` as `sha256:${string}`,
+    sort: "market-cap" as const,
+    query: "",
+    socials: null,
+    pageSize: EXPLORE_TOKENS_PER_PAGE,
+    ...overrides,
+  };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -432,6 +462,615 @@ describe("Explore refresh state", () => {
     });
   });
 
+  it("never sends an unbound market-cap continuation request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(loadExplorePayload(
+      "unbound-visible-market-page",
+      new URLSearchParams({
+        q: "",
+        sort: "market-cap",
+        page: "2",
+        limit: "9",
+      }),
+    )).rejects.toThrow("complete valuation snapshot");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("records page one and carries all five bindings through visible pagination", async () => {
+    const snapshot = valuationSnapshot({
+      sort: "market-cap-asc",
+      query: "ranked",
+      socials: "no",
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        if (page === 1) {
+          for (const parameter of [
+            "valuationBlock",
+            "valuationBlockHash",
+            "liquidityBlock",
+            "liquidityBlockHash",
+            "rankingCommitment",
+          ]) {
+            expect(url.searchParams.has(parameter)).toBe(false);
+          }
+        } else {
+          expect(page).toBe(12);
+          expect(url.searchParams.get("valuationBlock")).toBe(
+            snapshot.blockNumber,
+          );
+          expect(url.searchParams.get("valuationBlockHash")).toBe(
+            snapshot.blockHash,
+          );
+          expect(url.searchParams.get("liquidityBlock")).toBe(
+            snapshot.liquidityBlockNumber,
+          );
+          expect(url.searchParams.get("liquidityBlockHash")).toBe(
+            snapshot.liquidityBlockHash,
+          );
+          expect(url.searchParams.get("rankingCommitment")).toBe(
+            snapshot.rankingCommitment,
+          );
+        }
+        return new Response(JSON.stringify({
+          ...payload,
+          page,
+          total: 108,
+          totalPages: 12,
+          valuationSnapshot: snapshot,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+    const firstSearch = new URLSearchParams({
+      q: "ranked",
+      sort: "market-cap-asc",
+      socials: "no",
+      page: "1",
+      limit: "9",
+    });
+    const first = await loadExplorePageWithValuationSnapshot(
+      "visible-ranked-page-one",
+      firstSearch,
+    );
+    const secondSearch = new URLSearchParams(firstSearch);
+    secondSearch.set("page", "12");
+    const twelfth = await loadExplorePageWithValuationSnapshot(
+      "visible-ranked-page-twelve",
+      secondSearch,
+      first.valuationSnapshot,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(twelfth.payload.page).toBe(12);
+    expect(twelfth.valuationSnapshot).toEqual(snapshot);
+  });
+
+  it("carries the exact paired none liquidity sentinel for zero-candidate rankings", async () => {
+    const snapshot = valuationSnapshot({
+      liquidityBlockNumber: "none",
+      liquidityBlockHash: "none",
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        expect(url.searchParams.get("liquidityBlock")).toBe("none");
+        expect(url.searchParams.get("liquidityBlockHash")).toBe("none");
+        return new Response(JSON.stringify({
+          ...payload,
+          page: 2,
+          valuationSnapshot: snapshot,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+    const loaded = await loadExplorePageWithValuationSnapshot(
+      "zero-candidate-visible-page-two",
+      new URLSearchParams({
+        sort: "market-cap",
+        page: "2",
+        limit: "9",
+      }),
+      snapshot,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(loaded.valuationSnapshot).toEqual(snapshot);
+  });
+
+  it("canonicalizes market-cap aliases and the API page-size ceiling", async () => {
+    const snapshot = valuationSnapshot({ pageSize: 100 });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        ...payload,
+        pageSize: 100,
+        totalPages: 1,
+        valuationSnapshot: snapshot,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      "aliased-market-cap-clamped-page-size",
+      new URLSearchParams({
+        sort: "highest-market-cap",
+        page: "1",
+        limit: "999",
+      }),
+    )).resolves.toMatchObject({
+      pageSize: 100,
+      valuationSnapshot: snapshot,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("canonicalizes a deep market-cap continuation from its page-one snapshot", async () => {
+    const snapshot = valuationSnapshot({
+      query: "focused",
+      socials: "yes",
+      pageSize: 100,
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        if (page === 1) {
+          expect(url.searchParams.get("sort")).toBe("highest-market-cap");
+          expect(url.searchParams.get("q")).toBe("  focused  ");
+          expect(url.searchParams.get("limit")).toBe("999");
+        } else {
+          expect(url.searchParams.get("sort")).toBe("market-cap");
+          expect(url.searchParams.get("q")).toBe("focused");
+          expect(url.searchParams.get("socials")).toBe("yes");
+          expect(url.searchParams.get("limit")).toBe("100");
+          expect(url.searchParams.get("rankingCommitment")).toBe(
+            snapshot.rankingCommitment,
+          );
+        }
+        return new Response(JSON.stringify({
+          ...payload,
+          page,
+          pageSize: 100,
+          total: 200,
+          totalPages: 2,
+          valuationSnapshot: snapshot,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+    const loaded = await loadExplorePageWithValuationSnapshot(
+      "deep-canonical-continuation",
+      new URLSearchParams({
+        sort: "highest-market-cap",
+        q: "  focused  ",
+        socials: "yes",
+        page: "2",
+        limit: "999",
+      }),
+    );
+
+    expect(loaded.payload.page).toBe(2);
+    expect(loaded.valuationSnapshot).toEqual(snapshot);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("bootstraps a fresh page-one snapshot after refresh or filter drift", async () => {
+    const oldSnapshot = valuationSnapshot({
+      query: "old",
+      rankingCommitment: `sha256:${"44".repeat(32)}`,
+    });
+    const refreshedSnapshot = valuationSnapshot({
+      query: "fresh",
+      socials: "yes",
+      rankingCommitment: `sha256:${"55".repeat(32)}`,
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        if (page === 1) {
+          expect(url.searchParams.has("rankingCommitment")).toBe(false);
+        } else {
+          expect(url.searchParams.get("rankingCommitment")).toBe(
+            refreshedSnapshot.rankingCommitment,
+          );
+          expect(url.searchParams.get("rankingCommitment")).not.toBe(
+            oldSnapshot.rankingCommitment,
+          );
+        }
+        return new Response(JSON.stringify({
+          ...payload,
+          page,
+          total: 18,
+          totalPages: 2,
+          valuationSnapshot: refreshedSnapshot,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+    const loaded = await loadExplorePageWithValuationSnapshot(
+      "visible-refresh-filter-drift",
+      new URLSearchParams({
+        q: "fresh",
+        sort: "market-cap",
+        socials: "yes",
+        page: "2",
+        limit: "9",
+      }),
+      oldSnapshot,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(loaded.valuationSnapshot).toEqual(refreshedSnapshot);
+  });
+
+  it("binds every market-cap model page across more than one hundred results", async () => {
+    const tokens = Array.from({ length: 230 }, (_, index) => classicEntry({
+      id: `1:ranked-${index}`,
+      name: `Ranked ${index}`,
+      symbol: `R${index}`,
+      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      hookAddress: "0x2222222222222222222222222222222222222222",
+      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      launchedAt: "2026-08-03T00:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme" as const,
+    } satisfies LauncherToken));
+    const snapshot = valuationSnapshot({
+      query: "ranked",
+      pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+    });
+    const totalPages = Math.ceil(
+      tokens.length / EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const offset = (page - 1) * EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE;
+        if (page === 1) {
+          expect(url.searchParams.has("valuationBlock")).toBe(false);
+          expect(url.searchParams.has("liquidityBlock")).toBe(false);
+        } else {
+          expect(url.searchParams.get("valuationBlock")).toBe(
+            snapshot.blockNumber,
+          );
+          expect(url.searchParams.get("valuationBlockHash")).toBe(
+            snapshot.blockHash,
+          );
+          expect(url.searchParams.get("liquidityBlock")).toBe(
+            snapshot.liquidityBlockNumber,
+          );
+          expect(url.searchParams.get("liquidityBlockHash")).toBe(
+            snapshot.liquidityBlockHash,
+          );
+          expect(url.searchParams.get("rankingCommitment")).toBe(
+            snapshot.rankingCommitment,
+          );
+        }
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens: tokens.slice(
+            offset,
+            offset + EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+          ),
+          page,
+          pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+          total: tokens.length,
+          totalPages,
+          valuationSnapshot: snapshot,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+    const dataset = await loadExploreModelDataset(
+      "complete-ranked-model-dataset",
+      new URLSearchParams({
+        q: "ranked",
+        sort: "market-cap",
+        page: "17",
+        limit: "9",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(dataset.tokens.map((token) => token.id)).toEqual(
+      tokens.map((token) => token.id),
+    );
+    expect(dataset.valuationSnapshot).toEqual(snapshot);
+  });
+
+  it("rejects duplicate identities after traversing a multi-page model dataset", async () => {
+    const tokens = Array.from({ length: 101 }, (_, index) => customEntry(index));
+    const snapshot = valuationSnapshot({
+      pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "https://example.test");
+      const page = Number(url.searchParams.get("page"));
+      return new Response(JSON.stringify({
+        status: "ready",
+        tokens: page === 1 ? tokens.slice(0, 100) : [tokens[0]],
+        page,
+        pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+        total: tokens.length,
+        totalPages: 2,
+        valuationSnapshot: snapshot,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await expect(loadExploreModelDataset(
+      "duplicate-ranked-model-dataset",
+      new URLSearchParams({
+        sort: "market-cap",
+        page: "1",
+        limit: "9",
+      }),
+    )).rejects.toThrow("repeated an entry");
+  });
+
+  it("scopes resolved page caches to all five continuation fields", async () => {
+    const firstSnapshot = valuationSnapshot();
+    const secondSnapshot = valuationSnapshot({
+      blockNumber: "25740002",
+      blockHash: `0x${"44".repeat(32)}`,
+      liquidityBlockNumber: "25740000",
+      liquidityBlockHash: `0x${"55".repeat(32)}`,
+      rankingCommitment: `sha256:${"66".repeat(32)}`,
+    });
+    const responses = [firstSnapshot, secondSnapshot];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => {
+        const snapshot = responses.shift();
+        return new Response(JSON.stringify({
+          ...payload,
+          page: 2,
+          valuationSnapshot: snapshot,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+    const continuationSearch = (
+      snapshot: ReturnType<typeof valuationSnapshot>,
+    ) => new URLSearchParams({
+      sort: "market-cap",
+      page: "2",
+      limit: "9",
+      valuationBlock: snapshot.blockNumber,
+      valuationBlockHash: snapshot.blockHash,
+      liquidityBlock: snapshot.liquidityBlockNumber,
+      liquidityBlockHash: snapshot.liquidityBlockHash,
+      rankingCommitment: snapshot.rankingCommitment,
+    });
+
+    await loadExplorePayload(
+      "same-content-different-continuation",
+      continuationSearch(firstSnapshot),
+    );
+    await loadExplorePayload(
+      "same-content-different-continuation",
+      continuationSearch(secondSnapshot),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects malformed, drifting, and non-market valuation snapshots", async () => {
+    const malformed = valuationSnapshot() as Record<string, unknown>;
+    delete malformed.liquidityBlockHash;
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        valuationSnapshot: malformed,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "malformed-market-snapshot",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid valuation snapshot");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        valuationSnapshot: {
+          ...valuationSnapshot(),
+          extra: "not-canonical",
+        },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "extra-field-market-snapshot",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid valuation snapshot");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        valuationSnapshot: valuationSnapshot({
+          liquidityBlockNumber: "none",
+        }),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "mixed-none-market-snapshot",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid valuation snapshot");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        valuationSnapshot: valuationSnapshot(),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "snapshot-on-newest-sort",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).rejects.toThrow("unexpected valuation snapshot");
+
+    const requestedSnapshot = valuationSnapshot();
+    const changedSnapshot = valuationSnapshot({
+      rankingCommitment: `sha256:${"99".repeat(32)}`,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        page: 2,
+        valuationSnapshot: changedSnapshot,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "drifting-market-snapshot",
+      new URLSearchParams({
+        sort: "market-cap",
+        page: "2",
+        limit: "9",
+        valuationBlock: requestedSnapshot.blockNumber,
+        valuationBlockHash: requestedSnapshot.blockHash,
+        liquidityBlock: requestedSnapshot.liquidityBlockNumber,
+        liquidityBlockHash: requestedSnapshot.liquidityBlockHash,
+        rankingCommitment: requestedSnapshot.rankingCommitment,
+      }),
+    )).rejects.toThrow("changed the valuation snapshot");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        page: 3,
+        total: 27,
+        totalPages: 3,
+        valuationSnapshot: requestedSnapshot,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "clamped-market-page",
+      new URLSearchParams({
+        sort: "market-cap",
+        page: "2",
+        limit: "9",
+        valuationBlock: requestedSnapshot.blockNumber,
+        valuationBlockHash: requestedSnapshot.blockHash,
+        liquidityBlock: requestedSnapshot.liquidityBlockNumber,
+        liquidityBlockHash: requestedSnapshot.liquidityBlockHash,
+        rankingCommitment: requestedSnapshot.rankingCommitment,
+      }),
+    )).rejects.toThrow("inconsistent valuation snapshot");
+  });
+
+  it.each([
+    ["page", { page: undefined }],
+    ["pageSize", { pageSize: undefined }],
+    ["total", { total: undefined }],
+    ["totalPages", { totalPages: undefined }],
+  ])("rejects a market-cap response missing raw %s", async (field, mutation) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        ...mutation,
+        valuationSnapshot: valuationSnapshot(),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      `missing-market-${field}`,
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid pagination data");
+  });
+
+  it.each([
+    ["valuation block", { blockNumber: "1".repeat(79) }],
+    ["liquidity block", { liquidityBlockNumber: "2147483648" }],
+  ])("rejects an oversized response %s", async (field, snapshotMutation) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...payload,
+        valuationSnapshot: valuationSnapshot(snapshotMutation),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      `oversized-market-${field}`,
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid valuation snapshot");
+  });
+
+  it.each([
+    ["valuation block", { valuationBlock: "1".repeat(79) }],
+    ["liquidity block", { liquidityBlock: "2147483648" }],
+  ])("rejects an oversized continuation %s before fetch", async (
+    _field,
+    continuationMutation,
+  ) => {
+    const requestedSnapshot = valuationSnapshot();
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const search = new URLSearchParams({
+      sort: "market-cap",
+      page: "2",
+      limit: "9",
+      valuationBlock: requestedSnapshot.blockNumber,
+      valuationBlockHash: requestedSnapshot.blockHash,
+      liquidityBlock: requestedSnapshot.liquidityBlockNumber,
+      liquidityBlockHash: requestedSnapshot.liquidityBlockHash,
+      rankingCommitment: requestedSnapshot.rankingCommitment,
+    });
+    for (const [key, value] of Object.entries(continuationMutation)) {
+      if (value !== undefined) search.set(key, value);
+    }
+
+    await expect(loadExplorePayload(
+      `oversized-market-continuation-${_field}`,
+      search,
+    )).rejects.toThrow("continuation is malformed");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("refreshes only visible Explore content after the freshness interval", () => {
     expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(5_000);
     expect(
@@ -541,8 +1180,12 @@ describe("Explore refresh state", () => {
   });
 
   it("shares one in-flight request for repeated refreshes of the same content", async () => {
+    const marketPayload = {
+      ...payload,
+      valuationSnapshot: valuationSnapshot(),
+    };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(payload), {
+      new Response(JSON.stringify(marketPayload), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -558,7 +1201,7 @@ describe("Explore refresh state", () => {
     const second = loadExplorePayload("same-content-dedupe", search);
 
     expect(second).toBe(first);
-    await expect(first).resolves.toEqual(payload);
+    await expect(first).resolves.toEqual(marketPayload);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

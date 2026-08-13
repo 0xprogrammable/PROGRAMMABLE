@@ -40,7 +40,6 @@ describe("Shards generic V3 canary descriptor eligibility", () => {
       "SHARDS_LAUNCH_DESCRIPTOR_FEE_POLICY_PROFILE_MISSING",
       "SHARDS_REGISTRY_V1_FEE_POLICY_PROFILE_MISSING",
       "SHARDS_REGISTRY_V1_AUTHORIZATION_AND_FINALITY_BYTES_MISSING",
-      "CUSTOM_LAUNCH_AUTHENTICATED_CANARY_FEE_POLICY_SCHEMA_DRIFT",
     ]);
     expect(eligibility.requiredBindings).toHaveLength(8);
     expect(eligibility.requiredBindings.every(({ value }) => value === null))
@@ -103,7 +102,8 @@ describe("Shards generic V3 canary descriptor eligibility", () => {
     expect(eligibility.genericRouteContract).toMatchObject({
       feePolicyCompatibility:
         "ANALYSIS_PENDING_NO_100_BPS_INCLUSIVE_80_10_10_PROFILE",
-      deploymentProbeFeePolicyFieldState: "MISSING_REQUIRED_ROUTE_FIELD",
+      deploymentProbeFeePolicyFieldState:
+        "PRESENT_VALIDATED_PROFILE_UNSUPPORTED",
     });
     const responseContract = readFileSync(join(
       process.cwd(),
@@ -118,7 +118,8 @@ describe("Shards generic V3 canary descriptor eligibility", () => {
       deploymentProbe.indexOf("function validateForeignApplicationDenial(value)"),
     );
     expect(responseContract).toContain('"walletExecutionKind", "transactionValuePolicy", "feePolicy"');
-    expect(routeProbe).not.toContain('"feePolicy"');
+    expect(routeProbe).toContain('"feePolicy"');
+    expect(routeProbe).toContain('"manualClaimPolicy"');
     const nested = ROUTER_V2_SHARED_LIFECYCLE_V3_SOURCE_ONLY_STATE.profiles
       .find(({ slotId }) => slotId === eligibility.genericRouteContract.nestedFactorySlotId);
     expect(nested).toMatchObject({

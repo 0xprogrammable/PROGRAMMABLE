@@ -7,14 +7,37 @@ import {
   readLiveExploreModel,
   writeDurableExploreModel,
 } from "../../../../lib/onchain";
+import { currentMarketOnchainDeployment } from "../../../../lib/market-data/current-market-rpc.server";
 import { writePortfolioHistorySnapshot } from "../../../../lib/profile/portfolio-history-storage.server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
-const INDEX_READ_ATTEMPTS = 4;
-const INDEX_READ_RETRY_DELAY_MS = 1_500;
+const INDEX_REFRESH_DEADLINE_MS = 270_000;
+
+class IndexRefreshDeadlineError extends Error {
+  override name = "IndexRefreshDeadlineError";
+}
+
+async function withIndexRefreshDeadline<Output>(
+  read: () => Promise<Output>,
+) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new IndexRefreshDeadlineError()),
+          INDEX_REFRESH_DEADLINE_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
 
 function errorClassChain(error: unknown) {
   const classes: Array<{ name: string; code?: number }> = [];
@@ -82,33 +105,10 @@ export async function GET(request: NextRequest) {
         "The verified production release is not operationally eligible",
       );
     }
-    let model: Awaited<ReturnType<typeof readLiveExploreModel>> | null =
-      null;
-    let lastReadError: unknown;
-    for (let attempt = 1; attempt <= INDEX_READ_ATTEMPTS; attempt += 1) {
-      try {
-        model = await readLiveExploreModel(deployment);
-        break;
-      } catch (error) {
-        lastReadError = error;
-        if (attempt < INDEX_READ_ATTEMPTS) {
-          console.warn("Programmable index read will retry", {
-            attempt,
-            errorName:
-              error instanceof Error ? error.name : "UnknownIndexError",
-            errorClassChain: errorClassChain(error),
-          });
-          if (attempt < INDEX_READ_ATTEMPTS) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, INDEX_READ_RETRY_DELAY_MS * attempt),
-            );
-          }
-        }
-      }
-    }
-    if (!model) {
-      throw lastReadError ?? new Error("Index read failed");
-    }
+    const durableRefreshDeployment = currentMarketOnchainDeployment(deployment);
+    const model = await withIndexRefreshDeadline(() =>
+      readLiveExploreModel(durableRefreshDeployment),
+    );
     if (model.status !== "ready") {
       throw new Error("The live Explore model is not ready");
     }

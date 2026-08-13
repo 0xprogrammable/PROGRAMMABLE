@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   readIndexedReadModelHealth: vi.fn(),
   getOperationalOnchainDeployment: vi.fn(),
+  currentMarketOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readOperationalRpcHealth: vi.fn(),
 }));
@@ -15,6 +16,10 @@ vi.mock("../../lib/onchain", () => ({
   getWebsiteReadOnchainDeployment: mocks.getOperationalOnchainDeployment,
   readDurableExploreModel: mocks.readDurableExploreModel,
   readOperationalRpcHealth: mocks.readOperationalRpcHealth,
+}));
+
+vi.mock("../../lib/market-data/current-market-rpc.server", () => ({
+  currentMarketOnchainDeployment: mocks.currentMarketOnchainDeployment,
 }));
 
 import { GET } from "../../app/api/ops/health/route";
@@ -61,6 +66,13 @@ function rpcHealth(input?: Readonly<{
 describe("operations health route", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
+    mocks.currentMarketOnchainDeployment.mockImplementation(
+      (deployment: Record<string, unknown>) => ({
+        ...deployment,
+        rpcUrl: "https://quicknode.example.invalid/",
+        rpcUrlSecondary: "https://rpc.mevblocker.io/",
+      }),
+    );
   });
 
   it("preserves the complete legacy health behavior in legacy-only mode", async () => {
@@ -102,7 +114,13 @@ describe("operations health route", () => {
       },
     });
     expect(mocks.readDurableExploreModel).toHaveBeenCalledOnce();
-    expect(mocks.readOperationalRpcHealth).toHaveBeenCalledOnce();
+    expect(mocks.currentMarketOnchainDeployment).toHaveBeenCalledOnce();
+    expect(mocks.readOperationalRpcHealth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rpcUrl: "https://quicknode.example.invalid/",
+        rpcUrlSecondary: "https://rpc.mevblocker.io/",
+      }),
+    );
   });
 
   it("binds indexed health to the production deployment and independent RPC chain", async () => {

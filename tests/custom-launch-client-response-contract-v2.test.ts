@@ -12,6 +12,23 @@ const APPLICATION_HANDLE = `github-${"a".repeat(64)}` as const;
 const APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE =
   "0x1111111111111111111111111111111111111111";
 
+function manualClaimPolicy(expectedProgrammableFeeBps: 5 | 10 = 10) {
+  return {
+    schemaVersion: "programmable.custom-manual-claim-policy.v1",
+    discoveryMode: "custom-registry-v1-primary-contract",
+    sourceRole: "primary-contract",
+    asset: "0x0000000000000000000000000000000000000000",
+    recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    claimSelector: "0xb9d2fad0",
+    accruedSelector: "0x3129853d",
+    totalClaimedSelector: "0x4a383b32",
+    recipientSelector: "0x424ff2a5",
+    feeBpsSelector: "0x32c0314d",
+    sourceInterfaceId: "0x808cb67a",
+    expectedProgrammableFeeBps,
+  };
+}
+
 function clientFor(value: unknown, status = 200) {
   return createCustomLaunchWebsiteClientV2({
     getSession: async () => ({
@@ -112,6 +129,7 @@ function launchDescriptor() {
           },
         }],
       },
+      manualClaimPolicy: manualClaimPolicy(),
     }],
     defaultChoiceId: "ethereum",
   };
@@ -394,6 +412,7 @@ describe("custom launch client response contracts", () => {
           },
         }],
       },
+      manualClaimPolicy: manualClaimPolicy(5),
     });
     await expect(clientFor(aeon).launchDescriptor(APPLICATION_HANDLE)).resolves.toMatchObject({
       routes: [{ feePolicy: { providerId: "aeon", totalRateBps: 20 } }],
@@ -415,6 +434,7 @@ describe("custom launch client response contracts", () => {
         normalProgrammableTenBpsApplied: false,
         legs: [],
       },
+      manualClaimPolicy: null,
     });
     await expect(clientFor(noMarket).launchDescriptor(APPLICATION_HANDLE)).resolves.toMatchObject({
       routes: [{ feePolicy: { feeMode: "no-qualifying-market", totalRateBps: 0 } }],
@@ -431,6 +451,38 @@ describe("custom launch client response contracts", () => {
       Object.assign(invalid.routes[0]!.feePolicy, mutation);
       await expectContractMismatch(clientFor(invalid).launchDescriptor(APPLICATION_HANDLE));
     }
+
+    const missingClaimPolicy = launchDescriptor();
+    delete (missingClaimPolicy.routes[0] as Partial<
+      typeof missingClaimPolicy.routes[number]
+    >).manualClaimPolicy;
+    await expectContractMismatch(
+      clientFor(missingClaimPolicy).launchDescriptor(APPLICATION_HANDLE),
+    );
+
+    for (const mutation of [
+      { recipient: "0x1111111111111111111111111111111111111111" },
+      { claimSelector: "0x00000000" },
+      { expectedProgrammableFeeBps: 5 },
+    ]) {
+      const invalid = launchDescriptor();
+      Object.assign(invalid.routes[0]!.manualClaimPolicy!, mutation);
+      await expectContractMismatch(
+        clientFor(invalid).launchDescriptor(APPLICATION_HANDLE),
+      );
+    }
+
+    const feeBearingWithoutClaim = launchDescriptor();
+    feeBearingWithoutClaim.routes[0]!.manualClaimPolicy = null as never;
+    await expectContractMismatch(
+      clientFor(feeBearingWithoutClaim).launchDescriptor(APPLICATION_HANDLE),
+    );
+
+    const noMarketWithClaim = structuredClone(noMarket);
+    noMarketWithClaim.routes[0]!.manualClaimPolicy = manualClaimPolicy();
+    await expectContractMismatch(
+      clientFor(noMarketWithClaim).launchDescriptor(APPLICATION_HANDLE),
+    );
   });
 
   it("requires grant-native launch eligibility identity", async () => {

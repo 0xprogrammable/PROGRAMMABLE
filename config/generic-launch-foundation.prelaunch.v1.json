@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "programmable.generic-launch-foundation-descriptor.v1",
+  "activation": false,
+  "activationBindingHash": null,
+  "activatedAt": null,
+  "subjectSourceBindingHash": null,
+  "executionResultSourceBindingHash": null,
+  "readModelBindingHash": null,
+  "readModelVerifierBindingHash": null,
+  "readModelVerifier": null,
+  "routeAdapterReleases": null,
+  "api": {
+    "feedPath": "/api/custom-launch/generic/v1/launches",
+    "detailPathTemplate": "/api/custom-launch/generic/v1/launches/{recordHash}"
+  }
+}

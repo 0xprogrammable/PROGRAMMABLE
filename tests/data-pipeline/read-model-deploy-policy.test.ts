@@ -792,11 +792,11 @@ describe("read-model production deploy policy", () => {
       '"./scripts/perf/bitquery-historical-release-gate.mjs"',
     );
     expect(workflow).toContain(
-      "await verifyBitqueryGoldenMarketParityV1({",
+      "await verifyBitqueryGoldenMarketExecutionV1({",
     );
     expect(workflow).toContain("const historicalPaidPathVerified =");
     expect(workflow).toContain(
-      "verifyBitqueryHistoricalGoldenReleaseV1({",
+      "verifyBitqueryHistoricalGoldenReleaseV2({",
     );
     expect(workflow).toContain(
       "historicalGoldenRelease.confirmations >= 12",
@@ -828,27 +828,26 @@ describe("read-model production deploy policy", () => {
       workflow.indexOf("Record registry identity and combined market path"),
     );
     expect(bitquerySmoke).toContain(
-      "MAINNET_RPC_URL_A: ${{ secrets.MAINNET_RPC_URL_A }}",
+      '"https://ethereum-rpc.publicnode.com"',
     );
     expect(bitquerySmoke).toContain(
-      "MAINNET_RPC_URL_B: ${{ secrets.MAINNET_RPC_URL_B }}",
-    );
-    expect(bitquerySmoke).toContain(
-      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
-    );
-    expect(bitquerySmoke).toContain(
-      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}",
-    );
-    expect(bitquerySmoke).toContain(
-      '"./scripts/perf/read-model-provider-binding.mjs"',
-    );
-    expect(bitquerySmoke).toContain(
-      "runtimeProductionProviderBindingsFromUrls({",
-    );
-    expect(bitquerySmoke).toContain(
-      "binding.endpointCommitment !== expectedCommitment",
+      '"https://rpc.mevblocker.io"',
     );
     expect(bitquerySmoke).toContain("rpcUrls: independentRpcUrls");
+    expect(bitquerySmoke).not.toContain("MAINNET_RPC_URL_A");
+    expect(bitquerySmoke).not.toContain("MAINNET_RPC_URL_B");
+    expect(bitquerySmoke).not.toContain(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+    );
+    expect(bitquerySmoke).not.toContain(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+    );
+    expect(bitquerySmoke).not.toContain(
+      "runtimeProductionProviderBindingsFromUrls",
+    );
+    expect(bitquerySmoke).not.toContain(
+      '"./scripts/perf/read-model-provider-binding.mjs"',
+    );
     expect(bitquerySmoke).toContain(
       "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
     );
@@ -858,7 +857,7 @@ describe("read-model production deploy policy", () => {
     expect(bitquerySmoke).not.toContain("/api/ops/health");
     expect(bitquerySmoke).not.toContain("/api/explore/profile");
     expect(bitquerySmoke).not.toMatch(
-      /\b(?:database|projector|envio|real-block|sla)\b/iu,
+      /\b(?:database|projector|quicknode|envio|real-block|sla)\b/iu,
     );
     expect(workflow).toContain("Reverify staged candidate binding");
     expect(workflow).toContain("Record staged candidate handoff");
