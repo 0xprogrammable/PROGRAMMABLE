@@ -19,6 +19,22 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
 let productionTarget: ProjectionTargetReferenceHandlerV1 | null = null;
+let productionPool:
+ReturnType<typeof createProductionProjectionTargetPostgresPoolV1> | null = null;
+
+export function getProductionApprovalV3ProjectionPoolV1():
+ReturnType<typeof createProductionProjectionTargetPostgresPoolV1> {
+  if (productionPool !== null) return productionPool;
+  productionPool = createProductionProjectionTargetPostgresPoolV1(
+    environmentValue("PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL"),
+    environmentPem(
+      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
+      "CERTIFICATE",
+    ),
+    environmentId("PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE"),
+  );
+  return productionPool;
+}
 
 export function getProductionApprovalV3ProjectionTargetV1():
 ProjectionTargetReferenceHandlerV1 {
@@ -27,14 +43,7 @@ ProjectionTargetReferenceHandlerV1 {
   const targetBindingHash = environmentDigest(
     "PROGRAMMABLE_WEBSITE_APPROVAL_V3_TARGET_BINDING_HASH",
   );
-  const pool = createProductionProjectionTargetPostgresPoolV1(
-    environmentValue("PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL"),
-    environmentPem(
-      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
-      "CERTIFICATE",
-    ),
-    environmentId("PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE"),
-  );
+  const pool = getProductionApprovalV3ProjectionPoolV1();
   const credentialVerifier =
     createEd25519ProjectionWorkloadCredentialVerifierV1({
       issuer: environmentId("PROGRAMMABLE_APPROVAL_V3_WORKLOAD_ISSUER"),

@@ -1,5 +1,5 @@
 import { handleProductionGenericLaunchDetailV2 } from
-  "@/lib/server/custom-launch/generic-launch-read-v2";
+  "@/lib/server/custom-launch/generic-launch-production-v2";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10;

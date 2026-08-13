@@ -181,6 +181,7 @@ async function migrate(database: PGlite): Promise<void> {
     "../ops/website-projection-target/migrations/0002_custom_launch_wallet_profile_v2.sql",
     "../ops/website-projection-target/migrations/0003_registry_custom_public_read_v1.sql",
     "../ops/website-projection-target/migrations/0004_approval_v3_artifacts_v1.sql",
+    "../ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
   ]) {
     await database.exec(await readFile(new URL(path, import.meta.url), "utf8"));
   }
