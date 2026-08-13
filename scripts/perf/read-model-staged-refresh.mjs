@@ -12,7 +12,19 @@ const MAXIMUM_FRESH_AGE_SECONDS = 10 * 60;
 const CANONICAL_UINT = /^(?:0|[1-9][0-9]{0,77})$/u;
 const HEX32 = /^0x[0-9a-f]{64}$/u;
 const MAXIMUM_UINT64 = (1n << 64n) - 1n;
-const PREWARM_PHASES = ["classic-primary", "classic-secondary"];
+const PREWARM_STEP_COUNT = 32;
+const PREWARM_STEPS = Object.freeze([
+  "01", "02", "03", "04", "05", "06", "07", "08",
+  "09", "10", "11", "12", "13", "14", "15", "16",
+  "17", "18", "19", "20", "21", "22", "23", "24",
+  "25", "26", "27", "28", "29", "30", "31", "32",
+]);
+const PREWARM_PHASES = Object.freeze(PREWARM_STEPS.flatMap((step) => [
+  `classic-primary-${step}`,
+  `classic-secondary-${step}`,
+]));
+const PREWARM_PHASE =
+  /^classic-(primary|secondary)-(0[1-9]|[12][0-9]|3[0-2])$/u;
 
 function argumentsFrom(argv) {
   const result = {};
@@ -151,7 +163,34 @@ function exactRefreshResponse(value) {
 }
 
 function exactPrewarmResponse(value, phase) {
-  const provider = phase === "classic-primary" ? "primary" : "secondary";
+  const phaseMatch = PREWARM_PHASE.exec(phase);
+  if (!phaseMatch) return false;
+  const provider = phaseMatch[1];
+  const step = Number(phaseMatch[2]);
+  const coverageStart = CANONICAL_UINT.test(value.body?.coverageStartBlock)
+    ? BigInt(value.body.coverageStartBlock)
+    : null;
+  const blockNumber = CANONICAL_UINT.test(value.body?.blockNumber)
+    ? BigInt(value.body.blockNumber)
+    : null;
+  const confirmedBlock = CANONICAL_UINT.test(value.body?.confirmedBlockNumber)
+    ? BigInt(value.body.confirmedBlockNumber)
+    : null;
+  const coverage =
+    coverageStart !== null &&
+      confirmedBlock !== null &&
+      confirmedBlock >= coverageStart
+      ? confirmedBlock - coverageStart + 1n
+      : null;
+  const expectedPrefixLength = coverage === null
+    ? null
+    : (
+      coverage * BigInt(step) + BigInt(PREWARM_STEP_COUNT) - 1n
+    ) / BigInt(PREWARM_STEP_COUNT);
+  const expectedBlock =
+    coverageStart !== null && expectedPrefixLength !== null
+      ? coverageStart + expectedPrefixLength - 1n
+      : null;
   return (
     value.response.status === 200 &&
     value.response.headers
@@ -161,7 +200,15 @@ function exactPrewarmResponse(value, phase) {
     value.body?.ok === true &&
     value.body.phase === phase &&
     value.body.provider === provider &&
-    CANONICAL_UINT.test(value.body.blockNumber) &&
+    value.body.step === step &&
+    value.body.stepCount === PREWARM_STEP_COUNT &&
+    coverageStart !== null &&
+    blockNumber !== null &&
+    confirmedBlock !== null &&
+    expectedBlock !== null &&
+    blockNumber === expectedBlock &&
+    blockNumber <= confirmedBlock &&
+    (step !== PREWARM_STEP_COUNT || blockNumber === confirmedBlock) &&
     HEX32.test(value.body.blockHash) &&
     value.body.blockHash !== `0x${"00".repeat(32)}`
   );
@@ -272,19 +319,38 @@ export async function refreshExactStagedReadModel(input) {
     "User-Agent": "programmable-staged-read-model-refresh/1",
     "x-vercel-protection-bypass": input.automationBypassSecret,
   };
-  for (const phase of PREWARM_PHASES) {
-    const prewarmUrl = new URL(REFRESH_PATH, target);
-    prewarmUrl.searchParams.set("phase", phase);
-    const prewarm = await requestJson(
-      fetchImpl,
-      prewarmUrl,
-      protectedHeaders,
-      330_000,
-    );
-    if (!exactPrewarmResponse(prewarm, phase)) {
-      throw new Error(
-        `exact staged ${phase} prewarm failed (${prewarm.response.status})`,
+  const previousPrewarmBlocks = new Map();
+  for (let index = 0; index < PREWARM_PHASES.length; index += 2) {
+    const phasePair = PREWARM_PHASES.slice(index, index + 2);
+    const results = await Promise.allSettled(phasePair.map(async (phase) => {
+      const prewarmUrl = new URL(REFRESH_PATH, target);
+      prewarmUrl.searchParams.set("phase", phase);
+      return requestJson(
+        fetchImpl,
+        prewarmUrl,
+        protectedHeaders,
+        330_000,
       );
+    }));
+    for (let pairIndex = 0; pairIndex < phasePair.length; pairIndex += 1) {
+      const phase = phasePair[pairIndex];
+      const result = results[pairIndex];
+      if (result.status !== "fulfilled") {
+        throw new Error(`exact staged ${phase} prewarm request failed`);
+      }
+      const prewarm = result.value;
+      if (!exactPrewarmResponse(prewarm, phase)) {
+        throw new Error(
+          `exact staged ${phase} prewarm failed (${prewarm.response.status})`,
+        );
+      }
+      const provider = prewarm.body.provider;
+      const blockNumber = BigInt(prewarm.body.blockNumber);
+      const previousBlock = previousPrewarmBlocks.get(provider);
+      if (previousBlock !== undefined && blockNumber < previousBlock) {
+        throw new Error(`exact staged ${phase} prewarm moved backwards`);
+      }
+      previousPrewarmBlocks.set(provider, blockNumber);
     }
   }
 

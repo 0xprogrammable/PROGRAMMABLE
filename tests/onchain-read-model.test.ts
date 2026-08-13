@@ -98,6 +98,25 @@ describe("Explore read model deployment boundary", () => {
 });
 
 describe("Explore verified event indexing", () => {
+  it("stops before retrying when its cooperative prewarm signal aborts", async () => {
+    const controller = new AbortController();
+    const reason = new Error("prewarm deadline");
+    const getLogs = vi.fn(async () => {
+      controller.abort(reason);
+      return [];
+    });
+
+    await expect(
+      indexVerifiedEvents(
+        { getLogs } as unknown as PublicClient,
+        readyDeployment,
+        1_000n,
+        controller.signal,
+      ),
+    ).rejects.toBe(reason);
+    expect(getLogs).toHaveBeenCalledTimes(2);
+  });
+
   it("uses two concurrent strict topic-OR queries on scalar canonical addresses per range", async () => {
     const getLogs = vi.fn(
       async (input: {
