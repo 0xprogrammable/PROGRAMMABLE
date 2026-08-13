@@ -105,6 +105,7 @@ describe("Alchemy live pool market state", () => {
     expect(snapshot.ethUsdQuote).toEqual({
       feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
       roundId: "12",
+      answeredInRound: "12",
       answer: "300000000000",
       decimals: 8,
       updatedAt: "1786400000",

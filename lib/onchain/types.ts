@@ -128,6 +128,7 @@ export type ExploreSnapshot = {
   ethUsdQuote?: {
     feedAddress: Address;
     roundId: string;
+    answeredInRound?: string;
     answer: string;
     decimals: number;
     updatedAt: string;

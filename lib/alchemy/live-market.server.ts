@@ -246,17 +246,19 @@ export async function withSameBlockEthUsdQuote(input: {
         }),
         client.getBlock({ blockNumber }),
       ]);
-      const [roundId, answer, , updatedAt] = roundData;
+      const [roundId, answer, , updatedAt, answeredInRound] = roundData;
       assertValidEthUsdSnapshot({
         expectedBlockHash: snapshot.blockHash,
         actualBlockHash: block.hash,
         blockTimestamp: block.timestamp,
         roundId,
+        answeredInRound,
         answer,
         updatedAt,
       });
       return {
         roundId,
+        answeredInRound,
         answer,
         decimals,
         updatedAt,
@@ -271,6 +273,7 @@ export async function withSameBlockEthUsdQuote(input: {
     ethUsdQuote: {
       feedAddress: ETH_USD_FEED_ADDRESS,
       roundId: quote.roundId.toString(),
+      answeredInRound: quote.answeredInRound.toString(),
       answer: quote.answer.toString(),
       decimals: quote.decimals,
       updatedAt: quote.updatedAt.toString(),
@@ -395,6 +398,7 @@ function applyLivePoolState(
       marketCapUsdWad === undefined ||
       activeVirtualLiquidityUsdWad === undefined ||
       !snapshot.ethUsdQuote ||
+      !snapshot.ethUsdQuote.answeredInRound ||
       !blockTimestamp ||
       !blockTime ||
       !quoteUpdatedAtTime ||
@@ -429,6 +433,7 @@ function applyLivePoolState(
             fdvUsdWad: marketCapUsdWad.toString(),
             ethUsdQuote: {
               ...snapshot.ethUsdQuote,
+              answeredInRound: snapshot.ethUsdQuote.answeredInRound,
               updatedAtTime: quoteUpdatedAtTime,
             },
           },

@@ -91,6 +91,7 @@ function currentEvidenceFixture(
       ethUsdQuote: {
         feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
         roundId: "1",
+        answeredInRound: "1",
         answer: "250000000000",
         decimals: 8,
         updatedAt: blockTimestamp,
@@ -217,6 +218,36 @@ describe("Explore financial-data semantics", () => {
       status: "unavailable",
       reason: "source-unavailable",
     });
+  });
+
+  it("rejects incomplete or non-canonical Chainlink provenance", () => {
+    const { valued, liquidityEvidence } = currentEvidenceFixture();
+    const price = valued.liveMarketPriceEvidence!;
+    const incompleteRound = {
+      ...valued,
+      liveMarketPriceEvidence: {
+        ...price,
+        ethUsdQuote: {
+          ...price.ethUsdQuote,
+          answeredInRound: "0",
+        },
+      },
+    };
+    const wrongFeed = {
+      ...valued,
+      liveMarketPriceEvidence: {
+        ...price,
+        ethUsdQuote: {
+          ...price.ethUsdQuote,
+          feedAddress: "0x1111111111111111111111111111111111111111" as const,
+        },
+      },
+    };
+
+    expect(withCurrentOnchainValuation(incompleteRound, liquidityEvidence)
+      .valuation).toEqual(valued.valuation);
+    expect(withCurrentOnchainValuation(wrongFeed, liquidityEvidence).valuation)
+      .toEqual(valued.valuation);
   });
 
   it("promotes a canonical Router-stamped Classic native/token pool", () => {

@@ -10,7 +10,7 @@ import {
   marketCapNativeWadFromSqrtPriceX96,
   nativePriceWadFromSqrtPriceX96,
 } from "./onchain/math";
-import { usdValueFromWei } from "./onchain/usd";
+import { ETH_USD_FEED_ADDRESS, usdValueFromWei } from "./onchain/usd";
 import {
   MARKET_DATA_CURRENT_MAX_AGE_MS,
   MARKET_DATA_MAXIMUM_RAW_INDEXED_PRICE_DEVIATION_BPS,
@@ -503,7 +503,11 @@ function validCurrentPriceEvidence(
     positiveUint256(price.fdvUsdWad) === null ||
     positiveUint256(price.ethUsdQuote.answer) === null ||
     positiveUint256(price.ethUsdQuote.roundId) === null ||
-    !/^0x[0-9a-f]{40}$/iu.test(price.ethUsdQuote.feedAddress) ||
+    positiveUint256(price.ethUsdQuote.answeredInRound) === null ||
+    BigInt(price.ethUsdQuote.answeredInRound) <
+      BigInt(price.ethUsdQuote.roundId) ||
+    price.ethUsdQuote.feedAddress.toLowerCase() !==
+      ETH_USD_FEED_ADDRESS.toLowerCase() ||
     !Number.isInteger(price.ethUsdQuote.decimals) ||
     price.ethUsdQuote.decimals < 0 ||
     price.ethUsdQuote.decimals > 255 ||

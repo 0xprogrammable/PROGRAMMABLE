@@ -476,6 +476,7 @@ export type LauncherToken = {
     ethUsdQuote: Readonly<{
       feedAddress: `0x${string}`;
       roundId: string;
+      answeredInRound: string;
       answer: string;
       decimals: number;
       updatedAt: string;
