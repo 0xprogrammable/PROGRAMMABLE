@@ -237,6 +237,16 @@ export type OfficialV4LiquidityEvidenceReadCategory =
   | "request-capacity"
   | "request-circuit"
   | "response-schema"
+  | "response-envelope-schema"
+  | "response-meta-schema"
+  | "response-block-schema"
+  | "response-pool-schema"
+  | "response-pool-id-schema"
+  | "response-pool-token-schema"
+  | "response-pool-hook-schema"
+  | "response-pool-fee-schema"
+  | "response-pool-tick-schema"
+  | "response-pool-market-schema"
   | "response-deployment"
   | "response-indexing-error"
   | "response-ahead"
@@ -315,18 +325,25 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]) {
   );
 }
 
-function strictUnsignedInteger(value: unknown, maximumDigits = 78): string {
+function strictUnsignedInteger(
+  value: unknown,
+  maximumDigits = 78,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): string {
   if (
     typeof value !== "string" ||
     !/^(0|[1-9]\d*)$/.test(value) ||
     value.length > maximumDigits
   ) {
-    return invalidResponse();
+    return invalidResponse(category);
   }
   return value;
 }
 
-function strictBlockNumber(value: unknown): bigint {
+function strictBlockNumber(
+  value: unknown,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): bigint {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     return BigInt(value);
   }
@@ -337,19 +354,25 @@ function strictBlockNumber(value: unknown): bigint {
   ) {
     return BigInt(value);
   }
-  return invalidResponse();
+  return invalidResponse(category);
 }
 
-function strictAddress(value: unknown): `0x${string}` {
+function strictAddress(
+  value: unknown,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): `0x${string}` {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) {
-    return invalidResponse();
+    return invalidResponse(category);
   }
   return value.toLowerCase() as `0x${string}`;
 }
 
-function strictBytes32(value: unknown): `0x${string}` {
+function strictBytes32(
+  value: unknown,
+  category: OfficialV4LiquidityEvidenceReadCategory = "response-schema",
+): `0x${string}` {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    return invalidResponse();
+    return invalidResponse(category);
   }
   return value.toLowerCase() as `0x${string}`;
 }
@@ -361,11 +384,11 @@ function strictTick(value: unknown): number | undefined {
     !/^-?(0|[1-9]\d*)$/.test(value) ||
     value.length > 8
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-tick-schema");
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < -887_272 || parsed > 887_272) {
-    return invalidResponse();
+    return invalidResponse("response-pool-tick-schema");
   }
   return parsed;
 }
@@ -376,11 +399,11 @@ function strictTickSpacing(value: unknown): number {
     !/^[1-9]\d*$/.test(value) ||
     value.length > 5
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-fee-schema");
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed > 32_767) {
-    return invalidResponse();
+    return invalidResponse("response-pool-fee-schema");
   }
   return parsed;
 }
@@ -393,7 +416,7 @@ function strictDecimals(value: unknown): number {
         ? Number(value)
         : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 255) {
-    return invalidResponse();
+    return invalidResponse("response-pool-token-schema");
   }
   return parsed;
 }
@@ -404,11 +427,11 @@ function strictUnsignedDecimal(value: unknown): string {
     value.length > 160 ||
     !/^(0|[1-9]\d*)(?:\.(\d+))?$/.test(value)
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-market-schema");
   }
   const [integerPart, fractionalPart = ""] = value.split(".");
   if (integerPart.length > 78 || fractionalPart.length > 78) {
-    return invalidResponse();
+    return invalidResponse("response-pool-market-schema");
   }
   return value;
 }
@@ -427,12 +450,14 @@ function strictBlockTimestamp(value: unknown): {
   timestamp: string;
   time: string;
 } {
-  const timestamp = strictBlockNumber(value);
-  if (timestamp > 8_640_000_000_000n) return invalidResponse();
+  const timestamp = strictBlockNumber(value, "response-block-schema");
+  if (timestamp > 8_640_000_000_000n) {
+    return invalidResponse("response-block-schema");
+  }
   const milliseconds = Number(timestamp) * 1_000;
   const date = new Date(milliseconds);
   if (!Number.isFinite(milliseconds) || Number.isNaN(date.getTime())) {
-    return invalidResponse();
+    return invalidResponse("response-block-schema");
   }
   return { timestamp: timestamp.toString(), time: date.toISOString() };
 }
@@ -461,22 +486,26 @@ function parsePool(value: unknown): ParsedPool {
     !isRecord(value.token1) ||
     !hasOnlyKeys(value.token1, ["id", "decimals"])
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-schema");
   }
 
-  const token0 = strictAddress(value.token0.id);
-  const token1 = strictAddress(value.token1.id);
-  const hooks = strictAddress(value.hooks);
-  const feeTierPips = strictUnsignedInteger(value.feeTier, 8);
+  const token0 = strictAddress(value.token0.id, "response-pool-token-schema");
+  const token1 = strictAddress(value.token1.id, "response-pool-token-schema");
+  const hooks = strictAddress(value.hooks, "response-pool-hook-schema");
+  const feeTierPips = strictUnsignedInteger(
+    value.feeTier,
+    8,
+    "response-pool-fee-schema",
+  );
   const fee = BigInt(feeTierPips);
   if (
     (fee > 1_000_000n && fee !== 0x80_0000n) ||
     BigInt(token0) >= BigInt(token1)
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-fee-schema");
   }
   const tickSpacing = strictTickSpacing(value.tickSpacing);
-  const id = strictBytes32(value.id);
+  const id = strictBytes32(value.id, "response-pool-id-schema");
   let recomputedId: string;
   try {
     recomputedId = computeOfficialV4PoolId({
@@ -487,9 +516,9 @@ function parsePool(value: unknown): ParsedPool {
       hooks,
     }).toLowerCase();
   } catch {
-    return invalidResponse();
+    return invalidResponse("response-pool-id-schema");
   }
-  if (id !== recomputedId) return invalidResponse();
+  if (id !== recomputedId) return invalidResponse("response-pool-id-schema");
 
   return {
     id,
@@ -500,10 +529,22 @@ function parsePool(value: unknown): ParsedPool {
     hooks,
     feeTierPips,
     tickSpacing,
-    liquidity: strictUnsignedInteger(value.liquidity),
-    sqrtPriceX96: strictUnsignedInteger(value.sqrtPrice),
+    liquidity: strictUnsignedInteger(
+      value.liquidity,
+      78,
+      "response-pool-market-schema",
+    ),
+    sqrtPriceX96: strictUnsignedInteger(
+      value.sqrtPrice,
+      78,
+      "response-pool-market-schema",
+    ),
     tick: strictTick(value.tick),
-    transactionCount: strictUnsignedInteger(value.txCount),
+    transactionCount: strictUnsignedInteger(
+      value.txCount,
+      78,
+      "response-pool-market-schema",
+    ),
     volumeUsdWad: decimalToWad(value.volumeUSD),
     totalValueLockedToken0: strictUnsignedDecimal(
       value.totalValueLockedToken0,
@@ -522,19 +563,31 @@ export function parseOfficialV4SubgraphResponse(
     !isRecord(value) ||
     !hasOnlyKeys(value, ["data"]) ||
     !isRecord(value.data) ||
-    !hasOnlyKeys(value.data, ["_meta", "pools"]) ||
+    !hasOnlyKeys(value.data, ["_meta", "pools"])
+  ) {
+    return invalidResponse("response-envelope-schema");
+  }
+  if (
     !isRecord(value.data._meta) ||
     !hasOnlyKeys(value.data._meta, [
       "block",
       "deployment",
       "hasIndexingErrors",
-    ]) ||
+    ])
+  ) {
+    return invalidResponse("response-meta-schema");
+  }
+  if (
     !isRecord(value.data._meta.block) ||
-    !hasOnlyKeys(value.data._meta.block, ["number", "hash", "timestamp"]) ||
+    !hasOnlyKeys(value.data._meta.block, ["number", "hash", "timestamp"])
+  ) {
+    return invalidResponse("response-block-schema");
+  }
+  if (
     !Array.isArray(value.data.pools) ||
     value.data.pools.length > OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS
   ) {
-    return invalidResponse();
+    return invalidResponse("response-pool-schema");
   }
   if (value.data._meta.deployment !== OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT) {
     return invalidResponse("response-deployment");
@@ -543,7 +596,10 @@ export function parseOfficialV4SubgraphResponse(
     return invalidResponse("response-indexing-error");
   }
 
-  const indexedBlockNumber = strictBlockNumber(value.data._meta.block.number);
+  const indexedBlockNumber = strictBlockNumber(
+    value.data._meta.block.number,
+    "response-block-schema",
+  );
   const indexedBlockTimestamp = strictBlockTimestamp(
     value.data._meta.block.timestamp,
   );
@@ -556,7 +612,10 @@ export function parseOfficialV4SubgraphResponse(
   return {
     deployment: OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT,
     indexedBlockNumber: indexedBlockNumber.toString(),
-    indexedBlockHash: strictBytes32(value.data._meta.block.hash),
+    indexedBlockHash: strictBytes32(
+      value.data._meta.block.hash,
+      "response-block-schema",
+    ),
     indexedBlockTimestamp: indexedBlockTimestamp.timestamp,
     indexedBlockTime: indexedBlockTimestamp.time,
     pools,
@@ -570,7 +629,7 @@ function parseOfficialV4SubgraphSnapshotResponse(value: unknown) {
     !isRecord(value.data) ||
     !hasOnlyKeys(value.data, ["_meta"])
   ) {
-    return invalidResponse();
+    return invalidResponse("response-envelope-schema");
   }
   return parseOfficialV4SubgraphResponse({
     data: { _meta: value.data._meta, pools: [] },
