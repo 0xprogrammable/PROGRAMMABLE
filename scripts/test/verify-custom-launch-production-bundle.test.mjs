@@ -27,10 +27,10 @@ test("accepts a production bundle without development-only launch seeds", () => 
   }
 });
 
-test("rejects any production client or server artifact containing a local seed", () => {
+test("rejects a local seed in source maps and non-JavaScript production artifacts", () => {
   for (const [path, marker] of [
-    [".next/static/chunks/leak.js", "programmable-custom-launch-local-preview-v1"],
-    [".next/server/app/leak.js", "Local seed"],
+    [".next/static/chunks/leak.js.map", "programmable-custom-launch-local-preview-v1"],
+    [".next/server/app/leak.rsc", "Local seed"],
   ]) {
     const root = bundleFixture();
     try {

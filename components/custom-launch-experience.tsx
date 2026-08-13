@@ -251,6 +251,20 @@ export function resolveCustomLaunchVerifiedStagesV1(input: Readonly<{
   return verified;
 }
 
+export function customLaunchRailInvalidationForRecoveryV1(
+  recovery: Exclude<CustomLaunchApplicantRecoveryV2, "none">,
+): Readonly<{
+  clearGithubPrincipal: boolean;
+  clearRepositoriesLoaded: boolean;
+  verifiedThrough: null;
+}> {
+  return Object.freeze({
+    clearGithubPrincipal: recovery === "reconnect-github",
+    clearRepositoriesLoaded: recovery === "reconnect-github",
+    verifiedThrough: null,
+  });
+}
+
 export type PreparedLaunchRecoveryV2 = Readonly<{
   stage: "prepared";
   walletRequestAttempted: false;
@@ -1677,6 +1691,14 @@ function CustomLaunchRuntime({
       );
       setApplicantRecovery(recovery);
       if (recovery !== "none") {
+        const railInvalidation = customLaunchRailInvalidationForRecoveryV1(recovery);
+        setVerifiedThrough(railInvalidation.verifiedThrough);
+        if (railInvalidation.clearGithubPrincipal) {
+          setGithubPrincipalHash(null);
+        }
+        if (railInvalidation.clearRepositoriesLoaded) {
+          setApplicationsLoaded(false);
+        }
         setError(recovery === "connect-wallet"
           ? "Connect your launch wallet to continue. Your last known approval stays visible"
           : "Reconnect GitHub to continue. Your last known approval stays visible");

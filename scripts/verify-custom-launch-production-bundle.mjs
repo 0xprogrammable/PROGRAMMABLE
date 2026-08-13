@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const PRODUCTION_BUNDLE_ROOTS = [".next/static", ".next/server"];
@@ -13,8 +13,9 @@ function filesUnder(root) {
   const files = [];
   for (const entry of readdirSync(root)) {
     const path = join(root, entry);
-    if (statSync(path).isDirectory()) files.push(...filesUnder(path));
-    else if (/\.(?:js|json)$/u.test(entry)) files.push(path);
+    const stat = lstatSync(path);
+    if (stat.isDirectory()) files.push(...filesUnder(path));
+    else if (stat.isFile()) files.push(path);
   }
   return files;
 }
@@ -28,10 +29,11 @@ export function verifyCustomLaunchProductionBundle(root = process.cwd()) {
     throw new Error("Production bundle is missing; run next build before scanning local preview isolation");
   }
   const findings = [];
-  for (const file of bundleRoots.flatMap(filesUnder)) {
-    const source = readFileSync(file, "utf8");
+  const bundleFiles = bundleRoots.flatMap(filesUnder);
+  for (const file of bundleFiles) {
+    const source = readFileSync(file);
     for (const marker of DEVELOPMENT_ONLY_MARKERS) {
-      if (source.includes(marker)) {
+      if (source.includes(Buffer.from(marker))) {
         findings.push(`${relative(absoluteRoot, file)} contains ${JSON.stringify(marker)}`);
       }
     }
@@ -42,6 +44,7 @@ export function verifyCustomLaunchProductionBundle(root = process.cwd()) {
   return Object.freeze({
     schemaVersion: "programmable.custom-launch-production-bundle-scan.v1",
     scannedRoots: PRODUCTION_BUNDLE_ROOTS,
+    scannedFileCount: bundleFiles.length,
     forbiddenMarkerCount: DEVELOPMENT_ONLY_MARKERS.length,
   });
 }

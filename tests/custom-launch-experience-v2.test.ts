@@ -21,6 +21,7 @@ import {
   customLaunchErrorMessage,
   customLaunchFeeReviewV1,
   customLaunchFixedTokenIdentityCopyV1,
+  customLaunchRailInvalidationForRecoveryV1,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
@@ -663,6 +664,19 @@ describe("custom launch interface state line", () => {
       repositoriesLoaded: false,
       verifiedThrough: "registry",
     })).toEqual(["github"]);
+  });
+
+  it("invalidates stale rail evidence when the live session boundary is lost", () => {
+    expect(customLaunchRailInvalidationForRecoveryV1("reconnect-github")).toEqual({
+      clearGithubPrincipal: true,
+      clearRepositoriesLoaded: true,
+      verifiedThrough: null,
+    });
+    expect(customLaunchRailInvalidationForRecoveryV1("connect-wallet")).toEqual({
+      clearGithubPrincipal: false,
+      clearRepositoriesLoaded: false,
+      verifiedThrough: null,
+    });
   });
 });
 
