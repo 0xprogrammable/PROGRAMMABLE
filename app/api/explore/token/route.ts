@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
@@ -23,6 +22,8 @@ import {
 } from "../../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
   "../../../../lib/market-data/bitquery.server";
+import { currentMarketOnchainDeployment } from
+  "../../../../lib/market-data/current-market-rpc.server";
 import { hydrateMissingCanonicalTokenSupplyV1 } from
   "../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
@@ -117,14 +118,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const deployment = getAlchemyOnchainDeployment();
+    const deployment = getOnchainDeployment("production");
+    const currentMarketDeployment = deployment.status === "ready"
+      ? currentMarketOnchainDeployment(deployment)
+      : null;
     const currentEvidenceDeadlineAt =
       Date.now() + CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
-    const operationalSnapshotRead = deployment.status === "ready"
+    const operationalSnapshotRead = currentMarketDeployment
       ? settleCurrentEvidenceSnapshot({
-          read: readVerifiedOperationalMarketSnapshot(deployment),
+          read: (signal) => readVerifiedOperationalMarketSnapshot(
+            currentMarketDeployment,
+            { signal },
+          ),
           requireComplete: false,
           timeoutMs: CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+          signal: request.signal,
         })
       : Promise.resolve(null);
     const [
@@ -234,11 +242,12 @@ export async function GET(request: NextRequest) {
       ? (await valueExploreEntriesWithCurrentEvidence({
           entries: [identityEntry],
           marketByToken,
-          deployment: deployment.status === "ready" ? deployment : null,
+          deployment: currentMarketDeployment,
           operationalSnapshot: operationalSnapshotRead,
           now: new Date(),
           allowHistoricalBitqueryFallback: true,
           timeoutMs: Math.max(0, currentEvidenceDeadlineAt - Date.now()),
+          signal: request.signal,
         }))[0] ?? null
       : null;
     const primaryMarket = valuedEntry?.marketData?.pools.find(

@@ -94,6 +94,36 @@ function dependencies(
 }
 
 describe("operational RPC health", () => {
+  it("propagates caller aborts into the active health transport without failover", async () => {
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    const pending = (signal?: AbortSignal) => new Promise<never>(
+      (_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      },
+    );
+    const createClient = vi.fn((_rpcUrl: string, signal?: AbortSignal) => {
+      observedSignal = signal;
+      return {
+        getChainId: () => pending(signal),
+        getBlockNumber: () => pending(signal),
+        getBlock: () => pending(signal),
+      };
+    });
+    const read = readOperationalRpcHealth(deployment, {
+      createClient,
+      nowMs: () => NOW_MS,
+    }, controller.signal);
+
+    await vi.waitFor(() => expect(observedSignal).toBe(controller.signal));
+    controller.abort(new Error("current evidence deadline"));
+
+    await expect(read).rejects.toThrow("current evidence deadline");
+    expect(createClient).toHaveBeenCalledTimes(1);
+  });
+
   it("reports healthy only when both fixed providers agree", async () => {
     const primary = client({
       head: 100n,

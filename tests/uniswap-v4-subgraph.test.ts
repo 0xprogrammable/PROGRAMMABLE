@@ -277,6 +277,43 @@ describe("official Uniswap v4 subgraph adapter", () => {
     ]);
   });
 
+  it("propagates a caller deadline into the active subgraph fetch", async () => {
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | null | undefined;
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      observedSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(init.signal?.reason),
+          { once: true },
+        );
+      });
+    });
+    const read = readOfficialV4LiquidityEvidence(
+      {
+        tokens: [canonicalToken()],
+        referenceHead: {
+          chainId: 1,
+          blockNumber: "25630000",
+          blockHash: `0x${"44".repeat(32)}`,
+        },
+      },
+      {
+        apiKey: "graph-secret",
+        endpoint: OFFICIAL_ENDPOINT,
+        fetcher,
+        signal: controller.signal,
+      },
+    );
+
+    await vi.waitFor(() => expect(observedSignal).toBeInstanceOf(AbortSignal));
+    controller.abort(new Error("current evidence deadline"));
+
+    await expect(read).rejects.toThrow("current evidence deadline");
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
   it("distinguishes shallow pools from stale or internally conflicting evidence", async () => {
     async function read(
       response: unknown,

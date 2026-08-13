@@ -35,7 +35,7 @@
         },
         "rpcRuntime": {
           "path": "lib/onchain/rpc-health.ts",
-          "sha256": "b88c14b6e537c04acc1684157c0e801b457f97205300fb1847f72865d30bdecd"
+          "sha256": "7315f82e8d0904941c9cdd6840a79b6720e6a73a99edeb44ce71bb0486d8596e"
         },
         "deploymentConfig": {
           "path": "lib/onchain/config.ts",
