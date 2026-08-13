@@ -7,11 +7,9 @@ vi.mock("server-only", () => ({}));
 import {
   assertProjectorRuntimeProviderCommitments,
   loadProjectorRuntimeConfig,
-  loadProjectorRuntimeConfigForBinding,
   projectorRuntimeActivationState,
   runConfiguredProjectorCycle,
 } from "../../lib/data-pipeline/projector-runtime-config.server";
-import { loadCandidateProjectorRuntimeBinding } from "../../lib/data-pipeline/candidate-projector-runtime-binding.server";
 import {
   projectorEnvioDeploymentCommitment,
   projectorEnvioSchemaCommitment,
@@ -71,45 +69,6 @@ function environment(
     VERCEL_DEPLOYMENT_ID: "dpl_12345678901234567890",
     ...overrides,
   };
-}
-
-function candidateEnvironment() {
-  return environment({
-    PROGRAMMABLE_PROJECTOR_BINDING_MODE: "candidate-backfill",
-    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
-      "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
-    PROGRAMMABLE_ENVIO_GRAPHQL_URL:
-      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
-    PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY:
-      "envio:production-7f24e63",
-    INDEXED_EXPLORE_LIST_READS_ENABLED: "false",
-    INDEXED_EXPLORE_TOKEN_READS_ENABLED: "false",
-    INDEXED_EXPLORE_CHART_READS_ENABLED: "false",
-    INDEXED_CREATOR_PROFILE_READS_ENABLED: "false",
-    INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED: "false",
-    INDEXED_LAUNCH_LOOKUP_ENABLED: "false",
-    INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED: "false",
-    INDEXED_READ_SHADOW_COMPARE_ENABLED: "false",
-  });
-}
-
-function promotedReleaseEnvironment() {
-  return candidateEnvironmentWithOverrides({
-    PROGRAMMABLE_PROJECTOR_BINDING_MODE: "release",
-  });
-}
-
-function candidateEnvironmentWithOverrides(
-  overrides: Record<string, string | undefined>,
-) {
-  return { ...candidateEnvironment(), ...overrides };
-}
-
-function candidateCanonicalBinding() {
-  return loadCandidateProjectorRuntimeBinding({
-    env: candidateEnvironment(),
-    activeProductionBinding: RELEASE_BINDING,
-  }).releaseBinding;
 }
 
 function mockPrepareReleaseRound() {
@@ -240,179 +199,12 @@ describe("configured projector runtime", () => {
     ]);
   });
 
-  it("loads the audited candidate only through the explicit backfill mode", () => {
-    const config = loadProjectorRuntimeConfig(candidateEnvironment());
-
-    expect(config.binding).toMatchObject({
-      mode: "candidate-backfill",
-      candidate: {
-        mirrorCommit: "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
-      },
-    });
-    expect(config.envio.endpoint).toBe(
-      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
-    );
-    expect(config.envio.releaseBinding.envio.deploymentLabel).toBe(
-      "production-7f24e63",
-    );
-    expect(config.providers[0]).toEqual({
-      type: "envio_deployment",
-      redactedIdentity: "envio:production-7f24e63",
-      deploymentCommitment:
-        "0xa4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259",
-      schemaCommitment:
-        "0x5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1",
-    });
-  });
-
-  it("loads promoted release mode only with exact server-side evidence", () => {
-    const config = loadProjectorRuntimeConfigForBinding(
-      promotedReleaseEnvironment(),
-      candidateCanonicalBinding(),
-    );
-
-    expect(config.binding).toMatchObject({
-      mode: "release",
-      releaseBinding: {
-        envio: {
-          deploymentLabel: "production-7f24e63",
-          graphqlEndpoint:
-            "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
-        },
-      },
-      candidate: null,
-      promotedDatabase: {
-        productCommit: "a".repeat(40),
-        stagedDeploymentId: "dpl_12345678901234567890",
-      },
-    });
-    expect(config.envio.releaseBinding.envio.deploymentLabel).toBe(
-      "production-7f24e63",
-    );
-  });
-
-  it("rejects a promoted candidate database before any external provider work", async () => {
-    const runtimeClose = vi.fn(async () => undefined);
-    const writerClose = vi.fn(async () => undefined);
-    const createProviders = vi.fn();
-    const createEnvio = vi.fn();
-    const createStore = vi.fn();
-    const createReleaseStore = vi.fn();
-    const runCycle = vi.fn();
-    const runReleaseCycle = vi.fn();
-    const release = vi.fn(async () => true);
-    const assertCandidateDatabase = vi.fn(async () => {
-      throw new Error("candidate database promoted");
-    });
-    const dependencies = {
-      createExecutor: vi
-        .fn()
-        .mockReturnValueOnce({ close: runtimeClose })
-        .mockReturnValueOnce({ close: writerClose }),
-      createLeaseController: vi.fn(() => ({
-        tryAcquire: vi.fn(async () => ({
-          status: "acquired",
-          fence: {
-            holderId: "projector-runtime-test",
-            generation: "1",
-            tokenHash: bytes32("a"),
-          },
-          acquiredAt: "2026-07-31T18:00:00.000Z",
-          expiresAt: "2026-07-31T18:01:25.000Z",
-        })),
-        release,
-      })),
-      createProviders,
-      assertProviders: vi.fn(),
-      createEnvio,
-      createStore,
-      createReleaseStore,
-      runCycle,
-      runReleaseCycle,
-      assertCandidateDatabase,
-    } as never;
-
-    await expect(
-      runConfiguredProjectorCycle({
-        env: candidateEnvironment(),
-        dependencies,
-      }),
-    ).rejects.toThrow("candidate database promoted");
-
-    expect(assertCandidateDatabase).toHaveBeenCalledOnce();
-    expect(createProviders).not.toHaveBeenCalled();
-    expect(createEnvio).not.toHaveBeenCalled();
-    expect(createStore).not.toHaveBeenCalled();
-    expect(createReleaseStore).not.toHaveBeenCalled();
-    expect(runCycle).not.toHaveBeenCalled();
-    expect(runReleaseCycle).not.toHaveBeenCalled();
-    expect(release).toHaveBeenCalledOnce();
-    expect(writerClose).toHaveBeenCalledOnce();
-    expect(runtimeClose).toHaveBeenCalledOnce();
-  });
-
-  it("rejects an unverified promoted release before providers, Envio, or stores", async () => {
-    const runtimeClose = vi.fn(async () => undefined);
-    const writerClose = vi.fn(async () => undefined);
-    const createProviders = vi.fn();
-    const createEnvio = vi.fn();
-    const createStore = vi.fn();
-    const createReleaseStore = vi.fn();
-    const runCycle = vi.fn();
-    const runReleaseCycle = vi.fn();
-    const release = vi.fn(async () => true);
-    const assertPromotedDatabase = vi.fn(async () => {
-      throw new Error("promoted database evidence mismatch");
-    });
-    const promotedEnv = promotedReleaseEnvironment();
-    const dependencies = {
-      loadConfig: (env: Readonly<Record<string, string | undefined>>) =>
-        loadProjectorRuntimeConfigForBinding(
-        env,
-        candidateCanonicalBinding(),
-      ),
-      createExecutor: vi
-        .fn()
-        .mockReturnValueOnce({ close: runtimeClose })
-        .mockReturnValueOnce({ close: writerClose }),
-      createLeaseController: vi.fn(() => ({
-        tryAcquire: vi.fn(async () => ({
-          status: "acquired",
-          fence: {
-            holderId: "projector-runtime-test",
-            generation: "1",
-            tokenHash: bytes32("a"),
-          },
-          acquiredAt: "2026-08-01T10:01:00.000Z",
-          expiresAt: "2026-08-01T10:02:25.000Z",
-        })),
-        release,
-      })),
-      createProviders,
-      assertProviders: vi.fn(),
-      createEnvio,
-      createStore,
-      createReleaseStore,
-      runCycle,
-      runReleaseCycle,
-      assertPromotedDatabase,
-    } as never;
-
-    await expect(runConfiguredProjectorCycle({
-      env: promotedEnv,
-      dependencies,
-    })).rejects.toThrow("promoted database evidence mismatch");
-
-    expect(assertPromotedDatabase).toHaveBeenCalledOnce();
-    expect(createProviders).not.toHaveBeenCalled();
-    expect(createEnvio).not.toHaveBeenCalled();
-    expect(createStore).not.toHaveBeenCalled();
-    expect(createReleaseStore).not.toHaveBeenCalled();
-    expect(runCycle).not.toHaveBeenCalled();
-    expect(runReleaseCycle).not.toHaveBeenCalled();
-    expect(release).toHaveBeenCalledOnce();
-    expect(writerClose).toHaveBeenCalledOnce();
-    expect(runtimeClose).toHaveBeenCalledOnce();
+  it("rejects the retired candidate mode before parsing database or providers", () => {
+    expect(() => loadProjectorRuntimeConfig(environment({
+      PROGRAMMABLE_PROJECTOR_BINDING_MODE: "candidate-backfill",
+      PROGRAMMABLE_PROJECTOR_DATABASE_URL: "not-a-database-url",
+      PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL: "not-an-rpc-url",
+    }))).toThrow();
   });
 
   it.each([

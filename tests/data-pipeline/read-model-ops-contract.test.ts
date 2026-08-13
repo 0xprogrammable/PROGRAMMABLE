@@ -1589,6 +1589,25 @@ vercel promote "$UNREVIEWED_DEPLOYMENT_ID"
       ]),
     );
   });
+
+  it("rejects a restored candidate scheduler selector", () => {
+    const bindingPath =
+      "lib/data-pipeline/candidate-projector-runtime-binding.server.ts";
+    const bypass = `${readFileSync(resolve(ROOT, bindingPath), "utf8")}
+const restoredHistoricalMode = "candidate-backfill";
+void restoredHistoricalMode;
+`;
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [bindingPath]: bypass,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-retired-candidate-cutover",
+    );
+  });
 });
 
 function currentPublicTokenFixture(publicMarketAsOf: string) {

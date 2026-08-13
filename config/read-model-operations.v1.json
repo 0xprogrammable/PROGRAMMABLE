@@ -75,7 +75,7 @@
       "dependencies": [
         {
           "path": "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          "sha256": "1d4515a3ea088ed5164f3083e6fa7e6d639e786f23b18e85b663c4395c64abf5"
+          "sha256": "014476a4f7b344b1d8a7c92aafab95d3e9efda1da4d2e323b83e838e8a068228"
         }
       ],
       "migrations": [

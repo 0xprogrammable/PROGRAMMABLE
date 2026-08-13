@@ -106,7 +106,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          sha256: "1d4515a3ea088ed5164f3083e6fa7e6d639e786f23b18e85b663c4395c64abf5",
+          sha256: "014476a4f7b344b1d8a7c92aafab95d3e9efda1da4d2e323b83e838e8a068228",
         }),
       ]),
       migrations: Object.freeze([
@@ -1204,18 +1204,39 @@ function manualPromotionSequenceIsFailClosed(source) {
     activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION;
 }
 
-function retiredCandidateCutoverIsFailClosed(source) {
-  return typeof source === "string" &&
-    source.includes("# Historical candidate cutover retired") &&
-    source.includes("This document no longer authorizes a production cutover.") &&
-    source.includes("production-7f24e63") &&
-    source.includes("production-92f6373") &&
-    source.includes("scripts/data-pipeline/cutover-operator.mjs") &&
-    source.includes("docs/operations/read-model-scheduler-cutover.md") &&
-    source.includes("historical evidence, not current") &&
-    !source.includes("```sh") &&
-    !source.includes("vercel promote") &&
-    !source.includes("bootstrap-plan");
+function retiredCandidateCutoverIsFailClosed(input) {
+  return input.productionRunbook.includes("# Historical candidate cutover retired") &&
+    input.productionRunbook.includes("This document no longer authorizes a production cutover.") &&
+    input.productionRunbook.includes("historical evidence, not current") &&
+    !input.productionRunbook.includes("```sh") &&
+    !input.productionRunbook.includes("vercel promote") &&
+    !input.productionRunbook.includes("bootstrap-plan") &&
+    input.envioRunbook.includes("# Historical Envio candidate record") &&
+    input.envioRunbook.includes("not a current deployment, promotion") &&
+    input.envioRunbook.includes("must not be rebound") &&
+    !input.envioRunbook.includes("```") &&
+    !input.envioRunbook.includes("envio-cloud") &&
+    input.runtimeBinding.includes('mode: "release"') &&
+    input.runtimeBinding.includes("production-92f6373") &&
+    input.runtimeBinding.includes("f6714ef") &&
+    input.runtimeBinding.includes("retired-candidate-projector-runtime-binding") &&
+    !input.runtimeBinding.includes("candidate-backfill") &&
+    !input.runtimeBinding.includes("production-7f24e63") &&
+    !input.runtimeBinding.includes("d7a39a2") &&
+    input.cutoverOperator.includes("No mutation command is available") &&
+    input.cutoverOperator.includes("historical candidate cutover is retired") &&
+    input.cutoverRuntime.includes("historical candidate cutover is retired") &&
+    !input.cutoverRuntime.includes("PROGRAMMABLE_") &&
+    input.bootstrapRuntime.includes("historical candidate bootstrap is retired") &&
+    !input.bootstrapRuntime.includes("PROGRAMMABLE_") &&
+    input.packageJson?.scripts?.["test:retired-read-model-cutover"] ===
+      "node --test scripts/data-pipeline/cutover-operator.test.mjs scripts/data-pipeline/cutover-runtime.test.mjs scripts/data-pipeline/hosted-db-bootstrap.test.mjs" &&
+    input.packageJson?.scripts?.test?.includes(
+      "npm run test:retired-read-model-cutover",
+    ) === true &&
+    input.packageJson?.scripts?.["test:interface:ci"]?.includes(
+      "npm run test:retired-read-model-cutover",
+    ) === true;
 }
 
 function migrationContract(id, source) {
@@ -1606,7 +1627,13 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-source-projector-migrations",
     sourceWorker?.dependencies?.length === 1 &&
       source(sourceWorker.dependencies[0]?.path)?.includes(
-        "verify_candidate_database_promoted_v2",
+        "retired-candidate-projector-runtime-binding",
+      ) &&
+      source(sourceWorker.dependencies[0]?.path)?.includes(
+        'mode: "release"',
+      ) &&
+      !source(sourceWorker.dependencies[0]?.path)?.includes(
+        "candidate-backfill",
       ) &&
       sourceWorker?.migrations?.length === 11 &&
       migrationContract(
@@ -1652,7 +1679,7 @@ export function evaluateReadModelOperationsSourceContracts(
       source(sourceWorker.migrations[10]?.path)?.includes(
         "rpc_provider_deployment_metadata_production_vendor_v2_check",
       ),
-    "the source worker is byte-bound to its runtime selector, database fence and provider evidence",
+    "the source worker is byte-bound to the current-only runtime selector, historical database fences and provider evidence",
   );
   check(
     "ops-market-projector-migration",
@@ -1748,6 +1775,30 @@ export function evaluateReadModelOperationsSourceContracts(
   const productionCutoverRunbook = source(
     "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
   ) ?? "";
+  const envioCandidateRunbook = source(
+    "docs/data-pipeline/ENVIO-CANDIDATE-RUNBOOK.md",
+  ) ?? "";
+  const candidateRuntimeBinding = source(
+    "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
+  ) ?? "";
+  const cutoverOperator = source(
+    "scripts/data-pipeline/cutover-operator.mjs",
+  ) ?? "";
+  const cutoverRuntime = source(
+    "scripts/data-pipeline/cutover-runtime.mjs",
+  ) ?? "";
+  const bootstrapRuntime = source(
+    "scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs",
+  ) ?? "";
+  const retiredCandidateCutover = Object.freeze({
+    productionRunbook: productionCutoverRunbook,
+    envioRunbook: envioCandidateRunbook,
+    runtimeBinding: candidateRuntimeBinding,
+    cutoverOperator,
+    cutoverRuntime,
+    bootstrapRuntime,
+    packageJson,
+  });
   check(
     "ops-package-verify-binding",
     packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
@@ -1790,7 +1841,7 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   check(
     "ops-retired-candidate-cutover",
-    retiredCandidateCutoverIsFailClosed(productionCutoverRunbook),
+    retiredCandidateCutoverIsFailClosed(retiredCandidateCutover),
     "the obsolete candidate cutover has no executable production authority",
   );
   check(
@@ -2556,7 +2607,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !deployWorkflow.includes("vercel rollback") &&
       operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
       manualPromotionSequenceIsFailClosed(operationsRunbook) &&
-      retiredCandidateCutoverIsFailClosed(productionCutoverRunbook) &&
+      retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
