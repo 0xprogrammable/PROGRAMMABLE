@@ -194,6 +194,58 @@ const SAFE_MARKET_ACTIVATION = `
   }
 `;
 
+function watchdogProgram() {
+  const workflow = readFileSync(
+    resolve(ROOT, ".github/workflows/refresh-production-read-model.yml"),
+    "utf8",
+  );
+  const startMarker = "          node --input-type=module <<'NODE'\n";
+  const endMarker = "\n          NODE\n";
+  const start = workflow.indexOf(startMarker);
+  const end = workflow.indexOf(endMarker, start + startMarker.length);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const inlineProgram = workflow
+    .slice(start + startMarker.length, end)
+    .replace(
+      '          import { appendFile } from "node:fs/promises";',
+      "          const appendFile = async () => undefined;",
+    );
+  const AsyncFunction = Object.getPrototypeOf(async () => undefined)
+    .constructor as new (...args: string[]) => (...values: unknown[]) => Promise<void>;
+  return new AsyncFunction(
+    "process",
+    "fetch",
+    "Buffer",
+    "AbortSignal",
+    "URL",
+    "setTimeout",
+    "console",
+    inlineProgram,
+  );
+}
+
+function watchdogProcessEnvironment() {
+  return {
+    env: {
+      TARGET_ORIGIN: "https://programmable.market",
+      CRON_SECRET: "test-production-cron-secret-32-characters",
+      SCHEDULER_RUN_ID: "1234",
+      SCHEDULER_RUN_ATTEMPT: "1",
+    },
+  };
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+}
+
 const PROVIDER_EVIDENCE_MIGRATION = `
   create table programmable_private.projection_provider_execution_evidence();
   create table programmable_private.reward_snapshot_provider_evidence();
@@ -239,6 +291,269 @@ function fixtureDigests() {
 }
 
 describe("read-model operations source contract", () => {
+  it("executes the exact watchdog program only after block-bound freshness and quorum proof", async () => {
+    const requests: Array<{ authorization: string | null; url: string }> = [];
+    const fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      requests.push({
+        authorization: headers.get("authorization"),
+        url,
+      });
+      if (url.endsWith("/api/ops/index-v2")) {
+        return jsonResponse({
+          ok: true,
+          blockNumber: "25740000",
+          tokenCount: 343,
+          updated: true,
+          portfolioHistory: {
+            status: "recorded",
+            blockNumber: "25740000",
+            tokenCount: 343,
+            path: "portfolio-history/1/2026-08-13T05.json",
+          },
+        });
+      }
+      return jsonResponse({
+        status: "healthy",
+        chainId: 1,
+        index: {
+          ageSeconds: 2,
+          blockNumber: "25740001",
+          tokenCount: 343,
+        },
+        indexSource: "durable",
+        indexedReadModel: { status: "disabled" },
+        rpc: {
+          status: "healthy",
+          chainId: 1,
+          read: { status: "available" },
+          providers: {
+            primary: {
+              status: "available",
+              head: "25740014",
+              headAgeSeconds: 3,
+            },
+            secondary: {
+              status: "available",
+              head: "25740013",
+              headAgeSeconds: 4,
+            },
+          },
+          freshness: { maxHeadAgeSeconds: 300 },
+          quorum: { status: "verified" },
+          confirmedBlock: {
+            number: "25740012",
+            hash: `0x${"12".repeat(32)}`,
+          },
+        },
+      });
+    };
+    const logged: string[] = [];
+    await watchdogProgram()(
+      watchdogProcessEnvironment(),
+      fetch,
+      Buffer,
+      AbortSignal,
+      URL,
+      setTimeout,
+      { log: (value: string) => logged.push(value) },
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.url).toBe(
+      "https://programmable.market/api/ops/index-v2",
+    );
+    expect(requests[0]?.authorization).toBe(
+      "Bearer test-production-cron-secret-32-characters",
+    );
+    expect(requests[1]?.url).toContain(
+      "https://programmable.market/api/ops/health?scheduler_proof=1234-1-1",
+    );
+    expect(requests[1]?.authorization).toBeNull();
+    expect(JSON.parse(logged.at(-1) ?? "{}")).toMatchObject({
+      refreshBlockNumber: "25740000",
+      visibleBlockNumber: "25740001",
+      confirmedBlockNumber: "25740012",
+      confirmedBlockHash: `0x${"12".repeat(32)}`,
+      ageSeconds: 2,
+    });
+  });
+
+  it.each([
+    ["missing confirmed block", (rpc: Record<string, unknown>) => {
+      const { confirmedBlock: _removed, ...remaining } = rpc;
+      return remaining;
+    }],
+    ["zero confirmed block hash", (rpc: Record<string, unknown>) => ({
+      ...rpc,
+      confirmedBlock: { number: "25740012", hash: `0x${"00".repeat(32)}` },
+    })],
+    ["confirmed block behind visible index", (rpc: Record<string, unknown>) => ({
+      ...rpc,
+      confirmedBlock: { number: "25740000", hash: `0x${"12".repeat(32)}` },
+    })],
+    ["secondary provider behind confirmed block", (rpc: Record<string, unknown>) => ({
+      ...rpc,
+      providers: {
+        ...(rpc.providers as Record<string, unknown>),
+        secondary: {
+          status: "available",
+          head: "25740011",
+          headAgeSeconds: 4,
+        },
+      },
+    })],
+  ])("fails closed on %s", async (_label, mutateRpc) => {
+    let attempts = 0;
+    const validRpc = {
+      status: "healthy",
+      chainId: 1,
+      read: { status: "available" },
+      providers: {
+        primary: {
+          status: "available",
+          head: "25740014",
+          headAgeSeconds: 3,
+        },
+        secondary: {
+          status: "available",
+          head: "25740013",
+          headAgeSeconds: 4,
+        },
+      },
+      freshness: { maxHeadAgeSeconds: 300 },
+      quorum: { status: "verified" },
+      confirmedBlock: {
+        number: "25740012",
+        hash: `0x${"12".repeat(32)}`,
+      },
+    };
+    const fetch = async (input: string | URL | Request) => {
+      if (String(input).endsWith("/api/ops/index-v2")) {
+        return jsonResponse({
+          ok: true,
+          blockNumber: "25740000",
+          tokenCount: 343,
+          updated: true,
+          portfolioHistory: {
+            status: "recorded",
+            blockNumber: "25740000",
+            tokenCount: 343,
+            path: "portfolio-history/1/2026-08-13T05.json",
+          },
+        });
+      }
+      attempts += 1;
+      return jsonResponse({
+        status: "healthy",
+        chainId: 1,
+        index: {
+          ageSeconds: 2,
+          blockNumber: "25740001",
+          tokenCount: 343,
+        },
+        indexSource: "durable",
+        indexedReadModel: { status: "disabled" },
+        rpc: mutateRpc(validRpc),
+      });
+    };
+    await expect(
+      watchdogProgram()(
+        watchdogProcessEnvironment(),
+        fetch,
+        Buffer,
+        AbortSignal,
+        URL,
+        (callback: () => void) => {
+          callback();
+          return 0;
+        },
+        { log: () => undefined },
+      ),
+    ).rejects.toThrow("production read-model freshness proof failed");
+    expect(attempts).toBe(18);
+  });
+
+  it("executes the exact watchdog program fail-closed on stale public health", async () => {
+    let attempts = 0;
+    const fetch = async (input: string | URL | Request) => {
+      if (String(input).endsWith("/api/ops/index-v2")) {
+        return jsonResponse({
+          ok: true,
+          blockNumber: "25740000",
+          tokenCount: 343,
+          updated: false,
+          portfolioHistory: {
+            status: "already-recorded",
+            blockNumber: "25740000",
+            tokenCount: 343,
+            path: "portfolio-history/1/2026-08-13T05.json",
+          },
+        });
+      }
+      attempts += 1;
+      return jsonResponse({
+        status: "healthy",
+        chainId: 1,
+        index: {
+          ageSeconds: 601,
+          blockNumber: "25740000",
+          tokenCount: 343,
+        },
+        indexSource: "durable",
+        indexedReadModel: { status: "disabled" },
+        rpc: {
+          status: "healthy",
+          chainId: 1,
+          read: { status: "available" },
+          quorum: { status: "verified" },
+        },
+      });
+    };
+    await expect(
+      watchdogProgram()(
+        watchdogProcessEnvironment(),
+        fetch,
+        Buffer,
+        AbortSignal,
+        URL,
+        (callback: () => void) => {
+          callback();
+          return 0;
+        },
+        { log: () => undefined },
+      ),
+    ).rejects.toThrow("production read-model freshness proof failed");
+    expect(attempts).toBe(18);
+  });
+
+  it("executes the exact watchdog program fail-closed on unbound portfolio history", async () => {
+    const fetch = async () =>
+      jsonResponse({
+        ok: true,
+        blockNumber: "25740000",
+        tokenCount: 343,
+        updated: true,
+        portfolioHistory: {
+          status: "recorded",
+          blockNumber: "25739999",
+          tokenCount: 343,
+          path: "portfolio-history/1/2026-08-13T05.json",
+        },
+      });
+    await expect(
+      watchdogProgram()(
+        watchdogProcessEnvironment(),
+        fetch,
+        Buffer,
+        AbortSignal,
+        URL,
+        setTimeout,
+        { log: () => undefined },
+      ),
+    ).rejects.toThrow("production read-model refresh failed (200)");
+  });
+
   it("binds the per-minute schedulers, activation gates and release workflow", () => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: integratedOverrides(),
@@ -313,6 +628,85 @@ describe("read-model operations source contract", () => {
         "ops-market-projector-activation",
         "ops-reconciler-unscheduled",
       ]),
+    );
+  });
+
+  it.each([
+    ["unprotected branch", "github.ref == 'refs/heads/production'"],
+    ["fixed public origin", 'targetOrigin !== "https://programmable.market"'],
+    ["bounded cron secret", "secretBytes < 32"],
+    ["canonical writer route", '"/api/ops/index-v2"'],
+    ["no-store writer response", 'includes("no-store")'],
+    [
+      "portfolio history block binding",
+      "refresh.body.portfolioHistory.blockNumber !==",
+    ],
+    ["durable public source", 'health.body.indexSource === "durable"'],
+    ["visible block binding", "healthBlock >= refreshBlock"],
+    ["freshness ceiling", "index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS"],
+    ["healthy RPC read", 'rpc?.read?.status === "available"'],
+    ["verified RPC quorum", 'rpc?.quorum?.status === "verified"'],
+    ["confirmed RPC block number", "confirmedBlockNumber >= healthBlock"],
+    ["confirmed RPC block hash", "HEX32.test(confirmedBlock?.hash)"],
+    ["primary provider head", "primaryHead >= confirmedBlockNumber"],
+    ["secondary provider head", "secondaryHead >= confirmedBlockNumber"],
+  ])("rejects a production watchdog missing %s", (_label, needle) => {
+    const workflowPath =
+      ".github/workflows/refresh-production-read-model.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    expect(workflow).toContain(needle);
+    const unsafeWorkflow = workflow.replace(needle, "REMOVED_WATCHDOG_GATE");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
+    );
+  });
+
+  it.each([
+    ["repository checkout", "      - uses: actions/checkout@v5\n"],
+    ["Vercel account credential", "          VERCEL_TOKEN: unsafe\n"],
+    [
+      "deployment protection bypass",
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: unsafe\n",
+    ],
+    ["write permission", "  contents: write\n"],
+    ["pull-request trigger", "  pull_request:\n"],
+  ])("rejects watchdog privilege expansion through %s", (_label, addition) => {
+    const workflowPath =
+      ".github/workflows/refresh-production-read-model.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = `${workflow}\n${addition}`;
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
+    );
+  });
+
+  it.each([
+    ["health route", "app/api/ops/health/route.ts"],
+    ["RPC health runtime", "lib/onchain/rpc-health.ts"],
+  ])("rejects unreviewed %s bytes", (_label, path) => {
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [path]: `${readFileSync(resolve(ROOT, path), "utf8")}\n// drift`,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
     );
   });
 

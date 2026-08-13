@@ -11,6 +11,32 @@ const APPROVED_OPERATIONS = Object.freeze({
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
     sha256: "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
+    schedulerWatchdog: Object.freeze({
+      provider: "github-actions",
+      workflow: Object.freeze({
+        path: ".github/workflows/refresh-production-read-model.yml",
+        sha256: "e4dd949194ef4046382e9930fe66bd3f63195578b63ed970b0e9ae2a421d2a9d",
+      }),
+      schedule: "2-57/5 * * * *",
+      targetOrigin: "https://programmable.market",
+      environment: "production",
+      secretEnvironment: "CRON_SECRET",
+      concurrencyGroup: "production-read-model-refresh",
+      freshnessMaximumAgeSeconds: 600,
+      rpcProof: Object.freeze({
+        confirmedBlockRequired: true,
+        providerPairRequired: true,
+        maximumHeadAgeSeconds: 300,
+        healthRoute: Object.freeze({
+          path: "app/api/ops/health/route.ts",
+          sha256: "fda037f55c3c633a860c11eb65a160eaffc77e66489f803e9933ad3b02926f3f",
+        }),
+        rpcRuntime: Object.freeze({
+          path: "lib/onchain/rpc-health.ts",
+          sha256: "4c8e5fb0f879ef72f2e8d742886b61b004de55fc59a440ef34893b352c33f865",
+        }),
+      }),
+    }),
     closedAlias: Object.freeze({
       path: "/api/ops/index",
       route: "app/api/ops/index/route.ts",
@@ -754,6 +780,80 @@ function routeIsPermanentlyClosed(source, binding) {
   );
 }
 
+function legacySchedulerWatchdogIsFailClosed(
+  workflowSource,
+  binding,
+  source,
+  expectedSha256Overrides,
+) {
+  return (
+    typeof workflowSource === "string" &&
+    binding?.provider === "github-actions" &&
+    binding.schedule === "2-57/5 * * * *" &&
+    binding.targetOrigin === "https://programmable.market" &&
+    binding.environment === "production" &&
+    binding.secretEnvironment === "CRON_SECRET" &&
+    binding.concurrencyGroup === "production-read-model-refresh" &&
+    binding.freshnessMaximumAgeSeconds === 600 &&
+    binding.rpcProof?.confirmedBlockRequired === true &&
+    binding.rpcProof?.providerPairRequired === true &&
+    binding.rpcProof?.maximumHeadAgeSeconds === 300 &&
+    sourceBindingMatches(source, binding.rpcProof?.healthRoute, expectedSha256Overrides) &&
+    sourceBindingMatches(source, binding.rpcProof?.rpcRuntime, expectedSha256Overrides) &&
+    workflowSource.includes('name: Refresh production read model') &&
+    workflowSource.includes('    - cron: "2-57/5 * * * *"') &&
+    workflowSource.includes("  workflow_dispatch:") &&
+    workflowSource.includes("permissions: {}") &&
+    workflowSource.includes("  group: production-read-model-refresh") &&
+    workflowSource.includes("  cancel-in-progress: false") &&
+    workflowSource.includes("github.repository == '0xprogrammable/programmable'") &&
+    workflowSource.includes("github.ref == 'refs/heads/production'") &&
+    workflowSource.includes("    timeout-minutes: 9") &&
+    workflowSource.includes("      name: production") &&
+    workflowSource.includes("CRON_SECRET: ${{ secrets.CRON_SECRET }}") &&
+    workflowSource.includes("TARGET_ORIGIN: https://programmable.market") &&
+    workflowSource.includes('targetOrigin !== "https://programmable.market"') &&
+    workflowSource.includes("secretBytes < 32") &&
+    workflowSource.includes("secretBytes > 1_024") &&
+    workflowSource.includes('/[\\r\\n]/u.test(cronSecret ?? "")') &&
+    workflowSource.includes('"/api/ops/index-v2"') &&
+    workflowSource.includes("headers.authorization = `Bearer ${cronSecret}`") &&
+    workflowSource.includes('redirect: "error"') &&
+    workflowSource.includes("signal: AbortSignal.timeout(timeoutMs)") &&
+    workflowSource.includes("const MAXIMUM_JSON_BYTES = 64 * 1024") &&
+    workflowSource.includes("bytes > MAXIMUM_JSON_BYTES") &&
+    workflowSource.includes("refresh.response.status !== 200") &&
+    workflowSource.includes('includes("no-store")') &&
+    workflowSource.includes("refresh.body?.ok !== true") &&
+    workflowSource.includes("refresh.body.portfolioHistory.blockNumber !==") &&
+    workflowSource.includes("refresh.body.portfolioHistory.tokenCount !==") &&
+    workflowSource.includes('refresh.body.portfolioHistory.status === "empty"') &&
+    workflowSource.includes("health.response.status === 200") &&
+    workflowSource.includes('health.body?.status === "healthy"') &&
+    workflowSource.includes('health.body.indexSource === "durable"') &&
+    workflowSource.includes('health.body.indexedReadModel?.status === "disabled"') &&
+    workflowSource.includes("healthBlock >= refreshBlock") &&
+    workflowSource.includes("index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS") &&
+    workflowSource.includes('rpc?.status === "healthy"') &&
+    workflowSource.includes('rpc?.read?.status === "available"') &&
+    workflowSource.includes('rpc?.quorum?.status === "verified"') &&
+    workflowSource.includes("confirmedBlockNumber >= healthBlock") &&
+    workflowSource.includes("confirmedBlockNumber >= refreshBlock") &&
+    workflowSource.includes("HEX32.test(confirmedBlock?.hash)") &&
+    workflowSource.includes('confirmedBlock.hash !== `0x${"00".repeat(32)}`') &&
+    workflowSource.includes('rpc?.freshness?.maxHeadAgeSeconds === 300') &&
+    workflowSource.includes('primary?.status === "available"') &&
+    workflowSource.includes('secondary?.status === "available"') &&
+    workflowSource.includes("primaryHead >= confirmedBlockNumber") &&
+    workflowSource.includes("secondaryHead >= confirmedBlockNumber") &&
+    !workflowSource.includes("actions/checkout") &&
+    !workflowSource.includes("VERCEL_TOKEN") &&
+    !workflowSource.includes("VERCEL_AUTOMATION_BYPASS_SECRET") &&
+    !workflowSource.includes("pull_request") &&
+    !workflowSource.includes("contents: write")
+  );
+}
+
 function activationIsExplicitAndSafe(source, environmentName) {
   return (
     typeof source === "string" &&
@@ -1138,6 +1238,26 @@ export function evaluateReadModelOperationsSourceContracts(
           expectedSha256Overrides,
         ),
     "the five-minute legacy route remains byte-bound until indexed-read cutover",
+  );
+  const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
+  check(
+    "ops-legacy-scheduler-watchdog",
+    exactJson(
+      schedulerWatchdog,
+      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog,
+    ) &&
+      sourceBindingMatches(
+        source,
+        schedulerWatchdog?.workflow,
+        expectedSha256Overrides,
+      ) &&
+      legacySchedulerWatchdogIsFailClosed(
+        source(APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path),
+        schedulerWatchdog,
+        source,
+        expectedSha256Overrides,
+      ),
+    "the generic GitHub watchdog refreshes only the public durable read model and proves freshness plus RPC quorum",
   );
   const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;
   check(
