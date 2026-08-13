@@ -11,6 +11,7 @@ import type {
   ProjectionTargetPostgresPoolV1,
 } from "../projection-target/postgres-store";
 import {
+  deriveExactShardsDescriptorBindingSha256V1,
   assertProjectedExactShardsRevocationV1,
   assertProjectedFinalizedExactShardsRecordV1,
   parseExactShardsSuccessorDescriptorV1,
@@ -20,6 +21,11 @@ import {
   type ExactShardsRevocationRecordV1,
   type ExactShardsSuccessorPublicReadStoreV1,
 } from "./exact-shards-successor-projection-v1";
+import {
+  issueExactShardsCanonicalProjectionCapabilityV1,
+  requireExactShardsCanonicalProjectionBindingV1,
+  type ExactShardsCanonicalProjectionCapabilityV1,
+} from "./exact-shards-canonical-projection-capability-v1";
 
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
@@ -46,11 +52,6 @@ interface CanonicalHistoryRow extends Record<string, unknown> {
   canonical_generation: string | number | bigint;
 }
 
-export type ExactShardsCanonicalProjectionPermitV1 = Readonly<{
-  sourceLane: "registry.exact-shards-v2";
-  canonicalGeneration: string;
-}>;
-
 export type ExactShardsPersistenceResultV1 = Readonly<{
   kind: "created" | "updated" | "existing" | "conflict";
 }>;
@@ -65,7 +66,8 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
   readonly sourceLane = "registry.exact-shards-v2" as const;
   readonly #pool: ProjectionTargetPostgresPoolV1;
   readonly #descriptor: BoundExactShardsSuccessorDescriptorV1;
-  readonly #canonicalProjectionPermits = new WeakSet<object>();
+  readonly #descriptorBindingSha256: `sha256:${string}`;
+  readonly #canonicalProjectionIssuer = Object.freeze({});
 
   constructor(input: Readonly<{
     pool: ProjectionTargetPostgresPoolV1;
@@ -82,6 +84,9 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     }
     this.#pool = input.pool;
     this.#descriptor = descriptor;
+    this.#descriptorBindingSha256 = deriveExactShardsDescriptorBindingSha256V1(
+      descriptor,
+    );
   }
 
   /**
@@ -92,37 +97,65 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
    */
   async authorizeCanonicalProjection(input: Readonly<{
     signal: AbortSignal;
-  }>): Promise<ExactShardsCanonicalProjectionPermitV1> {
+  }>): Promise<ExactShardsCanonicalProjectionCapabilityV1> {
     input.signal.throwIfAborted();
-    const result = await this.#pool.query<CanonicalHistoryRow>(`
-      SELECT canonical_generation
-        FROM programmable_website_projection_v1.registry_exact_shards_canonical_history
-       WHERE singleton = true
-    `);
-    input.signal.throwIfAborted();
-    if (result.rows.length !== 1) {
-      throw new TypeError("ExactShards canonical history checkpoint is invalid");
+    const client = await this.#pool.connect();
+    let transactionOpen = false;
+    try {
+      await client.query("BEGIN");
+      transactionOpen = true;
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 841103204))",
+        [CANONICAL_HISTORY_LOCK],
+      );
+      const result = await client.query<CanonicalHistoryRow>(`
+        SELECT canonical_generation
+          FROM programmable_website_projection_v1.registry_exact_shards_canonical_history
+         WHERE singleton = true
+         FOR UPDATE
+      `);
+      input.signal.throwIfAborted();
+      if (result.rows.length !== 1) {
+        throw new TypeError("ExactShards canonical history checkpoint is invalid");
+      }
+      const capability = issueExactShardsCanonicalProjectionCapabilityV1({
+        issuer: this.#canonicalProjectionIssuer,
+        canonicalGeneration: canonicalGeneration(
+          result.rows[0]?.canonical_generation,
+        ).toString(),
+        descriptorBindingSha256: this.#descriptorBindingSha256,
+      });
+      await client.query("COMMIT");
+      transactionOpen = false;
+      return capability;
+    } catch (error) {
+      if (transactionOpen) await rollback(client);
+      throw error;
+    } finally {
+      client.release();
     }
-    const permit = Object.freeze({
-      sourceLane: "registry.exact-shards-v2" as const,
-      canonicalGeneration: canonicalGeneration(
-        result.rows[0]?.canonical_generation,
-      ).toString(),
-    });
-    this.#canonicalProjectionPermits.add(permit);
-    return permit;
   }
 
   async materializeFinalized(input: Readonly<{
     record: ExactShardsPublicRecordV1;
-    canonicalProjection: ExactShardsCanonicalProjectionPermitV1;
+    canonicalProjection: ExactShardsCanonicalProjectionCapabilityV1;
     signal: AbortSignal;
   }>): Promise<ExactShardsPersistenceResultV1> {
     input.signal.throwIfAborted();
-    this.#assertCanonicalProjectionPermit(input.canonicalProjection);
     assertProjectedFinalizedExactShardsRecordV1(input.record);
     validateExactShardsPublicRecordV1(input.record, this.#descriptor);
     const record = input.record;
+    const provenance = requireExactShardsCanonicalProjectionBindingV1({
+      capability: input.canonicalProjection,
+      issuer: this.#canonicalProjectionIssuer,
+      descriptorBindingSha256: this.#descriptorBindingSha256,
+      kind: "finalized",
+      record,
+      anchorBlockHashes: [
+        record.launch.blockHash,
+        record.finality.finalizedBlockHash,
+      ],
+    });
     const canonicalRecord = canonicalizeJson(record as unknown as JsonValue);
     const eventBinding = canonicalSha256(
       "programmable.exact-shards-projection-event.v1",
@@ -144,7 +177,7 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
       );
       if (!await this.#canonicalProjectionIsCurrent(
         client,
-        input.canonicalProjection,
+        provenance.canonicalGeneration,
         [record.launch.blockHash, record.finality.finalizedBlockHash],
       )) {
         await client.query("COMMIT");
@@ -229,13 +262,20 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
 
   async materializeRevocation(input: Readonly<{
     record: ExactShardsRevocationRecordV1;
-    canonicalProjection: ExactShardsCanonicalProjectionPermitV1;
+    canonicalProjection: ExactShardsCanonicalProjectionCapabilityV1;
     signal: AbortSignal;
   }>): Promise<ExactShardsPersistenceResultV1> {
     input.signal.throwIfAborted();
-    this.#assertCanonicalProjectionPermit(input.canonicalProjection);
     assertProjectedExactShardsRevocationV1(input.record);
     const record = input.record;
+    const provenance = requireExactShardsCanonicalProjectionBindingV1({
+      capability: input.canonicalProjection,
+      issuer: this.#canonicalProjectionIssuer,
+      descriptorBindingSha256: this.#descriptorBindingSha256,
+      kind: "revoked",
+      record,
+      anchorBlockHashes: [record.blockHash],
+    });
     const eventBinding = canonicalSha256(
       "programmable.exact-shards-projection-event.v1",
       record as unknown as JsonValue,
@@ -251,8 +291,8 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
       );
       if (!await this.#canonicalProjectionIsCurrent(
         client,
-        input.canonicalProjection,
-        [record.blockHash, record.blockHash],
+        provenance.canonicalGeneration,
+        [record.blockHash],
       )) {
         await client.query("COMMIT");
         transactionOpen = false;
@@ -458,19 +498,10 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     }
   }
 
-  #assertCanonicalProjectionPermit(
-    permit: ExactShardsCanonicalProjectionPermitV1,
-  ): void {
-    if (permit === null || typeof permit !== "object"
-      || !this.#canonicalProjectionPermits.has(permit)) {
-      throw new TypeError("ExactShards canonical projection permit is invalid");
-    }
-  }
-
   async #canonicalProjectionIsCurrent(
     client: ProjectionTargetPostgresClientV1,
-    permit: ExactShardsCanonicalProjectionPermitV1,
-    blockHashes: readonly [string, string],
+    canonicalProjectionGeneration: string,
+    blockHashes: readonly [string] | readonly [string, string],
   ): Promise<boolean> {
     const checkpoint = await client.query<CanonicalHistoryRow>(`
       SELECT canonical_generation
@@ -480,15 +511,15 @@ implements ExactShardsSuccessorPublicReadStoreV1 {
     `);
     if (checkpoint.rows.length !== 1
       || canonicalGeneration(checkpoint.rows[0]?.canonical_generation).toString()
-        !== permit.canonicalGeneration) {
+        !== canonicalProjectionGeneration) {
       return false;
     }
     const orphaned = await client.query(`
       SELECT block_hash
         FROM programmable_website_projection_v1.registry_exact_shards_orphaned_blocks
-       WHERE block_hash = $1 OR block_hash = $2
+       WHERE block_hash = ANY($1::text[])
        LIMIT 1
-    `, blockHashes);
+    `, [blockHashes]);
     return orphaned.rows[0] === undefined;
   }
 

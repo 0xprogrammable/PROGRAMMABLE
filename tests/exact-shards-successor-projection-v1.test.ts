@@ -33,6 +33,8 @@ import {
   exactShardsRegistryConsumerAbiV1,
   exactShardsRouteConsumerAbiV1,
   parseExactShardsSuccessorDescriptorV1,
+  projectCanonicalExactShardsRevocationV1,
+  projectCanonicalFinalizedExactShardsPublicRecordV1,
   projectExactShardsRevocationV1,
   projectFinalizedExactShardsPublicRecordV1,
   validateExactShardsPublicRecordV1,
@@ -610,7 +612,9 @@ class DeterministicConcurrentExactShardsPGlitePool
 
   override async connect(): Promise<ProjectionTargetPostgresClientV1> {
     const id = Symbol(`pglite-client-${++this.#connectionCount}`);
-    const materializer = this.#connectionCount === 1;
+    // Connection 1 mints the pre-projection capability. Connection 2 is the
+    // materializer whose canonical-history critical section is coordinated.
+    const materializer = this.#connectionCount === 2;
     return Object.freeze({
       query: async <Row extends Record<string, unknown>>(
         text: string,
@@ -683,7 +687,9 @@ class DeterministicRollbackFirstExactShardsPGlitePool
 
   override async connect(): Promise<ProjectionTargetPostgresClientV1> {
     const id = Symbol(`pglite-client-${++this.#connectionCount}`);
-    const delayedMaterializer = this.#connectionCount === 1;
+    // Connection 1 mints the pre-projection capability. Connection 2 begins
+    // materialization before rollback but is held ahead of the global lock.
+    const delayedMaterializer = this.#connectionCount === 2;
     return Object.freeze({
       query: async <Row extends Record<string, unknown>>(
         text: string,
@@ -1115,10 +1121,6 @@ describe("ExactShards successor projection V1", () => {
   });
 
   it("persists finalized publication and restores canonical state across reorgs", async () => {
-    const record = projectFinalizedExactShardsPublicRecordV1({
-      descriptor: descriptor(),
-      observations: observations(),
-    });
     const revocationReceipt: ExactShardsReceiptV1 = {
       transactionHash: hash("8"),
       status: "success",
@@ -1148,11 +1150,7 @@ describe("ExactShards successor projection V1", () => {
       blockHash: hash("9"),
       launchState: { ...observations()[0].snapshot.launchState, status: 3 as const },
     };
-    const revocation = projectExactShardsRevocationV1({
-      descriptor: descriptor(),
-      launchId: registration.launchId,
-      latestRecordHash: registration.registeredRecordCommitment,
-      observations: [
+    const revocationObservations = [
         {
           provider: observations()[0].provider,
           chainId: 1,
@@ -1165,8 +1163,7 @@ describe("ExactShards successor projection V1", () => {
           receipt: revocationReceipt,
           snapshot: revokedSnapshot,
         },
-      ],
-    });
+      ] as const;
     const pool = await exactShardsPGlitePool();
     const store = new PostgresExactShardsSuccessorStoreV1({
       pool,
@@ -1175,6 +1172,11 @@ describe("ExactShards successor projection V1", () => {
     const signal = new AbortController().signal;
     try {
       const canonicalProjection = await store.authorizeCanonicalProjection({ signal });
+      const record = projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection,
+        descriptor: descriptor(),
+        observations: observations(),
+      });
       await expect(store.materializeFinalized({
         record,
         canonicalProjection,
@@ -1194,9 +1196,17 @@ describe("ExactShards successor projection V1", () => {
         projectId: record.publicIdentity.websiteProjectId,
         signal,
       })).resolves.toMatchObject({ recordBindingSha256: record.recordBindingSha256 });
+      const revocationProjection = await store.authorizeCanonicalProjection({ signal });
+      const revocation = projectCanonicalExactShardsRevocationV1({
+        canonicalProjection: revocationProjection,
+        descriptor: descriptor(),
+        launchId: registration.launchId,
+        latestRecordHash: registration.registeredRecordCommitment,
+        observations: revocationObservations,
+      });
       await expect(store.materializeRevocation({
         record: revocation,
-        canonicalProjection,
+        canonicalProjection: revocationProjection,
         signal,
       }))
         .resolves.toEqual({ kind: "updated" });
@@ -1224,10 +1234,6 @@ describe("ExactShards successor projection V1", () => {
   });
 
   it("serializes materialization before rollback discovery under deterministic concurrency", async () => {
-    const record = projectFinalizedExactShardsPublicRecordV1({
-      descriptor: descriptor(),
-      observations: observations(),
-    });
     const pool = await concurrentExactShardsPGlitePool();
     const store = new PostgresExactShardsSuccessorStoreV1({
       pool,
@@ -1236,6 +1242,11 @@ describe("ExactShards successor projection V1", () => {
     const signal = new AbortController().signal;
     try {
       const canonicalProjection = await store.authorizeCanonicalProjection({ signal });
+      const record = projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection,
+        descriptor: descriptor(),
+        observations: observations(),
+      });
       const materialization = store.materializeFinalized({
         record,
         canonicalProjection,
@@ -1260,20 +1271,6 @@ describe("ExactShards successor projection V1", () => {
   });
 
   it("rejects queued stale materialization after rollback and admits only a fresh-generation replacement", async () => {
-    const record = projectFinalizedExactShardsPublicRecordV1({
-      descriptor: descriptor(),
-      observations: observations(),
-    });
-    const replacement = projectFinalizedExactShardsPublicRecordV1({
-      descriptor: descriptor(),
-      observations: replacementObservations(),
-    });
-    expect(replacement.launch.blockNumber).toBe(record.launch.blockNumber);
-    expect(replacement.finality.finalizedAtBlock).toBe(record.finality.finalizedAtBlock);
-    expect(replacement.launch.blockHash).not.toBe(record.launch.blockHash);
-    expect(replacement.finality.finalizedBlockHash)
-      .not.toBe(record.finality.finalizedBlockHash);
-
     const pool = await rollbackFirstExactShardsPGlitePool();
     const store = new PostgresExactShardsSuccessorStoreV1({
       pool,
@@ -1282,7 +1279,14 @@ describe("ExactShards successor projection V1", () => {
     const signal = new AbortController().signal;
     try {
       const staleProjection = await store.authorizeCanonicalProjection({ signal });
-      expect(staleProjection.canonicalGeneration).toBe("1");
+      expect(Object.keys(staleProjection)).toEqual([]);
+      expect(() => JSON.stringify(staleProjection)).toThrow(/not serializable/i);
+      expect(() => structuredClone(staleProjection)).toThrow();
+      const record = projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection: staleProjection,
+        descriptor: descriptor(),
+        observations: observations(),
+      });
       const delayedMaterialization = store.materializeFinalized({
         record,
         canonicalProjection: staleProjection,
@@ -1301,13 +1305,27 @@ describe("ExactShards successor projection V1", () => {
         pool,
         descriptor: descriptor(),
       });
+      await expect(restartedStore.materializeFinalized({
+        record,
+        canonicalProjection: staleProjection,
+        signal,
+      })).rejects.toThrow(/provenance/i);
       const freshProjection = await restartedStore.authorizeCanonicalProjection({ signal });
-      expect(freshProjection.canonicalGeneration).toBe("2");
+      const replacement = projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection: freshProjection,
+        descriptor: descriptor(),
+        observations: replacementObservations(),
+      });
+      expect(replacement.launch.blockNumber).toBe(record.launch.blockNumber);
+      expect(replacement.finality.finalizedAtBlock).toBe(record.finality.finalizedAtBlock);
+      expect(replacement.launch.blockHash).not.toBe(record.launch.blockHash);
+      expect(replacement.finality.finalizedBlockHash)
+        .not.toBe(record.finality.finalizedBlockHash);
       await expect(restartedStore.materializeFinalized({
         record,
         canonicalProjection: freshProjection,
         signal,
-      })).resolves.toEqual({ kind: "conflict" });
+      })).rejects.toThrow(/provenance/i);
       await expect(restartedStore.materializeFinalized({
         record: replacement,
         canonicalProjection: freshProjection,
@@ -1318,6 +1336,89 @@ describe("ExactShards successor projection V1", () => {
       ]);
     } finally {
       pool.releaseMaterializer();
+      await pool.database.close();
+    }
+  });
+
+  it("rejects post-projection permits, clones, mixed records, cross-store capabilities and reuse", async () => {
+    const pool = await exactShardsPGlitePool();
+    const store = new PostgresExactShardsSuccessorStoreV1({
+      pool,
+      descriptor: descriptor(),
+    });
+    const signal = new AbortController().signal;
+    try {
+      const projectedBeforePermit = projectFinalizedExactShardsPublicRecordV1({
+        descriptor: descriptor(),
+        observations: observations(),
+      });
+      const postProjectionCapability = await store.authorizeCanonicalProjection({ signal });
+      await expect(store.materializeFinalized({
+        record: projectedBeforePermit,
+        canonicalProjection: postProjectionCapability,
+        signal,
+      })).rejects.toThrow(/provenance/i);
+
+      const capability = await store.authorizeCanonicalProjection({ signal });
+      const record = projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection: capability,
+        descriptor: descriptor(),
+        observations: observations(),
+      });
+      expect(() => projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection: capability,
+        descriptor: descriptor(),
+        observations: observations(),
+      })).toThrow(/consumed/i);
+
+      const clone = structuredClone(record);
+      await expect(store.materializeFinalized({
+        record: clone,
+        canonicalProjection: capability,
+        signal,
+      })).rejects.toThrow(/authenticated by the projector|provenance/i);
+      await expect(store.materializeFinalized({
+        record,
+        canonicalProjection: postProjectionCapability,
+        signal,
+      })).rejects.toThrow(/provenance/i);
+
+      const replacementCapability = await store.authorizeCanonicalProjection({ signal });
+      const replacement = projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection: replacementCapability,
+        descriptor: descriptor(),
+        observations: replacementObservations(),
+      });
+      await expect(store.materializeFinalized({
+        record,
+        canonicalProjection: replacementCapability,
+        signal,
+      })).rejects.toThrow(/provenance/i);
+      await expect(store.materializeFinalized({
+        record: replacement,
+        canonicalProjection: capability,
+        signal,
+      })).rejects.toThrow(/provenance/i);
+
+      const otherStore = new PostgresExactShardsSuccessorStoreV1({
+        pool,
+        descriptor: descriptor(),
+      });
+      await expect(otherStore.materializeFinalized({
+        record,
+        canonicalProjection: capability,
+        signal,
+      })).rejects.toThrow(/provenance/i);
+      const otherCapability = await otherStore.authorizeCanonicalProjection({ signal });
+      expect(() => projectCanonicalFinalizedExactShardsPublicRecordV1({
+        canonicalProjection: otherCapability,
+        descriptor: {
+          ...descriptor(),
+          minimumConfirmations: descriptor().minimumConfirmations + 1,
+        },
+        observations: observations(),
+      })).toThrow(/capability/i);
+    } finally {
       await pool.database.close();
     }
   });

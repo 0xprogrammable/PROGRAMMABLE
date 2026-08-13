@@ -11,6 +11,11 @@ import {
   type Address,
   type Hex,
 } from "viem";
+import {
+  assertExactShardsCanonicalProjectionCapabilityV1,
+  bindExactShardsCanonicalProjectionCapabilityV1,
+  type ExactShardsCanonicalProjectionCapabilityV1,
+} from "./exact-shards-canonical-projection-capability-v1";
 
 const HASH32 = /^0x[0-9a-fA-F]{64}$/u;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/u;
@@ -1190,6 +1195,48 @@ export function projectFinalizedExactShardsPublicRecordV1(input: Readonly<{
   return projected;
 }
 
+export function projectCanonicalFinalizedExactShardsPublicRecordV1(input: Readonly<{
+  canonicalProjection: ExactShardsCanonicalProjectionCapabilityV1;
+  descriptor: unknown;
+  observations: readonly [
+    ExactShardsAuthenticatedRpcObservationV1,
+    ExactShardsAuthenticatedRpcObservationV1,
+  ];
+}>): ExactShardsPublicRecordV1 {
+  const descriptorBindingSha256 = deriveExactShardsDescriptorBindingSha256V1(
+    input.descriptor,
+  );
+  assertExactShardsCanonicalProjectionCapabilityV1({
+    capability: input.canonicalProjection,
+    descriptorBindingSha256,
+  });
+  const projected = projectFinalizedExactShardsPublicRecordV1({
+    descriptor: input.descriptor,
+    observations: input.observations,
+  });
+  bindExactShardsCanonicalProjectionCapabilityV1({
+    capability: input.canonicalProjection,
+    descriptorBindingSha256,
+    kind: "finalized",
+    inputBindingSha256: sha256Canonical({
+      kind: "finalized",
+      descriptorBindingSha256,
+      observations: input.observations,
+    }),
+    record: projected,
+    recordBinding: projected.recordBindingSha256,
+    anchorBlockHashes: [
+      projected.launch.blockHash,
+      projected.finality.finalizedBlockHash,
+    ],
+  });
+  return projected;
+}
+
+export type CanonicalFinalizedExactShardsProjectionInputV1 = Parameters<
+  typeof projectCanonicalFinalizedExactShardsPublicRecordV1
+>[0];
+
 export type ExactShardsRevocationRecordV1 = Readonly<{
   schemaVersion: "programmable.exact-shards-revocation-record.v1";
   sourceLane: "registry.exact-shards-v2";
@@ -1310,6 +1357,48 @@ export function projectExactShardsRevocationV1(input: Readonly<{
   PROJECTED_REVOCATION_RECORDS.add(projected);
   return projected;
 }
+
+export function projectCanonicalExactShardsRevocationV1(input: Readonly<{
+  canonicalProjection: ExactShardsCanonicalProjectionCapabilityV1;
+  descriptor: unknown;
+  launchId: Hex;
+  latestRecordHash: Hex;
+  observations: Parameters<typeof projectExactShardsRevocationV1>[0]["observations"];
+}>): ExactShardsRevocationRecordV1 {
+  const descriptorBindingSha256 = deriveExactShardsDescriptorBindingSha256V1(
+    input.descriptor,
+  );
+  assertExactShardsCanonicalProjectionCapabilityV1({
+    capability: input.canonicalProjection,
+    descriptorBindingSha256,
+  });
+  const projected = projectExactShardsRevocationV1({
+    descriptor: input.descriptor,
+    launchId: input.launchId,
+    latestRecordHash: input.latestRecordHash,
+    observations: input.observations,
+  });
+  bindExactShardsCanonicalProjectionCapabilityV1({
+    capability: input.canonicalProjection,
+    descriptorBindingSha256,
+    kind: "revoked",
+    inputBindingSha256: sha256Canonical({
+      kind: "revoked",
+      descriptorBindingSha256,
+      launchId: input.launchId,
+      latestRecordHash: input.latestRecordHash,
+      observations: input.observations,
+    }),
+    record: projected,
+    recordBinding: sha256Canonical(projected),
+    anchorBlockHashes: [projected.blockHash],
+  });
+  return projected;
+}
+
+export type CanonicalExactShardsRevocationProjectionInputV1 = Parameters<
+  typeof projectCanonicalExactShardsRevocationV1
+>[0];
 
 export type ExactShardsPublicProjectionV1 = Readonly<{
   state: "absent" | "finalized" | "revoked" | "reorged";
@@ -1526,6 +1615,12 @@ export function validateExactShardsPublicRecordV1(
   if (suppliedRecordBinding !== sha256Canonical(withoutBinding)) {
     throw new TypeError("ExactShards public record binding is invalid");
   }
+}
+
+export function deriveExactShardsDescriptorBindingSha256V1(
+  descriptorValue: unknown,
+): `sha256:${string}` {
+  return sha256Canonical(requireBoundDescriptor(descriptorValue));
 }
 
 export function assertProjectedFinalizedExactShardsRecordV1(
