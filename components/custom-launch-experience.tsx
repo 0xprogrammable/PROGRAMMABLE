@@ -194,7 +194,7 @@ export type CustomLaunchStageV1 =
   | "wallet"
   | "registry";
 
-const CUSTOM_LAUNCH_STAGES_V1 = Object.freeze([
+export const CUSTOM_LAUNCH_STAGES_V1 = Object.freeze([
   { id: "github", label: "GitHub", detail: "Owner session" },
   { id: "repositories", label: "Repositories", detail: "Allowed source" },
   { id: "approval", label: "Approval", detail: "Exact revision" },
@@ -211,23 +211,44 @@ export function resolveCustomLaunchStageV1(input: Readonly<{
   screen: CustomLaunchScreen;
   applicationCount: number;
   launchProgress: LaunchProgress;
+  exactRevisionVerified?: boolean;
+  launchPrepared?: boolean;
+  walletSubmissionVerified?: boolean;
 }>): CustomLaunchStageV1 {
   if (input.screen === "intro") return "github";
   if (input.screen === "applications") {
     return input.applicationCount > 0 ? "approval" : "repositories";
   }
-  if (
-    input.launchProgress === "wallet-proof"
-    || input.launchProgress === "wallet-transaction"
-  ) return "wallet";
-  if (
-    input.launchProgress === "reconciling"
-    || input.launchProgress === "ambiguous"
-    || input.launchProgress === "confirmation"
-    || input.launchProgress === "publishing"
-    || input.launchProgress === "complete"
-  ) return "registry";
-  return "prepare";
+  if (!input.exactRevisionVerified) return "approval";
+  if (!input.launchPrepared) return "prepare";
+  if (!input.walletSubmissionVerified) return "wallet";
+  return "registry";
+}
+
+export type CustomLaunchVerifiedThroughV1 =
+  | "approval"
+  | "prepare"
+  | "wallet"
+  | "registry"
+  | null;
+
+export function resolveCustomLaunchVerifiedStagesV1(input: Readonly<{
+  githubPrincipalVerified: boolean;
+  repositoriesLoaded: boolean;
+  verifiedThrough: CustomLaunchVerifiedThroughV1;
+}>): readonly CustomLaunchStageV1[] {
+  if (!input.githubPrincipalVerified) return [];
+  const verified: CustomLaunchStageV1[] = ["github"];
+  if (!input.repositoriesLoaded) return verified;
+  verified.push("repositories");
+  if (input.verifiedThrough === null) return verified;
+  const verifiedThroughIndex = CUSTOM_LAUNCH_STAGES_V1.findIndex(
+    ({ id }) => id === input.verifiedThrough,
+  );
+  for (let index = 2; index <= verifiedThroughIndex; index += 1) {
+    verified.push(CUSTOM_LAUNCH_STAGES_V1[index].id);
+  }
+  return verified;
 }
 
 export type PreparedLaunchRecoveryV2 = Readonly<{
@@ -1446,22 +1467,10 @@ function namespacedIdentity(value: unknown): Readonly<{ namespace: string; value
   return { namespace: record.namespace, value: record.value };
 }
 
-export function CustomLaunchExperience({
-  localPreviewStage,
-  ...runtimeProps
-}: {
+export function CustomLaunchExperience(runtimeProps: {
   onBack: () => void;
   trustedLaunchPermitSigners: readonly TrustedLaunchPermitSignerV2[];
-  localPreviewStage?: CustomLaunchStageV1;
 }) {
-  if (localPreviewStage !== undefined) {
-    return (
-      <CustomLaunchLocalPreview
-        initialStage={localPreviewStage}
-        onBack={runtimeProps.onBack}
-      />
-    );
-  }
   return <CustomLaunchRuntime {...runtimeProps} />;
 }
 
@@ -1500,6 +1509,8 @@ function CustomLaunchRuntime({
   const [imageUploading, setImageUploading] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
   const [launchProgress, setLaunchProgress] = useState<LaunchProgress>("idle");
+  const [verifiedThrough, setVerifiedThrough] =
+    useState<CustomLaunchVerifiedThroughV1>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
@@ -1557,6 +1568,7 @@ function CustomLaunchRuntime({
     setImageUploading(false);
     setSetupLoading(false);
     setLaunchProgress("idle");
+    setVerifiedThrough(null);
     setStatusMessage("");
     setError("");
     setTransactionHash("");
@@ -1868,6 +1880,7 @@ function CustomLaunchRuntime({
       if (generation !== flowGenerationRef.current) return;
       if (application.state === "launched") {
         clearLaunchSession(githubPrincipalHash, application.applicationHandle);
+        setVerifiedThrough("registry");
         setLaunchProgress("complete");
         setStatusMessage("Launch complete. Project publishing is confirmed by the custom registry.");
         return;
@@ -1885,6 +1898,13 @@ function CustomLaunchRuntime({
           ? "confirmation"
           : customLaunchPersistedRecoveryProgressV2(recovery);
         setLaunchProgress(recoveryProgress);
+        setVerifiedThrough(
+          recovery?.stage === "broadcast"
+            ? "wallet"
+            : recovery?.stage === "submission-unknown"
+              ? "prepare"
+              : "approval",
+        );
         setStatusMessage(
           recoveryProgress === "reconciling"
             ? "Launch not submitted. Checking the reserved launch before retrying"
@@ -1927,6 +1947,7 @@ function CustomLaunchRuntime({
         if (generation !== flowGenerationRef.current) return;
         clearLaunchSession(githubPrincipalHash, application.applicationHandle);
         markApplicationFinalized(application.applicationHandle, finalized.finalizedAt);
+        setVerifiedThrough("registry");
         setLaunchProgress("complete");
         setStatusMessage("Launch complete");
         return;
@@ -1941,6 +1962,7 @@ function CustomLaunchRuntime({
       setApplications(setup.principalApplications.applications);
       setSelected(setup.application);
       setDescriptor(setup.descriptor);
+      setVerifiedThrough("approval");
       setConfiguration(Object.fromEntries(
         setup.descriptor.configurationSchema.fields.map(({ fieldId }) => [fieldId, ""]),
       ));
@@ -2129,6 +2151,7 @@ function CustomLaunchRuntime({
     if (result.kind === "failed") {
       setPendingGrantReissue(null);
       setDescriptor(null);
+      setVerifiedThrough(null);
       setLaunchProgress("idle");
       throw new Error("Launch preparation could not be refreshed. Check the GitHub review before trying again");
     }
@@ -2187,6 +2210,7 @@ function CustomLaunchRuntime({
     setApplications(principalApplications.applications);
     setSelected(freshApplication);
     setDescriptor(freshDescriptor);
+    setVerifiedThrough("approval");
     setConfiguration((current) => Object.fromEntries(
       freshDescriptor.configurationSchema.fields.map(({ fieldId }) => [
         fieldId,
@@ -2234,6 +2258,7 @@ function CustomLaunchRuntime({
       if (isPermanentGrantReissueFailure(caught)) {
         setPendingGrantReissue(null);
         setDescriptor(null);
+        setVerifiedThrough(null);
       }
       setLaunchProgress("idle");
       setApplicantFailure(caught);
@@ -2586,6 +2611,7 @@ function CustomLaunchRuntime({
             applicationHandle,
             preparedRecovery,
           );
+          setVerifiedThrough("prepare");
           return { execution, action, reportIdempotencyKey, preparedRecovery };
         },
         sendBrowserWalletAction: async ({ authentication, authorization, execution }) => {
@@ -2647,6 +2673,7 @@ function CustomLaunchRuntime({
       if (isActive()) {
         setTransactionHash(hash);
         setTransactionChainId(action.chainId);
+        setVerifiedThrough("wallet");
         setLaunchProgress("confirmation");
         setStatusMessage("Waiting for confirmation");
       }
@@ -2674,6 +2701,7 @@ function CustomLaunchRuntime({
       if (!isActive()) return;
       clearLaunchSession(launchGithubPrincipalHash, applicationHandle);
       markApplicationFinalized(applicationHandle, finalized.finalizedAt);
+      setVerifiedThrough("registry");
       setLaunchProgress("complete");
       setStatusMessage("Launch complete");
     } catch (caught) {
@@ -2711,6 +2739,7 @@ function CustomLaunchRuntime({
           if (isPermanentGrantReissueFailure(reissueFailure)) {
             setPendingGrantReissue(null);
             setDescriptor(null);
+            setVerifiedThrough(null);
           }
         }
       }
@@ -2725,6 +2754,7 @@ function CustomLaunchRuntime({
       if (broadcastRecovery !== null) {
         setTransactionHash(broadcastRecovery.transactionHash);
         setTransactionChainId(broadcastRecovery.chainId);
+        setVerifiedThrough("wallet");
         setLaunchProgress("confirmation");
         setStatusMessage("Launch submitted. Check confirmation status");
       } else if (recoveryReadAfterFailure.kind === "valid") {
@@ -2732,6 +2762,13 @@ function CustomLaunchRuntime({
           recoveryReadAfterFailure.recovery,
         );
         setLaunchProgress(recoveryProgress);
+        setVerifiedThrough(
+          recoveryReadAfterFailure.recovery.stage === "broadcast"
+            ? "wallet"
+            : recoveryReadAfterFailure.recovery.stage === "submission-unknown"
+              ? "prepare"
+              : "approval",
+        );
         setStatusMessage(
           recoveryProgress === "reconciling"
             ? "Launch not submitted. Check the reserved launch before retrying"
@@ -2817,10 +2854,18 @@ function CustomLaunchRuntime({
     : null;
   const durableApproval = selected !== null
     && customApplicationHasDurableApprovalV2(selected, null);
+  const verifiedStages = resolveCustomLaunchVerifiedStagesV1({
+    githubPrincipalVerified: githubPrincipalHash !== null,
+    repositoriesLoaded: applicationsLoaded,
+    verifiedThrough,
+  });
   const currentStage = resolveCustomLaunchStageV1({
     screen,
     applicationCount: applications.length,
     launchProgress,
+    exactRevisionVerified: verifiedStages.includes("approval"),
+    launchPrepared: verifiedStages.includes("prepare"),
+    walletSubmissionVerified: verifiedStages.includes("wallet"),
   });
 
   if (screen === "intro") {
@@ -2831,6 +2876,7 @@ function CustomLaunchRuntime({
         title="Launch an approved project"
         eyebrow="GitHub launch"
         stage={currentStage}
+        verifiedStages={verifiedStages}
       >
         <div className={styles.introGrid}>
           <section className={styles.introPrimary}>
@@ -2918,6 +2964,7 @@ function CustomLaunchRuntime({
         title="Allowed repositories"
         eyebrow={githubUsername ? `GitHub · @${githubUsername}` : "GitHub"}
         stage={currentStage}
+        verifiedStages={verifiedStages}
       >
         <div className={styles.listToolbar}>
           <p>Only revisions bound to your current GitHub identity appear here.</p>
@@ -2960,7 +3007,7 @@ function CustomLaunchRuntime({
       title={launchProgress === "complete" ? "Public record confirmed" : setupLoading && selected?.state === "ready_for_registration" ? "Verify exact approval" : launchProgress === "idle" ? "Prepare launch" : "Verify launch"}
       eyebrow={selected?.repositoryFullName ?? "Approved project"}
       stage={currentStage}
-      registryComplete={launchProgress === "complete"}
+      verifiedStages={verifiedStages}
       application={selected}
     >
       {setupLoading || !selected ? (
@@ -3112,14 +3159,12 @@ function CustomLaunchRuntime({
 }
 
 function LaunchFlowRail({
-  registryComplete = false,
   stage,
+  verifiedStages,
 }: {
-  registryComplete?: boolean;
   stage: CustomLaunchStageV1;
+  verifiedStages: readonly CustomLaunchStageV1[];
 }) {
-  const currentIndex = CUSTOM_LAUNCH_STAGES_V1.findIndex(({ id }) => id === stage);
-
   return (
     <aside className={styles.flowRail} aria-labelledby="custom-launch-path-title">
       <div className={styles.flowRailHeading}>
@@ -3128,10 +3173,9 @@ function LaunchFlowRail({
       </div>
       <ol className={styles.flowSteps}>
         {CUSTOM_LAUNCH_STAGES_V1.map((item, index) => {
-          const complete = index < currentIndex
-            || (registryComplete && index === currentIndex);
-          const current = index === currentIndex;
-          const state = complete ? "complete" : current ? "current" : "waiting";
+          const verified = verifiedStages.includes(item.id);
+          const current = item.id === stage;
+          const state = verified ? "complete" : current ? "current" : "waiting";
           return (
             <li
               key={item.id}
@@ -3140,14 +3184,14 @@ function LaunchFlowRail({
               aria-current={current ? "step" : undefined}
             >
               <span className={styles.flowNode} aria-hidden="true">
-                {complete ? "✓" : String(index + 1).padStart(2, "0")}
+                {verified ? "✓" : String(index + 1).padStart(2, "0")}
               </span>
               <span className={styles.flowStepCopy}>
                 <strong>{item.label}</strong>
                 <small>{item.detail}</small>
               </span>
               <span className={styles.flowState}>
-                {complete ? "Verified" : current ? "Current" : "Waiting"}
+                {verified ? "Verified" : current ? "Checking" : "Waiting"}
               </span>
             </li>
           );
@@ -3194,138 +3238,16 @@ function ApprovalRevisionCard({
   );
 }
 
-const LOCAL_PREVIEW_APPLICATION: PrincipalCustomLaunchApplicationSummaryV2 = Object.freeze({
-  applicationId: "local-interface-preview",
-  applicationHandle: `github-${"1".repeat(64)}`,
-  revisionId: "local-preview-revision",
-  repositoryId: "100000001",
-  repositoryOwnerId: "100000002",
-  repositoryFullName: "example-labs/approved-module",
-  pullRequestNumber: 24,
-  commitOid: "7c9a41d6f2b83e0a5d174c9260b48ee351a720df",
-  treeOid: "f14e7a893c2d50b4e1a6790d348c5fb217e6a09c",
-  state: "approved",
-  reasonCodes: [],
-  actionCodes: [],
-  correctionCount: 0,
-  correctionPreview: [],
-  receiptDigest: `sha256:${"2".repeat(64)}`,
-  launchEntitlementBindingHash: `sha256:${"3".repeat(64)}`,
-  updatedAt: "2026-08-13T06:24:17.000Z",
-});
-
-const LOCAL_PREVIEW_COPY: Readonly<Record<CustomLaunchStageV1, Readonly<{
-  title: string;
-  description: string;
-  action: string;
-}>>> = Object.freeze({
-  github: {
-    title: "Prove which GitHub account owns the launch.",
-    description: "The account opens only repositories and revisions explicitly allowed for that principal.",
-    action: "Connect GitHub",
-  },
-  repositories: {
-    title: "Choose from repositories you are allowed to launch.",
-    description: "Repository access alone is not approval. The next step binds one pull request and one immutable source tree.",
-    action: "Select repository",
-  },
-  approval: {
-    title: "Verify the approved commit and tree before preparing anything.",
-    description: "Any source change invalidates this approval and closes the launch path.",
-    action: "Use exact revision",
-  },
-  prepare: {
-    title: "Prepare one launch action from the approved adapter.",
-    description: "The route, network, value, target, and calldata stay bound to the approved source.",
-    action: "Prepare launch",
-  },
-  wallet: {
-    title: "Review the exact transaction in your browser wallet.",
-    description: "Programmable never takes custody and never submits an applicant transaction from a platform key.",
-    action: "Review wallet request",
-  },
-  registry: {
-    title: "Finality turns the transaction into a public Registry record.",
-    description: "The public page appears only after the required confirmations and exact read model verification.",
-    action: "End of local preview",
-  },
-});
-
-function CustomLaunchLocalPreview({
-  initialStage,
-  onBack,
-}: {
-  initialStage: CustomLaunchStageV1;
-  onBack: () => void;
-}) {
-  const [stage, setStage] = useState(initialStage);
-  const index = CUSTOM_LAUNCH_STAGES_V1.findIndex(({ id }) => id === stage);
-  const copy = LOCAL_PREVIEW_COPY[stage];
-  const showRevision = index >= 2;
-  const next = CUSTOM_LAUNCH_STAGES_V1[index + 1]?.id;
-  const previous = CUSTOM_LAUNCH_STAGES_V1[index - 1]?.id;
-
-  return (
-    <CustomLaunchFrame
-      boundaryRef={() => undefined}
-      onBack={onBack}
-      title="Approved project launch"
-      eyebrow="Local interface preview"
-      stage={stage}
-      registryComplete={stage === "registry"}
-      application={showRevision ? LOCAL_PREVIEW_APPLICATION : null}
-      applicationIsLocal
-    >
-      <section className={styles.previewPanel} aria-labelledby="local-preview-title">
-        <div className={styles.previewNotice} role="note">
-          <span>Local seed</span>
-          No account, wallet request, transaction, or public record is created.
-        </div>
-        <div className={styles.previewHero}>
-          <span className={styles.instrumentLabel}>Stage {String(index + 1).padStart(2, "0")}</span>
-          <h2 id="local-preview-title">{copy.title}</h2>
-          <p>{copy.description}</p>
-        </div>
-        <dl className={styles.previewFacts}>
-          <div><dt>GitHub owner</dt><dd>{index >= 1 ? "Verified" : "Required"}</dd></div>
-          <div><dt>Allowed source</dt><dd>{index >= 2 ? "Exact revision" : "Waiting"}</dd></div>
-          <div><dt>Browser wallet</dt><dd>{index >= 4 ? "Applicant controlled" : "Not requested"}</dd></div>
-          <div><dt>Registry record</dt><dd>{stage === "registry" ? "Simulated finality" : "Not published"}</dd></div>
-        </dl>
-        <div className={styles.previewActions}>
-          {previous ? (
-            <button className={styles.secondaryButton} type="button" onClick={() => setStage(previous)}>
-              Previous stage
-            </button>
-          ) : <span />}
-          <button
-            className="primary-button"
-            type="button"
-            disabled={!next}
-            onClick={() => next && setStage(next)}
-          >
-            {copy.action}
-            {next ? <ArrowRight aria-hidden="true" size={16} /> : <CircleCheck aria-hidden="true" size={16} />}
-          </button>
-        </div>
-        <div className={styles.visuallyHidden} role="status">
-          Local preview is showing {copy.title}
-        </div>
-      </section>
-    </CustomLaunchFrame>
-  );
-}
-
-function CustomLaunchFrame({
+export function CustomLaunchFrame({
   application = null,
   applicationIsLocal = false,
   boundaryRef,
   children,
   eyebrow = "Custom launch",
   onBack,
-  registryComplete = false,
   stage,
   title,
+  verifiedStages,
 }: {
   application?: PrincipalCustomLaunchApplicationSummaryV2 | null;
   applicationIsLocal?: boolean;
@@ -3333,9 +3255,9 @@ function CustomLaunchFrame({
   children: ReactNode;
   eyebrow?: string;
   onBack: () => void;
-  registryComplete?: boolean;
   stage: CustomLaunchStageV1;
   title: string;
+  verifiedStages: readonly CustomLaunchStageV1[];
 }) {
   return (
     <div ref={boundaryRef} className={`launch-page page-width ${launchExperience.formPage} ${styles.page}`} data-launch-model="custom" data-launch-stage={stage}>
@@ -3344,7 +3266,7 @@ function CustomLaunchFrame({
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}><span className={launchExperience.formModelName}>{eyebrow}</span><h1>{title}</h1></div>
       </header>
       <div className={styles.instrumentGrid}>
-        <LaunchFlowRail stage={stage} registryComplete={registryComplete} />
+        <LaunchFlowRail stage={stage} verifiedStages={verifiedStages} />
         <div className={styles.instrumentWorkspace}>
           {application ? (
             <ApprovalRevisionCard

@@ -55,6 +55,13 @@ const LazyCustomLaunchExperience = lazy(async () => {
   return { default: customModule.CustomLaunchExperience };
 });
 
+const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development"
+  ? lazy(async () => {
+      const previewModule = await import("@/components/custom-launch-local-preview");
+      return { default: previewModule.CustomLaunchLocalPreview };
+    })
+  : null;
+
 function LaunchFormLoading({
   onBack,
   title = "Create token",
@@ -94,16 +101,12 @@ function LaunchFormLoading({
 }
 
 type LaunchExperienceProps = Readonly<{
-  customLaunchLocalPreviewStage?: CustomLaunchStageV1;
   customLaunchPublicEnabled: boolean;
   trustedLaunchPermitSigners?: readonly TrustedLaunchPermitSignerV2[];
 }>;
 
 export function LaunchExperience(props: LaunchExperienceProps) {
-  if (
-    process.env.NODE_ENV !== "development"
-    || props.customLaunchLocalPreviewStage
-  ) {
+  if (process.env.NODE_ENV !== "development") {
     return <LaunchExperienceRuntime {...props} />;
   }
 
@@ -117,26 +120,28 @@ export function LaunchExperience(props: LaunchExperienceProps) {
 function DevelopmentLaunchPreviewRoute(props: LaunchExperienceProps) {
   const searchParams = useSearchParams();
   const previewCandidate = searchParams.get("localPreview");
-  const customLaunchLocalPreviewStage = previewCandidate
+  const localPreviewStage = previewCandidate
     && LOCAL_PREVIEW_STAGES.has(previewCandidate as CustomLaunchStageV1)
     ? previewCandidate as CustomLaunchStageV1
     : undefined;
+  if (localPreviewStage === undefined || LazyDevelopmentCustomLaunchPreview === null) {
+    return <LaunchExperienceRuntime {...props} />;
+  }
   return (
-    <LaunchExperienceRuntime
-      {...props}
-      customLaunchLocalPreviewStage={customLaunchLocalPreviewStage}
-    />
+    <Suspense fallback={<LaunchFormLoading title="Approved project launch" onBack={() => undefined} />}>
+      <LazyDevelopmentCustomLaunchPreview
+        initialStage={localPreviewStage}
+        onBack={() => window.location.assign("/launch")}
+      />
+    </Suspense>
   );
 }
 
 function LaunchExperienceRuntime({
-  customLaunchLocalPreviewStage,
   customLaunchPublicEnabled,
   trustedLaunchPermitSigners = [],
 }: LaunchExperienceProps) {
-  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(
-    customLaunchLocalPreviewStage ? "custom" : null,
-  );
+  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
   const customLaunchButtonRef = useRef<HTMLButtonElement>(null);
   const restoreCustomLaunchFocusRef = useRef(false);
 
@@ -189,7 +194,6 @@ function LaunchExperienceRuntime({
         <LazyCustomLaunchExperience
           onBack={returnToModels}
           trustedLaunchPermitSigners={trustedLaunchPermitSigners}
-          localPreviewStage={customLaunchLocalPreviewStage}
         />
       </Suspense>
     );
