@@ -218,7 +218,7 @@ test("rejects recommitted legacy Alchemy provider evidence", async () => {
   legacy.providerBindings[1].redactedIdentity = "rpc:1:alchemy";
   assert.throws(
     () => validateReviewedBootstrapPlan(recommit(legacy)),
-    /reviewed provider set is invalid/u,
+    /bootstrap provider/u,
   );
 });
 
