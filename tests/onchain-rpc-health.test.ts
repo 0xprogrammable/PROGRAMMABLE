@@ -167,6 +167,25 @@ describe("operational RPC health", () => {
     expect(secondary.getBlock).toHaveBeenCalledWith({ blockNumber: 88n });
   });
 
+  it("reports the public provider identities without exposing endpoints", async () => {
+    const primary = client({ head: 100n });
+    const secondary = client({ head: 101n });
+    const health = await readOperationalRpcHealth(
+      {
+        ...deployment,
+        rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
+      },
+      dependencies(primary, secondary),
+    );
+
+    expect(health.providers).toMatchObject({
+      primary: { provider: "drpc", status: "available" },
+      secondary: { provider: "quicknode", status: "available" },
+    });
+    expect(JSON.stringify(health)).not.toContain("rpc-key");
+    expect(JSON.stringify(health)).not.toContain("example");
+  });
+
   it("keeps reads available through the fixed secondary after primary 429", async () => {
     const primary = client({
       chainError: httpFailure(429, PRIMARY_URL),

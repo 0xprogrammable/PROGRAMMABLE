@@ -1364,6 +1364,10 @@ describe("read-model performance contract", () => {
         "primary.endpointCommitment !== expectedQuickNodeCommitment",
         "false",
       ),
+      currentMarketRpcSource.replace(
+        "rpcProviderIds: undefined",
+        "rpcProviderIds: baseDeployment.rpcProviderIds",
+      ),
     ]) {
       const mutatedCurrentMarket =
         alchemySourceContracts.evaluateAlchemyExploreSourceContracts(

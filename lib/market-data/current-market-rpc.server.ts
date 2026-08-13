@@ -63,6 +63,9 @@ export function currentMarketOnchainDeployment(
       ...baseDeployment,
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
+      // Provider-neutral Website role IDs describe the replaced base pair.
+      // Do not mislabel this dedicated QuickNode + MEV Blocker quorum.
+      rpcProviderIds: undefined,
     };
   } catch {
     throw new CurrentMarketRpcBindingError();

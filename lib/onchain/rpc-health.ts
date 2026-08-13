@@ -6,7 +6,10 @@ import {
   OperationalRpcUnavailableError,
   withOperationalRpcFailover,
 } from "./operational-rpc-failover.server";
-import type { ReadyOnchainDeployment } from "./types";
+import type {
+  MainnetRpcProviderId,
+  ReadyOnchainDeployment,
+} from "./types";
 
 type RpcRole = "primary" | "secondary";
 type ProviderStatus =
@@ -44,11 +47,13 @@ export type OperationalRpcHealth = Readonly<{
   }>;
   providers: Readonly<{
     primary: Readonly<{
+      provider?: MainnetRpcProviderId;
       status: ProviderStatus;
       head: string | null;
       headAgeSeconds: number | null;
     }>;
     secondary: Readonly<{
+      provider?: MainnetRpcProviderId;
       status: ProviderStatus;
       head: string | null;
       headAgeSeconds: number | null;
@@ -105,8 +110,12 @@ function defaultDependencies(
   };
 }
 
-function publicProvider(probe: ProviderProbe) {
+function publicProvider(
+  probe: ProviderProbe,
+  provider: MainnetRpcProviderId | undefined,
+) {
   return {
+    ...(provider ? { provider } : {}),
     status: probe.status,
     head: probe.head?.toString() ?? null,
     headAgeSeconds: probe.headAgeSeconds,
@@ -133,8 +142,14 @@ function result(
       failoverUsed: input.servedBy === "secondary",
     },
     providers: {
-      primary: publicProvider(probes.primary),
-      secondary: publicProvider(probes.secondary),
+      primary: publicProvider(
+        probes.primary,
+        deployment.rpcProviderIds?.primary,
+      ),
+      secondary: publicProvider(
+        probes.secondary,
+        deployment.rpcProviderIds?.secondary,
+      ),
     },
     freshness: {
       maxHeadAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,

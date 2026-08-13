@@ -84,6 +84,20 @@ describe("current market RPC deployment", () => {
     });
   });
 
+  it("does not retain provider-neutral role labels for replaced endpoints", () => {
+    stubQuickNodeCommitment();
+
+    const current = currentMarketOnchainDeployment(websiteDeployment({
+      rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
+    }));
+
+    expect(current).toMatchObject({
+      rpcUrl: QUICKNODE_RPC_URL,
+      rpcUrlSecondary: MEV_BLOCKER_RPC_URL,
+    });
+    expect(current.rpcProviderIds).toBeUndefined();
+  });
+
   it("rejects a missing or mismatched QuickNode commitment without retaining secrets", () => {
     vi.stubEnv(
       "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",

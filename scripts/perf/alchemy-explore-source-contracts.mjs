@@ -374,6 +374,7 @@ export function evaluateAlchemyExploreSourceContracts(
       currentMarketRpcSource.includes(
         "primary.endpointCommitment !== expectedQuickNodeCommitment",
       ) &&
+      currentMarketRpcSource.includes("rpcProviderIds: undefined") &&
       routeSources
         .filter(({ id }) => ["explore", "token-detail"].includes(id))
         .every(

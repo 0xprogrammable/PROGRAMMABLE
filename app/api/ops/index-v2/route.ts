@@ -13,7 +13,32 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
-const INDEX_READ_ATTEMPTS = 2;
+const INDEX_READ_ATTEMPTS = 4;
+const INDEX_READ_RETRY_DELAY_MS = 1_500;
+
+function errorClassChain(error: unknown) {
+  const classes: Array<{ name: string; code?: number }> = [];
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && !seen.has(current) && classes.length < 6) {
+    seen.add(current);
+    const code =
+      typeof current === "object" &&
+        "code" in current &&
+        typeof (current as { code?: unknown }).code === "number"
+        ? (current as { code: number }).code
+        : undefined;
+    classes.push({
+      name: current instanceof Error ? current.name : "UnknownIndexError",
+      ...(code === undefined ? {} : { code }),
+    });
+    current =
+      typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  return classes;
+}
 
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -71,7 +96,13 @@ export async function GET(request: NextRequest) {
             attempt,
             errorName:
               error instanceof Error ? error.name : "UnknownIndexError",
+            errorClassChain: errorClassChain(error),
           });
+          if (attempt < INDEX_READ_ATTEMPTS) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, INDEX_READ_RETRY_DELAY_MS * attempt),
+            );
+          }
         }
       }
     }
@@ -118,6 +149,7 @@ export async function GET(request: NextRequest) {
     console.error("Programmable index refresh failed", {
       errorName:
         error instanceof Error ? error.name : "UnknownIndexError",
+      errorClassChain: errorClassChain(error),
       durationMs: Date.now() - startedAt,
     });
     return NextResponse.json(

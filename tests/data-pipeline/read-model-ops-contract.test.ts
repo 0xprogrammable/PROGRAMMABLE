@@ -643,6 +643,12 @@ describe("read-model operations source contract", () => {
 
   it.each([
     ["unprotected branch", "github.ref == 'refs/heads/production'"],
+    [
+      "pinned Node setup action",
+      "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+    ],
+    ["Node 24 runtime", "node-version: 24.14.0"],
+    ["disabled dependency cache", "cache: false"],
     ["fixed public origin", 'targetOrigin !== "https://programmable.market"'],
     ["bounded cron secret", "secretBytes < 32"],
     ["canonical writer route", '"/api/ops/index-v2"'],
@@ -666,6 +672,66 @@ describe("read-model operations source contract", () => {
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
     expect(workflow).toContain(needle);
     const unsafeWorkflow = workflow.replace(needle, "REMOVED_WATCHDOG_GATE");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
+    );
+  });
+
+  it("rejects a production watchdog that installs Node after executing it", () => {
+    const workflowPath =
+      ".github/workflows/refresh-production-read-model.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const setupStart = workflow.indexOf(
+      "      - name: Install pinned Node.js runtime\n",
+    );
+    const watchdogStart = workflow.indexOf(
+      "      - name: Refresh and prove durable freshness\n",
+    );
+    expect(setupStart).toBeGreaterThanOrEqual(0);
+    expect(watchdogStart).toBeGreaterThan(setupStart);
+    const setupBlock = workflow.slice(setupStart, watchdogStart);
+    const unsafeWorkflow = `${workflow.slice(0, setupStart)}${workflow.slice(
+      watchdogStart,
+    )}\n${setupBlock}`;
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
+    );
+  });
+
+  it.each([
+    [
+      "Node 22",
+      (workflow: string) =>
+        workflow.replace("node-version: 24.14.0", "node-version: 22.22.0"),
+    ],
+    [
+      "the runner default",
+      (workflow: string) =>
+        workflow.replace(
+          /      - name: Install pinned Node\.js runtime\n[\s\S]*?\n\n(?=      - name: Refresh and prove durable freshness)/u,
+          "",
+        ),
+    ],
+  ])("rejects %s for the production watchdog", (_label, mutateWorkflow) => {
+    const workflowPath =
+      ".github/workflows/refresh-production-read-model.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = mutateWorkflow(workflow);
+    expect(unsafeWorkflow).not.toBe(workflow);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -707,6 +773,11 @@ describe("read-model operations source contract", () => {
   it.each([
     ["health route", "app/api/ops/health/route.ts"],
     ["RPC health runtime", "lib/onchain/rpc-health.ts"],
+    ["RPC deployment config", "lib/onchain/config.ts"],
+    [
+      "RPC provider config",
+      "lib/onchain/website-rpc-providers.server.ts",
+    ],
   ])("rejects unreviewed %s bytes", (_label, path) => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
