@@ -6,7 +6,7 @@ import * as historicalReleaseGate from "../../scripts/perf/bitquery-historical-r
 const {
   boundedStaleMarketTimeV1,
   classifyBitqueryStaleMarketReleaseV1,
-  verifyBitqueryHistoricalGoldenReleaseV1,
+  verifyBitqueryHistoricalGoldenReleaseV2,
 } = historicalReleaseGate;
 
 const TOKEN = "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
@@ -18,6 +18,9 @@ const TIME = "2026-08-10T11:50:47.000Z";
 const NOW = Date.parse("2026-08-13T00:00:00.000Z");
 const PRICE = "2000000000000000000000";
 const FDV = "2000000000000000000000000";
+const TRANSACTION_HASH = `0x${"33".repeat(32)}`;
+const POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
+const ETH_USD_FEED = "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419";
 const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000;
 
 function detailToken(overrides: Record<string, unknown> = {}) {
@@ -51,8 +54,15 @@ function detailToken(overrides: Record<string, unknown> = {}) {
         quality: "partial",
         asOfTime: TIME,
         latestTrade: {
+          transactionHash: TRANSACTION_HASH,
+          transactionIndex: 66,
+          logIndex: 0,
           blockNumber: BLOCK,
           time: TIME,
+          tokenSide: "sell",
+          tokenAmount: "1",
+          priceQuoteWad: "1000000000000",
+          quoteAddress: QUOTE,
           priceUsdWad: PRICE,
         },
         valuation: {
@@ -115,17 +125,39 @@ function chart() {
 
 function parity(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: "programmable.bitquery-golden-market-parity.v1",
+    schemaVersion: "programmable.bitquery-golden-market-execution.v1",
+    providerCount: 2,
     tokenAddress: TOKEN,
     poolId: POOL,
+    quoteAddress: QUOTE,
+    poolManager: POOL_MANAGER,
+    transactionHash: TRANSACTION_HASH,
+    transactionIndex: 66,
+    bitqueryTradeOrdinal: 0,
+    receiptLogIndex: 122,
     blockNumber: BLOCK,
     blockHash: `0x${"11".repeat(32)}`,
     blockTime: TIME,
-    historicalPoolLiquidity: "1000000",
+    executionTokenSide: "sell",
+    executionAmount0: "-1000000000000",
+    executionAmount1: "1000000000000000000",
+    executionNativeAmountWei: "1000000000000",
+    executionTokenAmountRaw: "1000000000000000000",
+    executionPriceQuoteWad: "1000000000000",
+    executionSqrtPriceX96: "1000000000000000000",
+    executionLiquidity: "1000000",
     confirmations: 20,
+    chainlink: {
+      feedAddress: ETH_USD_FEED,
+      decimals: 8,
+      roundId: "100",
+      answer: "200000000000",
+      updatedAt: "1786359287",
+      answeredInRound: "100",
+    },
     bitqueryFdvUsdWad: FDV,
-    onchainFdvUsdWad: FDV,
-    deviationBps: 0,
+    chainlinkExecutionFdvUsdWad: FDV,
+    executionUsdDeviationBps: 0,
     ...overrides,
   };
 }
@@ -133,7 +165,7 @@ function parity(overrides: Record<string, unknown> = {}) {
 describe("Bitquery historical release gate", () => {
   it("publishes the finite deferred PCAN evidence ceiling", () => {
     expect(
-      historicalReleaseGate.BITQUERY_HISTORICAL_RELEASE_V1
+      historicalReleaseGate.BITQUERY_HISTORICAL_RELEASE_V2
         .maximumDeferredPcanAgeMs,
     ).toBe(MAXIMUM_DEFERRED_PCAN_AGE_MS);
   });
@@ -146,18 +178,39 @@ describe("Bitquery historical release gate", () => {
       tokenAddress: TOKEN,
       poolId: POOL,
     });
-    expect(verifyBitqueryHistoricalGoldenReleaseV1({
+    expect(verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: token,
       chart: chart(),
       parity: parity(),
       nowMs: NOW,
     })).toMatchObject({
-      schemaVersion: "programmable.bitquery-historical-release.v1",
+      schemaVersion: "programmable.bitquery-historical-release.v2",
       temporalStatus: "deferred-pcan",
+      transactionHash: TRANSACTION_HASH,
+      receiptLogIndex: 122,
       blockNumber: BLOCK,
       bitqueryFdvUsdWad: FDV,
-      historicalPoolLiquidity: "1000000",
+      chainlinkExecutionFdvUsdWad: FDV,
       confirmations: 20,
+    });
+  });
+
+  it("accepts the canonical high precision period median emitted by PCAN", () => {
+    const highPrecisionChart = chart();
+    const lastPoint = highPrecisionChart.points[1] as {
+      priceUsd?: string;
+      priceQuote?: string;
+    };
+    delete lastPoint.priceUsd;
+    lastPoint.priceQuote = "0.00000001100841713949";
+    expect(verifyBitqueryHistoricalGoldenReleaseV2({
+      detailToken: detailToken(),
+      chart: highPrecisionChart,
+      parity: parity(),
+      nowMs: NOW,
+    })).toMatchObject({
+      schemaVersion: "programmable.bitquery-historical-release.v2",
+      receiptLogIndex: 122,
     });
   });
 
@@ -172,7 +225,7 @@ describe("Bitquery historical release gate", () => {
       token,
       nowMs: boundaryNow + 1,
     })).toThrow("historical PCAN release evidence exceeds the 96 hour ceiling");
-    expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
+    expect(() => verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: token,
       chart: chart(),
       parity: parity(),
@@ -181,15 +234,21 @@ describe("Bitquery historical release gate", () => {
   });
 
   it.each([
-    ["schema", { schemaVersion: "programmable.bitquery-golden-market-parity.v2" }],
+    ["schema", { schemaVersion: "programmable.bitquery-golden-market-execution.v2" }],
     ["token", { tokenAddress: "0x1111111111111111111111111111111111111111" }],
     ["pool", { poolId: `0x${"22".repeat(32)}` }],
+    ["transaction", { transactionHash: `0x${"44".repeat(32)}` }],
+    ["receipt log", { receiptLogIndex: -1 }],
+    ["execution quote", { executionPriceQuoteWad: "1000000000001" }],
+    ["Chainlink feed", { chainlink: { ...parity().chainlink, feedAddress: TOKEN } }],
+    ["Chainlink round", { chainlink: { ...parity().chainlink, answeredInRound: "99" } }],
     ["block", { blockNumber: "25731001" }],
     ["value", { bitqueryFdvUsdWad: (BigInt(FDV) + 1n).toString() }],
     ["confirmations", { confirmations: 11 }],
-    ["historical liquidity", { historicalPoolLiquidity: "0" }],
+    ["execution liquidity", { executionLiquidity: "0" }],
+    ["execution USD deviation", { executionUsdDeviationBps: 26 }],
   ])("fails closed when the deferred PCAN parity drifts in %s", (_field, drift) => {
-    expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
+    expect(() => verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: detailToken(),
       chart: chart(),
       parity: parity(drift),
@@ -200,7 +259,7 @@ describe("Bitquery historical release gate", () => {
   it("fails closed when the last chart observation is not the exact trade block", () => {
     const driftedChart = chart();
     driftedChart.points[1].blockNumber = "25731001";
-    expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
+    expect(() => verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: detailToken(),
       chart: driftedChart,
       parity: parity(),
@@ -212,7 +271,7 @@ describe("Bitquery historical release gate", () => {
     const driftedChart = chart();
     driftedChart.identity.quoteAddress =
       "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
-    expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
+    expect(() => verifyBitqueryHistoricalGoldenReleaseV2({
       detailToken: detailToken(),
       chart: driftedChart,
       parity: parity(),

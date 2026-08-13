@@ -128,6 +128,13 @@ export function evaluateAlchemyExploreSourceContracts(
     "lib/market-data/bitquery.server.ts",
     sourceOverrides,
   );
+  const currentMarketRpcPath =
+    "lib/market-data/current-market-rpc.server.ts";
+  const currentMarketRpcSource = readSource(
+    rootDirectory,
+    currentMarketRpcPath,
+    sourceOverrides,
+  );
   const canonicalSupplyPath =
     "lib/market-data/canonical-token-supply.server.ts";
   const canonicalSupplySource = readSource(
@@ -264,10 +271,59 @@ export function evaluateAlchemyExploreSourceContracts(
       canonicalSupplySource.includes("observation.decimals") &&
       canonicalSupplySource.includes("observation.totalSupplyRaw") &&
       canonicalSupplySource.includes("group.length >= 2") &&
-      canonicalSupplySource.includes("if (!agreed) return entry;") &&
+      canonicalSupplySource.includes("!agreed ||") &&
+      canonicalSupplySource.includes(
+        "agreed.blockHash.toLowerCase() !== requestedSnapshot.blockHash",
+      ) &&
       routeSources
         .filter(({ id }) => ["explore", "token-detail"].includes(id))
-        .every(({ source }) => {
+        .every(({ id, source }) => {
+          if (id === "explore") {
+            const globalHydration = source.indexOf(
+              "const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(",
+            );
+            const globalValuation = source.indexOf(
+              "const currentValuation = await valueExploreEntriesWithCurrentEvidenceSnapshot({",
+              globalHydration,
+            );
+            const globalMarketRead = source.indexOf(
+              "const marketByToken = readBitqueryTokenMarketDataV1(",
+              globalValuation,
+            );
+            const pageMarketRead = source.indexOf(
+              "const marketByToken = readBitqueryTokenMarketDataV1(",
+              globalMarketRead + 1,
+            );
+            const pageHydration = source.indexOf(
+              "const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(",
+              pageMarketRead,
+            );
+            const pageValuation = source.indexOf(
+              "const valuedEntries = await valueExploreEntriesWithCurrentEvidence({",
+              pageHydration,
+            );
+            return globalHydration >= 0 &&
+              globalValuation > globalHydration &&
+              source.slice(globalHydration, globalValuation).includes(
+                "deployment: input.deployment ?? undefined",
+              ) &&
+              source.slice(globalHydration, globalValuation).includes(
+                "blockNumber: operationalSnapshot.blockNumber",
+              ) &&
+              source.slice(globalHydration, globalValuation).includes(
+                "blockHash: operationalSnapshot.blockHash",
+              ) &&
+              source.slice(globalValuation, globalMarketRead).includes(
+                "marketByToken: new Map()",
+              ) &&
+              source.slice(globalValuation, globalMarketRead).includes(
+                "operationalSnapshot,",
+              ) &&
+              globalMarketRead > globalValuation &&
+              pageMarketRead > globalMarketRead &&
+              pageHydration > pageMarketRead &&
+              pageValuation > pageHydration;
+          }
           const supplyHydration = source.indexOf(
             "hydrateMissingCanonicalTokenSupplyV1(",
           );
@@ -300,6 +356,57 @@ export function evaluateAlchemyExploreSourceContracts(
             (supplyCompletesFirst || inputsJoinBeforeValuation);
         }),
     "missing supply is hydrated on valuation-bearing routes only after fixed readers agree on block hash, decimals and total supply",
+  );
+
+  check(
+    "current-market-rpc-quorum",
+    currentMarketRpcSource.includes('import "server-only"') &&
+      currentMarketRpcSource.includes(
+        'const CURRENT_MARKET_RPC_SECONDARY = "https://rpc.mevblocker.io/";',
+      ) &&
+      currentMarketRpcSource.includes("createActionRpcQuorum({") &&
+      currentMarketRpcSource.includes(
+        "primary: quickNodeRpcUrl()",
+      ) &&
+      currentMarketRpcSource.includes(
+        "process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+      ) &&
+      currentMarketRpcSource.includes("process.env.ETHEREUM_RPC_URL_B") &&
+      !currentMarketRpcSource.includes(
+        "process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+      ) &&
+      !/\bprocess\.env\.ETHEREUM_RPC_URL(?!_B)/u.test(currentMarketRpcSource) &&
+      currentMarketRpcSource.includes(
+        "secondary: CURRENT_MARKET_RPC_SECONDARY",
+      ) &&
+      currentMarketRpcSource.includes("maximumProviders: 2") &&
+      currentMarketRpcSource.includes(
+        'primary?.vendorGroup !== "quicknode"',
+      ) &&
+      currentMarketRpcSource.includes(
+        'secondary?.vendorGroup !== "mevblocker"',
+      ) &&
+      currentMarketRpcSource.includes(
+        "primary.endpointCommitment !== expectedQuickNodeCommitment",
+      ) &&
+      currentMarketRpcSource.includes("rpcProviderIds: undefined") &&
+      routeSources
+        .filter(({ id }) => ["explore", "token-detail"].includes(id))
+        .every(
+          ({ source }) =>
+            source.includes("currentMarketOnchainDeployment(deployment)") &&
+            source.includes(
+              "readVerifiedOperationalMarketSnapshot(\n            currentMarketDeployment,",
+            ) &&
+            source.includes("deployment: currentMarketDeployment"),
+        ) &&
+      routeSources
+        .filter(({ id }) => ["token-chart", "token-list"].includes(id))
+        .every(
+          ({ source }) =>
+            !source.includes("currentMarketOnchainDeployment"),
+        ),
+    "current StateView and Chainlink evidence alone uses commitment-bound QuickNode plus fixed independent MEV Blocker",
   );
 
   for (const route of routeSources) {

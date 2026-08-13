@@ -6,7 +6,10 @@ import {
   OperationalRpcUnavailableError,
   withOperationalRpcFailover,
 } from "./operational-rpc-failover.server";
-import type { ReadyOnchainDeployment } from "./types";
+import type {
+  MainnetRpcProviderId,
+  ReadyOnchainDeployment,
+} from "./types";
 
 type RpcRole = "primary" | "secondary";
 type ProviderStatus =
@@ -30,7 +33,7 @@ type RpcHealthClient = Readonly<{
 }>;
 
 export type OperationalRpcHealthDependencies = Readonly<{
-  createClient: (rpcUrl: string) => RpcHealthClient;
+  createClient: (rpcUrl: string, signal?: AbortSignal) => RpcHealthClient;
   nowMs: () => number;
 }>;
 
@@ -44,11 +47,13 @@ export type OperationalRpcHealth = Readonly<{
   }>;
   providers: Readonly<{
     primary: Readonly<{
+      provider?: MainnetRpcProviderId;
       status: ProviderStatus;
       head: string | null;
       headAgeSeconds: number | null;
     }>;
     secondary: Readonly<{
+      provider?: MainnetRpcProviderId;
       status: ProviderStatus;
       head: string | null;
       headAgeSeconds: number | null;
@@ -88,6 +93,7 @@ class RpcHealthIntegrityError extends Error {
 
 function defaultDependencies(
   deployment: ReadyOnchainDeployment,
+  signal?: AbortSignal,
 ): OperationalRpcHealthDependencies {
   const chain = deployment.chainId === 1 ? mainnet : sepolia;
   return {
@@ -98,13 +104,18 @@ function defaultDependencies(
         transport: http(rpcUrl, {
           retryCount: 0,
           timeout: 12_000,
+          fetchOptions: { signal },
         }),
       }),
   };
 }
 
-function publicProvider(probe: ProviderProbe) {
+function publicProvider(
+  probe: ProviderProbe,
+  provider: MainnetRpcProviderId | undefined,
+) {
   return {
+    ...(provider ? { provider } : {}),
     status: probe.status,
     head: probe.head?.toString() ?? null,
     headAgeSeconds: probe.headAgeSeconds,
@@ -131,8 +142,14 @@ function result(
       failoverUsed: input.servedBy === "secondary",
     },
     providers: {
-      primary: publicProvider(probes.primary),
-      secondary: publicProvider(probes.secondary),
+      primary: publicProvider(
+        probes.primary,
+        deployment.rpcProviderIds?.primary,
+      ),
+      secondary: publicProvider(
+        probes.secondary,
+        deployment.rpcProviderIds?.secondary,
+      ),
     },
     freshness: {
       maxHeadAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
@@ -157,8 +174,12 @@ function validBlockHash(hash: unknown): hash is Hex {
  */
 export async function readOperationalRpcHealth(
   deployment: ReadyOnchainDeployment,
-  dependencies = defaultDependencies(deployment),
+  dependencies?: OperationalRpcHealthDependencies,
+  signal?: AbortSignal,
 ): Promise<OperationalRpcHealth> {
+  signal?.throwIfAborted();
+  const resolvedDependencies = dependencies ??
+    defaultDependencies(deployment, signal);
   const probes: Record<RpcRole, ProviderProbe> = {
     primary: {
       status: "unknown",
@@ -182,7 +203,7 @@ export async function readOperationalRpcHealth(
       quorumStatus: "unavailable",
     });
   }
-  const nowMs = dependencies.nowMs();
+  const nowMs = resolvedDependencies.nowMs();
   if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
     return result(deployment, probes, {
       status: "unhealthy",
@@ -200,13 +221,15 @@ export async function readOperationalRpcHealth(
   };
 
   const probeProvider = async (role: RpcRole, rpcUrl: string) => {
-    const client = dependencies.createClient(rpcUrl);
+    signal?.throwIfAborted();
+    const client = resolvedDependencies.createClient(rpcUrl, signal);
     probes[role].client = client;
     try {
       const [chainId, head] = await Promise.all([
         client.getChainId(),
         client.getBlockNumber(),
       ]);
+      signal?.throwIfAborted();
       if (chainId !== deployment.chainId || head < 0n) {
         probes[role].status = "invalid";
         probes[role].head = head;
@@ -214,6 +237,7 @@ export async function readOperationalRpcHealth(
       }
       probes[role].head = head;
       const headBlock = await client.getBlock({ blockNumber: head });
+      signal?.throwIfAborted();
       if (
         headBlock.number !== head ||
         !validBlockHash(headBlock.hash) ||
@@ -237,6 +261,7 @@ export async function readOperationalRpcHealth(
           : "available";
       return role;
     } catch (error) {
+      signal?.throwIfAborted();
       if (error instanceof RpcHealthIntegrityError) throw error;
       if (isOperationalRpcFailoverEligible(error)) {
         probes[role].status = "unavailable";
@@ -257,6 +282,7 @@ export async function readOperationalRpcHealth(
       },
     );
   } catch (error) {
+    signal?.throwIfAborted();
     if (
       error instanceof OperationalRpcUnavailableError ||
       isOperationalRpcFailoverEligible(error)
@@ -280,6 +306,7 @@ export async function readOperationalRpcHealth(
     try {
       await probeProvider("secondary", secondaryUrl);
     } catch (error) {
+      signal?.throwIfAborted();
       if (!isOperationalRpcFailoverEligible(error)) {
         return result(deployment, probes, {
           status: "unhealthy",
@@ -305,6 +332,7 @@ export async function readOperationalRpcHealth(
     }
     try {
       const block = await probe.client.getBlock({ blockNumber });
+      signal?.throwIfAborted();
       if (
         block.number !== blockNumber ||
         !validBlockHash(block.hash)
@@ -314,6 +342,7 @@ export async function readOperationalRpcHealth(
       }
       return { status: "available", hash: block.hash } as const;
     } catch (error) {
+      signal?.throwIfAborted();
       if (isOperationalRpcFailoverEligible(error)) {
         probe.status = "unavailable";
         return { status: "unavailable", hash: null } as const;

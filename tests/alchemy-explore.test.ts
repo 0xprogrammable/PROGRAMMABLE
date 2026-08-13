@@ -10,7 +10,12 @@ vi.mock("../lib/onchain", () => ({
 }));
 
 import type { LauncherToken } from "../lib/tokens";
-import { enrichTokensWithAlchemyPrices } from "../lib/alchemy/explore.server";
+import {
+  enrichTokensWithAlchemyPrices,
+  safeAlchemyError,
+} from "../lib/alchemy/explore.server";
+import { OfficialV4LiquidityEvidenceReadError } from
+  "../lib/onchain/uniswap-v4-subgraph";
 
 const HOOK_ADDRESS =
   "0x3333333333333333333333333333333333333333" as const;
@@ -41,6 +46,19 @@ describe("Alchemy Explore price enrichment", () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("preserves the secret-free official v4 diagnostic category", () => {
+    const error = new OfficialV4LiquidityEvidenceReadError(
+      "coverage-incomplete",
+      "response-indexing-error",
+    ) as OfficialV4LiquidityEvidenceReadError & { cause?: unknown };
+    error.cause = new Error("secret graph URL and query");
+
+    expect(safeAlchemyError(error)).toEqual({
+      name: "OfficialV4LiquidityEvidenceReadError",
+      category: "response-indexing-error",
+    });
   });
 
   it("authenticates the Alchemy Prices request and derives USD market cap", async () => {

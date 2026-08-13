@@ -1656,7 +1656,69 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(chart.points[0]).not.toHaveProperty("ohlcQuote");
   });
 
-  it("adapts the all-history interval beyond 80 days without dropping its start", async () => {
+  it("bounds the observed 17-day all-history query without dropping its start", async () => {
+    const historyStart = "2026-07-27T00:00:00.000Z";
+    const now = new Date("2026-08-13T00:00:00.000Z");
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      expect(request.variables.since).toBe(historyStart);
+      expect(request.variables.till).toBe(now.toISOString());
+      expect(request.query).toContain("limit: { count: 32 }");
+      expect(request.query).toContain(
+        "Bucket: Time(interval: { count: 14, in: hours })",
+      );
+      return jsonResponse(chartResponse({
+        points: [chartBucketRow({
+          bucket: historyStart,
+          block: "23040000",
+          time: "2026-07-27T01:00:00.000Z",
+          price: "1",
+          count: "1",
+        }), chartBucketRow({
+          bucket: "2026-08-12T20:00:00.000Z",
+          block: "25740000",
+          time: "2026-08-12T23:00:00.000Z",
+          price: "2",
+          count: "1",
+        })],
+        total: "2",
+      }));
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "all",
+      historyStart,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now,
+    });
+
+    expect(chart).toMatchObject({
+      status: "ready",
+      truncated: false,
+      swapCount: 2,
+      points: [
+        {
+          bucketStart: historyStart,
+          bucketEnd: "2026-07-27T14:00:00.000Z",
+          observedAt: "2026-07-27T01:00:00.000Z",
+          valueSemantics: "period-median",
+        },
+        {
+          bucketStart: "2026-08-12T20:00:00.000Z",
+          bucketEnd: now.toISOString(),
+          observedAt: "2026-08-12T23:00:00.000Z",
+          valueSemantics: "period-median",
+        },
+      ],
+    });
+  });
+
+  it("adapts a 406-day all-history interval without dropping its start", async () => {
     const historyStart = "2025-07-01T00:00:00.000Z";
     const fetchImpl = vi.fn(async (
       _url: string | URL | Request,
@@ -1665,8 +1727,9 @@ describe("Bitquery OHLCV chart and server stream", () => {
       const request = JSON.parse(String(init?.body));
       expect(request.variables.since).toBe(historyStart);
       expect(request.variables.till).toBe("2026-08-11T14:02:00.000Z");
+      expect(request.query).toContain("limit: { count: 32 }");
       expect(request.query).toContain(
-        "Bucket: Time(interval: { count: 6, in: days })",
+        "Bucket: Time(interval: { count: 14, in: days })",
       );
       return jsonResponse(chartResponse({
         points: [chartBucketRow({
@@ -1703,8 +1766,8 @@ describe("Bitquery OHLCV chart and server stream", () => {
       points: [
         {
           bucketStart: historyStart,
-          bucketEnd: "2025-07-07T00:00:00.000Z",
-          time: "2025-07-07T00:00:00.000Z",
+          bucketEnd: "2025-07-15T00:00:00.000Z",
+          time: "2025-07-15T00:00:00.000Z",
           observedAt: "2025-07-01T01:00:00.000Z",
           valueSemantics: "period-median",
         },

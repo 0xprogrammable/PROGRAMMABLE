@@ -94,6 +94,36 @@ function dependencies(
 }
 
 describe("operational RPC health", () => {
+  it("propagates caller aborts into the active health transport without failover", async () => {
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    const pending = (signal?: AbortSignal) => new Promise<never>(
+      (_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      },
+    );
+    const createClient = vi.fn((_rpcUrl: string, signal?: AbortSignal) => {
+      observedSignal = signal;
+      return {
+        getChainId: () => pending(signal),
+        getBlockNumber: () => pending(signal),
+        getBlock: () => pending(signal),
+      };
+    });
+    const read = readOperationalRpcHealth(deployment, {
+      createClient,
+      nowMs: () => NOW_MS,
+    }, controller.signal);
+
+    await vi.waitFor(() => expect(observedSignal).toBe(controller.signal));
+    controller.abort(new Error("current evidence deadline"));
+
+    await expect(read).rejects.toThrow("current evidence deadline");
+    expect(createClient).toHaveBeenCalledTimes(1);
+  });
+
   it("reports healthy only when both fixed providers agree", async () => {
     const primary = client({
       head: 100n,
@@ -135,6 +165,25 @@ describe("operational RPC health", () => {
     });
     expect(primary.getBlock).toHaveBeenCalledWith({ blockNumber: 88n });
     expect(secondary.getBlock).toHaveBeenCalledWith({ blockNumber: 88n });
+  });
+
+  it("reports the public provider identities without exposing endpoints", async () => {
+    const primary = client({ head: 100n });
+    const secondary = client({ head: 101n });
+    const health = await readOperationalRpcHealth(
+      {
+        ...deployment,
+        rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
+      },
+      dependencies(primary, secondary),
+    );
+
+    expect(health.providers).toMatchObject({
+      primary: { provider: "drpc", status: "available" },
+      secondary: { provider: "quicknode", status: "available" },
+    });
+    expect(JSON.stringify(health)).not.toContain("rpc-key");
+    expect(JSON.stringify(health)).not.toContain("example");
   });
 
   it("keeps reads available through the fixed secondary after primary 429", async () => {

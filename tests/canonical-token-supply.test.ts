@@ -74,6 +74,46 @@ describe("canonical token supply hydration", () => {
     expect(secondary.readContract).toHaveBeenCalledTimes(2);
   });
 
+  it("binds replay hydration to the requested valuation block and hash", async () => {
+    const primary = supplyClient();
+    const secondary = supplyClient();
+
+    const [hydrated] = await hydrateMissingCanonicalTokenSupplyV1([entry], {
+      deployment,
+      snapshot: {
+        blockNumber: "100",
+        blockHash: BLOCK_HASH,
+      },
+      createClient: (rpcUrl) =>
+        rpcUrl === deployment.rpcUrl ? primary : secondary,
+    });
+
+    expect(hydrated).toMatchObject({
+      tokenDecimals: 18,
+      totalSupplyRaw: SUPPLY.toString(),
+    });
+    expect(primary.getBlockNumber).not.toHaveBeenCalled();
+    expect(secondary.getBlockNumber).not.toHaveBeenCalled();
+    expect(primary.getBlock).toHaveBeenCalledWith({ blockNumber: 100n });
+    expect(secondary.getBlock).toHaveBeenCalledWith({ blockNumber: 100n });
+  });
+
+  it("fails closed when replay readers agree on a different block hash", async () => {
+    const driftedHash = `0x${"22".repeat(32)}` as const;
+    const primary = supplyClient({ blockHash: driftedHash });
+    const secondary = supplyClient({ blockHash: driftedHash });
+
+    await expect(hydrateMissingCanonicalTokenSupplyV1([entry], {
+      deployment,
+      snapshot: {
+        blockNumber: "100",
+        blockHash: BLOCK_HASH,
+      },
+      createClient: (rpcUrl) =>
+        rpcUrl === deployment.rpcUrl ? primary : secondary,
+    })).resolves.toEqual([entry]);
+  });
+
   it("leaves identity unchanged when the two readers disagree", async () => {
     const primary = supplyClient();
     const secondary = supplyClient({ totalSupply: SUPPLY - 1n });

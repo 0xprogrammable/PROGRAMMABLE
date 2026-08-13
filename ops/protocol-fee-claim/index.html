@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <meta name="color-scheme" content="light" />
+    <title>Programmable Fee Claim</title>
+    <link rel="icon" href="./assets/programmable-loop-mark-64.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div class="brand">
+          <img
+            src="./assets/programmable-loop-mark-64.png"
+            alt=""
+            width="32"
+            height="32"
+          />
+          <span>Programmable</span>
+        </div>
+        <div class="network" data-network>Ethereum</div>
+      </header>
+
+      <section class="content" aria-labelledby="claim-title">
+        <div class="intro-grid">
+          <div>
+            <p class="eyebrow">Privates Claim-Fenster</p>
+            <h1 id="claim-title">Alle Fees<br />claimen</h1>
+          </div>
+          <p class="intro">
+            Neue Classic- und Custom-Launches erscheinen bei jedem Scan
+            automatisch. Stock bleibt auf den bestehenden Assets.
+          </p>
+        </div>
+
+        <div class="total-line" aria-label="Offene Gebühren">
+          <span data-claim-count>0 Claims</span>
+          <strong data-total>0 ETH</strong>
+        </div>
+
+        <ul
+          class="claim-list"
+          data-claim-rows
+          aria-label="Programmable Feequellen"
+        ></ul>
+
+        <div class="meta-grid">
+          <div>
+            <span>Wallet</span>
+            <strong data-account>Nicht verbunden</strong>
+          </div>
+          <div>
+            <span>Bestätigung</span>
+            <strong data-batch-mode>Batch wird geprüft</strong>
+          </div>
+          <button class="refresh" type="button" data-refresh disabled>
+            Nur scannen
+          </button>
+        </div>
+
+        <button class="primary" type="button" data-action>
+          <strong data-action-label>Wallet verbinden</strong>
+          <span data-action-detail>MetaMask · Programmable Treasury</span>
+        </button>
+
+        <p class="status" role="status" aria-live="polite" data-status>
+          MetaMask verbinden, um offene Fees zu lesen
+        </p>
+        <p class="error" role="alert" data-error hidden></p>
+
+        <footer class="trust">
+          <span class="trust-mark" aria-hidden="true"></span>
+          <p>
+            Lokal und ohne Private Key. Vor jedem Claim werden Contract-Code,
+            Treasury-Empfänger und Guthaben am selben Ethereum-Block geprüft.
+            Classic-Launches laufen gesammelt über ihren gemeinsamen Hook.
+            Standardisierte Custom-Quellen werden aus der Registry erkannt und
+            im selben Wallet-Batch geclaimt. Unbekannte Quellen bleiben
+            gesperrt. Ohne atomaren MetaMask-Batch wird nichts gesendet.
+          </p>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

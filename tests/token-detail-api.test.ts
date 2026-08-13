@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
+  currentMarketOnchainDeployment: vi.fn(),
   hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
   valueExploreEntriesWithCurrentEvidence: vi.fn(),
   settleCurrentEvidenceSnapshot: vi.fn(),
@@ -69,6 +70,11 @@ vi.mock("../lib/onchain/durable-model", () => ({
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
   readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
+}));
+
+vi.mock("../lib/market-data/current-market-rpc.server", () => ({
+  currentMarketOnchainDeployment:
+    mocks.currentMarketOnchainDeployment,
 }));
 
 vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
@@ -179,6 +185,11 @@ describe("token detail Bitquery market read", () => {
       status: "ready",
       rpcUrlSecondary: "https://secondary.example",
     });
+    mocks.currentMarketOnchainDeployment.mockReturnValue({
+      status: "ready",
+      rpcUrl: "https://current-primary.example",
+      rpcUrlSecondary: "https://current-secondary.example",
+    });
     mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
     mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
@@ -191,7 +202,13 @@ describe("token detail Bitquery market read", () => {
       launchDiscoverySnapshot,
     );
     mocks.settleCurrentEvidenceSnapshot.mockImplementation(
-      async ({ read }: { read: Promise<unknown> }) => await read,
+      async ({
+        read,
+        signal,
+      }: {
+        read: (signal: AbortSignal) => Promise<unknown>;
+        signal?: AbortSignal;
+      }) => await read(signal ?? new AbortController().signal),
     );
     mocks.withSameBlockEthUsdQuote.mockImplementation(
       async ({ snapshot: value }) => value,
@@ -266,6 +283,28 @@ describe("token detail Bitquery market read", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mocks.currentMarketOnchainDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "ready",
+      }),
+    );
+    expect(mocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
+    expect(mocks.readVerifiedOperationalMarketSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rpcUrl: "https://current-primary.example",
+        rpcUrlSecondary: "https://current-secondary.example",
+      }),
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.valueExploreEntriesWithCurrentEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deployment: expect.objectContaining({
+          rpcUrl: "https://current-primary.example",
+          rpcUrlSecondary: "https://current-secondary.example",
+        }),
+      }),
+    );
     expect(mocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
     expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
     expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledWith(

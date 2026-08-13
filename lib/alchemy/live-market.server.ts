@@ -191,8 +191,15 @@ export function withoutUnboundEthUsdQuote(
  */
 export async function readVerifiedOperationalMarketSnapshot(
   deployment: ReadyOnchainDeployment,
+  expected?: Readonly<{ blockNumber: string; blockHash: Hex }>,
+  options: Readonly<{ signal?: AbortSignal }> = {},
 ): Promise<ExploreSnapshot | null> {
-  const health = await readOperationalRpcHealth(deployment);
+  options.signal?.throwIfAborted();
+  const health = await readOperationalRpcHealth(
+    deployment,
+    undefined,
+    options.signal,
+  );
   if (
     health.status !== "healthy" ||
     health.read.status !== "available" ||
@@ -200,10 +207,55 @@ export async function readVerifiedOperationalMarketSnapshot(
     health.confirmedBlock === null
   ) return null;
 
-  return {
+  const snapshot = {
     chainId: deployment.chainId,
     blockNumber: health.confirmedBlock.number,
-    blockHash: health.confirmedBlock.hash,
+    blockHash: health.confirmedBlock.hash.toLowerCase() as Hex,
+    confirmations: Number(deployment.confirmations),
+  };
+  const target = expected ?? snapshot;
+  if (
+    !/^(?:0|[1-9]\d*)$/u.test(target.blockNumber) ||
+    target.blockNumber.length > 78 ||
+    !/^0x[0-9a-f]{64}$/u.test(target.blockHash) ||
+    BigInt(target.blockNumber) > BigInt(snapshot.blockNumber)
+  ) return null;
+
+  const blockNumber = BigInt(target.blockNumber);
+  const observations = await Promise.allSettled(
+    [deployment.rpcUrl, deployment.rpcUrlSecondary].map(async (rpcUrl) => {
+      if (!rpcUrl) throw new OperationalRpcUnavailableError();
+      const client = createPublicClient({
+        chain: deployment.chainId === 1 ? mainnet : sepolia,
+        transport: http(rpcUrl, {
+          retryCount: 0,
+          timeout: 12_000,
+          fetchOptions: { signal: options.signal },
+        }),
+      });
+      const block = await client.getBlock({ blockNumber });
+      options.signal?.throwIfAborted();
+      if (
+        block.number !== blockNumber ||
+        !block.hash ||
+        block.hash.toLowerCase() !== target.blockHash
+      ) throw new OperationalRpcUnavailableError();
+      return block.timestamp;
+    }),
+  );
+  options.signal?.throwIfAborted();
+  const timestamps = observations.flatMap((observation) =>
+    observation.status === "fulfilled" ? [observation.value] : []
+  );
+  if (timestamps.length !== 2 || timestamps[0] !== timestamps[1]) return null;
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1_000));
+  const timestamp = timestamps[0]!;
+  if (timestamp > nowSeconds + 60n || nowSeconds - timestamp > 300n) return null;
+  return {
+    chainId: deployment.chainId,
+    blockNumber: target.blockNumber,
+    blockHash: target.blockHash,
+    blockTimestamp: timestamp.toString(),
     confirmations: Number(deployment.confirmations),
   };
 }
@@ -217,7 +269,9 @@ export async function readVerifiedOperationalMarketSnapshot(
 export async function withSameBlockEthUsdQuote(input: {
   deployment: ReadyOnchainDeployment;
   snapshot: ExploreSnapshot;
+  signal?: AbortSignal;
 }): Promise<ExploreSnapshot> {
+  input.signal?.throwIfAborted();
   const snapshot = withoutUnboundEthUsdQuote(input.snapshot);
   if (input.deployment.chainId !== 1) return snapshot;
   const blockNumber = snapshotBlock(snapshot);
@@ -229,6 +283,7 @@ export async function withSameBlockEthUsdQuote(input: {
         transport: http(rpcDeployment.rpcUrl, {
           retryCount: 1,
           timeout: 12_000,
+          fetchOptions: { signal: input.signal },
         }),
       });
       const [decimals, roundData, block] = await Promise.all([
@@ -247,6 +302,7 @@ export async function withSameBlockEthUsdQuote(input: {
         client.getBlock({ blockNumber }),
       ]);
       const [roundId, answer, , updatedAt, answeredInRound] = roundData;
+      input.signal?.throwIfAborted();
       assertValidEthUsdSnapshot({
         expectedBlockHash: snapshot.blockHash,
         actualBlockHash: block.hash,
@@ -445,7 +501,9 @@ export async function enrichTokensWithAlchemyPoolState(input: {
   deployment: ReadyOnchainDeployment;
   snapshot: ExploreSnapshot;
   tokens: readonly LauncherToken[];
+  signal?: AbortSignal;
 }) {
+  input.signal?.throwIfAborted();
   const eligible = input.tokens.filter(validPoolStateToken);
   if (eligible.length === 0) return [...input.tokens];
 
@@ -474,6 +532,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
           transport: http(rpcDeployment.rpcUrl, {
             retryCount: 1,
             timeout: 12_000,
+            fetchOptions: { signal: input.signal },
           }),
         });
         const [slot0Results, liquidityResults, block] = await Promise.all([
@@ -499,6 +558,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
           }),
           client.getBlock({ blockNumber }),
         ]);
+        input.signal?.throwIfAborted();
         if (block.hash.toLowerCase() !== input.snapshot.blockHash.toLowerCase()) {
           throw new OperationalRpcUnavailableError();
         }
@@ -525,7 +585,10 @@ export async function enrichTokensWithAlchemyPoolState(input: {
         });
       },
     )
-      .catch(() => missing.map(() => null));
+      .catch(() => {
+        input.signal?.throwIfAborted();
+        return missing.map(() => null);
+      });
 
     missing.forEach((token, index) => {
       const poolId = token.poolId.toLowerCase();
@@ -539,6 +602,11 @@ export async function enrichTokensWithAlchemyPoolState(input: {
       livePoolStateCache.set(cacheKey, {
         expiresAt: Date.now() + LIVE_POOL_STATE_TTL_MS,
         value,
+      });
+      void value.catch(() => {
+        if (livePoolStateCache.get(cacheKey)?.value === value) {
+          livePoolStateCache.delete(cacheKey);
+        }
       });
       states.set(poolId, value);
     });

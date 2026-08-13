@@ -29,6 +29,11 @@ curl -fsSL https://developers.programmable.family/api/v2/token-list
 
 The hosted API is optional for Router verification. An integration can reproduce provenance directly from Ethereum using the manifest, ABI and canonical Router getters.
 
+Protocol fee claim discovery is a separate execution index. The claim console
+uses complete Classic Launcher and Custom Registry scans plus the fixed Stock
+release set; see [Index Programmable launches](indexing.md#index-protocol-fee-claims-separately)
+for the exact completeness and fail-closed rules.
+
 {% content-ref url="verify.md" %}
 [verify.md](verify.md)
 {% endcontent-ref %}
