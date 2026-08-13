@@ -1,0 +1,442 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/generic-launch-foundation.v1.schema.json",
+  "title": "Programmable generic launch foundation V1",
+  "$ref": "#/$defs/genericLaunchFoundationDescriptor",
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "numericId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,31}$"
+    },
+    "githubRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forge", "repositoryId"],
+      "properties": {
+        "forge": { "const": "github" },
+        "repositoryId": { "$ref": "#/$defs/numericId" }
+      }
+    },
+    "gitRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commitObjectId", "treeObjectId"],
+      "properties": {
+        "commitObjectId": { "$ref": "#/$defs/gitObjectId" },
+        "treeObjectId": { "$ref": "#/$defs/gitObjectId" }
+      }
+    },
+    "applicantLaunchSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "subjectSourceBindingHash",
+        "sourceRepository",
+        "application",
+        "sourceRevision",
+        "principalBindingHash",
+        "subjectHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.applicant-launch-subject.v1" },
+        "subjectSourceBindingHash": { "$ref": "#/$defs/digest" },
+        "sourceRepository": { "$ref": "#/$defs/githubRepository" },
+        "application": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repositoryId", "pullRequestNumber", "approvalBindingHash"],
+          "properties": {
+            "repositoryId": { "$ref": "#/$defs/numericId" },
+            "pullRequestNumber": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "approvalBindingHash": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "sourceRevision": { "$ref": "#/$defs/gitRevision" },
+        "principalBindingHash": { "$ref": "#/$defs/digest" },
+        "subjectHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "routeAdapterRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "adapterId",
+        "releaseVersion",
+        "sourceRepository",
+        "sourceRevision",
+        "contractBindings",
+        "artifactManifestHash",
+        "releaseHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.route-adapter-release.v1" },
+        "adapterId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+        },
+        "releaseVersion": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "sourceRepository": { "$ref": "#/$defs/githubRepository" },
+        "sourceRevision": { "$ref": "#/$defs/gitRevision" },
+        "contractBindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subjectContractHash",
+            "executionContractHash",
+            "indexingContractHash",
+            "presentationContractHash"
+          ],
+          "properties": {
+            "subjectContractHash": { "$ref": "#/$defs/digest" },
+            "executionContractHash": { "$ref": "#/$defs/digest" },
+            "indexingContractHash": { "$ref": "#/$defs/digest" },
+            "presentationContractHash": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "artifactManifestHash": { "$ref": "#/$defs/digest" },
+        "releaseHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "candidateExecutionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "executionResultSourceBindingHash",
+        "attemptId",
+        "subjectHash",
+        "routeAdapterReleaseHash",
+        "status",
+        "network",
+        "transaction",
+        "finality",
+        "resultPayloadHash",
+        "resultHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.candidate-execution-result.v1" },
+        "executionResultSourceBindingHash": { "$ref": "#/$defs/digest" },
+        "attemptId": { "$ref": "#/$defs/digest" },
+        "subjectHash": { "$ref": "#/$defs/digest" },
+        "routeAdapterReleaseHash": { "$ref": "#/$defs/digest" },
+        "status": { "enum": ["succeeded", "failed"] },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["caip2"],
+          "properties": {
+            "caip2": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,7}:[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+            }
+          }
+        },
+        "transaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transactionHash", "blockHash", "blockNumber", "transactionIndex"],
+          "properties": {
+            "transactionHash": { "$ref": "#/$defs/hash32" },
+            "blockHash": { "$ref": "#/$defs/hash32" },
+            "blockNumber": { "type": "string", "pattern": "^(?:0|[1-9][0-9]{0,77})$" },
+            "transactionIndex": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+          }
+        },
+        "finality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requiredConfirmations",
+            "observedConfirmations",
+            "policyBindingHash",
+            "evidenceBindingHash",
+            "observedAt"
+          ],
+          "properties": {
+            "requiredConfirmations": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "observedConfirmations": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "policyBindingHash": { "$ref": "#/$defs/digest" },
+            "evidenceBindingHash": { "$ref": "#/$defs/digest" },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+            }
+          }
+        },
+        "resultPayloadHash": { "$ref": "#/$defs/digest" },
+        "resultHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "genericLaunchRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "subject",
+        "routeAdapterRelease",
+        "executionResult",
+        "readModelBindingHash",
+        "publicProjectionHash",
+        "recordHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.generic-launch-record.v1" },
+        "subject": { "$ref": "#/$defs/applicantLaunchSubject" },
+        "routeAdapterRelease": { "$ref": "#/$defs/routeAdapterRelease" },
+        "executionResult": { "$ref": "#/$defs/candidateExecutionResult" },
+        "readModelBindingHash": { "$ref": "#/$defs/digest" },
+        "publicProjectionHash": { "$ref": "#/$defs/digest" },
+        "recordHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "genericLaunchReadModelContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sourceLane",
+        "implementationBindingHash",
+        "persistenceBindingHash",
+        "queryContractBindingHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-read-model-contract.v1"
+        },
+        "sourceLane": { "const": "generic.finalized-launch" },
+        "implementationBindingHash": { "$ref": "#/$defs/digest" },
+        "persistenceBindingHash": { "$ref": "#/$defs/digest" },
+        "queryContractBindingHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "genericLaunchReadSignatureMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activationBindingHash",
+        "readModelBindingHash",
+        "requestBindingHash",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-read-signature-message.v1"
+        },
+        "activationBindingHash": { "$ref": "#/$defs/digest" },
+        "readModelBindingHash": { "$ref": "#/$defs/digest" },
+        "requestBindingHash": { "$ref": "#/$defs/digest" },
+        "payload": {}
+      }
+    },
+    "signedGenericLaunchReadEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activationBindingHash",
+        "readModelBindingHash",
+        "requestBindingHash",
+        "payload",
+        "signatureBase64Url"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.signed-generic-launch-read-envelope.v1"
+        },
+        "activationBindingHash": { "$ref": "#/$defs/digest" },
+        "readModelBindingHash": { "$ref": "#/$defs/digest" },
+        "requestBindingHash": { "$ref": "#/$defs/digest" },
+        "payload": {},
+        "signatureBase64Url": {
+          "type": "string",
+          "minLength": 86,
+          "maxLength": 86,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      }
+    },
+    "genericLaunchFoundationDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activation",
+        "activationBindingHash",
+        "activatedAt",
+        "subjectSourceBindingHash",
+        "executionResultSourceBindingHash",
+        "readModelBindingHash",
+        "readModelVerifier",
+        "readModelVerifierBindingHash",
+        "routeAdapterReleases",
+        "api"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-foundation-descriptor.v1"
+        },
+        "activation": { "type": "boolean" },
+        "activationBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "activatedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+            },
+            { "type": "null" }
+          ]
+        },
+        "subjectSourceBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "executionResultSourceBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "readModelBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "readModelVerifierBindingHash": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        },
+        "readModelVerifier": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "algorithm",
+                "publicKeySpkiBase64Url",
+                "publicKeySha256"
+              ],
+              "properties": {
+                "algorithm": { "const": "ed25519" },
+                "publicKeySpkiBase64Url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[A-Za-z0-9_-]+$"
+                },
+                "publicKeySha256": { "$ref": "#/$defs/digest" }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "routeAdapterReleases": {
+          "oneOf": [
+            {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 256,
+              "propertyNames": {
+                "maxLength": 193,
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?@(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+              },
+              "additionalProperties": { "$ref": "#/$defs/routeAdapterRelease" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "api": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["feedPath", "detailPathTemplate"],
+          "properties": {
+            "feedPath": { "const": "/api/custom-launch/generic/v1/launches" },
+            "detailPathTemplate": {
+              "const": "/api/custom-launch/generic/v1/launches/{recordHash}"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "activation": { "const": false } } },
+          "then": {
+            "properties": {
+              "activationBindingHash": { "type": "null" },
+              "activatedAt": { "type": "null" },
+              "subjectSourceBindingHash": { "type": "null" },
+              "executionResultSourceBindingHash": { "type": "null" },
+              "readModelBindingHash": { "type": "null" },
+              "readModelVerifier": { "type": "null" },
+              "readModelVerifierBindingHash": { "type": "null" },
+              "routeAdapterReleases": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "activationBindingHash": { "$ref": "#/$defs/digest" },
+              "activatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+              },
+              "subjectSourceBindingHash": { "$ref": "#/$defs/digest" },
+              "executionResultSourceBindingHash": { "$ref": "#/$defs/digest" },
+              "readModelBindingHash": { "$ref": "#/$defs/digest" },
+              "readModelVerifier": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "algorithm",
+                  "publicKeySpkiBase64Url",
+                  "publicKeySha256"
+                ],
+                "properties": {
+                  "algorithm": { "const": "ed25519" },
+                  "publicKeySpkiBase64Url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "publicKeySha256": { "$ref": "#/$defs/digest" }
+                }
+              },
+              "readModelVerifierBindingHash": { "$ref": "#/$defs/digest" },
+              "routeAdapterReleases": {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 256,
+                "propertyNames": {
+                  "maxLength": 193,
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?@(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+                },
+                "additionalProperties": { "$ref": "#/$defs/routeAdapterRelease" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

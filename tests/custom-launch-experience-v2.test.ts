@@ -21,6 +21,7 @@ import {
   customLaunchErrorMessage,
   customLaunchFeeReviewV1,
   customLaunchFixedTokenIdentityCopyV1,
+  customLaunchRailInvalidationForRecoveryV1,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
@@ -30,6 +31,8 @@ import {
   presentationFormFromResponse,
   requirePersistLaunchRecoveryV2,
   reportPersistedLaunchTransactionV2,
+  resolveCustomLaunchStageV1,
+  resolveCustomLaunchVerifiedStagesV1,
   shouldClearLaunchRecoveryV2,
   validateLaunchConfigurationV2,
   verifyAuthorizedLaunchPermitSignatureV2,
@@ -570,6 +573,112 @@ function replacePermitArtifact(
     ),
   };
 }
+
+describe("custom launch interface state line", () => {
+  it("advances only when the exact preceding evidence is complete", () => {
+    expect(resolveCustomLaunchStageV1({
+      screen: "intro",
+      applicationCount: 0,
+      launchProgress: "idle",
+    })).toBe("github");
+    expect(resolveCustomLaunchStageV1({
+      screen: "applications",
+      applicationCount: 0,
+      launchProgress: "idle",
+    })).toBe("repositories");
+    expect(resolveCustomLaunchStageV1({
+      screen: "applications",
+      applicationCount: 2,
+      launchProgress: "idle",
+    })).toBe("approval");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "preparing",
+      exactRevisionVerified: true,
+    })).toBe("prepare");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "wallet-transaction",
+      exactRevisionVerified: true,
+      launchPrepared: true,
+    })).toBe("wallet");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "confirmation",
+      exactRevisionVerified: true,
+      launchPrepared: true,
+      walletSubmissionVerified: true,
+    })).toBe("registry");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "complete",
+      exactRevisionVerified: true,
+      launchPrepared: true,
+      walletSubmissionVerified: true,
+    })).toBe("registry");
+  });
+
+  it("never promotes loading, reconciliation, or unknown submission into verified progress", () => {
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "idle",
+    })).toBe("approval");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "reconciling",
+      exactRevisionVerified: true,
+    })).toBe("prepare");
+    expect(resolveCustomLaunchStageV1({
+      screen: "setup",
+      applicationCount: 1,
+      launchProgress: "ambiguous",
+      exactRevisionVerified: true,
+      launchPrepared: true,
+    })).toBe("wallet");
+    expect(resolveCustomLaunchVerifiedStagesV1({
+      githubPrincipalVerified: true,
+      repositoriesLoaded: true,
+      verifiedThrough: "approval",
+    })).toEqual(["github", "repositories", "approval"]);
+    expect(resolveCustomLaunchVerifiedStagesV1({
+      githubPrincipalVerified: true,
+      repositoriesLoaded: true,
+      verifiedThrough: "prepare",
+    })).not.toContain("wallet");
+  });
+
+  it("refuses later verified stages when principal or repository evidence is missing", () => {
+    expect(resolveCustomLaunchVerifiedStagesV1({
+      githubPrincipalVerified: false,
+      repositoriesLoaded: true,
+      verifiedThrough: "registry",
+    })).toEqual([]);
+    expect(resolveCustomLaunchVerifiedStagesV1({
+      githubPrincipalVerified: true,
+      repositoriesLoaded: false,
+      verifiedThrough: "registry",
+    })).toEqual(["github"]);
+  });
+
+  it("invalidates stale rail evidence when the live session boundary is lost", () => {
+    expect(customLaunchRailInvalidationForRecoveryV1("reconnect-github")).toEqual({
+      clearGithubPrincipal: true,
+      clearRepositoriesLoaded: true,
+      verifiedThrough: null,
+    });
+    expect(customLaunchRailInvalidationForRecoveryV1("connect-wallet")).toEqual({
+      clearGithubPrincipal: false,
+      clearRepositoriesLoaded: false,
+      verifiedThrough: null,
+    });
+  });
+});
 
 describe("custom launch browser authority", () => {
   it("matches the server canonical hash exactly", () => {
