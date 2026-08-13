@@ -183,6 +183,7 @@ async function readFeeDisclosure(
 function createOnchainClient(
   config: OnchainDeployment,
   rpcUrl = config.rpcUrl,
+  signal?: AbortSignal,
 ): PublicClient {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
@@ -193,6 +194,7 @@ function createOnchainClient(
       http: {
         retryCount: 1,
         timeout: 10_000,
+        ...(signal ? { fetchOptions: { signal } } : {}),
       },
       ...(config.status === "ready"
         ? {
@@ -342,6 +344,7 @@ export async function indexVerifiedEvents(
   client: PublicClient,
   config: ReadyOnchainDeployment,
   toBlock: bigint,
+  signal?: AbortSignal,
 ): Promise<IndexedEvents> {
   const launches: LaunchEventRecord[] = [];
   const liquidities: LiquidityEventRecord[] = [];
@@ -356,6 +359,7 @@ export async function indexVerifiedEvents(
   let logBlockRange = configuredLogBlockRange;
   let transientRetries = 0;
   while (fromBlock <= toBlock) {
+    signal?.throwIfAborted();
     const rangeEnd = minimum(
       toBlock,
       fromBlock + logBlockRange - 1n,
@@ -380,7 +384,9 @@ export async function indexVerifiedEvents(
     let logs: Awaited<ReturnType<typeof readLogs>>;
     try {
       logs = await readLogs();
+      signal?.throwIfAborted();
     } catch (error) {
+      signal?.throwIfAborted();
       const transient = isTransientLogReadError(error);
       const transientRetryLimit =
         logBlockRange === MINIMUM_LOG_BLOCK_RANGE
@@ -519,6 +525,8 @@ export async function indexVerifiedEvents(
       );
     }
   }
+
+  signal?.throwIfAborted();
 
   return {
     launches,
@@ -1007,6 +1015,9 @@ export type ClassicEventCacheProvider = "primary" | "secondary";
 export async function prewarmClassicEventCache(
   config: OnchainDeployment,
   provider: ClassicEventCacheProvider,
+  step: number,
+  stepCount: number,
+  signal?: AbortSignal,
 ) {
   if (config.status !== "ready") {
     throw new Error("Classic event cache prewarm requires a ready deployment");
@@ -1018,10 +1029,20 @@ export async function prewarmClassicEventCache(
   if (providerEndpoints.length !== 2) {
     throw new Error("Classic event cache prewarm requires two independent RPCs");
   }
+  if (
+    !Number.isSafeInteger(step) ||
+    !Number.isSafeInteger(stepCount) ||
+    step < 1 ||
+    stepCount < 1 ||
+    step > stepCount
+  ) {
+    throw new Error("Classic event cache prewarm step is invalid");
+  }
+  signal?.throwIfAborted();
   const clients = providerEndpoints.map((endpoint, index) =>
     index === 0
-      ? createOnchainClient(config)
-      : createOnchainClient(config, endpoint)
+      ? createOnchainClient(config, config.rpcUrl, signal)
+      : createOnchainClient(config, endpoint, signal)
   );
   const chainStates = await withReadStage("classic-prewarm-chain-heads", () =>
     mapInBatches(
@@ -1036,13 +1057,25 @@ export async function prewarmClassicEventCache(
   if (chainStates.some((state) => state.chainId !== config.chainId)) {
     throw new Error("RPC chain does not match the deployment manifest");
   }
+  signal?.throwIfAborted();
   const head = chainStates.reduce(
     (lowest, state) => minimum(lowest, state.head),
     chainStates[0].head,
   );
-  const toBlock = head > config.confirmations
+  const confirmedBlock = head > config.confirmations
     ? head - config.confirmations
     : 0n;
+  const coverage = confirmedBlock >= config.deploymentBlock
+    ? confirmedBlock - config.deploymentBlock + 1n
+    : 0n;
+  const prefixLength = coverage === 0n
+    ? 0n
+    : (
+      coverage * BigInt(step) + BigInt(stepCount) - 1n
+    ) / BigInt(stepCount);
+  const toBlock = prefixLength === 0n
+    ? confirmedBlock
+    : config.deploymentBlock + prefixLength - 1n;
   const snapshotBlocks = await withReadStage(
     "classic-prewarm-snapshot-blocks",
     () =>
@@ -1053,6 +1086,7 @@ export async function prewarmClassicEventCache(
       ),
   );
   const snapshotBlock = snapshotBlocks[0];
+  signal?.throwIfAborted();
   if (
     !snapshotBlock.hash ||
     snapshotBlocks.some(
@@ -1069,7 +1103,12 @@ export async function prewarmClassicEventCache(
     const providerIndex = provider === "primary" ? 0 : 1;
     await withReadStage(`classic-prewarm-${provider}`, () =>
       withPersistentRpcIntegrityScope(
-        () => indexVerifiedEvents(clients[providerIndex], config, toBlock),
+        () => indexVerifiedEvents(
+          clients[providerIndex],
+          config,
+          toBlock,
+          signal,
+        ),
         {
           checkpointGroup: [
             "classic-events",
@@ -1080,13 +1119,19 @@ export async function prewarmClassicEventCache(
             persistentRpcProviderId(providerEndpoints[providerIndex]),
           ].join(":"),
           expectedCursorBindings: 2,
+          signal,
         },
       )
     );
   }
+  signal?.throwIfAborted();
   return {
     provider,
+    step,
+    stepCount,
+    coverageStartBlock: config.deploymentBlock.toString(),
     blockNumber: toBlock.toString(),
+    confirmedBlockNumber: confirmedBlock.toString(),
     blockHash: snapshotBlock.hash,
   };
 }

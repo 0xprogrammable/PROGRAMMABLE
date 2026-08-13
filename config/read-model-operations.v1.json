@@ -5,11 +5,11 @@
     "schedule": "*/5 * * * *",
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
-    "sha256": "c3096ba966fe940e695c6b347dbbedcb7f568352de429a7abd18bf506c7fd26d",
+    "sha256": "ff3968534ca2360d6a6ab7d22605c3b1eeb3d014f7d65eb40f00fcc3b3792bfa",
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "41cc8023775c09a3ca48825f1e19c2f6342f6c4b04855803b15ca3d77be6fa69"
+        "sha256": "a31450f6444e4d495ab2adb964bc713c2191723a5f62cc94d151c71e8627c6e4"
       },
       "dependencies": [
         {
@@ -22,7 +22,7 @@
         },
         {
           "path": "lib/onchain/persistent-rpc-cache.server.ts",
-          "sha256": "11cdf402ccb7985a215064dc445ca638bf597eb0c4949a000a0ce509642ae459"
+          "sha256": "5faaaeafffb837668c5759ff85f879721c6ac4fd41e0a49bf3ee6b615fbb3af4"
         }
       ],
       "releaseRuntimes": [
@@ -41,7 +41,10 @@
       ],
       "eventFiltersPerRange": 2,
       "providerPasses": 2,
-      "requestDeadlineMs": 270000
+      "requestDeadlineMs": 270000,
+      "classicPrewarmStepCount": 32,
+      "prewarmProviderConcurrency": 2,
+      "prewarmRequestDeadlineMs": 250000
     },
     "schedulerWatchdog": {
       "provider": "github-actions",

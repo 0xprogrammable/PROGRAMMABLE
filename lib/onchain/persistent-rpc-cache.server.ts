@@ -950,6 +950,7 @@ export async function withPersistentRpcIntegrityScope<T>(
     requiredInitialFromBlock?: bigint;
     requireContiguousCheckpointWindow?: boolean;
     allowCheckpointWindowExtension?: boolean;
+    signal?: AbortSignal;
   }> = {},
 ) {
   if (integrityScopes.getStore()) return operation();
@@ -1000,7 +1001,9 @@ export async function withPersistentRpcIntegrityScope<T>(
   nextIntegrityScopeId += 1;
   return integrityScopes.run(scope, async () => {
     try {
+      input.signal?.throwIfAborted();
       const result = await operation();
+      input.signal?.throwIfAborted();
       scope.phase = "finalizing";
       const finalBindings = [...scope.bindings.entries()];
       const commitProofKeys = new Set<string>();
@@ -1022,11 +1025,13 @@ export async function withPersistentRpcIntegrityScope<T>(
       }
       for (const [key, binding] of finalBindings) {
         if (commitProofKeys.has(key)) continue;
+        input.signal?.throwIfAborted();
         await assertCanonicalBlockProofs(
           binding.input,
           [binding.proof],
           binding.options,
         );
+        input.signal?.throwIfAborted();
       }
       const persistence = scope.persistenceBindings[0];
       if (!persistence) return result;
@@ -1109,7 +1114,9 @@ export async function withPersistentRpcIntegrityScope<T>(
           const requestInput = scope.persistenceBindings.find(
             (candidate) => candidate.input.providerId === binding.providerId,
           )?.input;
+          input.signal?.throwIfAborted();
           const cursorRecord = await persistence.store.read(binding.cursorPath);
+          input.signal?.throwIfAborted();
           if (!requestInput || !cursorRecord) {
             fail("Persistent RPC checkpoint cursor is missing");
           }
@@ -1163,9 +1170,12 @@ export async function withPersistentRpcIntegrityScope<T>(
           PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
           "integrity commit",
         );
+        input.signal?.throwIfAborted();
         const created = await persistence.store.create(path, marker);
+        input.signal?.throwIfAborted();
         if (created !== "created") {
           const record = await persistence.store.read(path);
+          input.signal?.throwIfAborted();
           const existing = record
             ? parseIntegrityMarker(
                 record.value,
@@ -1210,6 +1220,7 @@ export async function withPersistentRpcIntegrityScope<T>(
           PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
           "integrity checkpoint",
         );
+        input.signal?.throwIfAborted();
         const published = checkpoint.etag === null
           ? await checkpoint.store.create(checkpoint.path, nextCheckpoint)
           : await checkpoint.store.replace(
@@ -1217,6 +1228,7 @@ export async function withPersistentRpcIntegrityScope<T>(
               nextCheckpoint,
               checkpoint.etag,
             );
+        input.signal?.throwIfAborted();
         if (
           (checkpoint.etag === null && published !== "created") ||
           (checkpoint.etag !== null && published !== "replaced")
@@ -1225,12 +1237,15 @@ export async function withPersistentRpcIntegrityScope<T>(
         }
         for (const [key, binding] of finalBindings) {
           if (!commitProofKeys.has(key)) continue;
+          input.signal?.throwIfAborted();
           await assertCanonicalBlockProofs(
             binding.input,
             [binding.proof],
             binding.options,
           );
+          input.signal?.throwIfAborted();
         }
+        input.signal?.throwIfAborted();
         await transitionIntegrityMarker(
           persistence.input.chainId,
           scope.checkpointGroupId,
@@ -1241,6 +1256,7 @@ export async function withPersistentRpcIntegrityScope<T>(
           scope.checkpointWindow ?? null,
           cursorBindings,
         );
+        input.signal?.throwIfAborted();
       } catch (error) {
         await transitionIntegrityMarker(
           persistence.input.chainId,

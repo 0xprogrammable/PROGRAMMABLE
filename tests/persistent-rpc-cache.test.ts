@@ -291,6 +291,83 @@ describe("persistent RPC log cursor", () => {
     });
   });
 
+  it("does not publish an integrity checkpoint after its scope is aborted", async () => {
+    const inspected = inspectableMemoryStore();
+    const cached = cachedRequest(
+      mockRpc(),
+      inspected.store,
+      "provider-aborted-prewarm",
+    );
+    const controller = new AbortController();
+    const reason = new Error("prewarm deadline");
+
+    await expect(
+      withPersistentRpcIntegrityScope(
+        async () => {
+          await Promise.all([
+            logRequest(cached.request, 0, 9, bytes32(101)),
+            logRequest(cached.request, 0, 9, bytes32(102)),
+          ]);
+          controller.abort(reason);
+        },
+        {
+          checkpointGroup: "aborted-prewarm",
+          expectedCursorBindings: 2,
+          signal: controller.signal,
+        },
+      ),
+    ).rejects.toBe(reason);
+
+    expect(
+      [...inspected.values.keys()].filter((path) =>
+        path.includes("/checkpoints/")
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps a prewarm milestone below the committed prefix read-only", async () => {
+    const inspected = inspectableMemoryStore();
+    const rpc = mockRpc();
+    const cached = cachedRequest(
+      rpc,
+      inspected.store,
+      "provider-covered-prewarm",
+    );
+    const readPrefix = (toBlock: number) =>
+      withPersistentRpcIntegrityScope(
+        () => Promise.all([
+          logRequest(cached.request, 0, toBlock, bytes32(301)),
+          logRequest(cached.request, 0, toBlock, bytes32(302)),
+        ]),
+        {
+          checkpointGroup: "covered-prewarm-prefix",
+          expectedCursorBindings: 2,
+        },
+      );
+
+    await readPrefix(19);
+    const checkpointPath = [...inspected.values.keys()].find((path) =>
+      path.includes("/checkpoints/")
+    );
+    const checkpointBefore = inspected.values.get(checkpointPath as string);
+    const markerCountBefore = [...inspected.values.keys()].filter((path) =>
+      path.includes("/integrity/")
+    ).length;
+    const logReadsBefore = rpc.counts.logs;
+
+    await readPrefix(9);
+
+    expect(rpc.counts.logs).toBe(logReadsBefore);
+    expect(inspected.values.get(checkpointPath as string)).toEqual(
+      checkpointBefore,
+    );
+    expect(
+      [...inspected.values.keys()].filter((path) =>
+        path.includes("/integrity/")
+      ),
+    ).toHaveLength(markerCountBefore);
+  });
+
   it("retries transient truncated private Blob reads within a strict budget", async () => {
     const blob = weakEtagBlobClient();
     const store = createVercelBlobPersistentRpcCacheStore(

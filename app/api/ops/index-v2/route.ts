@@ -16,6 +16,10 @@ export const maxDuration = 300;
 export const runtime = "nodejs";
 
 const INDEX_REFRESH_DEADLINE_MS = 270_000;
+const INDEX_PREWARM_DEADLINE_MS = 250_000;
+const CLASSIC_PREWARM_STEP_COUNT = 32;
+const CLASSIC_PREWARM_PHASE =
+  /^classic-(primary|secondary)-(0[1-9]|[12][0-9]|3[0-2])$/u;
 
 class IndexRefreshDeadlineError extends Error {
   override name = "IndexRefreshDeadlineError";
@@ -37,6 +41,30 @@ async function withIndexRefreshDeadline<Output>(
     ]);
   } finally {
     if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+async function withIndexPrewarmDeadline<Output>(
+  read: (signal: AbortSignal) => Promise<Output>,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new IndexRefreshDeadlineError()),
+    INDEX_PREWARM_DEADLINE_MS,
+  );
+  try {
+    const output = await read(controller.signal);
+    controller.signal.throwIfAborted();
+    return output;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw controller.signal.reason instanceof IndexRefreshDeadlineError
+        ? controller.signal.reason
+        : new IndexRefreshDeadlineError();
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -102,11 +130,15 @@ export async function GET(request: NextRequest) {
   try {
     const phaseValues = request.nextUrl.searchParams.getAll("phase");
     const queryKeys = [...request.nextUrl.searchParams.keys()];
-    const phase = phaseValues[0] ?? "refresh";
+    const phase = phaseValues[0];
+    const prewarmMatch = phase === undefined
+      ? null
+      : CLASSIC_PREWARM_PHASE.exec(phase);
     if (
       queryKeys.some((key) => key !== "phase") ||
       phaseValues.length > 1 ||
-      !["refresh", "classic-primary", "classic-secondary"].includes(phase)
+      (phase !== undefined && prewarmMatch === null) ||
+      (phase === undefined && queryKeys.length !== 0)
     ) {
       return NextResponse.json(
         { error: "Invalid index refresh phase" },
@@ -120,11 +152,16 @@ export async function GET(request: NextRequest) {
       );
     }
     const durableRefreshDeployment = historicalReadOnchainDeployment(deployment);
-    if (phase === "classic-primary" || phase === "classic-secondary") {
-      const result = await withIndexRefreshDeadline(() =>
+    if (phase !== undefined && prewarmMatch !== null) {
+      const provider = prewarmMatch[1] as "primary" | "secondary";
+      const step = Number(prewarmMatch[2]);
+      const result = await withIndexPrewarmDeadline((signal) =>
         prewarmClassicEventCache(
           durableRefreshDeployment,
-          phase === "classic-primary" ? "primary" : "secondary",
+          provider,
+          step,
+          CLASSIC_PREWARM_STEP_COUNT,
+          signal,
         )
       );
       console.info("Programmable classic event cache prewarm completed", {

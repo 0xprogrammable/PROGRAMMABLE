@@ -10,11 +10,11 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "c3096ba966fe940e695c6b347dbbedcb7f568352de429a7abd18bf506c7fd26d",
+    sha256: "ff3968534ca2360d6a6ab7d22605c3b1eeb3d014f7d65eb40f00fcc3b3792bfa",
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "41cc8023775c09a3ca48825f1e19c2f6342f6c4b04855803b15ca3d77be6fa69",
+        sha256: "a31450f6444e4d495ab2adb964bc713c2191723a5f62cc94d151c71e8627c6e4",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -27,7 +27,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/onchain/persistent-rpc-cache.server.ts",
-          sha256: "11cdf402ccb7985a215064dc445ca638bf597eb0c4949a000a0ce509642ae459",
+          sha256: "5faaaeafffb837668c5759ff85f879721c6ac4fd41e0a49bf3ee6b615fbb3af4",
         }),
       ]),
       releaseRuntimes: Object.freeze([
@@ -47,6 +47,9 @@ const APPROVED_OPERATIONS = Object.freeze({
       eventFiltersPerRange: 2,
       providerPasses: 2,
       requestDeadlineMs: 270_000,
+      classicPrewarmStepCount: 32,
+      prewarmProviderConcurrency: 2,
+      prewarmRequestDeadlineMs: 250_000,
     }),
     schedulerWatchdog: Object.freeze({
       provider: "github-actions",
@@ -835,7 +838,18 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "Authorization: `Bearer ${input.cronSecret}`",
   '"x-vercel-protection-bypass": input.automationBypassSecret',
   'redirect: "error"',
-  'const PREWARM_PHASES = ["classic-primary", "classic-secondary"]',
+  "const PREWARM_STEP_COUNT = 32;",
+  "const PREWARM_STEPS = Object.freeze([",
+  '"01", "02", "03", "04", "05", "06", "07", "08"',
+  '"25", "26", "27", "28", "29", "30", "31", "32"',
+  "const PREWARM_PHASES = Object.freeze(PREWARM_STEPS.flatMap((step) => [",
+  "`classic-primary-${step}`",
+  "`classic-secondary-${step}`",
+  "const results = await Promise.allSettled(phasePair.map(async (phase) => {",
+  'if (result.status !== "fulfilled") {',
+  "value.body.stepCount === PREWARM_STEP_COUNT",
+  "blockNumber === expectedBlock",
+  "blockNumber === confirmedBlock",
   'prewarmUrl.searchParams.set("phase", phase)',
   "if (!exactPrewarmResponse(prewarm, phase)) {",
   "if (!exactRefreshResponse(refresh)) {",
@@ -850,7 +864,7 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   '"stage_refresh_proof"',
 ]);
 const STAGED_DURABLE_REFRESH_SCRIPT_SHA256 =
-  "2f0f7d575b5d8bd34ae8a5fc3cec3ad775d097171ae903c9aa6c4f3ce2cb5385";
+  "da794e41cc86d8d36ff8d945cba279fa0282477aaaecad0259efab9411023701";
 const STAGED_DURABLE_REFRESH_WORKFLOW_STEP = [
   "      - name: Refresh and prove exact staged durable read model",
   "        if: needs.release-gate.outputs.verified_read_model == 'true'",
@@ -1606,6 +1620,8 @@ export function evaluateReadModelOperationsSourceContracts(
       persistentCacheSource?.includes("requiredInitialFromBlock") &&
       persistentCacheSource?.includes("requireContiguousCheckpointWindow") &&
       persistentCacheSource?.includes("allowCheckpointWindowExtension") &&
+      persistentCacheSource?.includes("signal?: AbortSignal") &&
+      persistentCacheSource?.includes("input.signal?.throwIfAborted()") &&
       persistentCacheSource?.includes(
         "bindPersistentRpcIntegrityCheckpointWindow",
       ) &&
@@ -1634,9 +1650,23 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       boundedRefresh?.eventFiltersPerRange === 2 &&
       boundedRefresh?.providerPasses === 2 &&
+      boundedRefresh?.classicPrewarmStepCount === 32 &&
+      boundedRefresh?.prewarmProviderConcurrency === 2 &&
+      boundedRefresh?.prewarmRequestDeadlineMs === 250_000 &&
       legacyRouteSource?.includes(
         "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
       ) &&
+      legacyRouteSource?.includes(
+        "const INDEX_PREWARM_DEADLINE_MS = 250_000;",
+      ) &&
+      legacyRouteSource?.includes("const CLASSIC_PREWARM_STEP_COUNT = 32;") &&
+      legacyRouteSource?.includes("withIndexPrewarmDeadline((signal) =>") &&
+      legacyRouteSource?.includes(
+        "controller.abort(new IndexRefreshDeadlineError())",
+      ) &&
+      legacyRouteSource?.includes("const output = await read(controller.signal)") &&
+      legacyRouteSource?.indexOf("if (!isAuthorized(request))") <
+        legacyRouteSource?.indexOf("const phaseValues =") &&
       legacyRouteSource?.includes("withIndexRefreshDeadline(() =>") &&
       !legacyRouteSource?.includes("INDEX_READ_ATTEMPTS") &&
       hasAdaptiveCompleteRangeScan(refreshRuntimeSource) &&
@@ -1652,6 +1682,9 @@ export function evaluateReadModelOperationsSourceContracts(
       refreshRuntimeSource?.includes(
         "persistentRpcProviderId(providerEndpoints[providerIndex])",
       ) &&
+      refreshRuntimeSource?.includes("fetchOptions: { signal }") &&
+      refreshRuntimeSource?.includes("coverage * BigInt(step)") &&
+      refreshRuntimeSource?.includes("stepCount: number") &&
       refreshRuntimeSource?.includes("expectedCursorBindings: 2") &&
       hasAdaptiveCompleteRangeScan(classicV3RefreshSource) &&
       classicV3RefreshSource?.includes(
