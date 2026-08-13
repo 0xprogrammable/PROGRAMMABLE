@@ -8,6 +8,7 @@ import {
   assertPreflightEnvelope,
   computeConstructorCommitment,
   computeReviewedPlanDigest,
+  reviewedAuthorizationMessage,
   verifyReviewedAuthorizationSignature,
 } from "./custom-registry-v2-deployment-guards.mjs";
 
@@ -18,15 +19,16 @@ const argument = (name) => {
   return path.resolve(process.argv[index + 1]);
 };
 const preflightPath = argument("--preflight");
-const outputPath = argument("--output");
-if (!preflightPath.startsWith("/tmp/") || !outputPath.startsWith("/tmp/")) {
+const printMessage = process.argv.includes("--print-message");
+const outputPath = printMessage ? null : argument("--output");
+if (!preflightPath.startsWith("/tmp/") || (outputPath !== null && !outputPath.startsWith("/tmp/"))) {
   throw new Error("authorization inputs and output must be under /tmp");
 }
 const ownerAuthorizationAddress = process.env.REGISTRY_RELEASE_OWNER;
 const ownerAuthorizationSignature = process.env.REGISTRY_OWNER_AUTHORIZATION_SIGNATURE;
 const expiresAtTimestamp = Number(process.env.REGISTRY_AUTHORIZATION_EXPIRES_AT);
 if (!/^0x[0-9a-fA-F]{40}$/.test(ownerAuthorizationAddress ?? "")) throw new Error("REGISTRY_RELEASE_OWNER is required");
-if (!/^0x[0-9a-fA-F]{130}$/.test(ownerAuthorizationSignature ?? "")) {
+if (!printMessage && !/^0x[0-9a-fA-F]{130}$/.test(ownerAuthorizationSignature ?? "")) {
   throw new Error("REGISTRY_OWNER_AUTHORIZATION_SIGNATURE is required");
 }
 const preflightBytes = await readFile(preflightPath);
@@ -64,6 +66,13 @@ authorization.reviewedPlanDigest = computeReviewedPlanDigest({
   sourceCommit: commit,
   sourceTree: tree,
 });
+if (printMessage) {
+  process.stdout.write(`${JSON.stringify({
+    reviewedPlanDigest: authorization.reviewedPlanDigest,
+    message: reviewedAuthorizationMessage(authorization.reviewedPlanDigest),
+  })}\n`);
+  process.exit(0);
+}
 await verifyReviewedAuthorizationSignature(authorization);
 await writeFile(outputPath, `${JSON.stringify(authorization, null, 2)}\n`, { flag: "wx", mode: 0o600 });
 process.stdout.write(`CUSTOM_REGISTRY_V2_REVIEWED_AUTHORIZATION ${outputPath}\n`);
