@@ -37,6 +37,7 @@ import {
   sanitizeImageUrl,
 } from "./metadata";
 import {
+  PersistentRpcCacheError,
   persistentRpcHttp,
   persistentRpcProviderId,
   withPersistentRpcIntegrityScope,
@@ -330,6 +331,13 @@ function assertCanonicalClassicEventSource(
   }
 }
 
+function isPersistentCacheRangeLimitError(error: unknown) {
+  return (
+    error instanceof PersistentRpcCacheError &&
+    /^Persistent RPC cache log segment exceeds \d+ bytes$/u.test(error.message)
+  );
+}
+
 export async function indexVerifiedEvents(
   client: PublicClient,
   config: ReadyOnchainDeployment,
@@ -392,7 +400,8 @@ export async function indexVerifiedEvents(
       if (
         (transient ||
           error instanceof LimitExceededRpcError ||
-          error instanceof ResponseBodyTooLargeError) &&
+          error instanceof ResponseBodyTooLargeError ||
+          isPersistentCacheRangeLimitError(error)) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
       ) {

@@ -671,6 +671,12 @@ describe("read-model operations source contract", () => {
       "false ||",
     ],
     [
+      "Classic V2 durable segment range bisection",
+      "lib/onchain/read-model.ts",
+      "isPersistentCacheRangeLimitError(error)",
+      "false",
+    ],
+    [
       "Classic V3 complete-range settlement",
       "lib/onchain/classic-v3-read-model.ts",
       "allSettledOrThrow([",
@@ -719,6 +725,18 @@ describe("read-model operations source contract", () => {
       'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";',
     ],
     [
+      "bounded dense-stream cursor capacity",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "maxCursorSegments: 16,",
+      "maxCursorSegments: 8,",
+    ],
+    [
+      "bounded dense-stream replay budget",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "maxSegmentReadsPerOperation: 16,",
+      "maxSegmentReadsPerOperation: 8,",
+    ],
+    [
       "single group-head CAS",
       "lib/onchain/persistent-rpc-cache.server.ts",
       "const published = checkpoint.etag === null",
@@ -759,6 +777,12 @@ describe("read-model operations source contract", () => {
       "lib/onchain/stock-paired-read-model.ts",
       "error instanceof LimitExceededRpcError ||",
       "false ||",
+    ],
+    [
+      "Stock durable segment range bisection",
+      "lib/onchain/stock-paired-read-model.ts",
+      "isPersistentCacheRangeLimitError(error)",
+      "false",
     ],
   ])(
     "rejects a legacy refresh missing %s",

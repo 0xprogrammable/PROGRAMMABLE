@@ -14,7 +14,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "168e440ffbaa78f24c55cf4a484c8735443251071eb2794ccc3321d0b708f0cb",
+        sha256: "76e5c5a6bebb697e842572a730e38e3423d6448f661119a2b31a0760b64ace58",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -27,7 +27,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/onchain/persistent-rpc-cache.server.ts",
-          sha256: "4556161d79d49914f064a4df5ad2eb7f9777dfe1b3d188cf36a1e5b434b38f9b",
+          sha256: "11cdf402ccb7985a215064dc445ca638bf597eb0c4949a000a0ce509642ae459",
         }),
       ]),
       releaseRuntimes: Object.freeze([
@@ -40,7 +40,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "2074bff385c644f6bd9dfb2879e52e713457a3b04cedfe858dc297ad19baee74",
+          sha256: "0f1a0713aa02b617f1ae9df6463140640d1217cdbb38964b56fc9d2b59e1d054",
           eventFiltersPerRange: 3,
         }),
       ]),
@@ -1515,6 +1515,10 @@ export function evaluateReadModelOperationsSourceContracts(
     runtimeSource?.includes("error instanceof LimitExceededRpcError") &&
     runtimeSource?.includes("error instanceof HttpRequestError") &&
     runtimeSource?.includes("error instanceof ResponseBodyTooLargeError") &&
+    runtimeSource?.includes("isPersistentCacheRangeLimitError(error)") &&
+    runtimeSource?.includes(
+      "Persistent RPC cache log segment exceeds \\d+ bytes",
+    ) &&
     runtimeSource?.includes("logBlockRange > MINIMUM_LOG_BLOCK_RANGE") &&
     runtimeSource?.includes("logBlockRange * 2n") &&
     runtimeSource?.includes("continue;");
@@ -1577,6 +1581,8 @@ export function evaluateReadModelOperationsSourceContracts(
       persistentCacheSource?.includes(
         'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";',
       ) &&
+      persistentCacheSource?.includes("maxCursorSegments: 16,") &&
+      persistentCacheSource?.includes("maxSegmentReadsPerOperation: 16,") &&
       !persistentCacheSource?.includes(
         'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";',
       ) &&

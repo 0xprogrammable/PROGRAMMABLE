@@ -18,11 +18,11 @@ const ADDRESS = /^0x[0-9a-f]{40}$/iu;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export const PERSISTENT_RPC_CACHE_LIMITS = Object.freeze({
-  maxCursorSegments: 8,
+  maxCursorSegments: 16,
   maxSegmentBytes: 4 * 1024 * 1024,
   maxCursorBytes: 64 * 1024,
   maxRuntimeBytes: 256 * 1024,
-  maxSegmentReadsPerOperation: 8,
+  maxSegmentReadsPerOperation: 16,
 });
 
 type JsonRpcRequest = Parameters<EIP1193RequestFn>[0];
