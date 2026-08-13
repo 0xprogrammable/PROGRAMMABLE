@@ -308,7 +308,7 @@ describe("Explore verified event indexing", () => {
     );
   });
 
-  it("bisects and retries the same complete range after a transport timeout", async () => {
+  it("retries the same complete range after a transient transport timeout", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     let firstRequest = true;
     const getLogs = vi.fn(
@@ -337,7 +337,7 @@ describe("Explore verified event indexing", () => {
       ),
     ).resolves.toMatchObject({ launches: [], creatorClaims: [] });
 
-    expect(getLogs).toHaveBeenCalledTimes(6);
+    expect(getLogs).toHaveBeenCalledTimes(4);
     expect(
       getLogs.mock.calls.map(([input]) => [
         input.address,
@@ -347,20 +347,76 @@ describe("Explore verified event indexing", () => {
     ).toEqual([
       [readyDeployment.launcher, 1n, 1_000n],
       [readyDeployment.feeHook, 1n, 1_000n],
-      [readyDeployment.launcher, 1n, 500n],
-      [readyDeployment.feeHook, 1n, 500n],
-      [readyDeployment.launcher, 501n, 1_000n],
-      [readyDeployment.feeHook, 501n, 1_000n],
+      [readyDeployment.launcher, 1n, 1_000n],
+      [readyDeployment.feeHook, 1n, 1_000n],
     ]);
     expect(console.warn).toHaveBeenCalledWith(
-      "Explore log range reduced after RPC rejection",
+      "Explore log window retried after transient RPC rejection",
       expect.objectContaining({
         fromBlock: "1",
         attemptedToBlock: "1000",
-        nextRange: "500",
+        retry: 1,
         errorName: "TimeoutError",
       }),
     );
+  });
+
+  it("halves after the bounded retry and grows after a successful window", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let launcherFailures = 2;
+    const getLogs = vi.fn(async (input: {
+      address: string;
+      fromBlock: bigint;
+      toBlock: bigint;
+    }) => {
+      if (input.address === readyDeployment.launcher && launcherFailures > 0) {
+        launcherFailures -= 1;
+        throw new TimeoutError({
+          body: { method: "eth_getLogs" },
+          url: readyDeployment.rpcUrl,
+        });
+      }
+      return [];
+    });
+
+    await indexVerifiedEvents(
+      { getLogs } as unknown as PublicClient,
+      readyDeployment,
+      1_000n,
+    );
+
+    expect(
+      getLogs.mock.calls
+        .filter(([input]) => input.address === readyDeployment.launcher)
+        .map(([input]) => [input.fromBlock, input.toBlock]),
+    ).toEqual([
+      [1n, 1_000n],
+      [1n, 1_000n],
+      [1n, 500n],
+      [501n, 1_000n],
+    ]);
+  });
+
+  it("retries a one-block window twice before failing closed", async () => {
+    let launcherFailures = 2;
+    const getLogs = vi.fn(async (input: { address: string }) => {
+      if (input.address === readyDeployment.launcher && launcherFailures > 0) {
+        launcherFailures -= 1;
+        throw new TimeoutError({
+          body: { method: "eth_getLogs" },
+          url: readyDeployment.rpcUrl,
+        });
+      }
+      return [];
+    });
+    await expect(
+      indexVerifiedEvents(
+        { getLogs } as unknown as PublicClient,
+        { ...readyDeployment, logBlockRange: 1n },
+        1n,
+      ),
+    ).resolves.toMatchObject({ launches: [] });
+    expect(getLogs).toHaveBeenCalledTimes(6);
   });
 
   it("bisects and retries the complete range after an RPC result limit", async () => {
@@ -406,8 +462,8 @@ describe("Explore verified event indexing", () => {
     await expect(
       indexVerifiedEvents(
         { getLogs } as unknown as PublicClient,
-        { ...readyDeployment, logBlockRange: 100n },
-        100n,
+        { ...readyDeployment, logBlockRange: 1n },
+        1n,
       ),
     ).rejects.toBeInstanceOf(LimitExceededRpcError);
     expect(getLogs).toHaveBeenCalledTimes(2);

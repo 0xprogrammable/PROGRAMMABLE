@@ -1491,11 +1491,15 @@ export function evaluateReadModelOperationsSourceContracts(
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
   const hasAdaptiveCompleteRangeScan = (runtimeSource) =>
     runtimeSource?.includes("allSettledOrThrow([") &&
+    runtimeSource?.includes("const MINIMUM_LOG_BLOCK_RANGE = 1n;") &&
+    runtimeSource?.includes("const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;") &&
+    runtimeSource?.includes("transientRetries < transientRetryLimit") &&
     runtimeSource?.includes("error instanceof TimeoutError") &&
     runtimeSource?.includes("error instanceof LimitExceededRpcError") &&
     runtimeSource?.includes("error instanceof HttpRequestError") &&
     runtimeSource?.includes("error instanceof ResponseBodyTooLargeError") &&
     runtimeSource?.includes("logBlockRange > MINIMUM_LOG_BLOCK_RANGE") &&
+    runtimeSource?.includes("logBlockRange * 2n") &&
     runtimeSource?.includes("continue;");
   check(
     "ops-legacy-bounded-refresh",
