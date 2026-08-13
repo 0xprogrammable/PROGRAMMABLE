@@ -70,9 +70,11 @@ const projectNames = Object.freeze([
   ["random", "holder", "rewards"].join("[-_ ]?"),
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
+const applicantIdentityPatterns = Object.freeze([
+  new RegExp(`\\b${["a", "eon"].join("")}\\b`, "iu"),
+  new RegExp(`\\b${["based", "bid"].join("")}\\b`, "iu"),
+]);
 const applicantCardMarkers = Object.freeze([
-  ["a", "eon"].join(""),
-  ["based", "bid"].join(""),
   ["13253", "24453"].join(""),
   ["custom-registry-v1", "primary-contract"].join("-"),
   ["included-in", "partner-total"].join("-"),
@@ -84,6 +86,7 @@ const applicantCardMarkers = Object.freeze([
 ]);
 const forbiddenContent = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...applicantIdentityPatterns,
   ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   new RegExp(["submit-launch", "pull", "13"].join("[/# ]+"), "iu"),
   /manual[-_ ]?router/iu,
@@ -92,6 +95,7 @@ const forbiddenContent = Object.freeze([
 ]);
 const forbiddenPath = Object.freeze([
   ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...applicantIdentityPatterns,
   ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   /manual[-_]?router/iu,
   /manual[-_]?applicant/iu,
