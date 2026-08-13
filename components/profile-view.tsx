@@ -3766,8 +3766,13 @@ function ProfileAccountWorkspace({
     deepV3Profile.status,
     stockPairedRewards.status,
   ] as const;
+  const nativeRewardSourceStatuses = [
+    data.status,
+    classicV3Rewards.status,
+    deepRewards.status,
+  ] as const;
   const rewardDataQuality = getProfileRewardDataQuality(
-    sourceStatuses,
+    nativeRewardSourceStatuses,
     classicV3SourceState.quality,
     data.sourceQuality ?? "current",
   );
