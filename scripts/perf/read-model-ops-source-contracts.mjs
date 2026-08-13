@@ -495,13 +495,35 @@ export const POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS = Object.freeze([
 ]);
 
 export const POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS = Object.freeze([
+  "exactExploreValuationSnapshot(",
+  'value.schemaVersion !== "programmable.explore-valuation-snapshot.v1"',
+  "Object.keys(value).length !== 11",
+  "value.chainId !== 1",
+  "!positiveInteger(value.blockNumber)",
+  "!exactBytes32(value.blockHash)",
+  "value.blockHash !== value.blockHash.toLowerCase()",
+  'value?.liquidityBlockNumber === "none"',
+  'value?.liquidityBlockHash === "none"',
+  "positiveInteger(value?.liquidityBlockNumber)",
+  "exactBytes32(value?.liquidityBlockHash)",
+  "value.liquidityBlockHash === value.liquidityBlockHash.toLowerCase()",
+  "(!noLiquiditySnapshot &&",
+  "!concreteLiquiditySnapshot ||",
+  "BigInt(value.liquidityBlockNumber) > BigInt(value.blockNumber)",
+  "!/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment)",
+  'value.sort !== "market-cap"',
+  'value.query !== ""',
+  "value.socials !== null",
+  "value.pageSize !== EXPLORE_PAGE_SIZE",
+  "!sameValuationSnapshot(valuationSnapshot, pageSnapshot)",
   "total > MAXIMUM_EXPLORE_TOKENS",
   "totalPages !== Math.ceil(total / EXPLORE_PAGE_SIZE)",
   "responses.length !== totalPages",
   'page?.status !== "ready"',
-  'page?.sort !== "market-cap"',
+  "page?.sort !== valuationSnapshot.sort",
+  "page?.query !== valuationSnapshot.query",
   "page?.page !== index + 1",
-  "page?.pageSize !== EXPLORE_PAGE_SIZE",
+  "page?.pageSize !== valuationSnapshot.pageSize",
   "page?.total !== total",
   "page?.totalPages !== totalPages",
   "pageTokens.length !== expectedLength",
@@ -515,6 +537,15 @@ export const POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS = Object.freeze([
   "!exactCurrentPublicMarketHeaders(response)",
   "!currentMarketEvidenceTime(quality.asOfTime)",
   "token.valuation.asOfBlock !== quality.asOfBlock",
+  "token.valuation.asOfBlock !== valuationSnapshot.blockNumber",
+  "token.valuation.asOfBlockHash,",
+  "valuationSnapshot.blockHash,",
+  "token.liquidityEvidence?.provenance?.referenceHeadBlockNumber !==",
+  "token.liquidityEvidence?.provenance?.referenceHeadBlockHash,",
+  "token.liquidityEvidence?.provenance?.indexedBlockNumber !==",
+  "valuationSnapshot.liquidityBlockNumber",
+  "token.liquidityEvidence?.provenance?.indexedBlockHash,",
+  "valuationSnapshot.liquidityBlockHash,",
   'response.headers.marketSource !== "bitquery"',
   "response.headers.valuationBlock !== null",
   "ids.has(token.id)",
@@ -529,7 +560,37 @@ export const POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS = Object.freeze([
   "sawNonCurrent",
   "!exactCurrentPublicFdvLiquidity(token)",
   "value > previousCurrentFdv",
-  "return currentCount > 0 ? { currentToken, tokens } : null;",
+  "return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
+  "left.schemaVersion === right.schemaVersion",
+  "left.chainId === right.chainId",
+  "left.blockNumber === right.blockNumber",
+  "left.blockHash === right.blockHash",
+  "left.liquidityBlockNumber === right.liquidityBlockNumber",
+  "left.liquidityBlockHash === right.liquidityBlockHash",
+  "left.rankingCommitment === right.rankingCommitment",
+  "left.sort === right.sort",
+  "left.query === right.query",
+  "left.socials === right.socials",
+  "left.pageSize === right.pageSize",
+  'search.set("valuationBlock", snapshot.blockNumber)',
+  'search.set("valuationBlockHash", snapshot.blockHash)',
+  'search.set("liquidityBlock", snapshot.liquidityBlockNumber)',
+  'search.set("liquidityBlockHash", snapshot.liquidityBlockHash)',
+  'search.set("rankingCommitment", snapshot.rankingCommitment)',
+]);
+
+export const POST_PROMOTION_PAGINATION_SOURCE_GUARDS = Object.freeze([
+  "const firstExploreSnapshot = exactExploreValuationSnapshot(",
+  "firstExplore.body?.valuationSnapshot,",
+  "firstExploreSnapshot !== null &&",
+  "firstExploreSnapshot === null",
+  "Array.from({ length: expectedExplorePages - 1 }, (_, index) =>",
+  "exploreContinuationPath(firstExploreSnapshot, index + 2)",
+  'search.set("valuationBlock", snapshot.blockNumber)',
+  'search.set("valuationBlockHash", snapshot.blockHash)',
+  'search.set("liquidityBlock", snapshot.liquidityBlockNumber)',
+  'search.set("liquidityBlockHash", snapshot.liquidityBlockHash)',
+  'search.set("rankingCommitment", snapshot.rankingCommitment)',
 ]);
 
 export const POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS = Object.freeze([
@@ -2387,6 +2448,9 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       postPromotion.includes("exactBitqueryHeaders") &&
       postPromotion.includes("exactExploreRanking") &&
+      postPromotion.includes(
+        "exploreContinuationPath(firstExploreSnapshot, index + 2)",
+      ) &&
       postPromotion.includes("exactCurrentPublicFdvLiquidity") &&
       postPromotion.includes("exactGoldenDetail") &&
       postPromotion.includes("exactGoldenSearch") &&
@@ -2404,6 +2468,10 @@ export function evaluateReadModelOperationsSourceContracts(
         POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS,
       ) &&
       includesEverySourceFragment(
+        postPromotion,
+        POST_PROMOTION_PAGINATION_SOURCE_GUARDS,
+      ) &&
+      includesEverySourceFragment(
         postDetailChartBlock,
         POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS,
       ) &&
@@ -2415,7 +2483,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
       postPromotion.includes(
-        "return currentCount > 0 ? { currentToken, tokens } : null;",
+        "return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
       ) &&
       postPromotion.includes(
         'tokenAddress === GOLDEN_TOKEN_ADDRESS',

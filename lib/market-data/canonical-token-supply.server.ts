@@ -35,6 +35,10 @@ export type CanonicalTokenSupplyDependencies = Readonly<{
   deployment?: ReadyOnchainDeployment;
   additionalRpcUrls?: readonly string[];
   createClient?: (rpcUrl: string) => SupplyClient;
+  snapshot?: Readonly<{
+    blockNumber: string;
+    blockHash: Hex;
+  }>;
 }>;
 
 function needsCanonicalSupply(entry: ExploreEntry): boolean {
@@ -124,17 +128,28 @@ export async function hydrateMissingCanonicalTokenSupplyV1<T extends ExploreEntr
     ])];
     if (rpcUrls.length < 2) return [...entries];
     const clients = rpcUrls.map(createClient);
-    const heads = (await Promise.allSettled(clients.map((client) =>
-      client.getBlockNumber())))
-      .flatMap((result) => result.status === "fulfilled" && result.value >= 0n
-        ? [result.value]
-        : []);
-    if (heads.length < 2) return [...entries];
-    const lowestHead = heads.reduce((lowest, head) =>
-      head < lowest ? head : lowest);
-    const blockNumber = lowestHead > deployment.confirmations
-      ? lowestHead - deployment.confirmations
-      : 0n;
+    const requestedSnapshot = dependencies.snapshot;
+    if (
+      requestedSnapshot &&
+      (!/^(?:0|[1-9]\d*)$/u.test(requestedSnapshot.blockNumber) ||
+        !/^0x[0-9a-f]{64}$/u.test(requestedSnapshot.blockHash))
+    ) return [...entries];
+    let blockNumber: bigint;
+    if (requestedSnapshot) {
+      blockNumber = BigInt(requestedSnapshot.blockNumber);
+    } else {
+      const heads = (await Promise.allSettled(clients.map((client) =>
+        client.getBlockNumber())))
+        .flatMap((result) => result.status === "fulfilled" && result.value >= 0n
+          ? [result.value]
+          : []);
+      if (heads.length < 2) return [...entries];
+      const lowestHead = heads.reduce((lowest, head) =>
+        head < lowest ? head : lowest);
+      blockNumber = lowestHead > deployment.confirmations
+        ? lowestHead - deployment.confirmations
+        : 0n;
+    }
 
     return await Promise.all(entries.map(async (entry) => {
       if (!needsCanonicalSupply(entry) || entry.exploreKind !== "token") {
@@ -154,7 +169,11 @@ export async function hydrateMissingCanonicalTokenSupplyV1<T extends ExploreEntr
           groups.set(key, [...(groups.get(key) ?? []), observation]);
         }
         const agreed = [...groups.values()].find((group) => group.length >= 2)?.[0];
-        if (!agreed) return entry;
+        if (
+          !agreed ||
+          (requestedSnapshot &&
+            agreed.blockHash.toLowerCase() !== requestedSnapshot.blockHash)
+        ) return entry;
         return {
           ...entry,
           totalSupplyRaw: agreed.totalSupplyRaw,

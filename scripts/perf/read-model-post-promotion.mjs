@@ -718,9 +718,13 @@ export async function verifyCurrentPublicOnchainEvidenceV1(input) {
 function exactExploreRanking(responses) {
   if (!Array.isArray(responses) || responses.length === 0) return null;
   const first = responses[0]?.body;
+  const valuationSnapshot = exactExploreValuationSnapshot(
+    first?.valuationSnapshot,
+  );
   const total = first?.total;
   const totalPages = first?.totalPages;
   if (
+    valuationSnapshot === null ||
     !Number.isSafeInteger(total) ||
     total < 1 ||
     total > MAXIMUM_EXPLORE_TOKENS ||
@@ -740,6 +744,9 @@ function exactExploreRanking(responses) {
       EXPLORE_PAGE_SIZE,
       total - index * EXPLORE_PAGE_SIZE,
     );
+    const pageSnapshot = exactExploreValuationSnapshot(
+      page?.valuationSnapshot,
+    );
     const quality = page?.dataQuality?.valuation;
     const currentTokens = Array.isArray(pageTokens)
       ? pageTokens.filter((token) =>
@@ -750,10 +757,12 @@ function exactExploreRanking(responses) {
       : [];
     if (
       !response?.ok ||
+      !sameValuationSnapshot(valuationSnapshot, pageSnapshot) ||
       page?.status !== "ready" ||
-      page?.sort !== "market-cap" ||
+      page?.sort !== valuationSnapshot.sort ||
+      page?.query !== valuationSnapshot.query ||
       page?.page !== index + 1 ||
-      page?.pageSize !== EXPLORE_PAGE_SIZE ||
+      page?.pageSize !== valuationSnapshot.pageSize ||
       page?.total !== total ||
       page?.totalPages !== totalPages ||
       !Array.isArray(pageTokens) ||
@@ -780,7 +789,24 @@ function exactExploreRanking(responses) {
         !positiveInteger(quality.asOfBlock) ||
         currentTokens.some((token) =>
           token.valuation.asOfTime !== quality.asOfTime ||
-          token.valuation.asOfBlock !== quality.asOfBlock
+          token.valuation.asOfBlock !== quality.asOfBlock ||
+          token.valuation.asOfBlock !== valuationSnapshot.blockNumber ||
+          !sameBytes32(
+            token.valuation.asOfBlockHash,
+            valuationSnapshot.blockHash,
+          ) ||
+          token.liquidityEvidence?.provenance?.referenceHeadBlockNumber !==
+            valuationSnapshot.blockNumber ||
+          !sameBytes32(
+            token.liquidityEvidence?.provenance?.referenceHeadBlockHash,
+            valuationSnapshot.blockHash,
+          ) ||
+          token.liquidityEvidence?.provenance?.indexedBlockNumber !==
+            valuationSnapshot.liquidityBlockNumber ||
+          !sameBytes32(
+            token.liquidityEvidence?.provenance?.indexedBlockHash,
+            valuationSnapshot.liquidityBlockHash,
+          )
         )
       ) return null;
     } else if (
@@ -845,7 +871,94 @@ function exactExploreRanking(responses) {
     currentCount += 1;
     currentToken ??= token;
   }
-  return currentCount > 0 ? { currentToken, tokens } : null;
+  return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;
+}
+
+export function exactExploreValuationSnapshot(value) {
+  const noLiquiditySnapshot =
+    value?.liquidityBlockNumber === "none" &&
+    value?.liquidityBlockHash === "none";
+  const concreteLiquiditySnapshot =
+    positiveInteger(value?.liquidityBlockNumber) &&
+    exactBytes32(value?.liquidityBlockHash) &&
+    value.liquidityBlockHash === value.liquidityBlockHash.toLowerCase();
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 11 ||
+    ![
+      "schemaVersion",
+      "chainId",
+      "blockNumber",
+      "blockHash",
+      "liquidityBlockNumber",
+      "liquidityBlockHash",
+      "rankingCommitment",
+      "sort",
+      "query",
+      "socials",
+      "pageSize",
+    ].every((key) => Object.prototype.hasOwnProperty.call(value, key)) ||
+    value.schemaVersion !== "programmable.explore-valuation-snapshot.v1" ||
+    value.chainId !== 1 ||
+    !positiveInteger(value.blockNumber) ||
+    !exactBytes32(value.blockHash) ||
+    value.blockHash !== value.blockHash.toLowerCase() ||
+    (!noLiquiditySnapshot &&
+      (!concreteLiquiditySnapshot ||
+        BigInt(value.liquidityBlockNumber) > BigInt(value.blockNumber))) ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment) ||
+    value.sort !== "market-cap" ||
+    value.query !== "" ||
+    value.socials !== null ||
+    value.pageSize !== EXPLORE_PAGE_SIZE
+  ) return null;
+  return Object.freeze({
+    schemaVersion: value.schemaVersion,
+    chainId: value.chainId,
+    blockNumber: value.blockNumber,
+    blockHash: value.blockHash,
+    liquidityBlockNumber: value.liquidityBlockNumber,
+    liquidityBlockHash: value.liquidityBlockHash,
+    rankingCommitment: value.rankingCommitment,
+    sort: value.sort,
+    query: value.query,
+    socials: value.socials,
+    pageSize: value.pageSize,
+  });
+}
+
+function sameValuationSnapshot(left, right) {
+  return left !== null &&
+    right !== null &&
+    left.schemaVersion === right.schemaVersion &&
+    left.chainId === right.chainId &&
+    left.blockNumber === right.blockNumber &&
+    left.blockHash === right.blockHash &&
+    left.liquidityBlockNumber === right.liquidityBlockNumber &&
+    left.liquidityBlockHash === right.liquidityBlockHash &&
+    left.rankingCommitment === right.rankingCommitment &&
+    left.sort === right.sort &&
+    left.query === right.query &&
+    left.socials === right.socials &&
+    left.pageSize === right.pageSize;
+}
+
+export function exploreContinuationPath(snapshot, page) {
+  const search = new URLSearchParams({
+    limit: String(snapshot.pageSize),
+    page: String(page),
+    sort: snapshot.sort,
+  });
+  if (snapshot.query !== "") search.set("q", snapshot.query);
+  if (snapshot.socials !== null) search.set("socials", snapshot.socials);
+  search.set("valuationBlock", snapshot.blockNumber);
+  search.set("valuationBlockHash", snapshot.blockHash);
+  search.set("liquidityBlock", snapshot.liquidityBlockNumber);
+  search.set("liquidityBlockHash", snapshot.liquidityBlockHash);
+  search.set("rankingCommitment", snapshot.rankingCommitment);
+  return `/api/explore?${search.toString()}`;
 }
 
 function exactCurrentPublicDetail(response, exploreToken) {
@@ -1165,21 +1278,27 @@ export async function verifyPostPromotion(input) {
     request(fetchImpl, targetUrl, GOLDEN_CHART_PATH),
   ]);
   const firstExplore = responses[2];
-  const expectedExplorePages = Number.isSafeInteger(firstExplore.body?.totalPages) &&
+  const firstExploreSnapshot = exactExploreValuationSnapshot(
+    firstExplore.body?.valuationSnapshot,
+  );
+  const expectedExplorePages = firstExploreSnapshot !== null &&
+      Number.isSafeInteger(firstExplore.body?.totalPages) &&
       firstExplore.body.totalPages > 0 &&
       firstExplore.body.totalPages <=
         Math.ceil(MAXIMUM_EXPLORE_TOKENS / EXPLORE_PAGE_SIZE)
     ? firstExplore.body.totalPages
     : 1;
-  const remainingExplorePages = await Promise.all(
-    Array.from({ length: expectedExplorePages - 1 }, (_, index) =>
-      request(
-        fetchImpl,
-        targetUrl,
-        `/api/explore?limit=${EXPLORE_PAGE_SIZE}&page=${index + 2}&sort=market-cap`,
-      )
-    ),
-  );
+  const remainingExplorePages = firstExploreSnapshot === null
+    ? []
+    : await Promise.all(
+      Array.from({ length: expectedExplorePages - 1 }, (_, index) =>
+        request(
+          fetchImpl,
+          targetUrl,
+          exploreContinuationPath(firstExploreSnapshot, index + 2),
+        )
+      ),
+    );
   const exploreRanking = exactExploreRanking([
     firstExplore,
     ...remainingExplorePages,

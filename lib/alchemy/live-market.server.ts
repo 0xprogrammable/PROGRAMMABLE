@@ -191,8 +191,10 @@ export function withoutUnboundEthUsdQuote(
  */
 export async function readVerifiedOperationalMarketSnapshot(
   deployment: ReadyOnchainDeployment,
+  expected?: Readonly<{ blockNumber: string; blockHash: Hex }>,
   options: Readonly<{ signal?: AbortSignal }> = {},
 ): Promise<ExploreSnapshot | null> {
+  options.signal?.throwIfAborted();
   const health = await readOperationalRpcHealth(
     deployment,
     undefined,
@@ -205,10 +207,55 @@ export async function readVerifiedOperationalMarketSnapshot(
     health.confirmedBlock === null
   ) return null;
 
-  return {
+  const snapshot = {
     chainId: deployment.chainId,
     blockNumber: health.confirmedBlock.number,
-    blockHash: health.confirmedBlock.hash,
+    blockHash: health.confirmedBlock.hash.toLowerCase() as Hex,
+    confirmations: Number(deployment.confirmations),
+  };
+  const target = expected ?? snapshot;
+  if (
+    !/^(?:0|[1-9]\d*)$/u.test(target.blockNumber) ||
+    target.blockNumber.length > 78 ||
+    !/^0x[0-9a-f]{64}$/u.test(target.blockHash) ||
+    BigInt(target.blockNumber) > BigInt(snapshot.blockNumber)
+  ) return null;
+
+  const blockNumber = BigInt(target.blockNumber);
+  const observations = await Promise.allSettled(
+    [deployment.rpcUrl, deployment.rpcUrlSecondary].map(async (rpcUrl) => {
+      if (!rpcUrl) throw new OperationalRpcUnavailableError();
+      const client = createPublicClient({
+        chain: deployment.chainId === 1 ? mainnet : sepolia,
+        transport: http(rpcUrl, {
+          retryCount: 0,
+          timeout: 12_000,
+          fetchOptions: { signal: options.signal },
+        }),
+      });
+      const block = await client.getBlock({ blockNumber });
+      options.signal?.throwIfAborted();
+      if (
+        block.number !== blockNumber ||
+        !block.hash ||
+        block.hash.toLowerCase() !== target.blockHash
+      ) throw new OperationalRpcUnavailableError();
+      return block.timestamp;
+    }),
+  );
+  options.signal?.throwIfAborted();
+  const timestamps = observations.flatMap((observation) =>
+    observation.status === "fulfilled" ? [observation.value] : []
+  );
+  if (timestamps.length !== 2 || timestamps[0] !== timestamps[1]) return null;
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1_000));
+  const timestamp = timestamps[0]!;
+  if (timestamp > nowSeconds + 60n || nowSeconds - timestamp > 300n) return null;
+  return {
+    chainId: deployment.chainId,
+    blockNumber: target.blockNumber,
+    blockHash: target.blockHash,
+    blockTimestamp: timestamp.toString(),
     confirmations: Number(deployment.confirmations),
   };
 }

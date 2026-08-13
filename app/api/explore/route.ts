@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -35,6 +37,7 @@ import {
   settleCurrentEvidenceSnapshot,
   type CurrentEvidenceSnapshotOutcome,
   valueExploreEntriesWithCurrentEvidence,
+  valueExploreEntriesWithCurrentEvidenceSnapshot,
 } from "../../../lib/market-data/current-valuation.server";
 import { readExploreReferenceHeadWithinRouteBudget } from "../../../lib/explore-reference-head.server";
 import { getOnchainDeployment } from "../../../lib/onchain/config";
@@ -62,7 +65,15 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
   "q",
   "socials",
   "sort",
+  "valuationBlock",
+  "valuationBlockHash",
+  "liquidityBlock",
+  "liquidityBlockHash",
+  "rankingCommitment",
 ]);
+const EXPLORE_RANKING_COMMITMENT = /^sha256:[0-9a-f]{64}$/u;
+const EXPLORE_BLOCK_HASH = /^0x[0-9a-f]{64}$/u;
+const GRAPHQL_INT_MAXIMUM = 2_147_483_647n;
 const readCanonicalExploreSource = createExploreConsumerSource<ExploreReadModel>({});
 const readCustomExploreSource = createExploreConsumerSource<
   readonly CustomProjectExploreEntry[]
@@ -129,6 +140,15 @@ function hasCanonicalQueryShape(search: URLSearchParams) {
   return true;
 }
 
+function hasCanonicalPaginationShape(search: URLSearchParams) {
+  return ["page", "limit"].every((parameter) => {
+    const value = search.get(parameter);
+    if (value === null) return true;
+    if (!/^[1-9]\d*$/u.test(value)) return false;
+    return Number.isSafeInteger(Number(value));
+  });
+}
+
 function integerQuery(value: string | null, fallback: number) {
   if (!value || !/^\d+$/u.test(value)) return fallback;
   const parsed = Number(value);
@@ -142,6 +162,134 @@ function positiveInteger(value: number, fallback: number, maximum: number) {
 
 function requiresCompleteCurrentValuation(sort: ExploreSort): boolean {
   return sort === "market-cap" || sort === "market-cap-asc";
+}
+
+type RequestedExploreValuationSnapshotV1 = Readonly<{
+  blockNumber: string;
+  blockHash: `0x${string}`;
+  liquidityBlockNumber: string;
+  liquidityBlockHash: `0x${string}` | "none";
+  rankingCommitment: `sha256:${string}`;
+}>;
+
+function requestedValuationSnapshot(
+  search: URLSearchParams,
+  options: Readonly<{
+    page: number;
+    pageSize: number;
+    query: string;
+    socials: "yes" | "no" | null;
+    sort: ExploreSort;
+  }>,
+): RequestedExploreValuationSnapshotV1 | null | undefined {
+  const blockNumber = search.get("valuationBlock");
+  const blockHash = search.get("valuationBlockHash");
+  const liquidityBlockNumber = search.get("liquidityBlock");
+  const liquidityBlockHash = search.get("liquidityBlockHash");
+  const rankingCommitment = search.get("rankingCommitment");
+  const supplied = [
+    blockNumber,
+    blockHash,
+    liquidityBlockNumber,
+    liquidityBlockHash,
+    rankingCommitment,
+  ]
+    .filter((value) => value !== null).length;
+  if (!requiresCompleteCurrentValuation(options.sort)) {
+    if (supplied > 0) return null;
+    return undefined;
+  }
+  if (options.page === 1) {
+    if (supplied > 0) return null;
+    return undefined;
+  }
+  const canonicalLiquiditySnapshot =
+    liquidityBlockNumber === "none" && liquidityBlockHash === "none" ||
+    liquidityBlockNumber !== null &&
+      /^[1-9]\d*$/u.test(liquidityBlockNumber) &&
+      liquidityBlockNumber.length <= 10 &&
+      BigInt(liquidityBlockNumber) <= GRAPHQL_INT_MAXIMUM &&
+      liquidityBlockHash !== null &&
+      EXPLORE_BLOCK_HASH.test(liquidityBlockHash);
+  if (
+    supplied !== 5 ||
+    search.get("sort") !== options.sort ||
+    search.get("q") !== null && search.get("q") !== options.query ||
+    options.pageSize > 100 ||
+    !blockNumber ||
+    !/^[1-9]\d*$/u.test(blockNumber) ||
+    blockNumber.length > 78 ||
+    !blockHash ||
+    !EXPLORE_BLOCK_HASH.test(blockHash) ||
+    !canonicalLiquiditySnapshot ||
+    !liquidityBlockNumber ||
+    !liquidityBlockHash ||
+    !rankingCommitment ||
+    !EXPLORE_RANKING_COMMITMENT.test(rankingCommitment)
+  ) return null;
+  return {
+    blockNumber,
+    blockHash: blockHash as `0x${string}`,
+    liquidityBlockNumber,
+    liquidityBlockHash: liquidityBlockHash as `0x${string}` | "none",
+    rankingCommitment: rankingCommitment as `sha256:${string}`,
+  };
+}
+
+function exploreRankingCommitment(
+  entries: readonly ValuedExploreEntry[],
+  input: Readonly<{
+    snapshot: Readonly<{
+      blockNumber: string;
+      blockHash: string;
+      liquidityBlockNumber: string;
+      liquidityBlockHash: string;
+    }>;
+    sort: ExploreSort;
+    query: string;
+    socials: "yes" | "no" | null;
+    pageSize: number;
+  }>,
+): `sha256:${string}` {
+  const ordered = sortExploreEntries(entries, input.sort);
+  const ranking = ordered.map((entry) => ({
+    id: entry.id,
+    tokenAddress: entry.tokenAddress?.toLowerCase() ?? null,
+    valueWad: valuationSortValue(entry)?.toString() ?? null,
+    availability: valuationSortValue(entry) === undefined
+      ? "unavailable"
+      : "available",
+    launchTime: entry.launchedAt,
+    launchOrder: entryLaunchOrder(entry)?.map(String) ?? null,
+  }));
+  const hash = createHash("sha256");
+  hash.update("programmable.explore-market-ranking.v1", "utf8");
+  hash.update(Uint8Array.of(0));
+  hash.update(JSON.stringify({
+    schemaVersion: "programmable.explore-valuation-snapshot.v1",
+    chainId: 1,
+    blockNumber: input.snapshot.blockNumber,
+    blockHash: input.snapshot.blockHash.toLowerCase(),
+    liquidityBlockNumber: input.snapshot.liquidityBlockNumber,
+    liquidityBlockHash: input.snapshot.liquidityBlockHash.toLowerCase(),
+    sort: input.sort,
+    query: input.query,
+    socials: input.socials,
+    pageSize: input.pageSize,
+    total: ordered.length,
+    ranking,
+  }), "utf8");
+  return `sha256:${hash.digest("hex")}`;
+}
+
+function matchingRankingCommitment(
+  supplied: `sha256:${string}`,
+  expected: `sha256:${string}`,
+) {
+  const suppliedBytes = Buffer.from(supplied.slice(7), "hex");
+  const expectedBytes = Buffer.from(expected.slice(7), "hex");
+  return suppliedBytes.length === expectedBytes.length &&
+    timingSafeEqual(suppliedBytes, expectedBytes);
 }
 
 function entryLaunchTime(entry: ExploreEntry): number {
@@ -396,6 +544,7 @@ async function valueExplorePage(input: Readonly<{
   deployment: ReturnType<typeof currentMarketOnchainDeployment> | null;
   operationalSnapshot: Promise<CurrentEvidenceSnapshotOutcome>;
   currentEvidenceDeadlineAt: number;
+  requestedSnapshot?: RequestedExploreValuationSnapshotV1;
 }>) {
   const requiresGlobalMarketRanking =
     requiresCompleteCurrentValuation(input.options.sort);
@@ -408,25 +557,80 @@ async function valueExplorePage(input: Readonly<{
       });
   const entriesToValue = identityPage?.tokens ?? input.identityEntries;
   if (requiresGlobalMarketRanking) {
+    const operationalSnapshotOutcome = await input.operationalSnapshot;
+    if (operationalSnapshotOutcome.status === "rejected") {
+      throw operationalSnapshotOutcome.error;
+    }
+    const operationalSnapshot = operationalSnapshotOutcome.value;
+    if (!operationalSnapshot) {
+      throw new Error("Current market evidence snapshot is unavailable");
+    }
     const hydratedEntries = await hydrateMissingCanonicalTokenSupplyV1(
       entriesToValue,
+      {
+        deployment: input.deployment ?? undefined,
+        snapshot: {
+          blockNumber: operationalSnapshot.blockNumber,
+          blockHash: operationalSnapshot.blockHash,
+        },
+      },
     );
-    const currentEntries = await valueExploreEntriesWithCurrentEvidence({
+    const currentValuation = await valueExploreEntriesWithCurrentEvidenceSnapshot({
       entries: hydratedEntries,
       marketByToken: new Map(),
       deployment: input.deployment,
-      operationalSnapshot: input.operationalSnapshot,
+      operationalSnapshot,
       maximumValuationAgeMs: EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
       now: new Date(),
-      requireCompleteLiquidityCoverage: true,
+      ...(input.requestedSnapshot
+        ? {
+            liquiditySnapshot:
+              input.requestedSnapshot.liquidityBlockNumber === "none"
+                ? {
+                    chainId: 1 as const,
+                    blockNumber: "none" as const,
+                    blockHash: "none" as const,
+                  }
+                : {
+                    chainId: 1 as const,
+                    blockNumber:
+                      input.requestedSnapshot.liquidityBlockNumber,
+                    blockHash: input.requestedSnapshot.liquidityBlockHash as
+                      `0x${string}`,
+                  },
+          }
+        : {}),
       timeoutMs: Math.max(0, input.currentEvidenceDeadlineAt - Date.now()),
       signal: input.signal,
     });
+    const currentEntries = currentValuation.entries;
     const currentPage = paginateExploreEntriesV1(currentEntries, {
       ...input.options,
       query: "",
       socials: null,
     });
+    const rankingCommitment = exploreRankingCommitment(currentEntries, {
+      snapshot: {
+        ...operationalSnapshot,
+        liquidityBlockNumber: currentValuation.liquiditySnapshot.blockNumber,
+        liquidityBlockHash: currentValuation.liquiditySnapshot.blockHash,
+      },
+      sort: input.options.sort,
+      query: input.options.query,
+      socials: input.options.socials,
+      pageSize: currentPage.pageSize,
+    });
+    if (
+      input.requestedSnapshot &&
+      !matchingRankingCommitment(
+        input.requestedSnapshot.rankingCommitment,
+        rankingCommitment,
+      )
+    ) throw new Error("Explore ranking snapshot changed");
+    if (
+      input.requestedSnapshot &&
+      input.options.page > currentPage.totalPages
+    ) throw new Error("Explore ranking page is outside the snapshot");
     const marketByToken = readBitqueryTokenMarketDataV1(
       exploreEntriesMarketIdentitiesV1(currentPage.tokens),
       { signal: input.signal },
@@ -440,6 +644,19 @@ async function valueExplorePage(input: Readonly<{
     return {
       entries: currentEntries,
       paginated: { ...currentPage, tokens: pageEntries },
+      valuationSnapshot: {
+        schemaVersion: "programmable.explore-valuation-snapshot.v1" as const,
+        chainId: 1 as const,
+        blockNumber: operationalSnapshot.blockNumber,
+        blockHash: operationalSnapshot.blockHash,
+        liquidityBlockNumber: currentValuation.liquiditySnapshot.blockNumber,
+        liquidityBlockHash: currentValuation.liquiditySnapshot.blockHash,
+        rankingCommitment,
+        sort: input.options.sort as "market-cap" | "market-cap-asc",
+        query: input.options.query,
+        socials: input.options.socials,
+        pageSize: currentPage.pageSize,
+      },
     };
   }
   const marketByToken = readBitqueryTokenMarketDataV1(
@@ -466,12 +683,13 @@ async function valueExplorePage(input: Readonly<{
   return {
     entries: valuedEntries,
     paginated: { ...identityPage, tokens: valuedEntries },
+    valuationSnapshot: undefined,
   };
 }
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
-  if (!hasCanonicalQueryShape(search)) {
+  if (!hasCanonicalQueryShape(search) || !hasCanonicalPaginationShape(search)) {
     return NextResponse.json(
       { error: "Unsupported query parameters" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
@@ -494,6 +712,13 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
+    const replaySnapshot = requestedValuationSnapshot(search, options);
+    if (replaySnapshot === null) {
+      return NextResponse.json(
+        { error: "A complete valuation snapshot is required" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const canonicalRead = settleExploreSource(
       readCanonicalExploreSource({
         primary: readPrimaryExploreModel,
@@ -517,6 +742,12 @@ export async function GET(request: NextRequest) {
       ? settleCurrentEvidenceSnapshot({
           read: (signal) => readVerifiedOperationalMarketSnapshot(
             currentMarketDeployment,
+            replaySnapshot
+              ? {
+                  blockNumber: replaySnapshot.blockNumber,
+                  blockHash: replaySnapshot.blockHash,
+                }
+              : undefined,
             { signal },
           ),
           requireComplete: requireCompleteCurrentValuation,
@@ -572,13 +803,14 @@ export async function GET(request: NextRequest) {
       options.query,
       options.socials,
     );
-    const { entries, paginated } = await valueExplorePage({
+    const { entries, paginated, valuationSnapshot } = await valueExplorePage({
       identityEntries: requestedIdentityEntries,
       options,
       signal: request.signal,
       deployment: currentMarketDeployment,
       operationalSnapshot: operationalSnapshotOutcome,
       currentEvidenceDeadlineAt,
+      requestedSnapshot: replaySnapshot,
     });
     const pageEntries = paginated.tokens as ValuedExploreEntry[];
     const currentOnchainEntry = pageEntries.find(
@@ -644,6 +876,7 @@ export async function GET(request: NextRequest) {
       query: options.query,
       sortMetric: "fdv" as const,
       dataQuality,
+      ...(valuationSnapshot ? { valuationSnapshot } : {}),
       snapshot: identityModel?.snapshot ?? null,
       launchDiscoverySnapshot:
         identityModel?.status === "ready"

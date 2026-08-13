@@ -12,9 +12,9 @@ import {
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { evaluateReadModelOperationsSourceContracts, POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS, POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS, POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS, STAGED_MARKET_EVIDENCE_SOURCE_GUARDS } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
+import { evaluateReadModelOperationsSourceContracts, POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS, POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS, POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS, POST_PROMOTION_PAGINATION_SOURCE_GUARDS, STAGED_MARKET_EVIDENCE_SOURCE_GUARDS } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { exactCurrentPublicFdvLiquidity, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
+import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { resolveProductionBinding } from "../../scripts/perf/read-model-production-binding.mjs";
 
@@ -133,6 +133,7 @@ const stagedMarketEvidenceGuardCases: ReadonlyArray<readonly [number, string]> =
 const postPromotionGuardCases: ReadonlyArray<readonly [number, string]> = [
   ...(POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS as readonly string[]),
   ...(POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS as readonly string[]),
+  ...(POST_PROMOTION_PAGINATION_SOURCE_GUARDS as readonly string[]),
   ...(POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS as readonly string[]),
 ].map((needle: string, index: number) => [index, needle] as const);
 const testStateViewAbi = parseAbi([
@@ -1041,8 +1042,8 @@ describe("read-model operations source contract", () => {
       "utf8",
     );
     const unsafePostPromotion = postPromotion.replace(
-      "  return currentCount > 0 ? { currentToken, tokens } : null;",
-      "  return currentCount >= 0 ? { currentToken, tokens } : null;",
+      "  return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
+      "  return currentCount >= 0 ? { currentToken, tokens, valuationSnapshot } : null;",
     );
     expect(unsafePostPromotion).not.toBe(postPromotion);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
@@ -1785,6 +1786,73 @@ function currentPublicHeaders(
   };
 }
 
+const EXPLORE_VALUATION_SNAPSHOT_FIELDS = [
+  "schemaVersion",
+  "chainId",
+  "blockNumber",
+  "blockHash",
+  "liquidityBlockNumber",
+  "liquidityBlockHash",
+  "rankingCommitment",
+  "sort",
+  "query",
+  "socials",
+  "pageSize",
+] as const;
+type ExploreValuationSnapshotField =
+  typeof EXPLORE_VALUATION_SNAPSHOT_FIELDS[number];
+type ExploreValuationSnapshotMutation = Readonly<{
+  page: 1 | 2;
+  field: ExploreValuationSnapshotField;
+  operation: "removed" | "changed";
+}>;
+
+function valuationSnapshotFixture() {
+  return {
+    schemaVersion: "programmable.explore-valuation-snapshot.v1",
+    chainId: 1,
+    blockNumber: TEST_CURRENT_BLOCK.toString(),
+    blockHash: TEST_PUBLIC_BLOCK_HASH,
+    liquidityBlockNumber: (TEST_CURRENT_BLOCK - 1n).toString(),
+    liquidityBlockHash: TEST_PUBLIC_INDEXED_BLOCK_HASH,
+    rankingCommitment: `sha256:${"88".repeat(32)}`,
+    sort: "market-cap",
+    query: "",
+    socials: null,
+    pageSize: 100,
+  } as const;
+}
+
+const EXPLORE_VALUATION_SNAPSHOT_CHANGED_VALUES = {
+  schemaVersion: "programmable.explore-valuation-snapshot.v2",
+  chainId: 2,
+  blockNumber: (TEST_CURRENT_BLOCK + 1n).toString(),
+  blockHash: `0x${"77".repeat(32)}`,
+  liquidityBlockNumber: (TEST_CURRENT_BLOCK - 2n).toString(),
+  liquidityBlockHash: `0x${"99".repeat(32)}`,
+  rankingCommitment: `sha256:${"aa".repeat(32)}`,
+  sort: "market-cap-asc",
+  query: "changed",
+  socials: "yes",
+  pageSize: 99,
+} satisfies Readonly<Record<ExploreValuationSnapshotField, unknown>>;
+
+function mutateValuationSnapshot(
+  mutation?: Pick<ExploreValuationSnapshotMutation, "field" | "operation">,
+) {
+  const snapshot: Record<string, unknown> = {
+    ...valuationSnapshotFixture(),
+  };
+  if (!mutation) return snapshot;
+  if (mutation.operation === "removed") {
+    delete snapshot[mutation.field];
+  } else {
+    snapshot[mutation.field] =
+      EXPLORE_VALUATION_SNAPSHOT_CHANGED_VALUES[mutation.field];
+  }
+  return snapshot;
+}
+
 function unavailablePublicTokenFixture(index: number) {
   const address = `0x${index.toString(16).padStart(40, "0")}`;
   return {
@@ -1797,6 +1865,7 @@ function unavailablePublicTokenFixture(index: number) {
 
 function paginatedMarketCapFetch(
   mode: "complete" | "hidden-current" | "missing-page" = "complete",
+  mutation?: ExploreValuationSnapshotMutation,
 ) {
   const base = publicFetch();
   const publicMarketAsOf = new Date(
@@ -1813,6 +1882,12 @@ function paginatedMarketCapFetch(
   const secondPageToken = mode === "hidden-current"
     ? publicToken
     : unavailable[99];
+  const firstPageSnapshot = mutateValuationSnapshot(
+    mutation?.page === 1 ? mutation : undefined,
+  );
+  const secondPageSnapshot = mutateValuationSnapshot(
+    mutation?.page === 2 ? mutation : undefined,
+  );
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
     if (
@@ -1830,6 +1905,8 @@ function paginatedMarketCapFetch(
         total: 101,
         totalPages: 2,
         sort: "market-cap",
+        query: "",
+        valuationSnapshot: firstPageSnapshot,
         dataQuality: hasCurrent
           ? currentExploreDataQuality(publicMarketAsOf, 1, 99)
           : {
@@ -1857,6 +1934,28 @@ function paginatedMarketCapFetch(
             },
       });
     }
+    const expectedContinuationParameters = [
+      ["valuationBlock", firstPageSnapshot.blockNumber],
+      ["valuationBlockHash", firstPageSnapshot.blockHash],
+      ["liquidityBlock", firstPageSnapshot.liquidityBlockNumber],
+      ["liquidityBlockHash", firstPageSnapshot.liquidityBlockHash],
+      ["rankingCommitment", firstPageSnapshot.rankingCommitment],
+    ] as const;
+    if (
+      url.searchParams.get("limit") !== "100" ||
+      url.searchParams.get("page") !== "2" ||
+      url.searchParams.get("sort") !== "market-cap" ||
+      expectedContinuationParameters.some(([name, value]) =>
+        typeof value !== "string" ||
+        url.searchParams.get(name) !== value ||
+        url.searchParams.getAll(name).length !== 1
+      )
+    ) {
+      return Response.json(
+        { error: "incomplete valuation snapshot continuation" },
+        { status: 400 },
+      );
+    }
     const pageTokens = mode === "missing-page" ? [] : [secondPageToken];
     const hasCurrent = mode === "hidden-current";
     return Response.json({
@@ -1867,6 +1966,8 @@ function paginatedMarketCapFetch(
       total: 101,
       totalPages: 2,
       sort: "market-cap",
+      query: "",
+      valuationSnapshot: secondPageSnapshot,
       dataQuality: hasCurrent
         ? currentExploreDataQuality(publicMarketAsOf, 1, 0)
         : {
@@ -1895,6 +1996,13 @@ function paginatedMarketCapFetch(
     });
   };
 }
+
+const exploreValuationSnapshotMutationCases: ReadonlyArray<
+  readonly [ExploreValuationSnapshotField, "removed" | "changed"]
+> = EXPLORE_VALUATION_SNAPSHOT_FIELDS.flatMap((field) => [
+  [field, "removed"] as const,
+  [field, "changed"] as const,
+]);
 
 function publicFetch(
   healthStatus = "healthy",
@@ -2102,6 +2210,8 @@ function publicFetch(
         total: 1,
         totalPages: 1,
         sort: "market-cap",
+        query: "",
+        valuationSnapshot: valuationSnapshotFixture(),
         dataQuality: currentExploreDataQuality(publicMarketAsOf),
       }, { headers: currentPublicHeaders(publicMarketAsOf) });
     }
@@ -2324,6 +2434,40 @@ function postPromotionInput(fetchImpl = publicFetch()) {
 }
 
 describe("post-promotion route verification", () => {
+  it("accepts only paired concrete or none liquidity snapshot commitments", () => {
+    const concrete = valuationSnapshotFixture();
+    expect(exactExploreValuationSnapshot(concrete)).toEqual(concrete);
+    const none = {
+      ...concrete,
+      liquidityBlockNumber: "none",
+      liquidityBlockHash: "none",
+    };
+    expect(exactExploreValuationSnapshot(none)).toEqual(none);
+    expect(exactExploreValuationSnapshot({
+      ...none,
+      liquidityBlockHash: concrete.liquidityBlockHash,
+    })).toBeNull();
+    expect(exactExploreValuationSnapshot({
+      ...none,
+      liquidityBlockNumber: concrete.liquidityBlockNumber,
+    })).toBeNull();
+
+    const continuation = new URL(
+      exploreContinuationPath(none, 2),
+      "https://programmable.test",
+    );
+    expect([...continuation.searchParams.entries()]).toEqual([
+      ["limit", "100"],
+      ["page", "2"],
+      ["sort", "market-cap"],
+      ["valuationBlock", concrete.blockNumber],
+      ["valuationBlockHash", concrete.blockHash],
+      ["liquidityBlock", "none"],
+      ["liquidityBlockHash", "none"],
+      ["rankingCommitment", concrete.rankingCommitment],
+    ]);
+  });
+
   it("accepts the exact legacy and stamped Classic native/token branches", () => {
     const asOfTime = new Date(
       Math.floor((Date.now() - 2 * 60_000) / 1_000) * 1_000,
@@ -2536,6 +2680,40 @@ describe("post-promotion route verification", () => {
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
   });
+
+  it.each(exploreValuationSnapshotMutationCases)(
+    "rejects page-one valuation snapshot field %s when %s",
+    async (field, operation) => {
+      const result = await verifyPostPromotion(
+        postPromotionInput(paginatedMarketCapFetch("complete", {
+          page: 1,
+          field,
+          operation,
+        })),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.failures).toContainEqual(
+        expect.objectContaining({ id: "production-explore" }),
+      );
+    },
+  );
+
+  it.each(exploreValuationSnapshotMutationCases)(
+    "rejects page-two valuation snapshot field %s when %s",
+    async (field, operation) => {
+      const result = await verifyPostPromotion(
+        postPromotionInput(paginatedMarketCapFetch("complete", {
+          page: 2,
+          field,
+          operation,
+        })),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.failures).toContainEqual(
+        expect.objectContaining({ id: "production-explore" }),
+      );
+    },
+  );
 
   it("rejects a higher current FDV hidden after unavailable page-one entries", async () => {
     const result = await verifyPostPromotion(
