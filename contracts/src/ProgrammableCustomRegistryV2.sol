@@ -128,8 +128,8 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         return interfaceId == type(IProgrammableCustomRegistryV2).interfaceId || super.supportsInterface(interfaceId);
     }
 
-    /// @dev Operational roles are immutable after deployment. A default administrator cannot collapse independent
-    ///      approval, registration, finalization, and revocation authorities into one account.
+    /// @dev Direct role mutation is disabled. Operational controllers can only change through the delayed,
+    ///      non-overlapping transfer path below.
     function grantRole(bytes32 role, address account) public virtual override(AccessControlDefaultAdminRules) {
         if (_isOperationalRole(role)) revert ImmutableOperationalRole(role);
         super.grantRole(role, account);
@@ -173,7 +173,20 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
             revert OperationalControllerConflict(newController);
         }
         uint48 acceptAfter = SafeCast.toUint48(block.timestamp) + defaultAdminDelay();
+        PendingControllerV2 memory replaced = _pendingOperationalControllers[role];
+        if (replaced.controller != address(0)) {
+            emit OperationalControllerTransferCanceledV2(role, replaced.controller);
+        }
         _pendingOperationalControllers[role] = PendingControllerV2(newController, acceptAfter);
+        emit OperationalControllerTransferScheduledV2(role, _operationalControllers[role], newController, acceptAfter);
+    }
+
+    function cancelOperationalControllerTransfer(bytes32 role) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!_isOperationalRole(role)) revert ImmutableOperationalRole(role);
+        PendingControllerV2 memory pending = _pendingOperationalControllers[role];
+        if (pending.controller == address(0)) return;
+        delete _pendingOperationalControllers[role];
+        emit OperationalControllerTransferCanceledV2(role, pending.controller);
     }
 
     function acceptOperationalControllerTransfer(bytes32 role) external {
@@ -192,6 +205,7 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         _operationalControllers[role] = msg.sender;
         super._revokeRole(role, previous);
         super._grantRole(role, msg.sender);
+        emit OperationalControllerTransferAcceptedV2(role, previous, msg.sender);
     }
 
     function operationalController(bytes32 role) external view returns (address) {

@@ -12,6 +12,7 @@ const sourcePaths = [
   "contracts/src/ProgrammableCustomRegistryV2.sol",
   "contracts/script/DeployProgrammableCustomRegistryV2.s.sol",
   "contracts/scripts/prepare-custom-registry-v2-deployment.mjs",
+  "contracts/scripts/authorize-custom-registry-v2-deployment.mjs",
   "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs",
 ];
@@ -42,6 +43,11 @@ const runtimeImmutableReferences = Object.values(artifact.deployedBytecode.immut
   .flat()
   .map(({ start, length }) => ({ start, length }))
   .sort((a, b) => a.start - b.start || a.length - b.length);
+const abiDocument = json({
+  schemaVersion: "programmable.custom-registry-abi.v2",
+  contractName: "ProgrammableCustomRegistryV2",
+  abi,
+});
 
 const manifest = {
   schemaVersion: "programmable.custom-registry-predeployment.v2",
@@ -62,6 +68,7 @@ const manifest = {
     cborMetadata: false,
   },
   artifact: {
+    abiSha256: sha256(abiDocument),
     creationBytecodeKeccak256: keccak256(artifact.bytecode.object),
     runtimeTemplateKeccak256: keccak256(artifact.deployedBytecode.object),
     runtimeImmutableReferences,
@@ -81,7 +88,7 @@ const manifest = {
 
 const rendered = {
   manifest: json(manifest),
-  abi: json({ schemaVersion: "programmable.custom-registry-abi.v2", contractName: "ProgrammableCustomRegistryV2", abi }),
+  abi: abiDocument,
   events: json({ schemaVersion: "programmable.custom-registry-events.v2", events }),
 };
 

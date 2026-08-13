@@ -127,6 +127,16 @@ interface IProgrammableCustomRegistryV2 {
         uint64 transitionSequence
     );
 
+    event OperationalControllerTransferScheduledV2(
+        bytes32 indexed role, address indexed previousController, address indexed pendingController, uint48 acceptAfter
+    );
+
+    event OperationalControllerTransferAcceptedV2(
+        bytes32 indexed role, address indexed previousController, address indexed newController
+    );
+
+    event OperationalControllerTransferCanceledV2(bytes32 indexed role, address indexed pendingController);
+
     function authorizeApproval(ApprovalAuthorizationV2 calldata authorization) external;
 
     function registerLaunch(

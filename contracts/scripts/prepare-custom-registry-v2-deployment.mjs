@@ -5,7 +5,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createPublicClient,
-  encodeAbiParameters,
   getAddress,
   getContractAddress,
   http,
@@ -14,6 +13,7 @@ import {
 import { mainnet } from "viem/chains";
 import {
   assessDeploymentCost,
+  computeConstructorCommitment,
   requireDistinctRpcOrigins,
 } from "./custom-registry-v2-deployment-guards.mjs";
 
@@ -51,12 +51,16 @@ const artifactBytes = await readFile(
 const artifact = JSON.parse(artifactBytes);
 const manifestBytes = await readFile(path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"));
 const manifest = JSON.parse(manifestBytes);
+const committedAbiBytes = await readFile(path.join(root, "docs/security/abi/ProgrammableCustomRegistryV2.json"));
+const committedAbiDocument = JSON.parse(committedAbiBytes);
 if (manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" || manifest.activationAllowed !== false) {
   throw new Error("source manifest is not fail-closed");
 }
 if (
   manifest.artifact?.creationBytecodeKeccak256 !== keccak256(artifact.bytecode.object)
   || manifest.artifact?.runtimeTemplateKeccak256 !== keccak256(artifact.deployedBytecode.object)
+  || manifest.artifact?.abiSha256 !== `0x${createHash("sha256").update(committedAbiBytes).digest("hex")}`
+  || committedAbiDocument.schemaVersion !== "programmable.custom-registry-abi.v2"
 ) throw new Error("artifact does not match the source manifest");
 for (const [relative, digest] of Object.entries(manifest.sourceDigests ?? {})) {
   const actual = `0x${createHash("sha256").update(await readFile(path.join(root, relative))).digest("hex")}`;
@@ -74,22 +78,7 @@ const config = {
   minimumFinalityBlocks: positiveInteger("REGISTRY_MINIMUM_FINALITY_BLOCKS", 255n),
   registryPolicyCommitment: bytes32("REGISTRY_POLICY_COMMITMENT"),
 };
-const constructorCommitment = keccak256(encodeAbiParameters(
-  [{
-    type: "tuple",
-    components: [
-      { name: "initialAdminDelay", type: "uint48" },
-      { name: "initialAdmin", type: "address" },
-      { name: "initialApprover", type: "address" },
-      { name: "initialRegistrar", type: "address" },
-      { name: "initialFinalizer", type: "address" },
-      { name: "initialRevoker", type: "address" },
-      { name: "minimumFinalityBlocks", type: "uint64" },
-      { name: "registryPolicyCommitment", type: "bytes32" },
-    ],
-  }],
-  [config],
-));
+const constructorCommitment = computeConstructorCommitment(config);
 if (new Set(Object.values(config).filter((value) => typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value))).size !== 5) {
   throw new Error("admin and operational roles must be five distinct accounts");
 }
@@ -109,7 +98,7 @@ const observations = await Promise.all(clients.map(async (client) => {
   const [predictedCode, estimatedGas] = await Promise.all([
     client.getCode({ address: predictedAddress, blockTag: "latest" }),
     client.estimateContractGas({
-      abi: artifact.abi,
+      abi: committedAbiDocument.abi,
       bytecode: artifact.bytecode.object,
       args: [config],
       account: deployer,

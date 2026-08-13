@@ -52,6 +52,21 @@
       "topic0": "0x3377dc44241e779dd06afab5b788a35ca5f3b778836e2990bdb26a2a4b2e5ed6"
     },
     {
+      "name": "OperationalControllerTransferAcceptedV2",
+      "signature": "OperationalControllerTransferAcceptedV2(bytes32,address,address)",
+      "topic0": "0x9bd25012b3092f3ab75b14e267308c5765ef97aa95256491cf5653fc39c5d500"
+    },
+    {
+      "name": "OperationalControllerTransferCanceledV2",
+      "signature": "OperationalControllerTransferCanceledV2(bytes32,address)",
+      "topic0": "0x378c015a7816e77abf17e5c2b0750bc046bf1ddc50ba2376376ceb162b8d868e"
+    },
+    {
+      "name": "OperationalControllerTransferScheduledV2",
+      "signature": "OperationalControllerTransferScheduledV2(bytes32,address,address,uint48)",
+      "topic0": "0x4c8061c2277fb5edf78a647c068430efd74f41a4ad5775a1fdfd93ec348890b8"
+    },
+    {
       "name": "RoleAdminChanged",
       "signature": "RoleAdminChanged(bytes32,bytes32,bytes32)",
       "topic0": "0xbd79b86ffe0ab8e8776151514217cd7cacd52c909f66475c3af44e129f0b00ff"

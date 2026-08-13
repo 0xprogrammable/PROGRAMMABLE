@@ -85,8 +85,15 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registry.beginOperationalControllerTransfer(approverRole, successor);
         assertEq(registry.pendingOperationalController(approverRole).controller, successor);
 
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProgrammableCustomRegistryV2.OperationalControllerTransferNotReady.selector,
+                approverRole,
+                successor,
+                registry.pendingOperationalController(approverRole).acceptAfter
+            )
+        );
         vm.prank(successor);
-        vm.expectRevert(ProgrammableCustomRegistryV2.OperationalControllerTransferNotReady.selector);
         registry.acceptOperationalControllerTransfer(approverRole);
 
         vm.warp(block.timestamp + registry.defaultAdminDelay());
@@ -97,12 +104,23 @@ contract ProgrammableCustomRegistryV2Test is Test {
         assertFalse(registry.hasRole(approverRole, APPROVER));
 
         vm.prank(ADMIN);
-        vm.expectRevert(ProgrammableCustomRegistryV2.OperationalControllerConflict.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableCustomRegistryV2.OperationalControllerConflict.selector, successor)
+        );
         registry.beginOperationalControllerTransfer(registrarRole, successor);
 
         vm.prank(ADMIN);
-        vm.expectRevert(ProgrammableCustomRegistryV2.OperationalControllerConflict.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableCustomRegistryV2.OperationalControllerConflict.selector, successor)
+        );
         registry.beginDefaultAdminTransfer(successor);
+
+        address canceled = address(new NeutralOperationalControllerV2());
+        vm.prank(ADMIN);
+        registry.beginOperationalControllerTransfer(approverRole, canceled);
+        vm.prank(ADMIN);
+        registry.cancelOperationalControllerTransfer(approverRole);
+        assertEq(registry.pendingOperationalController(approverRole).controller, address(0));
     }
 
     function test_marketDescriptorRegistersOnlyAtStandard10() public {

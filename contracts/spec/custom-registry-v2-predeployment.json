@@ -14,12 +14,13 @@
     }
   },
   "sourceDigests": {
-    "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol": "0x0edb7785b12181f9039c478261c5bcb2db4f689611687f3df30924ca6bd719ad",
-    "contracts/src/ProgrammableCustomRegistryV2.sol": "0xcf935207809f06e9f4b7eedcefc573ac733ccd70a9619068ceaef5385c031570",
+    "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol": "0xaca7226e3a03895bf1c8a16c4ec28197197805784a951b36b7fa057c57d80b1c",
+    "contracts/src/ProgrammableCustomRegistryV2.sol": "0x6845ec501466bbb98f72142d588cc0fe8cca46753f5a61d58ee9daf579df423b",
     "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0xdb8a8376323dfbc3c2ac60e31364d6bf767d8e597e2e8b765fd3685a8542a622",
-    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0x7874225112ec42ceae17ce9cdac8832f3c4ad93fa59d26f8e604ee77bc900b30",
-    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0xc27861594ead6d0e525000a9ddc08fae8962542f17c29a2f111969a870ac1e3a",
-    "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0xd1048f1563f30b2d4ac74599bdf1fb5020e50d797dbc823ef0157f05070de1a0"
+    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0xd9ae39bc5256263b031d6a48ce45ecd8bfaadb4d558c74f30c5b7898eba37d0c",
+    "contracts/scripts/authorize-custom-registry-v2-deployment.mjs": "0xee19a35b06a33a9576a45b0b523af6cf8f12b5e44b43519e76875a5e4014d85d",
+    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0x00fc873d958d05d1d0b75a0ba0f286650ad68af2115d2b34d08a81cdc8697c84",
+    "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0x7a8512347cde74653c42b2b7bec9e9d8583d9cd4a7a6a1cf3495f5edd231a3a0"
   },
   "compiler": {
     "version": "0.8.26",
@@ -30,39 +31,40 @@
     "cborMetadata": false
   },
   "artifact": {
-    "creationBytecodeKeccak256": "0x551e2795cb772b0f0790c4860cdc2b3680540fe03f54b4d151aad5adcbedc2a5",
-    "runtimeTemplateKeccak256": "0x0e900b966aa45898d26406b7fc97a826976a9ce1ef4c11ae37b4a8a75277d9fd",
+    "abiSha256": "0x46d0aebd00c0eb7b9a152cb0e230f7777e367397e8c2f1b130c276c1309df4eb",
+    "creationBytecodeKeccak256": "0xa2a56d969d2d7e1ee38a7f404ffeadaf2525c1f43020ea4852afec10dd9c30af",
+    "runtimeTemplateKeccak256": "0x7eca70a8ca41bd2f08e9b634c54b302b1f5db05e9032558da77e09f60eafea62",
     "runtimeImmutableReferences": [
       {
-        "start": 926,
+        "start": 937,
         "length": 32
       },
       {
-        "start": 1542,
+        "start": 1553,
         "length": 32
       },
       {
-        "start": 1989,
+        "start": 2000,
         "length": 32
       },
       {
-        "start": 5175,
+        "start": 5260,
         "length": 32
       },
       {
-        "start": 5367,
+        "start": 5452,
         "length": 32
       },
       {
-        "start": 9128,
+        "start": 9607,
         "length": 32
       },
       {
-        "start": 10938,
+        "start": 11417,
         "length": 32
       },
       {
-        "start": 11021,
+        "start": 11500,
         "length": 32
       }
     ],
@@ -111,6 +113,11 @@
         "name": "cancelDefaultAdminTransfer",
         "signature": "cancelDefaultAdminTransfer()",
         "selector": "0xd602b9fd"
+      },
+      {
+        "name": "cancelOperationalControllerTransfer",
+        "signature": "cancelOperationalControllerTransfer(bytes32)",
+        "selector": "0xe7a3082c"
       },
       {
         "name": "CATEGORY",
@@ -388,6 +395,21 @@
         "name": "DefaultAdminTransferScheduled",
         "signature": "DefaultAdminTransferScheduled(address,uint48)",
         "topic0": "0x3377dc44241e779dd06afab5b788a35ca5f3b778836e2990bdb26a2a4b2e5ed6"
+      },
+      {
+        "name": "OperationalControllerTransferAcceptedV2",
+        "signature": "OperationalControllerTransferAcceptedV2(bytes32,address,address)",
+        "topic0": "0x9bd25012b3092f3ab75b14e267308c5765ef97aa95256491cf5653fc39c5d500"
+      },
+      {
+        "name": "OperationalControllerTransferCanceledV2",
+        "signature": "OperationalControllerTransferCanceledV2(bytes32,address)",
+        "topic0": "0x378c015a7816e77abf17e5c2b0750bc046bf1ddc50ba2376376ceb162b8d868e"
+      },
+      {
+        "name": "OperationalControllerTransferScheduledV2",
+        "signature": "OperationalControllerTransferScheduledV2(bytes32,address,address,uint48)",
+        "topic0": "0x4c8061c2277fb5edf78a647c068430efd74f41a4ad5775a1fdfd93ec348890b8"
       },
       {
         "name": "RoleAdminChanged",

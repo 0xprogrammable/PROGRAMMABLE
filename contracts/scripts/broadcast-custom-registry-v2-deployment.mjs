@@ -9,11 +9,21 @@ import {
   getAddress,
   getContractAddress,
   http,
-  keccak256,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import { assessDeploymentCost, requireDistinctRpcOrigins } from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  assessDeploymentCost,
+  assertArtifactBinding,
+  assertDeployerBinding,
+  assertLiveBinding,
+  assertPreflightEnvelope,
+  assertReviewedAuthorization,
+  assertSourceBinding,
+  computeConstructorCommitment,
+  requireDistinctRpcOrigins,
+  verifyReviewedAuthorizationSignature,
+} from "./custom-registry-v2-deployment-guards.mjs";
 
 if (!process.argv.includes("--broadcast")) throw new Error("explicit --broadcast is required");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -24,26 +34,46 @@ const expectedDigest = process.env.REGISTRY_REVIEWED_PLAN_SHA256;
 const actualDigest = `0x${createHash("sha256").update(planBytes).digest("hex")}`;
 if (actualDigest !== expectedDigest) throw new Error("reviewed plan digest mismatch");
 const plan = JSON.parse(planBytes);
-if (
-  plan.schemaVersion !== "programmable.custom-registry-deployment-preflight.v2"
-  || plan.status !== "PREFLIGHT_ONLY_NO_TRANSACTION"
-  || plan.broadcastAllowed !== false
-  || plan.signingAllowed !== false
-  || !Number.isSafeInteger(plan.expiresAtTimestamp)
-  || plan.expiresAtTimestamp < Math.floor(Date.now() / 1000)
-) throw new Error("reviewed plan is stale or invalid");
+const nowTimestamp = Math.floor(Date.now() / 1000);
+assertPreflightEnvelope(plan, nowTimestamp);
+const authorizationPath = path.resolve(process.env.REGISTRY_BROADCAST_AUTHORIZATION_PATH ?? "");
+if (!authorizationPath.startsWith("/tmp/")) throw new Error("broadcast authorization must be under /tmp");
+const authorizationBytes = await readFile(authorizationPath);
+const authorizationSha256 = `0x${createHash("sha256").update(authorizationBytes).digest("hex")}`;
+if (authorizationSha256 !== process.env.REGISTRY_BROADCAST_AUTHORIZATION_SHA256) {
+  throw new Error("broadcast authorization digest mismatch");
+}
+const authorization = JSON.parse(authorizationBytes);
+assertReviewedAuthorization({ authorization, preflightSha256: actualDigest, plan, nowTimestamp });
+await verifyReviewedAuthorizationSignature(authorization);
+if (computeConstructorCommitment(plan.constructor) !== plan.constructorCommitment) {
+  throw new Error("constructor commitment mismatch");
+}
 
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: root, encoding: "utf8" }).trim();
-if (commit !== plan.source.commit || tree !== plan.source.tree) throw new Error("source identity drifted from plan");
-if (execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }) !== "") {
-  throw new Error("broadcast requires a clean worktree");
-}
+assertSourceBinding({
+  commit,
+  tree,
+  clean: execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }) === "",
+  plan,
+});
 const artifact = JSON.parse(await readFile(
   path.join(root, "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json"),
 ));
-if (keccak256(artifact.bytecode.object) !== plan.source.creationBytecodeKeccak256) {
-  throw new Error("creation bytecode drifted from plan");
+const manifestBytes = await readFile(path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"));
+const manifest = JSON.parse(manifestBytes);
+const committedAbiBytes = await readFile(path.join(root, "docs/security/abi/ProgrammableCustomRegistryV2.json"));
+const committedAbiDocument = JSON.parse(committedAbiBytes);
+assertArtifactBinding({
+  artifactBytecode: artifact.bytecode.object,
+  manifestBytes,
+  committedAbiBytes,
+  manifest,
+  plan,
+});
+if (committedAbiDocument.schemaVersion !== "programmable.custom-registry-abi.v2") {
+  throw new Error("committed deployment ABI schema is invalid");
 }
 
 const rpcA = process.env.REGISTRY_PREFLIGHT_RPC_URL_A;
@@ -53,7 +83,7 @@ requireDistinctRpcOrigins(rpcA, rpcB);
 const privateKey = process.env.REGISTRY_DEPLOYER_PRIVATE_KEY;
 if (!privateKey || !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) throw new Error("deployer key is missing");
 const account = privateKeyToAccount(privateKey);
-if (getAddress(account.address) !== getAddress(plan.create.deployer)) throw new Error("deployer key mismatch");
+assertDeployerBinding(account.address, plan.create.deployer);
 const clients = [rpcA, rpcB].map((url) => createPublicClient({ chain: mainnet, transport: http(url) }));
 const live = await Promise.all(clients.map(async (client) => {
   const [finalized, latest, nonce, balance, priorityFee, code] = await Promise.all([
@@ -67,15 +97,10 @@ const live = await Promise.all(clients.map(async (client) => {
   return { finalized, latest, nonce, balance, priorityFee, code };
 }));
 const [a, b] = live;
-if (
-  a.finalized.number.toString() !== plan.commonFinalizedAnchor.blockNumber
-  || a.finalized.hash !== plan.commonFinalizedAnchor.blockHash
-  || b.finalized.number !== a.finalized.number || b.finalized.hash !== a.finalized.hash
-  || a.nonce !== b.nonce || a.nonce !== plan.create.exactPendingNonce
-  || a.balance !== b.balance || a.latest.gasLimit !== b.latest.gasLimit
-  || a.latest.baseFeePerGas !== b.latest.baseFeePerGas || a.priorityFee !== b.priorityFee
-) throw new Error("live broadcast state drifted from reviewed plan");
-if (a.code !== undefined && a.code !== "0x") throw new Error("predicted address is occupied");
+assertLiveBinding({ first: a, second: b, plan });
+if ((a.code !== undefined && a.code !== "0x") || (b.code !== undefined && b.code !== "0x")) {
+  throw new Error("predicted address is occupied on an independent RPC");
+}
 if (getContractAddress({ from: account.address, nonce: BigInt(a.nonce) }) !== plan.create.predictedAddress) {
   throw new Error("predicted CREATE address mismatch");
 }
@@ -92,7 +117,7 @@ assessDeploymentCost({
 });
 const wallet = createWalletClient({ account, chain: mainnet, transport: http(rpcA) });
 const transactionHash = await wallet.deployContract({
-  abi: artifact.abi,
+  abi: committedAbiDocument.abi,
   bytecode: artifact.bytecode.object,
   args: [plan.constructor],
   gas,
@@ -102,5 +127,43 @@ const transactionHash = await wallet.deployContract({
 const receipt = await clients[0].waitForTransactionReceipt({ hash: transactionHash, confirmations: 1 });
 if (receipt.status !== "success" || receipt.contractAddress !== plan.create.predictedAddress) {
   throw new Error("deployment receipt does not match reviewed plan");
+}
+const address = receipt.contractAddress;
+const read = (functionName, args = undefined) => clients[0].readContract({
+  address,
+  abi: committedAbiDocument.abi,
+  functionName,
+  ...(args ? { args } : {}),
+});
+const roleNames = ["APPROVER_ROLE", "REGISTRAR_ROLE", "FINALIZER_ROLE", "REVOKER_ROLE"];
+const roleValues = await Promise.all(roleNames.map((name) => read(name)));
+const [runtimeA, runtimeB, chainId, adminDelay, admin, minimumFinalityBlocks, policy, ...controllers] = await Promise.all([
+  clients[0].getCode({ address, blockTag: "latest" }),
+  clients[1].getCode({ address, blockTag: "latest" }),
+  read("CHAIN_ID"),
+  read("defaultAdminDelay"),
+  read("defaultAdmin"),
+  read("MINIMUM_FINALITY_BLOCKS"),
+  read("REGISTRY_POLICY_COMMITMENT"),
+  ...roleValues.map((role) => read("operationalController", [role])),
+]);
+const expectedControllers = [
+  plan.constructor.initialApprover,
+  plan.constructor.initialRegistrar,
+  plan.constructor.initialFinalizer,
+  plan.constructor.initialRevoker,
+].map(getAddress);
+if (
+  !runtimeA || runtimeA === "0x" || runtimeA !== runtimeB
+  || chainId !== 1n
+  || adminDelay !== BigInt(plan.constructor.initialAdminDelay)
+  || getAddress(admin) !== getAddress(plan.constructor.initialAdmin)
+  || minimumFinalityBlocks !== BigInt(plan.constructor.minimumFinalityBlocks)
+  || policy !== plan.constructor.registryPolicyCommitment
+  || controllers.some((controller, index) => getAddress(controller) !== expectedControllers[index])
+) throw new Error("post-deployment immutable or controller verification failed");
+const roleAssignments = await Promise.all(roleValues.map((role, index) => read("hasRole", [role, expectedControllers[index]])));
+if (roleAssignments.some((assigned) => assigned !== true)) {
+  throw new Error("post-deployment operational role verification failed");
 }
 process.stdout.write(`${JSON.stringify({ transactionHash, contractAddress: receipt.contractAddress })}\n`);
