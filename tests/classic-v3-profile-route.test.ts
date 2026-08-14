@@ -134,7 +134,7 @@ describe("Classic profile release gate", () => {
     });
   });
 
-  it("does not instantiate an RPC client for the public GET", async () => {
+  it("uses exactly one commitment-bound dRPC client for the public GET", async () => {
     const response = await GET(
       new NextRequest(
         `http://localhost/api/profile/classic-v3?account=${account}`,
@@ -142,16 +142,19 @@ describe("Classic profile release gate", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.readBitqueryClassicV3Profile).toHaveBeenCalledWith(account);
-    expect(mocks.createPublicClient).not.toHaveBeenCalled();
+    expect(mocks.readBitqueryClassicV3Profile).not.toHaveBeenCalled();
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "bitquery",
+      "rpc",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "drpc-primary",
     );
   });
 
-  it("returns a temporary error when the Bitquery read fails", async () => {
-    mocks.readBitqueryClassicV3Profile.mockRejectedValue(
-      new Error("Bitquery unavailable"),
+  it("returns 503 without fallback when the sole dRPC read fails", async () => {
+    mocks.client.getBlockNumber.mockRejectedValueOnce(
+      new Error("dRPC unavailable"),
     );
 
     const response = await GET(
@@ -169,10 +172,11 @@ describe("Classic profile release gate", () => {
         message: "Classic rewards are temporarily unavailable",
       },
     });
-    expect(mocks.createPublicClient).not.toHaveBeenCalled();
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readBitqueryClassicV3Profile).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid launch lookup hashes before reading Bitquery", async () => {
+  it("rejects invalid launch lookup hashes before reading a provider", async () => {
     const response = await GET(
       new NextRequest(
         `http://localhost/api/profile/classic-v3?account=${account}&launch=bad`,
@@ -184,6 +188,7 @@ describe("Classic profile release gate", () => {
       error: "Enter a valid launch transaction hash",
     });
     expect(mocks.readBitqueryClassicV3Launch).not.toHaveBeenCalled();
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
   });
 
   it("rejects claims from a wallet that does not own the vault", async () => {

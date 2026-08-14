@@ -8,6 +8,7 @@ import {
   isAddress,
   isHex,
   keccak256,
+  parseAbiItem,
   type Address,
   type Hex,
   type PublicClient,
@@ -17,6 +18,7 @@ import { mainnet } from "viem/chains";
 import {
   type ExploreReadModel,
 } from "@/lib/onchain";
+import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { readBitqueryExploreModelV1 } from
   "@/lib/market-data/bitquery-explore-model.server";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
@@ -33,12 +35,9 @@ import {
 } from "@/lib/stock-paired";
 import {
   getConfiguredStockPairedReleaseByHookAndVersion,
+  getConfiguredStockPairedReleases,
 } from "@/lib/stock-paired-release";
 import type { LauncherToken } from "@/lib/tokens";
-import {
-  readBitqueryStockPairedProfile,
-  safeBitqueryProfileError,
-} from "@/lib/market-data/bitquery-profile.server";
 import { ClassicTradeInputError } from "@/lib/trade/classic";
 import {
   prepareStockPairedRewardConversion,
@@ -53,6 +52,33 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 2_048;
 const ZERO_HASH = `0x${"0".repeat(64)}`;
 const CONVERSION_SLIPPAGE_BPS = 100;
+const PROFILE_LOG_RANGE = 10_000n;
+const stockPairedLaunchEvent = parseAbiItem(
+  "event StockPairedTokenLaunched(address indexed deployer,address indexed token,address indexed quoteAsset,bytes32 poolId,address rewardVault,address positionRecipient,uint256 positionTokenId,bytes32 launchHash)",
+);
+
+type StockRewardIdentity = Readonly<
+  Pick<
+    LauncherToken,
+    | "name"
+    | "symbol"
+    | "tokenAddress"
+    | "hookAddress"
+    | "poolId"
+    | "launchModel"
+  > &
+    Partial<
+      Pick<
+        LauncherToken,
+        | "imageUrl"
+        | "creatorAddress"
+        | "rewardVaultAddress"
+        | "quoteAssetAddress"
+        | "launchTransactionHash"
+        | "launchModelVersion"
+      >
+    >
+>;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -142,7 +168,7 @@ function entitlement(
 
 async function readVaultReward(
   client: PublicClient,
-  token: LauncherToken,
+  token: StockRewardIdentity,
   account: Address,
   snapshotBlock: bigint,
 ) {
@@ -441,6 +467,124 @@ async function readStockActionReward(
   return { reward, rpcClient };
 }
 
+async function readStockLaunchLogs(
+  client: PublicClient,
+  launcher: Address,
+  fromBlock: bigint,
+  toBlock: bigint,
+) {
+  const logs = [];
+  for (
+    let rangeStart = fromBlock;
+    rangeStart <= toBlock;
+    rangeStart += PROFILE_LOG_RANGE
+  ) {
+    const rangeEnd = rangeStart + PROFILE_LOG_RANGE - 1n;
+    logs.push(...await client.getLogs({
+      address: launcher,
+      event: stockPairedLaunchEvent,
+      fromBlock: rangeStart,
+      toBlock: rangeEnd < toBlock ? rangeEnd : toBlock,
+      strict: true,
+    }));
+  }
+  return logs;
+}
+
+async function readStockProfileFromClient(
+  account: Address,
+  client: PublicClient,
+) {
+  const releases = getConfiguredStockPairedReleases();
+  if (releases.length === 0) {
+    return {
+      status: "not-deployed" as const,
+      account,
+      chainId: 1 as const,
+      rewards: [],
+    };
+  }
+  const snapshotBlock = await client.getBlockNumber();
+  const launchGroups = await Promise.all(releases.map(async (release) => {
+    await Promise.all([
+      assertRuntime(
+        client,
+        release.addresses.feeHook,
+        release.runtimeCodeHashes.feeHook,
+        snapshotBlock,
+        `${release.internalContractRelease} hook`,
+      ),
+      assertRuntime(
+        client,
+        release.addresses.feeSplitVaultFactory,
+        release.runtimeCodeHashes.feeSplitVaultFactory,
+        snapshotBlock,
+        `${release.internalContractRelease} reward-vault factory`,
+      ),
+    ]);
+    const logs = snapshotBlock < BigInt(release.startBlock)
+      ? []
+      : await readStockLaunchLogs(
+          client,
+          release.addresses.launcher,
+          BigInt(release.startBlock),
+          snapshotBlock,
+        );
+    return Promise.all(logs.flatMap((log) => {
+      if (log.removed) return [];
+      return [async () => {
+        const vaultAddress = getAddress(log.args.rewardVault);
+        const accountShare = await client.readContract({
+          address: vaultAddress,
+          abi: stockFeeSplitVaultAbi,
+          functionName: "shareBpsOf",
+          args: [account],
+          blockNumber: snapshotBlock,
+        });
+        if (accountShare === 0) return null;
+        const tokenAddress = getAddress(log.args.token);
+        const [name, symbol] = await Promise.all([
+          client.readContract({
+            address: tokenAddress,
+            abi: uerc20ReadAbi,
+            functionName: "name",
+            blockNumber: snapshotBlock,
+          }),
+          client.readContract({
+            address: tokenAddress,
+            abi: uerc20ReadAbi,
+            functionName: "symbol",
+            blockNumber: snapshotBlock,
+          }),
+        ]);
+        const identity: StockRewardIdentity = {
+          name,
+          symbol,
+          tokenAddress,
+          hookAddress: release.addresses.feeHook,
+          poolId: log.args.poolId,
+          creatorAddress: getAddress(log.args.deployer),
+          launchTransactionHash: log.transactionHash,
+          quoteAssetAddress: getAddress(log.args.quoteAsset),
+          rewardVaultAddress: vaultAddress,
+          launchModel: "stock-paired",
+          launchModelVersion: release.internalContractRelease,
+        };
+        return readVaultReward(client, identity, account, snapshotBlock);
+      }];
+    }).map((read) => read()));
+  }));
+  return {
+    status: "ready" as const,
+    account,
+    chainId: 1 as const,
+    snapshotBlock: snapshotBlock.toString(),
+    rewards: launchGroups.flat().filter(
+      (reward): reward is NonNullable<typeof reward> => reward !== null,
+    ),
+  };
+}
+
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   if (
@@ -455,16 +599,19 @@ export async function GET(request: NextRequest) {
   }
   try {
     const account = getAddress(accountInput);
-    return NextResponse.json(await readBitqueryStockPairedProfile(account), {
+    return NextResponse.json(
+      await readStockProfileFromClient(account, actionClient()),
+      {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Read-Source": "bitquery",
+        "X-Programmable-Read-Source": "rpc",
+        "X-Programmable-Rpc-Provider": "drpc-primary",
       },
     });
   } catch (error) {
     console.error(
-      "Bitquery Stock-Paired profile read failed",
-      safeBitqueryProfileError(error),
+      "dRPC Stock-Paired profile read failed",
+      safeServerErrorSummary(error),
     );
     return json(
       { error: "Stock-Paired rewards are temporarily unavailable" },
