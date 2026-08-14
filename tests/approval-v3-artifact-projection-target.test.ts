@@ -46,6 +46,14 @@ describe("Approval v3 Website artifact projection target", () => {
         .resolves.toBeUndefined();
       await database.exec(`
         RESET ROLE;
+        GRANT postgres TO service_role;
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      await expect(assertApprovalV3ProjectionAdmissionReadyV1(pool))
+        .rejects.toThrow(/admission posture/u);
+      await database.exec(`
+        RESET ROLE;
+        REVOKE postgres FROM service_role;
         DROP TRIGGER projection_records_approval_v3_capacity_v1
           ON programmable_website_projection_v1.projection_records;
         SET ROLE programmable_website_projection_runtime;

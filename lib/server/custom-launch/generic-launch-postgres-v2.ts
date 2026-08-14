@@ -130,6 +130,7 @@ interface StorageMembershipPostureRow extends Record<string, unknown> {
 
 interface StorageAdmissionPostureRow extends Record<string, unknown> {
   trigger_count: unknown;
+  total_trigger_count: unknown;
   function_count: unknown;
   provider_execute_count: unknown;
 }
@@ -601,6 +602,30 @@ export async function assertPostgresGenericLaunchAdmissionReadyV2(
     || actualPolicies.some((value, index) => value !== expectedPolicies[index])) {
     throw new TypeError("Generic launch Approval admission posture is invalid");
   }
+  const membershipPosture = await pool.query<StorageMembershipPostureRow>(`
+    WITH RECURSIVE roots(root_oid, role_oid) AS (
+      SELECT oid, oid FROM pg_roles
+       WHERE rolname IN (
+         current_user, 'anon', 'authenticated', 'service_role'
+       )
+    ), reachable(root_oid, role_oid) AS (
+      SELECT root_oid, role_oid FROM roots
+      UNION
+      SELECT reachable.root_oid, memberships.roleid
+        FROM reachable
+        JOIN pg_auth_members memberships
+          ON memberships.member = reachable.role_oid
+    )
+    SELECT count(*) FILTER (WHERE root_oid <> role_oid)::text
+      AS reachable_membership_count
+      FROM reachable
+  `);
+  if (decimal(
+    membershipPosture.rows[0]?.reachable_membership_count,
+    "Generic launch reachable role membership count",
+  ) !== "0") {
+    throw new TypeError("Generic launch Approval admission posture is invalid");
+  }
   await assertGenericLaunchApprovalAdmissionFunctionV2(pool);
   const inventory = await pool.query<{ total: unknown }>(`
     SELECT count(*)::text AS total
@@ -781,30 +806,6 @@ async function assertGenericLaunchMaterializationStorageV2(
   ) !== "0") {
     throw new TypeError("Generic launch materialization storage posture is invalid");
   }
-  const membershipPosture = await pool.query<StorageMembershipPostureRow>(`
-    WITH RECURSIVE roots(root_oid, role_oid) AS (
-      SELECT oid, oid FROM pg_roles
-       WHERE rolname IN (
-         current_user, 'anon', 'authenticated', 'service_role'
-       )
-    ), reachable(root_oid, role_oid) AS (
-      SELECT root_oid, role_oid FROM roots
-      UNION
-      SELECT reachable.root_oid, memberships.roleid
-        FROM reachable
-        JOIN pg_auth_members memberships
-          ON memberships.member = reachable.role_oid
-    )
-    SELECT count(*) FILTER (WHERE root_oid <> role_oid)::text
-      AS reachable_membership_count
-      FROM reachable
-  `);
-  if (decimal(
-    membershipPosture.rows[0]?.reachable_membership_count,
-    "Generic launch reachable role membership count",
-  ) !== "0") {
-    throw new TypeError("Generic launch materialization storage posture is invalid");
-  }
 }
 
 async function assertGenericLaunchApprovalAdmissionFunctionV2(
@@ -830,6 +831,15 @@ async function assertGenericLaunchApprovalAdmissionFunctionV2(
          AND function.prorettype = 'trigger'::regtype
          AND function.prosrc = $1
     ) AS trigger_count,
+    (
+      SELECT count(*)::text
+        FROM pg_trigger trigger
+        JOIN pg_class table_class ON table_class.oid = trigger.tgrelid
+        JOIN pg_namespace table_schema ON table_schema.oid = table_class.relnamespace
+       WHERE table_schema.nspname = 'programmable_website_projection_v1'
+         AND table_class.relname = 'projection_records'
+         AND NOT trigger.tgisinternal
+    ) AS total_trigger_count,
     (
       SELECT count(*)::text
         FROM pg_proc function
@@ -872,6 +882,8 @@ async function assertGenericLaunchApprovalAdmissionFunctionV2(
   `, [APPROVAL_V3_CAPACITY_FUNCTION_SOURCE]);
   if (decimal(admissionPosture.rows[0]?.trigger_count,
       "Generic launch capacity trigger count") !== "1"
+    || decimal(admissionPosture.rows[0]?.total_trigger_count,
+      "Generic launch total projection trigger count") !== "1"
     || decimal(admissionPosture.rows[0]?.function_count,
       "Generic launch capacity function count") !== "1"
     || decimal(admissionPosture.rows[0]?.provider_execute_count,

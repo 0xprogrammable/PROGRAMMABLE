@@ -329,7 +329,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         SET ROLE programmable_website_projection_runtime;
       `);
       await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
-        .rejects.toThrow(/storage posture/u);
+        .rejects.toThrow(/posture/u);
       await database.exec(`
         RESET ROLE;
         REVOKE TRUNCATE
@@ -340,7 +340,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         SET ROLE programmable_website_projection_runtime;
       `);
       await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
-        .rejects.toThrow(/storage posture/u);
+        .rejects.toThrow(/posture/u);
       await database.exec(`
         RESET ROLE;
         REVOKE hidden_bypass FROM programmable_website_projection_runtime;
@@ -401,6 +401,24 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
           AS RESTRICTIVE FOR SELECT TO programmable_website_projection_runtime
           USING (false);
       `,
+      `
+        CREATE FUNCTION programmable_website_projection_v1.mutate_approval_lane_v1()
+        RETURNS trigger LANGUAGE plpgsql AS $mutate$
+        BEGIN
+          NEW.lane := CASE WHEN NEW.lane = 'website.approval-v3'
+            THEN 'website.entitlement' ELSE 'website.approval-v3' END;
+          RETURN NEW;
+        END
+        $mutate$;
+        CREATE TRIGGER aaa_hide_approval_lane_v1
+        BEFORE INSERT ON programmable_website_projection_v1.projection_records
+        FOR EACH ROW EXECUTE FUNCTION
+          programmable_website_projection_v1.mutate_approval_lane_v1();
+        CREATE TRIGGER zzz_restore_approval_lane_v1
+        BEFORE INSERT ON programmable_website_projection_v1.projection_records
+        FOR EACH ROW EXECUTE FUNCTION
+          programmable_website_projection_v1.mutate_approval_lane_v1();
+      `,
     ];
     for (const mutation of mutations) {
       const database = new PGlite();
@@ -417,7 +435,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         await database.close();
       }
     }
-  }, 30_000);
+  }, 60_000);
 
   it("repairs a legacy partial lifecycle commit without changing its record", async () => {
     const database = new PGlite();
