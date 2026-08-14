@@ -26,6 +26,8 @@ import {
   type ProjectionTargetPostgresPoolV1,
   type ProjectionTargetPostgresQueryResultV1,
 } from "../lib/server/projection-target/postgres-store";
+import { assertApprovalV3ProjectionAdmissionReadyV1 } from
+  "../lib/server/projection-target/approval-v3-target";
 
 const TARGET = digest("approval-v3-target");
 const AUDIENCE = "programmable.website.approval-v3";
@@ -35,6 +37,26 @@ const DESCRIPTOR_HASH = hash("2");
 const LAUNCH_ID = hash("3");
 
 describe("Approval v3 Website artifact projection target", () => {
+  it("fails ingress readiness when the exact Approval capacity fence is absent", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      await expect(assertApprovalV3ProjectionAdmissionReadyV1(pool))
+        .resolves.toBeUndefined();
+      await database.exec(`
+        RESET ROLE;
+        DROP TRIGGER projection_records_approval_v3_capacity_v1
+          ON programmable_website_projection_v1.projection_records;
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      await expect(assertApprovalV3ProjectionAdmissionReadyV1(pool))
+        .rejects.toThrow(/storage posture/u);
+    } finally {
+      await database.close();
+    }
+  }, 20_000);
+
   it("durably acknowledges, exactly replays, and reads one authenticated artifact", async () => {
     const store = createInMemoryProjectionTargetAtomicStoreV1();
     const handler = target(store);
@@ -208,6 +230,8 @@ class TestPool implements ProjectionTargetPostgresPoolV1 {
       release() {},
     });
   }
+
+  async assertProductionReadiness(): Promise<void> {}
 
   async query<Row extends Record<string, unknown> = Record<string, unknown>>(
     text: string,

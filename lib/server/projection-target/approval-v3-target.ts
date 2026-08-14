@@ -14,6 +14,8 @@ import {
 import {
   createProductionProjectionTargetPostgresPoolV1,
 } from "./website-target";
+import { assertPostgresGenericLaunchAdmissionReadyV2 } from
+  "../custom-launch/generic-launch-postgres-v2";
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -68,11 +70,18 @@ ProjectionTargetReferenceHandlerV1 {
   productionTarget = Object.freeze({
     contract: handler.contract,
     async handle(request: Request) {
-      await pool.assertProductionReadiness();
+      await assertApprovalV3ProjectionAdmissionReadyV1(pool);
       return await handler.handle(request);
     },
   });
   return productionTarget;
+}
+
+export async function assertApprovalV3ProjectionAdmissionReadyV1(
+  pool: ReturnType<typeof createProductionProjectionTargetPostgresPoolV1>,
+): Promise<void> {
+  await pool.assertProductionReadiness();
+  await assertPostgresGenericLaunchAdmissionReadyV2(pool);
 }
 
 export async function handleProductionApprovalV3ProjectionTargetV1(

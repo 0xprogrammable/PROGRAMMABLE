@@ -390,6 +390,17 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         FOR EACH ROW WHEN (false) EXECUTE FUNCTION
           programmable_website_projection_v1.enforce_approval_v3_capacity_v1();
       `,
+      `
+        ALTER POLICY projection_records_runtime_select
+          ON programmable_website_projection_v1.projection_records
+          USING (created_at > clock_timestamp() - interval '20 milliseconds');
+      `,
+      `
+        CREATE POLICY projection_records_hidden_restrictive
+          ON programmable_website_projection_v1.projection_records
+          AS RESTRICTIVE FOR SELECT TO programmable_website_projection_runtime
+          USING (false);
+      `,
     ];
     for (const mutation of mutations) {
       const database = new PGlite();
@@ -401,7 +412,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         await database.exec(`RESET ROLE; ${mutation}
           SET ROLE programmable_website_projection_runtime;`);
         await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
-          .rejects.toThrow(/storage posture/u);
+          .rejects.toThrow(/posture/u);
       } finally {
         await database.close();
       }

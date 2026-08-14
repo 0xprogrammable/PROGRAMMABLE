@@ -576,9 +576,49 @@ export async function assertPostgresGenericLaunchReadStoreReadyV2(
   );
 }
 
+export async function assertPostgresGenericLaunchAdmissionReadyV2(
+  pool: ProjectionTargetPostgresPoolV1,
+): Promise<void> {
+  const policies = await pool.query<StoragePolicyPostureRow>(`
+    SELECT tablename, policyname, permissive,
+           array_to_string(roles, ',') AS roles, cmd,
+           COALESCE(qual, '') AS qual,
+           COALESCE(with_check, '') AS with_check
+      FROM pg_policies
+     WHERE schemaname = 'programmable_website_projection_v1'
+       AND tablename = 'projection_records'
+     ORDER BY policyname
+  `);
+  const actualPolicies = policies.rows.map((row) => [
+    row.tablename, row.policyname, row.permissive, row.roles, row.cmd,
+    row.qual, row.with_check,
+  ].join("|"));
+  const expectedPolicies = [
+    "projection_records|projection_records_runtime_insert|PERMISSIVE|programmable_website_projection_runtime|INSERT||true",
+    "projection_records|projection_records_runtime_select|PERMISSIVE|programmable_website_projection_runtime|SELECT|true|",
+  ];
+  if (actualPolicies.length !== expectedPolicies.length
+    || actualPolicies.some((value, index) => value !== expectedPolicies[index])) {
+    throw new TypeError("Generic launch Approval admission posture is invalid");
+  }
+  await assertGenericLaunchApprovalAdmissionFunctionV2(pool);
+  const inventory = await pool.query<{ total: unknown }>(`
+    SELECT count(*)::text AS total
+      FROM programmable_website_projection_v1.projection_records
+     WHERE lane = 'website.approval-v3'
+  `);
+  if (BigInt(decimal(
+    inventory.rows[0]?.total,
+    "Generic launch Approval inventory",
+  )) > MAXIMUM_SUPPORTED_APPROVAL_INVENTORY) {
+    throw new TypeError("Generic launch reconciliation capacity is exceeded");
+  }
+}
+
 async function assertGenericLaunchMaterializationStorageV2(
   pool: ProjectionTargetPostgresPoolV1,
 ): Promise<void> {
+  await assertPostgresGenericLaunchAdmissionReadyV2(pool);
   const tables = await pool.query<StorageTablePostureRow>(`
     SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
            owner.rolname AS owner_name,
@@ -765,6 +805,11 @@ async function assertGenericLaunchMaterializationStorageV2(
   ) !== "0") {
     throw new TypeError("Generic launch materialization storage posture is invalid");
   }
+}
+
+async function assertGenericLaunchApprovalAdmissionFunctionV2(
+  pool: ProjectionTargetPostgresPoolV1,
+): Promise<void> {
   const admissionPosture = await pool.query<StorageAdmissionPostureRow>(`
     SELECT (
       SELECT count(*)::text
