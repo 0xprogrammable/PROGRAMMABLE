@@ -4,6 +4,7 @@ import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 import {
   WEBSITE_MAINNET_RPC_ENV,
+  productionMainnetRpcPrimary,
   productionMainnetRpcPair,
   websiteMainnetRpcPair,
 } from "../lib/onchain/website-rpc-providers.server";
@@ -72,6 +73,38 @@ describe("Website Mainnet RPC provider bindings", () => {
       secondaryProvider: "alchemy",
       secondaryUrl: ALCHEMY_URL,
     }))).toThrow("Production RPC provider roles are invalid");
+  });
+
+  it("binds only the committed dRPC primary without secondary configuration", () => {
+    const primaryOnly = {
+      [WEBSITE_MAINNET_RPC_ENV.primaryProvider]: "drpc",
+      [WEBSITE_MAINNET_RPC_ENV.primaryUrl]: DRPC_URL,
+      [WEBSITE_MAINNET_RPC_ENV.primaryCommitment]:
+        rpcProviderCommitment("endpoint", DRPC_URL),
+    };
+
+    expect(productionMainnetRpcPrimary(primaryOnly)).toEqual({
+      provider: "drpc",
+      url: DRPC_URL,
+      endpointCommitment: rpcProviderCommitment("endpoint", DRPC_URL),
+    });
+    expect(() => productionMainnetRpcPair(primaryOnly)).toThrow(
+      "Website secondary RPC provider binding is invalid",
+    );
+  });
+
+  it("rejects a non-dRPC or drifted production primary", () => {
+    expect(() => productionMainnetRpcPrimary({
+      [WEBSITE_MAINNET_RPC_ENV.primaryProvider]: "quicknode",
+      [WEBSITE_MAINNET_RPC_ENV.primaryUrl]: QUICKNODE_URL,
+      [WEBSITE_MAINNET_RPC_ENV.primaryCommitment]:
+        rpcProviderCommitment("endpoint", QUICKNODE_URL),
+    })).toThrow("Production primary RPC provider role is invalid");
+    expect(() => productionMainnetRpcPrimary({
+      [WEBSITE_MAINNET_RPC_ENV.primaryProvider]: "drpc",
+      [WEBSITE_MAINNET_RPC_ENV.primaryUrl]: DRPC_URL,
+      [WEBSITE_MAINNET_RPC_ENV.primaryCommitment]: `0x${"ab".repeat(32)}`,
+    })).toThrow("Website primary RPC endpoint commitment mismatch");
   });
 
   it("keeps provider roles interchangeable across the reviewed vendors", () => {
