@@ -174,6 +174,85 @@ test("fails closed when an exact metadata match remains after bounded reconcilia
   }), /did not become empty/u);
 });
 
+test("cancels an oversized chunked provider list without a content length", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(1_500_000));
+      controller.enqueue(new Uint8Array(700_000));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(reconcileGenericSignerProbeDeploymentsV1({
+    ...authority,
+    sleep: async () => {},
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  }), /too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
+test("rejects a declared oversized provider list before reading its body", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(reconcileGenericSignerProbeDeploymentsV1({
+    ...authority,
+    sleep: async () => {},
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: {
+        "content-length": "2097153",
+        "content-type": "application/json",
+      },
+    }),
+  }), /too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
+test("cancels a provider list whose body exceeds its small declared length", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(1_100_000));
+      controller.enqueue(new Uint8Array(1_100_000));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(reconcileGenericSignerProbeDeploymentsV1({
+    ...authority,
+    sleep: async () => {},
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: {
+        "content-length": "2",
+        "content-type": "application/json",
+      },
+    }),
+  }), /too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
+test("rejects a provider list response without a readable body", async () => {
+  await assert.rejects(reconcileGenericSignerProbeDeploymentsV1({
+    ...authority,
+    sleep: async () => {},
+    fetchImpl: async () => new Response(null, { status: 200 }),
+  }), /body is unavailable/u);
+});
+
 function candidate(id, prefix) {
   return {
     id,

@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
+import { readBoundedResponseText } from "./read-bounded-response.mjs";
+
 export const CUSTOM_V2_STAGE_EVIDENCE_SCHEMA_VERSION =
   "programmable.custom-v2-stage-evidence.v1";
 export const CUSTOM_V2_AUTHENTICATED_INGRESS_SCHEMA_VERSION =
@@ -55,12 +57,15 @@ export async function verifyCustomV2StageCandidateV1(input) {
       headers: { ...commonHeaders, ...(init.headers ?? {}) },
       signal: init.signal ?? AbortSignal.timeout(30_000),
     });
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > MAXIMUM_JSON_BYTES
-      || !response.headers.get("content-type")?.toLowerCase()
-        .startsWith("application/json")) {
+    if (!response.headers.get("content-type")?.toLowerCase()
+      .startsWith("application/json")) {
+      await response.body?.cancel("unexpected content type").catch(() => {});
       throw new Error(`${path} did not return bounded JSON`);
     }
+    const text = await readBoundedResponseText(response, {
+      maximumBytes: MAXIMUM_JSON_BYTES,
+      label: `${path} response`,
+    });
     let body;
     try {
       body = JSON.parse(text);

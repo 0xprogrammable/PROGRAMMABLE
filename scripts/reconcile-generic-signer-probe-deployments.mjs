@@ -5,6 +5,8 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { readBoundedResponseText } from "./read-bounded-response.mjs";
+
 const SCHEMA =
   "programmable.website-generic-launch-read-stage-probe-reconciliation.v1";
 const PROBE_MARKER = "one-shot-v1";
@@ -220,10 +222,10 @@ async function waitForStatus({ request, accepted, wait, label }) {
 }
 
 async function responseJson(response, label) {
-  const source = await response.text();
-  if (Buffer.byteLength(source, "utf8") > MAXIMUM_RESPONSE_BYTES) {
-    throw new Error(`${label} is too large`);
-  }
+  const source = await readBoundedResponseText(response, {
+    maximumBytes: MAXIMUM_RESPONSE_BYTES,
+    label,
+  });
   try {
     return JSON.parse(source);
   } catch {

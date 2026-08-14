@@ -377,6 +377,27 @@ test("authenticated ingress is digest-bound, delivered, read back and projected"
   ));
 });
 
+test("cancels an oversized chunked staged JSON response before buffering", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(3_000_000));
+      controller.enqueue(new Uint8Array(1_300_000));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(verifyCustomV2StageCandidateV1(baseInput(
+    async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  )), /response is too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
 test("candidate identity and activation matrix fail closed", async () => {
   await assert.rejects(
     verifyCustomV2StageCandidateV1(baseInput(fetchMatrix(), {

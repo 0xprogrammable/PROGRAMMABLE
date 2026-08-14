@@ -657,6 +657,7 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           import { appendFileSync } from "node:fs";
+          import { readBoundedResponseText } from "./scripts/read-bounded-response.mjs";
           const response = await fetch(new URL(
             "/api/ops/custom-launch/generic-v2-signer-probe",
             process.env.STAGED_TARGET_URL,
@@ -672,7 +673,15 @@ jobs:
             body: "{}",
             signal: AbortSignal.timeout(30_000),
           });
-          const body = await response.json();
+          if (!response.headers.get("content-type")?.toLowerCase()
+            .startsWith("application/json")) {
+            await response.body?.cancel("unexpected content type").catch(() => {});
+            throw new Error("clean candidate signer probe did not return JSON");
+          }
+          const body = JSON.parse(await readBoundedResponseText(response, {
+            maximumBytes: 65_536,
+            label: "clean candidate signer probe response",
+          }));
           if (response.status !== 503
             || body?.schemaVersion !==
               "programmable.generic-launch-signer-probe-error.v1"

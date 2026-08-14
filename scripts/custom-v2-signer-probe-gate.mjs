@@ -8,6 +8,8 @@ import {
 import { mkdirSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
+import { readBoundedResponseText } from "./read-bounded-response.mjs";
+
 const REQUEST_SCHEMA =
   "programmable.website-generic-launch-read-stage-probe-request.v1";
 const EXPECTED_SCHEMA =
@@ -68,10 +70,10 @@ export async function verifyGenericSignerProbeStageV1(input) {
         .startsWith("application/json")) {
       throw new Error(`Generic signer probe ${targetMachineId} failed`);
     }
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > MAXIMUM_RESPONSE_BYTES) {
-      throw new Error("Generic signer probe response is too large");
-    }
+    const text = await readBoundedResponseText(response, {
+      maximumBytes: MAXIMUM_RESPONSE_BYTES,
+      label: "Generic signer probe response",
+    });
     const receipt = verifyReceipt(JSON.parse(text), {
       request, target, deploymentId: input.deploymentId, gitHead: input.gitHead,
     });

@@ -10,6 +10,16 @@ const standaloneReconcile = readFileSync(
 );
 const verify = readFileSync(".github/workflows/verify.yml", "utf8");
 const proof = readFileSync("scripts/production-verify-proof.mjs", "utf8");
+const stageGate = readFileSync("scripts/custom-v2-stage-gate.mjs", "utf8");
+const signerProbeGate = readFileSync(
+  "scripts/custom-v2-signer-probe-gate.mjs",
+  "utf8",
+);
+const reconciler = readFileSync(
+  "scripts/reconcile-generic-signer-probe-deployments.mjs",
+  "utf8",
+);
+const boundedReader = readFileSync("scripts/read-bounded-response.mjs", "utf8");
 const exactTransportUnavailableMarketPhases =
   /\["market-core", "market-liquidity", "market-price"\]\.includes\(\s*marketRead\.phase,\s*\)/u;
 
@@ -149,6 +159,8 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   );
   assert.match(clean, /response\.status !== 503/u);
   assert.match(clean, /probe_unavailable/u);
+  assert.match(clean, /readBoundedResponseText/u);
+  assert.doesNotMatch(clean, /response\.(?:json|text)\(\)/u);
   const attest = stepBlock(
     deploy,
     "Attest canonical Generic signer probe cleanup bundle",
@@ -194,6 +206,25 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
     /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u,
   );
   assert.doesNotMatch(deploy, /vercel (?:promote|alias)/u);
+});
+
+test("new stage and cleanup HTTP consumers share the bounded streaming reader", () => {
+  assert.match(boundedReader, /headers\?\.get\?\.\("content-length"\)/u);
+  assert.match(boundedReader, /body\?\.getReader\?\.\(\)/u);
+  assert.match(boundedReader, /reader\.cancel/u);
+  assert.match(boundedReader, /reader\.releaseLock\(\)/u);
+  assert.match(boundedReader, /length > maximumBytes/u);
+  for (const source of [stageGate, signerProbeGate, reconciler]) {
+    assert.match(source, /from "\.\/read-bounded-response\.mjs"/u);
+    assert.match(source, /readBoundedResponseText/u);
+  }
+  const stagedJsonHelper = stageGate.slice(
+    stageGate.indexOf("const requestJson ="),
+    stageGate.indexOf("const manifestResult ="),
+  );
+  assert.doesNotMatch(stagedJsonHelper, /response\.(?:json|text)\(\)/u);
+  assert.doesNotMatch(signerProbeGate, /response\.(?:json|text)\(\)/u);
+  assert.doesNotMatch(reconciler, /response\.(?:json|text)\(\)/u);
 });
 
 test("Custom-only changes do not invoke the public data smoke", () => {

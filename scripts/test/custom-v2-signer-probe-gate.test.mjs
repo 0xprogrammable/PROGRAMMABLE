@@ -71,6 +71,92 @@ test("rejects a tampered authenticated provider signature", async () => {
   }), /signatures are invalid/u);
 });
 
+test("cancels an oversized chunked probe response without a content length", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(200_000));
+      controller.enqueue(new Uint8Array(70_000));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(verifyGenericSignerProbeStageV1({
+    targetUrl,
+    deploymentId,
+    gitHead,
+    expectedJson,
+    expectedSha256: digest(expectedJson),
+    probeSecret: "p".repeat(32),
+    automationBypassSecret: "b".repeat(32),
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  }), /response is too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
+test("rejects a declared oversized probe response before buffering it", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(verifyGenericSignerProbeStageV1({
+    targetUrl,
+    deploymentId,
+    gitHead,
+    expectedJson,
+    expectedSha256: digest(expectedJson),
+    probeSecret: "p".repeat(32),
+    automationBypassSecret: "b".repeat(32),
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: {
+        "content-length": "262145",
+        "content-type": "application/json",
+      },
+    }),
+  }), /response is too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
+test("cancels a probe response larger than its small declared length", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(140_000));
+      controller.enqueue(new Uint8Array(140_000));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(verifyGenericSignerProbeStageV1({
+    targetUrl,
+    deploymentId,
+    gitHead,
+    expectedJson,
+    expectedSha256: digest(expectedJson),
+    probeSecret: "p".repeat(32),
+    automationBypassSecret: "b".repeat(32),
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: {
+        "content-length": "2",
+        "content-type": "application/json",
+      },
+    }),
+  }), /response is too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
 function receipt(request) {
   const deployment = {
     schemaVersion:
