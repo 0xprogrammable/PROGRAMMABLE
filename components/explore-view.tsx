@@ -878,6 +878,22 @@ function assertExploreResponseContract(
   }
 }
 
+function shouldRetryMissingBitqueryFdv(
+  search: URLSearchParams,
+  payload: ExplorePayload,
+) {
+  const sort = search.get("sort");
+  if (sort !== "market-cap" && sort !== "market-cap-asc") return false;
+  return !payload.tokens.some((token) => {
+    const valuation = token.valuation;
+    return valuation.status === "available" &&
+      valuation.metric === "fdv" &&
+      valuation.freshness === "current" &&
+      valuation.source === "bitquery" &&
+      BigInt(valuation.valueWad) > 0n;
+  });
+}
+
 function assertUniqueExploreDatasetEntries(
   entries: readonly ValuedExploreEntry[],
 ) {
@@ -959,6 +975,9 @@ async function fetchExplorePayload(
       }
       const payload = parseExplorePayload(body);
       assertExploreResponseContract(payload, contract);
+      if (attempt === 0 && shouldRetryMissingBitqueryFdv(search, payload)) {
+        continue;
+      }
       return payload;
     } catch (error) {
       signal.throwIfAborted();
