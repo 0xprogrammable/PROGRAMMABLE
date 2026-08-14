@@ -830,6 +830,7 @@ describe("read-model operations source contract", () => {
   it("accepts the exact Explore transport-unavailable provider taxonomy", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain('error.phase === "market-liquidity"');
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: route },
     });
@@ -846,8 +847,13 @@ describe("read-model operations source contract", () => {
     ],
     [
       "an unbounded failure phase",
-      '(error.phase === "market-core" || error.phase === "market-price")',
+      '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
       "Boolean(error.phase)",
+    ],
+    [
+      "a bounded failure phase set without exact-pool liquidity",
+      '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
+      '(error.phase === "market-core" || error.phase === "market-price")',
     ],
     [
       "a combined degraded read source",
@@ -1141,8 +1147,13 @@ describe("read-model operations source contract", () => {
     ],
     [
       "an unbounded degraded failure phase",
-      '["market-core", "market-price"].includes(marketRead.phase)',
+      '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
       "Boolean(marketRead.phase)",
+    ],
+    [
+      "a degraded phase set without exact-pool liquidity",
+      '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
+      '["market-core", "market-price"].includes(marketRead.phase)',
     ],
     [
       "mixed available degraded valuations",

@@ -2568,7 +2568,9 @@ export function evaluateReadModelOperationsSourceContracts(
       'marketRead?.provider === "bitquery"',
       'marketRead.status === "unavailable"',
       'marketRead.category === "transport"',
-      '["market-core", "market-price"].includes(marketRead.phase)',
+      '["market-core", "market-liquidity", "market-price"].includes(\n' +
+        "                marketRead.phase,\n" +
+        "              )",
       'valuation?.status === "unavailable"',
       'valuation.metric === "fdv"',
       "valuation.available === 0",
@@ -2750,7 +2752,9 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicExplore, [
       "error instanceof BitqueryMarketDataError",
       'error.category === "transport"',
-      '(error.phase === "market-core" || error.phase === "market-price")',
+      '(error.phase === "market-core" ||\n' +
+        '      error.phase === "market-liquidity" ||\n' +
+        '      error.phase === "market-price")',
       "identityEntryCount > 0",
       "marketIdentityCount > 0",
       "!signal.aborted",

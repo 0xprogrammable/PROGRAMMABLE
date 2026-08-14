@@ -788,7 +788,9 @@ jobs:
               marketRead?.provider === "bitquery" &&
               marketRead.status === "unavailable" &&
               marketRead.category === "transport" &&
-              ["market-core", "market-price"].includes(marketRead.phase) &&
+              ["market-core", "market-liquidity", "market-price"].includes(
+                marketRead.phase,
+              ) &&
               valuation?.status === "unavailable" &&
               valuation.metric === "fdv" &&
               valuation.available === 0 &&
