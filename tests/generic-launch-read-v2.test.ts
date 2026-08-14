@@ -25,6 +25,11 @@ import {
   type GenericLaunchReadStoreV2,
   type SignedGenericLaunchReadEnvelopeV2,
 } from "../lib/server/custom-launch/generic-launch-read-v2";
+import {
+  handleProductionGenericLaunchDetailV2,
+  handleProductionGenericLaunchFeedV2,
+  handleProductionGenericLaunchReadinessV2,
+} from "../lib/server/custom-launch/generic-launch-production-v2";
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import publicSchema from "../config/generic-launch-public.v2.schema.json";
@@ -319,6 +324,44 @@ describe("Generic launch V2 signed read adapter", () => {
       binding: null,
       store: store(activeBinding(), []),
     })).toThrow(/cannot bind a read store/u);
+  });
+
+  it("keeps production Generic V2 dark after Registry activation until every runtime binding exists", async () => {
+    const name = "PROGRAMMABLE_GENERIC_LAUNCH_READ_BINDING_V2_JSON";
+    const previous = process.env[name];
+    delete process.env[name];
+    try {
+      const feed = await handleProductionGenericLaunchFeedV2(request(
+        "/api/custom-launch/generic/v2/launches",
+      ));
+      const detail = await handleProductionGenericLaunchDetailV2(
+        request(`/api/custom-launch/generic/v2/launches/${sha("1")}`),
+        sha("1"),
+      );
+      const readiness = await handleProductionGenericLaunchReadinessV2(request(
+        "/api/custom-launch/generic/v2/readiness",
+      ));
+
+      expect(feed.status).toBe(503);
+      expect(detail.status).toBe(503);
+      expect(readiness.status).toBe(503);
+      await expect(feed.json()).resolves.toEqual({
+        schemaVersion: "programmable.custom-launch-error.v1",
+        code: "generic_launch_v2_not_active",
+      });
+      await expect(detail.json()).resolves.toEqual({
+        schemaVersion: "programmable.custom-launch-error.v1",
+        code: "generic_launch_v2_not_active",
+      });
+      await expect(readiness.json()).resolves.toMatchObject({
+        schemaVersion: "programmable.generic-launch-readiness.v2",
+        status: "unready",
+        code: "generic_launch_v2_not_active",
+      });
+    } finally {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    }
   });
 
   it("serves identical signed V2 records from feed and detail", async () => {
