@@ -14,6 +14,9 @@ import {
   websiteProjectionAdoptionAttestationSha256,
   WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT,
   WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256,
+  WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_COMMIT,
+  WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_TREE,
+  WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256,
   WEBSITE_PROJECTION_ADOPTION_LEGACY_INVENTORY_SHA256,
   WEBSITE_PROJECTION_ADOPTION_LEGACY_PUBLIC_SHA256,
   WEBSITE_PROJECTION_ADOPTION_SOURCE_COMMIT,
@@ -125,7 +128,7 @@ CREATE TABLE programmable_website_projection_migrations.migration_evidence_v1 (
       evidence_kind = 'adopted-existing-prefix-v1'
       AND ordinal BETWEEN 1 AND 3
       AND adoption_source_snapshot_sha256 =
-        '0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284'
+        '0x917afa0f6bcd19f00f5d2ce5cd0d8221ef00ad6716460af11bff0906e4b9a0f9'
       AND adoption_source_catalog_sha256 ~ '^0x[0-9a-f]{64}$'
       AND adoption_source_data_sha256 ~ '^0x[0-9a-f]{64}$'
       AND adoption_attestation_sha256 ~ '^0x[0-9a-f]{64}$'
@@ -145,6 +148,10 @@ CREATE TABLE programmable_website_projection_migrations.adoption_evidence_v1 (
   ),
   source_snapshot_sha256 text NOT NULL CHECK (
     source_snapshot_sha256 =
+      '0x917afa0f6bcd19f00f5d2ce5cd0d8221ef00ad6716460af11bff0906e4b9a0f9'
+  ),
+  expanded_snapshot_sha256 text NOT NULL CHECK (
+    expanded_snapshot_sha256 =
       '0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284'
   ),
   base_snapshot_sha256 text NOT NULL CHECK (
@@ -364,9 +371,76 @@ function expectedTargetIdentity(value, expectedProjectRef) {
     && value.sslMode === "verify-full";
 }
 
+function assertCurrentSnapshotRoleAndMembershipInventory(currentSnapshot) {
+  if (!Array.isArray(currentSnapshot.roles)
+    || currentSnapshot.roles.length !== 36
+    || !Array.isArray(currentSnapshot.memberships)
+    || currentSnapshot.memberships.length !== 50) {
+    throw new Error("adopt-existing current snapshot inventory size mismatch");
+  }
+  const roleNames = [];
+  for (const role of currentSnapshot.roles) {
+    if (!plainObject(role)
+      || typeof role.rolname !== "string"
+      || role.rolname === ""
+      || typeof role.rolsuper !== "boolean"
+      || typeof role.rolinherit !== "boolean"
+      || typeof role.rolcreaterole !== "boolean"
+      || typeof role.rolcreatedb !== "boolean"
+      || typeof role.rolcanlogin !== "boolean"
+      || typeof role.rolreplication !== "boolean"
+      || !Number.isSafeInteger(role.rolconnlimit)
+      || !(role.rolvaliduntil === null
+        || typeof role.rolvaliduntil === "string")
+      || typeof role.rolbypassrls !== "boolean"
+      || !(role.rolconfig === null
+        || (Array.isArray(role.rolconfig)
+          && role.rolconfig.every((entry) => typeof entry === "string")))) {
+      throw new Error("adopt-existing current snapshot role inventory is invalid");
+    }
+    roleNames.push(role.rolname);
+  }
+  if (new Set(roleNames).size !== roleNames.length
+    || canonicalJson(roleNames) !== canonicalJson([...roleNames].sort())) {
+    throw new Error("adopt-existing current snapshot roles are not unique and sorted");
+  }
+  const roleNameSet = new Set(roleNames);
+  const membershipKeys = [];
+  for (const membership of currentSnapshot.memberships) {
+    if (!plainObject(membership)
+      || typeof membership.member_name !== "string"
+      || typeof membership.role_name !== "string"
+      || typeof membership.grantor_name !== "string"
+      || typeof membership.admin_option !== "boolean"
+      || typeof membership.inherit_option !== "boolean"
+      || typeof membership.set_option !== "boolean"
+      || !roleNameSet.has(membership.member_name)
+      || !roleNameSet.has(membership.role_name)
+      || !roleNameSet.has(membership.grantor_name)) {
+      throw new Error("adopt-existing current snapshot membership inventory is invalid");
+    }
+    membershipKeys.push([
+      membership.member_name,
+      membership.role_name,
+      membership.grantor_name,
+      String(membership.admin_option),
+      String(membership.inherit_option),
+      String(membership.set_option),
+    ].join("\0"));
+  }
+  if (new Set(membershipKeys).size !== membershipKeys.length
+    || canonicalJson(membershipKeys)
+      !== canonicalJson([...membershipKeys].sort())) {
+    throw new Error(
+      "adopt-existing current snapshot memberships are not unique and sorted",
+    );
+  }
+}
+
 export function assertWebsiteProjectionAdoptionProtectedSnapshots({
   baseSnapshot,
   expandedSnapshot,
+  currentSnapshot,
   expectedProjectRef,
 }) {
   if (!plainObject(baseSnapshot)
@@ -383,9 +457,31 @@ export function assertWebsiteProjectionAdoptionProtectedSnapshots({
     || expandedSnapshot.baseSnapshot?.rawSha256
       !== WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256
     || canonicalJson(expandedSnapshot.applicationCatalog)
-      !== canonicalJson(baseSnapshot)) {
+      !== canonicalJson(baseSnapshot)
+    || !plainObject(currentSnapshot)
+    || currentSnapshot.kind
+      !== "programmable-website-projection-hosted-catalog-snapshot-v3"
+    || currentSnapshot.schemaVersion !== 3
+    || !expectedTargetIdentity(currentSnapshot.target, expectedProjectRef)
+    || currentSnapshot.operatorSource?.repositoryCommit
+      !== WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_COMMIT
+    || currentSnapshot.operatorSource?.repositoryTree
+      !== WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_TREE
+    || currentSnapshot.parentSnapshots?.baseRawSha256
+      !== WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256
+    || currentSnapshot.parentSnapshots?.expandedRawSha256
+      !== WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256
+    || currentSnapshot.observation?.databaseName !== "postgres"
+    || Number(currentSnapshot.observation?.serverPort) !== 5432
+    || !/^\d{6}$/u.test(currentSnapshot.observation?.serverVersionNum ?? "")
+    || Number(currentSnapshot.observation.serverVersionNum) < 150000
+    || currentSnapshot.observation?.sessionUser !== "postgres"
+    || currentSnapshot.observation?.currentRole !== "postgres"
+    || typeof currentSnapshot.observation?.observedAt !== "string"
+    || !Number.isFinite(Date.parse(currentSnapshot.observation.observedAt))) {
     throw new Error("adopt-existing protected snapshot identity mismatch");
   }
+  assertCurrentSnapshotRoleAndMembershipInventory(currentSnapshot);
   const legacy = expandedSnapshot.legacySupabaseInventory;
   if (!plainObject(legacy)
     || legacy.fullCanonicalSha256
@@ -428,7 +524,10 @@ export function assertWebsiteProjectionAdoptionProtectedSnapshots({
   return Object.freeze({
     baseSnapshot,
     expandedSnapshot,
+    currentSnapshot,
     sourceSnapshotSha256: WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256,
+    expandedSnapshotSha256:
+      WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256,
     baseSnapshotSha256: WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256,
   });
 }
@@ -436,9 +535,10 @@ export function assertWebsiteProjectionAdoptionProtectedSnapshots({
 export async function readWebsiteProjectionAdoptionProtectedSnapshots({
   baseSnapshotPath,
   expandedSnapshotPath,
+  currentSnapshotPath,
   expectedProjectRef,
 }) {
-  const [baseSnapshot, expandedSnapshot] = await Promise.all([
+  const [baseSnapshot, expandedSnapshot, currentSnapshot] = await Promise.all([
     readProtectedSnapshotFile(
       baseSnapshotPath,
       WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256,
@@ -446,13 +546,19 @@ export async function readWebsiteProjectionAdoptionProtectedSnapshots({
     ),
     readProtectedSnapshotFile(
       expandedSnapshotPath,
-      WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256,
+      WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256,
       "adopt-existing expanded snapshot",
+    ),
+    readProtectedSnapshotFile(
+      currentSnapshotPath,
+      WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256,
+      "adopt-existing current snapshot",
     ),
   ]);
   return assertWebsiteProjectionAdoptionProtectedSnapshots({
     baseSnapshot,
     expandedSnapshot,
+    currentSnapshot,
     expectedProjectRef,
   });
 }
@@ -556,22 +662,8 @@ async function readRoleGraph(sql, appliedCount, {
 }
 
 async function readExtendedRoleInventory(sql) {
-  return {
-    roles: await queryRows(sql, `
-      /* website-projection:adoption-extended-roles */
-      SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
-             rolcanlogin, rolreplication, rolconnlimit,
-             rolvaliduntil::text AS rolvaliduntil, rolbypassrls, rolconfig
-        FROM pg_catalog.pg_roles
-       WHERE rolname IN (
-         'anon', 'authenticated', 'postgres',
-         'programmable_website_projection_runtime',
-         'service_role', 'supabase_admin'
-       )
-       ORDER BY rolname
-    `),
-    memberships: await queryRows(sql, `
-      /* website-projection:adoption-extended-memberships */
+  const memberships = await queryRows(sql, `
+    /* website-projection:adoption-extended-memberships */
       SELECT member.rolname AS member_name,
              granted.rolname AS role_name,
              grantor.rolname AS grantor_name,
@@ -582,7 +674,23 @@ async function readExtendedRoleInventory(sql) {
         JOIN pg_catalog.pg_roles granted ON granted.oid = membership.roleid
         JOIN pg_catalog.pg_roles grantor ON grantor.oid = membership.grantor
        ORDER BY member.rolname, granted.rolname, grantor.rolname
-    `),
+  `);
+  const endpointRoleNames = [...new Set(memberships.flatMap((membership) => [
+    membership.member_name,
+    membership.role_name,
+    membership.grantor_name,
+  ]))].sort();
+  return {
+    roles: await queryRows(sql, `
+      /* website-projection:adoption-extended-roles */
+      SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
+             rolcanlogin, rolreplication, rolconnlimit,
+             rolvaliduntil::text AS rolvaliduntil, rolbypassrls, rolconfig
+        FROM pg_catalog.pg_roles
+       WHERE rolname::text = ANY($1::text[])
+       ORDER BY rolname
+    `, [endpointRoleNames]),
+    memberships,
   };
 }
 
@@ -677,7 +785,8 @@ export function assertWebsiteProjectionAdoptionLiveInventory({
   protectedSnapshots,
 }) {
   const expanded = protectedSnapshots?.expandedSnapshot;
-  if (!plainObject(expanded)) {
+  const current = protectedSnapshots?.currentSnapshot;
+  if (!plainObject(expanded) || !plainObject(current)) {
     throw new Error("adopt-existing protected snapshot is unavailable");
   }
   assertExactApplicationStructure(
@@ -697,9 +806,9 @@ export function assertWebsiteProjectionAdoptionLiveInventory({
     "adopt-existing protected application role inventory mismatch");
   exactJson(sourceCatalog.memberships, expectedMemberships,
     "adopt-existing protected application membership inventory mismatch");
-  exactJson(extendedRoleInventory.roles, expanded.roleExtended,
+  exactJson(extendedRoleInventory.roles, current.roles,
     "adopt-existing extended role inventory mismatch");
-  exactJson(extendedRoleInventory.memberships, expanded.membershipExtended,
+  exactJson(extendedRoleInventory.memberships, current.memberships,
     "adopt-existing extended membership inventory mismatch");
   assertEmptyAdoptionData(sourceData);
   exactJson(
@@ -773,7 +882,8 @@ async function readPresenceAndEvidence(sql) {
     ? await queryRows(sql, `
         /* website-projection:adoption-evidence */
         SELECT evidence_kind, adopted_through_version,
-               source_snapshot_sha256, base_snapshot_sha256,
+               source_snapshot_sha256, expanded_snapshot_sha256,
+               base_snapshot_sha256,
                legacy_inventory_sha256, legacy_public_sha256,
                source_catalog_sha256,
                corrected_catalog_sha256, source_data_sha256,
@@ -1433,7 +1543,8 @@ async function insertAdoptionEvidence(transaction, {
   await queryRows(transaction, `
     INSERT INTO programmable_website_projection_migrations.adoption_evidence_v1 (
       evidence_kind, adopted_through_version, source_snapshot_sha256,
-      base_snapshot_sha256, legacy_inventory_sha256, legacy_public_sha256,
+      expanded_snapshot_sha256, base_snapshot_sha256,
+      legacy_inventory_sha256, legacy_public_sha256,
       source_catalog_sha256, corrected_catalog_sha256, source_data_sha256,
       operator_catalog_sha256, attestation_sha256, source_plan_sha256,
       source_order_sha256, source_repository_commit, source_repository_tree,
@@ -1445,11 +1556,12 @@ async function insertAdoptionEvidence(transaction, {
     ) VALUES (
       'adopted-existing-prefix-v1', '0003', $1, $2, $3, $4, $5, $6,
       $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-      $19, $20,
+      $19, $20, $21,
       0, 0, 0, true, false
     )
   `, [
     sourceSnapshotSha256,
+    WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256,
     WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256,
     WEBSITE_PROJECTION_ADOPTION_LEGACY_INVENTORY_SHA256,
     WEBSITE_PROJECTION_ADOPTION_LEGACY_PUBLIC_SHA256,
@@ -1539,6 +1651,8 @@ export async function adoptExistingWebsiteProjectionDatabase({
   if (!plainObject(protectedSnapshots)
     || protectedSnapshots.sourceSnapshotSha256
       !== WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256
+    || protectedSnapshots.expandedSnapshotSha256
+      !== WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256
     || protectedSnapshots.baseSnapshotSha256
       !== WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256) {
     throw new Error("adopt-existing protected snapshots were not verified");
