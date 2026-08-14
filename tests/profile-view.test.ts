@@ -367,6 +367,24 @@ describe("profile workspace loading state", () => {
       /@media \(max-width: 820px\)[\s\S]*?\.profileWorkspace/,
     );
   });
+
+  it("keeps profile loading visually empty and reveals only resolved content", () => {
+    expect(profileViewSource).toContain(
+      'className={styles.profileLoadingState}',
+    );
+    expect(profileViewSource).toContain(
+      'if (profileWorkspacePhase === "loading")',
+    );
+    expect(profileViewSource).not.toContain("styles.sessionLoadingWorkspace");
+    expect(profileViewSource).not.toContain("styles.loadingPanelTitle");
+    expect(profileExperienceCss).toMatch(
+      /\.profileLoadingState\s*\{[^}]*min-height:/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileReveal\s*\{[^}]*animation: profile-content-reveal/s,
+    );
+    expect(profileExperienceCss).not.toContain("profile-skeleton-pulse");
+  });
 });
 
 describe("fee earnings chart", () => {

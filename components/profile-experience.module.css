@@ -557,8 +557,7 @@
 }
 
 .feePanel,
-.claimablePanel,
-.loadingPanel {
+.claimablePanel {
   min-width: 0;
 }
 
@@ -1246,123 +1245,9 @@
   width: 1px;
 }
 
-.sessionLoading {
-  display: grid;
-  gap: 18px;
+.profileLoadingState {
+  min-height: clamp(420px, 68svh, 680px);
   min-width: 0;
-}
-
-.sessionLoadingHero {
-  align-items: center;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 56px minmax(0, 1fr);
-  min-height: 64px;
-  min-width: 0;
-}
-
-.sessionLoadingAvatar,
-.sessionLoadingIdentity > span,
-.sessionLoadingWorkspace > span,
-.loadingPanelTitle,
-.loadingPanelTotal,
-.loadingPanelChart,
-.loadingClaimRows > span {
-  background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
-}
-
-.sessionLoadingAvatar {
-  border-radius: 15px;
-  height: 56px;
-  width: 56px;
-}
-
-.sessionLoadingIdentity {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.sessionLoadingIdentity > span:first-child {
-  border-radius: 8px;
-  height: 30px;
-  max-width: 260px;
-  width: 48%;
-}
-
-.sessionLoadingIdentity > span:last-child {
-  border-radius: 5px;
-  height: 11px;
-  max-width: 145px;
-  width: 28%;
-}
-
-.sessionLoadingWorkspace {
-  background: var(--profile-panel);
-  border: 1px solid var(--profile-line);
-  border-radius: 24px;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: var(--liquid-glass-shadow);
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.62fr);
-  min-width: 0;
-  padding: 8px;
-}
-
-.sessionLoadingWorkspace > span {
-  border-radius: 17px;
-  min-height: 470px;
-}
-
-.profileLoading {
-  margin-block-start: 18px;
-  min-width: 0;
-}
-
-.loadingPanel {
-  display: flex;
-  flex-direction: column;
-  min-height: 470px;
-  padding: 20px 22px;
-}
-
-.loadingPanel:last-child {
-  background: var(--profile-subtle);
-  border-radius: 17px;
-  padding: 18px;
-}
-
-.loadingPanelTitle {
-  border-radius: 7px;
-  height: 20px;
-  width: 118px;
-}
-
-.loadingPanelTotal {
-  border-radius: 9px;
-  height: 50px;
-  margin-block-start: 28px;
-  width: min(255px, 66%);
-}
-
-.loadingPanelChart {
-  border-radius: 14px;
-  flex: 1;
-  margin-block-start: 28px;
-  min-height: 210px;
-}
-
-.loadingClaimRows {
-  display: grid;
-  gap: 3px;
-  margin-block-start: 14px;
-}
-
-.loadingClaimRows > span {
-  border-radius: 12px;
-  min-height: 62px;
 }
 
 .accountState {
@@ -1480,18 +1365,8 @@
     );
   }
 
-  .sessionLoadingWorkspace {
-    height: clamp(
-      500px,
-      calc(100svh - var(--header-height) - 132px),
-      680px
-    );
-  }
-
   .feePanel,
-  .claimablePanel,
-  .loadingPanel,
-  .sessionLoadingWorkspace > span {
+  .claimablePanel {
     height: 100%;
     min-height: 0;
   }
@@ -1511,8 +1386,7 @@
 }
 
 @media (max-width: 980px) {
-  .profileWorkspace,
-  .sessionLoadingWorkspace {
+  .profileWorkspace {
     grid-template-columns: minmax(0, 1fr) minmax(340px, 0.68fr);
   }
 
@@ -1527,8 +1401,7 @@
     padding-block: 22px 36px;
   }
 
-  .profileWorkspace,
-  .sessionLoadingWorkspace {
+  .profileWorkspace {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1541,9 +1414,7 @@
     min-height: 370px;
   }
 
-  .claimablePanel,
-  .loadingPanel,
-  .sessionLoadingWorkspace > span {
+  .claimablePanel {
     min-height: 340px;
   }
 
@@ -1603,8 +1474,7 @@
     padding: 48px 8px 54px;
   }
 
-  .profileWorkspace,
-  .sessionLoadingWorkspace {
+  .profileWorkspace {
     border-radius: 20px;
     padding: 6px;
   }
@@ -1618,8 +1488,7 @@
     padding: 18px 14px 14px;
   }
 
-  .claimablePanel,
-  .loadingPanel:last-child {
+  .claimablePanel {
     border-radius: 15px;
     padding: 16px 12px;
   }
@@ -1686,16 +1555,6 @@
     width: 100%;
   }
 
-  .sessionLoadingHero {
-    gap: 12px;
-    grid-template-columns: 50px minmax(0, 1fr);
-  }
-
-  .sessionLoadingAvatar {
-    border-radius: 13px;
-    height: 50px;
-    width: 50px;
-  }
 }
 
 @media (max-width: 380px) {
@@ -1744,9 +1603,7 @@
   }
 
   .feePanel,
-  .claimablePanel,
-  .loadingPanel,
-  .loadingPanel:last-child {
+  .claimablePanel {
     padding-inline: 11px;
   }
 
@@ -1790,25 +1647,21 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .sessionLoadingAvatar,
-  .sessionLoadingIdentity > span,
-  .sessionLoadingWorkspace > span,
-  .loadingPanelTitle,
-  .loadingPanelTotal,
-  .loadingPanelChart,
-  .loadingClaimRows > span {
-    animation: profile-skeleton-pulse 1.6s ease-in-out infinite;
+  .profileReveal {
+    animation: profile-content-reveal 420ms cubic-bezier(0.32, 0.72, 0, 1)
+      both;
   }
 }
 
-@keyframes profile-skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.48;
+@keyframes profile-content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
 
-  50% {
-    opacity: 0.88;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -1830,7 +1683,6 @@
 
 @media (forced-colors: active) {
   .profileWorkspace,
-  .sessionLoadingWorkspace,
   .claimablePanel,
   .claimDialogSurface,
   .claimDialogAction {
