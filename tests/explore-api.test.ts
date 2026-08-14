@@ -310,7 +310,9 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     const body = await json(response);
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ total: 12, sort: "market-cap" });
-    expect((body.tokens as ExploreEntry[]).every(
+    expect((body.tokens as Array<ExploreEntry & {
+      valuation?: { status?: string };
+    }>).every(
       (entry) => entry.valuation?.status === "unavailable",
     )).toBe(true);
     expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
