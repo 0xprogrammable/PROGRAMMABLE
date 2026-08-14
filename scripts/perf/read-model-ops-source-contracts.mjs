@@ -2361,6 +2361,8 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/onchain/website-rpc-providers.server.ts") ?? "";
   const actionRpcProviders =
     source("lib/server/action-rpc-quorum.server.ts") ?? "";
+  const actionRpcIdentity =
+    source("lib/server/action-rpc-identity.server.ts") ?? "";
   const retiredCandidateCutover = Object.freeze({
     productionRunbook: productionCutoverRunbook,
     envioRunbook: envioCandidateRunbook,
@@ -2556,6 +2558,11 @@ export function evaluateReadModelOperationsSourceContracts(
         'Object.defineProperty(provider, "endpoint"',
       ) &&
       actionRpcProviders.includes("enumerable: false") &&
+      actionRpcIdentity.includes("readTradeActionModelFromRpc") &&
+      actionRpcIdentity.includes("readCreatorClaimIdentityFromRpc") &&
+      !/bitquery|alchemy|durable|blob|secondary|fallback|quorum|subgraph|stateview|chainlink|envio/iu.test(
+        actionRpcIdentity,
+      ) &&
       tradePrepare.includes("tradeActionRpcProvider") &&
       !tradePrepare.includes("tradeActionRpcProviders") &&
       tradePrepare.includes('"Cache-Control": "no-store"') &&
