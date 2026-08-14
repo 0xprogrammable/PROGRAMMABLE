@@ -6,13 +6,14 @@ import { Suspense } from "react";
 import { GET as readExploreResponse } from "@/app/api/explore/route";
 import { ExploreView } from "@/components/explore-view";
 import type { ExploreInitialResponse } from "@/components/explore-view";
+import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 
 export const dynamic = "force-dynamic";
 
 const INITIAL_EXPLORE_TIMEOUT_MS = 12_000;
-const INITIAL_EXPLORE_QUERY = new URLSearchParams({
+export const INITIAL_EXPLORE_QUERY = new URLSearchParams({
   q: "",
-  sort: "newest",
+  sort: DEFAULT_EXPLORE_VIEW_SORT,
   page: "1",
   limit: "9",
 }).toString();

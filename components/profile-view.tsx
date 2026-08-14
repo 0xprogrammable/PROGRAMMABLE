@@ -387,6 +387,9 @@ const walletChangedBeforeSubmission =
   "The connected wallet changed before submission";
 const insufficientNetworkFee =
   "This wallet needs more ETH to cover the network fee";
+const transactionCancelledInWallet = "Transaction cancelled in wallet";
+const creatorClaimNotSubmitted =
+  "The claim status could not be confirmed. Check your wallet activity before trying again.";
 
 export function profileCreatorClaimErrorMessage(error: unknown) {
   if (
@@ -399,11 +402,14 @@ export function profileCreatorClaimErrorMessage(error: unknown) {
   if (
     error instanceof Error &&
     (error.message === walletChangedBeforeSubmission ||
-      error.message === insufficientNetworkFee)
+      error.message === insufficientNetworkFee ||
+      error.message === transactionCancelledInWallet)
   ) {
-    return error.message;
+    return error.message === transactionCancelledInWallet
+      ? "Transaction cancelled. Your rewards are still available to claim."
+      : error.message;
   }
-  return "The creator claim was not completed. Check your wallet and try again.";
+  return creatorClaimNotSubmitted;
 }
 
 export function profileRewardActionErrorMessage(error: unknown) {

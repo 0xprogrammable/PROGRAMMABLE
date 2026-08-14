@@ -123,7 +123,19 @@ describe("profile action error copy", () => {
         ),
       ),
     ).toBe(
-      "The creator claim was not completed. Check your wallet and try again.",
+      "The claim status could not be confirmed. Check your wallet activity before trying again.",
+    );
+    expect(
+      profileCreatorClaimErrorMessage(
+        new Error("Transaction cancelled in wallet"),
+      ),
+    ).toBe(
+      "Transaction cancelled. Your rewards are still available to claim.",
+    );
+    expect(
+      profileCreatorClaimErrorMessage(new Error("private provider detail")),
+    ).toBe(
+      "The claim status could not be confirmed. Check your wallet activity before trying again.",
     );
   });
 
