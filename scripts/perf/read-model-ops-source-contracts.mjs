@@ -2471,15 +2471,10 @@ export function evaluateReadModelOperationsSourceContracts(
     stockProfilePostStart >= 0
       ? publicStockProfile.slice(0, stockProfilePostStart)
       : publicStockProfile;
-  const publicCreatorRoutes = [
-    publicCreatorProfile,
-    publicClassicProfileGet,
-    publicStockProfileGet,
-  ];
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
   const publicRuntimeRoutes = [
     ...publicIdentityAndMarketRoutes,
-    ...publicCreatorRoutes,
+    publicCreatorProfile,
     ...publicActionRoutes,
   ];
   const obsoletePublicBinding =
