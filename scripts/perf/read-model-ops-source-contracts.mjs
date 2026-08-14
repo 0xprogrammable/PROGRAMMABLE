@@ -2452,6 +2452,40 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
+  const stagedBitquery503Retry =
+    /const requestUrl = new URL\(path, target\);[\s\S]*for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{[\s\S]*const response = await fetch\(requestUrl, \{[\s\S]*if \(response\.status === 503 && attempt === 0\) continue;[\s\S]*if \(!response\.ok\)/u.test(
+      stagedBitquerySmokeBlock,
+    );
+  const stagedBitqueryEmptyFdvRetry =
+    stagedBitquerySmokeBlock.includes(
+      "async function requestJson(path, retryWhen = null)",
+    ) &&
+    stagedBitquerySmokeBlock.includes("response.status === 200") &&
+    stagedBitquerySmokeBlock.includes("retryWhen?.(result) === true") &&
+    stagedBitquerySmokeBlock.includes(
+      '["market-cap", "market-cap-asc"].includes(expectedSort)',
+    ) &&
+    stagedBitquerySmokeBlock.includes(
+      "response.body?.sort === expectedSort",
+    ) &&
+    stagedBitquerySmokeBlock.includes(
+      'token.valuation.freshness === "current"',
+    ) &&
+    stagedBitquerySmokeBlock.includes('token.valuation.metric === "fdv"') &&
+    stagedBitquerySmokeBlock.includes(
+      'token.valuation.supplyBasis === "total"',
+    ) &&
+    stagedBitquerySmokeBlock.includes('token.valuation.currency === "usd"') &&
+    stagedBitquerySmokeBlock.includes('token.valuation.source === "bitquery"') &&
+    stagedBitquerySmokeBlock.includes(
+      "positiveInteger.test(String(token.valuation.valueWad ?? \"\"))",
+    ) &&
+    stagedBitquerySmokeBlock.includes(
+      '"/api/explore?limit=20&page=1&sort=market-cap",\n' +
+        "            (response) =>\n" +
+        '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
+    ) &&
+    (stagedBitquerySmokeBlock.match(/emptyCurrentBitqueryFdvRanking/gu)?.length ?? 0) === 2;
   const publicIdentityAndMarketRoutes = [
     publicExplore,
     publicToken,
@@ -2676,6 +2710,8 @@ export function evaluateReadModelOperationsSourceContracts(
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
       stagedBitquerySmokeBlock.includes('requestJson("/api/ops/health")') &&
+      stagedBitquery503Retry &&
+      stagedBitqueryEmptyFdvRetry &&
       stagedBitquerySmokeBlock.includes("sort=market-cap") &&
       stagedBitquerySmokeBlock.includes("sort=newest") &&
       stagedBitquerySmokeBlock.includes("/api/explore/token?address=") &&
