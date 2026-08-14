@@ -275,13 +275,20 @@ export async function readBitqueryTokenFdvRankingStrictV1(
     throw new BitqueryMarketDataError("response", "market-core");
   }
 
-  const expectedTokens = new Set(unique.map(({ tokenAddress }) => tokenAddress));
-  const tokenRows = indexUniqueRows(
-    array(trading.rankingTokens),
-    (row) => canonicalAddress(record(record(row)?.Token)?.Address),
+  const expectedTokenIds = new Set(
+    unique.map(({ tokenAddress }) => ethereumTokenId(tokenAddress)),
   );
-  for (const tokenAddress of tokenRows.keys()) {
-    if (!expectedTokens.has(tokenAddress as `0x${string}`)) {
+  let tokenRows: ReadonlyMap<string, unknown>;
+  try {
+    tokenRows = indexUniqueRows(
+      array(trading.rankingTokens),
+      (row) => canonicalEthereumTokenId(record(record(row)?.Token)?.Id),
+    );
+  } catch {
+    throw new BitqueryMarketDataError("integrity", "market-core");
+  }
+  for (const tokenId of tokenRows.keys()) {
+    if (!expectedTokenIds.has(tokenId)) {
       throw new BitqueryMarketDataError("integrity", "market-core");
     }
   }
@@ -305,7 +312,7 @@ export async function readBitqueryTokenFdvRankingStrictV1(
   const pools = new Map<string, MarketPoolDataV1>();
   for (const identity of unique) {
     const tokenValue = parseFdvRankingToken(
-      tokenRows.get(identity.tokenAddress),
+      tokenRows.get(ethereumTokenId(identity.tokenAddress)),
       identity,
       now,
     );
@@ -1220,21 +1227,22 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
 function marketFdvRankingQuery(
   identities: readonly MarketDataIdentityV1[],
 ) {
-  const tokenAddresses = [...new Set(
-    identities.map(({ tokenAddress }) => tokenAddress),
+  const tokenIds = [...new Set(
+    identities.map(({ tokenAddress }) => ethereumTokenId(tokenAddress)),
   )].sort();
-  const rowLimit = Math.max(1, tokenAddresses.length);
+  const rowLimit = Math.max(1, tokenIds.length);
   return {
     query: `query ProgrammableExploreFdvRanking(
-      $tokenAddresses: [String!]!
+      $tokenIds: [String!]!
     ) {
       Trading {
         rankingTokens: Tokens(
           limit: { count: ${rowLimit} }
-          limitBy: { by: Token_Address, count: 1 }
+          limitBy: { by: Token_Id, count: 1 }
           orderBy: { descending: Block_Time }
           where: {
-            Token: { Address: { in: $tokenAddresses } }
+            Token: { Id: { in: $tokenIds } }
+            Interval: { Time: { Duration: { eq: 1 } } }
             Price: { IsQuotedInUsd: true }
           }
         ) {
@@ -1242,14 +1250,13 @@ function marketFdvRankingQuery(
           Block { Time }
           Supply {
             TotalSupply
-            MaxSupply
             FullyDilutedValuationUsd
           }
           Price { IsQuotedInUsd Ohlc { Close } }
         }
       }
     }`,
-    variables: { tokenAddresses },
+    variables: { tokenIds },
   };
 }
 
@@ -1882,8 +1889,7 @@ function parseFdvRankingToken(
   const id = nonEmptyString(token.Id)?.toLowerCase();
   if (
     address !== identity.tokenAddress ||
-    (id !== `eth:${identity.tokenAddress}` &&
-      id !== `bid:eth:${identity.tokenAddress}`)
+    id !== ethereumTokenId(identity.tokenAddress)
   ) {
     return { reason: "inconsistent-market-data" };
   }
@@ -2463,6 +2469,16 @@ function resolveToken(explicit: string | null | undefined): string | null {
   return typeof value === "string" && value.trim().length >= 16
     ? value.trim()
     : null;
+}
+
+function ethereumTokenId(address: `0x${string}`): string {
+  return `eth:${address}`;
+}
+
+function canonicalEthereumTokenId(value: unknown): string | null {
+  if (typeof value !== "string" || value !== value.toLowerCase()) return null;
+  const address = canonicalAddress(value.slice("eth:".length));
+  return address !== null && value === ethereumTokenId(address) ? value : null;
 }
 
 function canonicalAddress(value: unknown): `0x${string}` | null {

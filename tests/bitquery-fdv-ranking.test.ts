@@ -29,13 +29,12 @@ function json(value: unknown): Response {
 function rankingToken() {
   return {
     Token: {
-      Id: `bid:eth:${IDENTITY.tokenAddress}`,
+      Id: `eth:${IDENTITY.tokenAddress}`,
       Address: IDENTITY.tokenAddress,
     },
     Block: { Time: "2026-08-11T14:00:00.000Z" },
     Supply: {
       TotalSupply: "1000000",
-      MaxSupply: "1000000",
       FullyDilutedValuationUsd: "250000",
     },
     Price: { IsQuotedInUsd: true, Ohlc: { Close: "0.25" } },
@@ -81,11 +80,19 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       expect(request.query).not.toContain("DEXTradeByTokens");
       if (request.query.includes("ProgrammableExploreFdvRanking")) {
         expect(request.variables).toEqual({
-          tokenAddresses: [IDENTITY.tokenAddress],
+          tokenIds: [`eth:${IDENTITY.tokenAddress}`],
         });
         expect(request.query).toContain("rankingTokens: Tokens(");
+        expect(request.query).toContain(
+          "limitBy: { by: Token_Id, count: 1 }",
+        );
+        expect(request.query).toContain("Token: { Id: { in: $tokenIds } }");
+        expect(request.query).toContain(
+          "Interval: { Time: { Duration: { eq: 1 } } }",
+        );
         expect(request.query).toContain("FullyDilutedValuationUsd");
         expect(request.query).toContain("Price { IsQuotedInUsd Ohlc { Close } }");
+        expect(request.query).not.toContain("Token_Address");
         return json({ data: { Trading: { rankingTokens: [rankingToken()] } } });
       }
       expect(request.query).toContain("EVM(network: eth) {");
@@ -191,6 +198,39 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       token: TOKEN,
     })).rejects.toMatchObject({
       category: "transport",
+      phase: "market-core",
+    });
+  });
+
+  it("rejects a same-address row bound to another chain id", async () => {
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      return request.query.includes("ProgrammableExploreFdvRanking")
+        ? json({
+            data: {
+              Trading: {
+                rankingTokens: [{
+                  ...rankingToken(),
+                  Token: {
+                    Id: `base:${IDENTITY.tokenAddress}`,
+                    Address: IDENTITY.tokenAddress,
+                  },
+                }],
+              },
+            },
+          })
+        : json({ data: { EVM: { latestLiquidity: [liquidityRow()] } } });
+    }) as typeof fetch;
+
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl,
+      token: TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    })).rejects.toMatchObject({
+      category: "integrity",
       phase: "market-core",
     });
   });
