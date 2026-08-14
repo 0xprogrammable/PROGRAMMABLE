@@ -29,6 +29,10 @@ describe("Explore UI contract", () => {
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
     expect(source).toContain("enabled: !preview && !loadingOnly");
+    expect(source).toContain(
+      "useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)",
+    );
+    expect(source).toContain("inert={loadingOnly ? true : undefined}");
   });
 
   it("keeps sort, socials and model choices in one persistent disclosure", () => {

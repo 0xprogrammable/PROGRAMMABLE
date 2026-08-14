@@ -37,6 +37,7 @@ import {
   type ExploreValuation,
   type ValuedExploreEntry,
 } from "@/lib/explore-financial-data";
+import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 import {
   isTokenMarketDataV1,
   marketDataStatusLabel,
@@ -1576,7 +1577,7 @@ export function ExploreView({
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [sort, setSort] = useState<TokenSort>("newest");
+  const [sort, setSort] = useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT);
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -2083,7 +2084,10 @@ export function ExploreView({
             {hasPublicTokens ? (
               <div className="token-section-heading">
                 <h2 className="sr-only">Launches</h2>
-                <div className="token-toolbar">
+                <div
+                  className="token-toolbar"
+                  inert={loadingOnly ? true : undefined}
+                >
                   <div
                     className="token-search liquid-glass-control"
                     role="search"
