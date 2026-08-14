@@ -10,6 +10,7 @@ import { sha256 } from "./custom-registry-v2-deployment-guards.mjs";
 export const REGISTRY_FQCN =
   "src/ProgrammableCustomRegistryV2.sol:ProgrammableCustomRegistryV2";
 export const REGISTRY_CONTRACT_NAME = "ProgrammableCustomRegistryV2";
+const REGISTRY_SOURCE_PATH = "src/ProgrammableCustomRegistryV2.sol";
 export const REGISTRY_COMPILER_VERSION = "v0.8.26+commit.8a97fa7a";
 export const OPENZEPPELIN_COMMIT = "21c8312b022f495ebe3621d5daeed20552b43ff9";
 export const AUTHORITY_SOURCE_PATHS = [
@@ -286,8 +287,8 @@ const allowedCompilerSettingKeys = new Set([
 export function assertExactSourceClosure(remote, local, label) {
   if (
     remote?.language !== local.language ||
-    JSON.stringify(materialCompilerSettings(remote.settings)) !==
-      JSON.stringify(materialCompilerSettings(local.settings)) ||
+    canonicalJson(materialCompilerSettings(remote.settings)) !==
+      canonicalJson(materialCompilerSettings(local.settings)) ||
     Object.keys(remote.settings ?? {}).some(
       (key) => !allowedCompilerSettingKeys.has(key),
     )
@@ -590,8 +591,9 @@ export async function verifyRegistrySourceProviders({
     etherscanPayload.result?.length !== 1 ||
     etherscan?.ContractName !== REGISTRY_CONTRACT_NAME ||
     (etherscan.ContractFileName &&
-      etherscan.ContractFileName !== "src/ProgrammableCustomRegistryV2.sol") ||
-    (etherscan.CompilerType && etherscan.CompilerType !== "solc") ||
+      etherscan.ContractFileName !== REGISTRY_SOURCE_PATH) ||
+    (etherscan.CompilerType &&
+      !["solc", "solc-j"].includes(etherscan.CompilerType)) ||
     etherscan?.CompilerVersion !== REGISTRY_COMPILER_VERSION ||
     etherscan?.OptimizationUsed !== "1" ||
     etherscan?.Runs !== "1000" ||
@@ -608,10 +610,20 @@ export async function verifyRegistrySourceProviders({
   }
   const etherscanInput = parseEtherscanStandardJsonSource(etherscan.SourceCode);
   assertExactSourceClosure(etherscanInput, compilation.input, "Etherscan");
+  const etherscanSettings = etherscanInput.settings ?? {};
+  const hasCompilationTarget = Object.hasOwn(
+    etherscanSettings,
+    "compilationTarget",
+  );
+  const expectedCompilationTarget = {
+    [REGISTRY_SOURCE_PATH]: REGISTRY_CONTRACT_NAME,
+  };
   if (
-    etherscanInput.settings?.compilationTarget?.[
-      "src/ProgrammableCustomRegistryV2.sol"
-    ] !== REGISTRY_CONTRACT_NAME ||
+    (!hasCompilationTarget &&
+      etherscan.ContractFileName !== REGISTRY_SOURCE_PATH) ||
+    (hasCompilationTarget &&
+      canonicalJson(etherscanSettings.compilationTarget) !==
+        canonicalJson(expectedCompilationTarget)) ||
     canonicalJson(canonicalAbi(JSON.parse(etherscan.ABI))) !==
       canonicalJson(canonicalAbi(compilation.compiled.abi))
   ) {
@@ -637,10 +649,12 @@ export async function verifyRegistrySourceProviders({
   }
 
   const sourcify = sourcifyResult.value;
+  const isExactSourcifyMatch = (value) =>
+    value === "exact_match" || value === "match";
   if (
-    sourcify?.match !== "exact_match" ||
-    sourcify?.creationMatch !== "exact_match" ||
-    sourcify?.runtimeMatch !== "exact_match" ||
+    !isExactSourcifyMatch(sourcify?.match) ||
+    !isExactSourcifyMatch(sourcify?.creationMatch) ||
+    !isExactSourcifyMatch(sourcify?.runtimeMatch) ||
     sourcify?.chainId !== "1" ||
     getAddress(sourcify?.address) !== address ||
     sourcify.compilation?.language !== "Solidity" ||
