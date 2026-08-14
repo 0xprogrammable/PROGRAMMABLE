@@ -29,6 +29,7 @@ import {
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
 import {
+  buildExploreDataQuality,
   exploreValuation,
   isExploreDataQuality,
   isExploreValuation,
@@ -1170,13 +1171,130 @@ export async function loadExploreModelDataset(
     }),
   );
 
-  const tokens = [firstPage, ...remainingPages].flatMap(
+  const pages = [firstPage, ...remainingPages];
+  let tokens = pages.flatMap(
     (payload) => payload.tokens,
   );
   assertUniqueExploreDatasetEntries(tokens);
+  const degradedPages = pages.filter(
+    (payload) => payload.marketRead?.status === "unavailable",
+  );
+  if (degradedPages.length > 0 && degradedPages.length !== pages.length) {
+    throw new Error("Tokens changed while filters were loading");
+  }
+  const degradedPage = degradedPages[0];
+  if (degradedPage !== undefined) {
+    const markerIsConsistent = degradedPages.every((payload) =>
+      payload.marketRead?.provider === degradedPage.marketRead?.provider &&
+      payload.marketRead?.status === degradedPage.marketRead?.status &&
+      payload.marketRead?.category === degradedPage.marketRead?.category &&
+      payload.marketRead?.phase === degradedPage.marketRead?.phase &&
+      payload.ranking?.status === degradedPage.ranking?.status &&
+      payload.ranking?.requested === degradedPage.ranking?.requested &&
+      payload.ranking?.applied === degradedPage.ranking?.applied
+    );
+    if (!markerIsConsistent) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    const sourceQuality = degradedPage.dataQuality;
+    if (sourceQuality === undefined) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    tokens = tokens.map((entry): ValuedExploreEntry => {
+      if (entry.exploreKind === "custom-project") {
+        const {
+          marketData: _marketData,
+          liquidityEvidence: _liquidityEvidence,
+          fdvUsdWad: _fdvUsdWad,
+          ...identity
+        } = entry as typeof entry & Readonly<{ fdvUsdWad?: string }>;
+        void _marketData;
+        void _liquidityEvidence;
+        void _fdvUsdWad;
+        return {
+          ...identity,
+          valuation: {
+            status: "unavailable",
+            reason: entry.markets.length === 0
+              ? "no-market"
+              : "source-unavailable",
+          },
+        };
+      }
+      const {
+        marketData: _marketData,
+        liquidityEvidence: _liquidityEvidence,
+        fdvUsdWad: _fdvUsdWad,
+        ...identity
+      } = entry;
+      void _marketData;
+      void _liquidityEvidence;
+      void _fdvUsdWad;
+      return {
+        ...identity,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      };
+    });
+    const marketSort = firstPageSearch.get("sort") === "market-cap" ||
+      firstPageSearch.get("sort") === "market-cap-asc";
+    if (marketSort && degradedPage.ranking === undefined) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    return {
+      ...firstPage,
+      tokens,
+      dataQuality: buildExploreDataQuality({
+        entries: tokens,
+        generatedAt: sourceQuality.generatedAt,
+        canonicalStatus: sourceQuality.launchIdentity.canonical,
+        customStatus: sourceQuality.launchIdentity.custom,
+        identityAsOfBlock: sourceQuality.launchIdentity.asOfBlock,
+        referenceBlock: sourceQuality.launchIdentity.referenceBlock,
+        identityAgeMs: sourceQuality.launchIdentity.ageMs,
+      }),
+      marketRead: degradedPage.marketRead,
+      ...(degradedPage.ranking === undefined
+        ? {}
+        : { ranking: degradedPage.ranking }),
+    };
+  }
   return {
     ...firstPage,
     tokens,
+  };
+}
+
+export function paginateExploreModelDataset(
+  dataset: ExplorePayload,
+  modelFilter: ExploreModelFilter,
+  requestedPage: number,
+): ExplorePayload {
+  const page = paginateTokensByExploreFilters(
+    dataset.tokens,
+    "all",
+    modelFilter,
+    requestedPage,
+  );
+  return {
+    status: dataset.status,
+    ...page,
+    ...(dataset.dataQuality === undefined
+      ? {}
+      : {
+          dataQuality: buildExploreDataQuality({
+            entries: page.tokens,
+            generatedAt: dataset.dataQuality.generatedAt,
+            canonicalStatus: dataset.dataQuality.launchIdentity.canonical,
+            customStatus: dataset.dataQuality.launchIdentity.custom,
+            identityAsOfBlock: dataset.dataQuality.launchIdentity.asOfBlock,
+            referenceBlock: dataset.dataQuality.launchIdentity.referenceBlock,
+            identityAgeMs: dataset.dataQuality.launchIdentity.ageMs,
+          }),
+        }),
+    ...(dataset.marketRead === undefined
+      ? {}
+      : { marketRead: dataset.marketRead }),
+    ...(dataset.ranking === undefined ? {} : { ranking: dataset.ranking }),
   };
 }
 
@@ -1595,20 +1713,19 @@ export function ExploreView({
               search,
             );
             if (ignore) return;
-            modelDatasetCache.current = {
-              key: modelDatasetKey,
-              payload: dataset,
-            };
+            modelDatasetCache.current =
+              dataset.marketRead?.status === "unavailable"
+                ? null
+                : {
+                    key: modelDatasetKey,
+                    payload: dataset,
+                  };
           }
-          payload = {
-            status: dataset.status,
-            ...paginateTokensByExploreFilters(
-              dataset.tokens,
-              "all",
-              modelFilter,
-              currentPage,
-            ),
-          };
+          payload = paginateExploreModelDataset(
+            dataset,
+            modelFilter,
+            currentPage,
+          );
         }
         if (ignore) return;
         if (payload.page !== currentPage) {
