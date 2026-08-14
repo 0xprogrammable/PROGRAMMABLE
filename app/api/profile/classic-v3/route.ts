@@ -25,30 +25,19 @@ import {
   getConfiguredClassicV3Release,
   isClassicV3ReleaseVerified,
 } from "@/lib/classic-v3-release";
-import {
-  ActionLookupError,
-  lookupActionReward,
-  type ActionRewardLookup,
-} from "@/lib/data-pipeline/action-lookup";
-import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation.server";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
-import { getWebsiteChartOnchainDeployment } from "@/lib/onchain/config";
 import {
-  safeOperationalRpcError,
-  isOperationalRpcFailoverEligible,
-  withOperationalRpcFailover,
-} from "@/lib/onchain/operational-rpc-failover.server";
+  readBitqueryClassicV3Launch,
+  readBitqueryClassicV3Profile,
+  safeBitqueryProfileError,
+} from "@/lib/market-data/bitquery-profile.server";
+import { safeOperationalRpcError } from
+  "@/lib/onchain/operational-rpc-failover.server";
 import {
   classicV3ProfileApiError,
   encodeClassicV3RewardAction,
 } from "@/lib/profile/classic-v3-rewards";
-import { classicV3ActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
-import {
-  CLASSIC_V3_ROUTE_SCOPE,
-  coordinatePublicRouteRead,
-  PUBLIC_INDEXED_ROUTE_READS,
-  preparePublicRouteRequest,
-} from "@/lib/data-pipeline/public-route-readiness.server";
+import { classicV3ActionRpcProvider } from "@/lib/server/action-rpc-quorum.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,14 +45,6 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 2_048;
 const LOG_RANGE = 10_000n;
 const CONFIRMATIONS = 12n;
-
-class ClassicV3ProfileIntegrityError extends Error {
-  override name = "ClassicV3ProfileIntegrityError";
-
-  constructor(cause: unknown) {
-    super("Classic profile accounting or integrity conflict", { cause });
-  }
-}
 
 type ClassicActionRewardIdentity = Readonly<{
   vaultAddress: Address;
@@ -97,16 +78,8 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function createClient(rpcUrl: string) {
-  return createPublicClient({
-    chain,
-    batch: { multicall: true },
-    transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
-  });
-}
-
 function classicActionRpcEndpoints() {
-  return classicV3ActionRpcProviders(environment);
+  return [classicV3ActionRpcProvider(environment)];
 }
 
 function createActionClients() {
@@ -120,21 +93,12 @@ function createActionClients() {
 }
 
 async function sharedActionBlock(clients: readonly PublicClient[]) {
-  if (clients.length !== 2) {
-    throw new Error("Classic actions require two independent RPCs");
+  if (clients.length !== 1) {
+    throw new Error("Classic actions require the configured RPC");
   }
-  const heads = await Promise.all(clients.map((client) => client.getBlockNumber()));
-  const blockNumber = heads[0]! < heads[1]! ? heads[0]! : heads[1]!;
-  const blocks = await Promise.all(
-    clients.map((client) => client.getBlock({ blockNumber })),
-  );
-  if (
-    !blocks[0]?.hash ||
-    !blocks[1]?.hash ||
-    blocks[0].hash.toLowerCase() !== blocks[1].hash.toLowerCase()
-  ) {
-    throw new Error("Independent RPCs disagree on Classic action state");
-  }
+  const blockNumber = await clients[0]!.getBlockNumber();
+  const block = await clients[0]!.getBlock({ blockNumber });
+  if (!block.hash) throw new Error("The configured RPC returned no block hash");
   return blockNumber;
 }
 
@@ -650,133 +614,12 @@ async function readRewardsFromClient(
   };
 }
 
-async function readRewards(account: Address) {
-  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
-    return {
-      status: "not-deployed" as const,
-      account,
-      chainId: chain.id,
-      rewards: [],
-    };
-  }
-  try {
-    const deployment = getWebsiteChartOnchainDeployment(environment);
-    return await withOperationalRpcFailover(deployment, (rpcDeployment) =>
-      readRewardsFromClient(account, createClient(rpcDeployment.rpcUrl))
-    );
-  } catch (error) {
-    if (isOperationalRpcFailoverEligible(error)) throw error;
-    if (error instanceof ClassicV3ProfileIntegrityError) throw error;
-    throw new ClassicV3ProfileIntegrityError(error);
-  }
-}
-
-async function classicV3ProfileLegacyResult(account: Address) {
-  try {
-    return {
-      source: "rpc" as const,
-      response: json(await readRewards(account)),
-    };
-  } catch (error) {
-    if (!(error instanceof ClassicV3ProfileIntegrityError)) throw error;
-    console.error(
-      "Classic profile read failed",
-      safeOperationalRpcError(error),
-    );
-    return {
-      source: "rpc" as const,
-      response: json(classicV3ProfileApiError("integrity"), 409),
-    };
-  }
-}
-
-async function readLaunchByTransactionFromClient(
-  account: Address,
-  transactionHash: Hex,
-  client: PublicClient,
-) {
-  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
-    return { status: "not-deployed" as const, launch: null };
-  }
-  const launcher = getAddress(manifest.memeLaunchV2 as string);
-  await assertCodeHash(
-    client,
-    launcher,
-    manifest.runtimeCodeHashes?.memeLaunchV2 as string,
-    "Classic launcher",
-  );
-  const latestBlock = await client.getBlockNumber();
-  const snapshotBlock =
-    latestBlock > CONFIRMATIONS ? latestBlock - CONFIRMATIONS : latestBlock;
-  const deploymentBlock = BigInt(
-    manifest.deploymentBlocks?.memeLaunchV2 as number,
-  );
-  const logs =
-    deploymentBlock <= snapshotBlock
-      ? await readLaunchLogs(client, launcher, deploymentBlock, snapshotBlock)
-      : [];
-  const launch = logs.find(
-    (log) =>
-      !log.removed &&
-      log.args.deployer.toLowerCase() === account.toLowerCase() &&
-      log.transactionHash.toLowerCase() === transactionHash.toLowerCase(),
-  );
-  if (!launch) {
-    return { status: "ready" as const, launch: null };
-  }
-  const tokenAddress = getAddress(launch.args.token);
-  const [name, symbol] = await Promise.all([
-    client.readContract({
-      address: tokenAddress,
-      abi: uerc20ReadAbi,
-      functionName: "name",
-      blockNumber: snapshotBlock,
-    }),
-    client.readContract({
-      address: tokenAddress,
-      abi: uerc20ReadAbi,
-      functionName: "symbol",
-      blockNumber: snapshotBlock,
-    }),
-  ]);
-  return {
-    status: "ready" as const,
-    launch: {
-      tokenAddress,
-      name,
-      symbol,
-      launchTransactionHash: launch.transactionHash,
-    },
-  };
-}
-
-async function readLaunchByTransaction(
-  account: Address,
-  transactionHash: Hex,
-) {
-  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
-    return { status: "not-deployed" as const, launch: null };
-  }
-  const deployment = getWebsiteChartOnchainDeployment(environment);
-  return withOperationalRpcFailover(deployment, (rpcDeployment) =>
-    readLaunchByTransactionFromClient(
-      account,
-      transactionHash,
-      createClient(rpcDeployment.rpcUrl),
-    )
-  );
-}
+// Kept as a pure legacy-accounting verifier for focused fixtures; production
+// GET and POST identity reads use Bitquery directly.
+void readRewardsFromClient;
 
 export async function GET(request: NextRequest) {
-  const routeRequest = await preparePublicRouteRequest(
-    request.nextUrl.searchParams,
-    request.headers,
-    request.nextUrl.searchParams.get("launch")?.trim()
-      ? "launch-lookup"
-      : "classic-v3-profile",
-  );
-  if (routeRequest.probeFailure) return routeRequest.probeFailure;
-  const search = routeRequest.searchParams;
+  const search = request.nextUrl.searchParams;
   if (
     [...search.keys()].some(
       (key) => key !== "account" && key !== "launch",
@@ -796,53 +639,28 @@ export async function GET(request: NextRequest) {
       if (!isHex(launch, { strict: true }) || launch.length !== 66) {
         return json({ error: "Enter a valid launch transaction hash" }, 400);
       }
-      return await coordinatePublicRouteRead({
-        route: "launch-lookup",
-        scope: CLASSIC_V3_ROUTE_SCOPE,
-        ...(routeRequest.releaseProbe
-          ? { releaseProbe: routeRequest.releaseProbe }
-          : {}),
-        indexed: (transaction) =>
-          PUBLIC_INDEXED_ROUTE_READS.launchLookup(transaction, {
-            chainId: 1,
-            surface: "classic-v3",
-            account: getAddress(input),
-            transactionHash: launch,
-          }),
-        async legacy() {
-          return {
-            source: "rpc" as const,
-            response: json(
-              await readLaunchByTransaction(
-                getAddress(input),
-                launch as Hex,
-              ),
-            ),
-          };
-        },
-      });
+      return json(
+        await readBitqueryClassicV3Launch(
+          getAddress(input),
+          launch as Hex,
+        ),
+      );
     }
-    return await coordinatePublicRouteRead({
-      route: "classic-v3-profile",
-      scope: CLASSIC_V3_ROUTE_SCOPE,
-      ...(routeRequest.releaseProbe
-        ? { releaseProbe: routeRequest.releaseProbe }
-        : {}),
-      indexed: (transaction) =>
-        PUBLIC_INDEXED_ROUTE_READS.classicV3Profile(transaction, {
-          chainId: 1,
-          account: getAddress(input),
-        }),
-      legacy: () => classicV3ProfileLegacyResult(getAddress(input)),
-    });
+    return NextResponse.json(
+      await readBitqueryClassicV3Profile(getAddress(input)),
+      {
+        headers: {
+          "Cache-Control": "private, max-age=0, s-maxage=15",
+          "X-Programmable-Read-Source": "bitquery",
+        },
+      },
+    );
   } catch (error) {
     console.error(
-      "Classic profile read failed",
-      safeOperationalRpcError(error),
+      "Bitquery Classic profile read failed",
+      safeBitqueryProfileError(error),
     );
-    return error instanceof ClassicV3ProfileIntegrityError
-      ? json(classicV3ProfileApiError("integrity"), 409)
-      : json(classicV3ProfileApiError("temporary"), 503);
+    return json(classicV3ProfileApiError("temporary"), 503);
   }
 }
 
@@ -900,64 +718,31 @@ export async function POST(request: NextRequest) {
     if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
       return json({ error: "Classic is not deployed yet" }, 409);
     }
-    let reward: ClassicActionRewardIdentity;
-    if (indexedLaunchLookupEnabled()) {
-      const indexedReward: ActionRewardLookup = await lookupActionReward({
-        chainId: chain.id,
-        account,
-        vaultAddress,
-      });
-      if (
-        indexedReward.releaseVersion !== "classic-v3" ||
-        indexedReward.modelVersion !== "classic" ||
-        indexedReward.token.rewardVaultAddress?.toLowerCase() !==
-          vaultAddress.toLowerCase() ||
-        indexedReward.hookAddress.toLowerCase() !==
-          getAddress(manifest.ethCreatorFeeHookV3 as string).toLowerCase()
-      ) {
-        return json(
-          { error: "Only a current or historic payout wallet can continue" },
-          403,
-        );
-      }
-      reward = {
-        vaultAddress: indexedReward.vaultAddress,
-        poolId: indexedReward.poolId,
-        buySwapFeeBps: indexedReward.token.buySwapFeeBps,
-        sellSwapFeeBps: indexedReward.token.sellSwapFeeBps,
-        buyCreatorFeeBps: indexedReward.token.buyCreatorFeeBps,
-        sellCreatorFeeBps: indexedReward.token.sellCreatorFeeBps,
-        launcherFeeBps: indexedReward.token.launcherFeeBps,
-        transferTaxBps: indexedReward.token.transferTaxBps,
-        lpFeePips: indexedReward.token.lpFeePips,
-      };
-    } else {
-      const profile = await readRewards(account);
-      if (profile.status !== "ready") {
-        return json({ error: "Classic is not deployed yet" }, 409);
-      }
-      const legacyReward = profile.rewards.find(
-        (candidate) =>
-          candidate.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
-      );
-      if (!legacyReward) {
-        return json(
-          { error: "Only a current or historic payout wallet can continue" },
-          403,
-        );
-      }
-      reward = {
-        vaultAddress: legacyReward.vaultAddress,
-        poolId: legacyReward.poolId,
-        buySwapFeeBps: legacyReward.buySwapFeeBps,
-        sellSwapFeeBps: legacyReward.sellSwapFeeBps,
-        buyCreatorFeeBps: null,
-        sellCreatorFeeBps: null,
-        launcherFeeBps: legacyReward.platformFeeBps,
-        transferTaxBps: 0,
-        lpFeePips: 0,
-      };
+    const profile = await readBitqueryClassicV3Profile(account);
+    if (profile.status !== "ready") {
+      return json({ error: "Classic is not deployed yet" }, 409);
     }
+    const bitqueryReward = profile.rewards.find(
+      (candidate) =>
+        candidate.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
+    );
+    if (!bitqueryReward) {
+      return json(
+        { error: "Only a current or historic payout wallet can continue" },
+        403,
+      );
+    }
+    const reward: ClassicActionRewardIdentity = {
+      vaultAddress: bitqueryReward.vaultAddress,
+      poolId: bitqueryReward.poolId,
+      buySwapFeeBps: bitqueryReward.buySwapFeeBps,
+      sellSwapFeeBps: bitqueryReward.sellSwapFeeBps,
+      buyCreatorFeeBps: null,
+      sellCreatorFeeBps: null,
+      launcherFeeBps: bitqueryReward.platformFeeBps,
+      transferTaxBps: 0,
+      lpFeePips: 0,
+    };
     const clients = createActionClients();
     const blockNumber = await sharedActionBlock(clients);
     const actionStates = await Promise.all(
@@ -971,9 +756,6 @@ export async function POST(request: NextRequest) {
         }),
       ),
     );
-    if (JSON.stringify(actionStates[0]) !== JSON.stringify(actionStates[1])) {
-      throw new Error("Independent RPCs disagree on Classic reward state");
-    }
     const actionState = actionStates[0]!;
     if (
       input.action === "update-payout" &&
@@ -1053,12 +835,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    if (error instanceof ActionLookupError && error.code === "not-found") {
-      return json(
-        { error: "Only a current or historic payout wallet can continue" },
-        403,
-      );
-    }
     console.error(
       "Classic reward preparation failed",
       safeOperationalRpcError(error),

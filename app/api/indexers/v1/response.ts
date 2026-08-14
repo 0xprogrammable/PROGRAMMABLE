@@ -1,7 +1,6 @@
 import type { ExploreReadModel } from "../../../../lib/onchain/types";
 
-// Retained as a type-only compatibility surface for the old, disconnected
-// read-model modules until their files are removed by the integration owner.
+// Internal projector compatibility only. Public indexer routes are retired.
 export type IndexedFeedSnapshot = Readonly<{
   chainId: 1;
   model: ExploreReadModel & { status: "ready" };
@@ -13,29 +12,12 @@ export type IndexedFeedSnapshot = Readonly<{
   releaseVersions: readonly string[];
 }>;
 
-export const INDEXER_READY_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
-
-export function alchemyFeedHeaders(
-  cacheControl = INDEXER_READY_CACHE_CONTROL,
-): Readonly<Record<string, string>> {
-  return Object.freeze({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Expose-Headers":
-      "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
-    "Cache-Control": cacheControl,
-    "X-Programmable-Launch-Source": "operational+durable",
-    "X-Programmable-Read-Source": "blob",
-    "X-Programmable-Rpc-Provider": "operational-dual",
-  });
-}
-
-export const ALCHEMY_NO_STORE_HEADERS = Object.freeze({
+export const RETIRED_INDEXER_HEADERS = Object.freeze({
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Expose-Headers":
-    "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
   "Cache-Control": "no-store",
-  "X-Programmable-Launch-Source": "operational+durable",
-  "X-Programmable-Read-Source": "blob",
-  "X-Programmable-Rpc-Provider": "operational-dual",
+  "X-Programmable-Read-Source": "retired",
+});
+
+export const RETIRED_INDEXER_RESPONSE = Object.freeze({
+  error: "This indexer feed has been retired. Use /api/explore.",
 });

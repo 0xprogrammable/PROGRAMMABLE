@@ -762,8 +762,7 @@ export function publicExploreEntryV1(
     entry.valuation.status === "available" &&
     entry.valuation.metric === "fdv" &&
     entry.valuation.currency === "usd" &&
-    entry.valuation.freshness === "current" &&
-    entry.valuation.source !== "bitquery"
+    entry.valuation.freshness === "current"
   ) {
     output.fdvUsdWad = entry.valuation.valueWad;
   } else {
@@ -796,8 +795,7 @@ export function valuationSortValue(entry: ExploreEntry): bigint | null {
   return value?.status === "available" &&
     value.metric === "fdv" &&
     value.currency === "usd" &&
-    value.freshness === "current" &&
-    value.source !== "bitquery"
+    value.freshness === "current"
     ? positiveUint256(value.valueWad)
     : null;
 }

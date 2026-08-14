@@ -30,67 +30,25 @@ function isReceiptNotFound(error: unknown) {
 }
 
 export async function verifyStockPairedClaimReceipt(input: {
-  rpcClients: readonly PublicClient[];
+  rpcClient: PublicClient;
   transactionHash: Hex;
   account: Address;
   vaultAddress: Address;
   quoteAsset: Address;
   minimumAmount: bigint;
 }) {
-  const receiptResults = await Promise.allSettled(
-    input.rpcClients.map((client) =>
-      client.getTransactionReceipt({
-        hash: input.transactionHash,
-      }),
-    ),
-  );
-  const receipts = receiptResults.flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  );
-  if (receipts.length < 2) {
-    const unavailable = receiptResults.some(
-      (result) =>
-        result.status === "rejected" && !isReceiptNotFound(result.reason),
-    );
+  let canonical: Awaited<ReturnType<PublicClient["getTransactionReceipt"]>>;
+  try {
+    canonical = await input.rpcClient.getTransactionReceipt({
+      hash: input.transactionHash,
+    });
+  } catch (error) {
+    const unavailable = !isReceiptNotFound(error);
     throw new StockPairedClaimReceiptError(
       unavailable
-        ? "The claim receipt could not be verified across both Ethereum RPCs"
-        : "The claim receipt is still pending across Ethereum RPCs",
+        ? "The configured RPC could not verify the claim receipt"
+        : "The claim receipt is still pending on Ethereum",
       unavailable ? "unavailable" : "pending",
-    );
-  }
-  const receiptKey = (receipt: (typeof receipts)[number]) =>
-    [
-      receipt.transactionHash.toLowerCase(),
-      receipt.blockHash.toLowerCase(),
-      receipt.blockNumber.toString(),
-      receipt.transactionIndex.toString(),
-      receipt.status,
-      receipt.to?.toLowerCase() ?? "",
-      receipt.from.toLowerCase(),
-      receipt.logs
-        .map((log) =>
-          [
-            log.address.toLowerCase(),
-            log.topics.map((topic) => topic.toLowerCase()).join(","),
-            log.data.toLowerCase(),
-            log.logIndex?.toString() ?? "",
-            log.transactionIndex?.toString() ?? "",
-            log.removed ? "1" : "0",
-          ].join(":"),
-        )
-        .join(";"),
-    ].join(":");
-  const canonical = receipts.find(
-    (candidate) =>
-      receipts.filter(
-        (receipt) => receiptKey(receipt) === receiptKey(candidate),
-      ).length >= 2,
-  );
-  if (!canonical) {
-    throw new StockPairedClaimReceiptError(
-      "Independent Ethereum RPCs disagree on the claim receipt",
-      "invalid",
     );
   }
   const releases = getConfiguredStockPairedReleases();

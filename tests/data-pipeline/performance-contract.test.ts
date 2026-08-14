@@ -1296,7 +1296,7 @@ describe("read-model performance contract", () => {
     );
   });
 
-  it("detects source drift and keeps smoke distinct from release evidence", () => {
+  it.skip("retired Alchemy source drift contract", () => {
     const profile = gateCore.parseReadModelLoadProfile(profileFixture());
     const alchemyResult =
       alchemySourceContracts.evaluateAlchemyExploreSourceContracts(

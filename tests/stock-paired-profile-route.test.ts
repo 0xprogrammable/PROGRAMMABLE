@@ -59,18 +59,17 @@ function receipt(payoutAddress = STOCK_TEST_ACCOUNT) {
   };
 }
 
-function rpcClients(candidate: ReturnType<typeof receipt>) {
-  return [
-    { getTransactionReceipt: async () => candidate },
-    { getTransactionReceipt: async () => candidate },
-  ] as unknown as readonly PublicClient[];
+function rpcClient(candidate: ReturnType<typeof receipt>) {
+  return {
+    getTransactionReceipt: async () => candidate,
+  } as unknown as PublicClient;
 }
 
 describe("Stock-Paired claim receipt verification", () => {
   it("binds conversion to the beneficiary, payout wallet, asset and amount", async () => {
     await expect(
       verifyStockPairedClaimReceipt({
-        rpcClients: rpcClients(receipt()),
+        rpcClient: rpcClient(receipt()),
         transactionHash,
         account: STOCK_TEST_ACCOUNT,
         vaultAddress: vault,
@@ -80,44 +79,18 @@ describe("Stock-Paired claim receipt verification", () => {
     ).resolves.toBe(1_000n);
   });
 
-  it("accepts two matching receipts when another RPC is unavailable", async () => {
-    const candidate = receipt();
-    const clients = [
-      { getTransactionReceipt: async () => candidate },
-      { getTransactionReceipt: async () => candidate },
-      {
-        getTransactionReceipt: async () => {
-          throw new Error("RPC unavailable");
-        },
-      },
-    ] as unknown as readonly PublicClient[];
-    await expect(
-      verifyStockPairedClaimReceipt({
-        rpcClients: clients,
-        transactionHash,
-        account: STOCK_TEST_ACCOUNT,
-        vaultAddress: vault,
-        quoteAsset: STOCK_QUOTE_ASSETS[0].address,
-        minimumAmount: 1_000n,
-      }),
-    ).resolves.toBe(1_000n);
-  });
-
-  it("fails closed with an explicit pending code until two receipts exist", async () => {
+  it("fails closed with an explicit pending code until the receipt exists", async () => {
     const pending = new Error("Transaction receipt could not be found");
     pending.name = "TransactionReceiptNotFoundError";
-    const clients = [
-      { getTransactionReceipt: async () => receipt() },
-      {
-        getTransactionReceipt: async () => {
-          throw pending;
-        },
+    const client = {
+      getTransactionReceipt: async () => {
+        throw pending;
       },
-    ] as unknown as readonly PublicClient[];
+    } as unknown as PublicClient;
 
     await expect(
       verifyStockPairedClaimReceipt({
-        rpcClients: clients,
+        rpcClient: client,
         transactionHash,
         account: STOCK_TEST_ACCOUNT,
         vaultAddress: vault,
@@ -127,19 +100,16 @@ describe("Stock-Paired claim receipt verification", () => {
     ).rejects.toMatchObject({ code: "pending" });
   });
 
-  it("distinguishes an unavailable receipt quorum from pending", async () => {
-    const clients = [
-      { getTransactionReceipt: async () => receipt() },
-      {
-        getTransactionReceipt: async () => {
-          throw new Error("RPC unavailable");
-        },
+  it("distinguishes an unavailable configured RPC from pending", async () => {
+    const client = {
+      getTransactionReceipt: async () => {
+        throw new Error("RPC unavailable");
       },
-    ] as unknown as readonly PublicClient[];
+    } as unknown as PublicClient;
 
     await expect(
       verifyStockPairedClaimReceipt({
-        rpcClients: clients,
+        rpcClient: client,
         transactionHash,
         account: STOCK_TEST_ACCOUNT,
         vaultAddress: vault,
@@ -149,31 +119,10 @@ describe("Stock-Paired claim receipt verification", () => {
     ).rejects.toMatchObject({ code: "unavailable" });
   });
 
-  it("rejects same-header receipts with divergent claim logs", async () => {
-    const otherPayout = getAddress(
-      "0x6666666666666666666666666666666666666666",
-    );
-    const clients = [
-      { getTransactionReceipt: async () => receipt() },
-      { getTransactionReceipt: async () => receipt(otherPayout) },
-    ] as unknown as readonly PublicClient[];
-
-    await expect(
-      verifyStockPairedClaimReceipt({
-        rpcClients: clients,
-        transactionHash,
-        account: STOCK_TEST_ACCOUNT,
-        vaultAddress: vault,
-        quoteAsset: STOCK_QUOTE_ASSETS[0].address,
-        minimumAmount: 1_000n,
-      }),
-    ).rejects.toMatchObject({ code: "invalid" });
-  });
-
   it("rejects a claim paid to another wallet", async () => {
     await expect(
       verifyStockPairedClaimReceipt({
-        rpcClients: rpcClients(
+        rpcClient: rpcClient(
           receipt(
             getAddress(
               "0x9999999999999999999999999999999999999999",

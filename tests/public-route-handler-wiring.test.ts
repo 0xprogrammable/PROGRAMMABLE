@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
       };
     },
   ),
+  readBitqueryCreatorProfile: vi.fn(),
   readAlchemyCreatorProfile: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
@@ -81,6 +82,11 @@ vi.mock("../lib/alchemy/profile.server", () => ({
   readAlchemyCreatorProfile: mocks.readAlchemyCreatorProfile,
 }));
 
+vi.mock("../lib/market-data/bitquery-profile.server", () => ({
+  readBitqueryCreatorProfile: mocks.readBitqueryCreatorProfile,
+  safeBitqueryProfileError: vi.fn((error) => error),
+}));
+
 import { GET as creatorProfile } from "../app/api/explore/profile/route";
 import { GET as stockLaunchLookup } from "../app/api/explore/launch/stock-paired/route";
 
@@ -92,16 +98,8 @@ describe("public route coordinator wiring", () => {
     vi.clearAllMocks();
   });
 
-  it("reports the indexed model and operational RPC profile sources", async () => {
-    const snapshot = {
-      blockNumber: "25650000",
-      blockHash: `0x${"33".repeat(32)}`,
-    };
-    const model = { status: "ready", snapshot };
-    const deployment = { status: "ready", chainId: 1 };
-    mocks.readAlchemyExploreModel.mockResolvedValue(model);
-    mocks.getWebsiteChartOnchainDeployment.mockReturnValue(deployment);
-    mocks.readAlchemyCreatorProfile.mockResolvedValue({
+  it("reports Bitquery as the sole creator profile read source", async () => {
+    mocks.readBitqueryCreatorProfile.mockResolvedValue({
       status: "ready",
       account: ACCOUNT,
       tokens: [],
@@ -114,44 +112,24 @@ describe("public route coordinator wiring", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.readAlchemyCreatorProfile).toHaveBeenCalledWith({
-      account: ACCOUNT,
-      deployment,
-      model,
-    });
-    expect(mocks.getWebsiteChartOnchainDeployment).toHaveBeenCalledWith(
-      "production",
-    );
+    expect(mocks.readBitqueryCreatorProfile).toHaveBeenCalledWith(ACCOUNT);
+    expect(mocks.readAlchemyCreatorProfile).not.toHaveBeenCalled();
+    expect(mocks.coordinatePublicRouteRead).not.toHaveBeenCalled();
     expect(response.headers.get("Cache-Control")).toBe(
       "private, max-age=0, s-maxage=15",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "indexed-read-model+operational-rpc",
+      "bitquery-events",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "operational-dual",
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "bitquery",
     );
-    expect(response.headers.get("X-Programmable-Launch-Source")).not.toBe(
-      "alchemy",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
   });
 
-  it("keeps creator reward integrity conflicts non-temporary", async () => {
-    mocks.readAlchemyExploreModel.mockResolvedValue({
-      status: "ready",
-      snapshot: {
-        blockNumber: "25650000",
-        blockHash: `0x${"33".repeat(32)}`,
-      },
-    });
-    mocks.getWebsiteChartOnchainDeployment.mockReturnValue({
-      status: "ready",
-      chainId: 1,
-    });
-    mocks.readAlchemyCreatorProfile.mockRejectedValue(
-      new mocks.AlchemyCreatorProfileIntegrityError(
-        "deterministic pool mismatch",
-      ),
+  it("fails the route closed when the Bitquery read fails", async () => {
+    mocks.readBitqueryCreatorProfile.mockRejectedValue(
+      new Error("Bitquery unavailable"),
     );
 
     const response = await creatorProfile(
@@ -160,30 +138,19 @@ describe("public route coordinator wiring", () => {
       ),
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
       status: "error",
       error: {
-        kind: "integrity",
-        code: "creator_profile_integrity_conflict",
-        message: "Current creator reward data could not be verified",
+        kind: "temporary",
+        code: "creator_profile_temporarily_unavailable",
+        message: "Onchain creator data is temporarily unavailable",
       },
     });
   });
 
   it("keeps creator provider failures temporary", async () => {
-    mocks.readAlchemyExploreModel.mockResolvedValue({
-      status: "ready",
-      snapshot: {
-        blockNumber: "25650000",
-        blockHash: `0x${"33".repeat(32)}`,
-      },
-    });
-    mocks.getWebsiteChartOnchainDeployment.mockReturnValue({
-      status: "ready",
-      chainId: 1,
-    });
-    mocks.readAlchemyCreatorProfile.mockRejectedValue(
+    mocks.readBitqueryCreatorProfile.mockRejectedValue(
       new Error("operational provider unavailable"),
     );
 

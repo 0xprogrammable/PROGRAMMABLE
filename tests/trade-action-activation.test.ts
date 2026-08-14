@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
   readLegacy: vi.fn(),
+  readBitquery: vi.fn(),
   prepare: vi.fn(),
   createPublicClient: vi.fn(() => ({})),
 }));
@@ -67,6 +68,10 @@ vi.mock("../lib/onchain", async (importOriginal) => {
 
 vi.mock("../lib/alchemy/explore.server", () => ({
   readAlchemyExploreModel: mocks.readLegacy,
+}));
+
+vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({
+  readBitqueryExploreModelV1: mocks.readBitquery,
 }));
 
 vi.mock("../lib/trade/server", async (importOriginal) => {
@@ -133,37 +138,34 @@ describe("trade action identity activation", () => {
     );
     mocks.lookup.mockResolvedValue({});
     mocks.readLegacy.mockResolvedValue(registry);
-    mocks.prepare
-      .mockResolvedValueOnce({
-        quote: { amountOut: "100" },
-        transaction: { kind: "swap" },
-      })
-      .mockResolvedValueOnce({
-        quote: { amountOut: "99" },
-        transaction: { kind: "swap" },
-      });
+    mocks.readBitquery.mockResolvedValue(registry);
+    mocks.prepare.mockResolvedValue({
+      quote: { amountOut: "100" },
+      transaction: { kind: "swap" },
+    });
   });
 
   it.each([true, false])(
-    "uses two independent RPC preparations with indexed lookup %s",
+    "uses one committed RPC preparation with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
       const response = await POST(request());
 
       expect(response.status).toBe(200);
-      expect(mocks.prepare).toHaveBeenCalledTimes(2);
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
-      expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
-      expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
+      expect(mocks.prepare).toHaveBeenCalledTimes(1);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).toHaveBeenCalledTimes(1);
+      expect(mocks.lookup).not.toHaveBeenCalled();
+      expect(mocks.readLegacy).not.toHaveBeenCalled();
       await expect(response.json()).resolves.toMatchObject({
-        quote: { amountOut: "99" },
+        quote: { amountOut: "100" },
       });
     },
   );
 
   it.each([true, false])(
-    "fails closed on same-provider key aliases with indexed lookup %s",
+    "does not consult the configured secondary RPC with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
@@ -174,11 +176,29 @@ describe("trade action identity activation", () => {
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());
 
-      expect(response.status).toBe(502);
-      expect(mocks.prepare).not.toHaveBeenCalled();
-      expect(mocks.createPublicClient).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(mocks.prepare).toHaveBeenCalledTimes(1);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
       expect(serialized).not.toContain("drpc-action-key");
       expect(serialized).not.toContain("second-secret-key");
     },
   );
+
+  it("rejects a primary endpoint that does not match its commitment", async () => {
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      `0x${"00".repeat(32)}`,
+    );
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(payload).toEqual({
+      error:
+        "The configured RPC could not prepare the trade from the current onchain state",
+    });
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
+  });
 });

@@ -7,18 +7,8 @@ import {
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 
-import {
-  ActionLookupError,
-  actionTokenAsExploreModel,
-  lookupActionTokenByAddress,
-} from "../../../../lib/data-pipeline/action-lookup";
-import { readAlchemyExploreModel } from
-  "../../../../lib/alchemy/explore.server";
-import { indexedLaunchLookupEnabled } from "../../../../lib/data-pipeline/route-activation.server";
-import {
-  getWebsiteReadOnchainDeployment,
-  readExploreModel,
-} from "../../../../lib/onchain";
+import { readBitqueryExploreModelV1 } from
+  "../../../../lib/market-data/bitquery-explore-model.server";
 import {
   ClassicTradeInputError,
 } from "../../../../lib/trade/classic";
@@ -35,7 +25,7 @@ import {
   resolveStockPairedTradeDeployment,
   StockPairedTradeUnavailableError,
 } from "../../../../lib/trade/stock-paired";
-import { tradeActionRpcProviders } from "../../../../lib/server/action-rpc-quorum.server";
+import { tradeActionRpcProvider } from "../../../../lib/server/action-rpc-quorum.server";
 import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -106,27 +96,6 @@ function runtimeClient(
   };
 }
 
-function selectConservativeTradeQuote<T extends {
-  quote: { amountOut: string };
-  transaction: { kind: string };
-}>(primary: T, secondary: T) {
-  if (primary.transaction.kind !== secondary.transaction.kind) {
-    throw new ClassicTradeUnavailableError(
-      "Independent RPCs disagree on the required trade step",
-    );
-  }
-  const left = BigInt(primary.quote.amountOut);
-  const right = BigInt(secondary.quote.amountOut);
-  const high = left > right ? left : right;
-  const low = left > right ? right : left;
-  if (low <= 0n || (high - low) * 10_000n > low * 300n) {
-    throw new ClassicTradeUnavailableError(
-      "Independent RPC quotes differ too much",
-    );
-  }
-  return left <= right ? primary : secondary;
-}
-
 export async function POST(request: NextRequest) {
   const contentLength = Number(
     request.headers.get("content-length") ?? "0",
@@ -160,18 +129,14 @@ export async function POST(request: NextRequest) {
               `Classic trading is not supported on chain ${tradeRequest.chainId}`,
             );
           })();
-    const registry = indexedLaunchLookupEnabled()
-      ? actionTokenAsExploreModel(
-          await lookupActionTokenByAddress({
-            chainId: actionChainId,
-            token: tradeRequest.token,
-          }),
-        )
-      : tradeRequest.chainId === 1
-        ? await readAlchemyExploreModel()
-        : await readExploreModel(
-            getWebsiteReadOnchainDeployment("rehearsal"),
-          );
+    if (actionChainId !== 1) {
+      throw new ClassicTradeUnavailableError(
+        "Bitquery trading identity is only available on Ethereum mainnet",
+      );
+    }
+    const registry = await readBitqueryExploreModelV1({
+      signal: request.signal,
+    });
     const indexedToken = registry.tokens.find(
       (candidate) =>
         candidate.tokenAddress.toLowerCase() ===
@@ -183,77 +148,26 @@ export async function POST(request: NextRequest) {
         registry,
         tradeRequest.token,
       );
-      const providers = tradeActionRpcProviders(tradeRequest.chainId);
-      const preparations = await Promise.allSettled(
-        providers.map((provider) =>
-          prepareStockPairedTrade(
-            runtimeClient(tradeRequest.chainId, provider.endpoint),
-            deployment,
-            tradeRequest,
-          ),
-        ),
+      const provider = tradeActionRpcProvider(tradeRequest.chainId);
+      const prepared = await prepareStockPairedTrade(
+        runtimeClient(tradeRequest.chainId, provider.endpoint),
+        deployment,
+        tradeRequest,
       );
-      const inputFailure = preparations.find(
-        (
-          result,
-        ): result is PromiseRejectedResult =>
-          result.status === "rejected" &&
-          result.reason instanceof ClassicTradeInputError,
-      );
-      if (inputFailure) throw inputFailure.reason;
-      if (preparations.some((result) => result.status === "rejected")) {
-        throw new ClassicTradeUnavailableError(
-          "The Stock-Paired trade could not be verified across both independent RPCs",
-        );
-      }
-      const [primary, secondary] = preparations.map(
-        (result) =>
-          (
-            result as PromiseFulfilledResult<
-              Awaited<ReturnType<typeof prepareStockPairedTrade>>
-            >
-          ).value,
-      );
-      return json(selectConservativeTradeQuote(primary, secondary));
+      return json(prepared);
     }
     const deployment = resolveTradeDeployment(
       tradeRequest.chainId,
       registry,
       tradeRequest.token,
     );
-    const providers = tradeActionRpcProviders(tradeRequest.chainId);
-    const preparations = await Promise.allSettled(
-      providers.map((provider) =>
-        prepareClassicTrade(
-          runtimeClient(tradeRequest.chainId, provider.endpoint),
-          deployment,
-          tradeRequest,
-          registry,
-        ),
-      ),
+    const provider = tradeActionRpcProvider(tradeRequest.chainId);
+    const prepared = await prepareClassicTrade(
+      runtimeClient(tradeRequest.chainId, provider.endpoint),
+      deployment,
+      tradeRequest,
+      registry,
     );
-    const inputFailure = preparations.find(
-      (
-        result,
-      ): result is PromiseRejectedResult =>
-        result.status === "rejected" &&
-        result.reason instanceof ClassicTradeInputError,
-    );
-    if (inputFailure) {
-      throw inputFailure.reason;
-    }
-    if (preparations.some((result) => result.status === "rejected")) {
-      throw new ClassicTradeUnavailableError(
-        "The trade could not be verified across both independent RPCs",
-      );
-    }
-    const [primary, secondary] = preparations.map(
-      (result) =>
-        (result as PromiseFulfilledResult<
-          Awaited<ReturnType<typeof prepareClassicTrade>>
-        >).value,
-    );
-    const prepared = selectConservativeTradeQuote(primary, secondary);
     return json(prepared);
   } catch (error) {
     if (error instanceof ClassicTradeInputError) {
@@ -265,12 +179,6 @@ export async function POST(request: NextRequest) {
     ) {
       return json({ error: error.message }, 409);
     }
-    if (error instanceof ActionLookupError) {
-      return json(
-        { error: "This token is not a verified Programmable launch" },
-        409,
-      );
-    }
     console.error(
       "Trade preparation failed",
       safeServerErrorSummary(error),
@@ -278,7 +186,7 @@ export async function POST(request: NextRequest) {
     return json(
       {
         error:
-          "The trade could not be prepared from the current onchain state",
+          "The configured RPC could not prepare the trade from the current onchain state",
       },
       502,
     );
