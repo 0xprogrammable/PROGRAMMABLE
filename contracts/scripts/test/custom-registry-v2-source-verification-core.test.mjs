@@ -357,15 +357,147 @@ test("accepts only exact semantic Etherscan and Sourcify provider evidence", asy
 
     installProviderMock({
       sourceMutation: (value) => {
+        value.result[0].CompilerType = "solc-j";
+        const input = JSON.parse(value.result[0].SourceCode);
+        delete input.settings.compilationTarget;
+        input.settings.optimizer = Object.fromEntries(
+          Object.entries(input.settings.optimizer).reverse(),
+        );
+        input.settings.metadata = Object.fromEntries(
+          Object.entries(input.settings.metadata).reverse(),
+        );
+        input.settings = Object.fromEntries(
+          Object.entries(input.settings).reverse(),
+        );
+        value.result[0].SourceCode = JSON.stringify(input);
+      },
+      sourcifyMutation: (value) => {
+        value.match = "match";
+        value.creationMatch = "match";
+        value.runtimeMatch = "match";
+        value.stdJsonInput.settings.optimizer = Object.fromEntries(
+          Object.entries(value.stdJsonInput.settings.optimizer).reverse(),
+        );
+        value.stdJsonInput.settings.metadata = Object.fromEntries(
+          Object.entries(value.stdJsonInput.settings.metadata).reverse(),
+        );
+        value.stdJsonInput.settings = Object.fromEntries(
+          Object.entries(value.stdJsonInput.settings).reverse(),
+        );
+      },
+    });
+    const currentProviderEvidence = await verifyRegistrySourceProviders({
+      compilation,
+      finalized,
+      plan,
+      etherscanApiKey: "sentinel-key",
+    });
+    assert.equal(
+      currentProviderEvidence.etherscan.status,
+      "verified-source-exact-closure",
+    );
+    assert.equal(currentProviderEvidence.sourcify.status, "exact-match");
+
+    installProviderMock({
+      sourceMutation: (value) => {
+        value.result[0].ContractFileName = "";
+      },
+    });
+    const legacyTargetEvidence = await verifyRegistrySourceProviders({
+      compilation,
+      finalized,
+      plan,
+      etherscanApiKey: "sentinel-key",
+    });
+    assert.equal(
+      legacyTargetEvidence.etherscan.status,
+      "verified-source-exact-closure",
+    );
+
+    installProviderMock({
+      sourceMutation: (value) => {
+        value.result[0].CompilerType = "solc-js";
+      },
+    });
+    await assert.rejects(
+      () =>
+        verifyRegistrySourceProviders({
+          compilation,
+          finalized,
+          plan,
+          etherscanApiKey: "sentinel-key",
+        }),
+      /Etherscan exact source metadata/u,
+    );
+
+    installProviderMock({
+      sourceMutation: (value) => {
+        const input = JSON.parse(value.result[0].SourceCode);
+        input.settings.compilationTarget["src/Injected.sol"] = "Injected";
+        value.result[0].SourceCode = JSON.stringify(input);
+      },
+    });
+    await assert.rejects(
+      () =>
+        verifyRegistrySourceProviders({
+          compilation,
+          finalized,
+          plan,
+          etherscanApiKey: "sentinel-key",
+        }),
+      /Etherscan target or ABI/u,
+    );
+
+    installProviderMock({
+      sourceMutation: (value) => {
+        const input = JSON.parse(value.result[0].SourceCode);
+        input.settings.compilationTarget[
+          "src/ProgrammableCustomRegistryV2.sol"
+        ] = "Injected";
+        value.result[0].SourceCode = JSON.stringify(input);
+      },
+    });
+    await assert.rejects(
+      () =>
+        verifyRegistrySourceProviders({
+          compilation,
+          finalized,
+          plan,
+          etherscanApiKey: "sentinel-key",
+        }),
+      /Etherscan target or ABI/u,
+    );
+
+    installProviderMock({
+      sourceMutation: (value) => {
+        const input = JSON.parse(value.result[0].SourceCode);
+        delete input.settings.compilationTarget;
+        value.result[0].ContractFileName = "src/Injected.sol";
+        value.result[0].SourceCode = JSON.stringify(input);
+      },
+    });
+    await assert.rejects(
+      () =>
+        verifyRegistrySourceProviders({
+          compilation,
+          finalized,
+          plan,
+          etherscanApiKey: "sentinel-key",
+        }),
+      /Etherscan exact source metadata/u,
+    );
+
+    installProviderMock({
+      sourceMutation: (value) => {
         value.result[0].SimilarMatch = address;
       },
     });
     const similarMatchEvidence = await verifyRegistrySourceProviders({
-        compilation,
-        finalized,
-        plan,
-        etherscanApiKey: "sentinel-key",
-      });
+      compilation,
+      finalized,
+      plan,
+      etherscanApiKey: "sentinel-key",
+    });
     assert.equal(
       similarMatchEvidence.etherscan.status,
       "verified-source-exact-closure",
@@ -388,7 +520,7 @@ test("accepts only exact semantic Etherscan and Sourcify provider evidence", asy
     );
     installProviderMock({
       sourcifyMutation: (value) => {
-        value.match = "match";
+        value.match = "partial_match";
       },
     });
     await assert.rejects(
