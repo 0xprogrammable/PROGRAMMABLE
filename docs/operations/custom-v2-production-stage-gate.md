@@ -84,7 +84,12 @@ The workflow performs this sequence:
 The Custom V2 probe verifies:
 
 - Registry V2 manifest and readiness in the selected prelaunch/live mode
-- unauthenticated Approval V3 GET and PUT rejection
+- unauthenticated Approval V3 GET and PUT rejection when its exact audience
+  and target binding are configured
+- exact `503 target_unavailable` responses for both Approval V3 methods when
+  the fully closed prelaunch/disabled matrix has no Approval V3 configuration;
+  partial configuration and every active matrix remain invalid without both
+  bindings
 - unauthenticated projector POST and reconciliation GET rejection
 - authenticated Approval V3 delivery, separate authenticated readback, and
   authenticated projection when digest-bound evidence is supplied
