@@ -290,7 +290,9 @@ function isFailSoftMarketTransportFailure(
     !signal.aborted &&
     error instanceof BitqueryMarketDataError &&
     error.category === "transport" &&
-    (error.phase === "market-core" || error.phase === "market-price");
+    (error.phase === "market-core" ||
+      error.phase === "market-liquidity" ||
+      error.phase === "market-price");
 }
 
 export async function GET(request: NextRequest) {

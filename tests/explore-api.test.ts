@@ -405,6 +405,40 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     },
   );
 
+  it("serves verified launches when exact-pool liquidity transport fails", async () => {
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockRejectedValueOnce(
+      new mocks.BitqueryMarketDataError("transport", "market-liquidity"),
+    );
+
+    const response = await GET(request("sort=market-cap&page=1&limit=9"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "ready",
+      marketRead: {
+        provider: "bitquery",
+        status: "unavailable",
+        category: "transport",
+        phase: "market-liquidity",
+      },
+      ranking: {
+        status: "unavailable",
+        requested: "fdv",
+        applied: "launch-order",
+      },
+      dataQuality: {
+        status: "partial",
+        launchIdentity: { status: "current" },
+        valuation: { status: "unavailable", available: 0, unavailable: 9 },
+      },
+    });
+    expect(response.headers.get("x-programmable-market-read-status")).toBe(
+      "transport-unavailable",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("serves the Newest identity page when the Bitquery price transport fails", async () => {
     mocks.readBitqueryTokenMarketDataStrictV1.mockRejectedValueOnce(
       new mocks.BitqueryMarketDataError("transport", "market-price"),
@@ -445,7 +479,6 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     ["configuration", "configuration"],
     ["response", "market-core"],
     ["integrity", "market-core"],
-    ["transport", "market-liquidity"],
     ["transport", "market-stats"],
   ] as const)(
     "keeps Bitquery %s/%s failures fail-closed",

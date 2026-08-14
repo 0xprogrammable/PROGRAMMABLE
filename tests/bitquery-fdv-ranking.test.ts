@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   BITQUERY_HTTP_ENDPOINT,
+  BitqueryMarketDataError,
   readBitqueryTokenFdvRankingStrictV1,
 } from "../lib/market-data/bitquery.server";
 import {
@@ -138,7 +139,7 @@ describe("strict lightweight Bitquery FDV ranking", () => {
     expect(market?.pools[0]).not.toHaveProperty("latestTrade");
   });
 
-  it("degrades a liquidity transport failure without failing the token read", async () => {
+  it("propagates a genuine liquidity transport failure with its exact phase", async () => {
     const fetchImpl = vi.fn(async (
       _url: string | URL | Request,
       init?: RequestInit,
@@ -147,7 +148,28 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       if (request.query.includes("ProgrammableExploreFdvRanking")) {
         return json({ data: { Trading: { rankingTokens: [rankingToken()] } } });
       }
-      throw new Error("liquidity unavailable");
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl,
+      token: TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    })).rejects.toMatchObject({
+      category: "transport",
+      phase: "market-liquidity",
+    });
+  });
+
+  it("keeps a successfully empty liquidity result unavailable", async () => {
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      return request.query.includes("ProgrammableExploreFdvRanking")
+        ? json({ data: { Trading: { rankingTokens: [rankingToken()] } } })
+        : json({ data: { EVM: { latestLiquidity: [] } } });
     }) as typeof fetch;
 
     const values = await readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
@@ -162,6 +184,92 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       quality: "partial",
       valuation: { status: "unavailable", reason: "source-unavailable" },
     });
+  });
+
+  it.each([
+    [401, "configuration"],
+    [400, "response"],
+  ] as const)(
+    "keeps a liquidity HTTP %s failure fail-closed as %s",
+    async (status, category) => {
+      const fetchImpl = vi.fn(async (
+        _url: string | URL | Request,
+        init?: RequestInit,
+      ) => {
+        const request = JSON.parse(String(init?.body));
+        return request.query.includes("ProgrammableExploreFdvRanking")
+          ? json({ data: { Trading: { rankingTokens: [rankingToken()] } } })
+          : new Response("provider error", { status });
+      }) as typeof fetch;
+
+      await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+        fetchImpl,
+        token: TOKEN,
+      })).rejects.toMatchObject({ category, phase: "market-liquidity" });
+    },
+  );
+
+  it("keeps a partial liquidity response fail-closed", async () => {
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      return request.query.includes("ProgrammableExploreFdvRanking")
+        ? json({ data: { Trading: { rankingTokens: [rankingToken()] } } })
+        : json({
+            data: { EVM: { latestLiquidity: [] } },
+            errors: [{ message: "partial liquidity" }],
+          });
+    }) as typeof fetch;
+
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl,
+      token: TOKEN,
+    })).rejects.toMatchObject({
+      category: "response",
+      phase: "market-liquidity",
+    });
+  });
+
+  it("keeps malformed liquidity rows fail-closed", async () => {
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      return request.query.includes("ProgrammableExploreFdvRanking")
+        ? json({ data: { Trading: { rankingTokens: [rankingToken()] } } })
+        : json({ data: { EVM: { latestLiquidity: [{}] } } });
+    }) as typeof fetch;
+
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl,
+      token: TOKEN,
+    })).rejects.toMatchObject({
+      category: "integrity",
+      phase: "market-liquidity",
+    });
+  });
+
+  it("does not relabel an unknown liquidity failure as transport", async () => {
+    const programmingError = new Error("unexpected liquidity failure");
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableExploreFdvRanking")) {
+        return json({ data: { Trading: { rankingTokens: [rankingToken()] } } });
+      }
+      throw programmingError;
+    }) as typeof fetch;
+
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl,
+      token: TOKEN,
+    })).rejects.toBe(programmingError);
+    expect(programmingError).not.toBeInstanceOf(BitqueryMarketDataError);
   });
 
   it("keeps a low-liquidity pool but withholds its FDV", async () => {
