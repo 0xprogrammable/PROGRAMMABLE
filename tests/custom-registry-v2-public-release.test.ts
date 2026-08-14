@@ -10,6 +10,7 @@ import {
 import {
   createCustomRegistryManifestHandlerV2,
   createCustomRegistryReadinessHandlerV2,
+  handleProductionCustomRegistryManifestV2,
   resolveCustomRegistryPublicManifestV2,
 } from "../lib/server/custom-launch/registry-manifest-v2";
 
@@ -157,6 +158,23 @@ describe("Custom Registry V2 public release binding", () => {
       release: liveSource().release,
       finality: liveSource().finality,
     });
+  });
+
+  it("serves the imported finalized deployment as the canonical live manifest", async () => {
+    const manifest = resolveCustomRegistryPublicManifestV2();
+    expect(manifest).toMatchObject({
+      status: "live",
+      publicReadEnabled: true,
+      indexingEnabled: true,
+      registry: {
+        address: "0x845506084a1afb969fa4def444a2bdeee794aaad",
+      },
+    });
+    const response = handleProductionCustomRegistryManifestV2(
+      request(CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH_V2),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(manifest);
   });
 
   it("serves an explicit prelaunch manifest and rejects malformed requests", async () => {

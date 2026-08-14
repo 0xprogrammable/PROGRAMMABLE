@@ -87,13 +87,16 @@ The Custom V2 probe verifies:
 - unauthenticated Approval V3 GET and PUT rejection when its exact audience
   and target binding are configured
 - exact `503 target_unavailable` responses for both Approval V3 methods when
-  the fully closed prelaunch/disabled matrix has no Approval V3 configuration;
-  partial configuration and every active matrix remain invalid without both
-  bindings
+  Generic V2 is disabled, no authenticated evidence is supplied, and both
+  Approval V3 bindings are absent, whether Registry V2 is prelaunch or live;
+  partial configuration, authenticated evidence, and every Generic-ready
+  matrix remain invalid without both bindings
 - unauthenticated projector POST and reconciliation GET rejection
 - authenticated Approval V3 delivery, separate authenticated readback, and
   authenticated projection when digest-bound evidence is supplied
-- authenticated reconciliation with zero failed records in live mode
+- authenticated reconciliation with zero failed records in Generic-ready mode;
+  Registry-live candidates with Generic disabled require no reconciliation
+  credential and make no authenticated reconciliation request
 - Generic V2 readiness, feed and detail contracts, including the transitive
   Postgres posture, exact Registry binding, dual-RPC deployment check, and
   remote read-signer verification enforced by those handlers

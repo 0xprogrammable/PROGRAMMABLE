@@ -7,7 +7,7 @@
   "publicReadEnabled": true,
   "indexingEnabled": true,
   "registry": {
-    "address": "0x845506084a1AfB969fa4DeF444A2bdeEe794AAad",
+    "address": "0x845506084a1afb969fa4def444a2bdeee794aaad",
     "runtimeCodeKeccak256": "0x74d8196e2d40d030c66b147e835cbdf6dd0ab61c964fb3ef3890d86ed7daf074",
     "deploymentTransactionHash": "0x49d3f19cf9f8afdc307892a95a880652ad7c6c4763458e5846eef78ef60b2ed5",
     "deploymentBlock": "25749665",

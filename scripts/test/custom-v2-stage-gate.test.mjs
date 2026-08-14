@@ -95,6 +95,8 @@ function fetchMatrix({
   emptyFeed = false,
   approvalUnavailable = false,
   approvalUnexpectedlyAvailable = false,
+  approvalMethods = null,
+  projectorRequests = null,
 } = {}) {
   return async (input, init = {}) => {
     const url = new URL(input);
@@ -124,6 +126,7 @@ function fetchMatrix({
         });
     }
     if (url.pathname.startsWith("/v2/internal/projections/approval-descriptors/")) {
+      approvalMethods?.push(method);
       if (approvalUnavailable) {
         assert.equal(init.headers?.["x-programmable-audience"], undefined);
         assert.equal(init.headers?.["x-programmable-target-binding"], undefined);
@@ -171,6 +174,7 @@ function fetchMatrix({
         });
     }
     if (url.pathname === "/api/ops/custom-launch/generic-v2-projector") {
+      projectorRequests?.push([method, Boolean(init.headers?.authorization)]);
       if (!init.headers?.authorization) {
         return json(401, {
           schemaVersion: "programmable.generic-launch-projector-error.v2",
@@ -271,6 +275,35 @@ test("closed matrix requires unconfigured Approval V3 to fail closed", async () 
   assert.ok(!evidence.checks.some(({ id }) => id === "approval-v3-unauthorized"));
 });
 
+test("live Registry with disabled Generic proves unconfigured Approval V3 fail-closed", async () => {
+  const approvalMethods = [];
+  const projectorRequests = [];
+  const evidence = await verifyCustomV2StageCandidateV1(baseInput(
+    fetchMatrix({
+      live: true,
+      approvalUnavailable: true,
+      approvalMethods,
+      projectorRequests,
+    }),
+    {
+      registryMode: "live",
+      approvalAudience: undefined,
+      approvalTargetBindingHash: undefined,
+    },
+  ));
+  assert.deepEqual(evidence.matrix, {
+    registryMode: "live",
+    genericMode: "disabled",
+    authenticatedIngress: false,
+  });
+  assert.deepEqual(approvalMethods, ["GET", "PUT"]);
+  assert.deepEqual(projectorRequests, [["GET", false], ["POST", false]]);
+  assert.ok(evidence.checks.some(({ id }) => id === "registry-v2-readiness"));
+  assert.ok(evidence.checks.some(({ id }) => id === "approval-v3-unavailable"));
+  assert.ok(evidence.checks.some(({ id }) => id === "generic-v2-disabled"));
+  assert.ok(!evidence.checks.some(({ id }) => id === "generic-v2-reconciliation"));
+});
+
 test("explicit live and ready matrix proves Registry, DB, signer, feed and detail", async () => {
   const evidence = await verifyCustomV2StageCandidateV1(baseInput(
     fetchMatrix({ live: true, ready: true }),
@@ -356,9 +389,20 @@ test("candidate identity and activation matrix fail closed", async () => {
   await assert.rejects(
     verifyCustomV2StageCandidateV1(baseInput(fetchMatrix({ live: true }), {
       registryMode: "live",
+      genericMode: "ready",
       approvalAudience: undefined,
       approvalTargetBindingHash: undefined,
     })),
+    /Approval V3 audience is invalid/u,
+  );
+  await assert.rejects(
+    verifyCustomV2StageCandidateV1(baseInput(
+      fetchMatrix({ live: true, approvalUnavailable: true }),
+      {
+        registryMode: "live",
+        approvalAudience: undefined,
+      },
+    )),
     /Approval V3 audience is invalid/u,
   );
   await assert.rejects(
