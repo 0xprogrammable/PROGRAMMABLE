@@ -39,7 +39,7 @@ const HELP = `Usage:
   node scripts/website-projection-db-operator.mjs dry-run --plan FILE --expected-project-ref REF
   node scripts/website-projection-db-operator.mjs verify --plan FILE --expected-project-ref REF
   node scripts/website-projection-db-operator.mjs apply --plan FILE --expected-project-ref REF --confirm-apply PLAN_SHA256 --confirm-target REF
-  node scripts/website-projection-db-operator.mjs adopt-existing --plan FILE --expected-project-ref REF --source-base-snapshot FILE --source-expanded-snapshot FILE --confirm-adopt-existing PLAN_SHA256 --confirm-target REF --confirm-source-snapshot SNAPSHOT_SHA256 --confirm-adopt-through 0003
+  node scripts/website-projection-db-operator.mjs adopt-existing --plan FILE --expected-project-ref REF --source-base-snapshot FILE --source-expanded-snapshot FILE --source-current-snapshot FILE --confirm-adopt-existing PLAN_SHA256 --confirm-target REF --confirm-source-snapshot SNAPSHOT_SHA256 --confirm-adopt-through 0003
 
 Database credentials are accepted only through PROGRAMMABLE_MIGRATOR_DATABASE_URL.
 The CA certificate is accepted only through PROGRAMMABLE_POSTGRES_SSL_CA_PEM.
@@ -144,6 +144,7 @@ async function runDatabaseCommand(command, flags) {
       "--confirm-adopt-through",
       "--source-base-snapshot",
       "--source-expanded-snapshot",
+      "--source-current-snapshot",
     );
   }
   exactFlags(flags, allowed);
@@ -173,6 +174,7 @@ async function runDatabaseCommand(command, flags) {
     ? await readWebsiteProjectionAdoptionProtectedSnapshots({
       baseSnapshotPath: flags.get("--source-base-snapshot"),
       expandedSnapshotPath: flags.get("--source-expanded-snapshot"),
+      currentSnapshotPath: flags.get("--source-current-snapshot"),
       expectedProjectRef,
     })
     : null;

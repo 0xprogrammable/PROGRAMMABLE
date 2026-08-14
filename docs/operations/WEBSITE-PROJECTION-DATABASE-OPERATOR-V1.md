@@ -34,6 +34,10 @@ repair. It accepts only all of these exact facts:
   `0xac4a1fe60ebf677865a0f8ca6160162d9c457dc2bd401aa60fd820c8f2fdcc58`
   and expanded snapshot
   `0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284`;
+- protected current-role snapshot
+  `0x917afa0f6bcd19f00f5d2ce5cd0d8221ef00ad6716460af11bff0906e4b9a0f9`,
+  captured by commit `482aba91cd246d605ec0f98d0718dd5fff781d1f`,
+  with exactly 36 endpoint roles and all 50 membership rows;
 - the exact normalized catalog, RLS, policies, grants, functions and triggers
   after `0001` through `0003`, including the captured schema `USAGE`, three
   table `SELECT`/`INSERT` grants and eleven registry column `UPDATE` grants,
@@ -46,11 +50,11 @@ repair. It accepts only all of these exact facts:
   `0x93e41eab957ab8add897a8b277bcaaa0a5f10eebeb27f47db5bc0e59640484a2`
   and protected full-inventory hash
   `0xd32953874c1466be82433d97e6532d0572ddcf80eed261efa119b25f17e0f5b3`;
-- the constrained runtime role with the sole accepted drift
-  `rolinherit = true`, plus exactly the provider-owned
+- the exact full endpoint-role and membership inventory, including the
+  constrained runtime role with the sole accepted drift `rolinherit = true`
+  and the provider-owned
   `postgres -> programmable_website_projection_runtime WITH ADMIN OPTION`
-  membership with `INHERIT FALSE`, `SET FALSE`, grantor `supabase_admin`, and
-  no other runtime/provider edge.
+  membership with `INHERIT FALSE`, `SET FALSE`, and grantor `supabase_admin`.
 
 The protected operator checkout may be a clean reviewed successor commit only
 when all five migration file/execution hashes still equal the source plan. The
@@ -64,6 +68,7 @@ hashes, zero-row hash and counts, exact role delta, source and operator Git
 identities, plan, target and adoption attestation hash.
 
 Run only after independently reviewing the protected snapshot and exact target:
+all three snapshot inputs must be owner-only regular files with mode `0600`.
 
 ```sh
 npm run --silent db:website-projection:operator -- adopt-existing \
@@ -73,11 +78,13 @@ npm run --silent db:website-projection:operator -- adopt-existing \
     /secure/operator/programmable-website-projection-hosted-catalog-snapshot-76ebd54.json \
   --source-expanded-snapshot \
     /secure/operator/programmable-website-projection-hosted-catalog-snapshot-v2-76ebd54.json \
+  --source-current-snapshot \
+    /secure/operator/programmable-website-projection-hosted-catalog-snapshot-v3-482aba91.json \
   --confirm-adopt-existing \
     '<exact-successor-planSha256>' \
   --confirm-target 'mnnvlrqwhfoppogslsje' \
   --confirm-source-snapshot \
-    '0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284' \
+    '0x917afa0f6bcd19f00f5d2ce5cd0d8221ef00ad6716460af11bff0906e4b9a0f9' \
   --confirm-adopt-through '0003'
 ```
 

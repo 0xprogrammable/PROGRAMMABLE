@@ -40,6 +40,8 @@ const COMMIT = "76ebd54e2f0e31d055cfe6c36b7474b0e850de90";
 const TREE = "8e4ddd9a73818ce70f1284f3b2731bc87b005f27";
 const PROJECT_REF = "mnnvlrqwhfoppogslsje";
 const SOURCE_SNAPSHOT =
+  "0x917afa0f6bcd19f00f5d2ce5cd0d8221ef00ad6716460af11bff0906e4b9a0f9";
+const EXPANDED_SNAPSHOT =
   "0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284";
 const BASE_SNAPSHOT =
   "0xac4a1fe60ebf677865a0f8ca6160162d9c457dc2bd401aa60fd820c8f2fdcc58";
@@ -435,6 +437,23 @@ test("protected adoption inventory validator rejects catalog, role, data and leg
     inherit_option: false,
     set_option: false,
   }];
+  const currentRoles = [
+    roles[0],
+    roles[1],
+    safeRole("authenticator", { rolinherit: true, rolcanlogin: true }),
+    ...roles.slice(2),
+  ];
+  const currentMemberships = [
+    {
+      member_name: "authenticator",
+      role_name: "anon",
+      grantor_name: "supabase_admin",
+      admin_option: false,
+      inherit_option: false,
+      set_option: true,
+    },
+    ...memberships,
+  ];
   const sourceData = { rowPresence: [
     { relation_name: "credential_uses", has_rows: false },
     { relation_name: "projection_records", has_rows: false },
@@ -477,6 +496,10 @@ test("protected adoption inventory validator rejects catalog, role, data and leg
         evidenceRows: [],
       },
     },
+    currentSnapshot: {
+      roles: currentRoles,
+      memberships: currentMemberships,
+    },
   };
   const valid = {
     sourceCatalog: {
@@ -485,7 +508,10 @@ test("protected adoption inventory validator rejects catalog, role, data and leg
       ...structure,
     },
     sourceData,
-    extendedRoleInventory: { roles, memberships },
+    extendedRoleInventory: {
+      roles: currentRoles,
+      memberships: currentMemberships,
+    },
     legacyInventory,
     protectedSnapshots,
   };
@@ -495,7 +521,24 @@ test("protected adoption inventory validator rejects catalog, role, data and leg
     (value) => { value.sourceCatalog.roles[3].rolinherit = false; },
     (value) => { value.sourceCatalog.memberships[0].grantor_name = "postgres"; },
     (value) => { value.extendedRoleInventory.roles[3].rolconnlimit = 1; },
-    (value) => { value.extendedRoleInventory.memberships[0].set_option = true; },
+    (value) => { value.extendedRoleInventory.memberships[1].set_option = true; },
+    (value) => { value.extendedRoleInventory.memberships.shift(); },
+    (value) => { value.extendedRoleInventory.memberships[0].set_option = false; },
+    (value) => {
+      value.extendedRoleInventory.roles.splice(
+        2,
+        0,
+        safeRole("attacker_login", { rolcanlogin: true, rolinherit: true }),
+      );
+      value.extendedRoleInventory.memberships.unshift({
+        member_name: "attacker_login",
+        role_name: "authenticator",
+        grantor_name: "supabase_admin",
+        admin_option: false,
+        inherit_option: false,
+        set_option: true,
+      });
+    },
     (value) => { value.sourceData.rowPresence[0].has_rows = true; },
     (value) => { value.legacyInventory.relations.push({ relname: "extra" }); },
     (value) => { value.legacyInventory.columns.push({ column_name: "extra" }); },
@@ -519,34 +562,44 @@ test("protected snapshot reader rejects symlinks, broad modes, raw drift and tar
   const target = path.join(root, "target.json");
   const baseLink = path.join(root, "base-link.json");
   const expandedLink = path.join(root, "expanded-link.json");
+  const currentLink = path.join(root, "current-link.json");
   await writeFile(target, "{}\n", { mode: 0o600 });
   await symlink(target, baseLink);
   await symlink(target, expandedLink);
+  await symlink(target, currentLink);
   await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
     baseSnapshotPath: baseLink,
     expandedSnapshotPath: expandedLink,
+    currentSnapshotPath: currentLink,
     expectedProjectRef: PROJECT_REF,
   }), /ELOOP|symbolic links/u);
 
   const broadBase = path.join(root, "broad-base.json");
   const broadExpanded = path.join(root, "broad-expanded.json");
+  const broadCurrent = path.join(root, "broad-current.json");
   await writeFile(broadBase, "{}\n", { mode: 0o600 });
   await writeFile(broadExpanded, "{}\n", { mode: 0o600 });
+  await writeFile(broadCurrent, "{}\n", { mode: 0o600 });
   await chmod(broadBase, 0o644);
   await chmod(broadExpanded, 0o644);
+  await chmod(broadCurrent, 0o644);
   await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
     baseSnapshotPath: broadBase,
     expandedSnapshotPath: broadExpanded,
+    currentSnapshotPath: broadCurrent,
     expectedProjectRef: PROJECT_REF,
   }), /owner-only regular file/u);
 
   const driftedBase = path.join(root, "drifted-base.json");
   const driftedExpanded = path.join(root, "drifted-expanded.json");
+  const driftedCurrent = path.join(root, "drifted-current.json");
   await writeFile(driftedBase, "{}\n", { mode: 0o600 });
   await writeFile(driftedExpanded, "{}\n", { mode: 0o600 });
+  await writeFile(driftedCurrent, "{}\n", { mode: 0o600 });
   await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
     baseSnapshotPath: driftedBase,
     expandedSnapshotPath: driftedExpanded,
+    currentSnapshotPath: driftedCurrent,
     expectedProjectRef: PROJECT_REF,
   }), /raw hash mismatch/u);
 
@@ -577,6 +630,29 @@ test("protected snapshot reader rejects symlinks, broad modes, raw drift and tar
       target: targetIdentity,
       baseSnapshot: { rawSha256: BASE_SNAPSHOT },
       applicationCatalog: baseSnapshot,
+    },
+    currentSnapshot: {
+      kind: "programmable-website-projection-hosted-catalog-snapshot-v3",
+      schemaVersion: 3,
+      target: targetIdentity,
+      operatorSource: {
+        repositoryCommit: "482aba91cd246d605ec0f98d0718dd5fff781d1f",
+        repositoryTree: "b65e183f679c97b8152c779d9866aec53202bf4a",
+      },
+      parentSnapshots: {
+        baseRawSha256: BASE_SNAPSHOT,
+        expandedRawSha256: EXPANDED_SNAPSHOT,
+      },
+      observation: {
+        databaseName: "postgres",
+        serverPort: 5432,
+        serverVersionNum: "170006",
+        sessionUser: "postgres",
+        currentRole: "postgres",
+        observedAt: "2026-08-14T05:28:42.903695+00:00",
+      },
+      roles: [],
+      memberships: [],
     },
     expectedProjectRef: "z".repeat(20),
   }), /protected snapshot identity mismatch/u);
@@ -799,8 +875,10 @@ function pgliteAdoptionAuditOptions() {
   return {
     protectedSnapshots: {
       sourceSnapshotSha256: SOURCE_SNAPSHOT,
+      expandedSnapshotSha256: EXPANDED_SNAPSHOT,
       baseSnapshotSha256: BASE_SNAPSHOT,
       expandedSnapshot: {},
+      currentSnapshot: {},
     },
     legacyInventoryReader: async () => ({ fixture: true }),
     liveInventoryValidator({ sourceData }) {
@@ -961,6 +1039,8 @@ test("adopt-existing records exact evidence atomically without replaying applica
     adoption_attestation_sha256 === adopted.adoptionAttestationSha256));
   const adoptionEvidence = await fixture.database.query(`
     SELECT evidence_kind, adopted_through_version,
+           source_snapshot_sha256, expanded_snapshot_sha256,
+           base_snapshot_sha256,
            credential_uses_count, projection_records_count,
            registry_custom_launch_records_count,
            runtime_rolinherit_before, runtime_rolinherit_after
@@ -969,6 +1049,9 @@ test("adopt-existing records exact evidence atomically without replaying applica
   assert.deepEqual(adoptionEvidence.rows, [{
     evidence_kind: "adopted-existing-prefix-v1",
     adopted_through_version: "0003",
+    source_snapshot_sha256: SOURCE_SNAPSHOT,
+    expanded_snapshot_sha256: EXPANDED_SNAPSHOT,
+    base_snapshot_sha256: BASE_SNAPSHOT,
     credential_uses_count: 0,
     projection_records_count: 0,
     registry_custom_launch_records_count: 0,

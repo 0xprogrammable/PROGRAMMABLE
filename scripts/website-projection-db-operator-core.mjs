@@ -27,6 +27,8 @@ export const WEBSITE_PROJECTION_ADOPTION_SOURCE_PLAN_SHA256 =
 export const WEBSITE_PROJECTION_ADOPTION_SOURCE_ORDER_SHA256 =
   "0xce50954bfa6ff3b66b849bb5b53e8f1adf93abbe12cf865c19375100f2571cc2";
 export const WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256 =
+  "0x917afa0f6bcd19f00f5d2ce5cd0d8221ef00ad6716460af11bff0906e4b9a0f9";
+export const WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256 =
   "0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284";
 export const WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256 =
   "0xac4a1fe60ebf677865a0f8ca6160162d9c457dc2bd401aa60fd820c8f2fdcc58";
@@ -37,6 +39,10 @@ export const WEBSITE_PROJECTION_ADOPTION_LEGACY_PUBLIC_SHA256 =
 export const WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT = 3;
 export const WEBSITE_PROJECTION_ADOPTION_TARGET_PROJECT_REF =
   "mnnvlrqwhfoppogslsje";
+export const WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_COMMIT =
+  "482aba91cd246d605ec0f98d0718dd5fff781d1f";
+export const WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_TREE =
+  "b65e183f679c97b8152c779d9866aec53202bf4a";
 
 export const WEBSITE_PROJECTION_MIGRATION_FILES = Object.freeze([
   "0001_projection_records_v1.sql",
@@ -270,6 +276,8 @@ export function websiteProjectionAdoptionAttestationSha256({
     adoptedMigrationCount: WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT,
     adoptedThroughVersion: "0003",
     sourceSnapshotSha256,
+    expandedSnapshotSha256:
+      WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256,
     baseSnapshotSha256: WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256,
     legacyInventorySha256:
       WEBSITE_PROJECTION_ADOPTION_LEGACY_INVENTORY_SHA256,
@@ -402,6 +410,8 @@ export function compareWebsiteProjectionEvidence({
       || adoptionRow.source_snapshot_sha256 !== adoption.sourceSnapshotSha256
       || adoptionRow.base_snapshot_sha256
         !== WEBSITE_PROJECTION_ADOPTION_BASE_SNAPSHOT_SHA256
+      || adoptionRow.expanded_snapshot_sha256
+        !== WEBSITE_PROJECTION_ADOPTION_EXPANDED_SNAPSHOT_SHA256
       || adoptionRow.legacy_inventory_sha256
         !== WEBSITE_PROJECTION_ADOPTION_LEGACY_INVENTORY_SHA256
       || adoptionRow.legacy_public_sha256
