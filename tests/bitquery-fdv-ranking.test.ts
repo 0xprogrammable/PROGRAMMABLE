@@ -31,6 +31,7 @@ function rankingToken() {
     Token: {
       Id: `bid:eth:${IDENTITY.tokenAddress}`,
       Address: IDENTITY.tokenAddress,
+      Network: "Ethereum",
     },
     Block: { Time: "2026-08-11T14:00:00.000Z" },
     Supply: {
@@ -80,19 +81,20 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       expect(request.query).not.toContain("DEXTradeByTokens");
       if (request.query.includes("ProgrammableExploreFdvRanking")) {
         expect(request.variables).toEqual({
-          tokenIds: [`bid:eth:${IDENTITY.tokenAddress}`],
+          tokenAddresses: [IDENTITY.tokenAddress],
         });
         expect(request.query).toContain("rankingTokens: Tokens(");
         expect(request.query).toContain(
           "limitBy: { by: Token_Id, count: 1 }",
         );
-        expect(request.query).toContain("Token: { Id: { in: $tokenIds } }");
+        expect(request.query).toContain("Address: { in: $tokenAddresses }");
+        expect(request.query).toContain('Network: { is: "Ethereum" }');
         expect(request.query).toContain(
           "Interval: { Time: { Duration: { eq: 1 } } }",
         );
         expect(request.query).toContain("FullyDilutedValuationUsd");
         expect(request.query).toContain("Price { IsQuotedInUsd Ohlc { Close } }");
-        expect(request.query).not.toContain("Token_Address");
+        expect(request.query).not.toContain("Token: { Id: { in:");
         return json({ data: { Trading: { rankingTokens: [rankingToken()] } } });
       }
       expect(request.query).toContain("EVM(network: eth) {");
@@ -217,6 +219,7 @@ describe("strict lightweight Bitquery FDV ranking", () => {
                   Token: {
                     Id: `base:${IDENTITY.tokenAddress}`,
                     Address: IDENTITY.tokenAddress,
+                    Network: "Base",
                   },
                 }],
               },

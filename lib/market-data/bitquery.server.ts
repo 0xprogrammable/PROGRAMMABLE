@@ -275,20 +275,20 @@ export async function readBitqueryTokenFdvRankingStrictV1(
     throw new BitqueryMarketDataError("response", "market-core");
   }
 
-  const expectedTokenIds = new Set(
-    unique.map(({ tokenAddress }) => ethereumTokenId(tokenAddress)),
+  const expectedTokenAddresses = new Set(
+    unique.map(({ tokenAddress }) => tokenAddress),
   );
   let tokenRows: ReadonlyMap<string, unknown>;
   try {
     tokenRows = indexUniqueRows(
       array(trading.rankingTokens),
-      (row) => canonicalEthereumTokenId(record(record(row)?.Token)?.Id),
+      rankingTokenRowAddress,
     );
   } catch {
     throw new BitqueryMarketDataError("integrity", "market-core");
   }
-  for (const tokenId of tokenRows.keys()) {
-    if (!expectedTokenIds.has(tokenId)) {
+  for (const tokenAddress of tokenRows.keys()) {
+    if (!expectedTokenAddresses.has(tokenAddress as `0x${string}`)) {
       throw new BitqueryMarketDataError("integrity", "market-core");
     }
   }
@@ -312,7 +312,7 @@ export async function readBitqueryTokenFdvRankingStrictV1(
   const pools = new Map<string, MarketPoolDataV1>();
   for (const identity of unique) {
     const tokenValue = parseFdvRankingToken(
-      tokenRows.get(ethereumTokenId(identity.tokenAddress)),
+      tokenRows.get(identity.tokenAddress),
       identity,
       now,
     );
@@ -1227,13 +1227,13 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
 function marketFdvRankingQuery(
   identities: readonly MarketDataIdentityV1[],
 ) {
-  const tokenIds = [...new Set(
-    identities.map(({ tokenAddress }) => ethereumTokenId(tokenAddress)),
+  const tokenAddresses = [...new Set(
+    identities.map(({ tokenAddress }) => tokenAddress),
   )].sort();
-  const rowLimit = Math.max(1, tokenIds.length);
+  const rowLimit = Math.max(1, tokenAddresses.length);
   return {
     query: `query ProgrammableExploreFdvRanking(
-      $tokenIds: [String!]!
+      $tokenAddresses: [String!]!
     ) {
       Trading {
         rankingTokens: Tokens(
@@ -1241,12 +1241,15 @@ function marketFdvRankingQuery(
           limitBy: { by: Token_Id, count: 1 }
           orderBy: { descending: Block_Time }
           where: {
-            Token: { Id: { in: $tokenIds } }
+            Token: {
+              Address: { in: $tokenAddresses }
+              Network: { is: "Ethereum" }
+            }
             Interval: { Time: { Duration: { eq: 1 } } }
             Price: { IsQuotedInUsd: true }
           }
         ) {
-          Token { Id Address }
+          Token { Id Address Network }
           Block { Time }
           Supply {
             TotalSupply
@@ -1256,7 +1259,7 @@ function marketFdvRankingQuery(
         }
       }
     }`,
-    variables: { tokenIds },
+    variables: { tokenAddresses },
   };
 }
 
@@ -1889,7 +1892,9 @@ function parseFdvRankingToken(
   const id = nonEmptyString(token.Id)?.toLowerCase();
   if (
     address !== identity.tokenAddress ||
-    id !== ethereumTokenId(identity.tokenAddress)
+    token.Network !== "Ethereum" ||
+    (id !== ethereumTokenId(identity.tokenAddress) &&
+      id !== bidEthereumTokenId(identity.tokenAddress))
   ) {
     return { reason: "inconsistent-market-data" };
   }
@@ -2472,13 +2477,21 @@ function resolveToken(explicit: string | null | undefined): string | null {
 }
 
 function ethereumTokenId(address: `0x${string}`): string {
+  return `eth:${address}`;
+}
+
+function bidEthereumTokenId(address: `0x${string}`): string {
   return `bid:eth:${address}`;
 }
 
-function canonicalEthereumTokenId(value: unknown): string | null {
-  if (typeof value !== "string" || value !== value.toLowerCase()) return null;
-  const address = canonicalAddress(value.slice("bid:eth:".length));
-  return address !== null && value === ethereumTokenId(address) ? value : null;
+function rankingTokenRowAddress(value: unknown): `0x${string}` | null {
+  const token = record(record(value)?.Token);
+  const address = canonicalAddress(token?.Address);
+  const id = nonEmptyString(token?.Id)?.toLowerCase();
+  return address !== null && token?.Network === "Ethereum" &&
+      (id === ethereumTokenId(address) || id === bidEthereumTokenId(address))
+    ? address
+    : null;
 }
 
 function canonicalAddress(value: unknown): `0x${string}` | null {
