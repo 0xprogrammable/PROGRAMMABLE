@@ -148,6 +148,14 @@ const valuedMarketPayload = {
   totalPages: 1,
 };
 
+const wrongCurrencyMarketPayload = {
+  ...valuedMarketPayload,
+  tokens: valuedMarketPayload.tokens.map((token) => ({
+    ...token,
+    valuation: { ...token.valuation, currency: "eth" },
+  })),
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -669,6 +677,36 @@ describe("Explore refresh state", () => {
       expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
     },
   );
+
+  it("retries the first non-USD FDV and returns the second fail-closed", async () => {
+    const secondPayload = { ...wrongCurrencyMarketPayload, total: 2 };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(wrongCurrencyMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(secondPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+
+    await expect(loadExplorePayload(
+      "market-cap-wrong-currency",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({
+      total: 2,
+      tokens: [expect.objectContaining({
+        valuation: expect.objectContaining({ currency: "eth" }),
+      })],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 
   it("returns the second valid zero-valuation response without a third attempt", async () => {
     const secondPayload = { ...unvaluedMarketPayload, total: 2 };

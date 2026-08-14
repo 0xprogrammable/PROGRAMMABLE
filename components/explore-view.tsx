@@ -888,6 +888,8 @@ function shouldRetryMissingBitqueryFdv(
     const valuation = token.valuation;
     return valuation.status === "available" &&
       valuation.metric === "fdv" &&
+      valuation.supplyBasis === "total" &&
+      valuation.currency === "usd" &&
       valuation.freshness === "current" &&
       valuation.source === "bitquery" &&
       BigInt(valuation.valueWad) > 0n;
