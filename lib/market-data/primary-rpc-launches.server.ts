@@ -43,6 +43,7 @@ const REQUEST_TIMEOUT_MS = 4_000;
 const LOG_WINDOW_RANGE = 4_096n;
 const MAXIMUM_CONCURRENT_LOG_WINDOWS = 6;
 const MAXIMUM_LOG_WINDOW_ATTEMPTS = 2;
+const MAXIMUM_HEAD_READ_ATTEMPTS = 2;
 const MAXIMUM_LOGS = 10_000;
 const MAXIMUM_LAUNCHES = 5_000;
 const MAXIMUM_CONCURRENT_RPC_READS = 100;
@@ -340,7 +341,7 @@ export async function readPrimaryRpcExploreEntriesV1(
     const now = options.now ?? new Date();
 
     phase = "head";
-    const headNumber = await providerCall(
+    const headNumber = await readHeadWithRetry(
       () => client.getBlockNumber(),
       signal,
     );
@@ -348,7 +349,7 @@ export async function readPrimaryRpcExploreEntriesV1(
       throw new PrimaryRpcLaunchCatalogError("response");
     }
     const head = parseBlock(
-      await providerCall(
+      await readHeadWithRetry(
         () => client.getBlock({ blockNumber: headNumber }),
         signal,
       ),
@@ -1099,6 +1100,28 @@ async function providerCall<T>(
     if (error instanceof PrimaryRpcLaunchCatalogError) throw error;
     throw new PrimaryRpcLaunchCatalogError("transport");
   }
+}
+
+async function readHeadWithRetry<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  for (let attempt = 1; attempt <= MAXIMUM_HEAD_READ_ATTEMPTS; attempt += 1) {
+    assertNotAborted(signal);
+    try {
+      return await providerCall(operation, signal);
+    } catch (error) {
+      if (
+        !(error instanceof PrimaryRpcLaunchCatalogError) ||
+        error.category !== "transport" ||
+        attempt === MAXIMUM_HEAD_READ_ATTEMPTS
+      ) {
+        throw error;
+      }
+      assertNotAborted(signal);
+    }
+  }
+  throw new PrimaryRpcLaunchCatalogError("runtime");
 }
 
 async function abortableCall<T>(
