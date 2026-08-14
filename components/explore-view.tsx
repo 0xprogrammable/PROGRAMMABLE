@@ -1498,43 +1498,6 @@ function TokenLinkIcon({ kind }: { kind: TokenLink["kind"] }) {
   return <XBrandIcon />;
 }
 
-const exploreSkeletonItems = Array.from(
-  { length: EXPLORE_TOKENS_PER_PAGE },
-  (_, index) => index,
-);
-
-function ExploreGridSkeleton() {
-  return (
-    <div
-      className={`${styles.runnerGrid} ${styles.skeletonGrid}`}
-      role="status"
-      aria-label="Loading launches"
-    >
-      {exploreSkeletonItems.map((index) => (
-        <article
-          className={`${styles.runnerCard} ${styles.skeletonCard}`}
-          key={index}
-          aria-hidden="true"
-        >
-          <div className={`${styles.runnerHitArea} ${styles.skeletonHitArea}`}>
-            <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
-            <div className={`${styles.runnerBody} ${styles.skeletonBody}`}>
-              <span className={styles.skeletonTitle} />
-              <span className={styles.skeletonDescription} />
-              <span className={styles.skeletonDescriptionShort} />
-            </div>
-          </div>
-          <div className={`${styles.runnerMeta} ${styles.skeletonMetaRow}`}>
-            <span className={styles.skeletonCategory} />
-            <span className={styles.skeletonMeta} />
-            <span className={styles.skeletonSocial} />
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function resultRangeLabel(payload: ExplorePayload | null) {
   if (!payload) return "Loading launch index";
   if (payload.status === "not-deployed") return "Explore unavailable";
@@ -1559,9 +1522,6 @@ export function exploreDataQualityMessage(
   }
   if (quality.valuation.status === "stale") {
     return "Prices may be out of date";
-  }
-  if (quality.valuation.status === "unavailable") {
-    return "Market data is temporarily unavailable";
   }
   return null;
 }
@@ -1834,6 +1794,8 @@ export function ExploreView({
       displayState.requestKey !== requestKey);
   const activeFilterCount =
     Number(socialFilter !== "all") + Number(modelFilter !== "all");
+  const activeSortLabel =
+    sortOptions.find((option) => option.id === sort)?.label ?? "Sort";
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
@@ -1852,8 +1814,10 @@ export function ExploreView({
       (displayState.phase === "error" && displayState.requestKey !== requestKey)
     ) {
       return (
-        <div className={styles.loadingState}>
-          <ExploreGridSkeleton />
+        <div className={styles.loadingState} aria-busy="true">
+          <span className="sr-only" role="status">
+            Loading launches
+          </span>
         </div>
       );
     }
@@ -1970,7 +1934,7 @@ export function ExploreView({
                   fill
                   loading={index < 3 ? "eager" : "lazy"}
                   priority={index < 3}
-                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 313px"
+                  sizes="(max-width: 360px) 96px, (max-width: 700px) 104px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 299px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />
@@ -2069,10 +2033,7 @@ export function ExploreView({
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1 aria-label="Explore programmable launches">
-            <span>Explore programmable</span>
-            <span>launches</span>
-          </h1>
+          <h1>Explore Launches</h1>
         </header>
 
         <section
@@ -2140,14 +2101,14 @@ export function ExploreView({
                       aria-controls="explore-filter-panel"
                       aria-label={
                         activeFilterCount === 0
-                          ? "Filter and sort tokens"
-                          : `Filter and sort tokens, ${activeFilterCount} ${
+                          ? `Filter and sort tokens, ${activeSortLabel} selected`
+                          : `Filter and sort tokens, ${activeSortLabel} selected, ${activeFilterCount} ${
                               activeFilterCount === 1 ? "filter" : "filters"
                             } active`
                       }
                     >
                       <SlidersHorizontal aria-hidden="true" size={16} />
-                      <span>Filter</span>
+                      <span>{activeSortLabel}</span>
                       {activeFilterCount > 0 ? (
                         <span
                           className={styles.activeFilterCount}
@@ -2344,11 +2305,7 @@ export function ExploreView({
 
           <p
             ref={resultStatusRef}
-            className={
-              hasPublicTokens && displayState.phase !== "error"
-                ? styles.resultLabel
-                : "sr-only"
-            }
+            className="sr-only"
             role="status"
             aria-live="polite"
             aria-atomic="true"
