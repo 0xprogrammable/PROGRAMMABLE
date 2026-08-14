@@ -4,6 +4,7 @@ import {
   findClassicV3IndexedLaunch,
   findDeepV3IndexedLaunch,
   findIndexedLaunch,
+  LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS,
   LAUNCH_INDEX_POLL_ATTEMPTS,
   launchDraftForSuccessDisplay,
   launchDraftIsLocked,
@@ -26,6 +27,7 @@ import {
   releaseConfirmedLaunchSubmission,
   removePendingLaunchSubmission,
   submissionPhaseForPendingLaunch,
+  shouldCelebrateIndexedLaunch,
   updatePendingLaunchSubmission,
   writePendingLaunchSubmission,
   type PendingLaunchStorage,
@@ -33,7 +35,7 @@ import {
 } from "../components/launch-builder";
 import { createClassicV3Draft } from "../lib/launch";
 
-const transactionHash = `0x${"12".repeat(32)}`;
+const transactionHash: `0x${string}` = `0x${"12".repeat(32)}`;
 const tokenAddress = "0x1111111111111111111111111111111111111111";
 const account = "0x2222222222222222222222222222222222222222";
 
@@ -89,6 +91,52 @@ describe("launch success indexing", () => {
         3,
         2,
       ),
+    ).toBe(false);
+  });
+
+  it("celebrates only a fresh launch submitted from the current draft", () => {
+    const submittedAtMs = 1_000_000;
+    const submission: PendingLaunchSubmission = {
+      version: 2,
+      transactionHash,
+      account,
+      chainId: 1,
+      model: "classic-v3",
+      submittedAtMs,
+      receiptConfirmedAtMs: submittedAtMs + 1_000,
+    };
+    const currentDraft = {
+      submission,
+      currentDraftSubmissionHash: transactionHash,
+      currentDraftVersion: 3,
+      submittedDraftVersion: 3,
+    };
+
+    expect(
+      shouldCelebrateIndexedLaunch({
+        ...currentDraft,
+        nowMs: submittedAtMs + LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS - 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldCelebrateIndexedLaunch({
+        ...currentDraft,
+        nowMs: submittedAtMs + LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCelebrateIndexedLaunch({
+        ...currentDraft,
+        currentDraftSubmissionHash: "",
+        nowMs: submittedAtMs + 10_000,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCelebrateIndexedLaunch({
+        ...currentDraft,
+        submittedDraftVersion: 2,
+        nowMs: submittedAtMs + 10_000,
+      }),
     ).toBe(false);
   });
 

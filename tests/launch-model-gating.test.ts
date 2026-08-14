@@ -219,14 +219,21 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("does not render the removed legacy Custom Hook card", () => {
+  it("keeps Custom Hook visible without implying that a closed launch is available", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
       }),
     );
-    expect(html).not.toContain('data-launch-model-option="custom"');
-    expect(html).not.toContain('id="launch-model-custom-title"');
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html).toContain('data-launch-model-option="custom"');
+    expect(html).toContain('id="launch-model-custom-title"');
+    expect(html).toContain('href="/docs/models/custom"');
+    expect(html).toContain('data-launch-model-available="false"');
+    expect(html).toContain('data-launch-model-launchable="false"');
+    expect(html).toContain("Review required");
+    expect(html).toContain("View Custom Hook requirements");
+    expect(html).not.toContain("Open approved Custom Hook launch");
     expect(html).not.toContain("Coming soon");
     expect(html).not.toContain("Build or resume");
   });
