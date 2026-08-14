@@ -2472,12 +2472,12 @@ function resolveToken(explicit: string | null | undefined): string | null {
 }
 
 function ethereumTokenId(address: `0x${string}`): string {
-  return `eth:${address}`;
+  return `bid:eth:${address}`;
 }
 
 function canonicalEthereumTokenId(value: unknown): string | null {
   if (typeof value !== "string" || value !== value.toLowerCase()) return null;
-  const address = canonicalAddress(value.slice("eth:".length));
+  const address = canonicalAddress(value.slice("bid:eth:".length));
   return address !== null && value === ethereumTokenId(address) ? value : null;
 }
 

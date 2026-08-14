@@ -29,7 +29,7 @@ function json(value: unknown): Response {
 function rankingToken() {
   return {
     Token: {
-      Id: `eth:${IDENTITY.tokenAddress}`,
+      Id: `bid:eth:${IDENTITY.tokenAddress}`,
       Address: IDENTITY.tokenAddress,
     },
     Block: { Time: "2026-08-11T14:00:00.000Z" },
@@ -80,7 +80,7 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       expect(request.query).not.toContain("DEXTradeByTokens");
       if (request.query.includes("ProgrammableExploreFdvRanking")) {
         expect(request.variables).toEqual({
-          tokenIds: [`eth:${IDENTITY.tokenAddress}`],
+          tokenIds: [`bid:eth:${IDENTITY.tokenAddress}`],
         });
         expect(request.query).toContain("rankingTokens: Tokens(");
         expect(request.query).toContain(
