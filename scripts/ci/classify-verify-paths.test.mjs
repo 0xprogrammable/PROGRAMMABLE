@@ -11,12 +11,34 @@ import {
 
 const none = {
   contracts: false,
+  custom_v2: false,
   database: false,
   dependencies: false,
   indexer: false,
   interface: false,
   read_model: false,
 };
+
+test("routes the versioned Custom V2 surface without legacy market lanes", () => {
+  for (const path of [
+    "config/custom-registry-v2.deployment.prelaunch.json",
+    "config/generic-launch-foundation.prelaunch.v1.json",
+    "app/api/custom-launch/registry/v2/manifest/route.ts",
+    "app/api/custom-launch/generic/v2/readiness/route.ts",
+    "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+    "app/v2/internal/projections/approval-descriptors/[projectionKey]/route.ts",
+    "app/custom-launches/page.tsx",
+    "components/generic-launch-directory-v2.tsx",
+    "lib/server/custom-launch/generic-launch-production-v2.ts",
+    "lib/server/custom-launch/registry-manifest-v2.ts",
+    "tests/generic-launch-read-v2.test.ts",
+  ]) {
+    assert.deepEqual(classifyVerifyPaths([path]), {
+      ...none,
+      custom_v2: true,
+    });
+  }
+});
 
 test("keeps documentation changes on the minimal lane", () => {
   assert.deepEqual(classifyVerifyPaths(["docs/guide.md", "README.md"]), none);
@@ -185,14 +207,14 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
     workflow,
     /name: Verify affected interface\n        if: needs\.scope\.outputs\.interface == 'true'/u,
   );
-  assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 5);
+  assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 6);
   assert.equal(
     workflow.match(/name: Require successful change classification/gmu)?.length,
-    4,
+    5,
   );
   assert.equal(
     workflow.match(/if: needs\.scope\.result != 'success'/gmu)?.length,
-    4,
+    5,
   );
 
   for (const name of [
@@ -201,6 +223,7 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
     "Database (PGlite)",
     "Interface",
     "Contracts",
+    "Custom V2",
   ]) {
     assert.match(
       workflow,
@@ -216,6 +239,7 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
     "database-pglite",
     "interface",
     "contracts",
+    "custom-v2",
   ]) {
     assert.match(workflow, new RegExp(`      - ${dependency}\\n`, "u"));
   }

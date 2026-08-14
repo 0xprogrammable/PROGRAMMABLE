@@ -3,12 +3,38 @@ import { pathToFileURL } from "node:url";
 
 const EMPTY_SCOPE = Object.freeze({
   contracts: false,
+  custom_v2: false,
   database: false,
   dependencies: false,
   indexer: false,
   interface: false,
   read_model: false,
 });
+
+const CUSTOM_V2_EXACT_PATHS = new Set([
+  "config/custom-registry-v2.deployment.prelaunch.json",
+  "config/generic-launch-foundation.prelaunch.v1.json",
+  "config/generic-launch-foundation.v1.schema.json",
+  "config/generic-launch-public.v2.schema.json",
+  "lib/custom-launch/registry-public-manifest-v2.ts",
+  "lib/data-pipeline/custom-registry-v2-event-manifest.ts",
+  "lib/server/custom-launch/registry-manifest-v2.ts",
+  "lib/server/projection-target/approval-v3-target.ts",
+  "scripts/custom-v2-stage-gate.mjs",
+  "scripts/test/custom-v2-stage-gate.test.mjs",
+  "scripts/test/custom-v2-production-workflow-contract.test.mjs",
+]);
+
+function isCustomV2OnlyPath(path) {
+  return CUSTOM_V2_EXACT_PATHS.has(path)
+    || /^app\/api\/custom-launch\/(?:generic|registry)\/v2\//u.test(path)
+    || /^app\/api\/ops\/custom-launch\/generic-v2-projector\//u.test(path)
+    || /^app\/v2\/internal\/projections\/approval-descriptors\//u.test(path)
+    || /^app\/custom-launches\//u.test(path)
+    || /^components\/generic-launch-directory-v2(?:\.module\.css|\.tsx)$/u.test(path)
+    || /^lib\/server\/custom-launch\/generic-launch-[^/]*-v2\.ts$/u.test(path)
+    || /^tests\/(?:approval-v3-artifact-projection-target|custom-registry-v2-(?:bindings|public-release)|generic-launch-(?:postgres-v2|projector-v2|read-signer-v2|read-v2|record-v2))\.test\.ts$/u.test(path);
+}
 
 export const CONTRACT_RELEASE_TEST_PATHS = Object.freeze([
   "tests/classic-v3-deployment-sequence.test.ts",
@@ -48,6 +74,15 @@ export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
 
   for (const path of paths) {
     if (!path) continue;
+
+    // This closed generation-2 surface has its own production proof and
+    // staged health contract. In particular, flipping the versioned Registry
+    // deployment binding must not pay Classic, Stock, Explore, or the global
+    // market read-model gates.
+    if (isCustomV2OnlyPath(path)) {
+      scope.custom_v2 = true;
+      continue;
+    }
 
     if (
       /^(?:package(?:-lock)?\.json|pnpm-lock\.yaml|bun\.lock|tsconfig[^/]*\.json|next\.config\.[^/]+|eslint\.config\.[^/]+|vitest\.config\.[^/]+)$/u.test(

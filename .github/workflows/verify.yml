@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       contracts: ${{ steps.scope.outputs.contracts }}
+      custom_v2: ${{ steps.scope.outputs.custom_v2 }}
       database: ${{ steps.scope.outputs.database }}
       dependencies: ${{ steps.scope.outputs.dependencies }}
       indexer: ${{ steps.scope.outputs.indexer }}
@@ -43,19 +44,27 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}"; then
-            node scripts/ci/classify-verify-paths.mjs --all >> "$GITHUB_OUTPUT"
+            node scripts/ci/classify-verify-paths.mjs --all > "$RUNNER_TEMP/verify-scope.txt"
           else
             git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
 
             if git cat-file -e "$BASE_SHA:scripts/ci/classify-verify-paths.mjs"; then
               git show "$BASE_SHA:scripts/ci/classify-verify-paths.mjs" > "$RUNNER_TEMP/classify-verify-paths.mjs"
-              node "$RUNNER_TEMP/classify-verify-paths.mjs" "$RUNNER_TEMP/changed-paths.txt" >> "$GITHUB_OUTPUT"
+              node "$RUNNER_TEMP/classify-verify-paths.mjs" "$RUNNER_TEMP/changed-paths.txt" > "$RUNNER_TEMP/verify-scope.txt"
             else
               # The bootstrap change has no trusted-base classifier yet, so it
               # deliberately pays the complete gate once.
-              node scripts/ci/classify-verify-paths.mjs --all >> "$GITHUB_OUTPUT"
+              node scripts/ci/classify-verify-paths.mjs --all > "$RUNNER_TEMP/verify-scope.txt"
             fi
           fi
+
+          # The first production commit that adds the Custom V2 lane is still
+          # classified by its trusted base. Pay the new lane once without
+          # changing or narrowing any trusted-base legacy result.
+          if ! grep -Eq '^custom_v2=(true|false)$' "$RUNNER_TEMP/verify-scope.txt"; then
+            echo 'custom_v2=true' >> "$RUNNER_TEMP/verify-scope.txt"
+          fi
+          cat "$RUNNER_TEMP/verify-scope.txt" >> "$GITHUB_OUTPUT"
 
   secret-scan:
     name: Credential leak gate
@@ -270,6 +279,45 @@ jobs:
         if: needs.scope.result == 'success' && needs.scope.outputs.contracts != 'true'
         run: echo "No contract paths changed."
 
+  custom-v2:
+    name: Custom V2
+    needs: scope
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Require successful change classification
+        if: needs.scope.result != 'success'
+        run: exit 1
+
+      - name: Check out repository
+        if: needs.scope.outputs.custom_v2 == 'true'
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        if: needs.scope.outputs.custom_v2 == 'true'
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Install dependencies
+        if: needs.scope.outputs.custom_v2 == 'true'
+        run: npm ci
+
+      - name: Verify exact Website projection database operator
+        if: needs.scope.outputs.custom_v2 == 'true'
+        run: node --test scripts/website-projection-db-operator.test.mjs
+
+      - name: Verify exact Custom V2 surface
+        if: needs.scope.outputs.custom_v2 == 'true'
+        run: npm run verify:custom-v2:ci
+
+      - name: Skip unaffected Custom V2
+        if: needs.scope.result == 'success' && needs.scope.outputs.custom_v2 != 'true'
+        run: echo "No Custom V2 paths changed."
+
   production-proof:
     name: Bind production Verify proof
     if: github.event_name == 'push' && github.ref == 'refs/heads/production'
@@ -280,6 +328,7 @@ jobs:
       - database-pglite
       - interface
       - contracts
+      - custom-v2
     permissions:
       contents: read
       id-token: write
@@ -304,6 +353,7 @@ jobs:
       - name: Create exact production Verify proof
         env:
           PRODUCTION_VERIFY_SCOPE_CONTRACTS: ${{ needs.scope.outputs.contracts }}
+          PRODUCTION_VERIFY_SCOPE_CUSTOM_V2: ${{ needs.scope.outputs.custom_v2 }}
           PRODUCTION_VERIFY_SCOPE_DATABASE: ${{ needs.scope.outputs.database }}
           PRODUCTION_VERIFY_SCOPE_DEPENDENCIES: ${{ needs.scope.outputs.dependencies }}
           PRODUCTION_VERIFY_SCOPE_INDEXER: ${{ needs.scope.outputs.indexer }}
@@ -314,6 +364,7 @@ jobs:
           PRODUCTION_VERIFY_DATABASE_PGLITE_RESULT: ${{ needs.scope.outputs.database == 'true' && needs.database-pglite.result || 'skipped' }}
           PRODUCTION_VERIFY_INTERFACE_RESULT: ${{ needs.scope.outputs.interface == 'true' && needs.interface.result || 'skipped' }}
           PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.scope.outputs.contracts == 'true' && needs.contracts.result || 'skipped' }}
+          PRODUCTION_VERIFY_CUSTOM_V2_RESULT: ${{ needs.scope.outputs.custom_v2 == 'true' && needs.custom-v2.result || 'skipped' }}
         run: >-
           node scripts/production-verify-proof.mjs create
           --repository-root "$GITHUB_WORKSPACE"
@@ -360,6 +411,7 @@ jobs:
       - database-pglite
       - interface
       - contracts
+      - custom-v2
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -373,9 +425,10 @@ jobs:
           DATABASE_RESULT: ${{ needs.database-pglite.result }}
           INTERFACE_RESULT: ${{ needs.interface.result }}
           CONTRACTS_RESULT: ${{ needs.contracts.result }}
+          CUSTOM_V2_RESULT: ${{ needs.custom-v2.result }}
         run: |
           set -euo pipefail
-          for result in "$SCOPE_RESULT" "$SECRET_SCAN_RESULT" "$INDEXER_RESULT" "$DATABASE_RESULT" "$INTERFACE_RESULT" "$CONTRACTS_RESULT"; do
+          for result in "$SCOPE_RESULT" "$SECRET_SCAN_RESULT" "$INDEXER_RESULT" "$DATABASE_RESULT" "$INTERFACE_RESULT" "$CONTRACTS_RESULT" "$CUSTOM_V2_RESULT"; do
             test "$result" = success || {
               echo "Verification lane did not succeed: $result" >&2
               exit 1
