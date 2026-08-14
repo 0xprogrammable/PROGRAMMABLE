@@ -20,7 +20,9 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
   "lib/data-pipeline/custom-registry-v2-event-manifest.ts",
   "lib/server/custom-launch/registry-manifest-v2.ts",
   "lib/server/projection-target/approval-v3-target.ts",
+  "scripts/custom-v2-read-model-contract-v2.mjs",
   "scripts/custom-v2-stage-gate.mjs",
+  "scripts/test/custom-v2-read-model-contract-v2.test.mjs",
   "scripts/test/custom-v2-stage-gate.test.mjs",
   "scripts/test/custom-v2-production-workflow-contract.test.mjs",
 ]);
