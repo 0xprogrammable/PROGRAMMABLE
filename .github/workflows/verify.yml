@@ -310,6 +310,10 @@ jobs:
         if: needs.scope.outputs.custom_v2 == 'true'
         run: node --test scripts/website-projection-db-operator.test.mjs
 
+      - name: Verify exact Generic V2 read-model contract derivation
+        if: needs.scope.outputs.custom_v2 == 'true'
+        run: node --test scripts/test/custom-v2-read-model-contract-v2.test.mjs
+
       - name: Verify exact Custom V2 surface
         if: needs.scope.outputs.custom_v2 == 'true'
         run: npm run verify:custom-v2:ci

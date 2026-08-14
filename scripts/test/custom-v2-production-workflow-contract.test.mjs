@@ -26,6 +26,10 @@ test("Custom V2 production proof is a dedicated versioned protected lane", () =>
     verify,
     /name: Verify exact Website projection database operator[\s\S]*node --test scripts\/website-projection-db-operator\.test\.mjs/u,
   );
+  assert.match(
+    verify,
+    /name: Verify exact Generic V2 read-model contract derivation[\s\S]*node --test scripts\/test\/custom-v2-read-model-contract-v2\.test\.mjs/u,
+  );
   assert.match(verify, /PRODUCTION_VERIFY_SCOPE_CUSTOM_V2:/u);
   assert.match(verify, /PRODUCTION_VERIFY_CUSTOM_V2_RESULT:/u);
   assert.match(verify, /verified Custom V2|CUSTOM_V2_RESULT/u);
