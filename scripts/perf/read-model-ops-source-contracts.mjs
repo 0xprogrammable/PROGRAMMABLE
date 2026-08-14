@@ -2533,7 +2533,7 @@ export function evaluateReadModelOperationsSourceContracts(
           route.includes('"X-Programmable-Market-Source": "bitquery"'),
       ) &&
       publicCreatorProfile.includes("readCreatorProfile") &&
-      publicCreatorProfile.includes("creatorClaimRpcProvider") &&
+      publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
       publicCreatorProfile.includes('"X-Programmable-Launch-Source": "drpc"') &&
       publicCreatorProfile.includes('"X-Programmable-Read-Source": "drpc"') &&
       publicCreatorProfile.includes(
