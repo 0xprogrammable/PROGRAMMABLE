@@ -14,13 +14,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { evaluateReadModelOperationsSourceContracts } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import {
-  exactCurrentPublicFdvLiquidity,
-  exactExploreValuationSnapshot,
-  exploreContinuationPath,
-  verifyCurrentPublicOnchainEvidenceV1,
-  verifyPostPromotion,
-} from "../../scripts/perf/read-model-post-promotion.mjs";
+import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { resolveProductionBinding } from "../../scripts/perf/read-model-production-binding.mjs";
 
