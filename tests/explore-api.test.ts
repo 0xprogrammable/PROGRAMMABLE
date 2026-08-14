@@ -294,7 +294,9 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
       expect(source).toContain("readPrimaryRpcExploreEntriesV1");
       expect(source).not.toContain("readBitqueryExploreEntriesV1");
       expect(source).not.toContain("bitquery-launches.server");
-      expect(source).not.toContain("readProductionCustomExploreDirectoryV1");
+      if (!relative.endsWith("/token/route.ts")) {
+        expect(source).not.toContain("readProductionCustomExploreDirectoryV1");
+      }
     }
   });
 });

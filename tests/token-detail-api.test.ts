@@ -9,11 +9,15 @@ import type {
   MarketDataIdentityV1,
   TokenMarketDataV1,
 } from "../lib/market-data/market-data-v1";
-import type { CanonicalTokenExploreEntry } from "../lib/tokens";
+import type {
+  CanonicalTokenExploreEntry,
+  CustomProjectExploreEntry,
+} from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
   readPrimaryRpcExploreEntriesV1: vi.fn(),
   readBitqueryTokenMarketDataStrictV1: vi.fn(),
+  readProductionCustomExploreDirectoryV1: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
@@ -25,12 +29,24 @@ vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
 }));
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
+  BitqueryMarketDataError: class BitqueryMarketDataError extends Error {
+    category: string;
+    constructor(category: string) {
+      super("Market data is temporarily unavailable");
+      this.category = category;
+    }
+  },
   readBitqueryTokenMarketDataStrictV1:
     mocks.readBitqueryTokenMarketDataStrictV1,
   safeBitqueryMarketDataError: vi.fn(() => ({
     name: "BitqueryMarketDataError",
     category: "transport",
   })),
+}));
+
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1:
+    mocks.readProductionCustomExploreDirectoryV1,
 }));
 
 import { GET } from "../app/api/explore/token/route";
@@ -67,6 +83,27 @@ const canonicalEntry = {
     modelVersion: null,
   },
 } as const satisfies CanonicalTokenExploreEntry;
+
+const customEntry = {
+  exploreKind: "custom-project",
+  id: `custom:sha256:${"55".repeat(32)}`,
+  name: "Custom Project",
+  symbol: "CUSTOM",
+  links: [],
+  launchedAt: "2026-08-14T09:00:00.000Z",
+  finalizedAt: "2026-08-14T09:05:00.000Z",
+  chainId: "1",
+  modelId: "custom-model",
+  customProjectId: `sha256:${"55".repeat(32)}`,
+  customLaunchId: `sha256:${"66".repeat(32)}`,
+  launchingWallet: { namespace: "eip155:1", value: HOOK_ADDRESS },
+  postLaunchAuthorityInventory: {},
+  postLaunchAuthorityInventoryHash: `sha256:${"77".repeat(32)}`,
+  tokenAddress: UNKNOWN_ADDRESS,
+  tokenDecimals: 18,
+  markets: [],
+  launchCategoryProvenance: {},
+} as unknown as CustomProjectExploreEntry;
 
 function bitqueryMarketData(
   identities: readonly MarketDataIdentityV1[],
@@ -123,6 +160,7 @@ describe("dRPC identity and Bitquery market token detail API", () => {
       generatedAt: NOW.toISOString(),
       asOfBlock: "25800000",
     });
+    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
     mocks.readBitqueryTokenMarketDataStrictV1.mockImplementation(
       async (identities: readonly MarketDataIdentityV1[]) =>
         bitqueryMarketData(identities),
@@ -137,8 +175,10 @@ describe("dRPC identity and Bitquery market token detail API", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.readPrimaryRpcExploreEntriesV1).toHaveBeenCalledWith({
+      requestedTokenAddress: TOKEN_ADDRESS,
       signal: expect.any(AbortSignal),
     });
+    expect(mocks.readProductionCustomExploreDirectoryV1).not.toHaveBeenCalled();
     expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledWith(
       [{
         chainId: "1",
@@ -194,6 +234,9 @@ describe("dRPC identity and Bitquery market token detail API", () => {
     ));
 
     expect(response.status).toBe(404);
+    expect(mocks.readProductionCustomExploreDirectoryV1).toHaveBeenCalledWith(
+      expect.any(AbortSignal),
+    );
     expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
       status: "ready",
@@ -201,6 +244,63 @@ describe("dRPC identity and Bitquery market token detail API", () => {
       customProject: null,
       snapshot: null,
     });
+  });
+
+  it("serves a Custom Registry project only after a successful canonical miss", async () => {
+    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
+      source: "drpc",
+      entries: [],
+      generatedAt: NOW.toISOString(),
+      asOfBlock: "25800000",
+    });
+    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([
+      customEntry,
+    ]);
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token?address=${UNKNOWN_ADDRESS}`,
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      token: null,
+      customProject: {
+        tokenAddress: UNKNOWN_ADDRESS,
+        valuation: { status: "unavailable", reason: "no-market" },
+      },
+      snapshot: null,
+    });
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "drpc+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Market-Source")).toBeNull();
+    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the Custom Registry read fails after a canonical miss", async () => {
+    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
+      source: "drpc",
+      entries: [],
+      generatedAt: NOW.toISOString(),
+      asOfBlock: "25800000",
+    });
+    mocks.readProductionCustomExploreDirectoryV1.mockRejectedValue(
+      new Error("registry unavailable"),
+    );
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token?address=${UNKNOWN_ADDRESS}`,
+    ));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Market-Source")).toBeNull();
+    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
   });
 
   it("fails directly when primary dRPC identity fails", async () => {
@@ -213,6 +313,7 @@ describe("dRPC identity and Bitquery market token detail API", () => {
     ));
 
     expect(response.status).toBe(503);
+    expect(mocks.readProductionCustomExploreDirectoryV1).not.toHaveBeenCalled();
     expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
@@ -267,7 +368,6 @@ describe("dRPC identity and Bitquery market token detail API", () => {
       "readExploreReferenceHeadWithinRouteBudget",
       "valueExploreEntriesWithCurrentEvidence",
       "readBitqueryExploreEntriesV1",
-      "readProductionCustomExploreDirectoryV1",
       "stateview-chainlink",
       "official-uniswap-v4-subgraph",
       "fallback:",
@@ -275,5 +375,6 @@ describe("dRPC identity and Bitquery market token detail API", () => {
       expect(source).not.toContain(forbidden);
     }
     expect(source).toContain("readPrimaryRpcExploreEntriesV1");
+    expect(source).toContain("readProductionCustomExploreDirectoryV1");
   });
 });

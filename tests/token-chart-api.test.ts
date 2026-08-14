@@ -110,6 +110,10 @@ describe("dRPC identity and strict Bitquery token chart API", () => {
     expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
     expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
     expect(response.headers.get("x-programmable-read-source")).toBe("drpc+bitquery");
+    expect(mocks.catalog).toHaveBeenCalledWith({
+      requestedTokenAddress: address,
+      signal: expect.any(AbortSignal),
+    });
     expect(mocks.chart).toHaveBeenCalledWith(expect.objectContaining({
       identity,
       range: "1d",

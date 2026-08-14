@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const catalog = await readPrimaryRpcExploreEntriesV1({
+      requestedTokenAddress: address,
       signal: request.signal,
     });
     const entry = catalog.entries.find((candidate) =>

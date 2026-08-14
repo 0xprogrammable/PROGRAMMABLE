@@ -586,7 +586,6 @@ async function readMarketBatch(
   }>,
 ): Promise<readonly MarketPoolDataV1[]> {
   const coreRequest = marketBatchQuery(identities);
-  const liquidityRequest = marketLiquidityQuery(identities);
   const statsRequest = marketStatsQuery(identities);
   const coreRead = executeBitqueryGraphql(
     coreRequest.query,
@@ -594,11 +593,6 @@ async function readMarketBatch(
     options,
   );
   const supplementaryOperations = [
-    executeBitqueryGraphql(
-      liquidityRequest.query,
-      liquidityRequest.variables,
-      options,
-    ),
     executeBitqueryGraphql(
       statsRequest.query,
       statsRequest.variables,
@@ -612,10 +606,10 @@ async function readMarketBatch(
   ]);
   if (coreResult.status === "rejected") throw coreResult.reason;
   const response = coreResult.value;
-  const [liquidityResult, statsResult] = supplementaryResults.status ===
+  const [statsResult] = supplementaryResults.status ===
       "fulfilled"
     ? supplementaryResults.value
-    : [supplementaryResults, supplementaryResults];
+    : [supplementaryResults];
   if (options.strict && response.partial) {
     throw new BitqueryMarketDataError("response");
   }
@@ -649,24 +643,15 @@ async function readMarketBatch(
   if (options.strict && priceLookupWasPartial) {
     throw new BitqueryMarketDataError("response");
   }
-  const liquidityEvm = liquidityResult.status === "fulfilled"
-    ? record(liquidityResult.value.data.EVM)
-    : null;
   const statsEvm = statsResult.status === "fulfilled"
     ? record(statsResult.value.data.EVM)
     : null;
   if (
     options.strict &&
-    (liquidityEvm === null || statsEvm === null ||
-      liquidityResult.status !== "fulfilled" ||
-      statsResult.status !== "fulfilled" ||
-      liquidityResult.value.partial || statsResult.value.partial)
+    (statsEvm === null || statsResult.status !== "fulfilled" ||
+      statsResult.value.partial)
   ) throw new BitqueryMarketDataError("response");
 
-  const liquidityByPool = indexUniqueRows(
-    array(liquidityEvm?.latestLiquidity),
-    liquidityRowPoolId,
-  );
   const statsByMarket = indexUniqueRows(
     array(statsEvm?.stats),
     (row) => {
@@ -704,8 +689,6 @@ async function readMarketBatch(
       identity,
       latestTradeRows,
       latestTrade,
-      liquidityPriceTrade: parsedTrade,
-      liquidityRow: liquidityByPool.get(identity.poolId),
       stats: parseStats(statsByMarket.get(
         marketStatsKey(identity.poolId, identity.tokenAddress),
       )),
@@ -714,25 +697,17 @@ async function readMarketBatch(
   });
 
   return parsed.map((value) => {
-    const liquidity = parseLiquidity(
-      value.liquidityRow,
-      value.identity,
-      options.now,
-      value.liquidityPriceTrade,
-    );
     return marketPoolData({
       identity: value.identity,
       latestTrade: value.latestTrade,
       tradeObserved: value.latestTradeRows.length > 0,
-      liquidity,
+      liquidity: null,
       stats: value.stats,
       supply: value.supply,
       now: options.now,
       partialResponse:
         response.partial ||
         priceLookupWasPartial ||
-        liquidityResult.status !== "fulfilled" ||
-        liquidityResult.value.partial ||
         statsResult.status !== "fulfilled" ||
         statsResult.value.partial,
     });
@@ -982,11 +957,6 @@ function tradeRowPoolId(row: unknown): `0x${string}` | null {
   return canonicalBytes32(record(record(row)?.Trade)?.PoolId);
 }
 
-function liquidityRowPoolId(row: unknown): `0x${string}` | null {
-  const event = record(record(row)?.PoolEvent);
-  return canonicalBytes32(record(event?.Pool)?.PoolId);
-}
-
 function marketStatsKey(
   poolId: `0x${string}`,
   tokenAddress: `0x${string}`,
@@ -1059,34 +1029,6 @@ function marketPriceQuery(trades: readonly MarketTradeV1[]) {
       Trading { ${selections} }
     }`,
     variables: {},
-  };
-}
-
-function marketLiquidityQuery(identities: readonly MarketDataIdentityV1[]) {
-  const pools = identities.map(({ poolId }) => poolId);
-  const rowLimit = Math.max(1, identities.length);
-  return {
-    query: `query ProgrammableMarketLiquidity($pools: [String!]!) {
-      EVM(network: eth, dataset: combined) {
-        latestLiquidity: DEXPoolEvents(
-          limit: { count: ${rowLimit} }
-          limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }
-          orderBy: [
-            { descending: Block_Number }
-            { descending: Transaction_Index }
-            { descending: Log_Index }
-          ]
-          where: {
-            TransactionStatus: { Success: true }
-            PoolEvent: {
-              Dex: { ProtocolName: { is: "uniswap_v4" } }
-              Pool: { PoolId: { in: $pools } }
-            }
-          }
-        ) { ${liquiditySelection()} }
-      }
-    }`,
-    variables: { pools },
   };
 }
 
@@ -1311,27 +1253,6 @@ function tradeSelection() {
       Sell { Currency { SmartContract Symbol } Amount AmountInUSD Price PriceInUSD }
     }
     Transaction { Hash Index }
-  `;
-}
-
-function liquiditySelection() {
-  return `
-    Block { Number Time }
-    Log { Index }
-    Transaction { Hash Index }
-    PoolEvent {
-      Pool {
-        PoolId
-        CurrencyA { SmartContract Symbol }
-        CurrencyB { SmartContract Symbol }
-      }
-      Liquidity {
-        AmountCurrencyA
-        AmountCurrencyAInUSD
-        AmountCurrencyB
-        AmountCurrencyBInUSD
-      }
-    }
   `;
 }
 
@@ -1719,8 +1640,8 @@ function marketPoolData(input: Readonly<{
     ? null
     : BigInt(input.liquidity.valueUsdWad);
   const valuation = sourceValuation.status === "available" &&
-      (liquidityValue === null ||
-        liquidityValue < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD))
+      liquidityValue !== null &&
+      liquidityValue < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD)
     ? { status: "unavailable" as const, reason: "inconsistent-market-data" as const }
     : sourceValuation.status === "available" && input.liquidity !== null
       ? {
