@@ -148,9 +148,10 @@ function marketDataErrorAtPhase(
   error: unknown,
   phase: BitqueryMarketDataPhase,
 ): BitqueryMarketDataError {
-  return error instanceof BitqueryMarketDataError
-    ? new BitqueryMarketDataError(error.category, phase)
-    : new BitqueryMarketDataError("transport", phase);
+  if (error instanceof BitqueryMarketDataError) {
+    return new BitqueryMarketDataError(error.category, phase);
+  }
+  throw error;
 }
 
 export function bitqueryMarketDataConfigured(
@@ -1107,18 +1108,44 @@ async function executeBitqueryGraphql(
   if (options.signal?.aborted) abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
-    const response = await fetchImpl(BITQUERY_HTTP_ENDPOINT, {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${options.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, variables }),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new BitqueryMarketDataError("transport");
+    const body = JSON.stringify({ query, variables });
+    let response: Response;
+    try {
+      response = await fetchImpl(BITQUERY_HTTP_ENDPOINT, {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${options.token}`,
+          "Content-Type": "application/json",
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const message = error instanceof TypeError
+        ? error.message.trim().toLowerCase()
+        : "";
+      if (
+        controller.signal.aborted ||
+        message === "fetch failed" ||
+        message === "failed to fetch" ||
+        message === "load failed" ||
+        message === "networkerror when attempting to fetch resource."
+      ) {
+        throw new BitqueryMarketDataError("transport");
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      const category = response.status === 401 || response.status === 403
+        ? "configuration" as const
+        : response.status === 408 || response.status === 425 ||
+            response.status === 429 || response.status >= 500
+          ? "transport" as const
+          : "response" as const;
+      throw new BitqueryMarketDataError(category);
+    }
     const declared = Number(response.headers.get("content-length") ?? "0");
     if (
       (Number.isFinite(declared) && declared > MAXIMUM_RESPONSE_BYTES) ||
@@ -1143,9 +1170,6 @@ async function executeBitqueryGraphql(
     const errors = array(envelope?.errors);
     if (data === null) throw new BitqueryMarketDataError("response");
     return { data, partial: errors.length > 0 };
-  } catch (error) {
-    if (error instanceof BitqueryMarketDataError) throw error;
-    throw new BitqueryMarketDataError("transport");
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abort);

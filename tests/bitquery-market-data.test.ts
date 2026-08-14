@@ -56,7 +56,7 @@ describe("strict Bitquery market reads", () => {
     await expect(readBitqueryTokenMarketDataStrictV1([PCAN], {
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:00:01.000Z"),
-      fetchImpl: vi.fn().mockRejectedValue(new Error("offline")),
+      fetchImpl: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
     })).rejects.toMatchObject({ category: "transport" });
   });
 

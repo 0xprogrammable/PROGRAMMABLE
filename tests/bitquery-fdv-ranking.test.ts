@@ -196,12 +196,58 @@ describe("strict lightweight Bitquery FDV ranking", () => {
 
   it("rejects the strict core read on provider failure", async () => {
     await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
-      fetchImpl: vi.fn().mockRejectedValue(new Error("offline")),
+      fetchImpl: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
       token: TOKEN,
     })).rejects.toMatchObject({
       category: "transport",
       phase: "market-core",
     });
+  });
+
+  it.each([
+    [401, "configuration"],
+    [403, "configuration"],
+    [408, "transport"],
+    [425, "transport"],
+    [429, "transport"],
+    [500, "transport"],
+    [503, "transport"],
+    [400, "response"],
+    [404, "response"],
+    [422, "response"],
+  ] as const)(
+    "classifies Bitquery HTTP %s as %s",
+    async (status, category) => {
+      await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+        fetchImpl: vi.fn().mockResolvedValue(new Response("provider error", {
+          status,
+        })),
+        token: TOKEN,
+      })).rejects.toMatchObject({ category, phase: "market-core" });
+    },
+  );
+
+  it("does not relabel an unknown internal failure as transport", async () => {
+    const programmingError = new TypeError("unexpected internal failure");
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl: vi.fn().mockRejectedValue(programmingError),
+      token: TOKEN,
+    })).rejects.toBe(programmingError);
+  });
+
+  it("does not relabel an unknown response-body failure as transport", async () => {
+    const programmingError = new Error("unexpected body failure");
+    const response = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      arrayBuffer: vi.fn().mockRejectedValue(programmingError),
+    } as unknown as Response;
+
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl: vi.fn().mockResolvedValue(response),
+      token: TOKEN,
+    })).rejects.toBe(programmingError);
   });
 
   it("rejects a same-address row bound to another chain id", async () => {

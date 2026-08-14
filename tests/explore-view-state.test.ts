@@ -5,6 +5,7 @@ import {
   EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
   createExploreInitialState,
+  exploreDataQualityMessage,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
@@ -14,6 +15,7 @@ import {
   loadExploreModelDataset,
   loadExplorePage,
   loadExplorePayload,
+  paginateExploreModelDataset,
   paginateTokensByExploreFilters,
   paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
@@ -155,6 +157,126 @@ const wrongCurrencyMarketPayload = {
     valuation: { ...token.valuation, currency: "eth" },
   })),
 };
+
+const unavailableMarketDataQuality = {
+  schemaVersion: "programmable.explore-data-quality.v1",
+  status: "partial",
+  generatedAt: "2026-08-14T00:00:00.000Z",
+  launchIdentity: {
+    status: "current",
+    canonical: "current",
+    custom: "current",
+    asOfBlock: "25740000",
+    referenceBlock: "25740000",
+    lagBlocks: "0",
+    ageMs: 0,
+  },
+  valuation: {
+    status: "unavailable",
+    metric: "fdv",
+    available: 0,
+    unavailable: 1,
+    stale: 0,
+    unknown: 0,
+    asOfBlock: null,
+    asOfTime: null,
+  },
+} as const;
+
+const transportUnavailableMarketPayload = {
+  ...unvaluedMarketPayload,
+  dataQuality: unavailableMarketDataQuality,
+  marketRead: {
+    provider: "bitquery",
+    status: "unavailable",
+    category: "transport",
+    phase: "market-core",
+  },
+  ranking: {
+    status: "unavailable",
+    requested: "fdv",
+    applied: "launch-order",
+  },
+} as const;
+
+function modelCompatibilityMarketData() {
+  return {
+    schemaVersion: "programmable.market-data.v1" as const,
+    source: "bitquery" as const,
+    generatedAt: "2026-08-14T00:00:00.000Z",
+    status: "current" as const,
+    primaryPoolId: null,
+    pools: [],
+  };
+}
+
+function modelFilterEntry(
+  index: number,
+  valuation: "available" | "unavailable",
+) {
+  const entry = classicEntry({
+    id: `1:model-filter-${index}`,
+    name: `Model filter ${index}`,
+    symbol: `MF${index}`,
+    tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+    hookAddress: "0x2222222222222222222222222222222222222222",
+    poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+    launchedAt: "2026-08-03T00:00:00.000Z",
+    totalSwapFeeBps: 100,
+    liquidityPath: "meme",
+  });
+  return {
+    ...entry,
+    ...(valuation === "available"
+      ? {
+          fdvUsdWad: `${index + 1}000000000000000000`,
+          marketData: modelCompatibilityMarketData(),
+        }
+      : {}),
+    valuation: valuation === "available"
+      ? {
+          status: "available" as const,
+          metric: "fdv" as const,
+          supplyBasis: "total" as const,
+          currency: "usd" as const,
+          valueWad: `${index + 1}000000000000000000`,
+          freshness: "current" as const,
+          source: "bitquery" as const,
+        }
+      : {
+          status: "unavailable" as const,
+          reason: "source-unavailable" as const,
+        },
+  };
+}
+
+function modelPageDataQuality(available: number, unavailable: number) {
+  const current = available > 0 && unavailable === 0;
+  return {
+    schemaVersion: "programmable.explore-data-quality.v1",
+    status: current ? "complete" as const : "partial" as const,
+    generatedAt: "2026-08-14T00:00:00.000Z",
+    launchIdentity: {
+      status: "current" as const,
+      canonical: "current" as const,
+      custom: "current" as const,
+      asOfBlock: "25740000",
+      referenceBlock: "25740000",
+      lagBlocks: "0",
+      ageMs: 0,
+    },
+    valuation: {
+      status: current ? "current" as const : "unavailable" as const,
+      metric: "fdv" as const,
+      available,
+      unavailable,
+      stale: 0,
+      unknown: 0,
+      asOfBlock: null,
+      asOfTime: null,
+    },
+  };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -481,6 +603,203 @@ describe("Explore refresh state", () => {
     });
   });
 
+  it("preserves an all-page transport marker and does not cache the degraded model dataset", async () => {
+    const tokens = [
+      ...Array.from(
+        { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE },
+        (_, index) => modelFilterEntry(index, "available"),
+      ),
+      {
+        ...customEntry(900),
+        fdvUsdWad: "1000000000000000000",
+        marketData: modelCompatibilityMarketData(),
+        liquidityEvidence: { compatibility: true },
+        valuation: {
+          status: "available" as const,
+          metric: "fdv" as const,
+          supplyBasis: "total" as const,
+          currency: "usd" as const,
+          valueWad: "1000000000000000000",
+          freshness: "current" as const,
+          source: "bitquery" as const,
+        },
+      },
+    ];
+    const totalPages = 2;
+    const degradedResponse = (
+      input: string | URL | Request,
+      phase: "market-core" | "market-price",
+    ) => {
+      const url = new URL(String(input), "https://example.test");
+      const page = Number(url.searchParams.get("page"));
+      const pageSize = Number(url.searchParams.get("limit"));
+      const pageTokens = tokens.slice((page - 1) * pageSize, page * pageSize)
+        .map((entry) => ({
+          ...entry,
+          valuation: {
+            status: "unavailable" as const,
+            reason: "source-unavailable" as const,
+          },
+        }));
+      return new Response(JSON.stringify({
+        status: "ready",
+        tokens: pageTokens,
+        page,
+        pageSize,
+        total: tokens.length,
+        totalPages,
+        dataQuality: modelPageDataQuality(0, pageTokens.length),
+        marketRead: {
+          provider: "bitquery",
+          status: "unavailable",
+          category: "transport",
+          phase,
+        },
+        ranking: {
+          status: "unavailable",
+          requested: "fdv",
+          applied: "launch-order",
+        },
+      }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "transport-unavailable",
+        },
+      });
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => degradedResponse(input, "market-core"),
+    );
+    const search = new URLSearchParams({
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    const dataset = await loadExploreModelDataset(
+      "all-degraded-model-dataset",
+      search,
+    );
+    const filtered = paginateExploreModelDataset(dataset, "classic", 1);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(dataset).toMatchObject({
+      marketRead: { status: "unavailable", phase: "market-core" },
+      ranking: { status: "unavailable", applied: "launch-order" },
+      dataQuality: {
+        status: "partial",
+        valuation: {
+          status: "unavailable",
+          available: 0,
+          unavailable: tokens.length,
+        },
+      },
+    });
+    expect(filtered).toMatchObject({
+      marketRead: { status: "unavailable" },
+      ranking: { status: "unavailable", applied: "launch-order" },
+      dataQuality: {
+        status: "partial",
+        valuation: { status: "unavailable", available: 0, unavailable: 9 },
+      },
+    });
+    expect(dataset.tokens.every((entry) =>
+      entry.valuation.status === "unavailable" &&
+      !("fdvUsdWad" in entry) &&
+      !("marketData" in entry) &&
+      !("liquidityEvidence" in entry)
+    )).toBe(true);
+    expect(dataset.tokens.at(-1)?.valuation).toEqual({
+      status: "unavailable",
+      reason: "no-market",
+    });
+
+    await loadExploreModelDataset("all-degraded-model-dataset", search);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    fetchMock.mockImplementation(async (input) => {
+      const page = new URL(String(input), "https://example.test")
+        .searchParams.get("page");
+      return degradedResponse(
+        input,
+        page === "1" ? "market-core" : "market-price",
+      );
+    });
+    await expect(loadExploreModelDataset(
+      "inconsistent-degraded-model-dataset",
+      search,
+    )).rejects.toThrow("Tokens changed while filters were loading");
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("rejects a mixed current and transport-unavailable model dataset", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "available"),
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        const pageTokens = tokens.slice((page - 1) * pageSize, page * pageSize);
+        const degraded = page === 2;
+        const visibleTokens = degraded
+          ? pageTokens.map((entry) => ({
+              ...entry,
+              valuation: {
+                status: "unavailable" as const,
+                reason: "source-unavailable" as const,
+              },
+            }))
+          : pageTokens;
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens: visibleTokens,
+          page,
+          pageSize,
+          total: tokens.length,
+          totalPages: 2,
+          dataQuality: modelPageDataQuality(
+            degraded ? 0 : visibleTokens.length,
+            degraded ? visibleTokens.length : 0,
+          ),
+          ...(degraded
+            ? {
+                marketRead: {
+                  provider: "bitquery",
+                  status: "unavailable",
+                  category: "transport",
+                  phase: "market-price",
+                },
+                ranking: {
+                  status: "unavailable",
+                  requested: "fdv",
+                  applied: "launch-order",
+                },
+              }
+            : {}),
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Programmable-Market-Read-Status": degraded
+              ? "transport-unavailable"
+              : "current",
+          },
+        });
+      },
+    );
+
+    await expect(loadExploreModelDataset(
+      "mixed-model-dataset",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("Tokens changed while filters were loading");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["highest-market-cap", "lowest-market-cap"])(
     "requests a direct second %s page without continuation fields",
     async (sort) => {
@@ -677,6 +996,55 @@ describe("Explore refresh state", () => {
       expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
     },
   );
+
+  it("returns a marked transport-unavailable page without retrying or caching it", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(JSON.stringify(transportUnavailableMarketPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "transport-unavailable",
+        },
+      }),
+    );
+    const search = new URLSearchParams({
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    await expect(loadExplorePayload(
+      "marked-market-transport-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: {
+        provider: "bitquery",
+        status: "unavailable",
+        category: "transport",
+        phase: "market-core",
+      },
+      ranking: {
+        status: "unavailable",
+        requested: "fdv",
+        applied: "launch-order",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(loadExplorePayload(
+      "marked-market-transport-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: { status: "unavailable" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows calm copy while market data is transport-unavailable", () => {
+    expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBe(
+      "Market data is temporarily unavailable",
+    );
+  });
 
   it("retries the first non-USD FDV and returns the second fail-closed", async () => {
     const secondPayload = { ...wrongCurrencyMarketPayload, total: 2 };

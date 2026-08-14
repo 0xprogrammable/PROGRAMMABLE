@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const deploy = readFileSync(".github/workflows/deploy-production.yml", "utf8");
 const verify = readFileSync(".github/workflows/verify.yml", "utf8");
@@ -109,6 +110,59 @@ test("Custom-only changes do not invoke the public data smoke", () => {
     /sort=market-cap",\s*\(response\) =>\s*emptyCurrentBitqueryFdvRanking\(response, "market-cap"\),/u,
   );
   assert.equal(smoke.match(/emptyCurrentBitqueryFdvRanking/gu)?.length, 2);
+  assert.match(smoke, /id: public-provider-smoke/u);
+  assert.match(smoke, /highest\.status !== 200/u);
+  assert.match(smoke, /newest\.status !== 200/u);
+  assert.match(
+    smoke,
+    /response\.body\?\.page === 1[\s\S]*response\.body\?\.pageSize === 20[\s\S]*tokens\.length === Math\.min\(20, total\)[\s\S]*totalPages === Math\.ceil\(total \/ 20\)/u,
+  );
+  assert.match(smoke, /exactExplorePage\(highest, highestTokens\)/u);
+  assert.match(smoke, /exactExplorePage\(newest, newestTokens\)/u);
+  assert.match(
+    smoke,
+    /function exactExploreIdentity\(token\)[\s\S]*function exactDegradedLaunchOrder\([\s\S]*highest\.body\?\.total !== newest\.body\?\.total[\s\S]*highestTokens\.length !== newestTokens\.length[\s\S]*new Set\(highestIdentities\)\.size === highestIdentities\.length[\s\S]*identity === newestIdentities\[index\]/u,
+  );
+  assert.match(
+    smoke,
+    /!exactDegradedLaunchOrder\(\s*highest,\s*highestTokens,\s*newest,\s*newestTokens,\s*\)/u,
+  );
+  assert.match(
+    smoke,
+    /\["current", "transport-unavailable"\]\.includes\([\s\S]*newestMarketReadStatus !== highestMarketReadStatus/u,
+  );
+  assert.match(
+    smoke,
+    /if \(marketReadStatus === "current"\)[\s\S]*exactCurrentExploreSources\(highest\)[\s\S]*Highest FDV returned no Bitquery valuation[\s\S]*\/api\/explore\/token\?address=[\s\S]*\/api\/explore\/token\/chart\?address=/u,
+  );
+  assert.match(
+    smoke,
+    /x-programmable-read-source"\) === "drpc"[\s\S]*x-programmable-data-quality"\) === "partial"[\s\S]*x-programmable-market-read-status"\) ===[\s\S]*"transport-unavailable"[\s\S]*x-programmable-market-provider"\) ===[\s\S]*"bitquery"/u,
+  );
+  assert.match(
+    smoke,
+    /!response\.headers\.has\("x-programmable-market-source"\)[\s\S]*!response\.headers\.has\("x-programmable-price-source"\)[\s\S]*!response\.headers\.has\("x-programmable-market-as-of"\)/u,
+  );
+  assert.match(
+    smoke,
+    /marketRead\?\.provider === "bitquery"[\s\S]*marketRead\.status === "unavailable"[\s\S]*marketRead\.category === "transport"[\s\S]*\["market-core", "market-price"\]\.includes\(marketRead\.phase\)/u,
+  );
+  assert.match(
+    smoke,
+    /valuation\?\.status === "unavailable"[\s\S]*valuation\.available === 0[\s\S]*valuation\.unavailable === tokens\.length[\s\S]*tokens\.every\(exactUnavailableValuation\)/u,
+  );
+  assert.match(
+    smoke,
+    /ranking\?\.status === "unavailable"[\s\S]*ranking\.requested === "fdv"[\s\S]*ranking\.applied === "launch-order"[\s\S]*: ranking === undefined/u,
+  );
+  assert.match(
+    smoke,
+    /detailStatus = "skipped-provider-unavailable"[\s\S]*chartStatus = "skipped-provider-unavailable"[\s\S]*const profileToken =/u,
+  );
+  assert.match(
+    smoke,
+    /"market_read_status=" \+ marketReadStatus[\s\S]*"detail_status=" \+ detailStatus[\s\S]*"chart_status=" \+ chartStatus/u,
+  );
   assert.match(
     smoke,
     /x-programmable-launch-source"\) ===[\s\S]*"drpc"/u,
@@ -140,6 +194,15 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   assert.doesNotMatch(smoke, /\/api\/trade\/prepare/u);
   assert.doesNotMatch(smoke, /method:\s*"POST"/u);
 
+  const handoff = stepBlock(deploy, "Record staged candidate handoff");
+  assert.match(
+    handoff,
+    /MARKET_READ_STATUS: \$\{\{ steps\.public-provider-smoke\.outputs\.market_read_status \}\}/u,
+  );
+  assert.match(handoff, /Explore market read status:/u);
+  assert.match(handoff, /Token detail smoke:/u);
+  assert.match(handoff, /Market chart smoke:/u);
+
   for (const retired of [
     "Resolve read-model release policy",
     "Attest exact staged release policy",
@@ -151,4 +214,60 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   ]) {
     assert.equal(deploy.includes(`      - name: ${retired}`), false);
   }
+});
+
+test("degraded Highest must match the exact Newest launch identity order", () => {
+  const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
+  const helperStart = smoke.indexOf("function exactExploreIdentity(token)");
+  const helperEnd = smoke.indexOf(
+    "function exactUnavailableValuation(token)",
+    helperStart,
+  );
+  assert.notEqual(helperStart, -1);
+  assert.notEqual(helperEnd, -1);
+  const helperSource = smoke.slice(helperStart, helperEnd);
+  const exactDegradedLaunchOrder = runInNewContext(
+    `(() => {\n${helperSource}\nreturn exactDegradedLaunchOrder;\n})()`,
+    { address: /^0x[0-9a-f]{40}$/u },
+  );
+  const canonicalAddress = `0x${"1".repeat(40)}`;
+  const canonical = {
+    exploreKind: "token",
+    id: `1:${canonicalAddress}`,
+    tokenAddress: canonicalAddress,
+  };
+  const custom = {
+    exploreKind: "custom-project",
+    id: "custom:reviewer-p1",
+    customProjectId: `sha256:${"2".repeat(64)}`,
+    customLaunchId: `sha256:${"3".repeat(64)}`,
+  };
+  const page = {
+    body: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+  };
+
+  assert.equal(
+    exactDegradedLaunchOrder(page, [canonical, custom], page, [canonical, custom]),
+    true,
+  );
+  assert.equal(
+    exactDegradedLaunchOrder(page, [custom, canonical], page, [canonical, custom]),
+    false,
+    "a reordered degraded Highest page must be rejected",
+  );
+  assert.equal(
+    exactDegradedLaunchOrder(
+      { body: { ...page.body, total: 3, totalPages: 1 } },
+      [canonical, custom],
+      page,
+      [canonical, custom],
+    ),
+    false,
+    "mismatched page totals must be rejected",
+  );
+  assert.equal(
+    exactDegradedLaunchOrder(page, [canonical, canonical], page, [canonical, canonical]),
+    false,
+    "duplicate launch identities must be rejected",
+  );
 });
