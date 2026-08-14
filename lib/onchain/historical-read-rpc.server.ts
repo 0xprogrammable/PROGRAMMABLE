@@ -1,0 +1,63 @@
+import "server-only";
+
+import { createActionRpcQuorum } from
+  "../server/action-rpc-quorum.server";
+import type { ReadyOnchainDeployment } from "./types";
+import { productionMainnetRpcPair } from
+  "./website-rpc-providers.server";
+
+export class HistoricalReadRpcBindingError extends Error {
+  override name = "HistoricalReadRpcBindingError";
+
+  constructor() {
+    super("Historical read RPC quorum is unavailable");
+  }
+}
+
+/**
+ * Historical registry reconstruction requires two archive-capable readers.
+ * It reuses the exact commitment-bound production dRPC + QuickNode pair: this
+ * creates a deliberate correlation with current-market reads, but preserves
+ * independent vendors, exact endpoint commitments and operational capacity.
+ * No public or anonymous fallback may substitute either provider.
+ */
+export function historicalReadOnchainDeployment(
+  baseDeployment: ReadyOnchainDeployment,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): ReadyOnchainDeployment {
+  if (baseDeployment.chainId !== 1) {
+    throw new HistoricalReadRpcBindingError();
+  }
+
+  try {
+    const binding = productionMainnetRpcPair(environment);
+    const providers = createActionRpcQuorum({
+      chainId: 1,
+      primary: binding.primary.url,
+      secondary: binding.secondary.url,
+      maximumProviders: 2,
+    });
+    const [primary, secondary] = providers;
+    if (
+      providers.length !== 2 ||
+      primary?.vendorGroup !== "drpc" ||
+      secondary?.vendorGroup !== "quicknode" ||
+      primary.endpointCommitment !== binding.primary.endpointCommitment ||
+      secondary.endpointCommitment !== binding.secondary.endpointCommitment
+    ) {
+      throw new HistoricalReadRpcBindingError();
+    }
+
+    return {
+      ...baseDeployment,
+      rpcUrl: primary.endpoint,
+      rpcUrlSecondary: secondary.endpoint,
+      rpcProviderIds: {
+        primary: "drpc",
+        secondary: "quicknode",
+      },
+    };
+  } catch {
+    throw new HistoricalReadRpcBindingError();
+  }
+}

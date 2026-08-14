@@ -5,6 +5,7 @@ import {
   EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
   createExploreInitialState,
+  exploreDataQualityMessage,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
@@ -12,8 +13,9 @@ import {
   getExplorePaginationItems,
   getExploreValuationMetric,
   loadExploreModelDataset,
-  loadExplorePageWithValuationSnapshot,
+  loadExplorePage,
   loadExplorePayload,
+  paginateExploreModelDataset,
   paginateTokensByExploreFilters,
   paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
@@ -108,32 +110,171 @@ const payload = {
   totalPages: 2,
 };
 
-function valuationSnapshot(
-  overrides: Partial<{
-    blockNumber: string;
-    blockHash: `0x${string}`;
-    liquidityBlockNumber: string;
-    liquidityBlockHash: `0x${string}` | "none";
-    rankingCommitment: `sha256:${string}`;
-    sort: "market-cap" | "market-cap-asc";
-    query: string;
-    socials: "yes" | "no" | null;
-    pageSize: number;
-  }> = {},
-) {
+const bitqueryMarketEntry = classicEntry({
+  id: "1:bitquery-market",
+  name: "Bitquery market",
+  symbol: "BQM",
+  tokenAddress: "0x1111111111111111111111111111111111111111",
+  hookAddress: "0x2222222222222222222222222222222222222222",
+  poolId: `0x${"33".repeat(32)}`,
+  launchedAt: "2026-08-11T14:00:00.000Z",
+  totalSwapFeeBps: 100,
+  liquidityPath: "meme",
+});
+
+const unvaluedMarketPayload = {
+  ...payload,
+  tokens: [{
+    ...bitqueryMarketEntry,
+    valuation: { status: "unavailable", reason: "source-unavailable" },
+  }],
+  total: 1,
+  totalPages: 1,
+};
+
+const valuedMarketPayload = {
+  ...payload,
+  tokens: [{
+    ...bitqueryMarketEntry,
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: "125000000000000000000",
+      freshness: "current",
+      source: "bitquery",
+    },
+  }],
+  total: 1,
+  totalPages: 1,
+};
+
+const wrongCurrencyMarketPayload = {
+  ...valuedMarketPayload,
+  tokens: valuedMarketPayload.tokens.map((token) => ({
+    ...token,
+    valuation: { ...token.valuation, currency: "eth" },
+  })),
+};
+
+const unavailableMarketDataQuality = {
+  schemaVersion: "programmable.explore-data-quality.v1",
+  status: "partial",
+  generatedAt: "2026-08-14T00:00:00.000Z",
+  launchIdentity: {
+    status: "current",
+    canonical: "current",
+    custom: "current",
+    asOfBlock: "25740000",
+    referenceBlock: "25740000",
+    lagBlocks: "0",
+    ageMs: 0,
+  },
+  valuation: {
+    status: "unavailable",
+    metric: "fdv",
+    available: 0,
+    unavailable: 1,
+    stale: 0,
+    unknown: 0,
+    asOfBlock: null,
+    asOfTime: null,
+  },
+} as const;
+
+const transportUnavailableMarketPayload = {
+  ...unvaluedMarketPayload,
+  dataQuality: unavailableMarketDataQuality,
+  marketRead: {
+    provider: "bitquery",
+    status: "unavailable",
+    category: "transport",
+    phase: "market-core",
+  },
+  ranking: {
+    status: "unavailable",
+    requested: "fdv",
+    applied: "launch-order",
+  },
+} as const;
+
+function modelCompatibilityMarketData() {
   return {
-    schemaVersion: "programmable.explore-valuation-snapshot.v1" as const,
-    chainId: 1 as const,
-    blockNumber: "25740001",
-    blockHash: `0x${"11".repeat(32)}` as `0x${string}`,
-    liquidityBlockNumber: "25739999",
-    liquidityBlockHash: `0x${"22".repeat(32)}` as `0x${string}`,
-    rankingCommitment: `sha256:${"33".repeat(32)}` as `sha256:${string}`,
-    sort: "market-cap" as const,
-    query: "",
-    socials: null,
-    pageSize: EXPLORE_TOKENS_PER_PAGE,
-    ...overrides,
+    schemaVersion: "programmable.market-data.v1" as const,
+    source: "bitquery" as const,
+    generatedAt: "2026-08-14T00:00:00.000Z",
+    status: "current" as const,
+    primaryPoolId: null,
+    pools: [],
+  };
+}
+
+function modelFilterEntry(
+  index: number,
+  valuation: "available" | "unavailable",
+) {
+  const entry = classicEntry({
+    id: `1:model-filter-${index}`,
+    name: `Model filter ${index}`,
+    symbol: `MF${index}`,
+    tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+    hookAddress: "0x2222222222222222222222222222222222222222",
+    poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+    launchedAt: "2026-08-03T00:00:00.000Z",
+    totalSwapFeeBps: 100,
+    liquidityPath: "meme",
+  });
+  return {
+    ...entry,
+    ...(valuation === "available"
+      ? {
+          fdvUsdWad: `${index + 1}000000000000000000`,
+          marketData: modelCompatibilityMarketData(),
+        }
+      : {}),
+    valuation: valuation === "available"
+      ? {
+          status: "available" as const,
+          metric: "fdv" as const,
+          supplyBasis: "total" as const,
+          currency: "usd" as const,
+          valueWad: `${index + 1}000000000000000000`,
+          freshness: "current" as const,
+          source: "bitquery" as const,
+        }
+      : {
+          status: "unavailable" as const,
+          reason: "source-unavailable" as const,
+        },
+  };
+}
+
+function modelPageDataQuality(available: number, unavailable: number) {
+  const current = available > 0 && unavailable === 0;
+  return {
+    schemaVersion: "programmable.explore-data-quality.v1",
+    status: current ? "complete" as const : "partial" as const,
+    generatedAt: "2026-08-14T00:00:00.000Z",
+    launchIdentity: {
+      status: "current" as const,
+      canonical: "current" as const,
+      custom: "current" as const,
+      asOfBlock: "25740000",
+      referenceBlock: "25740000",
+      lagBlocks: "0",
+      ageMs: 0,
+    },
+    valuation: {
+      status: current ? "current" as const : "unavailable" as const,
+      metric: "fdv" as const,
+      available,
+      unavailable,
+      stale: 0,
+      unknown: 0,
+      asOfBlock: null,
+      asOfTime: null,
+    },
   };
 }
 
@@ -462,614 +603,233 @@ describe("Explore refresh state", () => {
     });
   });
 
-  it("never sends an unbound market-cap continuation request", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-
-    await expect(loadExplorePayload(
-      "unbound-visible-market-page",
-      new URLSearchParams({
-        q: "",
-        sort: "market-cap",
-        page: "2",
-        limit: "9",
-      }),
-    )).rejects.toThrow("complete valuation snapshot");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("records page one and carries all five bindings through visible pagination", async () => {
-    const snapshot = valuationSnapshot({
-      sort: "market-cap-asc",
-      query: "ranked",
-      socials: "no",
-    });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = new URL(String(input), "https://example.test");
-        const page = Number(url.searchParams.get("page"));
-        if (page === 1) {
-          for (const parameter of [
-            "valuationBlock",
-            "valuationBlockHash",
-            "liquidityBlock",
-            "liquidityBlockHash",
-            "rankingCommitment",
-          ]) {
-            expect(url.searchParams.has(parameter)).toBe(false);
-          }
-        } else {
-          expect(page).toBe(12);
-          expect(url.searchParams.get("valuationBlock")).toBe(
-            snapshot.blockNumber,
-          );
-          expect(url.searchParams.get("valuationBlockHash")).toBe(
-            snapshot.blockHash,
-          );
-          expect(url.searchParams.get("liquidityBlock")).toBe(
-            snapshot.liquidityBlockNumber,
-          );
-          expect(url.searchParams.get("liquidityBlockHash")).toBe(
-            snapshot.liquidityBlockHash,
-          );
-          expect(url.searchParams.get("rankingCommitment")).toBe(
-            snapshot.rankingCommitment,
-          );
-        }
-        return new Response(JSON.stringify({
-          ...payload,
-          page,
-          total: 108,
-          totalPages: 12,
-          valuationSnapshot: snapshot,
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      });
-    const firstSearch = new URLSearchParams({
-      q: "ranked",
-      sort: "market-cap-asc",
-      socials: "no",
-      page: "1",
-      limit: "9",
-    });
-    const first = await loadExplorePageWithValuationSnapshot(
-      "visible-ranked-page-one",
-      firstSearch,
-    );
-    const secondSearch = new URLSearchParams(firstSearch);
-    secondSearch.set("page", "12");
-    const twelfth = await loadExplorePageWithValuationSnapshot(
-      "visible-ranked-page-twelve",
-      secondSearch,
-      first.valuationSnapshot,
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(twelfth.payload.page).toBe(12);
-    expect(twelfth.valuationSnapshot).toEqual(snapshot);
-  });
-
-  it("carries the exact paired none liquidity sentinel for zero-candidate rankings", async () => {
-    const snapshot = valuationSnapshot({
-      liquidityBlockNumber: "none",
-      liquidityBlockHash: "none",
-    });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = new URL(String(input), "https://example.test");
-        expect(url.searchParams.get("liquidityBlock")).toBe("none");
-        expect(url.searchParams.get("liquidityBlockHash")).toBe("none");
-        return new Response(JSON.stringify({
-          ...payload,
-          page: 2,
-          valuationSnapshot: snapshot,
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      });
-
-    const loaded = await loadExplorePageWithValuationSnapshot(
-      "zero-candidate-visible-page-two",
-      new URLSearchParams({
-        sort: "market-cap",
-        page: "2",
-        limit: "9",
-      }),
-      snapshot,
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(loaded.valuationSnapshot).toEqual(snapshot);
-  });
-
-  it("canonicalizes market-cap aliases and the API page-size ceiling", async () => {
-    const snapshot = valuationSnapshot({ pageSize: 100 });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({
-        ...payload,
-        pageSize: 100,
-        totalPages: 1,
-        valuationSnapshot: snapshot,
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    await expect(loadExplorePayload(
-      "aliased-market-cap-clamped-page-size",
-      new URLSearchParams({
-        sort: "highest-market-cap",
-        page: "1",
-        limit: "999",
-      }),
-    )).resolves.toMatchObject({
-      pageSize: 100,
-      valuationSnapshot: snapshot,
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("canonicalizes a deep market-cap continuation from its page-one snapshot", async () => {
-    const snapshot = valuationSnapshot({
-      query: "focused",
-      socials: "yes",
-      pageSize: 100,
-    });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = new URL(String(input), "https://example.test");
-        const page = Number(url.searchParams.get("page"));
-        if (page === 1) {
-          expect(url.searchParams.get("sort")).toBe("highest-market-cap");
-          expect(url.searchParams.get("q")).toBe("  focused  ");
-          expect(url.searchParams.get("limit")).toBe("999");
-        } else {
-          expect(url.searchParams.get("sort")).toBe("market-cap");
-          expect(url.searchParams.get("q")).toBe("focused");
-          expect(url.searchParams.get("socials")).toBe("yes");
-          expect(url.searchParams.get("limit")).toBe("100");
-          expect(url.searchParams.get("rankingCommitment")).toBe(
-            snapshot.rankingCommitment,
-          );
-        }
-        return new Response(JSON.stringify({
-          ...payload,
-          page,
-          pageSize: 100,
-          total: 200,
-          totalPages: 2,
-          valuationSnapshot: snapshot,
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      });
-
-    const loaded = await loadExplorePageWithValuationSnapshot(
-      "deep-canonical-continuation",
-      new URLSearchParams({
-        sort: "highest-market-cap",
-        q: "  focused  ",
-        socials: "yes",
-        page: "2",
-        limit: "999",
-      }),
-    );
-
-    expect(loaded.payload.page).toBe(2);
-    expect(loaded.valuationSnapshot).toEqual(snapshot);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it("bootstraps a fresh page-one snapshot after refresh or filter drift", async () => {
-    const oldSnapshot = valuationSnapshot({
-      query: "old",
-      rankingCommitment: `sha256:${"44".repeat(32)}`,
-    });
-    const refreshedSnapshot = valuationSnapshot({
-      query: "fresh",
-      socials: "yes",
-      rankingCommitment: `sha256:${"55".repeat(32)}`,
-    });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = new URL(String(input), "https://example.test");
-        const page = Number(url.searchParams.get("page"));
-        if (page === 1) {
-          expect(url.searchParams.has("rankingCommitment")).toBe(false);
-        } else {
-          expect(url.searchParams.get("rankingCommitment")).toBe(
-            refreshedSnapshot.rankingCommitment,
-          );
-          expect(url.searchParams.get("rankingCommitment")).not.toBe(
-            oldSnapshot.rankingCommitment,
-          );
-        }
-        return new Response(JSON.stringify({
-          ...payload,
-          page,
-          total: 18,
-          totalPages: 2,
-          valuationSnapshot: refreshedSnapshot,
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      });
-
-    const loaded = await loadExplorePageWithValuationSnapshot(
-      "visible-refresh-filter-drift",
-      new URLSearchParams({
-        q: "fresh",
-        sort: "market-cap",
-        socials: "yes",
-        page: "2",
-        limit: "9",
-      }),
-      oldSnapshot,
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(loaded.valuationSnapshot).toEqual(refreshedSnapshot);
-  });
-
-  it("binds every market-cap model page across more than one hundred results", async () => {
-    const tokens = Array.from({ length: 230 }, (_, index) => classicEntry({
-      id: `1:ranked-${index}`,
-      name: `Ranked ${index}`,
-      symbol: `R${index}`,
-      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
-      hookAddress: "0x2222222222222222222222222222222222222222",
-      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
-      launchedAt: "2026-08-03T00:00:00.000Z",
-      totalSwapFeeBps: 100,
-      liquidityPath: "meme" as const,
-    } satisfies LauncherToken));
-    const snapshot = valuationSnapshot({
-      query: "ranked",
-      pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
-    });
-    const totalPages = Math.ceil(
-      tokens.length / EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
-    );
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = new URL(String(input), "https://example.test");
-        const page = Number(url.searchParams.get("page"));
-        const offset = (page - 1) * EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE;
-        if (page === 1) {
-          expect(url.searchParams.has("valuationBlock")).toBe(false);
-          expect(url.searchParams.has("liquidityBlock")).toBe(false);
-        } else {
-          expect(url.searchParams.get("valuationBlock")).toBe(
-            snapshot.blockNumber,
-          );
-          expect(url.searchParams.get("valuationBlockHash")).toBe(
-            snapshot.blockHash,
-          );
-          expect(url.searchParams.get("liquidityBlock")).toBe(
-            snapshot.liquidityBlockNumber,
-          );
-          expect(url.searchParams.get("liquidityBlockHash")).toBe(
-            snapshot.liquidityBlockHash,
-          );
-          expect(url.searchParams.get("rankingCommitment")).toBe(
-            snapshot.rankingCommitment,
-          );
-        }
-        return new Response(JSON.stringify({
-          status: "ready",
-          tokens: tokens.slice(
-            offset,
-            offset + EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
-          ),
-          page,
-          pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
-          total: tokens.length,
-          totalPages,
-          valuationSnapshot: snapshot,
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      });
-
-    const dataset = await loadExploreModelDataset(
-      "complete-ranked-model-dataset",
-      new URLSearchParams({
-        q: "ranked",
-        sort: "market-cap",
-        page: "17",
-        limit: "9",
-      }),
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(dataset.tokens.map((token) => token.id)).toEqual(
-      tokens.map((token) => token.id),
-    );
-    expect(dataset.valuationSnapshot).toEqual(snapshot);
-  });
-
-  it("rejects duplicate identities after traversing a multi-page model dataset", async () => {
-    const tokens = Array.from({ length: 101 }, (_, index) => customEntry(index));
-    const snapshot = valuationSnapshot({
-      pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
-    });
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  it("preserves an all-page transport marker and does not cache the degraded model dataset", async () => {
+    const tokens = [
+      ...Array.from(
+        { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE },
+        (_, index) => modelFilterEntry(index, "available"),
+      ),
+      {
+        ...customEntry(900),
+        fdvUsdWad: "1000000000000000000",
+        marketData: modelCompatibilityMarketData(),
+        liquidityEvidence: { compatibility: true },
+        valuation: {
+          status: "available" as const,
+          metric: "fdv" as const,
+          supplyBasis: "total" as const,
+          currency: "usd" as const,
+          valueWad: "1000000000000000000",
+          freshness: "current" as const,
+          source: "bitquery" as const,
+        },
+      },
+    ];
+    const totalPages = 2;
+    const degradedResponse = (
+      input: string | URL | Request,
+      phase: "market-core" | "market-price",
+    ) => {
       const url = new URL(String(input), "https://example.test");
       const page = Number(url.searchParams.get("page"));
+      const pageSize = Number(url.searchParams.get("limit"));
+      const pageTokens = tokens.slice((page - 1) * pageSize, page * pageSize)
+        .map((entry) => ({
+          ...entry,
+          valuation: {
+            status: "unavailable" as const,
+            reason: "source-unavailable" as const,
+          },
+        }));
       return new Response(JSON.stringify({
         status: "ready",
-        tokens: page === 1 ? tokens.slice(0, 100) : [tokens[0]],
+        tokens: pageTokens,
         page,
-        pageSize: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+        pageSize,
         total: tokens.length,
-        totalPages: 2,
-        valuationSnapshot: snapshot,
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    });
-
-    await expect(loadExploreModelDataset(
-      "duplicate-ranked-model-dataset",
-      new URLSearchParams({
-        sort: "market-cap",
-        page: "1",
-        limit: "9",
-      }),
-    )).rejects.toThrow("repeated an entry");
-  });
-
-  it("scopes resolved page caches to all five continuation fields", async () => {
-    const firstSnapshot = valuationSnapshot();
-    const secondSnapshot = valuationSnapshot({
-      blockNumber: "25740002",
-      blockHash: `0x${"44".repeat(32)}`,
-      liquidityBlockNumber: "25740000",
-      liquidityBlockHash: `0x${"55".repeat(32)}`,
-      rankingCommitment: `sha256:${"66".repeat(32)}`,
-    });
-    const responses = [firstSnapshot, secondSnapshot];
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async () => {
-        const snapshot = responses.shift();
-        return new Response(JSON.stringify({
-          ...payload,
-          page: 2,
-          valuationSnapshot: snapshot,
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      });
-    const continuationSearch = (
-      snapshot: ReturnType<typeof valuationSnapshot>,
-    ) => new URLSearchParams({
-      sort: "market-cap",
-      page: "2",
-      limit: "9",
-      valuationBlock: snapshot.blockNumber,
-      valuationBlockHash: snapshot.blockHash,
-      liquidityBlock: snapshot.liquidityBlockNumber,
-      liquidityBlockHash: snapshot.liquidityBlockHash,
-      rankingCommitment: snapshot.rankingCommitment,
-    });
-
-    await loadExplorePayload(
-      "same-content-different-continuation",
-      continuationSearch(firstSnapshot),
-    );
-    await loadExplorePayload(
-      "same-content-different-continuation",
-      continuationSearch(secondSnapshot),
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it("rejects malformed, drifting, and non-market valuation snapshots", async () => {
-    const malformed = valuationSnapshot() as Record<string, unknown>;
-    delete malformed.liquidityBlockHash;
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        valuationSnapshot: malformed,
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(loadExplorePayload(
-      "malformed-market-snapshot",
-      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
-    )).rejects.toThrow("invalid valuation snapshot");
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        valuationSnapshot: {
-          ...valuationSnapshot(),
-          extra: "not-canonical",
+        totalPages,
+        dataQuality: modelPageDataQuality(0, pageTokens.length),
+        marketRead: {
+          provider: "bitquery",
+          status: "unavailable",
+          category: "transport",
+          phase,
+        },
+        ranking: {
+          status: "unavailable",
+          requested: "fdv",
+          applied: "launch-order",
         },
       }), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "transport-unavailable",
+        },
+      });
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => degradedResponse(input, "market-core"),
     );
-    await expect(loadExplorePayload(
-      "extra-field-market-snapshot",
-      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
-    )).rejects.toThrow("invalid valuation snapshot");
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        valuationSnapshot: valuationSnapshot({
-          liquidityBlockNumber: "none",
-        }),
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(loadExplorePayload(
-      "mixed-none-market-snapshot",
-      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
-    )).rejects.toThrow("invalid valuation snapshot");
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        valuationSnapshot: valuationSnapshot(),
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(loadExplorePayload(
-      "snapshot-on-newest-sort",
-      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
-    )).rejects.toThrow("unexpected valuation snapshot");
-
-    const requestedSnapshot = valuationSnapshot();
-    const changedSnapshot = valuationSnapshot({
-      rankingCommitment: `sha256:${"99".repeat(32)}`,
-    });
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        page: 2,
-        valuationSnapshot: changedSnapshot,
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(loadExplorePayload(
-      "drifting-market-snapshot",
-      new URLSearchParams({
-        sort: "market-cap",
-        page: "2",
-        limit: "9",
-        valuationBlock: requestedSnapshot.blockNumber,
-        valuationBlockHash: requestedSnapshot.blockHash,
-        liquidityBlock: requestedSnapshot.liquidityBlockNumber,
-        liquidityBlockHash: requestedSnapshot.liquidityBlockHash,
-        rankingCommitment: requestedSnapshot.rankingCommitment,
-      }),
-    )).rejects.toThrow("changed the valuation snapshot");
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        page: 3,
-        total: 27,
-        totalPages: 3,
-        valuationSnapshot: requestedSnapshot,
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(loadExplorePayload(
-      "clamped-market-page",
-      new URLSearchParams({
-        sort: "market-cap",
-        page: "2",
-        limit: "9",
-        valuationBlock: requestedSnapshot.blockNumber,
-        valuationBlockHash: requestedSnapshot.blockHash,
-        liquidityBlock: requestedSnapshot.liquidityBlockNumber,
-        liquidityBlockHash: requestedSnapshot.liquidityBlockHash,
-        rankingCommitment: requestedSnapshot.rankingCommitment,
-      }),
-    )).rejects.toThrow("inconsistent valuation snapshot");
-  });
-
-  it.each([
-    ["page", { page: undefined }],
-    ["pageSize", { pageSize: undefined }],
-    ["total", { total: undefined }],
-    ["totalPages", { totalPages: undefined }],
-  ])("rejects a market-cap response missing raw %s", async (field, mutation) => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        ...mutation,
-        valuationSnapshot: valuationSnapshot(),
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    await expect(loadExplorePayload(
-      `missing-market-${field}`,
-      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
-    )).rejects.toThrow("invalid pagination data");
-  });
-
-  it.each([
-    ["valuation block", { blockNumber: "1".repeat(79) }],
-    ["liquidity block", { liquidityBlockNumber: "2147483648" }],
-  ])("rejects an oversized response %s", async (field, snapshotMutation) => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...payload,
-        valuationSnapshot: valuationSnapshot(snapshotMutation),
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    await expect(loadExplorePayload(
-      `oversized-market-${field}`,
-      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
-    )).rejects.toThrow("invalid valuation snapshot");
-  });
-
-  it.each([
-    ["valuation block", { valuationBlock: "1".repeat(79) }],
-    ["liquidity block", { liquidityBlock: "2147483648" }],
-  ])("rejects an oversized continuation %s before fetch", async (
-    _field,
-    continuationMutation,
-  ) => {
-    const requestedSnapshot = valuationSnapshot();
-    const fetchMock = vi.spyOn(globalThis, "fetch");
     const search = new URLSearchParams({
       sort: "market-cap",
-      page: "2",
+      page: "1",
       limit: "9",
-      valuationBlock: requestedSnapshot.blockNumber,
-      valuationBlockHash: requestedSnapshot.blockHash,
-      liquidityBlock: requestedSnapshot.liquidityBlockNumber,
-      liquidityBlockHash: requestedSnapshot.liquidityBlockHash,
-      rankingCommitment: requestedSnapshot.rankingCommitment,
     });
-    for (const [key, value] of Object.entries(continuationMutation)) {
-      if (value !== undefined) search.set(key, value);
-    }
 
-    await expect(loadExplorePayload(
-      `oversized-market-continuation-${_field}`,
+    const dataset = await loadExploreModelDataset(
+      "all-degraded-model-dataset",
       search,
-    )).rejects.toThrow("continuation is malformed");
-    expect(fetchMock).not.toHaveBeenCalled();
+    );
+    const filtered = paginateExploreModelDataset(dataset, "classic", 1);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(dataset).toMatchObject({
+      marketRead: { status: "unavailable", phase: "market-core" },
+      ranking: { status: "unavailable", applied: "launch-order" },
+      dataQuality: {
+        status: "partial",
+        valuation: {
+          status: "unavailable",
+          available: 0,
+          unavailable: tokens.length,
+        },
+      },
+    });
+    expect(filtered).toMatchObject({
+      marketRead: { status: "unavailable" },
+      ranking: { status: "unavailable", applied: "launch-order" },
+      dataQuality: {
+        status: "partial",
+        valuation: { status: "unavailable", available: 0, unavailable: 9 },
+      },
+    });
+    expect(dataset.tokens.every((entry) =>
+      entry.valuation.status === "unavailable" &&
+      !("fdvUsdWad" in entry) &&
+      !("marketData" in entry) &&
+      !("liquidityEvidence" in entry)
+    )).toBe(true);
+    expect(dataset.tokens.at(-1)?.valuation).toEqual({
+      status: "unavailable",
+      reason: "no-market",
+    });
+
+    await loadExploreModelDataset("all-degraded-model-dataset", search);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    fetchMock.mockImplementation(async (input) => {
+      const page = new URL(String(input), "https://example.test")
+        .searchParams.get("page");
+      return degradedResponse(
+        input,
+        page === "1" ? "market-core" : "market-price",
+      );
+    });
+    await expect(loadExploreModelDataset(
+      "inconsistent-degraded-model-dataset",
+      search,
+    )).rejects.toThrow("Tokens changed while filters were loading");
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
+
+  it("rejects a mixed current and transport-unavailable model dataset", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "available"),
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        const pageTokens = tokens.slice((page - 1) * pageSize, page * pageSize);
+        const degraded = page === 2;
+        const visibleTokens = degraded
+          ? pageTokens.map((entry) => ({
+              ...entry,
+              valuation: {
+                status: "unavailable" as const,
+                reason: "source-unavailable" as const,
+              },
+            }))
+          : pageTokens;
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens: visibleTokens,
+          page,
+          pageSize,
+          total: tokens.length,
+          totalPages: 2,
+          dataQuality: modelPageDataQuality(
+            degraded ? 0 : visibleTokens.length,
+            degraded ? visibleTokens.length : 0,
+          ),
+          ...(degraded
+            ? {
+                marketRead: {
+                  provider: "bitquery",
+                  status: "unavailable",
+                  category: "transport",
+                  phase: "market-price",
+                },
+                ranking: {
+                  status: "unavailable",
+                  requested: "fdv",
+                  applied: "launch-order",
+                },
+              }
+            : {}),
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Programmable-Market-Read-Status": degraded
+              ? "transport-unavailable"
+              : "current",
+          },
+        });
+      },
+    );
+
+    await expect(loadExploreModelDataset(
+      "mixed-model-dataset",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("Tokens changed while filters were loading");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["highest-market-cap", "lowest-market-cap"])(
+    "requests a direct second %s page without continuation fields",
+    async (sort) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (input) => {
+          const url = new URL(String(input), "https://example.test");
+          expect(url.searchParams.get("sort")).toBe(sort);
+          expect(url.searchParams.get("page")).toBe("2");
+          expect([...url.searchParams.keys()]).toEqual([
+            "sort",
+            "page",
+            "limit",
+          ]);
+          return new Response(JSON.stringify({
+            ...payload,
+            page: 2,
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        },
+      );
+
+      await expect(loadExplorePage(
+        `direct-${sort}-page-two`,
+        new URLSearchParams({ sort, page: "2", limit: "9" }),
+      )).resolves.toMatchObject({ page: 2 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("refreshes only visible Explore content after the freshness interval", () => {
     expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(5_000);
@@ -1180,10 +940,7 @@ describe("Explore refresh state", () => {
   });
 
   it("shares one in-flight request for repeated refreshes of the same content", async () => {
-    const marketPayload = {
-      ...payload,
-      valuationSnapshot: valuationSnapshot(),
-    };
+    const marketPayload = payload;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify(marketPayload), {
         status: 200,
@@ -1192,7 +949,7 @@ describe("Explore refresh state", () => {
     );
     const search = new URLSearchParams({
       q: "",
-      sort: "market-cap",
+      sort: "newest",
       page: "1",
       limit: "9",
     });
@@ -1203,6 +960,431 @@ describe("Explore refresh state", () => {
     expect(second).toBe(first);
     await expect(first).resolves.toEqual(marketPayload);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["market-cap", "market-cap-asc"])(
+    "retries a valid zero-valuation %s response and returns the valued retry",
+    async (sort) => {
+      const first = new Response(JSON.stringify(unvaluedMarketPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+      const firstJson = vi.spyOn(first, "json");
+      const fetchMock = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(new Response(
+          JSON.stringify(valuedMarketPayload),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ));
+
+      const result = await loadExplorePayload(
+        `${sort}-zero-then-valued`,
+        new URLSearchParams({ sort, page: "1", limit: "9" }),
+      );
+
+      expect(result.tokens[0]?.valuation).toMatchObject({
+        status: "available",
+        metric: "fdv",
+        freshness: "current",
+        source: "bitquery",
+      });
+      expect(firstJson).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+    },
+  );
+
+  it("returns a marked transport-unavailable page without retrying or caching it", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(JSON.stringify(transportUnavailableMarketPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "transport-unavailable",
+        },
+      }),
+    );
+    const search = new URLSearchParams({
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    await expect(loadExplorePayload(
+      "marked-market-transport-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: {
+        provider: "bitquery",
+        status: "unavailable",
+        category: "transport",
+        phase: "market-core",
+      },
+      ranking: {
+        status: "unavailable",
+        requested: "fdv",
+        applied: "launch-order",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(loadExplorePayload(
+      "marked-market-transport-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: { status: "unavailable" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not surface a market availability banner", () => {
+    expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBeNull();
+  });
+
+  it("retries the first non-USD FDV and returns the second fail-closed", async () => {
+    const secondPayload = { ...wrongCurrencyMarketPayload, total: 2 };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(wrongCurrencyMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(secondPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+
+    await expect(loadExplorePayload(
+      "market-cap-wrong-currency",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({
+      total: 2,
+      tokens: [expect.objectContaining({
+        valuation: expect.objectContaining({ currency: "eth" }),
+      })],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the second valid zero-valuation response without a third attempt", async () => {
+    const secondPayload = { ...unvaluedMarketPayload, total: 2 };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(unvaluedMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify(secondPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+
+    await expect(loadExplorePayload(
+      "market-cap-zero-twice",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({ total: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a valid zero-valuation response for Newest", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(unvaluedMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(valuedMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+
+    await expect(loadExplorePayload(
+      "newest-zero-no-retry",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({
+      tokens: [expect.objectContaining({
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      })],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the identical Explore request once after a 503", async () => {
+    const first = new Response(JSON.stringify({
+      status: "ready",
+      tokens: [{ forged: "must-not-be-parsed" }],
+    }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+    const firstJson = vi.spyOn(first, "json");
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(new Response(JSON.stringify(unvaluedMarketPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    const search = new URLSearchParams({
+      q: "",
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    const request = loadExplorePayload("bitquery-one-retry", search);
+    expect(loadExplorePayload("bitquery-one-retry", search)).toBe(request);
+    await expect(request).resolves.toMatchObject({
+      tokens: [expect.objectContaining({
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      })],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: { Accept: "application/json" },
+    });
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).not.toBe(
+      fetchMock.mock.calls[0]?.[1]?.signal,
+    );
+    expect(firstJson).not.toHaveBeenCalled();
+  });
+
+  it.each(["newest", "oldest", "market-cap", "market-cap-asc"])(
+    "stops after one automatic 503 retry for the %s sort",
+    async (sort) => {
+      const first = new Response("not launch data", { status: 503 });
+      const firstJson = vi.spyOn(first, "json");
+      const fetchMock = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          status: "unavailable",
+          error: "Launch data is temporarily unavailable",
+          retryable: true,
+        }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }));
+
+      await expect(loadExplorePayload(
+        `${sort}-one-retry-terminal`,
+        new URLSearchParams({ sort, page: "1", limit: "9" }),
+      )).rejects.toThrow("Launch data is temporarily unavailable");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+      expect(firstJson).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not retry a non-503 response", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "Invalid Explore request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      "non-503-no-retry",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("Invalid Explore request");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a late 503 retry its own full twelve-second deadline", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => {
+        calls += 1;
+        if (calls === 1) {
+          return await new Promise<Response>((resolve) => {
+            globalThis.setTimeout(
+              () => resolve(new Response("ignored", { status: 503 })),
+              11_000,
+            );
+          });
+        }
+        return await new Promise<Response>((resolve) => {
+          globalThis.setTimeout(() => resolve(new Response(
+            JSON.stringify(payload),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          )), 6_000);
+        });
+      },
+    );
+    const request = loadExplorePayload(
+      "late-503-fresh-attempt-deadline",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await expect(request).resolves.toEqual(payload);
+  });
+
+  it("does not retry an aborted 503 request", async () => {
+    let resolveOld: ((response: Response) => void) | undefined;
+    let oldAttemptSignal: AbortSignal | undefined;
+    const requests: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("page=1")) {
+          oldAttemptSignal = init?.signal ?? undefined;
+          return await new Promise<Response>((resolve) => {
+            resolveOld = resolve;
+          });
+        }
+        return new Response(JSON.stringify({
+          ...valuedMarketPayload,
+          page: 2,
+          total: 18,
+          totalPages: 2,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    const first = loadExplorePayload(
+      "aborted-503-no-retry",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    await vi.waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+    const current = loadExplorePayload(
+      "aborted-503-no-retry",
+      new URLSearchParams({ sort: "market-cap", page: "2", limit: "9" }),
+    );
+    resolveOld?.(new Response("ignored", { status: 503 }));
+
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await expect(current).resolves.toMatchObject({ page: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requests.filter((url) => url.includes("page=1"))).toHaveLength(1);
+    expect(oldAttemptSignal?.aborted).toBe(true);
+  });
+
+  it("never caches a successful response from an aborted stale request", async () => {
+    let resolveOld: ((response: Response) => void) | undefined;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = String(input);
+        if (url.includes("page=1")) {
+          return await new Promise<Response>((resolve) => {
+            resolveOld = resolve;
+          });
+        }
+        return new Response(JSON.stringify({ ...payload, page: 2 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    const first = loadExplorePayload(
+      "aborted-success-no-stale-cache",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    );
+    await vi.waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+    const currentSearch = new URLSearchParams({
+      sort: "newest",
+      page: "2",
+      limit: "9",
+    });
+    const current = loadExplorePayload(
+      "aborted-success-no-stale-cache",
+      currentSearch,
+    );
+    await expect(current).resolves.toMatchObject({ page: 2 });
+    resolveOld?.(new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await expect(loadExplorePayload(
+      "aborted-success-no-stale-cache",
+      currentSearch,
+    )).resolves.toMatchObject({ page: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache an empty-FDV response when its retry is aborted as stale", async () => {
+    let resolveOldRetry: ((response: Response) => void) | undefined;
+    let oldRetrySignal: AbortSignal | undefined;
+    let pageOneCalls = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init) => {
+        const url = new URL(String(input), "https://example.test");
+        if (url.searchParams.get("page") === "1") {
+          pageOneCalls += 1;
+          if (pageOneCalls === 1) {
+            return new Response(JSON.stringify(unvaluedMarketPayload), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          oldRetrySignal = init?.signal ?? undefined;
+          return await new Promise<Response>((resolve) => {
+            resolveOldRetry = resolve;
+          });
+        }
+        return new Response(JSON.stringify({
+          ...valuedMarketPayload,
+          page: 2,
+          total: 18,
+          totalPages: 2,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    const oldRequest = loadExplorePayload(
+      "aborted-empty-fdv-no-stale-cache",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const currentSearch = new URLSearchParams({
+      sort: "market-cap",
+      page: "2",
+      limit: "9",
+    });
+    const currentRequest = loadExplorePayload(
+      "aborted-empty-fdv-no-stale-cache",
+      currentSearch,
+    );
+    resolveOldRetry?.(new Response(JSON.stringify(valuedMarketPayload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(oldRequest).rejects.toMatchObject({ name: "AbortError" });
+    await expect(currentRequest).resolves.toMatchObject({ page: 2 });
+    await expect(loadExplorePayload(
+      "aborted-empty-fdv-no-stale-cache",
+      currentSearch,
+    )).resolves.toMatchObject({ page: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(oldRetrySignal?.aborted).toBe(true);
   });
 
   it("rejects Router provenance on a custom project without a complete stamp", async () => {

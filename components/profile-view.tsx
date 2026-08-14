@@ -387,6 +387,9 @@ const walletChangedBeforeSubmission =
   "The connected wallet changed before submission";
 const insufficientNetworkFee =
   "This wallet needs more ETH to cover the network fee";
+const transactionCancelledInWallet = "Transaction cancelled in wallet";
+const creatorClaimNotSubmitted =
+  "The claim status could not be confirmed. Check your wallet activity before trying again.";
 
 export function profileCreatorClaimErrorMessage(error: unknown) {
   if (
@@ -399,11 +402,14 @@ export function profileCreatorClaimErrorMessage(error: unknown) {
   if (
     error instanceof Error &&
     (error.message === walletChangedBeforeSubmission ||
-      error.message === insufficientNetworkFee)
+      error.message === insufficientNetworkFee ||
+      error.message === transactionCancelledInWallet)
   ) {
-    return error.message;
+    return error.message === transactionCancelledInWallet
+      ? "Transaction cancelled. Your rewards are still available to claim."
+      : error.message;
   }
-  return "The creator claim was not completed. Check your wallet and try again.";
+  return creatorClaimNotSubmitted;
 }
 
 export function profileRewardActionErrorMessage(error: unknown) {
@@ -2577,8 +2583,27 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     );
   }
 
+  const profileWorkspacePhase = getProfileWorkspacePhase(
+    [
+      scopedOnchainData.status,
+      scopedClassicV3Rewards.status,
+      scopedDeepRewards.status,
+      scopedDeepV3Profile.status,
+      scopedStockPairedRewards.status,
+    ],
+    terminalErrorReady,
+  );
+
+  if (profileWorkspacePhase === "loading") {
+    return (
+      <div className={`${styles.page} page-width`}>
+        <ProfileLoadingState />
+      </div>
+    );
+  }
+
   return (
-    <div className={`${styles.page} page-width`}>
+    <div className={`${styles.page} ${styles.profileReveal} page-width`}>
       <section
         className={`${styles.hero} ${
           editingProfile ? styles.heroEditing : ""
@@ -3440,27 +3465,13 @@ function ProfileSessionLoadingState() {
   return (
     <div className={`${styles.page} page-width`}>
       <section
-        className={styles.sessionLoading}
+        className={styles.profileLoadingState}
         aria-busy="true"
         aria-label="Restoring wallet profile"
       >
         <span className={styles.visuallyHidden} role="status">
           Restoring wallet profile
         </span>
-        <div className={styles.sessionLoadingHero} aria-hidden="true">
-          <span className={styles.sessionLoadingAvatar} />
-          <span className={styles.sessionLoadingIdentity}>
-            <span />
-            <span />
-          </span>
-        </div>
-        <div
-          className={`${styles.sessionLoadingWorkspace} liquid-glass-surface`}
-          aria-hidden="true"
-        >
-          <span />
-          <span />
-        </div>
       </section>
     </div>
   );
@@ -3469,31 +3480,13 @@ function ProfileSessionLoadingState() {
 function ProfileLoadingState() {
   return (
     <section
-      className={styles.profileLoading}
+      className={styles.profileLoadingState}
       aria-busy="true"
       aria-label="Loading profile"
     >
       <span className={styles.visuallyHidden} role="status">
         Loading profile
       </span>
-      <div
-        className={`${styles.profileWorkspace} liquid-glass-surface`}
-        aria-hidden="true"
-      >
-        <div className={styles.loadingPanel}>
-          <span className={styles.loadingPanelTitle} />
-          <span className={styles.loadingPanelTotal} />
-          <span className={styles.loadingPanelChart} />
-        </div>
-        <div className={styles.loadingPanel}>
-          <span className={styles.loadingPanelTitle} />
-          <div className={styles.loadingClaimRows}>
-            {Array.from({ length: profileClaimPageSize }, (_, index) => (
-              <span key={index} />
-            ))}
-          </div>
-        </div>
-      </div>
     </section>
   );
 }
@@ -3766,8 +3759,13 @@ function ProfileAccountWorkspace({
     deepV3Profile.status,
     stockPairedRewards.status,
   ] as const;
+  const nativeRewardSourceStatuses = [
+    data.status,
+    classicV3Rewards.status,
+    deepRewards.status,
+  ] as const;
   const rewardDataQuality = getProfileRewardDataQuality(
-    sourceStatuses,
+    nativeRewardSourceStatuses,
     classicV3SourceState.quality,
     data.sourceQuality ?? "current",
   );

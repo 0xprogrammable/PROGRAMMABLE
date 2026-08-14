@@ -1,0 +1,461 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/generic-launch-public.v2.schema.json",
+  "$ref": "#/$defs/genericLaunchRecord",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x(?!0{40}$)[0-9a-f]{40}$"
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]{0,77})$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "registryEventEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventName",
+        "transactionHash",
+        "blockHash",
+        "blockNumber",
+        "transactionIndex",
+        "logIndex",
+        "removed"
+      ],
+      "properties": {
+        "eventName": { "type": "string", "minLength": 1 },
+        "transactionHash": { "$ref": "#/$defs/hash32" },
+        "blockHash": { "$ref": "#/$defs/hash32" },
+        "blockNumber": { "$ref": "#/$defs/decimal" },
+        "transactionIndex": { "$ref": "#/$defs/decimal" },
+        "logIndex": { "$ref": "#/$defs/decimal" },
+        "removed": { "const": false }
+      }
+    },
+    "approvalAuthorizationEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/registryEventEvidence" },
+        {
+          "type": "object",
+          "properties": {
+            "eventName": { "const": "CustomLaunchApprovalAuthorizedV2" }
+          }
+        }
+      ]
+    },
+    "registeredEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/registryEventEvidence" },
+        {
+          "type": "object",
+          "properties": {
+            "eventName": { "const": "CustomLaunchRegisteredV2" }
+          }
+        }
+      ]
+    },
+    "descriptorCommittedEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/registryEventEvidence" },
+        {
+          "type": "object",
+          "properties": {
+            "eventName": { "const": "CustomLaunchDescriptorCommittedV2" }
+          }
+        }
+      ]
+    },
+    "descriptorEvidenceCommittedEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/registryEventEvidence" },
+        {
+          "type": "object",
+          "properties": {
+            "eventName": {
+              "const": "CustomLaunchDescriptorEvidenceCommittedV2"
+            }
+          }
+        }
+      ]
+    },
+    "finalizedEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/registryEventEvidence" },
+        {
+          "type": "object",
+          "properties": {
+            "eventName": { "const": "CustomLaunchFinalizedV2" }
+          }
+        }
+      ]
+    },
+    "genericLaunchSourceProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sourceRevision",
+        "approval",
+        "descriptor",
+        "lifecycle"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-source-projection.v2"
+        },
+        "sourceRevision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repositoryId",
+            "repositoryFullName",
+            "commitObjectId",
+            "treeObjectId"
+          ],
+          "properties": {
+            "repositoryId": { "$ref": "#/$defs/positiveDecimal" },
+            "repositoryFullName": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
+            },
+            "commitObjectId": { "$ref": "#/$defs/gitObjectId" },
+            "treeObjectId": { "$ref": "#/$defs/gitObjectId" }
+          }
+        },
+        "approval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "approvalRevision",
+            "approvalId",
+            "approvalEvidenceHash",
+            "signedReceiptArtifactHash"
+          ],
+          "properties": {
+            "approvalRevision": { "$ref": "#/$defs/positiveDecimal" },
+            "approvalId": { "$ref": "#/$defs/hash32" },
+            "approvalEvidenceHash": { "$ref": "#/$defs/hash32" },
+            "signedReceiptArtifactHash": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "descriptor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorHash",
+            "launchId",
+            "launchWallet",
+            "primaryContract",
+            "primaryRuntimeCodeHash",
+            "componentSetHash",
+            "sourceArtifactHash",
+            "configurationHash",
+            "launchPlanHash",
+            "projectCommitment",
+            "marketMode",
+            "marketModeValue",
+            "protocolFeeBps"
+          ],
+          "properties": {
+            "descriptorHash": { "$ref": "#/$defs/hash32" },
+            "launchId": { "$ref": "#/$defs/hash32" },
+            "launchWallet": { "$ref": "#/$defs/address" },
+            "primaryContract": { "$ref": "#/$defs/address" },
+            "primaryRuntimeCodeHash": { "$ref": "#/$defs/hash32" },
+            "componentSetHash": { "$ref": "#/$defs/hash32" },
+            "sourceArtifactHash": { "$ref": "#/$defs/hash32" },
+            "configurationHash": { "$ref": "#/$defs/hash32" },
+            "launchPlanHash": { "$ref": "#/$defs/hash32" },
+            "projectCommitment": { "$ref": "#/$defs/hash32" },
+            "marketMode": { "enum": ["NoMarket0", "Standard10"] },
+            "marketModeValue": { "enum": [0, 1] },
+            "protocolFeeBps": { "enum": [0, 10] }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "marketMode": { "const": "NoMarket0" },
+                "marketModeValue": { "const": 0 },
+                "protocolFeeBps": { "const": 0 }
+              }
+            },
+            {
+              "properties": {
+                "marketMode": { "const": "Standard10" },
+                "marketModeValue": { "const": 1 },
+                "protocolFeeBps": { "const": 10 }
+              }
+            }
+          ]
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "chainId",
+            "generation",
+            "registryAddress",
+            "registryRuntimeCodeKeccak256",
+            "registryPolicyCommitment",
+            "minimumFinalityBlocks",
+            "primaryLaunch",
+            "authorization",
+            "registration",
+            "finalization",
+            "latestCommonHead",
+            "latestCommonHeadHash",
+            "latestStatus",
+            "revokedAtBlock",
+            "revocationEvidenceHash"
+          ],
+          "properties": {
+            "chainId": { "const": "1" },
+            "generation": { "const": "2" },
+            "registryAddress": { "$ref": "#/$defs/address" },
+            "registryRuntimeCodeKeccak256": { "$ref": "#/$defs/hash32" },
+            "registryPolicyCommitment": { "$ref": "#/$defs/hash32" },
+            "minimumFinalityBlocks": { "$ref": "#/$defs/positiveDecimal" },
+            "primaryLaunch": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "transactionHash",
+                "sender",
+                "blockHash",
+                "blockNumber",
+                "transactionIndex",
+                "status"
+              ],
+              "properties": {
+                "transactionHash": { "$ref": "#/$defs/hash32" },
+                "sender": { "$ref": "#/$defs/address" },
+                "blockHash": { "$ref": "#/$defs/hash32" },
+                "blockNumber": { "$ref": "#/$defs/decimal" },
+                "transactionIndex": { "$ref": "#/$defs/decimal" },
+                "status": { "const": "success" }
+              }
+            },
+            "authorization": {
+              "$ref": "#/$defs/approvalAuthorizationEvidence"
+            },
+            "registration": {
+              "type": "array",
+              "prefixItems": [
+                { "$ref": "#/$defs/registeredEvidence" },
+                { "$ref": "#/$defs/descriptorCommittedEvidence" },
+                { "$ref": "#/$defs/descriptorEvidenceCommittedEvidence" }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "finalization": { "$ref": "#/$defs/finalizedEvidence" },
+            "latestCommonHead": { "$ref": "#/$defs/decimal" },
+            "latestCommonHeadHash": { "$ref": "#/$defs/hash32" },
+            "latestStatus": { "const": "finalized" },
+            "revokedAtBlock": { "const": "0" },
+            "revocationEvidenceHash": {
+              "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        }
+      }
+    },
+    "genericLaunchRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sourceProjection",
+        "sourceProjectionHash",
+        "readModelBindingHash",
+        "recordHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.generic-launch-record.v2" },
+        "sourceProjection": {
+          "$ref": "#/$defs/genericLaunchSourceProjection"
+        },
+        "sourceProjectionHash": { "$ref": "#/$defs/sha256" },
+        "readModelBindingHash": { "$ref": "#/$defs/sha256" },
+        "recordHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "genericLaunchFeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "records",
+        "nextCursor",
+        "total"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.generic-launch-feed.v2" },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/genericLaunchRecord" },
+          "maxItems": 100
+        },
+        "nextCursor": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,1024}$"
+            }
+          ]
+        },
+        "total": { "$ref": "#/$defs/decimal" }
+      }
+    },
+    "genericLaunchView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "record"],
+      "properties": {
+        "schemaVersion": { "const": "programmable.generic-launch-view.v2" },
+        "record": { "$ref": "#/$defs/genericLaunchRecord" }
+      }
+    },
+    "genericLaunchReadModelContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sourceLane",
+        "implementationBindingHash",
+        "persistenceBindingHash",
+        "queryContractBindingHash",
+        "approvalArtifactSchemaBindingHash",
+        "approvalReleaseBindingHash",
+        "registryProjectionBindingHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-read-model-contract.v2"
+        },
+        "sourceLane": { "const": "generic.finalized-launch-v2" },
+        "implementationBindingHash": { "$ref": "#/$defs/sha256" },
+        "persistenceBindingHash": { "$ref": "#/$defs/sha256" },
+        "queryContractBindingHash": { "$ref": "#/$defs/sha256" },
+        "approvalArtifactSchemaBindingHash": { "$ref": "#/$defs/sha256" },
+        "approvalReleaseBindingHash": { "$ref": "#/$defs/sha256" },
+        "registryProjectionBindingHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "genericLaunchReadBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activationBindingHash",
+        "activatedAt",
+        "readModelBindingHash",
+        "readModelVerifier",
+        "registryIdentity",
+        "api"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.generic-launch-read-binding.v2"
+        },
+        "activationBindingHash": { "$ref": "#/$defs/sha256" },
+        "activatedAt": { "type": "string", "format": "date-time" },
+        "readModelBindingHash": { "$ref": "#/$defs/sha256" },
+        "readModelVerifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "algorithm",
+            "publicKeySpkiBase64Url",
+            "publicKeySha256"
+          ],
+          "properties": {
+            "algorithm": { "const": "ed25519" },
+            "publicKeySpkiBase64Url": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "publicKeySha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "registryIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "chainId",
+            "generation",
+            "registryAddress",
+            "registryRuntimeCodeKeccak256",
+            "registryPolicyCommitment",
+            "minimumFinalityBlocks"
+          ],
+          "properties": {
+            "chainId": { "const": "1" },
+            "generation": { "const": "2" },
+            "registryAddress": { "$ref": "#/$defs/address" },
+            "registryRuntimeCodeKeccak256": { "$ref": "#/$defs/hash32" },
+            "registryPolicyCommitment": { "$ref": "#/$defs/hash32" },
+            "minimumFinalityBlocks": { "$ref": "#/$defs/positiveDecimal" }
+          }
+        },
+        "api": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["feedPath", "detailPathTemplate"],
+          "properties": {
+            "feedPath": {
+              "const": "/api/custom-launch/generic/v2/launches"
+            },
+            "detailPathTemplate": {
+              "const": "/api/custom-launch/generic/v2/launches/{recordHash}"
+            }
+          }
+        }
+      }
+    },
+    "signedGenericLaunchReadEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "activationBindingHash",
+        "readModelBindingHash",
+        "requestBindingHash",
+        "payload",
+        "signatureBase64Url"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.signed-generic-launch-read-envelope.v2"
+        },
+        "activationBindingHash": { "$ref": "#/$defs/sha256" },
+        "readModelBindingHash": { "$ref": "#/$defs/sha256" },
+        "requestBindingHash": { "$ref": "#/$defs/sha256" },
+        "payload": true,
+        "signatureBase64Url": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      }
+    }
+  }
+}

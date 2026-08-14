@@ -9,19 +9,20 @@ import {
   type Transport,
 } from "viem";
 
-const CACHE_SCHEMA = "programmable-rpc-log-cursor-v2";
-const CACHE_DIRECTORY = "indexes/rpc-log-cursors/v2";
+const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";
+const CACHE_DIRECTORY = "indexes/rpc-log-cursors/v4";
 const HEX_QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/iu;
+const DECIMAL = /^(?:0|[1-9]\d*)$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/iu;
 const ADDRESS = /^0x[0-9a-f]{40}$/iu;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export const PERSISTENT_RPC_CACHE_LIMITS = Object.freeze({
-  maxCursorSegments: 8,
+  maxCursorSegments: 16,
   maxSegmentBytes: 4 * 1024 * 1024,
   maxCursorBytes: 64 * 1024,
   maxRuntimeBytes: 256 * 1024,
-  maxSegmentReadsPerOperation: 8,
+  maxSegmentReadsPerOperation: 16,
 });
 
 type JsonRpcRequest = Parameters<EIP1193RequestFn>[0];
@@ -61,6 +62,33 @@ type LogCursorPayload = Readonly<{
   cursorBlockHash: string;
   integrityCommitId?: string;
   segments: readonly LogSegment[];
+}>;
+
+type CursorReference = Readonly<{
+  path: string;
+  contentHash: string;
+}>;
+
+type IntegrityCheckpointHeadPayload = Readonly<{
+  chainId: number;
+  checkpointGroupId: string;
+  integrityCommitId: string;
+  previousIntegrityCommitId: string | null;
+}>;
+
+type IntegrityCheckpointWindow = Readonly<{
+  fromBlock: string;
+  toBlock: string;
+  boundaryBlockHash: string;
+}>;
+
+type IntegrityCursorBinding = Readonly<{
+  providerId: string;
+  streamId: string;
+  streamIdentity: string;
+  cursorKey: string;
+  cursorPath: string;
+  cursorContentHash: string;
 }>;
 
 type LogSegmentPayload = Readonly<{
@@ -236,15 +264,35 @@ function streamId(input: PersistentRequestInput, filter: LogFilter) {
   });
 }
 
-function cursorPath(input: PersistentRequestInput, id: string) {
-  return `${CACHE_DIRECTORY}/${input.chainId}/${input.providerId}/${id}/cursor.json`;
+function streamIdentity(input: PersistentRequestInput, filter: LogFilter) {
+  return digest({
+    schemaVersion: CACHE_SCHEMA,
+    chainId: input.chainId,
+    filter: normalizedStreamFilter(filter),
+  });
+}
+
+function cursorKey(input: PersistentRequestInput, id: string) {
+  return `${input.providerId}:${id}`;
+}
+
+function checkpointHeadPath(chainId: number, checkpointGroupId: string) {
+  return `${CACHE_DIRECTORY}/${chainId}/checkpoints/${checkpointGroupId}.json`;
 }
 
 function integrityCommitPath(
-  input: PersistentRequestInput,
+  chainId: number,
   integrityCommitId: string,
 ) {
-  return `${CACHE_DIRECTORY}/${input.chainId}/${input.providerId}/integrity/${integrityCommitId}.json`;
+  return `${CACHE_DIRECTORY}/${chainId}/integrity/${integrityCommitId}.json`;
+}
+
+function cursorVersionPath(
+  input: PersistentRequestInput,
+  id: string,
+  contentHash: string,
+) {
+  return `${CACHE_DIRECTORY}/${input.chainId}/${input.providerId}/${id}/cursors/${contentHash}.json`;
 }
 
 function segmentPath(
@@ -355,6 +403,39 @@ function parseCursor(
     "cursor",
   );
   return cursor;
+}
+
+function parseCheckpointHead(
+  value: unknown,
+  chainId: number,
+  checkpointGroupId: string,
+) {
+  const payload = unwrapEnvelope(value);
+  if (
+    !isRecord(payload) ||
+    payload.chainId !== chainId ||
+    payload.checkpointGroupId !== checkpointGroupId ||
+    typeof payload.integrityCommitId !== "string" ||
+    !UUID.test(payload.integrityCommitId) ||
+    (payload.previousIntegrityCommitId !== null &&
+      (typeof payload.previousIntegrityCommitId !== "string" ||
+        !UUID.test(payload.previousIntegrityCommitId) ||
+        payload.previousIntegrityCommitId === payload.integrityCommitId))
+  ) {
+    fail("Persistent RPC integrity checkpoint is invalid");
+  }
+  const head: IntegrityCheckpointHeadPayload = {
+    chainId,
+    checkpointGroupId,
+    integrityCommitId: payload.integrityCommitId,
+    previousIntegrityCommitId: payload.previousIntegrityCommitId as string | null,
+  };
+  assertByteLimit(
+    envelope(head),
+    PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
+    "integrity checkpoint",
+  );
+  return head;
 }
 
 function allowedAddresses(filter: LogFilter) {
@@ -534,12 +615,31 @@ type IntegrityScope = {
   phase: "open" | "finalizing" | "closed";
   bindings: Map<string, IntegrityScopeBinding>;
   prechecks: Map<string, Promise<void>>;
+  expectedCursorBindings?: number;
+  expectedProviderCount?: number;
+  expectedStreamsPerProvider?: number;
+  requireCheckpointWindow: boolean;
+  requiredInitialFromBlock?: string;
+  requireContiguousCheckpointWindow: boolean;
+  allowCheckpointWindowExtension: boolean;
+  checkpointGroupId: string;
+  checkpointWindow?: IntegrityCheckpointWindow;
+  cursorDrafts: Map<string, CursorReference>;
+  checkpoint?: Readonly<{
+    store: PersistentRpcCacheStore;
+    chainId: number;
+    path: string;
+    etag: string | null;
+    pointedIntegrityCommitId: string | null;
+    integrityCommitId: string | null;
+    checkpointWindow: IntegrityCheckpointWindow | null;
+  }>;
   persistenceBindings: Array<
-    Readonly<{
+    {
       input: PersistentRequestInput;
       store: PersistentRpcCacheStore;
-      cursorDigests: Set<string>;
-    }>
+      cursors: Map<string, IntegrityCursorBinding>;
+    }
   >;
 };
 
@@ -565,59 +665,111 @@ function integrityProofKey(input: PersistentRequestInput, blockNumber: bigint) {
 type IntegrityMarkerStatus = "pending" | "committed" | "aborted";
 
 function integrityMarker(
-  input: PersistentRequestInput,
+  chainId: number,
+  checkpointGroupId: string,
   integrityCommitId: string,
   status: IntegrityMarkerStatus,
-  cursorDigests: ReadonlySet<string>,
+  previousIntegrityCommitId: string | null,
+  checkpointWindow: IntegrityCheckpointWindow | null,
+  cursors: readonly IntegrityCursorBinding[],
 ) {
   return envelope({
-    chainId: input.chainId,
-    providerId: input.providerId,
+    chainId,
+    checkpointGroupId,
     integrityCommitId,
     status,
-    cursorDigests: [...cursorDigests].sort(),
+    previousIntegrityCommitId,
+    checkpointWindow,
+    cursors: [...cursors].sort((left, right) =>
+      left.cursorPath.localeCompare(right.cursorPath)
+    ),
   });
 }
 
 function parseIntegrityMarker(
   value: unknown,
-  input: PersistentRequestInput,
+  chainId: number,
+  checkpointGroupId: string,
   integrityCommitId: string,
 ) {
   const payload = unwrapEnvelope(value);
   if (
     !isRecord(payload) ||
-    payload.chainId !== input.chainId ||
-    payload.providerId !== input.providerId ||
+    payload.chainId !== chainId ||
+    payload.checkpointGroupId !== checkpointGroupId ||
     payload.integrityCommitId !== integrityCommitId ||
     (payload.status !== "pending" &&
       payload.status !== "committed" &&
       payload.status !== "aborted") ||
-    !Array.isArray(payload.cursorDigests) ||
-    payload.cursorDigests.length === 0 ||
-    payload.cursorDigests.length > 128 ||
-    payload.cursorDigests.some(
-      (candidate) =>
-        typeof candidate !== "string" || !/^[0-9a-f]{64}$/u.test(candidate),
-    ) ||
-    new Set(payload.cursorDigests).size !== payload.cursorDigests.length
+    (payload.previousIntegrityCommitId !== null &&
+      (typeof payload.previousIntegrityCommitId !== "string" ||
+        !UUID.test(payload.previousIntegrityCommitId))) ||
+    (payload.checkpointWindow !== null &&
+      (!isRecord(payload.checkpointWindow) ||
+        typeof payload.checkpointWindow.fromBlock !== "string" ||
+        !DECIMAL.test(payload.checkpointWindow.fromBlock) ||
+        typeof payload.checkpointWindow.toBlock !== "string" ||
+        !DECIMAL.test(payload.checkpointWindow.toBlock) ||
+        BigInt(payload.checkpointWindow.fromBlock) >
+          BigInt(payload.checkpointWindow.toBlock) ||
+        typeof payload.checkpointWindow.boundaryBlockHash !== "string" ||
+        !BYTES32.test(payload.checkpointWindow.boundaryBlockHash))) ||
+    !Array.isArray(payload.cursors) ||
+    payload.cursors.length === 0 ||
+    payload.cursors.length > 32
   ) {
     fail("Persistent RPC integrity commit is invalid");
   }
+  const cursors = new Map<string, IntegrityCursorBinding>();
+  for (const candidate of payload.cursors) {
+    if (
+      !isRecord(candidate) ||
+      typeof candidate.providerId !== "string" ||
+      candidate.providerId.length < 1 ||
+      typeof candidate.streamId !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(candidate.streamId) ||
+      typeof candidate.streamIdentity !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(candidate.streamIdentity) ||
+      typeof candidate.cursorKey !== "string" ||
+      candidate.cursorKey !== `${candidate.providerId}:${candidate.streamId}` ||
+      typeof candidate.cursorPath !== "string" ||
+      !candidate.cursorPath.startsWith(
+        `${CACHE_DIRECTORY}/${chainId}/${candidate.providerId}/${candidate.streamId}/cursors/`,
+      ) ||
+      typeof candidate.cursorContentHash !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(candidate.cursorContentHash) ||
+      cursors.has(candidate.cursorKey)
+    ) {
+      fail("Persistent RPC integrity commit cursor binding is invalid");
+    }
+    cursors.set(candidate.cursorKey, {
+      providerId: candidate.providerId,
+      streamId: candidate.streamId,
+      streamIdentity: candidate.streamIdentity,
+      cursorKey: candidate.cursorKey,
+      cursorPath: candidate.cursorPath,
+      cursorContentHash: candidate.cursorContentHash,
+    });
+  }
   return {
     status: payload.status,
-    cursorDigests: new Set(payload.cursorDigests as string[]),
+    previousIntegrityCommitId: payload.previousIntegrityCommitId as string | null,
+    checkpointWindow: payload.checkpointWindow as IntegrityCheckpointWindow | null,
+    cursors,
   };
 }
 
 async function transitionIntegrityMarker(
-  input: PersistentRequestInput,
+  chainId: number,
+  checkpointGroupId: string,
   store: PersistentRpcCacheStore,
   integrityCommitId: string,
   status: Exclude<IntegrityMarkerStatus, "pending">,
-  cursorDigests: ReadonlySet<string>,
+  previousIntegrityCommitId: string | null,
+  checkpointWindow: IntegrityCheckpointWindow | null,
+  cursors: readonly IntegrityCursorBinding[],
 ) {
-  const path = integrityCommitPath(input, integrityCommitId);
+  const path = integrityCommitPath(chainId, integrityCommitId);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const record = await store.read(path);
     if (!record) {
@@ -626,13 +778,18 @@ async function transitionIntegrityMarker(
     }
     const current = parseIntegrityMarker(
       record.value,
-      input,
+      chainId,
+      checkpointGroupId,
       integrityCommitId,
     );
+    const expected = new Map(cursors.map((candidate) => [candidate.cursorKey, candidate]));
     if (
-      current.cursorDigests.size !== cursorDigests.size ||
-      [...cursorDigests].some(
-        (candidate) => !current.cursorDigests.has(candidate),
+      current.previousIntegrityCommitId !== previousIntegrityCommitId ||
+      canonicalJson(current.checkpointWindow) !== canonicalJson(checkpointWindow) ||
+      current.cursors.size !== expected.size ||
+      [...expected].some(
+        ([pathKey, binding]) =>
+          canonicalJson(current.cursors.get(pathKey)) !== canonicalJson(binding),
       )
     ) {
       fail("Persistent RPC integrity commit cursor set changed");
@@ -647,10 +804,13 @@ async function transitionIntegrityMarker(
       fail("Persistent RPC integrity commit cannot be promoted");
     }
     const marker = integrityMarker(
-      input,
+      chainId,
+      checkpointGroupId,
       integrityCommitId,
       status,
-      cursorDigests,
+      previousIntegrityCommitId,
+      checkpointWindow,
+      cursors,
     );
     assertByteLimit(
       marker,
@@ -748,22 +908,102 @@ async function registerScopedBlockProofs(
   return true;
 }
 
+export function bindPersistentRpcIntegrityCheckpointWindow(
+  input: Readonly<{
+    fromBlock: bigint;
+    toBlock: bigint;
+    boundaryBlockHash: string;
+  }>,
+) {
+  const scope = integrityScopes.getStore();
+  if (!scope || scope.phase !== "open") {
+    fail("Persistent RPC checkpoint window requires an open integrity scope");
+  }
+  if (input.fromBlock > input.toBlock) {
+    fail("Persistent RPC checkpoint window is inverted");
+  }
+  const checkpointWindow: IntegrityCheckpointWindow = {
+    fromBlock: input.fromBlock.toString(),
+    toBlock: input.toBlock.toString(),
+    boundaryBlockHash: requireBytes32(
+      input.boundaryBlockHash,
+      "checkpoint boundary block hash",
+    ),
+  };
+  if (
+    scope.checkpointWindow &&
+    canonicalJson(scope.checkpointWindow) !== canonicalJson(checkpointWindow)
+  ) {
+    fail("Persistent RPC integrity scope has conflicting checkpoint windows");
+  }
+  scope.checkpointWindow = checkpointWindow;
+}
+
 export async function withPersistentRpcIntegrityScope<T>(
   operation: () => Promise<T>,
+  input: Readonly<{
+    checkpointGroup?: string;
+    expectedCursorBindings?: number;
+    expectedProviderCount?: number;
+    expectedStreamsPerProvider?: number;
+    requireCheckpointWindow?: boolean;
+    requiredInitialFromBlock?: bigint;
+    requireContiguousCheckpointWindow?: boolean;
+    allowCheckpointWindowExtension?: boolean;
+    signal?: AbortSignal;
+  }> = {},
 ) {
   if (integrityScopes.getStore()) return operation();
+  for (const value of [
+    input.expectedCursorBindings,
+    input.expectedProviderCount,
+    input.expectedStreamsPerProvider,
+  ]) {
+    if (
+      value !== undefined &&
+      (!Number.isSafeInteger(value) || value < 1 || value > 32)
+    ) {
+      fail("Persistent RPC integrity scope expectation is invalid");
+    }
+  }
+  if (
+    input.expectedCursorBindings !== undefined &&
+    input.expectedProviderCount !== undefined &&
+    input.expectedStreamsPerProvider !== undefined &&
+    input.expectedProviderCount * input.expectedStreamsPerProvider !==
+      input.expectedCursorBindings
+  ) {
+    fail("Persistent RPC integrity scope expectations disagree");
+  }
   const scope: IntegrityScope = {
     id: nextIntegrityScopeId,
     commitId: randomUUID(),
     phase: "open",
     bindings: new Map(),
     prechecks: new Map(),
+    expectedCursorBindings: input.expectedCursorBindings,
+    expectedProviderCount: input.expectedProviderCount,
+    expectedStreamsPerProvider: input.expectedStreamsPerProvider,
+    requireCheckpointWindow: input.requireCheckpointWindow === true,
+    ...(input.requiredInitialFromBlock !== undefined
+      ? { requiredInitialFromBlock: input.requiredInitialFromBlock.toString() }
+      : {}),
+    requireContiguousCheckpointWindow:
+      input.requireContiguousCheckpointWindow === true,
+    allowCheckpointWindowExtension:
+      input.allowCheckpointWindowExtension === true,
+    checkpointGroupId: digest({
+      checkpointGroup: input.checkpointGroup ?? "isolated",
+    }),
+    cursorDrafts: new Map(),
     persistenceBindings: [],
   };
   nextIntegrityScopeId += 1;
   return integrityScopes.run(scope, async () => {
     try {
+      input.signal?.throwIfAborted();
       const result = await operation();
+      input.signal?.throwIfAborted();
       scope.phase = "finalizing";
       const finalBindings = [...scope.bindings.entries()];
       const commitProofKeys = new Set<string>();
@@ -785,65 +1025,249 @@ export async function withPersistentRpcIntegrityScope<T>(
       }
       for (const [key, binding] of finalBindings) {
         if (commitProofKeys.has(key)) continue;
+        input.signal?.throwIfAborted();
         await assertCanonicalBlockProofs(
           binding.input,
           [binding.proof],
           binding.options,
         );
+        input.signal?.throwIfAborted();
       }
-      try {
-        for (const { input, store, cursorDigests } of scope.persistenceBindings) {
-          const path = integrityCommitPath(input, scope.commitId);
-          const marker = integrityMarker(
-            input,
-            scope.commitId,
-            "pending",
-            cursorDigests,
+      const persistence = scope.persistenceBindings[0];
+      if (!persistence) return result;
+      const cursorBindings = scope.persistenceBindings.flatMap(
+        (binding) => [...binding.cursors.values()],
+      );
+      if (
+        scope.expectedCursorBindings !== undefined &&
+        cursorBindings.length !== scope.expectedCursorBindings
+      ) {
+        fail("Persistent RPC integrity scope has incomplete cursor coverage");
+      }
+      const providerStreams = new Map<string, Set<string>>();
+      for (const binding of cursorBindings) {
+        const streams = providerStreams.get(binding.providerId) ?? new Set();
+        streams.add(binding.streamIdentity);
+        providerStreams.set(binding.providerId, streams);
+      }
+      if (
+        scope.expectedProviderCount !== undefined &&
+        providerStreams.size !== scope.expectedProviderCount
+      ) {
+        fail("Persistent RPC integrity scope has incomplete provider coverage");
+      }
+      if (
+        scope.expectedStreamsPerProvider !== undefined &&
+        [...providerStreams.values()].some(
+          (streams) => streams.size !== scope.expectedStreamsPerProvider,
+        )
+      ) {
+        fail("Persistent RPC integrity scope has incomplete stream coverage");
+      }
+      const canonicalStreams = [...providerStreams.values()][0];
+      if (
+        canonicalStreams &&
+        [...providerStreams.values()].some(
+          (streams) =>
+            streams.size !== canonicalStreams.size ||
+            [...canonicalStreams].some((stream) => !streams.has(stream)),
+        )
+      ) {
+        fail("Persistent RPC providers do not cover the same event streams");
+      }
+      if (scope.requireCheckpointWindow && !scope.checkpointWindow) {
+        fail("Persistent RPC integrity scope has no checkpoint window");
+      }
+      if (scope.checkpointWindow) {
+        const previousWindow = scope.checkpoint?.checkpointWindow ?? null;
+        if (
+          previousWindow === null &&
+          scope.requiredInitialFromBlock !== undefined &&
+          scope.checkpointWindow.fromBlock !== scope.requiredInitialFromBlock
+        ) {
+          fail("Persistent RPC checkpoint baseline does not start at its release boundary");
+        }
+        if (
+          previousWindow !== null &&
+          scope.requireContiguousCheckpointWindow &&
+          BigInt(scope.checkpointWindow.fromBlock) !==
+            BigInt(previousWindow.toBlock) + 1n
+        ) {
+          const previousToBlock = BigInt(previousWindow.toBlock);
+          const requestedFromBlock = BigInt(scope.checkpointWindow.fromBlock);
+          const requestedToBlock = BigInt(scope.checkpointWindow.toBlock);
+          if (
+            !scope.allowCheckpointWindowExtension ||
+            requestedFromBlock > previousToBlock ||
+            requestedToBlock <= previousToBlock
+          ) {
+            fail("Persistent RPC checkpoint window is not contiguous with its committed baseline");
+          }
+          scope.checkpointWindow = {
+            ...scope.checkpointWindow,
+            fromBlock: (previousToBlock + 1n).toString(),
+          };
+        }
+      }
+      if (scope.checkpointWindow) {
+        for (const binding of cursorBindings) {
+          const requestInput = scope.persistenceBindings.find(
+            (candidate) => candidate.input.providerId === binding.providerId,
+          )?.input;
+          input.signal?.throwIfAborted();
+          const cursorRecord = await persistence.store.read(binding.cursorPath);
+          input.signal?.throwIfAborted();
+          if (!requestInput || !cursorRecord) {
+            fail("Persistent RPC checkpoint cursor is missing");
+          }
+          const cursor = parseCursor(
+            cursorRecord.value,
+            requestInput,
+            binding.streamId,
           );
-          assertByteLimit(
-            marker,
-            PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
-            "integrity commit",
-          );
-          const created = await store.create(path, marker);
-          if (created !== "created") {
-            const record = await store.read(path);
+          if (scope.requiredInitialFromBlock !== undefined) {
+            let nextCoveredBlock = BigInt(scope.requiredInitialFromBlock);
+            for (const segment of cursor.segments) {
+              if (BigInt(segment.fromBlock) !== nextCoveredBlock) {
+                fail("Persistent RPC checkpoint cursor has incomplete historical coverage");
+              }
+              nextCoveredBlock = BigInt(segment.toBlock) + 1n;
+            }
             if (
-              !record ||
-              parseIntegrityMarker(record.value, input, scope.commitId).status !==
-                "pending"
+              nextCoveredBlock !== BigInt(scope.checkpointWindow.toBlock) + 1n
             ) {
-              fail("Persistent RPC integrity commit already exists");
+              fail("Persistent RPC checkpoint cursor has incomplete historical coverage");
             }
           }
+          if (
+            BigInt(cursor.cursorBlock) !==
+              BigInt(scope.checkpointWindow.toBlock) ||
+            cursor.cursorBlockHash.toLowerCase() !==
+              scope.checkpointWindow.boundaryBlockHash.toLowerCase()
+          ) {
+            fail(
+              `Persistent RPC checkpoint cursors do not share its boundary: expected ${scope.checkpointWindow.toBlock}:${scope.checkpointWindow.boundaryBlockHash}, received ${cursor.cursorBlock}:${cursor.cursorBlockHash}`,
+            );
+          }
         }
-        for (const { input, store, cursorDigests } of scope.persistenceBindings) {
-          await transitionIntegrityMarker(
-            input,
-            store,
-            scope.commitId,
-            "committed",
-            cursorDigests,
-          );
+      }
+      const path = integrityCommitPath(
+        persistence.input.chainId,
+        scope.commitId,
+      );
+      try {
+        const marker = integrityMarker(
+          persistence.input.chainId,
+          scope.checkpointGroupId,
+          scope.commitId,
+          "pending",
+          scope.checkpoint?.integrityCommitId ?? null,
+          scope.checkpointWindow ?? null,
+          cursorBindings,
+        );
+        assertByteLimit(
+          marker,
+          PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
+          "integrity commit",
+        );
+        input.signal?.throwIfAborted();
+        const created = await persistence.store.create(path, marker);
+        input.signal?.throwIfAborted();
+        if (created !== "created") {
+          const record = await persistence.store.read(path);
+          input.signal?.throwIfAborted();
+          const existing = record
+            ? parseIntegrityMarker(
+                record.value,
+                persistence.input.chainId,
+                scope.checkpointGroupId,
+                scope.commitId,
+              )
+            : null;
+          if (
+            !existing ||
+            existing.status !== "pending" ||
+            existing.previousIntegrityCommitId !==
+              (scope.checkpoint?.integrityCommitId ?? null) ||
+            canonicalJson(existing.checkpointWindow) !==
+              canonicalJson(scope.checkpointWindow ?? null) ||
+            existing.cursors.size !== cursorBindings.length ||
+            cursorBindings.some(
+              (binding) =>
+                canonicalJson(existing.cursors.get(binding.cursorKey)) !==
+                canonicalJson(binding),
+            )
+          ) {
+            fail("Persistent RPC integrity commit already exists");
+          }
+        }
+        const checkpoint = scope.checkpoint;
+        if (
+          !checkpoint ||
+          checkpoint.store !== persistence.store ||
+          checkpoint.chainId !== persistence.input.chainId
+        ) {
+          fail("Persistent RPC integrity scope has no stable checkpoint base");
+        }
+        const nextCheckpoint = envelope({
+          chainId: checkpoint.chainId,
+          checkpointGroupId: scope.checkpointGroupId,
+          integrityCommitId: scope.commitId,
+          previousIntegrityCommitId: checkpoint.integrityCommitId,
+        } satisfies IntegrityCheckpointHeadPayload);
+        assertByteLimit(
+          nextCheckpoint,
+          PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
+          "integrity checkpoint",
+        );
+        input.signal?.throwIfAborted();
+        const published = checkpoint.etag === null
+          ? await checkpoint.store.create(checkpoint.path, nextCheckpoint)
+          : await checkpoint.store.replace(
+              checkpoint.path,
+              nextCheckpoint,
+              checkpoint.etag,
+            );
+        input.signal?.throwIfAborted();
+        if (
+          (checkpoint.etag === null && published !== "created") ||
+          (checkpoint.etag !== null && published !== "replaced")
+        ) {
+          fail("Persistent RPC integrity checkpoint publish conflicted");
         }
         for (const [key, binding] of finalBindings) {
           if (!commitProofKeys.has(key)) continue;
+          input.signal?.throwIfAborted();
           await assertCanonicalBlockProofs(
             binding.input,
             [binding.proof],
             binding.options,
           );
+          input.signal?.throwIfAborted();
         }
+        input.signal?.throwIfAborted();
+        await transitionIntegrityMarker(
+          persistence.input.chainId,
+          scope.checkpointGroupId,
+          persistence.store,
+          scope.commitId,
+          "committed",
+          scope.checkpoint?.integrityCommitId ?? null,
+          scope.checkpointWindow ?? null,
+          cursorBindings,
+        );
+        input.signal?.throwIfAborted();
       } catch (error) {
-        for (const { input, store, cursorDigests } of scope.persistenceBindings) {
-          await transitionIntegrityMarker(
-            input,
-            store,
-            scope.commitId,
-            "aborted",
-            cursorDigests,
-          );
-        }
+        await transitionIntegrityMarker(
+          persistence.input.chainId,
+          scope.checkpointGroupId,
+          persistence.store,
+          scope.commitId,
+          "aborted",
+          scope.checkpoint?.integrityCommitId ?? null,
+          scope.checkpointWindow ?? null,
+          cursorBindings,
+        );
         throw error;
       }
       return result;
@@ -983,39 +1407,216 @@ function logsInRequestedRange(
   });
 }
 
+function recordScopedCursorPersistence(
+  store: PersistentRpcCacheStore,
+  input: PersistentRequestInput,
+  binding: IntegrityCursorBinding,
+) {
+  const scope = integrityScopes.getStore();
+  if (!scope) {
+    fail("Persistent RPC cursor persistence requires an integrity scope");
+  }
+  if (scope.phase !== "open") {
+    fail("Persistent RPC integrity scope is already sealed");
+  }
+  const existing = scope.persistenceBindings.find(
+    (candidate) =>
+      candidate.store === store &&
+      candidate.input === input,
+  );
+  if (existing) {
+    existing.cursors.set(binding.cursorKey, binding);
+    return;
+  }
+  if (
+    scope.persistenceBindings.some(
+      (candidate) =>
+        candidate.input.chainId !== input.chainId ||
+        candidate.store !== store,
+    )
+  ) {
+    fail("Persistent RPC integrity scope cannot span chains or stores");
+  }
+  scope.persistenceBindings.push({
+    input,
+    store,
+    cursors: new Map([[binding.cursorKey, binding]]),
+  });
+}
+
 async function loadCursor(
   store: PersistentRpcCacheStore,
   input: PersistentRequestInput,
   id: string,
-  acceptedIntegrityCommitId?: string,
+  filter: LogFilter,
 ) {
-  const path = cursorPath(input, id);
-  const record = await store.read(path);
-  if (!record) return { path, etag: null, cursor: null };
-  const cursor = parseCursor(record.value, input, id);
+  const scope = integrityScopes.getStore();
+  const key = cursorKey(input, id);
   if (
-    cursor.integrityCommitId &&
-    cursor.integrityCommitId !== acceptedIntegrityCommitId
+    scope?.checkpoint &&
+    (scope.checkpoint.store !== store ||
+      scope.checkpoint.chainId !== input.chainId)
   ) {
-    const commit = await store.read(
-      integrityCommitPath(input, cursor.integrityCommitId),
-    );
-    if (!commit) {
-      return { path, etag: record.etag, cursor: null };
+    fail("Persistent RPC integrity scope cannot span chains or stores");
+  }
+  const draft = scope?.cursorDrafts.get(key);
+  if (draft) {
+    const cursorRecord = await store.read(draft.path);
+    if (!cursorRecord || digest(cursorRecord.value) !== draft.contentHash) {
+      fail("Persistent RPC draft cursor binding is invalid");
     }
-    const marker = parseIntegrityMarker(
-      commit.value,
-      input,
-      cursor.integrityCommitId,
+    return {
+      cursor: parseCursor(cursorRecord.value, input, id),
+      reference: draft,
+    };
+  }
+
+  const path = checkpointHeadPath(
+    input.chainId,
+    scope?.checkpointGroupId ?? digest({ cursorKey: key }),
+  );
+  const record = await store.read(path);
+  const checkpointGroupId = scope?.checkpointGroupId ?? digest({ cursorKey: key });
+  const head = record
+    ? parseCheckpointHead(record.value, input.chainId, checkpointGroupId)
+    : null;
+  if (!head) {
+    if (scope) {
+      if (scope.checkpoint) {
+        if (
+          scope.checkpoint.store !== store ||
+          scope.checkpoint.chainId !== input.chainId ||
+          scope.checkpoint.etag !== null ||
+          scope.checkpoint.pointedIntegrityCommitId !== null ||
+          scope.checkpoint.integrityCommitId !== null
+        ) {
+          fail("Persistent RPC integrity scope checkpoint changed during its read");
+        }
+      } else {
+        scope.checkpoint = {
+          store,
+          chainId: input.chainId,
+          path,
+          etag: null,
+          pointedIntegrityCommitId: null,
+          integrityCommitId: null,
+          checkpointWindow: null,
+        };
+      }
+    }
+    return { cursor: null };
+  }
+  const pointedCommit = await store.read(
+    integrityCommitPath(input.chainId, head.integrityCommitId),
+  );
+  if (!pointedCommit) fail("Persistent RPC integrity checkpoint marker is missing");
+  const pointedMarker = parseIntegrityMarker(
+    pointedCommit.value,
+    input.chainId,
+    checkpointGroupId,
+    head.integrityCommitId,
+  );
+  if (pointedMarker.previousIntegrityCommitId !== head.previousIntegrityCommitId) {
+    fail("Persistent RPC checkpoint lineage is invalid");
+  }
+  let acceptedIntegrityCommitId: string | null = head.integrityCommitId;
+  let marker = pointedMarker;
+  if (pointedMarker.status !== "committed") {
+    acceptedIntegrityCommitId = head.previousIntegrityCommitId;
+    if (acceptedIntegrityCommitId === null) {
+      if (scope) {
+        const nextCheckpoint = {
+          store,
+          chainId: input.chainId,
+          path,
+          etag: record?.etag ?? null,
+          pointedIntegrityCommitId: head.integrityCommitId,
+          integrityCommitId: null,
+          checkpointWindow: null,
+        };
+        if (
+          scope.checkpoint &&
+          (scope.checkpoint.store !== nextCheckpoint.store ||
+            scope.checkpoint.chainId !== nextCheckpoint.chainId ||
+            scope.checkpoint.path !== nextCheckpoint.path ||
+            scope.checkpoint.etag !== nextCheckpoint.etag ||
+            scope.checkpoint.pointedIntegrityCommitId !==
+              nextCheckpoint.pointedIntegrityCommitId ||
+            scope.checkpoint.integrityCommitId !== null)
+        ) {
+          fail("Persistent RPC integrity scope checkpoint changed during its read");
+        }
+        scope.checkpoint = nextCheckpoint;
+      }
+      return { cursor: null };
+    }
+    const previousCommit = await store.read(
+      integrityCommitPath(input.chainId, acceptedIntegrityCommitId),
     );
-    if (
-      marker.status !== "committed" ||
-      !marker.cursorDigests.has(digest(record.value))
-    ) {
-      return { path, etag: record.etag, cursor: null };
+    if (!previousCommit) {
+      fail("Persistent RPC previous checkpoint marker is missing");
+    }
+    marker = parseIntegrityMarker(
+      previousCommit.value,
+      input.chainId,
+      checkpointGroupId,
+      acceptedIntegrityCommitId,
+    );
+    if (marker.status !== "committed") {
+      fail("Persistent RPC previous checkpoint is not committed");
     }
   }
-  return { path, etag: record.etag, cursor };
+  if (scope) {
+    if (scope.checkpoint) {
+      if (
+        scope.checkpoint.store !== store ||
+        scope.checkpoint.chainId !== input.chainId ||
+        scope.checkpoint.etag !== (record?.etag ?? null) ||
+        scope.checkpoint.pointedIntegrityCommitId !== head.integrityCommitId ||
+        scope.checkpoint.integrityCommitId !== acceptedIntegrityCommitId
+      ) {
+        fail("Persistent RPC integrity scope checkpoint changed during its read");
+      }
+    } else {
+      scope.checkpoint = {
+        store,
+        chainId: input.chainId,
+        path,
+        etag: record?.etag ?? null,
+        pointedIntegrityCommitId: head.integrityCommitId,
+        integrityCommitId: acceptedIntegrityCommitId,
+        checkpointWindow: marker.checkpointWindow,
+      };
+    }
+  }
+  const binding = marker.cursors.get(key);
+  if (
+    marker.status !== "committed" ||
+    !binding ||
+    binding.providerId !== input.providerId ||
+    binding.streamId !== id ||
+    binding.streamIdentity !== streamIdentity(input, filter)
+  ) {
+    fail("Persistent RPC integrity checkpoint cursor binding is missing");
+  }
+  const cursorRecord = await store.read(binding.cursorPath);
+  if (
+    !cursorRecord ||
+    digest(cursorRecord.value) !== binding.cursorContentHash
+  ) {
+    fail("Persistent RPC integrity checkpoint cursor is invalid");
+  }
+  const cursor = parseCursor(cursorRecord.value, input, id);
+  if (cursor.integrityCommitId !== acceptedIntegrityCommitId) {
+    fail("Persistent RPC cursor is bound to the wrong integrity checkpoint");
+  }
+  return {
+    cursor,
+    reference: {
+      path: binding.cursorPath,
+      contentHash: binding.cursorContentHash,
+    },
+  };
 }
 
 async function assertCanonicalCursor(
@@ -1215,6 +1816,7 @@ async function persistSegment(
   logs: readonly unknown[],
 ) {
   const integrityScope = integrityScopes.getStore();
+  const key = cursorKey(input, id);
   const descriptor = await createSegment(
     store,
     input,
@@ -1226,103 +1828,90 @@ async function persistSegment(
     logs,
   );
 
-  const recordScopedPersistence = (cursorDigest: string) => {
-    if (!integrityScope) return;
-    if (integrityScope.phase !== "open") {
-      fail("Persistent RPC integrity scope is already sealed");
-    }
-    const exists = integrityScope.persistenceBindings.some(
-      (binding) =>
-        binding.store === store &&
-        binding.input === input,
+  const current = integrityScope?.cursorDrafts.has(key)
+    ? await loadCursor(store, input, id, filter)
+    : loaded;
+  if (current.cursor) {
+    const exact = current.cursor.segments.find(
+      (candidate) =>
+        BigInt(candidate.fromBlock) === fromBlock &&
+        BigInt(candidate.toBlock) === toBlock,
     );
-    if (exists) {
-      integrityScope.persistenceBindings[0]?.cursorDigests.add(cursorDigest);
-      return;
-    }
-    if (integrityScope.persistenceBindings.length !== 0) {
-      fail("Persistent RPC integrity scope cannot span request/store domains");
-    }
-    integrityScope.persistenceBindings.push({
-      input,
-      store,
-      cursorDigests: new Set([cursorDigest]),
-    });
-  };
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const current = attempt === 0
-      ? loaded
-      : await loadCursor(store, input, id, integrityScope?.commitId);
-    if (current.cursor) {
-      const exact = current.cursor.segments.find(
-        (candidate) =>
-          BigInt(candidate.fromBlock) === fromBlock &&
-          BigInt(candidate.toBlock) === toBlock,
-      );
-      if (exact) {
-        if (
-          exact.contentHash !== descriptor.contentHash ||
-          exact.blockHash.toLowerCase() !== descriptor.blockHash.toLowerCase()
-        ) {
-          fail("Persistent RPC log segment range changed content");
-        }
-        return;
-      }
+    if (exact) {
       if (
-        current.cursor.segments.some(
-          (candidate) =>
-            fromBlock <= BigInt(candidate.toBlock) &&
-            toBlock >= BigInt(candidate.fromBlock),
-        )
+        exact.contentHash !== descriptor.contentHash ||
+        exact.blockHash.toLowerCase() !== descriptor.blockHash.toLowerCase()
       ) {
-        fail("Persistent RPC log segment overlaps concurrent coverage");
+        fail("Persistent RPC log segment range changed content");
       }
-    }
-    const segments = await compactSegments(
-      store,
-      input,
-      id,
-      filter,
-      [...(current.cursor?.segments ?? []), descriptor],
-    );
-    const first = segments[0] as LogSegment;
-    const last = segments.at(-1) as LogSegment;
-    const next: LogCursorPayload = {
-      chainId: input.chainId,
-      providerId: input.providerId,
-      streamId: id,
-      startBlock: first.fromBlock,
-      cursorBlock: last.toBlock,
-      cursorBlockHash: last.blockHash,
-      ...(integrityScope
-        ? { integrityCommitId: integrityScope.commitId }
-        : {}),
-      segments,
-    };
-    const nextEnvelope = envelope(next);
-    assertByteLimit(
-      nextEnvelope,
-      PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
-      "cursor",
-    );
-    if (current.etag === null) {
-      if (await store.create(current.path, nextEnvelope) === "created") {
-        recordScopedPersistence(digest(nextEnvelope));
-        return;
-      }
-    } else if (
-      await store.replace(current.path, nextEnvelope, current.etag) ===
-        "replaced"
-    ) {
-      recordScopedPersistence(digest(nextEnvelope));
       return;
+    }
+    if (
+      current.cursor.segments.some(
+        (candidate) =>
+          fromBlock <= BigInt(candidate.toBlock) &&
+          toBlock >= BigInt(candidate.fromBlock),
+      )
+    ) {
+      fail("Persistent RPC log segment overlaps concurrent coverage");
     }
   }
-  fail("Persistent RPC log cursor advance conflicted repeatedly");
+  const segments = await compactSegments(
+    store,
+    input,
+    id,
+    filter,
+    [...(current.cursor?.segments ?? []), descriptor],
+  );
+  const first = segments[0] as LogSegment;
+  const last = segments.at(-1) as LogSegment;
+  const next: LogCursorPayload = {
+    chainId: input.chainId,
+    providerId: input.providerId,
+    streamId: id,
+    startBlock: first.fromBlock,
+    cursorBlock: last.toBlock,
+    cursorBlockHash: last.blockHash,
+    ...(integrityScope
+      ? { integrityCommitId: integrityScope.commitId }
+      : {}),
+    segments,
+  };
+  const nextEnvelope = envelope(next);
+  assertByteLimit(
+    nextEnvelope,
+    PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes,
+    "cursor",
+  );
+  const cursorContentHash = digest(nextEnvelope);
+  const versionPath = cursorVersionPath(input, id, cursorContentHash);
+  const createdVersion = await store.create(versionPath, nextEnvelope);
+  if (createdVersion === "exists") {
+    const version = await store.read(versionPath);
+    if (!version || digest(version.value) !== cursorContentHash) {
+      fail("Persistent RPC cursor version binding is invalid");
+    }
+    parseCursor(version.value, input, id);
+  }
+  const nextReference: CursorReference = {
+    path: versionPath,
+    contentHash: cursorContentHash,
+  };
+  const binding: IntegrityCursorBinding = {
+    providerId: input.providerId,
+    streamId: id,
+    streamIdentity: streamIdentity(input, filter),
+    cursorKey: key,
+    cursorPath: versionPath,
+    cursorContentHash,
+  };
+  if (!integrityScope) fail("Persistent RPC cursor persistence requires an integrity scope");
+  integrityScope.cursorDrafts.set(key, nextReference);
+  recordScopedCursorPersistence(store, input, binding);
 }
 
 const requestFlights = new Map<string, Promise<JsonRpcResult>>();
+const automaticScopeFlights = new Map<string, Promise<JsonRpcResult>>();
 
 export function createPersistentRpcRequest(
   input: PersistentRequestInput,
@@ -1429,6 +2018,51 @@ export function createPersistentRpcRequest(
       assertScopeLease();
       return result;
     }
+    if (input.store && !integrityScope) {
+      const automaticFlightKey = digest({
+        requestDomainId: requestDomainId(input),
+        providerId: input.providerId,
+        filter,
+      });
+      const existing = automaticScopeFlights.get(automaticFlightKey);
+      if (existing) return existing;
+      const automatic = (async () => {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          try {
+            return await withPersistentRpcIntegrityScope(
+              () => wrapped(request, options),
+              {
+                checkpointGroup: `isolated:${cursorKey(
+                  input,
+                  streamId(input, filter),
+                )}`,
+                expectedCursorBindings: 1,
+                expectedProviderCount: 1,
+                expectedStreamsPerProvider: 1,
+              },
+            );
+          } catch (error) {
+            if (
+              attempt === 3 ||
+              !(error instanceof PersistentRpcCacheError) ||
+              error.message !==
+                "Persistent RPC integrity checkpoint publish conflicted"
+            ) {
+              throw error;
+            }
+          }
+        }
+        fail("Persistent RPC automatic checkpoint retry exhausted");
+      })();
+      automaticScopeFlights.set(automaticFlightKey, automatic);
+      try {
+        return await automatic;
+      } finally {
+        if (automaticScopeFlights.get(automaticFlightKey) === automatic) {
+          automaticScopeFlights.delete(automaticFlightKey);
+        }
+      }
+    }
     const fromBlock = BigInt(filter.fromBlock);
     const toBlock = BigInt(filter.toBlock);
     if (!input.store) {
@@ -1497,7 +2131,7 @@ export function createPersistentRpcRequest(
         input.store as PersistentRpcCacheStore,
         input,
         id,
-        integrityScope?.commitId,
+        filter,
       );
       assertScopeLease();
       let logs: unknown[] = [];
@@ -1651,20 +2285,34 @@ function blobToken(environment: NodeJS.ProcessEnv = process.env) {
   );
 }
 
-function cachePathByteLimit(path: string) {
-  if (path.endsWith("/cursor.json")) {
+export function createEnvironmentPersistentRpcCacheStore(
+  environment: NodeJS.ProcessEnv = process.env,
+) {
+  const token = blobToken(environment);
+  return token ? createVercelBlobPersistentRpcCacheStore(token) : null;
+}
+
+export function persistentRpcCachePathByteLimit(path: string) {
+  if (!path.startsWith(`${CACHE_DIRECTORY}/`)) {
+    fail("Persistent RPC cache path uses a retired namespace");
+  }
+  if (path.includes("/checkpoints/") || path.includes("/cursors/")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes;
   }
   if (path.includes("/segments/")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxSegmentBytes;
   }
-  if (path.includes("/runtime/")) {
+  if (path.includes("/runtime-v2/")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxRuntimeBytes;
   }
   if (path.includes("/integrity/")) {
     return PERSISTENT_RPC_CACHE_LIMITS.maxCursorBytes;
   }
   fail("Persistent RPC cache path has no byte limit");
+}
+
+export function persistentRpcProviderId(rpcUrl: string) {
+  return digest({ rpcUrl });
 }
 
 function contentLength(headers: Readonly<{ get(name: string): string | null }>) {
@@ -1678,6 +2326,39 @@ function contentLength(headers: Readonly<{ get(name: string): string | null }>) 
     fail("Persistent RPC Blob Content-Length is unsafe");
   }
   return parsed;
+}
+
+const VERCEL_BLOB_STRONG_ETAG = /^"[0-9a-f]{32}"$/iu;
+
+export function normalizePersistentRpcBlobEtag(value: string) {
+  const normalized = value.trim().replace(/^W\//u, "");
+  if (!VERCEL_BLOB_STRONG_ETAG.test(normalized)) {
+    fail("Persistent RPC Blob ETag is invalid");
+  }
+  return normalized;
+}
+
+export function bindPrivateBlobReadMetadata(input: Readonly<{
+  responseEtag: string;
+  headEtag: string;
+  headSize: number;
+}>) {
+  const responseEtag = normalizePersistentRpcBlobEtag(input.responseEtag);
+  const headEtag = normalizePersistentRpcBlobEtag(input.headEtag);
+  if (
+    responseEtag.length < 1 ||
+    headEtag.length < 1 ||
+    responseEtag !== headEtag
+  ) {
+    fail("Persistent RPC Blob changed while it was being read");
+  }
+  if (!Number.isSafeInteger(input.headSize) || input.headSize < 0) {
+    fail("Persistent RPC Blob HEAD size is invalid");
+  }
+  return {
+    etag: headEtag,
+    declaredSize: input.headSize,
+  } as const;
 }
 
 export async function readBoundedBlobJson(input: Readonly<{
@@ -1758,29 +2439,121 @@ export async function readBoundedBlobJson(input: Readonly<{
   }
 }
 
-function blobStore(token: string): PersistentRpcCacheStore {
+type PersistentRpcBlobGetResult =
+  | Readonly<{
+      statusCode: 200;
+      stream: ReadableStream<Uint8Array>;
+      headers: Readonly<{ get(name: string): string | null }>;
+      blob: Readonly<{ etag: string; size: number }>;
+    }>
+  | Readonly<{
+      statusCode: 304;
+      stream: null;
+      headers: Readonly<{ get(name: string): string | null }>;
+      blob: Readonly<{ etag: string; size: null }>;
+    }>
+  | null;
+
+type PersistentRpcBlobClient = Readonly<{
+  get(
+    path: string,
+    options: Readonly<{
+      access: "private";
+      token: string;
+      useCache: false;
+    }>,
+  ): Promise<PersistentRpcBlobGetResult>;
+  head(
+    path: string,
+    options: Readonly<{ token: string }>,
+  ): Promise<Readonly<{ etag: string; size: number }>>;
+  put(
+    path: string,
+    value: string,
+    options: Readonly<{
+      access: "private";
+      contentType: "application/json";
+      addRandomSuffix: false;
+      allowOverwrite: boolean;
+      cacheControlMaxAge: 60;
+      ifMatch?: string;
+      token: string;
+    }>,
+  ): Promise<unknown>;
+}>;
+
+type PersistentRpcBlobClientLoader = () => Promise<PersistentRpcBlobClient>;
+
+const PRIVATE_BLOB_READ_ATTEMPTS = 3;
+
+async function loadPersistentRpcBlobClient(): Promise<PersistentRpcBlobClient> {
+  const { get, head, put } = await import("@vercel/blob");
+  return { get, head, put };
+}
+
+export function createVercelBlobPersistentRpcCacheStore(
+  token: string,
+  loadClient: PersistentRpcBlobClientLoader = loadPersistentRpcBlobClient,
+): PersistentRpcCacheStore {
   return {
     async read(path) {
-      const { get } = await import("@vercel/blob");
-      const result = await get(path, {
-        access: "private",
-        token,
-        useCache: false,
-      });
-      if (!result || result.statusCode !== 200 || !result.stream) return null;
-      const maximumBytes = cachePathByteLimit(path);
-      return {
-        etag: result.blob.etag,
-        value: await readBoundedBlobJson({
-          stream: result.stream,
-          maximumBytes,
-          declaredSize: result.blob.size,
-          declaredContentLength: contentLength(result.headers),
-        }),
-      };
+      const { get, head } = await loadClient();
+      const maximumBytes = persistentRpcCachePathByteLimit(path);
+      for (let attempt = 1; attempt <= PRIVATE_BLOB_READ_ATTEMPTS; attempt += 1) {
+        const result = await get(path, {
+          access: "private",
+          token,
+          useCache: false,
+        });
+        if (!result || result.statusCode !== 200 || !result.stream) return null;
+        let metadata;
+        try {
+          const current = await head(path, { token });
+          metadata = bindPrivateBlobReadMetadata({
+            responseEtag: result.blob.etag,
+            headEtag: current.etag,
+            headSize: current.size,
+          });
+        } catch (error) {
+          await result.stream.cancel(
+            "Persistent RPC Blob metadata could not be bound",
+          );
+          throw error;
+        }
+        try {
+          return {
+            etag: metadata.etag,
+            value: await readBoundedBlobJson({
+              stream: result.stream,
+              maximumBytes,
+              declaredSize: metadata.declaredSize,
+              declaredContentLength: result.headers.get("content-encoding")
+                ? null
+                : contentLength(result.headers),
+            }),
+          };
+        } catch (error) {
+          try {
+            await result.stream.cancel(
+              "Persistent RPC Blob read could not be bound",
+            );
+          } catch {
+            // The original bounded-read failure remains authoritative.
+          }
+          if (
+            !(error instanceof PersistentRpcCacheError) ||
+            attempt === PRIVATE_BLOB_READ_ATTEMPTS ||
+            error.message !==
+              "Persistent RPC Blob stream length does not match its declaration"
+          ) {
+            throw error;
+          }
+        }
+      }
+      fail("Persistent RPC Blob read retry budget was exhausted");
     },
     async create(path, value) {
-      const { get, put } = await import("@vercel/blob");
+      const { get, put } = await loadClient();
       try {
         await put(path, JSON.stringify(value), {
           access: "private",
@@ -1802,7 +2575,7 @@ function blobStore(token: string): PersistentRpcCacheStore {
       }
     },
     async replace(path, value, expectedEtag) {
-      const { get, put } = await import("@vercel/blob");
+      const { get, put } = await loadClient();
       try {
         await put(path, JSON.stringify(value), {
           access: "private",
@@ -1820,7 +2593,10 @@ function blobStore(token: string): PersistentRpcCacheStore {
           token,
           useCache: false,
         });
-        if (current?.statusCode === 200 && current.blob.etag !== expectedEtag) {
+        if (
+          current?.statusCode === 200 &&
+          normalizePersistentRpcBlobEtag(current.blob.etag) !== expectedEtag
+        ) {
           return "conflict";
         }
         throw error;
@@ -1863,7 +2639,7 @@ export function persistentRpcHttp(
   }>,
 ): Transport {
   const underlying = http(rpcUrl, input.http);
-  const providerId = digest({ rpcUrl });
+  const providerId = persistentRpcProviderId(rpcUrl);
   return (transportInput) => {
     const transport = underlying(transportInput);
     const token = blobToken();
@@ -1877,7 +2653,7 @@ export function persistentRpcHttp(
         immutableCodeBindings: input.immutableCodeBindings,
         store: input.store === undefined
           ? token
-            ? blobStore(token)
+            ? createVercelBlobPersistentRpcCacheStore(token)
             : null
           : input.store,
       }),

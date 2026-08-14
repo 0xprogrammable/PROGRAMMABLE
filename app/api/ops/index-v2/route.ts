@@ -4,10 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getWebsiteReadOnchainDeployment,
+  prewarmClassicEventCache,
   readLiveExploreModel,
   writeDurableExploreModel,
 } from "../../../../lib/onchain";
-import { currentMarketOnchainDeployment } from "../../../../lib/market-data/current-market-rpc.server";
+import { historicalReadOnchainDeployment } from "../../../../lib/onchain/historical-read-rpc.server";
 import { writePortfolioHistorySnapshot } from "../../../../lib/profile/portfolio-history-storage.server";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,10 @@ export const maxDuration = 300;
 export const runtime = "nodejs";
 
 const INDEX_REFRESH_DEADLINE_MS = 270_000;
+const INDEX_PREWARM_DEADLINE_MS = 250_000;
+const CLASSIC_PREWARM_STEP_COUNT = 32;
+const CLASSIC_PREWARM_PHASE =
+  /^classic-(primary|secondary)-(0[1-9]|[12][0-9]|3[0-2])$/u;
 
 class IndexRefreshDeadlineError extends Error {
   override name = "IndexRefreshDeadlineError";
@@ -36,6 +41,30 @@ async function withIndexRefreshDeadline<Output>(
     ]);
   } finally {
     if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+async function withIndexPrewarmDeadline<Output>(
+  read: (signal: AbortSignal) => Promise<Output>,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new IndexRefreshDeadlineError()),
+    INDEX_PREWARM_DEADLINE_MS,
+  );
+  try {
+    const output = await read(controller.signal);
+    controller.signal.throwIfAborted();
+    return output;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw controller.signal.reason instanceof IndexRefreshDeadlineError
+        ? controller.signal.reason
+        : new IndexRefreshDeadlineError();
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -99,13 +128,52 @@ export async function GET(request: NextRequest) {
 
   const startedAt = Date.now();
   try {
+    const phaseValues = request.nextUrl.searchParams.getAll("phase");
+    const queryKeys = [...request.nextUrl.searchParams.keys()];
+    const phase = phaseValues[0];
+    const prewarmMatch = phase === undefined
+      ? null
+      : CLASSIC_PREWARM_PHASE.exec(phase);
+    if (
+      queryKeys.some((key) => key !== "phase") ||
+      phaseValues.length > 1 ||
+      (phase !== undefined && prewarmMatch === null) ||
+      (phase === undefined && queryKeys.length !== 0)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid index refresh phase" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const deployment = getWebsiteReadOnchainDeployment("production");
     if (deployment.status !== "ready") {
       throw new Error(
         "The verified production release is not operationally eligible",
       );
     }
-    const durableRefreshDeployment = currentMarketOnchainDeployment(deployment);
+    const durableRefreshDeployment = historicalReadOnchainDeployment(deployment);
+    if (phase !== undefined && prewarmMatch !== null) {
+      const provider = prewarmMatch[1] as "primary" | "secondary";
+      const step = Number(prewarmMatch[2]);
+      const result = await withIndexPrewarmDeadline((signal) =>
+        prewarmClassicEventCache(
+          durableRefreshDeployment,
+          provider,
+          step,
+          CLASSIC_PREWARM_STEP_COUNT,
+          signal,
+        )
+      );
+      console.info("Programmable classic event cache prewarm completed", {
+        phase,
+        blockNumber: result.blockNumber,
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json(
+        { ok: true, phase, ...result },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const model = await withIndexRefreshDeadline(() =>
       readLiveExploreModel(durableRefreshDeployment),
     );

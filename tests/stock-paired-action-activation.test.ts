@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
   readLegacy: vi.fn(),
+  readBitquery: vi.fn(),
   createPublicClient: vi.fn(),
   verifyClaimReceipt: vi.fn(),
   resolveTradeDeployment: vi.fn(),
@@ -44,6 +45,7 @@ const configurationHash = `0x${"bb".repeat(32)}` as Hex;
 
 const release = {
   internalContractRelease: "stock-paired-v1" as const,
+  startBlock: 100,
   addresses: {
     feeHook: hook,
     feeSplitVaultFactory: factory,
@@ -138,6 +140,7 @@ const legacyModel = {
 function rpcClient(index: number) {
   return {
     getBlockNumber: vi.fn().mockResolvedValue(120n),
+    getLogs: vi.fn().mockResolvedValue([]),
     getBlock: vi.fn().mockResolvedValue({ hash: blockHash }),
     getCode: vi.fn(({ address }: { address: Address }) => {
       const normalized = address.toLowerCase();
@@ -223,6 +226,10 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({
+  readBitqueryExploreModelV1: mocks.readBitquery,
+}));
+
 vi.mock("../lib/stock-paired", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/stock-paired")>();
   return {
@@ -240,6 +247,7 @@ vi.mock("../lib/stock-paired-release", async (importOriginal) => {
   return {
     ...actual,
     getConfiguredStockPairedReleaseByHookAndVersion: () => release,
+    getConfiguredStockPairedReleases: () => [release],
   };
 });
 
@@ -276,7 +284,7 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-import { POST } from "../app/api/profile/stock-paired/route";
+import { GET, POST } from "../app/api/profile/stock-paired/route";
 import { StockPairedClaimReceiptError } from "../lib/server/stock-paired-claim-receipt";
 
 function request(action: "claim" | "convert-to-eth" = "claim") {
@@ -326,6 +334,7 @@ describe("Stock-Paired action identity activation", () => {
     );
     mocks.lookup.mockResolvedValue(actionReward);
     mocks.readLegacy.mockResolvedValue(legacyModel);
+    mocks.readBitquery.mockResolvedValue(legacyModel);
     mocks.verifyClaimReceipt.mockResolvedValue(
       BigInt(actionReward.claimableRaw),
     );
@@ -373,7 +382,7 @@ describe("Stock-Paired action identity activation", () => {
   });
 
   it.each([true, false])(
-    "uses the same multi-provider state checks and simulations with indexed lookup %s",
+    "uses one configured RPC with Bitquery identity when indexed lookup is %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
@@ -392,19 +401,55 @@ describe("Stock-Paired action identity activation", () => {
           to: vault,
         },
       });
-      expect(mocks.createPublicClient.mock.calls.length).toBeGreaterThanOrEqual(
-        2,
-      );
-      expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
-      expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).toHaveBeenCalledTimes(1);
+      expect(mocks.lookup).not.toHaveBeenCalled();
+      expect(mocks.readLegacy).not.toHaveBeenCalled();
     },
   );
+
+  it("uses exactly one committed dRPC client for the public profile GET", async () => {
+    const response = await GET(new NextRequest(
+      `http://localhost/api/profile/stock-paired?account=${account}`,
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "ready",
+      account,
+      chainId: 1,
+      snapshotBlock: "120",
+      rewards: [],
+    });
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readBitquery).not.toHaveBeenCalled();
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe("rpc");
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "drpc-primary",
+    );
+  });
+
+  it("returns 503 without fallback when the sole profile provider fails", async () => {
+    const failedClient = rpcClient(0);
+    failedClient.getBlockNumber.mockRejectedValueOnce(
+      new Error("dRPC unavailable"),
+    );
+    mocks.createPublicClient.mockReturnValueOnce(failedClient);
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/profile/stock-paired?account=${account}`,
+    ));
+
+    expect(response.status).toBe(503);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readBitquery).not.toHaveBeenCalled();
+  });
 
   it("returns a stable conflict before preparing a conversion for a pending claim receipt", async () => {
     mocks.indexedEnabled = true;
     mocks.verifyClaimReceipt.mockRejectedValue(
       new StockPairedClaimReceiptError(
-        "The claim receipt is still pending across Ethereum RPCs",
+        "The claim receipt is still pending on Ethereum",
         "pending",
       ),
     );
@@ -415,7 +460,7 @@ describe("Stock-Paired action identity activation", () => {
     await expect(response.json()).resolves.toEqual({
       status: "pending",
       code: "stock-paired-claim-receipt-pending",
-      error: "The claim receipt is still pending across Ethereum RPCs",
+      error: "The claim receipt is still pending on Ethereum",
     });
   });
 
@@ -436,7 +481,7 @@ describe("Stock-Paired action identity activation", () => {
   });
 
   it.each([true, false])(
-    "fails closed on same-provider aliases with indexed lookup %s",
+    "ignores the secondary RPC configuration with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
@@ -447,8 +492,8 @@ describe("Stock-Paired action identity activation", () => {
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());
 
-      expect(response.status).toBe(503);
-      expect(mocks.createPublicClient).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
       expect(serialized).not.toContain("drpc-stock-key");
       expect(serialized).not.toContain("second-stock-secret");
     },

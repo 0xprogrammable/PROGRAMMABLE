@@ -29,6 +29,13 @@ describe("Explore UI contract", () => {
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
     expect(source).toContain("enabled: !preview && !loadingOnly");
+    expect(source).toContain(
+      "useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)",
+    );
+    expect(source).toContain("inert={loadingOnly ? true : undefined}");
+    expect(source).toContain("<h1>Explore Launches</h1>");
+    expect(source).not.toContain("ExploreGridSkeleton");
+    expect(source).toContain('className={styles.loadingState} aria-busy="true"');
   });
 
   it("keeps sort, socials and model choices in one persistent disclosure", () => {
@@ -46,6 +53,10 @@ describe("Explore UI contract", () => {
     );
     expect(source).toContain(
       'Number(socialFilter !== "all") + Number(modelFilter !== "all")',
+    );
+    expect(source).toContain("<span>{activeSortLabel}</span>");
+    expect(source).toContain(
+      'useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)',
     );
     expect(source).not.toMatch(
       /onClick=\{\(\) => \{[\s\S]{0,300}filterRef\.current/s,
@@ -83,7 +94,7 @@ describe("Explore UI contract", () => {
       /\.runnerHeading h3\s*\{[^}]*line-height:\s*1\.15;/s,
     );
     expect(source).toContain(
-      'sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 313px"',
+      'sizes="(max-width: 360px) 96px, (max-width: 700px) 104px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 299px"',
     );
     expect(styles).toMatch(
       /\.runnerMarketStatus\s*\{[^}]*color:\s*var\(--explore-ivory-muted\);/s,
@@ -119,6 +130,10 @@ describe("Explore UI contract", () => {
       join(root, "components/explore-view.tsx"),
       "utf8",
     );
+    const styles = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
 
     expect(source).toContain("const resultStatusRef");
     expect(source).toContain("ref={resultStatusRef}");
@@ -130,10 +145,10 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       "resultStatusRef.current?.focus({ preventScroll: true })",
     );
-    expect(source).toContain(
-      'displayState.phase === "error" ? "" : resultRangeLabel(payload)',
-    );
+    expect(source).toContain('className="sr-only"');
+    expect(styles).not.toContain(".resultLabel");
     expect(source).toContain('return "Explore unavailable"');
+    expect(source).not.toContain("Market data is temporarily unavailable");
     expect(source).not.toContain("Loading tokens");
     expect(source).not.toContain("Updating tokens");
     expect(source).not.toContain("Page {activePage} of {pageCount}");

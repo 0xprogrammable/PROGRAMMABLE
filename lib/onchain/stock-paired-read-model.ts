@@ -31,7 +31,9 @@ import type { LauncherToken } from "../tokens";
 import { stateViewReadAbi, uerc20ReadAbi } from "./abis";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
 import {
+  PersistentRpcCacheError,
   persistentRpcHttp,
+  persistentRpcProviderId,
   withPersistentRpcIntegrityScope,
 } from "./persistent-rpc-cache.server";
 import {
@@ -158,6 +160,13 @@ function isTransientLogReadError(error: unknown) {
     error instanceof RpcRequestError &&
     error.code === -32603 &&
     error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
+
+function isPersistentCacheRangeLimitError(error: unknown) {
+  return (
+    error instanceof PersistentRpcCacheError &&
+    /^Persistent RPC cache log segment exceeds \d+ bytes$/u.test(error.message)
   );
 }
 
@@ -392,7 +401,8 @@ export async function readStockPairedEvents(
       if (
         (transient ||
           error instanceof LimitExceededRpcError ||
-          error instanceof ResponseBodyTooLargeError) &&
+          error instanceof ResponseBodyTooLargeError ||
+          isPersistentCacheRangeLimitError(error)) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
       ) {
@@ -866,12 +876,13 @@ export async function readStockPairedExploreModel(
   );
   if (activeReleases.length === 0) return [];
 
-  const clients = [
-    clientFor(config.rpcUrl, config, activeReleases),
-    ...(config.rpcUrlSecondary
-      ? [clientFor(config.rpcUrlSecondary, config, activeReleases)]
-      : []),
+  const providerEndpoints = [
+    config.rpcUrl,
+    ...(config.rpcUrlSecondary ? [config.rpcUrlSecondary] : []),
   ];
+  const clients = providerEndpoints.map((endpoint) =>
+    clientFor(endpoint, config, activeReleases)
+  );
   await mapInBatches(
     clients,
     RPC_PROVENANCE_BATCH_SIZE,
@@ -929,17 +940,33 @@ export async function readStockPairedExploreModel(
     activeReleases,
     1,
     async (release) => {
-      const eventSets = await allSettledOrThrow(
-        clients.map((candidate) =>
-          withPersistentRpcIntegrityScope(() =>
-            readStockPairedEvents(
-              candidate,
-              config,
-              release,
-              toBlock,
-              options.fromBlock ?? BigInt(release.startBlock),
-            ),
-          )),
+      const eventSets = await mapInBatches(
+        clients.map((candidate, providerIndex) => ({
+          candidate,
+          providerIndex,
+        })),
+        RPC_PROVENANCE_BATCH_SIZE,
+        ({ candidate, providerIndex }) =>
+          withPersistentRpcIntegrityScope(
+            () =>
+              readStockPairedEvents(
+                candidate,
+                config,
+                release,
+                toBlock,
+                options.fromBlock ?? BigInt(release.startBlock),
+              ),
+            {
+              checkpointGroup: [
+                "stock-paired-events",
+                config.chainId,
+                release.internalContractRelease,
+                release.startBlock,
+                persistentRpcProviderId(providerEndpoints[providerIndex]),
+              ].join(":"),
+              expectedCursorBindings: 3,
+            },
+          ),
       );
       const fingerprint = eventFingerprint(eventSets[0]);
       if (

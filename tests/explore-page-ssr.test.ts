@@ -4,13 +4,24 @@ vi.mock("@/app/api/explore/route", () => ({ GET: vi.fn() }));
 vi.mock("@/components/explore-view", () => ({ ExploreView: () => null }));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 
-import { readInitialExploreWithinDeadline } from "../app/explore/page";
+import {
+  INITIAL_EXPLORE_QUERY,
+  readInitialExploreWithinDeadline,
+} from "../app/explore/page";
+import { DEFAULT_EXPLORE_VIEW_SORT } from "../lib/explore-defaults";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("Explore initial server read", () => {
+  it("starts with the highest available FDV ranking", () => {
+    const query = new URLSearchParams(INITIAL_EXPLORE_QUERY);
+
+    expect(DEFAULT_EXPLORE_VIEW_SORT).toBe("market-cap");
+    expect(query.get("sort")).toBe(DEFAULT_EXPLORE_VIEW_SORT);
+  });
+
   it("returns at the total deadline and safely consumes the aborted read", async () => {
     vi.useFakeTimers();
     let readSignal: AbortSignal | undefined;

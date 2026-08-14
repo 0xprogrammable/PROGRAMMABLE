@@ -123,7 +123,19 @@ describe("profile action error copy", () => {
         ),
       ),
     ).toBe(
-      "The creator claim was not completed. Check your wallet and try again.",
+      "The claim status could not be confirmed. Check your wallet activity before trying again.",
+    );
+    expect(
+      profileCreatorClaimErrorMessage(
+        new Error("Transaction cancelled in wallet"),
+      ),
+    ).toBe(
+      "Transaction cancelled. Your rewards are still available to claim.",
+    );
+    expect(
+      profileCreatorClaimErrorMessage(new Error("private provider detail")),
+    ).toBe(
+      "The claim status could not be confirmed. Check your wallet activity before trying again.",
     );
   });
 
@@ -288,6 +300,15 @@ describe("profile workspace loading state", () => {
     );
   });
 
+  it("keeps verified native ETH totals when only Stock-Paired rewards fail", () => {
+    expect(profileViewSource).toContain(
+      'const nativeRewardSourceStatuses = [\n    data.status,\n    classicV3Rewards.status,\n    deepRewards.status,\n  ] as const;',
+    );
+    expect(profileViewSource).toContain(
+      "getProfileRewardDataQuality(\n    nativeRewardSourceStatuses,",
+    );
+  });
+
   it("uses LKG only for typed temporary creator reads and marks it stale", () => {
     const current = {
       account: firstAddress,
@@ -345,6 +366,24 @@ describe("profile workspace loading state", () => {
     expect(profileExperienceCss).toMatch(
       /@media \(max-width: 820px\)[\s\S]*?\.profileWorkspace/,
     );
+  });
+
+  it("keeps profile loading visually empty and reveals only resolved content", () => {
+    expect(profileViewSource).toContain(
+      'className={styles.profileLoadingState}',
+    );
+    expect(profileViewSource).toContain(
+      'if (profileWorkspacePhase === "loading")',
+    );
+    expect(profileViewSource).not.toContain("styles.sessionLoadingWorkspace");
+    expect(profileViewSource).not.toContain("styles.loadingPanelTitle");
+    expect(profileExperienceCss).toMatch(
+      /\.profileLoadingState\s*\{[^}]*min-height:/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileReveal\s*\{[^}]*animation: profile-content-reveal/s,
+    );
+    expect(profileExperienceCss).not.toContain("profile-skeleton-pulse");
   });
 });
 

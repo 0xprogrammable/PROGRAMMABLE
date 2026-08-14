@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpRequestError } from "viem";
 
 import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
@@ -34,6 +33,8 @@ const mocks = vi.hoisted(() => {
   return {
     client,
     createPublicClient: vi.fn(() => client),
+    readBitqueryClassicV3Launch: vi.fn(),
+    readBitqueryClassicV3Profile: vi.fn(),
     runtimeCodes,
   };
 });
@@ -63,6 +64,12 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/market-data/bitquery-profile.server", () => ({
+  readBitqueryClassicV3Launch: mocks.readBitqueryClassicV3Launch,
+  readBitqueryClassicV3Profile: mocks.readBitqueryClassicV3Profile,
+  safeBitqueryProfileError: vi.fn((error) => error),
+}));
+
 import {
   GET,
   POST,
@@ -79,6 +86,12 @@ describe("Classic profile release gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createPublicClient.mockReturnValue(mocks.client);
+    mocks.readBitqueryClassicV3Profile.mockResolvedValue({
+      status: "ready",
+      account,
+      chainId: 1,
+      rewards: [],
+    });
     vi.stubEnv("ETHEREUM_RPC_URL", drpcRpcUrl);
     vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
     vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
@@ -121,20 +134,7 @@ describe("Classic profile release gate", () => {
     });
   });
 
-  it("uses the fixed secondary when the primary rejects capacity", async () => {
-    const primary = {
-      ...mocks.client,
-      getCode: vi.fn(async () => {
-        throw new HttpRequestError({
-          status: 429,
-          url: "https://primary.example/rpc-key",
-        });
-      }),
-    };
-    mocks.createPublicClient
-      .mockReturnValueOnce(primary)
-      .mockReturnValueOnce(mocks.client);
-
+  it("uses exactly one commitment-bound dRPC client for the public GET", async () => {
     const response = await GET(
       new NextRequest(
         `http://localhost/api/profile/classic-v3?account=${account}`,
@@ -142,58 +142,20 @@ describe("Classic profile release gate", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not use secondary for an integrity error", async () => {
-    const primary = {
-      ...mocks.client,
-      getCode: vi.fn(async () => {
-        throw new Error("Classic runtime integrity mismatch");
-      }),
-    };
-    mocks.createPublicClient.mockReturnValueOnce(primary);
-
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/profile/classic-v3?account=${account}`,
-      ),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      status: "error",
-      error: {
-        kind: "integrity",
-        code: "classic_profile_integrity_conflict",
-        message: "Classic reward data could not be verified",
-      },
-    });
+    expect(mocks.readBitqueryClassicV3Profile).not.toHaveBeenCalled();
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "rpc",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "drpc-primary",
+    );
   });
 
-  it("keeps exhausted provider capacity typed as temporary", async () => {
-    const primary = {
-      ...mocks.client,
-      getCode: vi.fn(async () => {
-        throw new HttpRequestError({
-          status: 429,
-          url: "https://primary.example/rpc-key",
-        });
-      }),
-    };
-    const secondary = {
-      ...mocks.client,
-      getCode: vi.fn(async () => {
-        throw new HttpRequestError({
-          status: 503,
-          url: "https://secondary.example/rpc-key",
-        });
-      }),
-    };
-    mocks.createPublicClient
-      .mockReturnValueOnce(primary)
-      .mockReturnValueOnce(secondary);
+  it("returns 503 without fallback when the sole dRPC read fails", async () => {
+    mocks.client.getBlockNumber.mockRejectedValueOnce(
+      new Error("dRPC unavailable"),
+    );
 
     const response = await GET(
       new NextRequest(
@@ -210,7 +172,23 @@ describe("Classic profile release gate", () => {
         message: "Classic rewards are temporarily unavailable",
       },
     });
-    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readBitqueryClassicV3Profile).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid launch lookup hashes before reading a provider", async () => {
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/profile/classic-v3?account=${account}&launch=bad`,
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Enter a valid launch transaction hash",
+    });
+    expect(mocks.readBitqueryClassicV3Launch).not.toHaveBeenCalled();
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
   });
 
   it("rejects claims from a wallet that does not own the vault", async () => {

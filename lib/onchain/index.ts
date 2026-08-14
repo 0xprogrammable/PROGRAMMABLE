@@ -6,6 +6,7 @@ export {
   getWebsiteReadOnchainDeployment,
 } from "./config";
 export {
+  prewarmClassicEventCache,
   readExploreModel,
   readLiveExploreModel,
 } from "./read-model";

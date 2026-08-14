@@ -12,7 +12,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { evaluateReadModelOperationsSourceContracts, POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS, POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS, POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS, POST_PROMOTION_PAGINATION_SOURCE_GUARDS, STAGED_MARKET_EVIDENCE_SOURCE_GUARDS } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
+import { evaluateReadModelOperationsSourceContracts } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
@@ -22,99 +22,95 @@ const ROOT = process.cwd();
 const DEPLOYMENT_ID = "dpl_aaaaaaaaaaaaaaaaaaaaaaaa";
 const GIT_HEAD = "b".repeat(40);
 const PROJECT_ID = "prj_programmable_test";
-const GOLDEN_TOKEN_ADDRESS =
-  "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
+const GOLDEN_TOKEN_ADDRESS = "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
-const GOLDEN_QUOTE_ADDRESS =
-  "0x0000000000000000000000000000000000000000";
+const GOLDEN_QUOTE_ADDRESS = "0x0000000000000000000000000000000000000000";
 const GOLDEN_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
 const GOLDEN_SWAP_TOPIC =
   "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
 const GOLDEN_TRANSACTION_HASH = `0x${"22".repeat(32)}`;
-const PUBLIC_TOKEN_ADDRESS =
-  "0x1111111111111111111111111111111111111111";
+const PUBLIC_TOKEN_ADDRESS = "0x1111111111111111111111111111111111111111";
 const PUBLIC_POOL_ID = `0x${"44".repeat(32)}`;
 const PUBLIC_HOOK_ADDRESS = "0x2222222222222222222222222222222222222222";
 const TEST_STATE_VIEW = "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227";
 const TEST_STATE_VIEW_RUNTIME_CODE_HASH =
   "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878";
 const TEST_STATE_VIEW_RUNTIME_CODE =
-  "0x60806040526004361015610011575f80fd5b5f3560e01c80631c7ccb4c146108ac57806353e9c1fb146107c95780637c40"
-  + "f1fe146106ab5780638a2bb9e61461064657806397fd7b421461060b5780639ec538c8146105a2578063c815641c1461050b"
-  + "578063caedab54146103f6578063dacf1d2f146102ff578063dc4c90d314610291578063f0928f29146101e65763fa6793d5"
-  + "1461009d575f80fd5b346101a25760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36"
-  + "01126101a2576100d7600435610d2f565b600381018091116101b957604051907f1e2eaeaf00000000000000000000000000"
-  + "0000000000000000000000000000008252600482015260208160248173ffffffffffffffffffffffffffffffffffffffff7f"
-  + "000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101ae575f90610177575b6020"
-  + "906fffffffffffffffffffffffffffffffff60405191168152f35b506020813d6020116101a6575b8161019160209383610a"
-  + "2b565b810103126101a2576020905161015a565b5f80fd5b3d9150610184565b6040513d5f823e3d90fd5b7f4e487b710000"
-  + "00000000000000000000000000000000000000000000000000005f52601160045260245ffd5b346101a2576101fd6101f736"
-  + "6109f7565b90610d8b565b604051907f1e2eaeaf000000000000000000000000000000000000000000000000000000008252"
-  + "600482015260208160248173ffffffffffffffffffffffffffffffffffffffff7f0000000000000000000000000000000000"
-  + "04444c5dc75cb358380d2e3de08a90165afa80156101ae575f90610177576020906fffffffffffffffffffffffffffffffff"
-  + "60405191168152f35b346101a2575f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601"
-  + "126101a257602060405173ffffffffffffffffffffffffffffffffffffffff7f000000000000000000000000000000000004"
-  + "444c5dc75cb358380d2e3de08a90168152f35b346101a25760a07fffffffffffffffffffffffffffffffffffffffffffffff"
-  + "fffffffffffffffffc3601126101a25760243573ffffffffffffffffffffffffffffffffffffffff811681036101a2576103"
-  + "566109e7565b6064358060020b81036101a2576103f2926103c2926040519260843560268501526006840152600383015281"
-  + "525f603a600c83012091816040820152816020820152526004357f000000000000000000000000000000000004444c5dc75c"
-  + "b358380d2e3de08a90610bc0565b604080516fffffffffffffffffffffffffffffffff909416845260208401929092529082"
-  + "01529081906060820190565b0390f35b346101a25760407fffffffffffffffffffffffffffffffffffffffffffffffffffff"
-  + "fffffffffffc3601126101a2576104386104306109d7565b600435610d55565b604051907f1e2eaeaf000000000000000000"
-  + "000000000000000000000000000000000000008252600482015260208160248173ffffffffffffffffffffffffffffffffff"
-  + "ffffff7f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101ae575f906104d8"
-  + "575b6040908151906fffffffffffffffffffffffffffffffff8116825260801d600f0b6020820152f35b506020813d602011"
-  + "610503575b816104f260209383610a2b565b810103126101a257604090516104b0565b3d91506104e5565b346101a2576020"
-  + "7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101a257608062ffffff8061056d"
-  + "6004357f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90610c63565b92949173ffffffffff"
-  + "ffffffffffffffffffffffffffffff6040519616865260020b6020860152166040840152166060820152f35b346101a25760"
-  + "207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101a25760406105ff6004357f"
-  + "000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90610c58565b82519182526020820152f35b34"
-  + "6101a2576103f26103c261061f366109f7565b907f000000000000000000000000000000000004444c5dc75cb358380d2e3d"
-  + "e08a90610bc0565b346101a25760407ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601"
-  + "126101a25760406105ff6106826109d7565b6004357f000000000000000000000000000000000004444c5dc75cb358380d2e"
-  + "3de08a90610b1e565b346101a25760407ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36"
-  + "01126101a2576106e56104306109d7565b604051907f35fd631a000000000000000000000000000000000000000000000000"
-  + "0000000082526004820152600360248201525f8160448173ffffffffffffffffffffffffffffffffffffffff7f0000000000"
-  + "00000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101ae576080915f916107a7575b50602081"
-  + "0151906060604082015191015190604051926fffffffffffffffffffffffffffffffff81168452841d600f0b602084015260"
-  + "408301526060820152f35b6107c391503d805f833e6107bb8183610a2b565b810190610a99565b82610766565b346101a257"
-  + "60607ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101a2576040600435610805"
-  + "6109d7565b9061080e6109e7565b7f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90906108"
-  + "3a8383610c58565b90610846868686610b1e565b96909361085f610857828989610b1e565b989097610c63565b5050905060"
-  + "020b9160020b82125f14610885575050505003910382519182526020820152f35b95969593949360020b1361089d57505003"
-  + "91036105ff565b949392909403039203036105ff565b346101a25760407fffffffffffffffffffffffffffffffffffffffff"
-  + "fffffffffffffffffffffffc3601126101a2576024358060010b8091036101a2576108f4600435610d2f565b600581018091"
-  + "116101b957604051906020820192835260408201526040815261091e606082610a2b565b519020604051907f1e2eaeaf0000"
-  + "00000000000000000000000000000000000000000000000000008252600482015260208160248173ffffffffffffffffffff"
-  + "ffffffffffffffffffff7f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101"
-  + "ae575f906109a4575b602090604051908152f35b506020813d6020116109cf575b816109be60209383610a2b565b81010312"
-  + "6101a25760209051610999565b3d91506109b1565b602435908160020b82036101a257565b604435908160020b82036101a2"
-  + "57565b7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc60409101126101a2576004359060"
-  + "243590565b90601f7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0910116810190811067"
-  + "ffffffffffffffff821117610a6c57604052565b7f4e487b7100000000000000000000000000000000000000000000000000"
-  + "0000005f52604160045260245ffd5b6020818303126101a25780519067ffffffffffffffff82116101a257019080601f8301"
-  + "12156101a25781519167ffffffffffffffff8311610a6c578260051b9060405193610aea6020840186610a2b565b84526020"
-  + "808501928201019283116101a257602001905b828210610b0e5750505090565b8151815260209182019101610b01565b9291"
-  + "610b2991610d55565b600181018091116101b95773ffffffffffffffffffffffffffffffffffffffff9260445f9260405195"
-  + "869384927f35fd631a0000000000000000000000000000000000000000000000000000000084526004840152600260248401"
-  + "52165afa9182156101ae575f92610ba4575b506040602083015192015190565b610bb99192503d805f833e6107bb8183610a"
-  + "2b565b905f610b96565b6044610be273ffffffffffffffffffffffffffffffffffffffff945f94610d8b565b604051948593"
-  + "84927f35fd631a00000000000000000000000000000000000000000000000000000000845260048401526003602484015216"
-  + "5afa9081156101ae575f91610c3e575b506020810151916060604083015192015190565b610c5291503d805f833e6107bb81"
-  + "83610a2b565b5f610c2a565b9190610b2990610d2f565b6020906024610c8773ffffffffffffffffffffffffffffffffffff"
-  + "ffff9594610d2f565b60405195869384927f1e2eaeaf00000000000000000000000000000000000000000000000000000000"
-  + "84526004840152165afa9182156101ae575f92610cfb575b5073ffffffffffffffffffffffffffffffffffffffff82169180"
-  + "60a01c60020b9162ffffff808360b81c169260d01c1690565b9091506020813d602011610d27575b81610d1760209383610a"
-  + "2b565b810103126101a25751905f610cc8565b3d9150610d0a565b604051602081019182526006604082015260408152610d"
-  + "4f606082610a2b565b51902090565b610d5e90610d2f565b600481018091116101b95760405190602082019260020b835260"
-  + "4082015260408152610d4f606082610a2b565b610d9490610d2f565b600681018091116101b9576040519060208201928352"
-  + "604082015260408152610d4f606082610a2b56fea164736f6c634300081a000a";
+  "0x60806040526004361015610011575f80fd5b5f3560e01c80631c7ccb4c146108ac57806353e9c1fb146107c95780637c40" +
+  "f1fe146106ab5780638a2bb9e61461064657806397fd7b421461060b5780639ec538c8146105a2578063c815641c1461050b" +
+  "578063caedab54146103f6578063dacf1d2f146102ff578063dc4c90d314610291578063f0928f29146101e65763fa6793d5" +
+  "1461009d575f80fd5b346101a25760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36" +
+  "01126101a2576100d7600435610d2f565b600381018091116101b957604051907f1e2eaeaf00000000000000000000000000" +
+  "0000000000000000000000000000008252600482015260208160248173ffffffffffffffffffffffffffffffffffffffff7f" +
+  "000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101ae575f90610177575b6020" +
+  "906fffffffffffffffffffffffffffffffff60405191168152f35b506020813d6020116101a6575b8161019160209383610a" +
+  "2b565b810103126101a2576020905161015a565b5f80fd5b3d9150610184565b6040513d5f823e3d90fd5b7f4e487b710000" +
+  "00000000000000000000000000000000000000000000000000005f52601160045260245ffd5b346101a2576101fd6101f736" +
+  "6109f7565b90610d8b565b604051907f1e2eaeaf000000000000000000000000000000000000000000000000000000008252" +
+  "600482015260208160248173ffffffffffffffffffffffffffffffffffffffff7f0000000000000000000000000000000000" +
+  "04444c5dc75cb358380d2e3de08a90165afa80156101ae575f90610177576020906fffffffffffffffffffffffffffffffff" +
+  "60405191168152f35b346101a2575f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601" +
+  "126101a257602060405173ffffffffffffffffffffffffffffffffffffffff7f000000000000000000000000000000000004" +
+  "444c5dc75cb358380d2e3de08a90168152f35b346101a25760a07fffffffffffffffffffffffffffffffffffffffffffffff" +
+  "fffffffffffffffffc3601126101a25760243573ffffffffffffffffffffffffffffffffffffffff811681036101a2576103" +
+  "566109e7565b6064358060020b81036101a2576103f2926103c2926040519260843560268501526006840152600383015281" +
+  "525f603a600c83012091816040820152816020820152526004357f000000000000000000000000000000000004444c5dc75c" +
+  "b358380d2e3de08a90610bc0565b604080516fffffffffffffffffffffffffffffffff909416845260208401929092529082" +
+  "01529081906060820190565b0390f35b346101a25760407fffffffffffffffffffffffffffffffffffffffffffffffffffff" +
+  "fffffffffffc3601126101a2576104386104306109d7565b600435610d55565b604051907f1e2eaeaf000000000000000000" +
+  "000000000000000000000000000000000000008252600482015260208160248173ffffffffffffffffffffffffffffffffff" +
+  "ffffff7f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101ae575f906104d8" +
+  "575b6040908151906fffffffffffffffffffffffffffffffff8116825260801d600f0b6020820152f35b506020813d602011" +
+  "610503575b816104f260209383610a2b565b810103126101a257604090516104b0565b3d91506104e5565b346101a2576020" +
+  "7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101a257608062ffffff8061056d" +
+  "6004357f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90610c63565b92949173ffffffffff" +
+  "ffffffffffffffffffffffffffffff6040519616865260020b6020860152166040840152166060820152f35b346101a25760" +
+  "207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101a25760406105ff6004357f" +
+  "000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90610c58565b82519182526020820152f35b34" +
+  "6101a2576103f26103c261061f366109f7565b907f000000000000000000000000000000000004444c5dc75cb358380d2e3d" +
+  "e08a90610bc0565b346101a25760407ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601" +
+  "126101a25760406105ff6106826109d7565b6004357f000000000000000000000000000000000004444c5dc75cb358380d2e" +
+  "3de08a90610b1e565b346101a25760407ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36" +
+  "01126101a2576106e56104306109d7565b604051907f35fd631a000000000000000000000000000000000000000000000000" +
+  "0000000082526004820152600360248201525f8160448173ffffffffffffffffffffffffffffffffffffffff7f0000000000" +
+  "00000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101ae576080915f916107a7575b50602081" +
+  "0151906060604082015191015190604051926fffffffffffffffffffffffffffffffff81168452841d600f0b602084015260" +
+  "408301526060820152f35b6107c391503d805f833e6107bb8183610a2b565b810190610a99565b82610766565b346101a257" +
+  "60607ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101a2576040600435610805" +
+  "6109d7565b9061080e6109e7565b7f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90906108" +
+  "3a8383610c58565b90610846868686610b1e565b96909361085f610857828989610b1e565b989097610c63565b5050905060" +
+  "020b9160020b82125f14610885575050505003910382519182526020820152f35b95969593949360020b1361089d57505003" +
+  "91036105ff565b949392909403039203036105ff565b346101a25760407fffffffffffffffffffffffffffffffffffffffff" +
+  "fffffffffffffffffffffffc3601126101a2576024358060010b8091036101a2576108f4600435610d2f565b600581018091" +
+  "116101b957604051906020820192835260408201526040815261091e606082610a2b565b519020604051907f1e2eaeaf0000" +
+  "00000000000000000000000000000000000000000000000000008252600482015260208160248173ffffffffffffffffffff" +
+  "ffffffffffffffffffff7f000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90165afa80156101" +
+  "ae575f906109a4575b602090604051908152f35b506020813d6020116109cf575b816109be60209383610a2b565b81010312" +
+  "6101a25760209051610999565b3d91506109b1565b602435908160020b82036101a257565b604435908160020b82036101a2" +
+  "57565b7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc60409101126101a2576004359060" +
+  "243590565b90601f7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0910116810190811067" +
+  "ffffffffffffffff821117610a6c57604052565b7f4e487b7100000000000000000000000000000000000000000000000000" +
+  "0000005f52604160045260245ffd5b6020818303126101a25780519067ffffffffffffffff82116101a257019080601f8301" +
+  "12156101a25781519167ffffffffffffffff8311610a6c578260051b9060405193610aea6020840186610a2b565b84526020" +
+  "808501928201019283116101a257602001905b828210610b0e5750505090565b8151815260209182019101610b01565b9291" +
+  "610b2991610d55565b600181018091116101b95773ffffffffffffffffffffffffffffffffffffffff9260445f9260405195" +
+  "869384927f35fd631a0000000000000000000000000000000000000000000000000000000084526004840152600260248401" +
+  "52165afa9182156101ae575f92610ba4575b506040602083015192015190565b610bb99192503d805f833e6107bb8183610a" +
+  "2b565b905f610b96565b6044610be273ffffffffffffffffffffffffffffffffffffffff945f94610d8b565b604051948593" +
+  "84927f35fd631a00000000000000000000000000000000000000000000000000000000845260048401526003602484015216" +
+  "5afa9081156101ae575f91610c3e575b506020810151916060604083015192015190565b610c5291503d805f833e6107bb81" +
+  "83610a2b565b5f610c2a565b9190610b2990610d2f565b6020906024610c8773ffffffffffffffffffffffffffffffffffff" +
+  "ffff9594610d2f565b60405195869384927f1e2eaeaf00000000000000000000000000000000000000000000000000000000" +
+  "84526004840152165afa9182156101ae575f92610cfb575b5073ffffffffffffffffffffffffffffffffffffffff82169180" +
+  "60a01c60020b9162ffffff808360b81c169260d01c1690565b9091506020813d602011610d27575b81610d1760209383610a" +
+  "2b565b810103126101a25751905f610cc8565b3d9150610d0a565b604051602081019182526006604082015260408152610d" +
+  "4f606082610a2b565b51902090565b610d5e90610d2f565b600481018091116101b95760405190602082019260020b835260" +
+  "4082015260408152610d4f606082610a2b565b610d9490610d2f565b600681018091116101b9576040519060208201928352" +
+  "604082015260408152610d4f606082610a2b56fea164736f6c634300081a000a";
 const TEST_ETH_USD_FEED = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
 const TEST_NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
-const TEST_SUBGRAPH_ID =
-  "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
+const TEST_SUBGRAPH_ID = "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
 const TEST_SUBGRAPH_DEPLOYMENT =
   "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
 const TEST_PUBLIC_BLOCK_HASH = `0x${"55".repeat(32)}`;
@@ -126,16 +122,6 @@ const TEST_PRICE_USD_WAD = 2_000n * 10n ** 18n;
 const TEST_FDV_USD_WAD = 2_000_000n * 10n ** 18n;
 const TEST_ACTIVE_LIQUIDITY = 3n * 10n ** 18n;
 const TEST_ACTIVE_VIRTUAL_LIQUIDITY_USD_WAD = 12_000n * 10n ** 18n;
-const stagedMarketEvidenceGuardCases: ReadonlyArray<readonly [number, string]> =
-  (STAGED_MARKET_EVIDENCE_SOURCE_GUARDS as readonly string[]).map(
-    (needle: string, index: number) => [index, needle] as const,
-  );
-const postPromotionGuardCases: ReadonlyArray<readonly [number, string]> = [
-  ...(POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS as readonly string[]),
-  ...(POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS as readonly string[]),
-  ...(POST_PROMOTION_PAGINATION_SOURCE_GUARDS as readonly string[]),
-  ...(POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS as readonly string[]),
-].map((needle: string, index: number) => [index, needle] as const);
 const testStateViewAbi = parseAbi([
   "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
   "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
@@ -223,7 +209,9 @@ function watchdogProgram() {
       "          const appendFile = async () => undefined;",
     );
   const AsyncFunction = Object.getPrototypeOf(async () => undefined)
-    .constructor as new (...args: string[]) => (...values: unknown[]) => Promise<void>;
+    .constructor as new (
+    ...args: string[]
+  ) => (...values: unknown[]) => Promise<void>;
   return new AsyncFunction(
     "process",
     "fetch",
@@ -368,7 +356,9 @@ describe("read-model operations source contract", () => {
       AbortSignal,
       URL,
       setTimeout,
-      { log: (value: string) => logged.push(value) },
+      {
+        log: (value: string) => logged.push(value),
+      },
     );
     expect(requests).toHaveLength(2);
     expect(requests[0]?.url).toBe(
@@ -391,29 +381,42 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
-    ["missing confirmed block", (rpc: Record<string, unknown>) => {
-      const { confirmedBlock: _removed, ...remaining } = rpc;
-      return remaining;
-    }],
-    ["zero confirmed block hash", (rpc: Record<string, unknown>) => ({
-      ...rpc,
-      confirmedBlock: { number: "25740012", hash: `0x${"00".repeat(32)}` },
-    })],
-    ["confirmed block behind visible index", (rpc: Record<string, unknown>) => ({
-      ...rpc,
-      confirmedBlock: { number: "25740000", hash: `0x${"12".repeat(32)}` },
-    })],
-    ["secondary provider behind confirmed block", (rpc: Record<string, unknown>) => ({
-      ...rpc,
-      providers: {
-        ...(rpc.providers as Record<string, unknown>),
-        secondary: {
-          status: "available",
-          head: "25740011",
-          headAgeSeconds: 4,
-        },
+    [
+      "missing confirmed block",
+      (rpc: Record<string, unknown>) => {
+        const remaining = { ...rpc };
+        delete remaining.confirmedBlock;
+        return remaining;
       },
-    })],
+    ],
+    [
+      "zero confirmed block hash",
+      (rpc: Record<string, unknown>) => ({
+        ...rpc,
+        confirmedBlock: { number: "25740012", hash: `0x${"00".repeat(32)}` },
+      }),
+    ],
+    [
+      "confirmed block behind visible index",
+      (rpc: Record<string, unknown>) => ({
+        ...rpc,
+        confirmedBlock: { number: "25740000", hash: `0x${"12".repeat(32)}` },
+      }),
+    ],
+    [
+      "secondary provider behind confirmed block",
+      (rpc: Record<string, unknown>) => ({
+        ...rpc,
+        providers: {
+          ...(rpc.providers as Record<string, unknown>),
+          secondary: {
+            status: "available",
+            head: "25740011",
+            headAgeSeconds: 4,
+          },
+        },
+      }),
+    ],
   ])("fails closed on %s", async (_label, mutateRpc) => {
     let attempts = 0;
     const validRpc = {
@@ -560,7 +563,9 @@ describe("read-model operations source contract", () => {
         AbortSignal,
         URL,
         setTimeout,
-        { log: () => undefined },
+        {
+          log: () => undefined,
+        },
       ),
     ).rejects.toThrow("production read-model refresh failed (200)");
   });
@@ -622,6 +627,12 @@ describe("read-model operations source contract", () => {
       "const readLogs = () =>\n      Promise.all([",
     ],
     [
+      "serialized Classic V2 provider passes",
+      "lib/onchain/read-model.ts",
+      "const indexedEventSets = await mapInBatches(",
+      "const indexedEventSets = await allSettledOrThrow(",
+    ],
+    [
       "parallel registry slices",
       "lib/onchain/read-model.ts",
       "await settleParallelReadsInOrder([",
@@ -664,10 +675,22 @@ describe("read-model operations source contract", () => {
       "false ||",
     ],
     [
+      "Classic V2 durable segment range bisection",
+      "lib/onchain/read-model.ts",
+      "isPersistentCacheRangeLimitError(error)",
+      "false",
+    ],
+    [
       "Classic V3 complete-range settlement",
       "lib/onchain/classic-v3-read-model.ts",
       "allSettledOrThrow([",
       "Promise.all([",
+    ],
+    [
+      "serialized Classic V3 provider passes",
+      "lib/onchain/classic-v3-read-model.ts",
+      "const sets = await mapInBatches(",
+      "const sets = await allSettledOrThrow(",
     ],
     [
       "Classic V3 result-limit range bisection",
@@ -676,16 +699,94 @@ describe("read-model operations source contract", () => {
       "false ||",
     ],
     [
+      "Classic V3 shared four-cursor checkpoint",
+      "lib/onchain/classic-v3-read-model.ts",
+      "expectedCursorBindings: clients.length * 2",
+      "expectedCursorBindings: clients.length",
+    ],
+    [
+      "Classic V3 symmetric provider streams",
+      "lib/onchain/classic-v3-read-model.ts",
+      "expectedStreamsPerProvider: 2",
+      "expectedStreamsPerProvider: 1",
+    ],
+    [
+      "Classic V3 bounded checkpoint window",
+      "lib/onchain/classic-v3-read-model.ts",
+      "bindPersistentRpcIntegrityCheckpointWindow({",
+      "void ({",
+    ],
+    [
+      "Classic V3 raw event provenance quorum",
+      "lib/onchain/classic-v3-read-model.ts",
+      "eventProvenance: value.eventProvenance",
+      "eventProvenance: []",
+    ],
+    [
+      "v4 cache namespace",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";',
+      'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";',
+    ],
+    [
+      "bounded dense-stream cursor capacity",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "maxCursorSegments: 16,",
+      "maxCursorSegments: 8,",
+    ],
+    [
+      "bounded dense-stream replay budget",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "maxSegmentReadsPerOperation: 16,",
+      "maxSegmentReadsPerOperation: 8,",
+    ],
+    [
+      "single group-head CAS",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "const published = checkpoint.etag === null",
+      'const published = "created"',
+    ],
+    [
+      "post-publish marker activation",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      'scope.commitId,\n          "committed",',
+      'scope.commitId,\n          "pending",',
+    ],
+    [
+      "previous whole-generation fallback",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      'pointedMarker.status !== "committed"',
+      'pointedMarker.status === "committed"',
+    ],
+    [
+      "retired namespace rejection",
+      "lib/onchain/persistent-rpc-cache.server.ts",
+      "Persistent RPC cache path uses a retired namespace",
+      "Persistent RPC cache path is accepted",
+    ],
+    [
       "Stock launcher topic-OR filtering",
       "lib/onchain/stock-paired-read-model.ts",
       "events: STOCK_LAUNCHER_EVENTS",
       "event: launchedEvent",
     ],
     [
+      "serialized Stock-Paired provider passes",
+      "lib/onchain/stock-paired-read-model.ts",
+      "const eventSets = await mapInBatches(",
+      "const eventSets = await allSettledOrThrow(",
+    ],
+    [
       "Stock result-limit range bisection",
       "lib/onchain/stock-paired-read-model.ts",
       "error instanceof LimitExceededRpcError ||",
       "false ||",
+    ],
+    [
+      "Stock durable segment range bisection",
+      "lib/onchain/stock-paired-read-model.ts",
+      "isPersistentCacheRangeLimitError(error)",
+      "false",
     ],
   ])(
     "rejects a legacy refresh missing %s",
@@ -705,860 +806,561 @@ describe("read-model operations source contract", () => {
     },
   );
 
-  it.each([
-    ["unprotected branch", "github.ref == 'refs/heads/production'"],
-    [
-      "pinned Node setup action",
-      "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
-    ],
-    ["Node 24 runtime", "node-version: 24.14.0"],
-    ["disabled package-manager auto-cache", "package-manager-cache: false"],
-    ["fixed public origin", 'targetOrigin !== "https://programmable.market"'],
-    ["bounded cron secret", "secretBytes < 32"],
-    ["canonical writer route", '"/api/ops/index-v2"'],
-    ["no-store writer response", 'includes("no-store")'],
-    [
-      "portfolio history block binding",
-      "refresh.body.portfolioHistory.blockNumber !==",
-    ],
-    ["durable public source", 'health.body.indexSource === "durable"'],
-    ["visible block binding", "healthBlock >= refreshBlock"],
-    ["freshness ceiling", "index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS"],
-    ["healthy RPC read", 'rpc?.read?.status === "available"'],
-    ["verified RPC quorum", 'rpc?.quorum?.status === "verified"'],
-    ["confirmed RPC block number", "confirmedBlockNumber >= healthBlock"],
-    ["confirmed RPC block hash", "HEX32.test(confirmedBlock?.hash)"],
-    ["primary provider head", "primaryHead >= confirmedBlockNumber"],
-    ["secondary provider head", "secondaryHead >= confirmedBlockNumber"],
-  ])("rejects a production watchdog missing %s", (_label, needle) => {
-    const workflowPath =
-      ".github/workflows/refresh-production-read-model.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    expect(workflow).toContain(needle);
-    const unsafeWorkflow = workflow.replace(needle, "REMOVED_WATCHDOG_GATE");
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-legacy-scheduler-watchdog",
+  it("binds public identity to one dRPC primary and public market reads to Bitquery", () => {
+    const result = evaluateReadModelOperationsSourceContracts(ROOT);
+    expect(result.failures).toEqual([]);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ops-public-provider-split-source-contract",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "ops-protected-public-provider-stage-smoke",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "ops-obsolete-public-read-gates-absent",
+          status: "pass",
+        }),
+      ]),
     );
   });
 
-  it("rejects a production watchdog that installs Node after executing it", () => {
-    const workflowPath =
-      ".github/workflows/refresh-production-read-model.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const setupStart = workflow.indexOf(
-      "      - name: Install pinned Node.js runtime\n",
-    );
-    const watchdogStart = workflow.indexOf(
-      "      - name: Refresh and prove durable freshness\n",
-    );
-    expect(setupStart).toBeGreaterThanOrEqual(0);
-    expect(watchdogStart).toBeGreaterThan(setupStart);
-    const setupBlock = workflow.slice(setupStart, watchdogStart);
-    const unsafeWorkflow = `${workflow.slice(0, setupStart)}${workflow.slice(
-      watchdogStart,
-    )}\n${setupBlock}`;
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-legacy-scheduler-watchdog",
+  it("pins the dRPC launch catalog cache to one fresh commitment-bound singleflight", () => {
+    const result = evaluateReadModelOperationsSourceContracts(ROOT);
+    expect(result.failures).toEqual([]);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ops-primary-rpc-launch-catalog-cache-contract",
+          status: "pass",
+        }),
+      ]),
     );
   });
 
   it.each([
     [
-      "Node 22",
-      (workflow: string) =>
-        workflow.replace("node-version: 24.14.0", "node-version: 22.22.0"),
+      "a ten-minute TTL",
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;",
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 600_000;",
     ],
     [
-      "the runner default",
-      (workflow: string) =>
-        workflow.replace(
-          /      - name: Install pinned Node\.js runtime\n[\s\S]*?\n\n(?=      - name: Refresh and prove durable freshness)/u,
-          "",
-        ),
-    ],
-  ])("rejects %s for the production watchdog", (_label, mutateWorkflow) => {
-    const workflowPath =
-      ".github/workflows/refresh-production-read-model.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = mutateWorkflow(workflow);
-    expect(unsafeWorkflow).not.toBe(workflow);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-legacy-scheduler-watchdog",
-    );
-  });
-
-  it.each([
-    ["repository checkout", "      - uses: actions/checkout@v5\n"],
-    ["Vercel account credential", "          VERCEL_TOKEN: unsafe\n"],
-    [
-      "deployment protection bypass",
-      "          VERCEL_AUTOMATION_BYPASS_SECRET: unsafe\n",
-    ],
-    ["write permission", "  contents: write\n"],
-    ["pull-request trigger", "  pull_request:\n"],
-  ])("rejects watchdog privilege expansion through %s", (_label, addition) => {
-    const workflowPath =
-      ".github/workflows/refresh-production-read-model.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = `${workflow}\n${addition}`;
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-legacy-scheduler-watchdog",
-    );
-  });
-
-  it.each([
-    ["health route", "app/api/ops/health/route.ts"],
-    ["RPC health runtime", "lib/onchain/rpc-health.ts"],
-    ["RPC deployment config", "lib/onchain/config.ts"],
-    [
-      "RPC provider config",
-      "lib/onchain/website-rpc-providers.server.ts",
-    ],
-    [
-      "current-market RPC quorum",
-      "lib/market-data/current-market-rpc.server.ts",
-    ],
-  ])("rejects unreviewed %s bytes", (_label, path) => {
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [path]: `${readFileSync(resolve(ROOT, path), "utf8")}\n// drift`,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-legacy-scheduler-watchdog",
-    );
-  });
-
-  it("binds the exact GitHub commit into the staged deployment runtime", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const unsafeWorkflow = readFileSync(
-      resolve(ROOT, workflowPath),
-      "utf8",
-    ).replace('--env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"', "");
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-exact-release-dependency",
-    );
-  });
-
-  it("fails closed when the protected staged wake bypass is not bound", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const secretLine =
-      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
-    const quickNodeStep =
-      "      - name: Gate exact staged QuickNode wake route\n" +
-      "        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.wake_canary_required == 'true'\n" +
-      "        env:\n" +
-      "          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}\n" +
-      secretLine;
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow.replace(
-      quickNodeStep,
-      quickNodeStep.replace(secretLine, ""),
-    );
-    expect(unsafeWorkflow).not.toBe(workflow);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-quicknode-stream-stage-gate",
-    );
-  });
-
-  it("rejects a staged wake bypass secret relocated to another workflow step", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const secretLine =
-      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const quickNodeStepStart = workflow.indexOf(
-      "      - name: Gate exact staged QuickNode wake route",
-    );
-    const quickNodeStepEnd = workflow.indexOf(
-      "      - name: Attest exact staged release policy",
-    );
-    expect(quickNodeStepStart).toBeGreaterThanOrEqual(0);
-    expect(quickNodeStepEnd).toBeGreaterThan(quickNodeStepStart);
-    const quickNodeStep = workflow.slice(quickNodeStepStart, quickNodeStepEnd);
-    expect(quickNodeStep).toContain(secretLine);
-    const unsafeQuickNodeStep = quickNodeStep.replace(secretLine, "");
-    const withoutQuickNodeSecret =
-      workflow.slice(0, quickNodeStepStart) +
-      unsafeQuickNodeStep +
-      workflow.slice(quickNodeStepEnd);
-    const unsafeWorkflow = withoutQuickNodeSecret.replace(
-      "      - name: Pull production configuration\n        env:\n",
-      `      - name: Pull production configuration\n        env:\n${secretLine}`,
-    );
-    expect(unsafeWorkflow).not.toBe(withoutQuickNodeSecret);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-quicknode-stream-stage-gate",
-    );
-  });
-
-  it("fails closed when the protected market staged smoke bypass is missing", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const bitqueryStep =
-      "      - name: Smoke staged public market APIs\n" +
-      "        if: needs.release-gate.outputs.verified_read_model == 'true'\n" +
-      "        env:\n" +
-      "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
-      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
-    const unsafeWorkflow = readFileSync(
-      resolve(ROOT, workflowPath),
-      "utf8",
-    ).replace(
-      bitqueryStep,
-      bitqueryStep.replace(
-        "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
-        "",
-      ),
-    );
-    expect(unsafeWorkflow).not.toBe(
-      readFileSync(resolve(ROOT, workflowPath), "utf8"),
-    );
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it.each([
-    [
-      "secret-only Vercel environment handoff",
-      'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
-    ],
-    [
-      "private production witness resolver",
-      "runtimeProductionProviderEndpoints(process.env)",
-    ],
-    ["independent reader handoff", "                rpcUrls: independentRpcUrls,\n"],
-  ])("fails closed when staged market proof drops the %s", (_label, needle) => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const stepStart = workflow.indexOf(
-      "      - name: Smoke staged public market APIs",
-    );
-    const stepEnd = workflow.indexOf(
-      "      - name: Record registry identity and combined market path",
-    );
-    expect(stepStart).toBeGreaterThanOrEqual(0);
-    expect(stepEnd).toBeGreaterThan(stepStart);
-    const step = workflow.slice(stepStart, stepEnd);
-    expect(step).toContain(needle);
-    const unsafeStep = step.replace(needle, "");
-    const unsafeWorkflow =
-      workflow.slice(0, stepStart) +
-      unsafeStep +
-      workflow.slice(stepEnd);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it("fails closed when the Bitquery staged smoke stops proving current FDV order", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow.replace(
-      '"staged Bitquery Highest FDV is not monotonically descending"',
-      '"staged Bitquery order was not checked"',
-    );
-    expect(unsafeWorkflow).not.toBe(workflow);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it("fails closed when staged release permits zero current public FDVs", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow.replace(
-      "          if (currentFdvCount < 1) {",
-      "          if (currentFdvCount < 0) {",
-    );
-    expect(unsafeWorkflow).not.toBe(workflow);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it.each([
-    ["StateView price source", 'price?.source !== "uniswap-v4-stateview-chainlink-v1"'],
-    ["official liquidity source", 'liquidity?.source !== "official-uniswap-v4-subgraph"'],
-    ["official subgraph deployment", "provenance?.deployment !== officialV4SubgraphDeployment"],
-    ["minimum liquidity", "BigInt(liquidity.tvlUsdWad) <"],
-    ["exact reference head", "valuation.asOfBlock === provenance.referenceHeadBlockNumber"],
-    ["recomputed FDV", "expectedFdvUsdWad.toString() === valuation.valueWad"],
-  ])("fails closed when staged release drops %s binding", (_label, needle) => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow.replace(needle, "false");
-    expect(unsafeWorkflow).not.toBe(workflow);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it.each(stagedMarketEvidenceGuardCases)(
-    "mutation %i removes required staged market guard %s",
-    (_index, needle) => {
-      const workflowPath = ".github/workflows/deploy-production.yml";
-      const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-      expect(workflow).toContain(needle);
-      const unsafeWorkflow = workflow
-        .split(needle)
-        .join("MUTATED_RELEASE_GUARD");
-      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-        sourceOverrides: {
-          ...integratedOverrides(),
-          [workflowPath]: unsafeWorkflow,
-        },
-        expectedSha256Overrides: fixtureDigests(),
-      });
-      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-        "ops-protected-bitquery-stage-smoke",
-      );
-    },
-  );
-
-  it("fails closed when post-promotion permits zero current public FDVs", () => {
-    const postPromotionPath =
-      "scripts/perf/read-model-post-promotion.mjs";
-    const postPromotion = readFileSync(
-      resolve(ROOT, postPromotionPath),
-      "utf8",
-    );
-    const unsafePostPromotion = postPromotion.replace(
-      "  return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
-      "  return currentCount >= 0 ? { currentToken, tokens, valuationSnapshot } : null;",
-    );
-    expect(unsafePostPromotion).not.toBe(postPromotion);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [postPromotionPath]: unsafePostPromotion,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-post-promotion-binding",
-    );
-  });
-
-  it("fails closed when post-promotion drops the fixed production origin", () => {
-    const postPromotionPath =
-      "scripts/perf/read-model-post-promotion.mjs";
-    const postPromotion = readFileSync(
-      resolve(ROOT, postPromotionPath),
-      "utf8",
-    );
-    const unsafePostPromotion = postPromotion.replace(
-      "target.origin !== PRODUCTION_ORIGIN",
-      "false",
-    );
-    expect(unsafePostPromotion).not.toBe(postPromotion);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [postPromotionPath]: unsafePostPromotion,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-post-promotion-binding",
-    );
-  });
-
-  it.each([
-    "  if (false && target.origin !== PRODUCTION_ORIGIN) {",
-    "  if (target.origin !== PRODUCTION_ORIGIN && false) {",
-    "  if (Boolean(0) && target.origin !== PRODUCTION_ORIGIN) {",
-  ])(
-    "fails closed when post-promotion disables the production-origin guard as %s",
-    (disabledGuard) => {
-      const postPromotionPath =
-        "scripts/perf/read-model-post-promotion.mjs";
-      const postPromotion = readFileSync(
-        resolve(ROOT, postPromotionPath),
-        "utf8",
-      );
-      const unsafePostPromotion = postPromotion.replace(
-        "  if (target.origin !== PRODUCTION_ORIGIN) {",
-        disabledGuard,
-      );
-      expect(unsafePostPromotion).not.toBe(postPromotion);
-      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-        sourceOverrides: {
-          ...integratedOverrides(),
-          [postPromotionPath]: unsafePostPromotion,
-        },
-        expectedSha256Overrides: fixtureDigests(),
-      });
-      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-        "ops-post-promotion-binding",
-      );
-    },
-  );
-
-  it("fails closed when the exact production-origin throw is wrapped in a disabled branch", () => {
-    const postPromotionPath =
-      "scripts/perf/read-model-post-promotion.mjs";
-    const postPromotion = readFileSync(
-      resolve(ROOT, postPromotionPath),
-      "utf8",
-    );
-    const exactGuard = [
-      "  if (target.origin !== PRODUCTION_ORIGIN) {",
-      "    throw new Error(",
-      '      "post-promotion target must be the programmable.market production origin",',
-      "    );",
-      "  }",
-    ].join("\n");
-    const unsafePostPromotion = postPromotion.replace(
-      exactGuard,
-      ["  if (false) {", exactGuard, "  }"].join("\n"),
-    );
-    expect(unsafePostPromotion).not.toBe(postPromotion);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [postPromotionPath]: unsafePostPromotion,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-post-promotion-binding",
-    );
-  });
-
-  it.each([
-    ["StateView price source", 'price?.source !== "uniswap-v4-stateview-chainlink-v1"'],
-    ["official liquidity source", 'liquidity?.source !== "official-uniswap-v4-subgraph"'],
-    ["official subgraph deployment", "provenance?.deployment !== OFFICIAL_V4_SUBGRAPH_DEPLOYMENT"],
-    ["minimum liquidity", "BigInt(liquidity.tvlUsdWad) < MINIMUM_PUBLIC_FDV_LIQUIDITY_USD_WAD"],
-    ["exact reference head", "valuation.asOfBlock === provenance.referenceHeadBlockNumber"],
-    ["recomputed FDV", "expectedFdvUsdWad.toString() === valuation.valueWad"],
-  ])("fails closed when post-promotion drops %s binding", (_label, needle) => {
-    const postPromotionPath =
-      "scripts/perf/read-model-post-promotion.mjs";
-    const postPromotion = readFileSync(
-      resolve(ROOT, postPromotionPath),
-      "utf8",
-    );
-    const unsafePostPromotion = postPromotion.replace(needle, "false");
-    expect(unsafePostPromotion).not.toBe(postPromotion);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [postPromotionPath]: unsafePostPromotion,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-post-promotion-binding",
-    );
-  });
-
-  it.each(postPromotionGuardCases)(
-    "mutation %i removes required post-promotion guard %s",
-    (_index, needle) => {
-      const postPromotionPath =
-        "scripts/perf/read-model-post-promotion.mjs";
-      const postPromotion = readFileSync(
-        resolve(ROOT, postPromotionPath),
-        "utf8",
-      );
-      expect(postPromotion).toContain(needle);
-      const unsafePostPromotion = postPromotion
-        .split(needle)
-        .join("MUTATED_RELEASE_GUARD");
-      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-        sourceOverrides: {
-          ...integratedOverrides(),
-          [postPromotionPath]: unsafePostPromotion,
-        },
-        expectedSha256Overrides: fixtureDigests(),
-      });
-      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-        "ops-post-promotion-binding",
-      );
-    },
-  );
-
-  it("fails closed when the historical PCAN gate widens the general stale ceiling", () => {
-    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
-    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
-    const unsafeHelper = helper.replace(
-      "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
-      "const MAXIMUM_STALE_AGE_MS = 48 * 60 * 60_000",
-    );
-    expect(unsafeHelper).not.toBe(helper);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [helperPath]: unsafeHelper,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it("fails closed when the historical PCAN deferral ceiling is widened", () => {
-    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
-    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
-    const unsafeHelper = helper.replace(
-      "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000",
-      "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 365 * 24 * 60 * 60_000",
-    );
-    expect(unsafeHelper).not.toBe(helper);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [helperPath]: unsafeHelper,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it.each([
-    "runtimeProductionProviderEndpoints(process.env)",
-    '"eth_getTransactionReceipt"',
-    '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
-    "swapLogs.length !== 1",
-    'rpcQuantity(receipt?.status, "receipt status") !== 1n',
-    "requireCanonical: true",
-    "sameObservation(first, second)",
-    "first.amount0 >= 0n",
-    "first.amount1 !== tokenAmountRaw",
-    "executionPriceQuoteWad !== priceQuoteWad",
-    "executionPriceQuoteWad * first.answer",
-    "observation.answeredInRound < observation.roundId",
-    "const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n",
-  ])("fails closed when the PCAN execution proof drops %s", (needle) => {
-    const parityPath = "scripts/perf/bitquery-golden-market-parity.mjs";
-    const parity = readFileSync(resolve(ROOT, parityPath), "utf8");
-    expect(parity).toContain(needle);
-    const unsafeParity = parity.replace(needle, "MUTATED_EXECUTION_PROOF");
-    expect(unsafeParity).not.toBe(parity);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [parityPath]: unsafeParity,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it.each([
-    "parity.transactionHash !== trade?.transactionHash?.toLowerCase()",
-    "parity.bitqueryTradeOrdinal !== trade?.logIndex",
-    "parity.executionPriceQuoteWad !== trade?.priceQuoteWad",
-    "parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED",
-    "BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId)",
-  ])("fails closed when historical PCAN binding drops %s", (needle) => {
-    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
-    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
-    expect(helper).toContain(needle);
-    const unsafeHelper = helper.replace(needle, "MUTATED_EXECUTION_BINDING");
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [helperPath]: unsafeHelper,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it("fails closed when the staged PCAN canary becomes discoverable", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow.replace(
-      `            goldenSearch.tokens.some(
-              (token) => token?.tokenAddress?.toLowerCase() === goldenTokenAddress,
-            ) ||
-            goldenSearch.total !== 0`,
-      "            false",
-    );
-    expect(unsafeWorkflow).not.toBe(workflow);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it("rejects a public market staged smoke bypass relocated to another workflow step", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const secretLine =
-      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const bitqueryStepStart = workflow.indexOf(
-      "      - name: Smoke staged public market APIs",
-    );
-    const bitqueryStepEnd = workflow.indexOf(
-      "      - name: Record registry identity and combined market path",
-    );
-    expect(bitqueryStepStart).toBeGreaterThanOrEqual(0);
-    expect(bitqueryStepEnd).toBeGreaterThan(bitqueryStepStart);
-    const bitqueryStep = workflow.slice(bitqueryStepStart, bitqueryStepEnd);
-    expect(bitqueryStep).toContain(secretLine);
-    const unsafeBitqueryStep = bitqueryStep.replace(secretLine, "");
-    const unsafeWorkflow =
-      workflow.slice(0, bitqueryStepStart) +
-      unsafeBitqueryStep +
-      workflow
-        .slice(bitqueryStepEnd)
-        .replace(
-          "      - name: Record registry identity and combined market path\n",
-          `      - name: Record registry identity and combined market path\n        env:\n${secretLine}`,
-        );
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
-    );
-  });
-
-  it("fails closed when the protected indexed staged capture bypass is missing", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const captureStepStart = workflow.indexOf(
-      "      - name: Capture staged read-model evidence",
-    );
-    const captureStepEnd = workflow.indexOf(
-      "      - name: Preserve staged read-model evidence",
-    );
-    expect(captureStepStart).toBeGreaterThanOrEqual(0);
-    expect(captureStepEnd).toBeGreaterThan(captureStepStart);
-    const captureStep = workflow.slice(captureStepStart, captureStepEnd);
-    const secretLine =
-      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
-    expect(captureStep).toContain(secretLine);
-    const unsafeWorkflow =
-      workflow.slice(0, captureStepStart) +
-      captureStep.replace(secretLine, "") +
-      workflow.slice(captureStepEnd);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-indexed-stage-capture",
-    );
-  });
-
-  it("fails closed when the Bitquery staged smoke drops the bypass header", () => {
-    const workflowPath = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow.replace(
-      '            "x-vercel-protection-bypass": automationBypassSecret,\n',
+      "no literal TTL",
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;\n",
       "",
-    );
-    expect(unsafeWorkflow).not.toBe(workflow);
+    ],
+    [
+      "an unbound cache hit",
+      "cacheKeyHasCommitment(cached.key, binding.endpointCommitment)",
+      "true",
+    ],
+    [
+      "no shared in-flight refresh",
+      "let refresh = refreshes.get(refreshKey) ?? null;",
+      "let refresh = null;",
+    ],
+    [
+      "a stale cache return",
+      "cached = null;",
+      "return cached.catalog;",
+    ],
+  ])("rejects the dRPC launch catalog cache with %s", (_label, needle, replacement) => {
+    const path = "lib/market-data/primary-rpc-launches.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        [workflowPath]: unsafeWorkflow,
-      },
-      expectedSha256Overrides: fixtureDigests(),
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-bitquery-stage-smoke",
+      "ops-primary-rpc-launch-catalog-cache-contract",
     );
   });
 
-  it("rejects comment-only controls and jointly drifted manifests", () => {
-    const operations = JSON.parse(
-      readFileSync(
-        resolve(ROOT, "config/read-model-operations.v1.json"),
-        "utf8",
-      ),
-    );
-    operations.legacyIndexer.schedule = "0 0 * * *";
-    operations.workers.forEach((worker: { schedule: string }) => {
-      worker.schedule = "0 0 * * *";
-    });
-    const vercel = JSON.parse(
-      readFileSync(resolve(ROOT, "vercel.json"), "utf8"),
-    );
-    vercel.crons.forEach((cron: { schedule: string }) => {
-      cron.schedule = "0 0 * * *";
-    });
-    const commentsOnly = `
-      // process.env.CRON_SECRET request.headers.get("authorization")
-      // Buffer.byteLength(secret, "utf8") < 32; Buffer.byteLength(secret, "utf8") > 1_024
-      // authorization.startsWith("Bearer "); provided.length === expected.length
-      // timingSafeEqual(provided, expected); if (!isAuthorized(request)) {}
-      // status: 401; status: 503; "Cache-Control": "no-store"
-    `;
+  it("accepts the exact Explore transport-unavailable provider taxonomy", () => {
+    const path = "app/api/explore/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain('error.phase === "market-liquidity"');
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        ...integratedOverrides(),
-        "config/read-model-operations.v1.json": JSON.stringify(operations),
-        "vercel.json": JSON.stringify(vercel),
-        "app/api/ops/projector/route.ts": commentsOnly,
-      },
-      expectedSha256Overrides: {
-        ...fixtureDigests(),
-        "app/api/ops/projector/route.ts": createHash("sha256")
-          .update(commentsOnly)
-          .digest("hex"),
-      },
+      sourceOverrides: { [path]: route },
     });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
-      expect.arrayContaining([
-        "ops-config-schema",
-        "ops-cron-exact-set",
-        "ops-legacy-cron-preserved",
-        "ops-source-projector-schedule",
-        "ops-source-projector-route-auth",
-      ]),
+    expect(result.failures.map(({ id }: { id: string }) => id)).not.toContain(
+      "ops-public-provider-split-source-contract",
     );
   });
 
-  it("rejects wake canary, secret schema and staged-gate drift", () => {
-    const canaryPath = resolve(
-      ROOT,
-      "scripts/perf/read-model-projector-wake-canary.mjs",
+  it.each([
+    [
+      "a schema failure category",
+      'error.category === "transport"',
+      'error.category === "schema"',
+    ],
+    [
+      "an unbounded failure phase",
+      '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
+      "Boolean(error.phase)",
+    ],
+    [
+      "a bounded failure phase set without exact-pool liquidity",
+      '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
+      '(error.phase === "market-core" || error.phase === "market-price")',
+    ],
+    [
+      "a combined degraded read source",
+      '"X-Programmable-Read-Source": marketTransportFailure === null\n            ? "drpc+bitquery"\n            : "drpc",',
+      '"X-Programmable-Read-Source": marketTransportFailure === null\n            ? "drpc+bitquery"\n            : "drpc+bitquery",',
+    ],
+    [
+      "an unknown degraded market marker",
+      '"X-Programmable-Market-Read-Status":\n            marketTransportFailure === null\n              ? "current"\n              : "transport-unavailable",',
+      '"X-Programmable-Market-Read-Status":\n            marketTransportFailure === null\n              ? "current"\n              : "unknown",',
+    ],
+    [
+      "a different market provider",
+      '"X-Programmable-Market-Provider": "bitquery"',
+      '"X-Programmable-Market-Provider": "unknown"',
+    ],
+    [
+      "a healthy degraded cache policy",
+      '"Cache-Control": marketTransportFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "no-store",',
+      '"Cache-Control": marketTransportFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "public, max-age=0, s-maxage=2",',
+    ],
+    [
+      "FDV ordering during provider degradation",
+      'applied: "launch-order" as const',
+      'applied: "fdv" as const',
+    ],
+  ])("rejects the Explore source contract with %s", (_label, needle, replacement) => {
+    const path = "app/api/explore/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: route.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
     );
-    const workflowPath = resolve(
-      ROOT,
-      ".github/workflows/deploy-production.yml",
-    );
+  });
+
+  it("rejects a public route that restores a durable availability read", () => {
+    const path = "app/api/explore/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
-        ...integratedOverrides(),
-        "scripts/perf/read-model-projector-wake-canary.mjs": `${readFileSync(
-          canaryPath,
-          "utf8",
-        )}\n// unreviewed drift\n`,
-        ".env.example": readFileSync(
-          resolve(ROOT, ".env.example"),
-          "utf8",
-        ).replace(
-          "PROGRAMMABLE_QUICKNODE_STREAM_SECRET=",
-          "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET=exposed",
-        ),
-        ".github/workflows/deploy-production.yml": readFileSync(
-          workflowPath,
-          "utf8",
-        ).replace(
-          "Gate exact staged QuickNode wake route",
-          "Skipped staged QuickNode wake route",
+        [path]: route + "\nreadDurableExploreModel();\n",
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a public release manifest that requires a secondary RPC", () => {
+    const path = "config/read-model-operations.v1.json";
+    const manifest = JSON.parse(
+      readFileSync(resolve(ROOT, path), "utf8"),
+    ) as Record<string, unknown>;
+    const postPromotion = manifest.postPromotion as Record<string, unknown>;
+    const rpc = postPromotion.rpc as Record<string, unknown>;
+    const drifted = JSON.stringify(
+      {
+        ...manifest,
+        postPromotion: {
+          ...postPromotion,
+          rpc: { ...rpc, secondaryRequired: true },
+        },
+      },
+      null,
+      2,
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-config-schema",
+    );
+  });
+
+  it("rejects a public launch route that restores Bitquery identity discovery", () => {
+    const path = "app/api/explore/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain("readPrimaryRpcExploreEntriesV1");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replaceAll(
+          "readPrimaryRpcExploreEntriesV1",
+          "readBitqueryExploreEntriesV1",
         ),
       },
-      expectedSha256Overrides: fixtureDigests(),
     });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
-      expect.arrayContaining([
-        "ops-quicknode-stream-wake-binding",
-        "ops-quicknode-stream-env-contract",
-        "ops-quicknode-stream-stage-gate",
-      ]),
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    [
+      "canonical token detail headers that claim Custom Registry identity",
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Launch-Source": "registry.custom-launched"',
+    ],
+    [
+      "Custom Registry token detail headers that claim canonical identity",
+      '"X-Programmable-Launch-Source": "registry.custom-launched"',
+      '"X-Programmable-Launch-Source": "drpc"',
+    ],
+    [
+      "a canonical dRPC failure that does not return before the Custom Registry path",
+      "return unavailableResponse(canonicalResponseHeaders({",
+      "unavailableResponse(canonicalResponseHeaders({",
+    ],
+  ])("rejects %s", (_label, needle, replacement) => {
+    const path = "app/api/explore/token/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: route.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a public action route that restores RPC quorum selection", () => {
+    const path = "app/api/trade/prepare/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain("tradeActionRpcProvider");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replaceAll(
+          "tradeActionRpcProvider",
+          "tradeActionRpcProviders",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a staged public smoke that exposes an RPC provider URL", () => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: workflow.replace(
+          "Smoke staged Bitquery public APIs",
+          "Smoke staged Bitquery public APIs\n# PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    ["more than one retry", "attempt < 2", "attempt < 3"],
+    [
+      "a response other than HTTP 503",
+      "response.status === 503 && attempt === 0",
+      "response.status >= 500 && attempt === 0",
+    ],
+    ["a rebuilt URL", "fetch(requestUrl, {", "fetch(new URL(path, target), {"],
+  ])("rejects staged Bitquery smoke retrying %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    [
+      "an FDV response other than HTTP 200",
+      "response.status === 200",
+      "response.ok",
+    ],
+    [
+      "a non-current valuation",
+      'token.valuation.freshness === "current"',
+      'token.valuation.freshness !== "unknown"',
+    ],
+    [
+      "the Newest route on empty FDV data",
+      '["market-cap", "market-cap-asc"].includes(expectedSort)',
+      '["market-cap", "market-cap-asc", "newest"].includes(expectedSort)',
+    ],
+    [
+      "a response sort different from the requested FDV sort",
+      "response.body?.sort === expectedSort",
+      '["market-cap", "market-cap-asc"].includes(response.body?.sort)',
+    ],
+    [
+      "without the exact Highest callback",
+      '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
+      "              false,",
+    ],
+    [
+      "without the exact current market marker",
+      "exactCurrentExploreSources(response) &&",
+      "true &&",
+    ],
+  ])("rejects staged Bitquery data retrying %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    [
+      "an unknown market-read marker",
+      '["current", "transport-unavailable"].includes(',
+      '["current", "transport-unavailable", "unknown"].includes(',
+    ],
+    [
+      "mixed Highest and Newest market-read states",
+      "newestMarketReadStatus !== highestMarketReadStatus",
+      "false",
+    ],
+    ["a non-200 Highest response", "highest.status !== 200", "false"],
+    ["a non-200 Newest response", "newest.status !== 200", "false"],
+    [
+      "a widened response page size",
+      "response.body?.pageSize === 20",
+      "response.body?.pageSize <= 200",
+    ],
+    [
+      "an incomplete first page",
+      "tokens.length === Math.min(20, total)",
+      "tokens.length <= Math.min(20, total)",
+    ],
+    [
+      "an inconsistent total page count",
+      "totalPages === Math.ceil(total / 20)",
+      "totalPages >= Math.ceil(total / 20)",
+    ],
+    [
+      "a combined degraded read source",
+      'response.headers.get("x-programmable-read-source") === "drpc"',
+      'response.headers.get("x-programmable-read-source") === "drpc+bitquery"',
+    ],
+    [
+      "a degraded market-source claim",
+      '!response.headers.has("x-programmable-market-source")',
+      'response.headers.get("x-programmable-market-source") === "bitquery"',
+    ],
+    [
+      "a degraded price-source claim",
+      '!response.headers.has("x-programmable-price-source")',
+      'response.headers.get("x-programmable-price-source") === "bitquery"',
+    ],
+    [
+      "a degraded market as-of claim",
+      '!response.headers.has("x-programmable-market-as-of")',
+      'response.headers.has("x-programmable-market-as-of")',
+    ],
+    [
+      "cacheable degraded data",
+      'response.headers.get("cache-control") === "no-store"',
+      'response.headers.get("cache-control") !== ""',
+    ],
+    [
+      "non-partial degraded data quality",
+      'response.headers.get("x-programmable-data-quality") === "partial"',
+      'response.headers.get("x-programmable-data-quality") !== ""',
+    ],
+    [
+      "a non-current launch identity",
+      'launchIdentity?.status === "current"',
+      'launchIdentity?.status !== "unavailable"',
+    ],
+    [
+      "a ten-minute launch identity age",
+      "launchIdentity.ageMs < 60_000",
+      "launchIdentity.ageMs < 600_000",
+    ],
+    [
+      "a non-integer launch identity age",
+      "Number.isSafeInteger(launchIdentity.ageMs)",
+      "Number.isFinite(launchIdentity.ageMs)",
+    ],
+    [
+      "a nullable launch identity block",
+      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
+      "launchIdentity.asOfBlock !== undefined",
+    ],
+    [
+      "a nullable launch identity reference block",
+      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
+      "launchIdentity.referenceBlock !== undefined",
+    ],
+    [
+      "an available degraded market read",
+      'marketRead.status === "unavailable"',
+      'marketRead.status === "current"',
+    ],
+    [
+      "an unknown degraded failure category",
+      'marketRead.category === "transport"',
+      'marketRead.category !== "schema"',
+    ],
+    [
+      "an unbounded degraded failure phase",
+      '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
+      "Boolean(marketRead.phase)",
+    ],
+    [
+      "a degraded phase set without exact-pool liquidity",
+      '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
+      '["market-core", "market-price"].includes(marketRead.phase)',
+    ],
+    [
+      "mixed available degraded valuations",
+      "tokens.every(exactUnavailableValuation)",
+      "tokens.some(exactUnavailableValuation)",
+    ],
+    [
+      "a nonzero degraded available count",
+      "valuation.available === 0",
+      "valuation.available >= 0",
+    ],
+    [
+      "a mismatched degraded unavailable count",
+      "valuation.unavailable === tokens.length",
+      "valuation.unavailable >= 0",
+    ],
+    [
+      "empty degraded launches",
+      "valuation.asOfTime === null &&\n              tokens.length > 0 &&",
+      "valuation.asOfTime === null &&\n              tokens.length >= 0 &&",
+    ],
+    [
+      "fabricated top-level degraded FDV",
+      "token?.fdvUsdWad === undefined",
+      "true",
+    ],
+    [
+      "fabricated degraded market data",
+      "token?.marketData === undefined",
+      "true",
+    ],
+    [
+      "an arbitrary no-market exception",
+      'token?.exploreKind === "custom-project"',
+      "true",
+    ],
+    [
+      "a healthy ranking claim in degradation",
+      'ranking?.status === "unavailable"',
+      'ranking?.status === "current"',
+    ],
+    [
+      "FDV ranking instead of launch-order degradation",
+      'ranking.applied === "launch-order"',
+      'ranking.applied === "fdv"',
+    ],
+    [
+      "a Newest degraded ranking",
+      ": ranking === undefined",
+      ": true",
+    ],
+    [
+      "different degraded page totals",
+      "highest.body?.total !== newest.body?.total",
+      "false",
+    ],
+    [
+      "different degraded page token counts",
+      "highestTokens.length !== newestTokens.length",
+      "false",
+    ],
+    [
+      "duplicate degraded Highest identities",
+      "new Set(highestIdentities).size === highestIdentities.length",
+      "true",
+    ],
+    [
+      "reordered degraded Highest identities",
+      "(identity, index) => identity === newestIdentities[index]",
+      "() => true",
+    ],
+    [
+      "no degraded Highest-to-Newest order gate",
+      "!exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
+      "false &&\n              exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
+    ],
+    [
+      "a claimed degraded detail verification",
+      'detailStatus = "skipped-provider-unavailable"',
+      'detailStatus = "verified-current"',
+    ],
+    [
+      "a claimed degraded chart verification",
+      'chartStatus = "skipped-provider-unavailable"',
+      'chartStatus = "verified-ready"',
+    ],
+  ])("rejects a staged degraded market contract with %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    [
+      "market-read status output",
+      "MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}",
+      "MARKET_READ_STATUS: unavailable",
+    ],
+    [
+      "detail status output",
+      "DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}",
+      "DETAIL_SMOKE_STATUS: unavailable",
+    ],
+    [
+      "chart status output",
+      "CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}",
+      "CHART_SMOKE_STATUS: unavailable",
+    ],
+  ])("rejects a staged handoff without %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it("rejects restored staged read-model availability gates", () => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: workflow + "\n# npm run perf:read-model:staged-refresh\n",
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-obsolete-public-read-gates-absent",
     );
   });
 
@@ -1816,27 +1618,29 @@ function currentPublicTokenFixture(publicMarketAsOf: string) {
       generatedAt: new Date().toISOString(),
       status: "current",
       primaryPoolId: PUBLIC_POOL_ID,
-      pools: [{
-        identity: {
-          chainId: "1",
-          tokenAddress: PUBLIC_TOKEN_ADDRESS,
-          poolId: PUBLIC_POOL_ID,
-          protocol: "uniswap_v4",
+      pools: [
+        {
+          identity: {
+            chainId: "1",
+            tokenAddress: PUBLIC_TOKEN_ADDRESS,
+            poolId: PUBLIC_POOL_ID,
+            protocol: "uniswap_v4",
+          },
+          source: "bitquery",
+          status: "current",
+          quality: "complete",
+          asOfTime: publicMarketAsOf,
+          latestTrade: {
+            transactionHash: `0x${"77".repeat(32)}`,
+            logIndex: 1,
+            blockNumber: TEST_CURRENT_BLOCK.toString(),
+            time: publicMarketAsOf,
+            tokenSide: "buy",
+            priceUsdWad: TEST_PRICE_USD_WAD.toString(),
+          },
+          valuation: { status: "unavailable", reason: "source-unavailable" },
         },
-        source: "bitquery",
-        status: "current",
-        quality: "complete",
-        asOfTime: publicMarketAsOf,
-        latestTrade: {
-          transactionHash: `0x${"77".repeat(32)}`,
-          logIndex: 1,
-          blockNumber: TEST_CURRENT_BLOCK.toString(),
-          time: publicMarketAsOf,
-          tokenSide: "buy",
-          priceUsdWad: TEST_PRICE_USD_WAD.toString(),
-        },
-        valuation: { status: "unavailable", reason: "source-unavailable" },
-      }],
+      ],
     },
   };
 }
@@ -1891,7 +1695,7 @@ const EXPLORE_VALUATION_SNAPSHOT_FIELDS = [
   "pageSize",
 ] as const;
 type ExploreValuationSnapshotField =
-  typeof EXPLORE_VALUATION_SNAPSHOT_FIELDS[number];
+  (typeof EXPLORE_VALUATION_SNAPSHOT_FIELDS)[number];
 type ExploreValuationSnapshotMutation = Readonly<{
   page: 1 | 2;
   field: ExploreValuationSnapshotField;
@@ -1963,16 +1767,15 @@ function paginatedMarketCapFetch(
     Math.floor((Date.now() - 2 * 60_000) / 1_000) * 1_000,
   ).toISOString();
   const publicToken = currentPublicTokenFixture(publicMarketAsOf);
-  const unavailable = Array.from(
-    { length: 100 },
-    (_, index) => unavailablePublicTokenFixture(index + 10),
+  const unavailable = Array.from({ length: 100 }, (_, index) =>
+    unavailablePublicTokenFixture(index + 10),
   );
-  const firstPageTokens = mode === "hidden-current"
-    ? unavailable
-    : [publicToken, ...unavailable.slice(0, 99)];
-  const secondPageToken = mode === "hidden-current"
-    ? publicToken
-    : unavailable[99];
+  const firstPageTokens =
+    mode === "hidden-current"
+      ? unavailable
+      : [publicToken, ...unavailable.slice(0, 99)];
+  const secondPageToken =
+    mode === "hidden-current" ? publicToken : unavailable[99];
   const firstPageSnapshot = mutateValuationSnapshot(
     mutation?.page === 1 ? mutation : undefined,
   );
@@ -1981,49 +1784,49 @@ function paginatedMarketCapFetch(
   );
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
-    if (
-      url.pathname !== "/api/explore" ||
-      url.searchParams.has("q")
-    ) return base(input, init);
+    if (url.pathname !== "/api/explore" || url.searchParams.has("q"))
+      return base(input, init);
     const page = Number(url.searchParams.get("page") ?? "1");
     if (page === 1) {
       const hasCurrent = mode !== "hidden-current";
-      return Response.json({
-        status: "ready",
-        tokens: firstPageTokens,
-        page: 1,
-        pageSize: 100,
-        total: 101,
-        totalPages: 2,
-        sort: "market-cap",
-        query: "",
-        valuationSnapshot: firstPageSnapshot,
-        dataQuality: hasCurrent
-          ? currentExploreDataQuality(publicMarketAsOf, 1, 99)
-          : {
-              schemaVersion: "programmable.explore-data-quality.v1",
-              status: "partial",
-              valuation: {
-                status: "unavailable",
-                metric: "fdv",
-                available: 0,
-                unavailable: 100,
-                stale: 0,
-                unknown: 0,
-                asOfTime: null,
-                asOfBlock: null,
+      return Response.json(
+        {
+          status: "ready",
+          tokens: firstPageTokens,
+          page: 1,
+          pageSize: 100,
+          total: 101,
+          totalPages: 2,
+          sort: "market-cap",
+          query: "",
+          valuationSnapshot: firstPageSnapshot,
+          dataQuality: hasCurrent
+            ? currentExploreDataQuality(publicMarketAsOf, 1, 99)
+            : {
+                schemaVersion: "programmable.explore-data-quality.v1",
+                status: "partial",
+                valuation: {
+                  status: "unavailable",
+                  metric: "fdv",
+                  available: 0,
+                  unavailable: 100,
+                  stale: 0,
+                  unknown: 0,
+                  asOfTime: null,
+                  asOfBlock: null,
+                },
               },
-            },
-      }, {
-        headers: hasCurrent
-          ? currentPublicHeaders(publicMarketAsOf, "partial")
-          : {
-              "X-Programmable-Data-Quality": "partial",
-              "X-Programmable-Market-Source": "bitquery",
-              "X-Programmable-Read-Source":
-                "operational+durable+postgres",
-            },
-      });
+        },
+        {
+          headers: hasCurrent
+            ? currentPublicHeaders(publicMarketAsOf, "partial")
+            : {
+                "X-Programmable-Data-Quality": "partial",
+                "X-Programmable-Market-Source": "bitquery",
+                "X-Programmable-Read-Source": "operational+durable+postgres",
+              },
+        },
+      );
     }
     const expectedContinuationParameters = [
       ["valuationBlock", firstPageSnapshot.blockNumber],
@@ -2036,10 +1839,11 @@ function paginatedMarketCapFetch(
       url.searchParams.get("limit") !== "100" ||
       url.searchParams.get("page") !== "2" ||
       url.searchParams.get("sort") !== "market-cap" ||
-      expectedContinuationParameters.some(([name, value]) =>
-        typeof value !== "string" ||
-        url.searchParams.get(name) !== value ||
-        url.searchParams.getAll(name).length !== 1
+      expectedContinuationParameters.some(
+        ([name, value]) =>
+          typeof value !== "string" ||
+          url.searchParams.get(name) !== value ||
+          url.searchParams.getAll(name).length !== 1,
       )
     ) {
       return Response.json(
@@ -2049,42 +1853,44 @@ function paginatedMarketCapFetch(
     }
     const pageTokens = mode === "missing-page" ? [] : [secondPageToken];
     const hasCurrent = mode === "hidden-current";
-    return Response.json({
-      status: "ready",
-      tokens: pageTokens,
-      page: 2,
-      pageSize: 100,
-      total: 101,
-      totalPages: 2,
-      sort: "market-cap",
-      query: "",
-      valuationSnapshot: secondPageSnapshot,
-      dataQuality: hasCurrent
-        ? currentExploreDataQuality(publicMarketAsOf, 1, 0)
-        : {
-            schemaVersion: "programmable.explore-data-quality.v1",
-            status: "partial",
-            valuation: {
-              status: "unavailable",
-              metric: "fdv",
-              available: 0,
-              unavailable: pageTokens.length,
-              stale: 0,
-              unknown: 0,
-              asOfTime: null,
-              asOfBlock: null,
+    return Response.json(
+      {
+        status: "ready",
+        tokens: pageTokens,
+        page: 2,
+        pageSize: 100,
+        total: 101,
+        totalPages: 2,
+        sort: "market-cap",
+        query: "",
+        valuationSnapshot: secondPageSnapshot,
+        dataQuality: hasCurrent
+          ? currentExploreDataQuality(publicMarketAsOf, 1, 0)
+          : {
+              schemaVersion: "programmable.explore-data-quality.v1",
+              status: "partial",
+              valuation: {
+                status: "unavailable",
+                metric: "fdv",
+                available: 0,
+                unavailable: pageTokens.length,
+                stale: 0,
+                unknown: 0,
+                asOfTime: null,
+                asOfBlock: null,
+              },
             },
-          },
-    }, {
-      headers: hasCurrent
-        ? currentPublicHeaders(publicMarketAsOf)
-        : {
-            "X-Programmable-Data-Quality": "partial",
-            "X-Programmable-Market-Source": "bitquery",
-            "X-Programmable-Read-Source":
-              "operational+durable+postgres",
-          },
-    });
+      },
+      {
+        headers: hasCurrent
+          ? currentPublicHeaders(publicMarketAsOf)
+          : {
+              "X-Programmable-Data-Quality": "partial",
+              "X-Programmable-Market-Source": "bitquery",
+              "X-Programmable-Read-Source": "operational+durable+postgres",
+            },
+      },
+    );
   };
 }
 
@@ -2145,9 +1951,11 @@ function publicFetch(
         result = {
           number: `0x${requestedBlock.toString(16)}`,
           hash: current ? TEST_PUBLIC_BLOCK_HASH : `0x${"11".repeat(32)}`,
-          timestamp: `0x${BigInt(Math.floor(Date.parse(
-            current ? publicMarketAsOf : goldenMarketAsOf,
-          ) / 1_000)).toString(16)}`,
+          timestamp: `0x${BigInt(
+            Math.floor(
+              Date.parse(current ? publicMarketAsOf : goldenMarketAsOf) / 1_000,
+            ),
+          ).toString(16)}`,
         };
       } else if (request.method === "eth_getTransactionReceipt") {
         result = {
@@ -2156,38 +1964,40 @@ function publicFetch(
           blockHash: `0x${"11".repeat(32)}`,
           blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
           status: "0x1",
-          logs: [{
-            address: GOLDEN_POOL_MANAGER,
-            topics: [
-              GOLDEN_SWAP_TOPIC,
-              GOLDEN_POOL_ID,
-              `0x${"0".repeat(24)}${"33".repeat(20)}`,
-            ],
-            data: encodeAbiParameters(
-              parseAbiParameters(
-                "int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee",
+          logs: [
+            {
+              address: GOLDEN_POOL_MANAGER,
+              topics: [
+                GOLDEN_SWAP_TOPIC,
+                GOLDEN_POOL_ID,
+                `0x${"0".repeat(24)}${"33".repeat(20)}`,
+              ],
+              data: encodeAbiParameters(
+                parseAbiParameters(
+                  "int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee",
+                ),
+                [-(10n ** 18n), 10n ** 18n, 2n ** 96n, 1_000_000n, 0, 3_000],
               ),
-              [-(10n ** 18n), 10n ** 18n, 2n ** 96n, 1_000_000n, 0, 3_000],
-            ),
-            blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
-            transactionHash: GOLDEN_TRANSACTION_HASH,
-            transactionIndex: "0x1",
-            blockHash: `0x${"11".repeat(32)}`,
-            logIndex: "0x7a",
-            removed: false,
-          }],
+              blockNumber: `0x${TEST_PARITY_BLOCK.toString(16)}`,
+              transactionHash: GOLDEN_TRANSACTION_HASH,
+              transactionIndex: "0x1",
+              blockHash: `0x${"11".repeat(32)}`,
+              logIndex: "0x7a",
+              removed: false,
+            },
+          ],
         };
       } else if (request.method === "eth_getCode") {
         result = TEST_STATE_VIEW_RUNTIME_CODE;
       } else if (request.method === "eth_call") {
         const call = request.params[0] as { to: string; data: string };
         const blockTag = request.params[1] as
-          | string
-          | { blockHash?: string; requireCanonical?: boolean };
-        const current = typeof blockTag === "object"
-          ? blockTag.blockHash?.toLowerCase() === TEST_PUBLIC_BLOCK_HASH &&
-            blockTag.requireCanonical === true
-          : BigInt(blockTag) === TEST_CURRENT_BLOCK;
+          string | { blockHash?: string; requireCanonical?: boolean };
+        const current =
+          typeof blockTag === "object"
+            ? blockTag.blockHash?.toLowerCase() === TEST_PUBLIC_BLOCK_HASH &&
+              blockTag.requireCanonical === true
+            : BigInt(blockTag) === TEST_CURRENT_BLOCK;
         const target = call.to.toLowerCase();
         if (target === TEST_STATE_VIEW.toLowerCase()) {
           const liquiditySelector = encodeFunctionData({
@@ -2237,9 +2047,9 @@ function publicFetch(
           });
         } else {
           const timestamp = BigInt(
-            Math.floor(Date.parse(
-              current ? publicMarketAsOf : goldenMarketAsOf,
-            ) / 1_000),
+            Math.floor(
+              Date.parse(current ? publicMarketAsOf : goldenMarketAsOf) / 1_000,
+            ),
           );
           result = encodeFunctionResult({
             abi: testFeedAbi,
@@ -2277,154 +2087,235 @@ function publicFetch(
     }
     if (url.pathname === "/api/explore") {
       if (url.searchParams.get("q") === GOLDEN_TOKEN_ADDRESS) {
-        return Response.json({
-          status: "ready",
-          tokens: [],
-          total: 0,
-          dataQuality: {
-            status: "partial",
-            valuation: { asOfTime: null },
+        return Response.json(
+          {
+            status: "ready",
+            tokens: [],
+            total: 0,
+            dataQuality: {
+              status: "partial",
+              valuation: { asOfTime: null },
+            },
           },
-        }, {
+          {
+            headers: {
+              "X-Programmable-Data-Quality": "partial",
+              "X-Programmable-Market-Source": "bitquery",
+              "X-Programmable-Read-Source": "operational+durable+postgres",
+            },
+          },
+        );
+      }
+      return Response.json(
+        {
+          status: "ready",
+          tokens: [publicToken],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          totalPages: 1,
+          sort: "market-cap",
+          query: "",
+          valuationSnapshot: valuationSnapshotFixture(),
+          dataQuality: currentExploreDataQuality(publicMarketAsOf),
+        },
+        { headers: currentPublicHeaders(publicMarketAsOf) },
+      );
+    }
+    if (url.pathname === "/api/explore/token") {
+      if (
+        url.searchParams.get("address")?.toLowerCase() === PUBLIC_TOKEN_ADDRESS
+      ) {
+        return Response.json(
+          {
+            status: "ready",
+            token: publicToken,
+            dataQuality: currentExploreDataQuality(publicMarketAsOf),
+          },
+          { headers: currentPublicHeaders(publicMarketAsOf) },
+        );
+      }
+      return Response.json(
+        {
+          status: "ready",
+          token: {
+            tokenAddress: GOLDEN_TOKEN_ADDRESS,
+            totalSupplyRaw: TEST_TOTAL_SUPPLY_RAW.toString(),
+            tokenDecimals: 18,
+            valuation: {
+              status: "available",
+              metric: "fdv",
+              supplyBasis: "total",
+              currency: "usd",
+              source: "bitquery",
+              freshness: "stale",
+              valueWad: TEST_FDV_USD_WAD.toString(),
+              asOfTime: goldenMarketAsOf,
+            },
+            marketData: {
+              schemaVersion: "programmable.market-data.v1",
+              source: "bitquery",
+              generatedAt: new Date().toISOString(),
+              status: "stale",
+              primaryPoolId: GOLDEN_POOL_ID,
+              pools: [
+                {
+                  identity: {
+                    chainId: "1",
+                    tokenAddress: GOLDEN_TOKEN_ADDRESS,
+                    poolId: GOLDEN_POOL_ID,
+                    protocol: "uniswap_v4",
+                  },
+                  source: "bitquery",
+                  status: "stale",
+                  quality: "partial",
+                  asOfTime: goldenMarketAsOf,
+                  latestTrade: {
+                    transactionHash: GOLDEN_TRANSACTION_HASH,
+                    transactionIndex: 1,
+                    logIndex: 1,
+                    blockNumber: TEST_PARITY_BLOCK.toString(),
+                    time: goldenMarketAsOf,
+                    tokenSide: "sell",
+                    tokenAmount: "1",
+                    priceQuoteWad: (10n ** 18n).toString(),
+                    quoteAddress: GOLDEN_QUOTE_ADDRESS,
+                    quoteSymbol: "ETH",
+                    priceUsdWad: TEST_PRICE_USD_WAD.toString(),
+                    rawPriceUsdWad: TEST_PRICE_USD_WAD.toString(),
+                    priceUsdAsOfTime: goldenMarketAsOf,
+                    priceUsdSource: "bitquery-token-price-index-v1",
+                  },
+                  valuation: {
+                    status: "available",
+                    metric: "fdv",
+                    supplyBasis: "total",
+                    valueUsdWad: TEST_FDV_USD_WAD.toString(),
+                    fdvUsdWad: TEST_FDV_USD_WAD.toString(),
+                    totalSupply: "1000",
+                    asOfTime: goldenMarketAsOf,
+                    freshness: "stale",
+                  },
+                },
+              ],
+            },
+          },
+          dataQuality: {
+            schemaVersion: "programmable.explore-data-quality.v1",
+            status: "stale",
+          },
+        },
+        {
           headers: {
-            "X-Programmable-Data-Quality": "partial",
+            "X-Programmable-Market-As-Of": goldenMarketAsOf,
+            "X-Programmable-Data-Quality": "stale",
             "X-Programmable-Market-Source": "bitquery",
             "X-Programmable-Read-Source": "operational+durable+postgres",
           },
-        });
-      }
-      return Response.json({
-        status: "ready",
-        tokens: [publicToken],
-        page: 1,
-        pageSize: 100,
-        total: 1,
-        totalPages: 1,
-        sort: "market-cap",
-        query: "",
-        valuationSnapshot: valuationSnapshotFixture(),
-        dataQuality: currentExploreDataQuality(publicMarketAsOf),
-      }, { headers: currentPublicHeaders(publicMarketAsOf) });
-    }
-    if (url.pathname === "/api/explore/token") {
-      if (url.searchParams.get("address")?.toLowerCase() === PUBLIC_TOKEN_ADDRESS) {
-        return Response.json({
-          status: "ready",
-          token: publicToken,
-          dataQuality: currentExploreDataQuality(publicMarketAsOf),
-        }, { headers: currentPublicHeaders(publicMarketAsOf) });
-      }
-      return Response.json({
-        status: "ready",
-        token: {
-          tokenAddress: GOLDEN_TOKEN_ADDRESS,
-          totalSupplyRaw: TEST_TOTAL_SUPPLY_RAW.toString(),
-          tokenDecimals: 18,
-          valuation: {
-            status: "available",
-            metric: "fdv",
-            supplyBasis: "total",
-            currency: "usd",
-            source: "bitquery",
-            freshness: "stale",
-            valueWad: TEST_FDV_USD_WAD.toString(),
-            asOfTime: goldenMarketAsOf,
-          },
-          marketData: {
-            schemaVersion: "programmable.market-data.v1",
-            source: "bitquery",
-            generatedAt: new Date().toISOString(),
-            status: "stale",
-            primaryPoolId: GOLDEN_POOL_ID,
-            pools: [{
-              identity: {
-                chainId: "1",
-                tokenAddress: GOLDEN_TOKEN_ADDRESS,
-                poolId: GOLDEN_POOL_ID,
-                protocol: "uniswap_v4",
-              },
-              source: "bitquery",
-              status: "stale",
-              quality: "partial",
-              asOfTime: goldenMarketAsOf,
-              latestTrade: {
-                transactionHash: GOLDEN_TRANSACTION_HASH,
-                transactionIndex: 1,
-                logIndex: 1,
-                blockNumber: TEST_PARITY_BLOCK.toString(),
-                time: goldenMarketAsOf,
-                tokenSide: "sell",
-                tokenAmount: "1",
-                priceQuoteWad: (10n ** 18n).toString(),
-                quoteAddress: GOLDEN_QUOTE_ADDRESS,
-                quoteSymbol: "ETH",
-                priceUsdWad: TEST_PRICE_USD_WAD.toString(),
-                rawPriceUsdWad: TEST_PRICE_USD_WAD.toString(),
-                priceUsdAsOfTime: goldenMarketAsOf,
-                priceUsdSource: "bitquery-token-price-index-v1",
-              },
-              valuation: {
-                status: "available",
-                metric: "fdv",
-                supplyBasis: "total",
-                valueUsdWad: TEST_FDV_USD_WAD.toString(),
-                fdvUsdWad: TEST_FDV_USD_WAD.toString(),
-                totalSupply: "1000",
-                asOfTime: goldenMarketAsOf,
-                freshness: "stale",
-              },
-            }],
-          },
         },
-        dataQuality: {
-          schemaVersion: "programmable.explore-data-quality.v1",
-          status: "stale",
-        },
-      }, {
-        headers: {
-          "X-Programmable-Market-As-Of": goldenMarketAsOf,
-          "X-Programmable-Data-Quality": "stale",
-          "X-Programmable-Market-Source": "bitquery",
-          "X-Programmable-Read-Source": "operational+durable+postgres",
-        },
-      });
+      );
     }
     if (url.pathname === "/api/explore/token/chart") {
-      if (url.searchParams.get("address")?.toLowerCase() === PUBLIC_TOKEN_ADDRESS) {
+      if (
+        url.searchParams.get("address")?.toLowerCase() === PUBLIC_TOKEN_ADDRESS
+      ) {
         const range = url.searchParams.get("range") ?? "all";
-        return Response.json({
+        return Response.json(
+          {
+            schemaVersion: "programmable.market-chart.v1",
+            source: "bitquery",
+            readStatus: "live",
+            status: "ready",
+            range,
+            generatedAt: new Date().toISOString(),
+            address: PUBLIC_TOKEN_ADDRESS,
+            identity: {
+              chainId: "1",
+              tokenAddress: PUBLIC_TOKEN_ADDRESS,
+              poolId: PUBLIC_POOL_ID,
+              quoteAddress: TEST_NATIVE_CURRENCY,
+              protocol: "uniswap_v4",
+            },
+            points: [
+              {
+                blockNumber: (TEST_CURRENT_BLOCK - 1n).toString(),
+                time: earlierPublicMarketTime,
+                bucketStart: earliestPublicMarketTime,
+                bucketEnd: earlierPublicMarketTime,
+                observedAt: firstPublicObservedAt,
+                valueSemantics: "period-median",
+                priceQuote: "0.95",
+                quoteSymbol: "ETH",
+                tradeCount: 1,
+              },
+              {
+                blockNumber: TEST_CURRENT_BLOCK.toString(),
+                time: laterPublicBucketEnd,
+                bucketStart: earlierPublicMarketTime,
+                bucketEnd: laterPublicBucketEnd,
+                observedAt: publicMarketAsOf,
+                valueSemantics: "period-median",
+                priceQuote: "1",
+                quoteSymbol: "ETH",
+                tradeCount: 1,
+              },
+            ],
+            swapCount: 2,
+            valuation: {
+              status: "unavailable",
+              reason: "source-unavailable",
+            },
+            asOfTime: publicMarketAsOf,
+            truncated: false,
+          },
+          {
+            headers: {
+              "X-Programmable-Data-Quality": "ready",
+              "X-Programmable-Market-As-Of": publicMarketAsOf,
+              "X-Programmable-Market-Source": "bitquery",
+              "X-Programmable-Price-Source": "bitquery",
+            },
+          },
+        );
+      }
+      return Response.json(
+        {
           schemaVersion: "programmable.market-chart.v1",
           source: "bitquery",
           readStatus: "live",
           status: "ready",
-          range,
+          range: "all",
           generatedAt: new Date().toISOString(),
-          address: PUBLIC_TOKEN_ADDRESS,
+          address: GOLDEN_TOKEN_ADDRESS,
           identity: {
             chainId: "1",
-            tokenAddress: PUBLIC_TOKEN_ADDRESS,
-            poolId: PUBLIC_POOL_ID,
-            quoteAddress: TEST_NATIVE_CURRENCY,
+            tokenAddress: GOLDEN_TOKEN_ADDRESS,
+            poolId: GOLDEN_POOL_ID,
+            quoteAddress: GOLDEN_QUOTE_ADDRESS,
             protocol: "uniswap_v4",
           },
           points: [
             {
-              blockNumber: (TEST_CURRENT_BLOCK - 1n).toString(),
-              time: earlierPublicMarketTime,
-              bucketStart: earliestPublicMarketTime,
-              bucketEnd: earlierPublicMarketTime,
-              observedAt: firstPublicObservedAt,
+              blockNumber: "25730000",
+              time: goldenMarketAsOf,
+              bucketStart: earlierMarketTime,
+              bucketEnd: goldenMarketAsOf,
+              observedAt: earlierMarketTime,
               valueSemantics: "period-median",
               priceQuote: "0.95",
               quoteSymbol: "ETH",
               tradeCount: 1,
             },
             {
-              blockNumber: TEST_CURRENT_BLOCK.toString(),
-              time: laterPublicBucketEnd,
-              bucketStart: earlierPublicMarketTime,
-              bucketEnd: laterPublicBucketEnd,
-              observedAt: publicMarketAsOf,
+              blockNumber: "25731000",
+              time: new Date(
+                Date.parse(goldenMarketAsOf) + 60 * 60_000,
+              ).toISOString(),
+              bucketStart: goldenMarketAsOf,
+              bucketEnd: new Date(
+                Date.parse(goldenMarketAsOf) + 60 * 60_000,
+              ).toISOString(),
+              observedAt: goldenMarketAsOf,
               valueSemantics: "period-median",
               priceQuote: "1",
               quoteSymbol: "ETH",
@@ -2436,75 +2327,18 @@ function publicFetch(
             status: "unavailable",
             reason: "source-unavailable",
           },
-          asOfTime: publicMarketAsOf,
+          asOfTime: goldenMarketAsOf,
           truncated: false,
-        }, {
+        },
+        {
           headers: {
             "X-Programmable-Data-Quality": "ready",
-            "X-Programmable-Market-As-Of": publicMarketAsOf,
+            "X-Programmable-Market-As-Of": goldenMarketAsOf,
             "X-Programmable-Market-Source": "bitquery",
             "X-Programmable-Price-Source": "bitquery",
           },
-        });
-      }
-      return Response.json({
-        schemaVersion: "programmable.market-chart.v1",
-        source: "bitquery",
-        readStatus: "live",
-        status: "ready",
-        range: "all",
-        generatedAt: new Date().toISOString(),
-        address: GOLDEN_TOKEN_ADDRESS,
-        identity: {
-          chainId: "1",
-          tokenAddress: GOLDEN_TOKEN_ADDRESS,
-          poolId: GOLDEN_POOL_ID,
-          quoteAddress: GOLDEN_QUOTE_ADDRESS,
-          protocol: "uniswap_v4",
         },
-        points: [
-          {
-            blockNumber: "25730000",
-            time: goldenMarketAsOf,
-            bucketStart: earlierMarketTime,
-            bucketEnd: goldenMarketAsOf,
-            observedAt: earlierMarketTime,
-            valueSemantics: "period-median",
-            priceQuote: "0.95",
-            quoteSymbol: "ETH",
-            tradeCount: 1,
-          },
-          {
-            blockNumber: "25731000",
-            time: new Date(
-              Date.parse(goldenMarketAsOf) + 60 * 60_000,
-            ).toISOString(),
-            bucketStart: goldenMarketAsOf,
-            bucketEnd: new Date(
-              Date.parse(goldenMarketAsOf) + 60 * 60_000,
-            ).toISOString(),
-            observedAt: goldenMarketAsOf,
-            valueSemantics: "period-median",
-            priceQuote: "1",
-            quoteSymbol: "ETH",
-            tradeCount: 1,
-          },
-        ],
-        swapCount: 2,
-        valuation: {
-          status: "unavailable",
-          reason: "source-unavailable",
-        },
-        asOfTime: goldenMarketAsOf,
-        truncated: false,
-      }, {
-        headers: {
-          "X-Programmable-Data-Quality": "ready",
-          "X-Programmable-Market-As-Of": goldenMarketAsOf,
-          "X-Programmable-Market-Source": "bitquery",
-          "X-Programmable-Price-Source": "bitquery",
-        },
-      });
+      );
     }
     return Response.json({ error: "not found" }, { status: 404 });
   };
@@ -2534,14 +2368,18 @@ describe("post-promotion route verification", () => {
       liquidityBlockHash: "none",
     };
     expect(exactExploreValuationSnapshot(none)).toEqual(none);
-    expect(exactExploreValuationSnapshot({
-      ...none,
-      liquidityBlockHash: concrete.liquidityBlockHash,
-    })).toBeNull();
-    expect(exactExploreValuationSnapshot({
-      ...none,
-      liquidityBlockNumber: concrete.liquidityBlockNumber,
-    })).toBeNull();
+    expect(
+      exactExploreValuationSnapshot({
+        ...none,
+        liquidityBlockHash: concrete.liquidityBlockHash,
+      }),
+    ).toBeNull();
+    expect(
+      exactExploreValuationSnapshot({
+        ...none,
+        liquidityBlockNumber: concrete.liquidityBlockNumber,
+      }),
+    ).toBeNull();
 
     const continuation = new URL(
       exploreContinuationPath(none, 2),
@@ -2594,7 +2432,9 @@ describe("post-promotion route verification", () => {
     expect(exactCurrentPublicFdvLiquidity(staleRound)).toBe(false);
 
     const nestedBitqueryFdv = currentPublicTokenFixture(asOfTime);
-    (nestedBitqueryFdv.marketData.pools[0] as { valuation: unknown }).valuation = {
+    (
+      nestedBitqueryFdv.marketData.pools[0] as { valuation: unknown }
+    ).valuation = {
       status: "available",
       metric: "fdv",
       supplyBasis: "total",
@@ -2639,24 +2479,28 @@ describe("post-promotion route verification", () => {
         },
       },
     };
-    expect(exactCurrentPublicFdvLiquidity({
-      ...stamped,
-      launchModel: "custom-graph",
-      launchStampProvenance: {
-        ...stamped.launchStampProvenance,
-        kind: "custom-graph",
-      },
-    })).toBe(false);
-    expect(exactCurrentPublicFdvLiquidity({
-      ...stamped,
-      launchStampProvenance: {
-        ...stamped.launchStampProvenance,
-        poolKey: {
-          ...stamped.launchStampProvenance.poolKey,
-          currency0: PUBLIC_HOOK_ADDRESS,
+    expect(
+      exactCurrentPublicFdvLiquidity({
+        ...stamped,
+        launchModel: "custom-graph",
+        launchStampProvenance: {
+          ...stamped.launchStampProvenance,
+          kind: "custom-graph",
         },
-      },
-    })).toBe(false);
+      }),
+    ).toBe(false);
+    expect(
+      exactCurrentPublicFdvLiquidity({
+        ...stamped,
+        launchStampProvenance: {
+          ...stamped.launchStampProvenance,
+          poolKey: {
+            ...stamped.launchStampProvenance.poolKey,
+            currency0: PUBLIC_HOOK_ADDRESS,
+          },
+        },
+      }),
+    ).toBe(false);
   });
 
   it("rejects divergent independent current block, runtime, StateView and Chainlink reads", async () => {
@@ -2665,9 +2509,18 @@ describe("post-promotion route verification", () => {
       Math.floor((Date.now() - 2 * 60_000) / 1_000) * 1_000,
     ).toISOString();
     const token = currentPublicTokenFixture(asOfTime);
-    const mutations = ["runtime", "slot0", "liquidity", "feed", "block"] as const;
+    const mutations = [
+      "runtime",
+      "slot0",
+      "liquidity",
+      "feed",
+      "block",
+    ] as const;
     for (const mutation of mutations) {
-      const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const fetchImpl = async (
+        input: URL | RequestInfo,
+        init?: RequestInit,
+      ) => {
         const url = new URL(String(input));
         if (url.hostname !== "rpc-b.invalid") return base(input, init);
         const request = JSON.parse(String(init?.body ?? "{}")) as {
@@ -2676,7 +2529,11 @@ describe("post-promotion route verification", () => {
           params: readonly unknown[];
         };
         if (mutation === "runtime" && request.method === "eth_getCode") {
-          return Response.json({ jsonrpc: "2.0", id: request.id, result: "0x6000" });
+          return Response.json({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: "0x6000",
+          });
         }
         if (mutation === "block" && request.method === "eth_getBlockByNumber") {
           const response = await base(input, init);
@@ -2735,11 +2592,13 @@ describe("post-promotion route verification", () => {
         }
         return base(input, init);
       };
-      await expect(verifyCurrentPublicOnchainEvidenceV1({
-        token,
-        fetchImpl,
-        rpcUrls: ["https://rpc-a.invalid", "https://rpc-b.invalid"],
-      })).rejects.toThrow();
+      await expect(
+        verifyCurrentPublicOnchainEvidenceV1({
+          token,
+          fetchImpl,
+          rpcUrls: ["https://rpc-a.invalid", "https://rpc-b.invalid"],
+        }),
+      ).rejects.toThrow();
     }
   });
 
@@ -2776,11 +2635,13 @@ describe("post-promotion route verification", () => {
     "rejects page-one valuation snapshot field %s when %s",
     async (field, operation) => {
       const result = await verifyPostPromotion(
-        postPromotionInput(paginatedMarketCapFetch("complete", {
-          page: 1,
-          field,
-          operation,
-        })),
+        postPromotionInput(
+          paginatedMarketCapFetch("complete", {
+            page: 1,
+            field,
+            operation,
+          }),
+        ),
       );
       expect(result.ok).toBe(false);
       expect(result.failures).toContainEqual(
@@ -2793,11 +2654,13 @@ describe("post-promotion route verification", () => {
     "rejects page-two valuation snapshot field %s when %s",
     async (field, operation) => {
       const result = await verifyPostPromotion(
-        postPromotionInput(paginatedMarketCapFetch("complete", {
-          page: 2,
-          field,
-          operation,
-        })),
+        postPromotionInput(
+          paginatedMarketCapFetch("complete", {
+            page: 2,
+            field,
+            operation,
+          }),
+        ),
       );
       expect(result.ok).toBe(false);
       expect(result.failures).toContainEqual(
@@ -2831,10 +2694,8 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (
-        url.pathname !== "/api/explore" ||
-        url.searchParams.has("q")
-      ) return response;
+      if (url.pathname !== "/api/explore" || url.searchParams.has("q"))
+        return response;
       const body = await response.json();
       body.tokens[0].valuation.freshness = "stale";
       delete body.tokens[0].fdvUsdWad;
@@ -2858,10 +2719,8 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (
-        url.pathname !== "/api/explore" ||
-        url.searchParams.has("q")
-      ) return response;
+      if (url.pathname !== "/api/explore" || url.searchParams.has("q"))
+        return response;
       const body = await response.json();
       body.tokens[0].liquidityEvidence.tvlUsdWad = "0";
       return Response.json(body, { headers: response.headers });
@@ -2878,10 +2737,8 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (
-        url.pathname !== "/api/explore" ||
-        url.searchParams.has("q")
-      ) return response;
+      if (url.pathname !== "/api/explore" || url.searchParams.has("q"))
+        return response;
       const body = await response.json();
       body.tokens[0].liquidityEvidence.provenance.indexedBlockTime = new Date(
         Date.parse(
@@ -2902,10 +2759,8 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (
-        url.pathname !== "/api/explore" ||
-        url.searchParams.has("q")
-      ) return response;
+      if (url.pathname !== "/api/explore" || url.searchParams.has("q"))
+        return response;
       const body = await response.json();
       body.tokens[0].tokenAddress = GOLDEN_TOKEN_ADDRESS;
       body.tokens[0].marketData.pools[0].identity.tokenAddress =
@@ -2938,12 +2793,11 @@ describe("post-promotion route verification", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (
-        !["rpc-a.invalid", "rpc-b.invalid"].includes(
-          url.hostname,
-        )
-      ) return response;
-      const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
+      if (!["rpc-a.invalid", "rpc-b.invalid"].includes(url.hostname))
+        return response;
+      const request = JSON.parse(String(init?.body ?? "{}")) as {
+        method: string;
+      };
       if (request.method !== "eth_getTransactionReceipt") return response;
       const body = await response.json();
       body.result.status = "0x0";
@@ -2965,19 +2819,23 @@ describe("post-promotion route verification", () => {
       if (
         url.pathname !== "/api/explore" ||
         url.searchParams.get("q") !== GOLDEN_TOKEN_ADDRESS
-      ) return base(input, init);
-      return Response.json({
-        status: "ready",
-        tokens: [{ tokenAddress: GOLDEN_TOKEN_ADDRESS }],
-        total: 1,
-        dataQuality: { status: "partial", valuation: { asOfTime: null } },
-      }, {
-        headers: {
-          "X-Programmable-Data-Quality": "partial",
-          "X-Programmable-Market-Source": "bitquery",
-          "X-Programmable-Read-Source": "operational+durable+postgres",
+      )
+        return base(input, init);
+      return Response.json(
+        {
+          status: "ready",
+          tokens: [{ tokenAddress: GOLDEN_TOKEN_ADDRESS }],
+          total: 1,
+          dataQuality: { status: "partial", valuation: { asOfTime: null } },
         },
-      });
+        {
+          headers: {
+            "X-Programmable-Data-Quality": "partial",
+            "X-Programmable-Market-Source": "bitquery",
+            "X-Programmable-Read-Source": "operational+durable+postgres",
+          },
+        },
+      );
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
     expect(result.ok).toBe(false);
@@ -2995,9 +2853,12 @@ describe("post-promotion route verification", () => {
       const body = await response.json();
       const wrongPrice = 20n * 10n ** 18n;
       const wrongFdv = 20_000n * 10n ** 18n;
-      body.token.marketData.pools[0].latestTrade.priceUsdWad = wrongPrice.toString();
-      body.token.marketData.pools[0].latestTrade.rawPriceUsdWad = wrongPrice.toString();
-      body.token.marketData.pools[0].valuation.valueUsdWad = wrongFdv.toString();
+      body.token.marketData.pools[0].latestTrade.priceUsdWad =
+        wrongPrice.toString();
+      body.token.marketData.pools[0].latestTrade.rawPriceUsdWad =
+        wrongPrice.toString();
+      body.token.marketData.pools[0].valuation.valueUsdWad =
+        wrongFdv.toString();
       body.token.marketData.pools[0].valuation.fdvUsdWad = wrongFdv.toString();
       body.token.valuation.valueWad = wrongFdv.toString();
       return Response.json(body, { headers: response.headers });
@@ -3034,7 +2895,9 @@ describe("post-promotion route verification", () => {
       const url = new URL(String(input));
       const response = await base(input, init);
       if (url.hostname !== "rpc-b.invalid") return response;
-      const request = JSON.parse(String(init?.body ?? "{}")) as { method: string };
+      const request = JSON.parse(String(init?.body ?? "{}")) as {
+        method: string;
+      };
       if (request.method !== "eth_getBlockByNumber") return response;
       const body = await response.json();
       body.result.hash = `0x${"33".repeat(32)}`;
@@ -3072,8 +2935,7 @@ describe("post-promotion route verification", () => {
     await expect(
       verifyPostPromotion({
         ...postPromotionInput(),
-        targetUrl:
-          "https://launcher-v4-example-aficialais-projects.vercel.app",
+        targetUrl: "https://launcher-v4-example-aficialais-projects.vercel.app",
       }),
     ).rejects.toThrow("programmable.market production origin");
   });
@@ -3147,8 +3009,7 @@ describe("post-promotion route verification", () => {
       const response = await base(input, init);
       if (url.pathname !== "/api/explore/token/chart") return response;
       const body = await response.json();
-      body.identity.quoteAddress =
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+      body.identity.quoteAddress = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
       return Response.json(body, { headers: response.headers });
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));

@@ -29,6 +29,7 @@ import {
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
 import {
+  buildExploreDataQuality,
   exploreValuation,
   isExploreDataQuality,
   isExploreValuation,
@@ -36,11 +37,11 @@ import {
   type ExploreValuation,
   type ValuedExploreEntry,
 } from "@/lib/explore-financial-data";
+import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 import {
   isTokenMarketDataV1,
   marketDataStatusLabel,
 } from "@/lib/market-data/market-data-v1";
-import { parseExploreSort } from "@/lib/onchain/query";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -103,18 +104,17 @@ type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
-type ExploreValuationSnapshotV1 = Readonly<{
-  schemaVersion: "programmable.explore-valuation-snapshot.v1";
-  chainId: 1;
-  blockNumber: string;
-  blockHash: `0x${string}`;
-  liquidityBlockNumber: string | "none";
-  liquidityBlockHash: `0x${string}` | "none";
-  rankingCommitment: `sha256:${string}`;
-  sort: "market-cap" | "market-cap-asc";
-  query: string;
-  socials: "yes" | "no" | null;
-  pageSize: number;
+type ExploreMarketRead = Readonly<{
+  provider: "bitquery";
+  status: "unavailable";
+  category: "transport";
+  phase: "market-core" | "market-price";
+}>;
+
+type ExploreRanking = Readonly<{
+  status: "unavailable";
+  requested: "fdv";
+  applied: "launch-order";
 }>;
 
 type ExplorePayload = {
@@ -125,7 +125,8 @@ type ExplorePayload = {
   total: number;
   totalPages: number;
   dataQuality?: ExploreDataQuality;
-  valuationSnapshot?: ExploreValuationSnapshotV1;
+  marketRead?: ExploreMarketRead;
+  ranking?: ExploreRanking;
 };
 
 type ExploreState =
@@ -715,83 +716,6 @@ function positiveInteger(value: unknown, fallback: number) {
     : fallback;
 }
 
-const MAX_VALUATION_BLOCK_DIGITS = 78;
-const GRAPHQL_INT_MAXIMUM = 2_147_483_647n;
-
-function isCanonicalValuationBlockNumber(value: unknown): value is string {
-  return typeof value === "string" &&
-    value.length <= MAX_VALUATION_BLOCK_DIGITS &&
-    /^[1-9][0-9]*$/u.test(value);
-}
-
-function isCanonicalLiquidityBlockNumber(value: unknown): value is string {
-  return typeof value === "string" &&
-    value.length <= 10 &&
-    /^[1-9][0-9]*$/u.test(value) &&
-    BigInt(value) <= GRAPHQL_INT_MAXIMUM;
-}
-
-function parseExploreValuationSnapshot(
-  value: unknown,
-): ExploreValuationSnapshotV1 | null {
-  const fields = [
-    "schemaVersion",
-    "chainId",
-    "blockNumber",
-    "blockHash",
-    "liquidityBlockNumber",
-    "liquidityBlockHash",
-    "rankingCommitment",
-    "sort",
-    "query",
-    "socials",
-    "pageSize",
-  ];
-  if (
-    !isRecord(value) ||
-    Object.keys(value).length !== fields.length ||
-    fields.some((field) => !Object.hasOwn(value, field)) ||
-    value.schemaVersion !== "programmable.explore-valuation-snapshot.v1" ||
-    value.chainId !== 1 ||
-    !isCanonicalValuationBlockNumber(value.blockNumber) ||
-    typeof value.blockHash !== "string" ||
-    !/^0x[0-9a-f]{64}$/u.test(value.blockHash) ||
-    !(
-      (value.liquidityBlockNumber === "none" &&
-        value.liquidityBlockHash === "none") ||
-      (isCanonicalLiquidityBlockNumber(value.liquidityBlockNumber) &&
-        typeof value.liquidityBlockHash === "string" &&
-        /^0x[0-9a-f]{64}$/u.test(value.liquidityBlockHash))
-    ) ||
-    typeof value.rankingCommitment !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment) ||
-    (value.sort !== "market-cap" && value.sort !== "market-cap-asc") ||
-    typeof value.query !== "string" ||
-    (value.socials !== null && value.socials !== "yes" &&
-      value.socials !== "no") ||
-    !Number.isSafeInteger(value.pageSize) ||
-    Number(value.pageSize) < 1
-  ) return null;
-  return value as unknown as ExploreValuationSnapshotV1;
-}
-
-function sameExploreValuationSnapshot(
-  left: ExploreValuationSnapshotV1,
-  right: ExploreValuationSnapshotV1,
-) {
-  return left.schemaVersion === right.schemaVersion &&
-    left.chainId === right.chainId &&
-    left.blockNumber === right.blockNumber &&
-    left.blockHash === right.blockHash &&
-    left.liquidityBlockNumber === right.liquidityBlockNumber &&
-    left.liquidityBlockHash === right.liquidityBlockHash &&
-    left.rankingCommitment === right.rankingCommitment &&
-    left.sort === right.sort &&
-    left.query === right.query &&
-    left.socials === right.socials &&
-    left.pageSize === right.pageSize;
-}
-
 function parseExplorePayload(value: unknown): ExplorePayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -808,40 +732,61 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   ) {
     throw new Error("The token registry returned invalid data quality");
   }
+  const marketRead = isRecord(value.marketRead) &&
+      value.marketRead.provider === "bitquery" &&
+      value.marketRead.status === "unavailable" &&
+      value.marketRead.category === "transport" &&
+      (value.marketRead.phase === "market-core" ||
+        value.marketRead.phase === "market-price")
+    ? value.marketRead as ExploreMarketRead
+    : null;
+  if (value.marketRead !== undefined && marketRead === null) {
+    throw new Error("The token registry returned invalid market read data");
+  }
+  const ranking = isRecord(value.ranking) &&
+      value.ranking.status === "unavailable" &&
+      value.ranking.requested === "fdv" &&
+      value.ranking.applied === "launch-order"
+    ? value.ranking as ExploreRanking
+    : null;
+  if (
+    value.ranking !== undefined &&
+    (ranking === null || marketRead === null)
+  ) {
+    throw new Error("The token registry returned invalid ranking data");
+  }
 
   const tokens = value.tokens.map(parseExploreEntry);
   if (tokens.some((token) => token === null)) {
     throw new Error("The token registry returned an invalid token record");
   }
 
-  const valuationSnapshot = value.valuationSnapshot === undefined
-    ? undefined
-    : parseExploreValuationSnapshot(value.valuationSnapshot);
-  if (valuationSnapshot === null) {
-    throw new Error("The token registry returned an invalid valuation snapshot");
+  if (
+    typeof value.page !== "number" ||
+    !Number.isSafeInteger(value.page) ||
+    value.page < 1 ||
+    typeof value.pageSize !== "number" ||
+    !Number.isSafeInteger(value.pageSize) ||
+    value.pageSize < 1 ||
+    typeof value.total !== "number" ||
+    !Number.isSafeInteger(value.total) ||
+    value.total < 0 ||
+    typeof value.totalPages !== "number" ||
+    !Number.isSafeInteger(value.totalPages) ||
+    value.totalPages < 0 ||
+    value.totalPages !== Math.ceil(value.total / value.pageSize) ||
+    (value.totalPages === 0 ? value.page !== 1 : value.page > value.totalPages)
+  ) {
+    throw new Error("The token registry returned invalid pagination data");
   }
-
-  if (valuationSnapshot !== undefined) {
-    if (
-      typeof value.page !== "number" ||
-      !Number.isSafeInteger(value.page) ||
-      value.page < 1 ||
-      typeof value.pageSize !== "number" ||
-      !Number.isSafeInteger(value.pageSize) ||
-      value.pageSize < 1 ||
-      typeof value.total !== "number" ||
-      !Number.isSafeInteger(value.total) ||
-      value.total < 0 ||
-      typeof value.totalPages !== "number" ||
-      !Number.isSafeInteger(value.totalPages) ||
-      value.totalPages < 0 ||
-      value.totalPages !== Math.ceil(value.total / value.pageSize) ||
-      (value.totalPages === 0
-        ? value.page !== 1
-        : value.page > value.totalPages)
-    ) {
-      throw new Error("The token registry returned invalid pagination data");
-    }
+  if (
+    marketRead !== null &&
+    (value.dataQuality === undefined ||
+      value.dataQuality.valuation.status !== "unavailable" ||
+      value.dataQuality.valuation.available !== 0 ||
+      tokens.some((token) => token?.valuation.status !== "unavailable"))
+  ) {
+    throw new Error("The token registry returned inconsistent market read data");
   }
 
   return {
@@ -854,12 +799,11 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     ),
     total: positiveInteger(value.total, tokens.length),
     totalPages: positiveInteger(value.totalPages, 0),
-    ...(valuationSnapshot === undefined
-      ? {}
-      : { valuationSnapshot }),
     ...(value.dataQuality === undefined
       ? {}
       : { dataQuality: value.dataQuality }),
+    ...(marketRead === null ? {} : { marketRead }),
+    ...(ranking === null ? {} : { ranking }),
   };
 }
 
@@ -889,8 +833,7 @@ export function createExploreInitialState(
     const payload = parseExplorePayload(response.body);
     if (
       payload.page !== 1 ||
-      payload.pageSize !== EXPLORE_TOKENS_PER_PAGE ||
-      payload.valuationSnapshot !== undefined
+      payload.pageSize !== EXPLORE_TOKENS_PER_PAGE
     ) {
       throw new Error("The token registry returned an unexpected first page");
     }
@@ -931,28 +874,10 @@ const resolvedExplorePayloads = new Map<
 >();
 const RESOLVED_EXPLORE_PAYLOAD_TTL_MS = 4_500;
 const MAX_RESOLVED_EXPLORE_PAYLOADS = 24;
-const EXPLORE_VALUATION_CONTINUATION_PARAMETERS = [
-  "valuationBlock",
-  "valuationBlockHash",
-  "liquidityBlock",
-  "liquidityBlockHash",
-  "rankingCommitment",
-] as const;
 
-type ExploreValuationRequestContract = Readonly<{
-  marketCapSort: boolean;
+type ExploreRequestContract = Readonly<{
   page: number;
   pageSize: number;
-  query: string;
-  socials: "yes" | "no" | null;
-  sort: string;
-  continuation: Readonly<{
-    blockNumber: string;
-    blockHash: `0x${string}`;
-    liquidityBlockNumber: string | "none";
-    liquidityBlockHash: `0x${string}` | "none";
-    rankingCommitment: `sha256:${string}`;
-  }> | null;
 }>;
 
 function canonicalExploreSearchIdentity(search: URLSearchParams) {
@@ -977,16 +902,9 @@ function exactPositiveSearchInteger(
   return parsed;
 }
 
-function exploreValuationRequestContract(
+function exploreRequestContract(
   search: URLSearchParams,
-): ExploreValuationRequestContract {
-  for (const parameter of EXPLORE_VALUATION_CONTINUATION_PARAMETERS) {
-    if (search.getAll(parameter).length > 1) {
-      throw new Error("The token registry request has duplicate valuation snapshot fields");
-    }
-  }
-  const sort = parseExploreSort(search.get("sort"));
-  const marketCapSort = sort === "market-cap" || sort === "market-cap-asc";
+): ExploreRequestContract {
   const page = exactPositiveSearchInteger(search.get("page"), 1, "page");
   const pageSize = Math.min(
     exactPositiveSearchInteger(
@@ -996,110 +914,37 @@ function exploreValuationRequestContract(
     ),
     EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
   );
-  const supplied = EXPLORE_VALUATION_CONTINUATION_PARAMETERS.filter(
-    (parameter) => search.has(parameter),
-  ).length;
-  if (!marketCapSort) {
-    if (supplied > 0) {
-      throw new Error("A valuation snapshot is not allowed for this sort");
-    }
-    return {
-      marketCapSort,
-      page,
-      pageSize,
-      query: (search.get("q") ?? "").trim(),
-      socials:
-        search.get("socials") === "yes" || search.get("socials") === "no"
-          ? search.get("socials") as "yes" | "no"
-          : null,
-      sort,
-      continuation: null,
-    };
-  }
-  if (page === 1) {
-    if (supplied > 0) {
-      throw new Error("A valuation continuation is not allowed on page one");
-    }
-  } else if (supplied !== EXPLORE_VALUATION_CONTINUATION_PARAMETERS.length) {
-    throw new Error("A complete valuation snapshot is required for this page");
-  }
-
-  const valuationBlock = search.get("valuationBlock");
-  const valuationBlockHash = search.get("valuationBlockHash");
-  const liquidityBlock = search.get("liquidityBlock");
-  const liquidityBlockHash = search.get("liquidityBlockHash");
-  const rankingCommitment = search.get("rankingCommitment");
-  const continuation = page === 1
-    ? null
-    : valuationBlock &&
-        isCanonicalValuationBlockNumber(valuationBlock) &&
-        valuationBlockHash &&
-        /^0x[0-9a-f]{64}$/u.test(valuationBlockHash) &&
-        liquidityBlock &&
-        liquidityBlockHash &&
-        ((liquidityBlock === "none" && liquidityBlockHash === "none") ||
-          (isCanonicalLiquidityBlockNumber(liquidityBlock) &&
-            /^0x[0-9a-f]{64}$/u.test(liquidityBlockHash))) &&
-        rankingCommitment &&
-        /^sha256:[0-9a-f]{64}$/u.test(rankingCommitment)
-      ? {
-          blockNumber: valuationBlock,
-          blockHash: valuationBlockHash as `0x${string}`,
-          liquidityBlockNumber: liquidityBlock,
-          liquidityBlockHash: liquidityBlockHash as `0x${string}` | "none",
-          rankingCommitment: rankingCommitment as `sha256:${string}`,
-        }
-      : null;
-  if (page > 1 && continuation === null) {
-    throw new Error("The valuation snapshot continuation is malformed");
-  }
-  return {
-    marketCapSort,
-    page,
-    pageSize,
-    query: (search.get("q") ?? "").trim(),
-    socials:
-      search.get("socials") === "yes" || search.get("socials") === "no"
-        ? search.get("socials") as "yes" | "no"
-        : null,
-    sort,
-    continuation,
-  };
+  return { page, pageSize };
 }
 
-function assertExploreValuationResponseContract(
+function assertExploreResponseContract(
   payload: ExplorePayload,
-  contract: ExploreValuationRequestContract,
+  contract: ExploreRequestContract,
 ) {
-  const snapshot = payload.valuationSnapshot;
-  if (!contract.marketCapSort) {
-    if (snapshot !== undefined) {
-      throw new Error("The token registry returned an unexpected valuation snapshot");
-    }
-    return;
-  }
   if (
     payload.page !== contract.page ||
-    snapshot === undefined ||
-    snapshot.sort !== contract.sort ||
-    snapshot.query !== contract.query ||
-    snapshot.socials !== contract.socials ||
-    snapshot.pageSize !== contract.pageSize ||
     payload.pageSize !== contract.pageSize
   ) {
-    throw new Error("The token registry returned an inconsistent valuation snapshot");
+    throw new Error("The token registry returned an inconsistent page");
   }
-  const continuation = contract.continuation;
-  if (
-    continuation &&
-    (snapshot.blockNumber !== continuation.blockNumber ||
-      snapshot.blockHash !== continuation.blockHash ||
-      snapshot.liquidityBlockNumber !== continuation.liquidityBlockNumber ||
-      snapshot.liquidityBlockHash !== continuation.liquidityBlockHash ||
-      snapshot.rankingCommitment !== continuation.rankingCommitment)
-  ) {
-    throw new Error("The token registry changed the valuation snapshot");
-  }
+}
+
+function shouldRetryMissingBitqueryFdv(
+  search: URLSearchParams,
+  payload: ExplorePayload,
+) {
+  const sort = search.get("sort");
+  if (sort !== "market-cap" && sort !== "market-cap-asc") return false;
+  return !payload.tokens.some((token) => {
+    const valuation = token.valuation;
+    return valuation.status === "available" &&
+      valuation.metric === "fdv" &&
+      valuation.supplyBasis === "total" &&
+      valuation.currency === "usd" &&
+      valuation.freshness === "current" &&
+      valuation.source === "bitquery" &&
+      BigInt(valuation.valueWad) > 0n;
+  });
 }
 
 function assertUniqueExploreDatasetEntries(
@@ -1121,40 +966,6 @@ function assertUniqueExploreDatasetEntries(
   }
 }
 
-function valuationSnapshotMatchesSearch(
-  snapshot: ExploreValuationSnapshotV1,
-  search: URLSearchParams,
-) {
-  const firstPageSearch = new URLSearchParams(search);
-  firstPageSearch.set("page", "1");
-  for (const parameter of EXPLORE_VALUATION_CONTINUATION_PARAMETERS) {
-    firstPageSearch.delete(parameter);
-  }
-  const contract = exploreValuationRequestContract(firstPageSearch);
-  return contract.marketCapSort &&
-    snapshot.sort === contract.sort &&
-    snapshot.query === contract.query &&
-    snapshot.socials === contract.socials &&
-    snapshot.pageSize === contract.pageSize;
-}
-
-function applyExploreValuationContinuation(
-  search: URLSearchParams,
-  snapshot: ExploreValuationSnapshotV1,
-) {
-  search.set("sort", snapshot.sort);
-  if (snapshot.query === "") search.delete("q");
-  else search.set("q", snapshot.query);
-  if (snapshot.socials === null) search.delete("socials");
-  else search.set("socials", snapshot.socials);
-  search.set("limit", String(snapshot.pageSize));
-  search.set("valuationBlock", snapshot.blockNumber);
-  search.set("valuationBlockHash", snapshot.blockHash);
-  search.set("liquidityBlock", snapshot.liquidityBlockNumber);
-  search.set("liquidityBlockHash", snapshot.liquidityBlockHash);
-  search.set("rankingCommitment", snapshot.rankingCommitment);
-}
-
 function readResolvedExplorePayload(contentKey: string) {
   const cached = resolvedExplorePayloads.get(contentKey);
   if (!cached) return null;
@@ -1172,6 +983,7 @@ function cacheResolvedExplorePayload(
   payload: ExplorePayload,
 ) {
   resolvedExplorePayloads.delete(contentKey);
+  if (payload.marketRead?.status === "unavailable") return;
   resolvedExplorePayloads.set(contentKey, {
     payload,
     updatedAt: Date.now(),
@@ -1186,35 +998,88 @@ function cacheResolvedExplorePayload(
 async function fetchExplorePayload(
   search: URLSearchParams,
   signal: AbortSignal,
-  contract: ExploreValuationRequestContract,
+  contract: ExploreRequestContract,
 ) {
-  const response = await fetch(`/api/explore?${search.toString()}`, {
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(readApiError(body));
+  const requestUrl = `/api/explore?${search.toString()}`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    signal.throwIfAborted();
+    const attemptController = new AbortController();
+    let timedOut = false;
+    const abortAttempt = () => attemptController.abort(signal.reason);
+    signal.addEventListener("abort", abortAttempt, { once: true });
+    const timeout = globalThis.setTimeout(() => {
+      timedOut = true;
+      attemptController.abort();
+    }, EXPLORE_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(requestUrl, {
+        headers: { Accept: "application/json" },
+        signal: attemptController.signal,
+      });
+      signal.throwIfAborted();
+      if (timedOut) throw new Error("Tokens took too long to respond");
+      if (response.status === 503 && attempt === 0) {
+        continue;
+      }
+      const body: unknown = await response.json().catch(() => null);
+      signal.throwIfAborted();
+      if (timedOut) throw new Error("Tokens took too long to respond");
+      if (response.status !== 200) {
+        throw new Error(readApiError(body));
+      }
+      const payload = parseExplorePayload(body);
+      assertExploreResponseContract(payload, contract);
+      const marketReadStatus = response.headers.get(
+        "X-Programmable-Market-Read-Status",
+      );
+      if (
+        marketReadStatus === "transport-unavailable" &&
+        payload.marketRead?.status !== "unavailable"
+      ) {
+        throw new Error("The token registry returned inconsistent market read data");
+      }
+      if (
+        marketReadStatus === "current" &&
+        payload.marketRead?.status === "unavailable"
+      ) {
+        throw new Error("The token registry returned inconsistent market read data");
+      }
+      const marketTransportUnavailable =
+        marketReadStatus === "transport-unavailable";
+      if (
+        attempt === 0 &&
+        !marketTransportUnavailable &&
+        shouldRetryMissingBitqueryFdv(search, payload)
+      ) {
+        continue;
+      }
+      return payload;
+    } catch (error) {
+      signal.throwIfAborted();
+      if (timedOut) throw new Error("Tokens took too long to respond");
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeout);
+      signal.removeEventListener("abort", abortAttempt);
+    }
   }
-  const payload = parseExplorePayload(body);
-  assertExploreValuationResponseContract(payload, contract);
-  return payload;
+  throw new Error("Tokens are temporarily unavailable");
 }
 
 export function loadExplorePayload(
   contentKey: string,
   search: URLSearchParams,
 ) {
-  let contract: ExploreValuationRequestContract;
+  let contract: ExploreRequestContract;
   try {
-    contract = exploreValuationRequestContract(search);
+    contract = exploreRequestContract(search);
   } catch (error) {
     return Promise.reject(error);
   }
   const resolved = readResolvedExplorePayload(contentKey);
   if (resolved) {
     try {
-      assertExploreValuationResponseContract(resolved, contract);
+      assertExploreResponseContract(resolved, contract);
       return Promise.resolve(resolved);
     } catch {
       resolvedExplorePayloads.delete(contentKey);
@@ -1231,28 +1096,15 @@ export function loadExplorePayload(
   }
 
   const controller = new AbortController();
-  let timedOut = false;
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, EXPLORE_REQUEST_TIMEOUT_MS);
   const request = (async (): Promise<ExplorePayload> => {
-    try {
-      const payload = await fetchExplorePayload(
-        search,
-        controller.signal,
-        contract,
-      );
-      cacheResolvedExplorePayload(contentKey, payload);
-      return payload;
-    } catch (error) {
-      if (timedOut) {
-        throw new Error("Tokens took too long to respond");
-      }
-      throw error;
-    } finally {
-      globalThis.clearTimeout(timeout);
-    }
+    const payload = await fetchExplorePayload(
+      search,
+      controller.signal,
+      contract,
+    );
+    controller.signal.throwIfAborted();
+    cacheResolvedExplorePayload(contentKey, payload);
+    return payload;
   })();
 
   const entry = { controller, promise: request, requestIdentity };
@@ -1269,81 +1121,18 @@ export function loadExplorePayload(
 
 function abortExplorePayload(contentKey: string) {
   const modelPagePrefix = `${contentKey}\u0000model-page:`;
-  const snapshotBootstrapPrefix = `${contentKey}\u0000snapshot-bootstrap:`;
   for (const [key, pendingRequest] of pendingExploreRequests) {
-    if (
-      key !== contentKey &&
-      !key.startsWith(modelPagePrefix) &&
-      !key.startsWith(snapshotBootstrapPrefix)
-    ) continue;
+    if (key !== contentKey && !key.startsWith(modelPagePrefix)) continue;
     pendingExploreRequests.delete(key);
     pendingRequest.controller.abort();
   }
 }
 
-export async function loadExplorePageWithValuationSnapshot(
+export async function loadExplorePage(
   contentKey: string,
   search: URLSearchParams,
-  cachedSnapshot: ExploreValuationSnapshotV1 | null = null,
 ) {
-  const requestedSearch = new URLSearchParams(search);
-  const requestedPage = exactPositiveSearchInteger(
-    requestedSearch.get("page"),
-    1,
-    "page",
-  );
-  const contextSearch = new URLSearchParams(requestedSearch);
-  contextSearch.set("page", "1");
-  for (const parameter of EXPLORE_VALUATION_CONTINUATION_PARAMETERS) {
-    contextSearch.delete(parameter);
-  }
-  const contextContract = exploreValuationRequestContract(contextSearch);
-  if (!contextContract.marketCapSort || requestedPage === 1) {
-    const payload = await loadExplorePayload(contentKey, requestedSearch);
-    return {
-      payload,
-      valuationSnapshot: payload.valuationSnapshot ?? null,
-    };
-  }
-  if (
-    EXPLORE_VALUATION_CONTINUATION_PARAMETERS.some((parameter) =>
-      requestedSearch.has(parameter)
-    )
-  ) {
-    throw new Error("The valuation continuation must be bound by the client");
-  }
-
-  let valuationSnapshot =
-    cachedSnapshot && valuationSnapshotMatchesSearch(cachedSnapshot, search)
-      ? cachedSnapshot
-      : null;
-  if (valuationSnapshot === null) {
-    const firstPageSearch = new URLSearchParams(requestedSearch);
-    firstPageSearch.set("page", "1");
-    for (const parameter of EXPLORE_VALUATION_CONTINUATION_PARAMETERS) {
-      firstPageSearch.delete(parameter);
-    }
-    const firstPage = await loadExplorePayload(
-      `${contentKey}\u0000snapshot-bootstrap:${canonicalExploreSearchIdentity(firstPageSearch)}`,
-      firstPageSearch,
-    );
-    valuationSnapshot = firstPage.valuationSnapshot ?? null;
-    if (valuationSnapshot === null) {
-      throw new Error("The token registry did not bind the valuation snapshot");
-    }
-  }
-  applyExploreValuationContinuation(requestedSearch, valuationSnapshot);
-  const payload = await loadExplorePayload(contentKey, requestedSearch);
-  if (
-    !payload.valuationSnapshot ||
-    !sameExploreValuationSnapshot(
-      valuationSnapshot,
-      payload.valuationSnapshot,
-    )
-  ) {
-    throw new Error("The token registry changed the valuation snapshot");
-  }
-  return { payload, valuationSnapshot: payload.valuationSnapshot };
+  return loadExplorePayload(contentKey, new URLSearchParams(search));
 }
 
 export async function loadExploreModelDataset(
@@ -1353,22 +1142,10 @@ export async function loadExploreModelDataset(
   const firstPageSearch = new URLSearchParams(search);
   firstPageSearch.set("page", "1");
   firstPageSearch.set("limit", String(EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE));
-  for (const parameter of EXPLORE_VALUATION_CONTINUATION_PARAMETERS) {
-    if (firstPageSearch.has(parameter)) {
-      throw new Error("The model dataset request carried a valuation continuation");
-    }
-  }
   const firstPage = await loadExplorePayload(
     `${contentKey}\u0000model-page:1`,
     firstPageSearch,
   );
-  const marketCapSort =
-    firstPageSearch.get("sort") === "market-cap" ||
-    firstPageSearch.get("sort") === "market-cap-asc";
-  const valuationSnapshot = firstPage.valuationSnapshot;
-  if (marketCapSort !== (valuationSnapshot !== undefined)) {
-    throw new Error("The token registry returned an inconsistent valuation snapshot");
-  }
   if (firstPage.totalPages <= 1) {
     return firstPage;
   }
@@ -1378,9 +1155,6 @@ export async function loadExploreModelDataset(
       const page = index + 2;
       const pageSearch = new URLSearchParams(firstPageSearch);
       pageSearch.set("page", String(page));
-      if (valuationSnapshot) {
-        applyExploreValuationContinuation(pageSearch, valuationSnapshot);
-      }
       const payload = await loadExplorePayload(
         `${contentKey}\u0000model-page:${page}`,
         pageSearch,
@@ -1394,27 +1168,134 @@ export async function loadExploreModelDataset(
       ) {
         throw new Error("Tokens changed while filters were loading");
       }
-      if (
-        valuationSnapshot &&
-        (!payload.valuationSnapshot ||
-          !sameExploreValuationSnapshot(
-            valuationSnapshot,
-            payload.valuationSnapshot,
-          ))
-      ) {
-        throw new Error("Token ranking changed while filters were loading");
-      }
       return payload;
     }),
   );
 
-  const tokens = [firstPage, ...remainingPages].flatMap(
+  const pages = [firstPage, ...remainingPages];
+  let tokens = pages.flatMap(
     (payload) => payload.tokens,
   );
   assertUniqueExploreDatasetEntries(tokens);
+  const degradedPages = pages.filter(
+    (payload) => payload.marketRead?.status === "unavailable",
+  );
+  if (degradedPages.length > 0 && degradedPages.length !== pages.length) {
+    throw new Error("Tokens changed while filters were loading");
+  }
+  const degradedPage = degradedPages[0];
+  if (degradedPage !== undefined) {
+    const markerIsConsistent = degradedPages.every((payload) =>
+      payload.marketRead?.provider === degradedPage.marketRead?.provider &&
+      payload.marketRead?.status === degradedPage.marketRead?.status &&
+      payload.marketRead?.category === degradedPage.marketRead?.category &&
+      payload.marketRead?.phase === degradedPage.marketRead?.phase &&
+      payload.ranking?.status === degradedPage.ranking?.status &&
+      payload.ranking?.requested === degradedPage.ranking?.requested &&
+      payload.ranking?.applied === degradedPage.ranking?.applied
+    );
+    if (!markerIsConsistent) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    const sourceQuality = degradedPage.dataQuality;
+    if (sourceQuality === undefined) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    tokens = tokens.map((entry): ValuedExploreEntry => {
+      if (entry.exploreKind === "custom-project") {
+        const {
+          marketData: _marketData,
+          liquidityEvidence: _liquidityEvidence,
+          fdvUsdWad: _fdvUsdWad,
+          ...identity
+        } = entry as typeof entry & Readonly<{ fdvUsdWad?: string }>;
+        void _marketData;
+        void _liquidityEvidence;
+        void _fdvUsdWad;
+        return {
+          ...identity,
+          valuation: {
+            status: "unavailable",
+            reason: entry.markets.length === 0
+              ? "no-market"
+              : "source-unavailable",
+          },
+        };
+      }
+      const {
+        marketData: _marketData,
+        liquidityEvidence: _liquidityEvidence,
+        fdvUsdWad: _fdvUsdWad,
+        ...identity
+      } = entry;
+      void _marketData;
+      void _liquidityEvidence;
+      void _fdvUsdWad;
+      return {
+        ...identity,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      };
+    });
+    const marketSort = firstPageSearch.get("sort") === "market-cap" ||
+      firstPageSearch.get("sort") === "market-cap-asc";
+    if (marketSort && degradedPage.ranking === undefined) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    return {
+      ...firstPage,
+      tokens,
+      dataQuality: buildExploreDataQuality({
+        entries: tokens,
+        generatedAt: sourceQuality.generatedAt,
+        canonicalStatus: sourceQuality.launchIdentity.canonical,
+        customStatus: sourceQuality.launchIdentity.custom,
+        identityAsOfBlock: sourceQuality.launchIdentity.asOfBlock,
+        referenceBlock: sourceQuality.launchIdentity.referenceBlock,
+        identityAgeMs: sourceQuality.launchIdentity.ageMs,
+      }),
+      marketRead: degradedPage.marketRead,
+      ...(degradedPage.ranking === undefined
+        ? {}
+        : { ranking: degradedPage.ranking }),
+    };
+  }
   return {
     ...firstPage,
     tokens,
+  };
+}
+
+export function paginateExploreModelDataset(
+  dataset: ExplorePayload,
+  modelFilter: ExploreModelFilter,
+  requestedPage: number,
+): ExplorePayload {
+  const page = paginateTokensByExploreFilters(
+    dataset.tokens,
+    "all",
+    modelFilter,
+    requestedPage,
+  );
+  return {
+    status: dataset.status,
+    ...page,
+    ...(dataset.dataQuality === undefined
+      ? {}
+      : {
+          dataQuality: buildExploreDataQuality({
+            entries: page.tokens,
+            generatedAt: dataset.dataQuality.generatedAt,
+            canonicalStatus: dataset.dataQuality.launchIdentity.canonical,
+            customStatus: dataset.dataQuality.launchIdentity.custom,
+            identityAsOfBlock: dataset.dataQuality.launchIdentity.asOfBlock,
+            referenceBlock: dataset.dataQuality.launchIdentity.referenceBlock,
+            identityAgeMs: dataset.dataQuality.launchIdentity.ageMs,
+          }),
+        }),
+    ...(dataset.marketRead === undefined
+      ? {}
+      : { marketRead: dataset.marketRead }),
+    ...(dataset.ranking === undefined ? {} : { ranking: dataset.ranking }),
   };
 }
 
@@ -1617,43 +1498,6 @@ function TokenLinkIcon({ kind }: { kind: TokenLink["kind"] }) {
   return <XBrandIcon />;
 }
 
-const exploreSkeletonItems = Array.from(
-  { length: EXPLORE_TOKENS_PER_PAGE },
-  (_, index) => index,
-);
-
-function ExploreGridSkeleton() {
-  return (
-    <div
-      className={`${styles.runnerGrid} ${styles.skeletonGrid}`}
-      role="status"
-      aria-label="Loading launches"
-    >
-      {exploreSkeletonItems.map((index) => (
-        <article
-          className={`${styles.runnerCard} ${styles.skeletonCard}`}
-          key={index}
-          aria-hidden="true"
-        >
-          <div className={`${styles.runnerHitArea} ${styles.skeletonHitArea}`}>
-            <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
-            <div className={`${styles.runnerBody} ${styles.skeletonBody}`}>
-              <span className={styles.skeletonTitle} />
-              <span className={styles.skeletonDescription} />
-              <span className={styles.skeletonDescriptionShort} />
-            </div>
-          </div>
-          <div className={`${styles.runnerMeta} ${styles.skeletonMetaRow}`}>
-            <span className={styles.skeletonCategory} />
-            <span className={styles.skeletonMeta} />
-            <span className={styles.skeletonSocial} />
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function resultRangeLabel(payload: ExplorePayload | null) {
   if (!payload) return "Loading launch index";
   if (payload.status === "not-deployed") return "Explore unavailable";
@@ -1693,7 +1537,7 @@ export function ExploreView({
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [sort, setSort] = useState<TokenSort>("newest");
+  const [sort, setSort] = useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT);
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -1708,12 +1552,7 @@ export function ExploreView({
     key: string;
     payload: ExplorePayload;
   } | null>(null);
-  const visibleValuationSnapshot = useRef<{
-    epoch: string;
-    snapshot: ExploreValuationSnapshotV1;
-  } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const valuationSnapshotEpoch = `${retryKey}\u0000${refreshKey}`;
   const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}`;
   const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
   const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}\u0000${refreshKey}`;
@@ -1820,23 +1659,10 @@ export function ExploreView({
       try {
         let payload: ExplorePayload;
         if (modelFilter === "all") {
-          const loaded = await loadExplorePageWithValuationSnapshot(
+          payload = await loadExplorePage(
             activeRequestContentKey,
             search,
-            visibleValuationSnapshot.current?.epoch ===
-                valuationSnapshotEpoch
-              ? visibleValuationSnapshot.current.snapshot
-              : null,
           );
-          payload = loaded.payload;
-          if (!ignore) {
-            visibleValuationSnapshot.current = loaded.valuationSnapshot
-              ? {
-                  epoch: valuationSnapshotEpoch,
-                  snapshot: loaded.valuationSnapshot,
-                }
-              : null;
-          }
         } else {
           let dataset =
             modelDatasetCache.current?.key === modelDatasetKey
@@ -1848,20 +1674,19 @@ export function ExploreView({
               search,
             );
             if (ignore) return;
-            modelDatasetCache.current = {
-              key: modelDatasetKey,
-              payload: dataset,
-            };
+            modelDatasetCache.current =
+              dataset.marketRead?.status === "unavailable"
+                ? null
+                : {
+                    key: modelDatasetKey,
+                    payload: dataset,
+                  };
           }
-          payload = {
-            status: dataset.status,
-            ...paginateTokensByExploreFilters(
-              dataset.tokens,
-              "all",
-              modelFilter,
-              currentPage,
-            ),
-          };
+          payload = paginateExploreModelDataset(
+            dataset,
+            modelFilter,
+            currentPage,
+          );
         }
         if (ignore) return;
         if (payload.page !== currentPage) {
@@ -1907,7 +1732,6 @@ export function ExploreView({
     requestKey,
     socialFilter,
     sort,
-    valuationSnapshotEpoch,
   ]);
 
   const previewPayload = useMemo<ExplorePayload>(() => {
@@ -1970,6 +1794,8 @@ export function ExploreView({
       displayState.requestKey !== requestKey);
   const activeFilterCount =
     Number(socialFilter !== "all") + Number(modelFilter !== "all");
+  const activeSortLabel =
+    sortOptions.find((option) => option.id === sort)?.label ?? "Sort";
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
@@ -1988,8 +1814,10 @@ export function ExploreView({
       (displayState.phase === "error" && displayState.requestKey !== requestKey)
     ) {
       return (
-        <div className={styles.loadingState}>
-          <ExploreGridSkeleton />
+        <div className={styles.loadingState} aria-busy="true">
+          <span className="sr-only" role="status">
+            Loading launches
+          </span>
         </div>
       );
     }
@@ -2106,7 +1934,7 @@ export function ExploreView({
                   fill
                   loading={index < 3 ? "eager" : "lazy"}
                   priority={index < 3}
-                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 313px"
+                  sizes="(max-width: 360px) 96px, (max-width: 700px) 104px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 299px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />
@@ -2205,10 +2033,7 @@ export function ExploreView({
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1 aria-label="Explore programmable launches">
-            <span>Explore programmable</span>
-            <span>launches</span>
-          </h1>
+          <h1>Explore Launches</h1>
         </header>
 
         <section
@@ -2220,7 +2045,10 @@ export function ExploreView({
             {hasPublicTokens ? (
               <div className="token-section-heading">
                 <h2 className="sr-only">Launches</h2>
-                <div className="token-toolbar">
+                <div
+                  className="token-toolbar"
+                  inert={loadingOnly ? true : undefined}
+                >
                   <div
                     className="token-search liquid-glass-control"
                     role="search"
@@ -2273,14 +2101,14 @@ export function ExploreView({
                       aria-controls="explore-filter-panel"
                       aria-label={
                         activeFilterCount === 0
-                          ? "Filter and sort tokens"
-                          : `Filter and sort tokens, ${activeFilterCount} ${
+                          ? `Filter and sort tokens, ${activeSortLabel} selected`
+                          : `Filter and sort tokens, ${activeSortLabel} selected, ${activeFilterCount} ${
                               activeFilterCount === 1 ? "filter" : "filters"
                             } active`
                       }
                     >
                       <SlidersHorizontal aria-hidden="true" size={16} />
-                      <span>Filter</span>
+                      <span>{activeSortLabel}</span>
                       {activeFilterCount > 0 ? (
                         <span
                           className={styles.activeFilterCount}
@@ -2477,11 +2305,7 @@ export function ExploreView({
 
           <p
             ref={resultStatusRef}
-            className={
-              hasPublicTokens && displayState.phase !== "error"
-                ? styles.resultLabel
-                : "sr-only"
-            }
+            className="sr-only"
             role="status"
             aria-live="polite"
             aria-atomic="true"

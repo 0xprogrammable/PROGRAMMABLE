@@ -342,5 +342,6 @@ function isLane(value: string): value is ProjectionTargetLaneV1 {
   return value === "registry.publication"
     || value === "website.entitlement"
     || value === "registry.custom-launched"
-    || value === "website.custom-launched";
+    || value === "website.custom-launched"
+    || value === "website.approval-v3";
 }

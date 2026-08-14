@@ -612,10 +612,19 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
         },
       };
     }
+    if (!pool.liquidity) {
+      return {
+        ...pool,
+        quality: "partial",
+        valuation: {
+          status: "unavailable",
+          reason: "source-unavailable",
+        },
+      };
+    }
     if (
-      pool.liquidity &&
-      (liquidity === null ||
-        liquidity < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD))
+      liquidity === null ||
+      liquidity < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD)
     ) {
       return {
         ...pool,
@@ -762,8 +771,7 @@ export function publicExploreEntryV1(
     entry.valuation.status === "available" &&
     entry.valuation.metric === "fdv" &&
     entry.valuation.currency === "usd" &&
-    entry.valuation.freshness === "current" &&
-    entry.valuation.source !== "bitquery"
+    entry.valuation.freshness === "current"
   ) {
     output.fdvUsdWad = entry.valuation.valueWad;
   } else {
@@ -796,8 +804,7 @@ export function valuationSortValue(entry: ExploreEntry): bigint | null {
   return value?.status === "available" &&
     value.metric === "fdv" &&
     value.currency === "usd" &&
-    value.freshness === "current" &&
-    value.source !== "bitquery"
+    value.freshness === "current"
     ? positiveUint256(value.valueWad)
     : null;
 }

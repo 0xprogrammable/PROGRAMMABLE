@@ -4,8 +4,12 @@ import { keccak256, type EIP1193RequestFn } from "viem";
 vi.mock("server-only", () => ({}));
 
 import {
+  bindPersistentRpcIntegrityCheckpointWindow,
+  bindPrivateBlobReadMetadata,
   createMemoryPersistentRpcCacheStore,
   createPersistentRpcRequest,
+  createVercelBlobPersistentRpcCacheStore,
+  persistentRpcCachePathByteLimit,
   PERSISTENT_RPC_CACHE_LIMITS,
   PersistentRpcCacheError,
   PersistentRpcCacheReorgError,
@@ -151,6 +155,30 @@ function countingStore(base = createMemoryPersistentRpcCacheStore()) {
   return { store, counts };
 }
 
+function inspectableMemoryStore() {
+  const values = new Map<string, { etag: string; value: unknown }>();
+  let generation = 0;
+  const store: PersistentRpcCacheStore = {
+    async read(path) {
+      return values.get(path) ?? null;
+    },
+    async create(path, value) {
+      if (values.has(path)) return "exists";
+      generation += 1;
+      values.set(path, { etag: `inspect-${generation}`, value });
+      return "created";
+    },
+    async replace(path, value, expectedEtag) {
+      const current = values.get(path);
+      if (!current || current.etag !== expectedEtag) return "conflict";
+      generation += 1;
+      values.set(path, { etag: `inspect-${generation}`, value });
+      return "replaced";
+    },
+  };
+  return { store, values };
+}
+
 function reorgOnCreateStore(
   onCreate: () => void,
   base = createMemoryPersistentRpcCacheStore(),
@@ -170,7 +198,666 @@ function reorgOnCreateStore(
   };
 }
 
+function weakEtagBlobClient() {
+  const values = new Map<string, { body: string; etag: string }>();
+  const readCounts = new Map<string, number>();
+  const truncatedReads = new Map<string, number>();
+  let generation = 0;
+  const nextEtag = () => {
+    generation += 1;
+    return `"${generation.toString(16).padStart(32, "0")}"`;
+  };
+  const client = {
+    async get(path: string) {
+      const current = values.get(path);
+      if (!current) return null;
+      readCounts.set(path, (readCounts.get(path) ?? 0) + 1);
+      const encoded = new TextEncoder().encode(current.body);
+      const remainingTruncations = truncatedReads.get(path) ?? 0;
+      if (remainingTruncations > 0) {
+        truncatedReads.set(path, remainingTruncations - 1);
+      }
+      const bytes = remainingTruncations > 0
+        ? encoded.slice(0, Math.max(0, encoded.byteLength - 1))
+        : encoded;
+      return {
+        statusCode: 200 as const,
+        stream: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(bytes);
+            controller.close();
+          },
+        }),
+        headers: new Headers({
+          "content-encoding": "gzip",
+          "content-length": "0",
+        }),
+        blob: {
+          etag: `W/${current.etag}`,
+          size: 0,
+        },
+      };
+    },
+    async head(path: string) {
+      const current = values.get(path);
+      if (!current) throw new Error("Vercel Blob: object is missing");
+      return {
+        etag: current.etag,
+        size: new TextEncoder().encode(current.body).byteLength,
+      };
+    },
+    async put(
+      path: string,
+      body: string,
+      options: Readonly<{ allowOverwrite: boolean; ifMatch?: string }>,
+    ) {
+      const current = values.get(path);
+      if (!options.allowOverwrite && current) {
+        throw new Error("Vercel Blob: object already exists");
+      }
+      if (
+        options.ifMatch !== undefined &&
+        current?.etag !== options.ifMatch
+      ) {
+        throw new Error("Vercel Blob: Precondition failed: ETag mismatch.");
+      }
+      const etag = nextEtag();
+      values.set(path, { body, etag });
+      return { etag };
+    },
+  };
+  return {
+    client,
+    paths: () => [...values.keys()],
+    value(path: string) {
+      const current = values.get(path);
+      return current ? JSON.parse(current.body) as unknown : null;
+    },
+    readCount(path: string) {
+      return readCounts.get(path) ?? 0;
+    },
+    truncateReads(path: string, count: number) {
+      truncatedReads.set(path, count);
+    },
+  };
+}
+
 describe("persistent RPC log cursor", () => {
+  it("keeps a bounded sixteen-segment replay budget for the measured Classic fee stream", () => {
+    expect(PERSISTENT_RPC_CACHE_LIMITS).toMatchObject({
+      maxCursorSegments: 16,
+      maxSegmentBytes: 4 * 1024 * 1024,
+      maxSegmentReadsPerOperation: 16,
+    });
+  });
+
+  it("does not publish an integrity checkpoint after its scope is aborted", async () => {
+    const inspected = inspectableMemoryStore();
+    const cached = cachedRequest(
+      mockRpc(),
+      inspected.store,
+      "provider-aborted-prewarm",
+    );
+    const controller = new AbortController();
+    const reason = new Error("prewarm deadline");
+
+    await expect(
+      withPersistentRpcIntegrityScope(
+        async () => {
+          await Promise.all([
+            logRequest(cached.request, 0, 9, bytes32(101)),
+            logRequest(cached.request, 0, 9, bytes32(102)),
+          ]);
+          controller.abort(reason);
+        },
+        {
+          checkpointGroup: "aborted-prewarm",
+          expectedCursorBindings: 2,
+          signal: controller.signal,
+        },
+      ),
+    ).rejects.toBe(reason);
+
+    expect(
+      [...inspected.values.keys()].filter((path) =>
+        path.includes("/checkpoints/")
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps a prewarm milestone below the committed prefix read-only", async () => {
+    const inspected = inspectableMemoryStore();
+    const rpc = mockRpc();
+    const cached = cachedRequest(
+      rpc,
+      inspected.store,
+      "provider-covered-prewarm",
+    );
+    const readPrefix = (toBlock: number) =>
+      withPersistentRpcIntegrityScope(
+        () => Promise.all([
+          logRequest(cached.request, 0, toBlock, bytes32(301)),
+          logRequest(cached.request, 0, toBlock, bytes32(302)),
+        ]),
+        {
+          checkpointGroup: "covered-prewarm-prefix",
+          expectedCursorBindings: 2,
+        },
+      );
+
+    await readPrefix(19);
+    const checkpointPath = [...inspected.values.keys()].find((path) =>
+      path.includes("/checkpoints/")
+    );
+    const checkpointBefore = inspected.values.get(checkpointPath as string);
+    const markerCountBefore = [...inspected.values.keys()].filter((path) =>
+      path.includes("/integrity/")
+    ).length;
+    const logReadsBefore = rpc.counts.logs;
+
+    await readPrefix(9);
+
+    expect(rpc.counts.logs).toBe(logReadsBefore);
+    expect(inspected.values.get(checkpointPath as string)).toEqual(
+      checkpointBefore,
+    );
+    expect(
+      [...inspected.values.keys()].filter((path) =>
+        path.includes("/integrity/")
+      ),
+    ).toHaveLength(markerCountBefore);
+  });
+
+  it("retries transient truncated private Blob reads within a strict budget", async () => {
+    const blob = weakEtagBlobClient();
+    const store = createVercelBlobPersistentRpcCacheStore(
+      "test-read-write-token",
+      async () => blob.client,
+    );
+    const path = "indexes/rpc-log-cursors/v4/1/provider/stream/cursors/test.json";
+    const value = { status: "complete", blockNumber: "0x1" };
+
+    await expect(store.create(path, value)).resolves.toBe("created");
+    blob.truncateReads(path, 2);
+    await expect(store.read(path)).resolves.toMatchObject({ value });
+    expect(blob.readCount(path)).toBe(3);
+
+    blob.truncateReads(path, 3);
+    await expect(store.read(path)).rejects.toThrow(/does not match/u);
+    expect(blob.readCount(path)).toBe(6);
+  });
+
+  it("commits both provider cursors through weak Blob ETags and rejects a stale writer", async () => {
+    const blob = weakEtagBlobClient();
+    const store = createVercelBlobPersistentRpcCacheStore(
+      "test-read-write-token",
+      async () => blob.client,
+    );
+
+    const requests = ["provider-primary", "provider-secondary"].map(
+      (providerId) => cachedRequest(mockRpc(), store, providerId, 5n),
+    );
+    await withPersistentRpcIntegrityScope(
+      () => Promise.all(
+        requests.flatMap((cached) => [
+          logRequest(cached.request, 0, 9, bytes32(101)),
+          logRequest(cached.request, 0, 9, bytes32(102)),
+        ]),
+      ),
+      { checkpointGroup: "dual-provider-test", expectedCursorBindings: 4 },
+    );
+
+    const cursorPaths = blob.paths().filter((path) => path.includes("/cursors/"));
+    const integrityPaths = blob.paths().filter((path) => path.includes("/integrity/"));
+    const checkpointPaths = blob.paths().filter((path) => path.includes("/checkpoints/"));
+    expect(cursorPaths).toHaveLength(8);
+    expect(integrityPaths).toHaveLength(1);
+    expect(checkpointPaths).toHaveLength(1);
+    expect(
+      (blob.value(integrityPaths[0] as string) as {
+        payload: { cursors: unknown[]; status: string };
+      }).payload,
+    ).toMatchObject({ status: "committed", cursors: expect.arrayContaining([]) });
+    expect(
+      (blob.value(integrityPaths[0] as string) as {
+        payload: { cursors: unknown[] };
+      }).payload.cursors,
+    ).toHaveLength(4);
+
+    const checkpointPath = checkpointPaths[0] as string;
+    const stale = await store.read(checkpointPath);
+    expect(stale).not.toBeNull();
+    expect(
+      await store.replace(checkpointPath, stale?.value, stale?.etag as string),
+    ).toBe("replaced");
+    expect(
+      await store.replace(checkpointPath, stale?.value, stale?.etag as string),
+    ).toBe("conflict");
+  });
+
+  it("retries a truncated authenticated Blob stream without accepting partial JSON", async () => {
+    const value = { schemaVersion: "test", payload: { ok: true } };
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    let reads = 0;
+    const store = createVercelBlobPersistentRpcCacheStore(
+      "test-read-write-token",
+      async () => ({
+        async get() {
+          reads += 1;
+          const body = reads === 1 ? bytes.slice(0, bytes.length - 1) : bytes;
+          return {
+            statusCode: 200,
+            stream: new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(body);
+                controller.close();
+              },
+            }),
+            headers: new Headers({
+              "content-encoding": "gzip",
+              "content-length": String(body.length),
+            }),
+            blob: { etag: 'W/"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"', size: body.length },
+          };
+        },
+        async head() {
+          return {
+            etag: '"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+            size: bytes.length,
+          };
+        },
+        async put() {
+          throw new Error("unexpected write");
+        },
+      }),
+    );
+
+    await expect(
+      store.read("indexes/rpc-log-cursors/v4/1/checkpoints/retry.json"),
+    ).resolves.toEqual({
+      etag: '"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+      value,
+    });
+    expect(reads).toBe(2);
+  });
+
+  it("keeps exactly four stable cursor bindings across more than 128 checkpoints", async () => {
+    const inspected = inspectableMemoryStore();
+    const providers = ["provider-many-a", "provider-many-b"].map(
+      (providerId) => cachedRequest(mockRpc(), inspected.store, providerId),
+    );
+    for (let block = 0; block < 129; block += 1) {
+      await withPersistentRpcIntegrityScope(
+        async () => {
+          await Promise.all(
+            providers.flatMap((cached) => [
+              logRequest(cached.request, block, block, bytes32(201)),
+              logRequest(cached.request, block, block, bytes32(202)),
+            ]),
+          );
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: BigInt(block),
+            toBlock: BigInt(block),
+            boundaryBlockHash: bytes32(10_000 + block),
+          });
+        },
+        {
+          checkpointGroup: "more-than-128-checkpoints",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+        },
+      );
+    }
+    const markers = [...inspected.values]
+      .filter(([path]) => path.includes("/integrity/"))
+      .map(([, record]) => record.value as {
+        payload: {
+          checkpointWindow: unknown;
+          cursors: unknown[];
+          previousIntegrityCommitId: string | null;
+          status: string;
+        };
+      });
+    expect(markers).toHaveLength(129);
+    expect(
+      markers.every(
+        (marker) =>
+          marker.payload.status === "committed" &&
+          marker.payload.checkpointWindow !== null &&
+          marker.payload.cursors.length === 4,
+      ),
+    ).toBe(true);
+    expect(
+      markers.filter(
+        (marker) => marker.payload.previousIntegrityCommitId === null,
+      ),
+    ).toHaveLength(1);
+  }, 20_000);
+
+  it("replays committed historical windows read-only and checkpoints only the new tail", async () => {
+    const inspected = inspectableMemoryStore();
+    const rpcs = [mockRpc(), mockRpc()];
+    const providers = rpcs.map((rpc, index) =>
+      cachedRequest(rpc, inspected.store, `provider-restart-${index}`)
+    );
+    const readWindow = (fromBlock: number, toBlock: number) =>
+      withPersistentRpcIntegrityScope(
+        async () => {
+          const result = await Promise.all(
+            providers.flatMap((cached) => [
+              logRequest(cached.request, fromBlock, toBlock, bytes32(701)),
+              logRequest(cached.request, fromBlock, toBlock, bytes32(702)),
+            ]),
+          );
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: BigInt(fromBlock),
+            toBlock: BigInt(toBlock),
+            boundaryBlockHash: bytes32(10_000 + toBlock),
+          });
+          return result;
+        },
+        {
+          checkpointGroup: "restart-tail-resume",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+        },
+      );
+
+    await readWindow(0, 9);
+    await readWindow(10, 19);
+    const markerCount = () =>
+      [...inspected.values.keys()].filter((path) => path.includes("/integrity/"))
+        .length;
+    expect(markerCount()).toBe(2);
+    const logReadsBeforeRestart = rpcs.map((rpc) => rpc.counts.logs);
+    await readWindow(0, 9);
+    await readWindow(10, 19);
+    expect(markerCount()).toBe(2);
+    expect(rpcs.map((rpc) => rpc.counts.logs)).toEqual(logReadsBeforeRestart);
+
+    await readWindow(20, 29);
+    expect(markerCount()).toBe(3);
+    const checkpointRecord = [...inspected.values]
+      .find(([path]) => path.includes("/checkpoints/"))?.[1].value as {
+        payload: { integrityCommitId: string };
+      };
+    const marker = [...inspected.values]
+      .find(([path]) =>
+        path.endsWith(`/${checkpointRecord.payload.integrityCommitId}.json`)
+      )?.[1].value as {
+        payload: { cursors: Array<{ cursorPath: string }> };
+      };
+    const boundaries = marker.payload.cursors.map((binding) => {
+      const cursor = inspected.values.get(binding.cursorPath)?.value as {
+        payload: { cursorBlock: string };
+      };
+      return BigInt(cursor.payload.cursorBlock);
+    });
+    expect(boundaries).toEqual([29n, 29n, 29n, 29n]);
+  });
+
+  it("requires a genesis-first contiguous baseline before admitting a live tail", async () => {
+    const inspected = inspectableMemoryStore();
+    const rpcs = [mockRpc(), mockRpc()];
+    const providers = rpcs.map((rpc, index) =>
+      cachedRequest(rpc, inspected.store, `provider-baseline-${index}`)
+    );
+    const readWindow = (fromBlock: number, toBlock: number) =>
+      withPersistentRpcIntegrityScope(
+        async () => {
+          const result = await Promise.all(
+            providers.flatMap((cached) => [
+              logRequest(cached.request, fromBlock, toBlock, bytes32(711)),
+              logRequest(cached.request, fromBlock, toBlock, bytes32(712)),
+            ]),
+          );
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: BigInt(fromBlock),
+            toBlock: BigInt(toBlock),
+            boundaryBlockHash: bytes32(10_000 + toBlock),
+          });
+          return result;
+        },
+        {
+          checkpointGroup: "genesis-first-contiguous-baseline",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+          requiredInitialFromBlock: 0n,
+          requireContiguousCheckpointWindow: true,
+        },
+      );
+
+    await expect(readWindow(10, 19)).rejects.toThrow(
+      "baseline does not start at its release boundary",
+    );
+    await expect(readWindow(0, 9)).resolves.toHaveLength(4);
+    await expect(readWindow(20, 29)).rejects.toThrow(
+      "window is not contiguous with its committed baseline",
+    );
+    await expect(readWindow(10, 19)).resolves.toHaveLength(4);
+
+    const markersBeforeReplay = [...inspected.values.keys()].filter((path) =>
+      path.includes("/integrity/")
+    ).length;
+    await expect(readWindow(0, 9)).resolves.toHaveLength(4);
+    await expect(readWindow(10, 19)).resolves.toHaveLength(4);
+    expect(
+      [...inspected.values.keys()].filter((path) =>
+        path.includes("/integrity/")
+      ).length,
+    ).toBe(markersBeforeReplay);
+  });
+
+  it("publishes repeated extensions of a partial final window as contiguous tails", async () => {
+    const inspected = inspectableMemoryStore();
+    const providers = [mockRpc(), mockRpc()].map((rpc, index) =>
+      cachedRequest(rpc, inspected.store, `provider-partial-${index}`)
+    );
+    const readWindow = (toBlock: number) =>
+      withPersistentRpcIntegrityScope(
+        async () => {
+          const result = await Promise.all(
+            providers.flatMap((cached) => [
+              logRequest(cached.request, 0, toBlock, bytes32(721)),
+              logRequest(cached.request, 0, toBlock, bytes32(722)),
+            ]),
+          );
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: 0n,
+            toBlock: BigInt(toBlock),
+            boundaryBlockHash: bytes32(10_000 + toBlock),
+          });
+          return result;
+        },
+        {
+          checkpointGroup: "partial-final-window-extension",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+          requiredInitialFromBlock: 0n,
+          requireContiguousCheckpointWindow: true,
+          allowCheckpointWindowExtension: true,
+        },
+      );
+
+    await expect(readWindow(4)).resolves.toHaveLength(4);
+    await expect(readWindow(9)).resolves.toHaveLength(4);
+    await expect(readWindow(14)).resolves.toHaveLength(4);
+
+    const windows = [...inspected.values]
+      .filter(([path]) => path.includes("/integrity/"))
+      .map(([, record]) => record.value as {
+        payload: {
+          status: string;
+          checkpointWindow: { fromBlock: string; toBlock: string };
+        };
+      })
+      .filter((marker) => marker.payload.status === "committed")
+      .map((marker) => ({
+        fromBlock: marker.payload.checkpointWindow.fromBlock,
+        toBlock: marker.payload.checkpointWindow.toBlock,
+      }))
+      .sort((left, right) => BigInt(left.fromBlock) < BigInt(right.fromBlock) ? -1 : 1);
+    expect(windows).toEqual([
+      { fromBlock: "0", toBlock: "4" },
+      { fromBlock: "5", toBlock: "9" },
+      { fromBlock: "10", toBlock: "14" },
+    ]);
+  });
+
+  it("keeps the previous complete checkpoint when one of four participants fails", async () => {
+    const inspected = inspectableMemoryStore();
+    const primaryRpc = mockRpc();
+    const secondaryRpc = mockRpc();
+    const providers = [
+      cachedRequest(primaryRpc, inspected.store, "provider-group-a"),
+      cachedRequest(secondaryRpc, inspected.store, "provider-group-b"),
+    ];
+    const readWindow = (from: number, to: number) =>
+      Promise.all(
+        providers.flatMap((cached) => [
+          logRequest(cached.request, from, to, bytes32(301)),
+          logRequest(cached.request, from, to, bytes32(302)),
+        ]),
+      );
+    await withPersistentRpcIntegrityScope(
+      () => readWindow(0, 9),
+      { checkpointGroup: "four-way-abort", expectedCursorBindings: 4 },
+    );
+    const checkpointPath = [...inspected.values.keys()].find((path) =>
+      path.includes("/checkpoints/")
+    ) as string;
+    const checkpointBefore = inspected.values.get(checkpointPath)?.value;
+    secondaryRpc.failRange(10n, 19n);
+    await expect(
+      withPersistentRpcIntegrityScope(
+        () => readWindow(10, 19),
+        { checkpointGroup: "four-way-abort", expectedCursorBindings: 4 },
+      ),
+    ).rejects.toThrow("injected partial failure");
+    expect(inspected.values.get(checkpointPath)?.value).toEqual(checkpointBefore);
+  });
+
+  it("requires the exact symmetric provider and stream set for a group checkpoint", async () => {
+    const store = createMemoryPersistentRpcCacheStore();
+    const primary = cachedRequest(mockRpc(), store, "provider-symmetric-a");
+    const secondary = cachedRequest(mockRpc(), store, "provider-symmetric-b");
+    await expect(
+      withPersistentRpcIntegrityScope(
+        async () => {
+          await Promise.all([
+            logRequest(primary.request, 0, 9, bytes32(501)),
+            logRequest(primary.request, 0, 9, bytes32(502)),
+            logRequest(secondary.request, 0, 9, bytes32(501)),
+            logRequest(secondary.request, 0, 9, bytes32(503)),
+          ]);
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: 0n,
+            toBlock: 9n,
+            boundaryBlockHash: bytes32(10_009),
+          });
+        },
+        {
+          checkpointGroup: "asymmetric-streams",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+        },
+      ),
+    ).rejects.toThrow("do not cover the same event streams");
+  });
+
+  it("rejects a group checkpoint whose cursor boundary differs from its window", async () => {
+    const store = createMemoryPersistentRpcCacheStore();
+    const primary = cachedRequest(mockRpc(), store, "provider-window-a");
+    const secondary = cachedRequest(mockRpc(), store, "provider-window-b");
+    await expect(
+      withPersistentRpcIntegrityScope(
+        async () => {
+          await Promise.all([
+            logRequest(primary.request, 0, 9, bytes32(601)),
+            logRequest(primary.request, 0, 9, bytes32(602)),
+            logRequest(secondary.request, 0, 9, bytes32(601)),
+            logRequest(secondary.request, 0, 9, bytes32(602)),
+          ]);
+          bindPersistentRpcIntegrityCheckpointWindow({
+            fromBlock: 0n,
+            toBlock: 8n,
+            boundaryBlockHash: bytes32(10_008),
+          });
+        },
+        {
+          checkpointGroup: "wrong-window-boundary",
+          expectedCursorBindings: 4,
+          expectedProviderCount: 2,
+          expectedStreamsPerProvider: 2,
+          requireCheckpointWindow: true,
+        },
+      ),
+    ).rejects.toThrow("do not share its boundary");
+  });
+
+  it("never publishes a mixed generation from competing four-way checkpoints", async () => {
+    const inspected = inspectableMemoryStore();
+    const providers = ["provider-race-a", "provider-race-b"].map(
+      (providerId) => cachedRequest(mockRpc({ delayMs: 2 }), inspected.store, providerId),
+    );
+    const checkpoint = (from: number, to: number) =>
+      withPersistentRpcIntegrityScope(
+        () => Promise.all(
+          providers.flatMap((cached) => [
+            logRequest(cached.request, from, to, bytes32(401)),
+            logRequest(cached.request, from, to, bytes32(402)),
+          ]),
+        ),
+        { checkpointGroup: "four-way-race", expectedCursorBindings: 4 },
+      );
+    const raced = await Promise.allSettled([
+      checkpoint(0, 9),
+      checkpoint(10, 19),
+    ]);
+    expect(raced.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const checkpointRecord = [...inspected.values]
+      .find(([path]) => path.includes("/checkpoints/"))?.[1].value as {
+        payload: { integrityCommitId: string };
+      };
+    const marker = [...inspected.values]
+      .find(([path]) =>
+        path.endsWith(`/${checkpointRecord.payload.integrityCommitId}.json`)
+      )?.[1].value as {
+        payload: { cursors: Array<{ cursorPath: string }> };
+      };
+    const boundaries = marker.payload.cursors.map((binding) => {
+      const cursor = inspected.values.get(binding.cursorPath)?.value as {
+        payload: { cursorBlock: string };
+      };
+      return cursor.payload.cursorBlock;
+    });
+    expect(new Set(boundaries).size).toBe(1);
+    expect(boundaries).toHaveLength(4);
+  });
+
+  it("fails closed when an authoritative checkpoint marker is missing", async () => {
+    const inspected = inspectableMemoryStore();
+    const cached = cachedRequest(mockRpc(), inspected.store, "provider-missing-marker");
+    await logRequest(cached.request, 0, 9);
+    const markerPath = [...inspected.values.keys()].find((path) =>
+      path.includes("/integrity/")
+    ) as string;
+    inspected.values.delete(markerPath);
+    await expect(logRequest(cached.request, 0, 9)).rejects.toThrow(
+      "checkpoint marker is missing",
+    );
+  });
+
   it("survives a process restart and serves a canonical cursor without rescanning", async () => {
     const rpc = mockRpc();
     const first = cachedRequest(rpc);
@@ -328,7 +1015,7 @@ describe("persistent RPC log cursor", () => {
       log(0),
       log(5),
     ]);
-    expect(rpc.counts.logs).toBe(3);
+    expect(rpc.counts.logs).toBe(4);
   });
 
   it("keeps the configured provider chunk bound without a persistent store", async () => {
@@ -434,6 +1121,42 @@ describe("persistent RPC log cursor", () => {
     ).rejects.toBeInstanceOf(PersistentRpcCacheReorgError);
   });
 
+  it("falls back to the previous whole checkpoint after a post-publish reorg", async () => {
+    const rpc = mockRpc();
+    const base = createMemoryPersistentRpcCacheStore();
+    let injectPostPublishReorg = false;
+    const store: PersistentRpcCacheStore = {
+      read: base.read,
+      create: base.create,
+      async replace(path, value, expectedEtag) {
+        const result = await base.replace(path, value, expectedEtag);
+        if (
+          injectPostPublishReorg &&
+          result === "replaced" &&
+          path.includes("/checkpoints/")
+        ) {
+          rpc.reorg(19n);
+        }
+        return result;
+      },
+    };
+    const first = cachedRequest(rpc, store, "provider-post-publish-reorg");
+    await logRequest(first.request, 0, 9);
+    injectPostPublishReorg = true;
+    await expect(logRequest(first.request, 10, 19)).rejects.toBeInstanceOf(
+      PersistentRpcCacheReorgError,
+    );
+
+    const healthy = mockRpc();
+    const restarted = cachedRequest(
+      healthy,
+      store,
+      "provider-post-publish-reorg",
+    );
+    expect(await logRequest(restarted.request, 0, 9)).toEqual([log(0)]);
+    expect(healthy.counts.logs).toBe(0);
+  });
+
   it("rejects multiple request/store domains before admitting either cursor", async () => {
     const rpc = mockRpc();
     const storeA = createMemoryPersistentRpcCacheStore();
@@ -445,14 +1168,14 @@ describe("persistent RPC log cursor", () => {
         await logRequest(firstA.request, 0, 9);
         await logRequest(firstB.request, 0, 9);
       }),
-    ).rejects.toThrow("cannot span request/store domains");
-    expect(rpc.counts.logs).toBe(2);
+    ).rejects.toThrow("cannot span chains or stores");
+    expect(rpc.counts.logs).toBe(1);
 
     const restartedA = cachedRequest(rpc, storeA, "provider-shared");
     const restartedB = cachedRequest(rpc, storeB, "provider-shared");
     expect(await logRequest(restartedA.request, 0, 9)).toEqual([log(0)]);
     expect(await logRequest(restartedB.request, 0, 9)).toEqual([log(0)]);
-    expect(rpc.counts.logs).toBe(4);
+    expect(rpc.counts.logs).toBe(3);
   });
 
   it("does not share proofs across request backends with the same provider id", async () => {
@@ -527,7 +1250,7 @@ describe("persistent RPC log cursor", () => {
     expect(await logRequest(restarted.request, 0, 9, bytes32(2))).toEqual([
       log(0),
     ]);
-    expect(rpc.counts.logs).toBe(2);
+    expect(rpc.counts.logs).toBe(3);
   });
 
   it("rejects a detached covered read released after the scope closes", async () => {
@@ -574,7 +1297,7 @@ describe("persistent RPC log cursor", () => {
     });
     release();
     await expect(detached).rejects.toThrow("already sealed");
-    expect(rpc.counts.logs).toBe(2);
+    expect(rpc.counts.logs).toBe(4);
   });
 
   it("rejects and leaves uncovered a detached cursor write after scope close", async () => {
@@ -597,7 +1320,7 @@ describe("persistent RPC log cursor", () => {
         if (
           pauseCursorCreate &&
           !paused &&
-          path.endsWith("/cursor.json")
+          path.includes("/cursors/")
         ) {
           paused = true;
           entered();
@@ -634,7 +1357,7 @@ describe("persistent RPC log cursor", () => {
     expect(await logRequest(restarted.request, 0, 9, bytes32(2))).toEqual([
       log(0),
     ]);
-    expect(rpc.counts.logs).toBe(3);
+    expect(rpc.counts.logs).toBe(4);
   });
 
   it("extends an existing prefix by fetching only the new tail", async () => {
@@ -670,7 +1393,7 @@ describe("persistent RPC log cursor", () => {
     expect(rpc.counts.logs).toBe(2);
   });
 
-  it("fails closed on overlapping CAS races without corrupting later coverage", async () => {
+  it("retries overlapping checkpoint CAS races without corrupting later coverage", async () => {
     const rpc = mockRpc({ delayMs: 5 });
     const cached = cachedRequest(rpc);
     const raced = await Promise.allSettled([
@@ -679,12 +1402,7 @@ describe("persistent RPC log cursor", () => {
     ]);
     expect(
       raced.filter((result) => result.status === "fulfilled"),
-    ).toHaveLength(1);
-    const rejection = raced.find((result) => result.status === "rejected");
-    expect(rejection).toMatchObject({
-      status: "rejected",
-      reason: expect.any(PersistentRpcCacheError),
-    });
+    ).toHaveLength(2);
 
     const restarted = cachedRequest(rpc, cached.store);
     expect(await logRequest(restarted.request, 0, 14)).toHaveLength(2);
@@ -829,7 +1547,7 @@ describe("persistent RPC log cursor", () => {
     ).rejects.toBeInstanceOf(PersistentRpcCacheReorgError);
   });
 
-  it("isolates current runtime proofs from legacy runtime cache entries", async () => {
+  it("isolates the current cache generation from legacy cache entries", async () => {
     const code = "0x6001600055" as const;
     const expectedRuntimeCodeHash = keccak256(code);
     const backing = createMemoryPersistentRpcCacheStore();
@@ -874,8 +1592,28 @@ describe("persistent RPC log cursor", () => {
     await expect(
       request({ method: "eth_getCode", params: [ADDRESS, quantity(100)] }),
     ).resolves.toBe(code);
+    expect(paths.every((path) => path.includes("/rpc-log-cursors/v4/"))).toBe(true);
+    expect(paths.some((path) => path.includes("/rpc-log-cursors/v2/"))).toBe(false);
     expect(paths.some((path) => path.includes("/runtime-v2/"))).toBe(true);
     expect(paths.some((path) => path.includes("/runtime/"))).toBe(false);
+  });
+
+  it("bounds runtime-v2 Blob reads in the current cache generation", () => {
+    expect(
+      persistentRpcCachePathByteLimit(
+        "indexes/rpc-log-cursors/v4/1/provider/runtime-v2/address/release.json",
+      ),
+    ).toBe(PERSISTENT_RPC_CACHE_LIMITS.maxRuntimeBytes);
+    expect(() =>
+      persistentRpcCachePathByteLimit(
+        "indexes/rpc-log-cursors/v3/1/provider/runtime-v2/address/release.json",
+      )
+    ).toThrow(PersistentRpcCacheError);
+    expect(() =>
+      persistentRpcCachePathByteLimit(
+        "indexes/rpc-log-cursors/v2/1/provider/runtime/address/release.json",
+      )
+    ).toThrow(PersistentRpcCacheError);
   });
 
   it("does not persist runtime code across a changing canonical anchor", async () => {
@@ -1015,7 +1753,7 @@ describe("persistent RPC log cursor", () => {
     );
     expect(rpc.counts.logs).toBe(chunkCount);
     expect(counted.counts.reads).toBeLessThanOrEqual(
-      1 + PERSISTENT_RPC_CACHE_LIMITS.maxSegmentReadsPerOperation,
+      4 + PERSISTENT_RPC_CACHE_LIMITS.maxSegmentReadsPerOperation,
     );
 
     rpc.reorg(1_999n);
@@ -1024,7 +1762,7 @@ describe("persistent RPC log cursor", () => {
     await expect(logRequest(afterReorg.request, 0, 1_999)).rejects.toBeInstanceOf(
       PersistentRpcCacheReorgError,
     );
-    expect(counted.counts.reads).toBe(1);
+    expect(counted.counts.reads).toBe(3);
   });
 
   it("keeps concurrent CAS appends bounded when compaction is required", async () => {
@@ -1043,7 +1781,7 @@ describe("persistent RPC log cursor", () => {
     const restarted = cachedRequest(rpc, counted.store);
     expect(await logRequest(restarted.request, 0, 99)).toHaveLength(10);
     expect(counted.counts.reads).toBeLessThanOrEqual(
-      1 + PERSISTENT_RPC_CACHE_LIMITS.maxSegmentReadsPerOperation,
+      4 + PERSISTENT_RPC_CACHE_LIMITS.maxSegmentReadsPerOperation,
     );
   });
 
@@ -1170,6 +1908,29 @@ describe("persistent RPC log cursor", () => {
         declaredContentLength: 3,
       }),
     ).rejects.toThrow(/does not match/u);
+  });
+
+  it("binds a compressed private Blob response to its authenticated HEAD metadata", () => {
+    expect(
+      bindPrivateBlobReadMetadata({
+        responseEtag: 'W/"a51ca021c9c058ed68999c1ef7728007"',
+        headEtag: '"a51ca021c9c058ed68999c1ef7728007"',
+        headSize: 23_849,
+      }),
+    ).toEqual({
+      etag: '"a51ca021c9c058ed68999c1ef7728007"',
+      declaredSize: 23_849,
+    });
+  });
+
+  it("rejects a private Blob that changes between GET and HEAD", () => {
+    expect(() =>
+      bindPrivateBlobReadMetadata({
+        responseEtag: 'W/"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+        headEtag: '"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"',
+        headSize: 23_849,
+      }),
+    ).toThrow(/changed while it was being read/u);
   });
 
   it("reduces total steady-state RPC requests and conservative Alchemy CU by at least 80 percent", async () => {

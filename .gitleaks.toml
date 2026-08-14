@@ -78,6 +78,13 @@ paths = [
 regexes = ['''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''']
 
 [[allowlists]]
+description = "Registry V2 predeployment manifest pins public source file SHA-256 digests"
+condition = "AND"
+regexTarget = "match"
+paths = ['''contracts/spec/custom-registry-v2-predeployment\.json''']
+regexes = ['''custom-registry-v2-keychain-custody\.mjs"\s*:\s*"0x[0-9a-f]{64}"''']
+
+[[allowlists]]
 description = "Bitquery market parity pins the public PCAN golden token address"
 condition = "AND"
 regexTarget = "match"

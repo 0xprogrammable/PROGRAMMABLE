@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "programmable.custom-registry-v2-safe-public-migration-policy.v2",
+  "chainId": "1",
+  "safeVersion": "1.4.1",
+  "source": {
+    "repository": "safe-fndn/safe-smart-account",
+    "tag": "v1.4.1",
+    "commit": "bf943f80fec5ac647159d26161446ac5d716a294",
+    "tree": "dbbe8faa94445342975303ff4da1471cac2052d6"
+  },
+  "multiSendCallOnly": {
+    "address": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+    "runtimeCodeKeccak256": "0xecd5bd14a08c5d2122379900b2f272bdf107a7e92423c10dd5fe3254386c9939",
+    "sourcePath": "contracts/libraries/MultiSendCallOnly.sol",
+    "sourceBlob": "7399f11911d80b1c46ecab5408aad7cb66c7f43a",
+    "sourceSha256": "0x2ff7f7fd09ba1967524d9bd9507cb7528253ea3d401feaf8d0428e20109f8919"
+  },
+  "roles": ["approver", "registrar", "finalizer", "revoker"],
+  "migration": {
+    "transactions": 4,
+    "oneDirectCurrentOwnerTransactionPerSafe": true,
+    "safeOperation": "DELEGATECALL",
+    "innerOperations": [
+      "addOwnerWithThreshold(H1,1)",
+      "addOwnerWithThreshold(H2,2)",
+      "swapOwner(H1,legacy,H3)"
+    ],
+    "atomicPerSafe": true,
+    "crossSafeAtomicityRequired": false,
+    "partialProgressFailClosedUntilAggregateVerification": true,
+    "partialProgressClassification": "EXACT_LEGACY_ONE_OF_ONE_OR_EXACT_MIGRATED_HARDWARE_TWO_OF_THREE_OTHERWISE_INVALID",
+    "continuation": "FRESH_PLAN_AUTHORIZES_ONLY_REMAINING_LEGACY_SAFES_AND_BINDS_FINALIZED_COMPLETED_RECEIPTS_AUTHORIZATIONS_AND_JOURNALS",
+    "expiredPlanBehavior": "STOP_WITH_COMPLETED_SAFES_SAFE_AND_RESUME_ONLY_REMAINING_SAFES_UNDER_FRESH_AUTHORIZATION",
+    "safeTxGas": "0",
+    "baseGas": "0",
+    "gasPrice": "0",
+    "gasToken": "0x0000000000000000000000000000000000000000",
+    "refundReceiver": "0x0000000000000000000000000000000000000000",
+    "executorBinding": "CURRENT_OWNER_DIRECT_PREVALIDATED_SIGNATURE_V1"
+  },
+  "finalState": {
+    "ownersPerSafe": 3,
+    "threshold": 2,
+    "hardwareOwnersPerSafe": 3,
+    "hardwareOwnersGloballyDistinct": true,
+    "legacyKeychainOwnerRemoved": true,
+    "expectedOwnerOrder": ["H2", "H1", "H3"],
+    "modules": [],
+    "fallbackHandler": "0x0000000000000000000000000000000000000000",
+    "guard": "0x0000000000000000000000000000000000000000",
+    "safeNonceDelta": 1
+  },
+  "hardwareProof": {
+    "requiredOwners": 12,
+    "eip712ControlProofPerOwner": true,
+    "dualHardwareSignaturePostMigrationEthCallRequired": true,
+    "deviceDisplayAndIndependentCustodyAttestationRequired": true,
+    "physicalIndependenceIsOperationalEvidence": true
+  },
+  "activationAllowedBeforeAggregateFinalizedVerification": false,
+  "status": "POLICY_ONLY_NO_HARDWARE_KEYS_NO_TRANSACTION_AUTHORIZATION"
+}

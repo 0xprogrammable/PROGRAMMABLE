@@ -10,41 +10,59 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "06235ff68203da970d51022fe0a9bbe3a7d0096c547ecd7fc31b1ce1d4f1da52",
+    sha256: "ff3968534ca2360d6a6ab7d22605c3b1eeb3d014f7d65eb40f00fcc3b3792bfa",
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "73c99640515732c975600b5e9a8cd4ffb7fafbc04536a563126c76ea60b27fe6",
+        sha256:
+          "a31450f6444e4d495ab2adb964bc713c2191723a5f62cc94d151c71e8627c6e4",
       }),
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/onchain/parallel-reads.ts",
-          sha256: "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e",
+          sha256:
+            "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e",
+        }),
+        Object.freeze({
+          path: "lib/onchain/historical-read-rpc.server.ts",
+          sha256:
+            "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d",
+        }),
+        Object.freeze({
+          path: "lib/onchain/persistent-rpc-cache.server.ts",
+          sha256:
+            "5faaaeafffb837668c5759ff85f879721c6ac4fd41e0a49bf3ee6b615fbb3af4",
         }),
       ]),
       releaseRuntimes: Object.freeze([
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "c97c6f5875bf089b8545bfc55bd20f26c1520bdbe0c640e873f70ca08b4cc4a3",
+          sha256:
+            "da6b9cb5e938435010e7a2c0f6ea9a597e7f04257570bd243e368f68c2d28188",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "9c9badce8d6dfb000a29fd4abcc013701f5a81736ce9ad9fd1e72816b3a75b2f",
+          sha256:
+            "0f1a0713aa02b617f1ae9df6463140640d1217cdbb38964b56fc9d2b59e1d054",
           eventFiltersPerRange: 3,
         }),
       ]),
       eventFiltersPerRange: 2,
       providerPasses: 2,
       requestDeadlineMs: 270_000,
+      classicPrewarmStepCount: 32,
+      prewarmProviderConcurrency: 2,
+      prewarmRequestDeadlineMs: 250_000,
     }),
     schedulerWatchdog: Object.freeze({
       provider: "github-actions",
       workflow: Object.freeze({
         path: ".github/workflows/refresh-production-read-model.yml",
-        sha256: "778f68df03c9a66a17c5f58643940e0beb2e4090eacd5f126a5feb9a0ed6b616",
+        sha256:
+          "778f68df03c9a66a17c5f58643940e0beb2e4090eacd5f126a5feb9a0ed6b616",
       }),
       nodeRuntime: Object.freeze({
         setupAction: "actions/setup-node",
@@ -65,23 +83,28 @@ const APPROVED_OPERATIONS = Object.freeze({
         maximumHeadAgeSeconds: 300,
         healthRoute: Object.freeze({
           path: "app/api/ops/health/route.ts",
-          sha256: "2dd1539b39761c0416991af20dcc7ab27b5855ba0dc456244bd218b157386f59",
+          sha256:
+            "2dd1539b39761c0416991af20dcc7ab27b5855ba0dc456244bd218b157386f59",
         }),
         rpcRuntime: Object.freeze({
           path: "lib/onchain/rpc-health.ts",
-          sha256: "7315f82e8d0904941c9cdd6840a79b6720e6a73a99edeb44ce71bb0486d8596e",
+          sha256:
+            "7315f82e8d0904941c9cdd6840a79b6720e6a73a99edeb44ce71bb0486d8596e",
         }),
         deploymentConfig: Object.freeze({
           path: "lib/onchain/config.ts",
-          sha256: "0e75c3d55b54933504c702977c0d7972a788fe89d63cc3c2a7d19138ae7fbcb7",
+          sha256:
+            "0e75c3d55b54933504c702977c0d7972a788fe89d63cc3c2a7d19138ae7fbcb7",
         }),
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
-          sha256: "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7",
+          sha256:
+            "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7",
         }),
         currentMarketRpc: Object.freeze({
           path: "lib/market-data/current-market-rpc.server.ts",
-          sha256: "ef2e01d5a184839ce8c5bebe4ec8d05b374930be13ff16d65bccee12c7e96085",
+          sha256:
+            "ef2e01d5a184839ce8c5bebe4ec8d05b374930be13ff16d65bccee12c7e96085",
         }),
       }),
     }),
@@ -89,7 +112,46 @@ const APPROVED_OPERATIONS = Object.freeze({
       path: "/api/ops/index",
       route: "app/api/ops/index/route.ts",
       status: 410,
-      sha256: "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f",
+      sha256:
+        "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f",
+    }),
+  }),
+  customLaunchReconciler: Object.freeze({
+    path: "/api/ops/custom-launch/generic-v2-projector",
+    schedule: "* * * * *",
+    authEnvironment: "CRON_SECRET",
+    maximumLifecycleAgeMs: 300_000,
+    refreshAfterMs: 60_000,
+    leaseMs: 55_000,
+    maximumApprovalInventory: 48,
+    batchLimit: 16,
+    concurrency: 8,
+    maximumInitialLogBlocks: 20_000,
+    maximumConcurrentLogRequests: 24,
+    route: Object.freeze({
+      path: "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+      sha256:
+        "d2f6509eba91dd5690e58d121daf4802aa1367b3807da31ed7ec060ba84b1f14",
+    }),
+    runtime: Object.freeze({
+      path: "lib/server/custom-launch/generic-launch-production-v2.ts",
+      sha256:
+        "b70e8d1a904ed09b1161269b182af7b4e18c93d552acb6e94a5cc66d9d76a19b",
+    }),
+    store: Object.freeze({
+      path: "lib/server/custom-launch/generic-launch-postgres-v2.ts",
+      sha256:
+        "d542726f80bd816387240f1707e5934946b5dcf1cc9d69a015e08f3bb2d904be",
+    }),
+    registryReader: Object.freeze({
+      path: "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",
+      sha256:
+        "a8b6607c641949ad384def4cb9b808233fecea37aadcd9517da69c9845a3dafd",
+    }),
+    migration: Object.freeze({
+      path: "ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
+      sha256:
+        "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8",
     }),
   }),
   independentCrons: Object.freeze([
@@ -100,21 +162,25 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROTOCOL_REVENUE_AUTOMATION_ENABLED",
       route: Object.freeze({
         path: "app/api/ops/protocol-revenue/route.ts",
-        sha256: "9a7012e88ec958c61db08295401cd1b9a932dce9bec14b85075f090782485726",
+        sha256:
+          "9a7012e88ec958c61db08295401cd1b9a932dce9bec14b85075f090782485726",
       }),
       runtime: Object.freeze({
         path: "lib/protocol-revenue/keeper-v2.server.ts",
-        sha256: "8a0b48fcc3cf3034c4be422cc6e9f35f5c7c224c2c45589b34b5798a3fd5a0d8",
+        sha256:
+          "8a0b48fcc3cf3034c4be422cc6e9f35f5c7c224c2c45589b34b5798a3fd5a0d8",
       }),
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "398de34ff2965d89ee2c4b1cffeba043ebe2586eb08685e2a0ea7ff0d6cf18b9",
+          sha256:
+            "83b57151b7e456a2856230b81588b4b3558026af075939a2dba13250af599ae9",
         }),
       ]),
       policy: Object.freeze({
         path: "lib/protocol-revenue/keeper-policy.ts",
-        sha256: "bb39f651c11e49173e5b07e42edd2bfa4a1c0e78e5b0345a47b338751e451787",
+        sha256:
+          "bb39f651c11e49173e5b07e42edd2bfa4a1c0e78e5b0345a47b338751e451787",
       }),
     }),
   ]),
@@ -126,62 +192,76 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROGRAMMABLE_PROJECTOR_ACTIVE",
       route: Object.freeze({
         path: "app/api/ops/projector/route.ts",
-        sha256: "9b12168cbbadf0addac351c45f71931f3c04370bcd6cabe6174d21daeb00a94d",
+        sha256:
+          "9b12168cbbadf0addac351c45f71931f3c04370bcd6cabe6174d21daeb00a94d",
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "25c5427bd24714262e04d3eb14b6b31c71820e9b4070817d4146fe1309bb7fb5",
+        sha256:
+          "25c5427bd24714262e04d3eb14b6b31c71820e9b4070817d4146fe1309bb7fb5",
       }),
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          sha256: "014476a4f7b344b1d8a7c92aafab95d3e9efda1da4d2e323b83e838e8a068228",
+          sha256:
+            "014476a4f7b344b1d8a7c92aafab95d3e9efda1da4d2e323b83e838e8a068228",
         }),
       ]),
       migrations: Object.freeze([
         Object.freeze({
           path: "supabase/migrations/20260731203900_projector_runtime_singleton_lease.sql",
-          sha256: "068f27a70ec6df57b84bf336fc2c46b316a7d10d40b9d489fc47e95acb6f74b0",
+          sha256:
+            "068f27a70ec6df57b84bf336fc2c46b316a7d10d40b9d489fc47e95acb6f74b0",
         }),
         Object.freeze({
           path: "supabase/migrations/20260731224000_projector_provider_evidence_binding.sql",
-          sha256: "0404f7c610a34af23fe536f021927efec4e0aede235068b70be04331c58f03af",
+          sha256:
+            "0404f7c610a34af23fe536f021927efec4e0aede235068b70be04331c58f03af",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801090000_bootstrap_dynamic_evidence_and_launch_requirements.sql",
-          sha256: "e095d128feb12c8962c81be003e693dd67417cfed209144c998ab57d5e8786aa",
+          sha256:
+            "e095d128feb12c8962c81be003e693dd67417cfed209144c998ab57d5e8786aa",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801091000_candidate_projector_unpromoted_gate.sql",
-          sha256: "cd8b5a4aa4801ca773cb84047edbf05349288cada47d671bd47e7d997902c91f",
+          sha256:
+            "cd8b5a4aa4801ca773cb84047edbf05349288cada47d671bd47e7d997902c91f",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801092000_verify_candidate_database_promoted.sql",
-          sha256: "ed5f54a374ad8178393e88a3948281ad9acba10aebbbd5209ea6793691b8c677",
+          sha256:
+            "ed5f54a374ad8178393e88a3948281ad9acba10aebbbd5209ea6793691b8c677",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801093000_bind_candidate_promotion_to_product.sql",
-          sha256: "c6a032ef371b2211004c8d72c0a8c4eec4ba630776210aed48d2d054e642dbbe",
+          sha256:
+            "c6a032ef371b2211004c8d72c0a8c4eec4ba630776210aed48d2d054e642dbbe",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801125441_reuse_safe_head_observations.sql",
-          sha256: "afbeea7bcf60e492e51bfd0c56517613f32a6f87a0182af00c48bdaef6569e74",
+          sha256:
+            "afbeea7bcf60e492e51bfd0c56517613f32a6f87a0182af00c48bdaef6569e74",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801144403_accept_uuid_v8_dynamic_source_lineage.sql",
-          sha256: "85e0509d2a4fa49062a18d891e51cd0c64c1015926c3c3ef47a83ce16edb4170",
+          sha256:
+            "85e0509d2a4fa49062a18d891e51cd0c64c1015926c3c3ef47a83ce16edb4170",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801155212_reuse_dual_rpc_block_evidence.sql",
-          sha256: "51142370cf7fdf2bd60c2812978fe2cbbacf99f42b87c72f0ad1ac61b303cf51",
+          sha256:
+            "51142370cf7fdf2bd60c2812978fe2cbbacf99f42b87c72f0ad1ac61b303cf51",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801204500_reuse_dual_rpc_block_evidence_constraint.sql",
-          sha256: "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11",
+          sha256:
+            "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11",
         }),
         Object.freeze({
           path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
-          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
+          sha256:
+            "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -192,28 +272,34 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
       route: Object.freeze({
         path: "app/api/ops/market-projector/route.ts",
-        sha256: "73bf9299095cfdf75d5452513ee818e161297a83c6355760ab2f79a22a13edbd",
+        sha256:
+          "73bf9299095cfdf75d5452513ee818e161297a83c6355760ab2f79a22a13edbd",
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/market-projector-runtime.server.ts",
-        sha256: "170138d1d3cc8de5cacb0b2b7a8f587d83e75d6e4031c314b226b673cc9dac6b",
+        sha256:
+          "170138d1d3cc8de5cacb0b2b7a8f587d83e75d6e4031c314b226b673cc9dac6b",
       }),
       migrations: Object.freeze([
         Object.freeze({
           path: "supabase/migrations/20260731223000_market_projector_contract.sql",
-          sha256: "ea73f4112a53b25e72aa697d3fc0679bf9c6e7f93a496edd167803d6a7f81a24",
+          sha256:
+            "ea73f4112a53b25e72aa697d3fc0679bf9c6e7f93a496edd167803d6a7f81a24",
         }),
         Object.freeze({
           path: "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
-          sha256: "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7",
+          sha256:
+            "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7",
         }),
         Object.freeze({
           path: "supabase/migrations/20260803000100_market_projector_health_view.sql",
-          sha256: "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd",
+          sha256:
+            "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd",
         }),
         Object.freeze({
           path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
-          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
+          sha256:
+            "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -227,60 +313,74 @@ const APPROVED_OPERATIONS = Object.freeze({
       secretEnvironment: "PROGRAMMABLE_QUICKNODE_STREAM_SECRET",
       route: Object.freeze({
         path: "app/api/ops/projector-wake/route.ts",
-        sha256: "71549b17be233af2be052e1e4f948cbae37d804dc662354c6bfcd234bfdd266a",
+        sha256:
+          "71549b17be233af2be052e1e4f948cbae37d804dc662354c6bfcd234bfdd266a",
       }),
       verifier: Object.freeze({
         path: "lib/data-pipeline/quicknode-stream-wake.server.ts",
-        sha256: "b28af0bdd6860eb6f55b54ea4093a1ddbf9007667c3193f99061057e477c9153",
+        sha256:
+          "b28af0bdd6860eb6f55b54ea4093a1ddbf9007667c3193f99061057e477c9153",
       }),
       canary: Object.freeze({
         path: "scripts/perf/read-model-projector-wake-canary.mjs",
-        sha256: "6820b5bf29cdbf34ae7c5f1bfab55c7bccafb53a7989e09b87aad81cfa111db7",
+        sha256:
+          "6820b5bf29cdbf34ae7c5f1bfab55c7bccafb53a7989e09b87aad81cfa111db7",
       }),
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/data-pipeline/quicknode-wake-queue.server.ts",
-          sha256: "a3743900032ff2c7b4f4636d5731d6de1d680e1f49bd0cce2365c448ea1243d0",
+          sha256:
+            "a3743900032ff2c7b4f4636d5731d6de1d680e1f49bd0cce2365c448ea1243d0",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-wake-runtime.server.ts",
-          sha256: "306a06191e2d6849d8d85f6a1cf79ed027ff3ff482b8e374755935d738fa4307",
+          sha256:
+            "306a06191e2d6849d8d85f6a1cf79ed027ff3ff482b8e374755935d738fa4307",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-block-reader.server.ts",
-          sha256: "983080e347dd9fb90daf5696f096a446f3c119a250669545dcb2208ba639b161",
+          sha256:
+            "983080e347dd9fb90daf5696f096a446f3c119a250669545dcb2208ba639b161",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-market-state.server.ts",
-          sha256: "e608497bc890bf2fbaf8f6af056fe91a5a4c84bae04c1a4fd80dccd04b779d9e",
+          sha256:
+            "e608497bc890bf2fbaf8f6af056fe91a5a4c84bae04c1a4fd80dccd04b779d9e",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-live-runtime.server.ts",
-          sha256: "9cfc38593e10acdbb4206c93f7eea403ae32b944fd875cd2da8b330f6929bcd4",
+          sha256:
+            "9cfc38593e10acdbb4206c93f7eea403ae32b944fd875cd2da8b330f6929bcd4",
         }),
         Object.freeze({
           path: "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
-          sha256: "1cadb53abb9783204fc1a2cecc83abdfb1541225d46cea3e52ebc9411769dd32",
+          sha256:
+            "1cadb53abb9783204fc1a2cecc83abdfb1541225d46cea3e52ebc9411769dd32",
         }),
         Object.freeze({
           path: "lib/data-pipeline/dual-rpc.ts",
-          sha256: "12018866a1452d098d273e6e0f30274a4687f83a4fcba17764e2d88ca8093981",
+          sha256:
+            "12018866a1452d098d273e6e0f30274a4687f83a4fcba17764e2d88ca8093981",
         }),
         Object.freeze({
           path: "lib/data-pipeline/rpc-providers.server.ts",
-          sha256: "8901014d3f4beab60ff324efc90d2d57a3e034399942e9b42c2f01a0d7ef9b5d",
+          sha256:
+            "8901014d3f4beab60ff324efc90d2d57a3e034399942e9b42c2f01a0d7ef9b5d",
         }),
         Object.freeze({
           path: "app/api/ops/read-model-real-block-sla/route.ts",
-          sha256: "367140b12a27068c55f2a5881e27729fbab4d1d9a6187c2148fd29bc4f075946",
+          sha256:
+            "367140b12a27068c55f2a5881e27729fbab4d1d9a6187c2148fd29bc4f075946",
         }),
         Object.freeze({
           path: "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
-          sha256: "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc",
+          sha256:
+            "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc",
         }),
         Object.freeze({
           path: "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
-          sha256: "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
+          sha256:
+            "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0",
         }),
       ]),
     }),
@@ -296,13 +396,45 @@ const APPROVED_OPERATIONS = Object.freeze({
       maximumDeliveryToFirstVisibleMs: 10_000,
       script: Object.freeze({
         path: "scripts/perf/read-model-real-block-sla-gate.mjs",
-        sha256: "c6fa20ec8f4bbc18dc15da91328329f1822db31df66d6bd02e403f06e93fc28f",
+        sha256:
+          "c6fa20ec8f4bbc18dc15da91328329f1822db31df66d6bd02e403f06e93fc28f",
       }),
       schema: Object.freeze({
         path: "config/read-model-real-block-sla-db-attestation.schema.json",
-        sha256: "73d78c27c6b8dc311dd50911bd4f1b4c2c44e967fd53aa5b415f566e264b69da",
+        sha256:
+          "73d78c27c6b8dc311dd50911bd4f1b4c2c44e967fd53aa5b415f566e264b69da",
       }),
     }),
+  }),
+  postPromotion: Object.freeze({
+    publicRoutes: Object.freeze([
+      "/",
+      "/api/ops/health",
+      "/api/explore?limit=6&page=1&sort=market-cap",
+      "/api/explore/token",
+      "/api/explore/token/chart",
+      "/api/explore/profile",
+      "/api/profile/classic-v3",
+      "/api/profile/stock-paired",
+      "/api/explore/profile/claim",
+      "/api/trade/prepare",
+    ]),
+    sources: Object.freeze({
+      launchIdentity: "commitment-bound-drpc-primary",
+      creatorIdentity: "commitment-bound-drpc-primary",
+      actionState: "commitment-bound-drpc-primary",
+      market: "bitquery",
+      fdv: "bitquery",
+      chart: "bitquery",
+    }),
+    rpc: Object.freeze({
+      provider: "drpc",
+      role: "primary",
+      endpointCommitmentRequired: true,
+      secondaryRequired: false,
+    }),
+    fallbacks: false,
+    providerUrlExposure: false,
   }),
 });
 
@@ -352,8 +484,10 @@ function exactJson(left, right) {
 }
 
 function includesEverySourceFragment(source, fragments) {
-  return typeof source === "string" &&
-    fragments.every((fragment) => source.includes(fragment));
+  return (
+    typeof source === "string" &&
+    fragments.every((fragment) => source.includes(fragment))
+  );
 }
 
 export const POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS = Object.freeze([
@@ -615,7 +749,7 @@ export const POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS = Object.freeze([
   'chart.readStatus !== "live"',
   '["ready", "insufficient-history"].includes(chart.status)',
   "chart.truncated !== false",
-  "chart.identity?.chainId !== \"1\"",
+  'chart.identity?.chainId !== "1"',
   "!sameAddress(chart.identity?.tokenAddress, tokenAddress)",
   "!sameBytes32(chart.identity?.poolId, poolId)",
   "!sameAddress(chart.identity?.quoteAddress, quoteAddress)",
@@ -827,6 +961,20 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "Authorization: `Bearer ${input.cronSecret}`",
   '"x-vercel-protection-bypass": input.automationBypassSecret',
   'redirect: "error"',
+  "const PREWARM_STEP_COUNT = 32;",
+  "const PREWARM_STEPS = Object.freeze([",
+  '"01", "02", "03", "04", "05", "06", "07", "08"',
+  '"25", "26", "27", "28", "29", "30", "31", "32"',
+  "const PREWARM_PHASES = Object.freeze(PREWARM_STEPS.flatMap((step) => [",
+  "`classic-primary-${step}`",
+  "`classic-secondary-${step}`",
+  "const results = await Promise.allSettled(phasePair.map(async (phase) => {",
+  'if (result.status !== "fulfilled") {',
+  "value.body.stepCount === PREWARM_STEP_COUNT",
+  "blockNumber === expectedBlock",
+  "blockNumber === confirmedBlock",
+  'prewarmUrl.searchParams.set("phase", phase)',
+  "if (!exactPrewarmResponse(prewarm, phase)) {",
   "if (!exactRefreshResponse(refresh)) {",
   'value.body.indexSource === "durable"',
   'value.body.indexedReadModel?.status === "disabled"',
@@ -839,7 +987,7 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   '"stage_refresh_proof"',
 ]);
 const STAGED_DURABLE_REFRESH_SCRIPT_SHA256 =
-  "989495b90b8f8ebb549da1e869116d9dc3373567d8bff721285ced702271d68e";
+  "da794e41cc86d8d36ff8d945cba279fa0282477aaaecad0259efab9411023701";
 const STAGED_DURABLE_REFRESH_WORKFLOW_STEP = [
   "      - name: Refresh and prove exact staged durable read model",
   "        if: needs.release-gate.outputs.verified_read_model == 'true'",
@@ -914,7 +1062,9 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
     /Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*<\s*32/u.test(source) &&
     /Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*>\s*1_024/u.test(source);
   const namedSecretBounds =
-    /const\s+secretLength\s*=\s*secret\s*\?\s*Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*:\s*0/u.test(source) &&
+    /const\s+secretLength\s*=\s*secret\s*\?\s*Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*:\s*0/u.test(
+      source,
+    ) &&
     /secretLength\s*<\s*32/u.test(source) &&
     /secretLength\s*>\s*1_024/u.test(source);
   const standardAuthorization =
@@ -935,8 +1085,7 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
     /timingSafeEqual\(provided,\s*expected\)/u.test(source) &&
     standardAuthorization &&
     (!requireCutover ||
-      (cutoverAuthorization &&
-        /mode\s*===\s*["']cutover["']/u.test(source))) &&
+      (cutoverAuthorization && /mode\s*===\s*["']cutover["']/u.test(source))) &&
     (/if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) ||
       /if\s*\(\s*mode\s*===\s*null\s*\)/u.test(source)) &&
     /status\s*:\s*401\b/u.test(source) &&
@@ -970,7 +1119,9 @@ function legacySchedulerWatchdogIsFailClosed(
   ].join("\n");
   const pinnedNodeSetupIndex = workflowSource?.indexOf(pinnedNodeSetup) ?? -1;
   const watchdogStepIndex =
-    workflowSource?.indexOf("      - name: Refresh and prove durable freshness") ?? -1;
+    workflowSource?.indexOf(
+      "      - name: Refresh and prove durable freshness",
+    ) ?? -1;
   return (
     typeof workflowSource === "string" &&
     binding?.provider === "github-actions" &&
@@ -989,8 +1140,16 @@ function legacySchedulerWatchdogIsFailClosed(
     binding.rpcProof?.confirmedBlockRequired === true &&
     binding.rpcProof?.providerPairRequired === true &&
     binding.rpcProof?.maximumHeadAgeSeconds === 300 &&
-    sourceBindingMatches(source, binding.rpcProof?.healthRoute, expectedSha256Overrides) &&
-    sourceBindingMatches(source, binding.rpcProof?.rpcRuntime, expectedSha256Overrides) &&
+    sourceBindingMatches(
+      source,
+      binding.rpcProof?.healthRoute,
+      expectedSha256Overrides,
+    ) &&
+    sourceBindingMatches(
+      source,
+      binding.rpcProof?.rpcRuntime,
+      expectedSha256Overrides,
+    ) &&
     sourceBindingMatches(
       source,
       binding.rpcProof?.deploymentConfig,
@@ -1010,15 +1169,17 @@ function legacySchedulerWatchdogIsFailClosed(
       "currentMarketOnchainDeployment(deployment)",
     ) &&
     source(APPROVED_OPERATIONS.legacyIndexer.route)?.includes(
-      "currentMarketOnchainDeployment(deployment)",
+      "historicalReadOnchainDeployment(deployment)",
     ) &&
-    workflowSource.includes('name: Refresh production read model') &&
+    workflowSource.includes("name: Refresh production read model") &&
     workflowSource.includes('    - cron: "2-57/5 * * * *"') &&
     workflowSource.includes("  workflow_dispatch:") &&
     workflowSource.includes("permissions: {}") &&
     workflowSource.includes("  group: production-read-model-refresh") &&
     workflowSource.includes("  cancel-in-progress: false") &&
-    workflowSource.includes("github.repository == '0xprogrammable/programmable'") &&
+    workflowSource.includes(
+      "github.repository == '0xprogrammable/programmable'",
+    ) &&
     workflowSource.includes("github.ref == 'refs/heads/production'") &&
     workflowSource.includes("    timeout-minutes: 9") &&
     workflowSource.includes("      name: production") &&
@@ -1042,11 +1203,15 @@ function legacySchedulerWatchdogIsFailClosed(
     workflowSource.includes("refresh.body?.ok !== true") &&
     workflowSource.includes("refresh.body.portfolioHistory.blockNumber !==") &&
     workflowSource.includes("refresh.body.portfolioHistory.tokenCount !==") &&
-    workflowSource.includes('refresh.body.portfolioHistory.status === "empty"') &&
+    workflowSource.includes(
+      'refresh.body.portfolioHistory.status === "empty"',
+    ) &&
     workflowSource.includes("health.response.status === 200") &&
     workflowSource.includes('health.body?.status === "healthy"') &&
     workflowSource.includes('health.body.indexSource === "durable"') &&
-    workflowSource.includes('health.body.indexedReadModel?.status === "disabled"') &&
+    workflowSource.includes(
+      'health.body.indexedReadModel?.status === "disabled"',
+    ) &&
     workflowSource.includes("healthBlock >= refreshBlock") &&
     workflowSource.includes("index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS") &&
     workflowSource.includes('rpc?.status === "healthy"') &&
@@ -1056,7 +1221,7 @@ function legacySchedulerWatchdogIsFailClosed(
     workflowSource.includes("confirmedBlockNumber >= refreshBlock") &&
     workflowSource.includes("HEX32.test(confirmedBlock?.hash)") &&
     workflowSource.includes('confirmedBlock.hash !== `0x${"00".repeat(32)}`') &&
-    workflowSource.includes('rpc?.freshness?.maxHeadAgeSeconds === 300') &&
+    workflowSource.includes("rpc?.freshness?.maxHeadAgeSeconds === 300") &&
     workflowSource.includes('primary?.status === "available"') &&
     workflowSource.includes('secondary?.status === "available"') &&
     workflowSource.includes("primaryHead >= confirmedBlockNumber") &&
@@ -1154,7 +1319,9 @@ function realBlockSlaGateIsFailClosed(source, schema, gate) {
     source.includes("API body digest") &&
     source.includes("real-block SLA latency") &&
     source.includes("maximumEvidenceAgeMs") &&
-    source.includes('evidence.kind !== "programmable-real-block-sla-db-attestation"') &&
+    source.includes(
+      'evidence.kind !== "programmable-real-block-sla-db-attestation"',
+    ) &&
     source.includes("evidence.schemaVersion !== 2") &&
     source.includes("initialNonceDigest") &&
     source.includes("duplicateNonceDigest") &&
@@ -1227,15 +1394,22 @@ function manualPromotionSequenceIsFailClosed(source) {
     previousIndex = commandIndex;
   }
   const activePromotionCommands = shellCommands.filter((line) =>
-    /\bvercel\s+promote(?:\s|$)/u.test(line)
+    /\bvercel\s+promote(?:\s|$)/u.test(line),
   );
-  return activePromotionCommands.length === 1 &&
-    activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION;
+  return (
+    activePromotionCommands.length === 1 &&
+    activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION
+  );
 }
 
 function retiredCandidateCutoverIsFailClosed(input) {
-  return input.productionRunbook.includes("# Historical candidate cutover retired") &&
-    input.productionRunbook.includes("This document no longer authorizes a production cutover.") &&
+  return (
+    input.productionRunbook.includes(
+      "# Historical candidate cutover retired",
+    ) &&
+    input.productionRunbook.includes(
+      "This document no longer authorizes a production cutover.",
+    ) &&
     input.productionRunbook.includes("historical evidence, not current") &&
     !input.productionRunbook.includes("```sh") &&
     !input.productionRunbook.includes("vercel promote") &&
@@ -1248,7 +1422,9 @@ function retiredCandidateCutoverIsFailClosed(input) {
     input.runtimeBinding.includes('mode: "release"') &&
     input.runtimeBinding.includes("production-92f6373") &&
     input.runtimeBinding.includes("f6714ef") &&
-    input.runtimeBinding.includes("retired-candidate-projector-runtime-binding") &&
+    input.runtimeBinding.includes(
+      "retired-candidate-projector-runtime-binding",
+    ) &&
     !input.runtimeBinding.includes("candidate-backfill") &&
     !input.runtimeBinding.includes("production-7f24e63") &&
     !input.runtimeBinding.includes("d7a39a2") &&
@@ -1256,7 +1432,9 @@ function retiredCandidateCutoverIsFailClosed(input) {
     input.cutoverOperator.includes("historical candidate cutover is retired") &&
     input.cutoverRuntime.includes("historical candidate cutover is retired") &&
     !input.cutoverRuntime.includes("PROGRAMMABLE_") &&
-    input.bootstrapRuntime.includes("historical candidate bootstrap is retired") &&
+    input.bootstrapRuntime.includes(
+      "historical candidate bootstrap is retired",
+    ) &&
     !input.bootstrapRuntime.includes("PROGRAMMABLE_") &&
     input.packageJson?.scripts?.["test:retired-read-model-cutover"] ===
       "node --test scripts/data-pipeline/cutover-operator.test.mjs scripts/data-pipeline/cutover-runtime.test.mjs scripts/data-pipeline/hosted-db-bootstrap.test.mjs" &&
@@ -1265,7 +1443,8 @@ function retiredCandidateCutoverIsFailClosed(input) {
     ) === true &&
     input.packageJson?.scripts?.["test:interface:ci"]?.includes(
       "npm run test:retired-read-model-cutover",
-    ) === true;
+    ) === true
+  );
 }
 
 function migrationContract(id, source) {
@@ -1292,7 +1471,9 @@ function migrationContract(id, source) {
         "safe_head_observations_epoch_id_content_fingerprint_key",
       ) &&
       source.includes("for key share") &&
-      source.includes("safe-head fingerprint replay conflicts with stored evidence") &&
+      source.includes(
+        "safe-head fingerprint replay conflicts with stored evidence",
+      ) &&
       /security definer/iu.test(source)
     );
   }
@@ -1310,7 +1491,9 @@ function migrationContract(id, source) {
       source.includes(
         "dual_rpc_block_evidence_epoch_id_content_fingerprint_key",
       ) &&
-      source.includes("block-evidence fingerprint replay conflicts with stored evidence") &&
+      source.includes(
+        "block-evidence fingerprint replay conflicts with stored evidence",
+      ) &&
       /security definer/iu.test(source)
     );
   }
@@ -1354,7 +1537,9 @@ function migrationContract(id, source) {
     return (
       source.includes("verify_candidate_database_unpromoted_v1") &&
       source.includes("envio:production-7f24e63") &&
-      source.includes("programmable_private.assert_caller('programmable_projector')") &&
+      source.includes(
+        "programmable_private.assert_caller('programmable_projector')",
+      ) &&
       /grant execute[\s\S]*to programmable_projector/iu.test(source)
     );
   }
@@ -1362,7 +1547,9 @@ function migrationContract(id, source) {
     return (
       source.includes("verify_candidate_database_promoted_v1") &&
       source.includes("envio:production-7f24e63") &&
-      source.includes("programmable_private.assert_caller('programmable_projector')") &&
+      source.includes(
+        "programmable_private.assert_caller('programmable_projector')",
+      ) &&
       /grant execute[\s\S]*to programmable_projector/iu.test(source)
     );
   }
@@ -1373,7 +1560,9 @@ function migrationContract(id, source) {
       source.includes("staged_deployment_id") &&
       source.includes("verify_candidate_database_promoted_v2") &&
       source.includes("candidate product-bound promotion CAS lost") &&
-      /validate constraint candidate_database_control_product_binding/iu.test(source)
+      /validate constraint candidate_database_control_product_binding/iu.test(
+        source,
+      )
     );
   }
   if (id === "market-projector") {
@@ -1416,23 +1605,113 @@ export function evaluateReadModelOperationsSourceContracts(
     ? operations.eventTriggers
     : [];
   const releaseGates = operations?.releaseGates;
+  const postPromotionContract = operations?.postPromotion;
+  const customLaunchReconciler = operations?.customLaunchReconciler;
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
   const approvedCrons = new Map([
-    [APPROVED_OPERATIONS.legacyIndexer.path, APPROVED_OPERATIONS.legacyIndexer.schedule],
-    ...APPROVED_OPERATIONS.workers.map((worker) => [worker.path, worker.schedule]),
-    ...APPROVED_OPERATIONS.independentCrons.map((cron) => [cron.path, cron.schedule]),
+    [
+      APPROVED_OPERATIONS.legacyIndexer.path,
+      APPROVED_OPERATIONS.legacyIndexer.schedule,
+    ],
+    [
+      APPROVED_OPERATIONS.customLaunchReconciler.path,
+      APPROVED_OPERATIONS.customLaunchReconciler.schedule,
+    ],
+    ...APPROVED_OPERATIONS.workers.map((worker) => [
+      worker.path,
+      worker.schedule,
+    ]),
+    ...APPROVED_OPERATIONS.independentCrons.map((cron) => [
+      cron.path,
+      cron.schedule,
+    ]),
   ]);
 
   check(
     "ops-config-schema",
     operations?.schemaVersion === 1 &&
       exactJson(operations?.legacyIndexer, APPROVED_OPERATIONS.legacyIndexer) &&
+      exactJson(
+        customLaunchReconciler,
+        APPROVED_OPERATIONS.customLaunchReconciler,
+      ) &&
       exactJson(workers, APPROVED_OPERATIONS.workers) &&
       exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers) &&
-      exactJson(releaseGates, APPROVED_OPERATIONS.releaseGates),
-    "the manifest exactly binds the reviewed indexers, workers, event trigger and release gates",
+      exactJson(releaseGates, APPROVED_OPERATIONS.releaseGates) &&
+      exactJson(postPromotionContract, APPROVED_OPERATIONS.postPromotion),
+    "the manifest exactly binds the reviewed operations and the public Website provider split",
+  );
+  const customReconciler = APPROVED_OPERATIONS.customLaunchReconciler;
+  const customReconcilerRoute = source(customReconciler.route.path);
+  const customReconcilerRuntime = source(customReconciler.runtime.path);
+  check(
+    "ops-custom-launch-reconciler-schedule",
+    crons?.get(customReconciler.path) === customReconciler.schedule,
+    "Custom Launch V2 reconciliation has its fixed production schedule",
+  );
+  check(
+    "ops-custom-launch-reconciler-source-digests",
+    [
+      customReconciler.route,
+      customReconciler.runtime,
+      customReconciler.store,
+      customReconciler.registryReader,
+      customReconciler.migration,
+    ].every((binding) =>
+      sourceBindingMatches(source, binding, expectedSha256Overrides),
+    ),
+    "Custom Launch V2 reconciler is byte-bound to route, runtime, store, Registry reader and migration",
+  );
+  check(
+    "ops-custom-launch-reconciler-route-auth",
+    customReconcilerRoute.includes(
+      `authorized(request.headers, process.env.${customReconciler.authEnvironment})`,
+    ) &&
+      /Buffer\.byteLength\(expectedValue,\s*["']utf8["']\)\s*<\s*32/u.test(
+        customReconcilerRoute,
+      ) &&
+      /Buffer\.byteLength\(expectedValue,\s*["']utf8["']\)\s*>\s*1_024/u.test(
+        customReconcilerRoute,
+      ) &&
+      /timingSafeEqual\(expected,\s*actual\)/u.test(customReconcilerRoute) &&
+      /response\(401,\s*["']unauthorized["']\)/u.test(customReconcilerRoute) &&
+      /response\(503,\s*["']reconciliation_unavailable["']\)/u.test(
+        customReconcilerRoute,
+      ) &&
+      /["']cache-control["']:\s*["']no-store["']/u.test(customReconcilerRoute),
+    "Custom Launch V2 cron requires the bounded timing-safe cron secret",
+  );
+  check(
+    "ops-custom-launch-reconciler-freshness",
+    /GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS\s*=\s*300_000/u.test(
+      customReconcilerRuntime,
+    ) &&
+      /GENERIC_LAUNCH_LIFECYCLE_REFRESH_AFTER_MS\s*=\s*60_000/u.test(
+        customReconcilerRuntime,
+      ) &&
+      /GENERIC_LAUNCH_RECONCILIATION_LEASE_MS\s*=\s*55_000/u.test(
+        customReconcilerRuntime,
+      ) &&
+      /GENERIC_LAUNCH_RECONCILIATION_CONCURRENCY\s*=\s*8/u.test(
+        customReconcilerRuntime,
+      ) &&
+      customReconciler.maximumLifecycleAgeMs === 300_000 &&
+      customReconciler.refreshAfterMs === 60_000 &&
+      customReconciler.leaseMs === 55_000 &&
+      customReconciler.maximumApprovalInventory === 48 &&
+      customReconciler.concurrency === 8 &&
+      customReconciler.maximumInitialLogBlocks === 20_000 &&
+      customReconciler.maximumConcurrentLogRequests === 24 &&
+      /MAXIMUM_INITIAL_LOG_BLOCKS\s*=\s*20_000n/u.test(
+        source(customReconciler.registryReader.path),
+      ) &&
+      /MAXIMUM_CONCURRENT_LOG_REQUESTS\s*=\s*24/u.test(
+        source(customReconciler.registryReader.path),
+      ) &&
+      customReconcilerRoute.includes(`limit: ${customReconciler.batchLimit}`),
+    "Custom Launch V2 public reads fail closed on the reviewed lifecycle age and bounded sweep",
   );
   check(
     "ops-cron-exact-set",
@@ -1454,14 +1733,30 @@ export function evaluateReadModelOperationsSourceContracts(
     );
     check(
       `ops-${approvedCron.id}-source-digests`,
-      sourceBindingMatches(source, approvedCron.route, expectedSha256Overrides) &&
-        (!approvedCron.auth
-          || sourceBindingMatches(source, approvedCron.auth, expectedSha256Overrides)) &&
-        sourceBindingMatches(source, approvedCron.runtime, expectedSha256Overrides) &&
-        (approvedCron.dependencies ?? []).every((binding) =>
-          sourceBindingMatches(source, binding, expectedSha256Overrides)
+      sourceBindingMatches(
+        source,
+        approvedCron.route,
+        expectedSha256Overrides,
+      ) &&
+        (!approvedCron.auth ||
+          sourceBindingMatches(
+            source,
+            approvedCron.auth,
+            expectedSha256Overrides,
+          )) &&
+        sourceBindingMatches(
+          source,
+          approvedCron.runtime,
+          expectedSha256Overrides,
         ) &&
-        sourceBindingMatches(source, approvedCron.policy, expectedSha256Overrides),
+        (approvedCron.dependencies ?? []).every((binding) =>
+          sourceBindingMatches(source, binding, expectedSha256Overrides),
+        ) &&
+        sourceBindingMatches(
+          source,
+          approvedCron.policy,
+          expectedSha256Overrides,
+        ),
       `${approvedCron.id} route, runtime and policy match reviewed bytes`,
     );
     check(
@@ -1472,8 +1767,13 @@ export function evaluateReadModelOperationsSourceContracts(
     check(
       `ops-${approvedCron.id}-activation`,
       runtime.includes(`env.${approvedCron.activationEnvironment}`) &&
-        runtime.includes(`env.${approvedCron.activationEnvironment} !== "true"`) &&
-        exactFalseEnvironmentKey(source(".env.example"), approvedCron.activationEnvironment),
+        runtime.includes(
+          `env.${approvedCron.activationEnvironment} !== "true"`,
+        ) &&
+        exactFalseEnvironmentKey(
+          source(".env.example"),
+          approvedCron.activationEnvironment,
+        ),
       `${approvedCron.id} is disabled by default behind one server-only activation flag`,
     );
   }
@@ -1493,6 +1793,8 @@ export function evaluateReadModelOperationsSourceContracts(
   const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
   const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
   const parallelReadsSource = source(boundedRefresh?.dependencies?.[0]?.path);
+  const historicalRpcSource = source(boundedRefresh?.dependencies?.[1]?.path);
+  const persistentCacheSource = source(boundedRefresh?.dependencies?.[2]?.path);
   const releaseRuntimes = boundedRefresh?.releaseRuntimes;
   const classicV3RefreshSource = source(releaseRuntimes?.[0]?.path);
   const stockPairedRefreshSource = source(releaseRuntimes?.[1]?.path);
@@ -1505,6 +1807,10 @@ export function evaluateReadModelOperationsSourceContracts(
     runtimeSource?.includes("error instanceof LimitExceededRpcError") &&
     runtimeSource?.includes("error instanceof HttpRequestError") &&
     runtimeSource?.includes("error instanceof ResponseBodyTooLargeError") &&
+    runtimeSource?.includes("isPersistentCacheRangeLimitError(error)") &&
+    runtimeSource?.includes(
+      "Persistent RPC cache log segment exceeds \\d+ bytes",
+    ) &&
     runtimeSource?.includes("logBlockRange > MINIMUM_LOG_BLOCK_RANGE") &&
     runtimeSource?.includes("logBlockRange * 2n") &&
     runtimeSource?.includes("continue;");
@@ -1519,20 +1825,75 @@ export function evaluateReadModelOperationsSourceContracts(
         boundedRefresh?.runtime,
         expectedSha256Overrides,
       ) &&
-      boundedRefresh?.dependencies?.length === 1 &&
+      boundedRefresh?.dependencies?.length === 3 &&
       sourceBindingMatches(
         source,
         boundedRefresh.dependencies[0],
         expectedSha256Overrides,
       ) &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh.dependencies[1],
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh.dependencies[2],
+        expectedSha256Overrides,
+      ) &&
       refreshRuntimeSource?.includes(
         'import { settleParallelReadsInOrder } from "./parallel-reads";',
       ) &&
-      refreshRuntimeSource?.includes(
-        "await settleParallelReadsInOrder([",
-      ) &&
+      refreshRuntimeSource?.includes("await settleParallelReadsInOrder([") &&
       parallelReadsSource?.includes("Promise.allSettled(") &&
       parallelReadsSource?.includes("for (const result of results)") &&
+      legacyRouteSource?.includes(
+        "historicalReadOnchainDeployment(deployment)",
+      ) &&
+      historicalRpcSource?.includes("productionMainnetRpcPair(environment)") &&
+      historicalRpcSource?.includes("primary: binding.primary.url") &&
+      historicalRpcSource?.includes("secondary: binding.secondary.url") &&
+      historicalRpcSource?.includes('primary?.vendorGroup !== "drpc"') &&
+      historicalRpcSource?.includes('secondary?.vendorGroup !== "quicknode"') &&
+      historicalRpcSource?.includes(
+        "primary.endpointCommitment !== binding.primary.endpointCommitment",
+      ) &&
+      persistentCacheSource?.includes(
+        'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v4";',
+      ) &&
+      persistentCacheSource?.includes("maxCursorSegments: 16,") &&
+      persistentCacheSource?.includes("maxSegmentReadsPerOperation: 16,") &&
+      !persistentCacheSource?.includes(
+        'const CACHE_SCHEMA = "programmable-rpc-log-cursor-v3";',
+      ) &&
+      persistentCacheSource?.includes(
+        "Persistent RPC cache path uses a retired namespace",
+      ) &&
+      persistentCacheSource?.includes("previousIntegrityCommitId") &&
+      persistentCacheSource?.includes('pointedMarker.status !== "committed"') &&
+      persistentCacheSource?.includes(
+        "Persistent RPC providers do not cover the same event streams",
+      ) &&
+      persistentCacheSource?.includes(
+        "Persistent RPC checkpoint cursors do not share its boundary",
+      ) &&
+      persistentCacheSource?.includes("expectedProviderCount") &&
+      persistentCacheSource?.includes("expectedStreamsPerProvider") &&
+      persistentCacheSource?.includes("requireCheckpointWindow") &&
+      persistentCacheSource?.includes("requiredInitialFromBlock") &&
+      persistentCacheSource?.includes("requireContiguousCheckpointWindow") &&
+      persistentCacheSource?.includes("allowCheckpointWindowExtension") &&
+      persistentCacheSource?.includes("signal?: AbortSignal") &&
+      persistentCacheSource?.includes("input.signal?.throwIfAborted()") &&
+      persistentCacheSource?.includes(
+        "bindPersistentRpcIntegrityCheckpointWindow",
+      ) &&
+      persistentCacheSource?.indexOf('scope.commitId,\n          "pending",') <
+        persistentCacheSource?.indexOf("const published =") &&
+      persistentCacheSource?.indexOf("const published =") <
+        persistentCacheSource?.indexOf(
+          'scope.commitId,\n          "committed",',
+        ) &&
       Array.isArray(releaseRuntimes) &&
       releaseRuntimes.length === 2 &&
       releaseRuntimes[0]?.release === "classic-v3" &&
@@ -1551,55 +1912,123 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       boundedRefresh?.eventFiltersPerRange === 2 &&
       boundedRefresh?.providerPasses === 2 &&
+      boundedRefresh?.classicPrewarmStepCount === 32 &&
+      boundedRefresh?.prewarmProviderConcurrency === 2 &&
+      boundedRefresh?.prewarmRequestDeadlineMs === 250_000 &&
       legacyRouteSource?.includes(
         "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
       ) &&
+      legacyRouteSource?.includes(
+        "const INDEX_PREWARM_DEADLINE_MS = 250_000;",
+      ) &&
+      legacyRouteSource?.includes("const CLASSIC_PREWARM_STEP_COUNT = 32;") &&
+      legacyRouteSource?.includes("withIndexPrewarmDeadline((signal) =>") &&
+      legacyRouteSource?.includes(
+        "controller.abort(new IndexRefreshDeadlineError())",
+      ) &&
+      legacyRouteSource?.includes(
+        "const output = await read(controller.signal)",
+      ) &&
+      legacyRouteSource?.indexOf("if (!isAuthorized(request))") <
+        legacyRouteSource?.indexOf("const phaseValues =") &&
       legacyRouteSource?.includes("withIndexRefreshDeadline(() =>") &&
       !legacyRouteSource?.includes("INDEX_READ_ATTEMPTS") &&
       hasAdaptiveCompleteRangeScan(refreshRuntimeSource) &&
       refreshRuntimeSource?.includes("events: CLASSIC_LAUNCHER_EVENTS") &&
       refreshRuntimeSource?.includes("events: CLASSIC_FEE_HOOK_EVENTS") &&
       refreshRuntimeSource?.includes("assertCanonicalClassicEventSource(") &&
-      refreshRuntimeSource?.includes("clients.map((candidate) =>") &&
+      refreshRuntimeSource?.includes(
+        "const indexedEventSets = await mapInBatches(",
+      ) &&
+      refreshRuntimeSource?.includes(
+        "clients.map((candidate, providerIndex) =>",
+      ) &&
+      refreshRuntimeSource?.includes(
+        "persistentRpcProviderId(providerEndpoints[providerIndex])",
+      ) &&
+      refreshRuntimeSource?.includes("fetchOptions: { signal }") &&
+      refreshRuntimeSource?.includes("coverage * BigInt(step)") &&
+      refreshRuntimeSource?.includes("stepCount: number") &&
+      refreshRuntimeSource?.includes("expectedCursorBindings: 2") &&
       hasAdaptiveCompleteRangeScan(classicV3RefreshSource) &&
       classicV3RefreshSource?.includes(
         "assertCanonicalClassicV3EventSource(",
       ) &&
-      classicV3RefreshSource?.includes("clients.map((client) =>") &&
+      classicV3RefreshSource?.includes("const sets = await mapInBatches(") &&
+      classicV3RefreshSource?.includes("readClassicV3EventsQuorum(") &&
+      classicV3RefreshSource?.includes('"classic-v3-events-v2"') &&
+      classicV3RefreshSource?.includes("clients.length !== 2") &&
+      classicV3RefreshSource?.includes(
+        "createEnvironmentPersistentRpcCacheStore()",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "bindPersistentRpcIntegrityCheckpointWindow({",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "expectedCursorBindings: clients.length * 2",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "expectedProviderCount: clients.length",
+      ) &&
+      classicV3RefreshSource?.includes("expectedStreamsPerProvider: 2") &&
+      classicV3RefreshSource?.includes("requireCheckpointWindow: true") &&
+      classicV3RefreshSource?.includes(
+        "requiredInitialFromBlock: release.startBlock",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "requireContiguousCheckpointWindow: true",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "allowCheckpointWindowExtension: true",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "const MAXIMUM_CHECKPOINT_BLOCK_RANGE = 1_000n",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "config.logBlockRange,\n      MAXIMUM_CHECKPOINT_BLOCK_RANGE",
+      ) &&
+      classicV3RefreshSource?.includes("eventProvenance") &&
+      classicV3RefreshSource?.includes("toEventSelector(launchedEvent)") &&
+      classicV3RefreshSource?.includes("toEventSelector(feeEvent)") &&
+      classicV3RefreshSource?.includes(
+        ".map(persistentRpcProviderId).sort()",
+      ) &&
+      classicV3RefreshSource?.includes(
+        "Independent RPCs disagree on the Classic V3 checkpoint window",
+      ) &&
       hasAdaptiveCompleteRangeScan(stockPairedRefreshSource) &&
       stockPairedRefreshSource?.includes("events: STOCK_LAUNCHER_EVENTS") &&
       stockPairedRefreshSource?.includes("assertCanonicalStockEventSource(") &&
-      stockPairedRefreshSource?.includes("clients.map((candidate) =>"),
-    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two provider passes and settle registry slices in parallel before deterministic merging and the platform deadline",
+      stockPairedRefreshSource?.includes(
+        "const eventSets = await mapInBatches(",
+      ) &&
+      stockPairedRefreshSource?.includes(
+        "clients.map((candidate, providerIndex) =>",
+      ) &&
+      stockPairedRefreshSource?.includes(
+        "persistentRpcProviderId(providerEndpoints[providerIndex])",
+      ) &&
+      stockPairedRefreshSource?.includes("expectedCursorBindings: 3"),
+    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two serialized provider passes, atomically publish Classic V3 provider-stream checkpoints in a fail-closed v4 namespace and settle registry slices in parallel before deterministic merging and the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(
     "ops-legacy-scheduler-watchdog",
-    exactJson(
-      schedulerWatchdog,
-      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog,
-    ) &&
-      sourceBindingMatches(
-        source,
-        schedulerWatchdog?.workflow,
-        expectedSha256Overrides,
+    schedulerWatchdog?.workflow?.path ===
+      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path &&
+      !source(".github/workflows/deploy-production.yml")?.includes(
+        "perf:read-model:staged-refresh",
       ) &&
-      legacySchedulerWatchdogIsFailClosed(
-        source(APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path),
-        schedulerWatchdog,
-        source,
-        expectedSha256Overrides,
+      !source(".github/workflows/deploy-production.yml")?.includes(
+        "perf:read-model:staged-health",
       ),
-    "the generic GitHub watchdog refreshes only the public durable read model and proves freshness plus RPC quorum",
+    "legacy refresh tooling is not a production Website release prerequisite",
   );
   const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;
   check(
     "ops-legacy-alias-closed",
     !crons?.has(closedLegacyAlias.path) &&
-      exactJson(
-        operations?.legacyIndexer?.closedAlias,
-        closedLegacyAlias,
-      ) &&
+      exactJson(operations?.legacyIndexer?.closedAlias, closedLegacyAlias) &&
       sha256(source(closedLegacyAlias.route)) === closedLegacyAlias.sha256 &&
       routeIsPermanentlyClosed(
         source(closedLegacyAlias.route),
@@ -1622,7 +2051,11 @@ export function evaluateReadModelOperationsSourceContracts(
     check(
       `ops-${approvedWorker.id}-source-digests`,
       sourceBindingMatches(source, worker?.route, expectedSha256Overrides) &&
-      sourceBindingMatches(source, worker?.runtime, expectedSha256Overrides) &&
+        sourceBindingMatches(
+          source,
+          worker?.runtime,
+          expectedSha256Overrides,
+        ) &&
         (approvedWorker.dependencies ?? []).every((binding, index) =>
           sourceBindingMatches(
             source,
@@ -1650,19 +2083,23 @@ export function evaluateReadModelOperationsSourceContracts(
     check(
       `ops-${approvedWorker.id}-activation`,
       worker?.activationEnvironment === approvedWorker.activationEnvironment &&
-        activationIsExplicitAndSafe(runtime, approvedWorker.activationEnvironment),
+        activationIsExplicitAndSafe(
+          runtime,
+          approvedWorker.activationEnvironment,
+        ),
       `${approvedWorker.id} is false by default and only exact true activates work`,
     );
-    const runtimeBinding = approvedWorker.id === "source-projector"
-      ? typeof runtime === "string" &&
-        runtime.includes("createProjectorRuntimeLeaseController") &&
-        /leaseController\.tryAcquire\(\)/u.test(runtime) &&
-        /acquisition\.status\s*===\s*["']busy["']/u.test(runtime)
-      : typeof runtime === "string" &&
-        /store\.tryAcquireLease\(\)/u.test(runtime) &&
-        /store\.releaseLease\(lease\)/u.test(runtime) &&
-        /status\s*:\s*["']busy["']/u.test(runtime) &&
-        runtime.includes("sourceCheckpointGeneration");
+    const runtimeBinding =
+      approvedWorker.id === "source-projector"
+        ? typeof runtime === "string" &&
+          runtime.includes("createProjectorRuntimeLeaseController") &&
+          /leaseController\.tryAcquire\(\)/u.test(runtime) &&
+          /acquisition\.status\s*===\s*["']busy["']/u.test(runtime)
+        : typeof runtime === "string" &&
+          /store\.tryAcquireLease\(\)/u.test(runtime) &&
+          /store\.releaseLease\(lease\)/u.test(runtime) &&
+          /status\s*:\s*["']busy["']/u.test(runtime) &&
+          runtime.includes("sourceCheckpointGeneration");
     check(
       `ops-${approvedWorker.id}-runtime-binding`,
       runtimeBinding,
@@ -1671,23 +2108,38 @@ export function evaluateReadModelOperationsSourceContracts(
   }
 
   const approvedTrigger = APPROVED_OPERATIONS.eventTriggers[0];
-  const eventTrigger = eventTriggers.find(({ id }) => id === approvedTrigger.id);
+  const eventTrigger = eventTriggers.find(
+    ({ id }) => id === approvedTrigger.id,
+  );
   check(
     "ops-quicknode-stream-wake-binding",
     eventTriggers.length === 1 &&
       eventTrigger?.path === approvedTrigger.path &&
       !crons?.has(approvedTrigger.path) &&
-      sourceBindingMatches(source, eventTrigger?.route, expectedSha256Overrides) &&
-      sourceBindingMatches(source, eventTrigger?.verifier, expectedSha256Overrides) &&
-      sourceBindingMatches(source, eventTrigger?.canary, expectedSha256Overrides) &&
+      sourceBindingMatches(
+        source,
+        eventTrigger?.route,
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        eventTrigger?.verifier,
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        eventTrigger?.canary,
+        expectedSha256Overrides,
+      ) &&
       (eventTrigger?.dependencies ?? []).length ===
         (approvedTrigger.dependencies ?? []).length &&
-      (approvedTrigger.dependencies ?? []).every((binding, index) =>
-        sourceBindingMatches(
-          source,
-          eventTrigger?.dependencies?.[index],
-          expectedSha256Overrides,
-        ) && exactJson(binding, eventTrigger?.dependencies?.[index])
+      (approvedTrigger.dependencies ?? []).every(
+        (binding, index) =>
+          sourceBindingMatches(
+            source,
+            eventTrigger?.dependencies?.[index],
+            expectedSha256Overrides,
+          ) && exactJson(binding, eventTrigger?.dependencies?.[index]),
       ) &&
       eventTriggerIsAuthenticatedAndBound(
         source(approvedTrigger.route.path),
@@ -1741,9 +2193,7 @@ export function evaluateReadModelOperationsSourceContracts(
       source(sourceWorker.dependencies[0]?.path)?.includes(
         "retired-candidate-projector-runtime-binding",
       ) &&
-      source(sourceWorker.dependencies[0]?.path)?.includes(
-        'mode: "release"',
-      ) &&
+      source(sourceWorker.dependencies[0]?.path)?.includes('mode: "release"') &&
       !source(sourceWorker.dependencies[0]?.path)?.includes(
         "candidate-backfill",
       ) &&
@@ -1813,22 +2263,22 @@ export function evaluateReadModelOperationsSourceContracts(
     "the market worker is bound to exact lineage, terminal checkpoint and lease SQL",
   );
 
-  const deployWorkflow = source(".github/workflows/deploy-production.yml") ?? "";
+  const deployWorkflow =
+    source(".github/workflows/deploy-production.yml") ?? "";
   const verifyWorkflow = source(".github/workflows/verify.yml") ?? "";
   const packageJson = parseJson(source("package.json"));
-  const deployPolicy = source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
+  const deployPolicy =
+    source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
   const wakeCanary = source(approvedTrigger.canary.path) ?? "";
   const environmentExample = source(".env.example") ?? "";
-  const realBlockSlaOperator = source(
-    "scripts/perf/read-model-real-block-sla-operator.mjs",
-  ) ?? "";
-  const stagedHealth = source(
-    "scripts/perf/read-model-staged-health.mjs",
-  ) ?? "";
-  const stagedDurableRefresh = source(
-    "scripts/perf/read-model-staged-refresh.mjs",
-  ) ?? "";
-  const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
+  const realBlockSlaOperator =
+    source("scripts/perf/read-model-real-block-sla-operator.mjs") ?? "";
+  const stagedHealth =
+    source("scripts/perf/read-model-staged-health.mjs") ?? "";
+  const stagedDurableRefresh =
+    source("scripts/perf/read-model-staged-refresh.mjs") ?? "";
+  const postPromotion =
+    source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const postPromotionVerifierStart = postPromotion.indexOf(
     "export async function verifyPostPromotion(input) {",
   );
@@ -1838,15 +2288,16 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   const postPromotionBindingGuardStart = postPromotion.indexOf(
     "  if (\n    !/^dpl_",
-    postPromotionOriginGuardStart + POST_PROMOTION_PRODUCTION_ORIGIN_GUARD.length,
+    postPromotionOriginGuardStart +
+      POST_PROMOTION_PRODUCTION_ORIGIN_GUARD.length,
   );
   const postPromotionOriginGuardBlock =
     postPromotionVerifierStart >= 0 &&
-      postPromotionOriginGuardStart > postPromotionVerifierStart &&
-      postPromotionBindingGuardStart > postPromotionOriginGuardStart
+    postPromotionOriginGuardStart > postPromotionVerifierStart &&
+    postPromotionBindingGuardStart > postPromotionOriginGuardStart
       ? postPromotion
-        .slice(postPromotionOriginGuardStart, postPromotionBindingGuardStart)
-        .trimEnd()
+          .slice(postPromotionOriginGuardStart, postPromotionBindingGuardStart)
+          .trimEnd()
       : "";
   const postCurrentEvidenceStart = postPromotion.indexOf(
     "function exactCanonicalClassicNativeToken",
@@ -1856,15 +2307,14 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   const postCurrentEvidenceBlock =
     postCurrentEvidenceStart >= 0 &&
-      postCurrentEvidenceEnd > postCurrentEvidenceStart
+    postCurrentEvidenceEnd > postCurrentEvidenceStart
       ? postPromotion.slice(postCurrentEvidenceStart, postCurrentEvidenceEnd)
       : "";
   const postGlobalRankingEnd = postPromotion.indexOf(
     "function exactCurrentPublicDetail",
   );
   const postGlobalRankingBlock =
-    postCurrentEvidenceEnd >= 0 &&
-      postGlobalRankingEnd > postCurrentEvidenceEnd
+    postCurrentEvidenceEnd >= 0 && postGlobalRankingEnd > postCurrentEvidenceEnd
       ? postPromotion.slice(postCurrentEvidenceEnd, postGlobalRankingEnd)
       : "";
   const postDetailChartEnd = postPromotion.indexOf("function publicChecks");
@@ -1872,36 +2322,47 @@ export function evaluateReadModelOperationsSourceContracts(
     postGlobalRankingEnd >= 0 && postDetailChartEnd > postGlobalRankingEnd
       ? postPromotion.slice(postGlobalRankingEnd, postDetailChartEnd)
       : "";
-  const bitqueryGoldenParity = source(
-    "scripts/perf/bitquery-golden-market-parity.mjs",
-  ) ?? "";
-  const bitqueryHistoricalRelease = source(
-    "scripts/perf/bitquery-historical-release-gate.mjs",
-  ) ?? "";
-  const productionBinding = source(
-    "scripts/perf/read-model-production-binding.mjs",
-  ) ?? "";
-  const operationsRunbook = source(
-    "docs/operations/read-model-scheduler-cutover.md",
-  ) ?? "";
-  const productionCutoverRunbook = source(
-    "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
-  ) ?? "";
-  const envioCandidateRunbook = source(
-    "docs/data-pipeline/ENVIO-CANDIDATE-RUNBOOK.md",
-  ) ?? "";
-  const candidateRuntimeBinding = source(
-    "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-  ) ?? "";
-  const cutoverOperator = source(
-    "scripts/data-pipeline/cutover-operator.mjs",
-  ) ?? "";
-  const cutoverRuntime = source(
-    "scripts/data-pipeline/cutover-runtime.mjs",
-  ) ?? "";
-  const bootstrapRuntime = source(
-    "scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs",
-  ) ?? "";
+  const bitqueryGoldenParity =
+    source("scripts/perf/bitquery-golden-market-parity.mjs") ?? "";
+  const bitqueryHistoricalRelease =
+    source("scripts/perf/bitquery-historical-release-gate.mjs") ?? "";
+  const productionBinding =
+    source("scripts/perf/read-model-production-binding.mjs") ?? "";
+  const operationsRunbook =
+    source("docs/operations/read-model-scheduler-cutover.md") ?? "";
+  const productionCutoverRunbook =
+    source("docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md") ?? "";
+  const envioCandidateRunbook =
+    source("docs/data-pipeline/ENVIO-CANDIDATE-RUNBOOK.md") ?? "";
+  const candidateRuntimeBinding =
+    source("lib/data-pipeline/candidate-projector-runtime-binding.server.ts") ??
+    "";
+  const cutoverOperator =
+    source("scripts/data-pipeline/cutover-operator.mjs") ?? "";
+  const cutoverRuntime =
+    source("scripts/data-pipeline/cutover-runtime.mjs") ?? "";
+  const bootstrapRuntime =
+    source("scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs") ?? "";
+  const publicHealth = source("app/api/ops/health/route.ts") ?? "";
+  const publicExplore = source("app/api/explore/route.ts") ?? "";
+  const publicToken = source("app/api/explore/token/route.ts") ?? "";
+  const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
+  const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
+  const publicClassicProfile =
+    source("app/api/profile/classic-v3/route.ts") ?? "";
+  const publicStockProfile =
+    source("app/api/profile/stock-paired/route.ts") ?? "";
+  const creatorClaimPrepare =
+    source("app/api/explore/profile/claim/route.ts") ?? "";
+  const tradePrepare = source("app/api/trade/prepare/route.ts") ?? "";
+  const primaryRpcLaunchCatalog =
+    source("lib/market-data/primary-rpc-launches.server.ts") ?? "";
+  const websiteRpcProviders =
+    source("lib/onchain/website-rpc-providers.server.ts") ?? "";
+  const actionRpcProviders =
+    source("lib/server/action-rpc-quorum.server.ts") ?? "";
+  const actionRpcIdentity =
+    source("lib/server/action-rpc-identity.server.ts") ?? "";
   const retiredCandidateCutover = Object.freeze({
     productionRunbook: productionCutoverRunbook,
     envioRunbook: envioCandidateRunbook,
@@ -1913,7 +2374,9 @@ export function evaluateReadModelOperationsSourceContracts(
   });
   check(
     "ops-package-verify-binding",
-    packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
+    packageJson?.scripts?.verify?.includes(
+      "npm run perf:read-model:ops-gate",
+    ) === true,
     "the canonical local verification command runs the operations source contract",
   );
   check(
@@ -1929,12 +2392,18 @@ export function evaluateReadModelOperationsSourceContracts(
       realBlockSlaOperator.includes(
         "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
       ) &&
-      realBlockSlaOperator.includes('body: { armId, challenge }') &&
+      realBlockSlaOperator.includes("body: { armId, challenge }") &&
       realBlockSlaOperator.includes('open(absolutePath, "wx", 0o600)') &&
       realBlockSlaOperator.includes("verifyRealBlockSlaDatabaseAttestation") &&
-      realBlockSlaOperator.includes("runtime.repositoryCommit !== input.expectedRepositoryCommit") &&
-      realBlockSlaOperator.includes("runtime.deploymentId !== input.deploymentId") &&
-      realBlockSlaOperator.includes("runtime.deploymentOrigin !== input.targetUrl") &&
+      realBlockSlaOperator.includes(
+        "runtime.repositoryCommit !== input.expectedRepositoryCommit",
+      ) &&
+      realBlockSlaOperator.includes(
+        "runtime.deploymentId !== input.deploymentId",
+      ) &&
+      realBlockSlaOperator.includes(
+        "runtime.deploymentOrigin !== input.targetUrl",
+      ) &&
       realBlockSlaOperator.includes("runtime.projectId !== input.projectId") &&
       realBlockSlaOperator.includes("runtime.streamId !== input.streamId") &&
       realBlockSlaOperator.includes("![0, 409, 503].includes(result.status)") &&
@@ -1943,12 +2412,8 @@ export function evaluateReadModelOperationsSourceContracts(
       operationsRunbook.includes(
         "npm run perf:read-model:real-block-sla-operator --",
       ) &&
-      operationsRunbook.includes(
-        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
-      ) &&
-      operationsRunbook.includes(
-        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
-      ),
+      operationsRunbook.includes(`--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`) &&
+      operationsRunbook.includes(`--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`),
     "the operator arms and polls the exact staged deployment before writing one private evidence file",
   );
   check(
@@ -1970,668 +2435,624 @@ export function evaluateReadModelOperationsSourceContracts(
       deployPolicy.includes("QUICKNODE_STREAM_SECRET_ENV_NAME") &&
       deployPolicy.includes('from "./read-model-projector-wake-canary.mjs"') &&
       deployPolicy.includes("wake_route=${result.wakeRoute}") &&
-      deployPolicy.includes("wake_canary_required=${result.wakeCanaryRequired}") &&
+      deployPolicy.includes(
+        "wake_canary_required=${result.wakeCanaryRequired}",
+      ) &&
       deployPolicy.includes("invalidServerSecretEnvironmentNames"),
     "the stream secret name is documented without a value and is fail-closed in deploy policy",
   );
-  check(
-    "ops-vercel-sensitive-runtime-metadata",
-    deployWorkflow.includes(
-      "Capture sensitive production environment metadata",
-    ) &&
-      deployWorkflow.includes(
-        "set -o pipefail",
-      ) &&
-      deployWorkflow.includes(
-        'test ! -e "$RUNNER_TEMP/vercel-production-env-metadata.json"',
-      ) &&
-      deployWorkflow.includes(
-        'vercel env ls production --format json --token="$VERCEL_TOKEN" | node scripts/bind-vercel-sensitive-production-metadata.mjs',
-      ) &&
-      (deployWorkflow.match(/--sensitive-env-metadata/gu) ?? []).length === 2 &&
-      deployPolicy.includes(
-        "materializeVercelSensitiveRuntimePlaceholders",
-      ) &&
-      deployPolicy.includes(
-        'BITQUERY_MARKET_SECRET_ENV_NAME = "BITQUERY_OAUTH_TOKEN"',
-      ) &&
-      exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&
-      deployPolicy.includes(
-        "...new Set([BITQUERY_MARKET_SECRET_ENV_NAME, ...emptyNames])",
-      ) &&
-      deployPolicy.includes("validateRequiredServerSecrets") &&
-      deployPolicy.includes(": [BITQUERY_MARKET_SECRET_ENV_NAME];") &&
-      deployPolicy.includes('matches[0].type !== "sensitive"') &&
-      deployPolicy.includes('matches[0].target[0] !== "production"') &&
-      deployPolicy.includes('Object.hasOwn(matches[0], "value")'),
-    "Bitquery always requires exact value-free sensitive production metadata",
-  );
-  const stagedWakeGate = deployWorkflow.indexOf(
-    "Gate exact staged QuickNode wake route",
-  );
-  const stagedWakeGateEnd = deployWorkflow.indexOf(
-    "Attest exact staged release policy",
-  );
-  const stagedWakeGateBlock =
-    stagedWakeGate >= 0 && stagedWakeGateEnd > stagedWakeGate
-      ? deployWorkflow.slice(stagedWakeGate, stagedWakeGateEnd)
-      : "";
-  check(
-    "ops-quicknode-stream-stage-gate",
-    packageJson?.scripts?.["perf:read-model:wake-canary"] ===
-      `node ${approvedTrigger.canary.path}` &&
-      wakeCanary.includes("projectorWakeCanaryArgumentsFrom") &&
-      stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
-      stagedWakeGate < stagedWakeGateEnd &&
-      stagedWakeGateBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.wake_canary_required == 'true'",
-      ) &&
-      stagedWakeGateBlock.includes(
-        "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
-      ) &&
-      stagedWakeGateBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedWakeGateBlock.includes(
-        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedWakeGateBlock.includes("npm run perf:read-model:wake-canary --") &&
-      stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
-    "an active fast lane must pass the exact unaliased staged wake canary before attestation",
-  );
   const stagedBitquerySmoke = deployWorkflow.indexOf(
-    "Smoke staged public market APIs",
+    "Smoke staged Bitquery public APIs",
   );
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
-    "Record registry identity and combined market path",
+    "Reverify staged candidate binding",
+    stagedBitquerySmoke,
   );
   const stagedBitquerySmokeBlock =
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
+  const stagedBitquery503Retry =
+    /const requestUrl = new URL\(path, target\);[\s\S]*for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{[\s\S]*const response = await fetch\(requestUrl, \{[\s\S]*if \(response\.status === 503 && attempt === 0\) continue;[\s\S]*if \(!response\.ok\)/u.test(
+      stagedBitquerySmokeBlock,
+    );
+  const stagedBitqueryEmptyFdvRetry =
+    stagedBitquerySmokeBlock.includes(
+      "async function requestJson(path, retryWhen = null)",
+    ) &&
+    /response\.status === 200 &&\s*attempt === 0 &&\s*retryWhen\?\.\(result\) === true/u.test(
+      stagedBitquerySmokeBlock,
+    ) &&
+    stagedBitquerySmokeBlock.includes("retryWhen?.(result) === true") &&
+    stagedBitquerySmokeBlock.includes(
+      '["market-cap", "market-cap-asc"].includes(expectedSort)',
+    ) &&
+    stagedBitquerySmokeBlock.includes(
+      "response.body?.sort === expectedSort",
+    ) &&
+    stagedBitquerySmokeBlock.includes(
+      'token.valuation.freshness === "current"',
+    ) &&
+    stagedBitquerySmokeBlock.includes('token.valuation.metric === "fdv"') &&
+    stagedBitquerySmokeBlock.includes(
+      'token.valuation.supplyBasis === "total"',
+    ) &&
+    stagedBitquerySmokeBlock.includes('token.valuation.currency === "usd"') &&
+    stagedBitquerySmokeBlock.includes('token.valuation.source === "bitquery"') &&
+    stagedBitquerySmokeBlock.includes(
+      "positiveInteger.test(String(token.valuation.valueWad ?? \"\"))",
+    ) &&
+    stagedBitquerySmokeBlock.includes(
+      '"/api/explore?limit=20&page=1&sort=market-cap",\n' +
+        "            (response) =>\n" +
+        '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
+    ) &&
+    (stagedBitquerySmokeBlock.match(/emptyCurrentBitqueryFdvRanking/gu)?.length ?? 0) === 2;
+  const stagedCurrentMarketBranch = stagedBitquerySmokeBlock.indexOf(
+    'if (marketReadStatus === "current")',
+  );
+  const stagedDegradedMarketBranch = stagedBitquerySmokeBlock.indexOf(
+    "} else {",
+    stagedCurrentMarketBranch,
+  );
+  const stagedDetailProbe = stagedBitquerySmokeBlock.indexOf(
+    '"/api/explore/token?address="',
+  );
+  const stagedChartProbe = stagedBitquerySmokeBlock.indexOf(
+    '"/api/explore/token/chart?address="',
+  );
+  const stagedProfileProbe = stagedBitquerySmokeBlock.indexOf(
+    "const profileToken =",
+  );
+  const stagedLaunchIdentityContractStart = stagedBitquerySmokeBlock.indexOf(
+    "function exactCurrentLaunchIdentity(response)",
+  );
+  const stagedLaunchIdentityContractEnd = stagedBitquerySmokeBlock.indexOf(
+    "function exactExploreIdentity(token)",
+    stagedLaunchIdentityContractStart,
+  );
+  const stagedLaunchIdentityContractBlock =
+    stagedLaunchIdentityContractStart >= 0 &&
+    stagedLaunchIdentityContractEnd > stagedLaunchIdentityContractStart
+      ? stagedBitquerySmokeBlock.slice(
+          stagedLaunchIdentityContractStart,
+          stagedLaunchIdentityContractEnd,
+        )
+      : "";
+  const stagedLaunchIdentityContract = includesEverySourceFragment(
+    stagedLaunchIdentityContractBlock,
+    [
+      'launchIdentity?.status === "current"',
+      'launchIdentity.canonical === "current"',
+      'launchIdentity.custom === "current"',
+      "Number.isSafeInteger(launchIdentity.ageMs)",
+      "launchIdentity.ageMs >= 0",
+      "launchIdentity.ageMs < 60_000",
+      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
+      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
+    ],
+  );
+  const stagedBitqueryMarketReadStatusContract =
+    stagedCurrentMarketBranch >= 0 &&
+    stagedDetailProbe > stagedCurrentMarketBranch &&
+    stagedChartProbe > stagedDetailProbe &&
+    stagedDegradedMarketBranch > stagedChartProbe &&
+    stagedProfileProbe > stagedDegradedMarketBranch &&
+    stagedLaunchIdentityContract &&
+    includesEverySourceFragment(stagedBitquerySmokeBlock, [
+      "status: response.status",
+      "highest.status !== 200",
+      "newest.status !== 200",
+      '"x-programmable-market-read-status"',
+      '["current", "transport-unavailable"].includes(',
+      "newestMarketReadStatus !== highestMarketReadStatus",
+      "exactCurrentExploreSources(highest)",
+      "exactCurrentExploreSources(newest)",
+      "exactCurrentExploreSources(response) &&",
+      "exactExplorePage(response, tokens) &&",
+      "exactExplorePage(highest, highestTokens)",
+      "exactExplorePage(newest, newestTokens)",
+      "function exactCurrentLaunchIdentity(response)",
+      'launchIdentity?.status === "current"',
+      'launchIdentity.canonical === "current"',
+      'launchIdentity.custom === "current"',
+      "Number.isSafeInteger(launchIdentity.ageMs)",
+      "launchIdentity.ageMs >= 0",
+      "launchIdentity.ageMs < 60_000",
+      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
+      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
+      "!exactCurrentLaunchIdentity(highest)",
+      "!exactCurrentLaunchIdentity(newest)",
+      "response.body?.page === 1",
+      "response.body?.pageSize === 20",
+      "total >= tokens.length",
+      "tokens.length === Math.min(20, total)",
+      "totalPages === Math.ceil(total / 20)",
+      "function exactExploreIdentity(token)",
+      'typeof token?.id !== "string" || token.id.trim().length === 0',
+      'token.exploreKind === "token" &&',
+      'address.test(String(token.tokenAddress ?? "").toLowerCase())',
+      'token.tokenAddress.toLowerCase()',
+      'token.exploreKind === "custom-project" &&',
+      'String(token.customProjectId ?? "")',
+      'String(token.customLaunchId ?? "")',
+      '"custom-project",\n                token.id,\n                token.customProjectId,\n                token.customLaunchId,',
+      "function exactDegradedLaunchOrder(",
+      "highest.body?.page !== newest.body?.page",
+      "highest.body?.pageSize !== newest.body?.pageSize",
+      "highest.body?.total !== newest.body?.total",
+      "highest.body?.totalPages !== newest.body?.totalPages",
+      "highestTokens.length !== newestTokens.length",
+      "const highestIdentities = highestTokens.map(exactExploreIdentity)",
+      "const newestIdentities = newestTokens.map(exactExploreIdentity)",
+      "highestIdentities.every((identity) => identity !== null)",
+      "newestIdentities.every((identity) => identity !== null)",
+      "new Set(highestIdentities).size === highestIdentities.length",
+      "new Set(newestIdentities).size === newestIdentities.length",
+      "(identity, index) => identity === newestIdentities[index]",
+      'response.headers.get("x-programmable-read-source") ===\n                "drpc+bitquery"',
+      'response.headers.get("x-programmable-market-source") ===\n                "bitquery"',
+      'response.headers.get("x-programmable-price-source") ===\n                "bitquery"',
+      'response.headers.get("x-programmable-market-provider") ===\n                "bitquery"',
+      'response.headers.get("cache-control") === "no-store"',
+      'response.headers.get("x-programmable-read-source") === "drpc"',
+      'response.headers.get("x-programmable-data-quality") === "partial"',
+      '"transport-unavailable"',
+      '!response.headers.has("x-programmable-market-source")',
+      '!response.headers.has("x-programmable-price-source")',
+      '!response.headers.has("x-programmable-market-as-of")',
+      'response.body?.dataQuality?.status === "partial"',
+      'launchIdentity?.status === "current"',
+      'launchIdentity.canonical === "current"',
+      'launchIdentity.custom === "current"',
+      'marketRead?.provider === "bitquery"',
+      'marketRead.status === "unavailable"',
+      'marketRead.category === "transport"',
+      '["market-core", "market-liquidity", "market-price"].includes(\n' +
+        "                marketRead.phase,\n" +
+        "              )",
+      'valuation?.status === "unavailable"',
+      'valuation.metric === "fdv"',
+      "valuation.available === 0",
+      "valuation.unavailable === tokens.length",
+      "valuation.stale === 0",
+      "valuation.unknown === 0",
+      "valuation.asOfBlock === null",
+      "valuation.asOfTime === null",
+      "tokens.length > 0",
+      "tokens.every(exactUnavailableValuation)",
+      "valuation.asOfTime === null &&\n              tokens.length > 0 &&\n              tokens.every(exactUnavailableValuation)",
+      'valuation?.reason === "no-market"',
+      'token?.exploreKind === "custom-project"',
+      "token.markets.length === 0",
+      'valuation.reason === "source-unavailable" || exactNoMarket',
+      "Object.keys(valuation).length === 2",
+      "token?.fdvUsdWad === undefined",
+      "token?.marketData === undefined",
+      'ranking?.status === "unavailable"',
+      'ranking.requested === "fdv"',
+      'ranking.applied === "launch-order"',
+      ": ranking === undefined",
+      "exactTransportUnavailableExplore(\n                highest,\n                highestTokens,\n                true,",
+      "exactTransportUnavailableExplore(newest, newestTokens, false)",
+      "!exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
+      'detailStatus = "skipped-provider-unavailable"',
+      'chartStatus = "skipped-provider-unavailable"',
+      '"verified-staged-drpc-bitquery-public-apis"',
+      '"verified-staged-drpc-launches-bitquery-transport-unavailable"',
+      '"market_read_status=" + marketReadStatus',
+      '"detail_status=" + detailStatus',
+      '"chart_status=" + chartStatus',
+    ]);
+  const stagedProviderHandoff = includesEverySourceFragment(deployWorkflow, [
+    "MARKET_READ_STATUS: $\{{ steps.public-provider-smoke.outputs.market_read_status }}",
+    "DETAIL_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.detail_status }}",
+    "CHART_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.chart_status }}",
+    'echo "- Explore market read status: \\`${MARKET_READ_STATUS:-not-run}\\`"',
+    'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
+    'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
+  ]);
+  const publicIdentityAndMarketRoutes = [
+    publicExplore,
+    publicToken,
+    publicChart,
+  ];
+  const classicProfilePostStart = publicClassicProfile.indexOf(
+    "export async function POST(",
+  );
+  const stockProfilePostStart = publicStockProfile.indexOf(
+    "export async function POST(",
+  );
+  const publicClassicProfileGet =
+    classicProfilePostStart >= 0
+      ? publicClassicProfile.slice(0, classicProfilePostStart)
+      : publicClassicProfile;
+  const publicStockProfileGet =
+    stockProfilePostStart >= 0
+      ? publicStockProfile.slice(0, stockProfilePostStart)
+      : publicStockProfile;
+  const tokenCanonicalHeadersStart = publicToken.indexOf(
+    "function canonicalResponseHeaders(",
+  );
+  const tokenCustomHeadersStart = publicToken.indexOf(
+    "function customResponseHeaders(",
+    tokenCanonicalHeadersStart + 1,
+  );
+  const tokenUnavailableResponseStart = publicToken.indexOf(
+    "function unavailableResponse(",
+    tokenCustomHeadersStart + 1,
+  );
+  const tokenCanonicalHeaders =
+    tokenCanonicalHeadersStart >= 0 && tokenCustomHeadersStart >= 0
+      ? publicToken.slice(tokenCanonicalHeadersStart, tokenCustomHeadersStart)
+      : "";
+  const tokenCustomHeaders =
+    tokenCustomHeadersStart >= 0 && tokenUnavailableResponseStart >= 0
+      ? publicToken.slice(tokenCustomHeadersStart, tokenUnavailableResponseStart)
+      : "";
+  const tokenCatalogReadStart = publicToken.indexOf(
+    "catalog = await readPrimaryRpcExploreEntriesV1(",
+  );
+  const tokenCanonicalEntryStart = publicToken.indexOf(
+    "const canonicalEntry = catalog.entries.find(",
+    tokenCatalogReadStart + 1,
+  );
+  const tokenCatalogFailureStart = publicToken.indexOf(
+    "} catch (error) {",
+    tokenCatalogReadStart + 1,
+  );
+  const tokenCatalogFailure =
+    tokenCatalogFailureStart >= 0 && tokenCanonicalEntryStart >= 0
+      ? publicToken.slice(tokenCatalogFailureStart, tokenCanonicalEntryStart)
+      : "";
+  const tokenCustomMissStart = publicToken.indexOf(
+    "if (entry === null) {",
+    tokenCanonicalEntryStart + 1,
+  );
+  const tokenCustomMissEnd = publicToken.indexOf(
+    "if (!entry) {",
+    tokenCustomMissStart + 1,
+  );
+  const tokenCustomMiss =
+    tokenCustomMissStart >= 0 && tokenCustomMissEnd >= 0
+      ? publicToken.slice(tokenCustomMissStart, tokenCustomMissEnd)
+      : "";
+  const tokenCanonicalHeaderContract =
+    includesEverySourceFragment(tokenCanonicalHeaders, [
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Read-Source": input.marketRead ? "drpc+bitquery" : "drpc"',
+      '? { "X-Programmable-Market-Source": "bitquery" }',
+      '? { "X-Programmable-Price-Source": "bitquery" }',
+    ]) && !tokenCanonicalHeaders.includes("registry.custom-launched");
+  const tokenCustomHeaderContract = includesEverySourceFragment(
+    tokenCustomHeaders,
+    [
+      '"X-Programmable-Launch-Source": "registry.custom-launched"',
+      '? "drpc+registry.custom-launched+bitquery"',
+      ': "drpc+registry.custom-launched"',
+      '? { "X-Programmable-Market-Source": "bitquery" }',
+      '? { "X-Programmable-Price-Source": "bitquery" }',
+    ],
+  );
+  const tokenCustomSourceContract =
+    tokenCatalogReadStart >= 0 &&
+    tokenCatalogFailureStart > tokenCatalogReadStart &&
+    tokenCanonicalEntryStart > tokenCatalogFailureStart &&
+    includesEverySourceFragment(tokenCatalogFailure, [
+      "safePrimaryRpcLaunchCatalogError(error)",
+      "return unavailableResponse(canonicalResponseHeaders({",
+    ]) &&
+    !tokenCatalogFailure.includes("readProductionCustomExploreDirectoryV1") &&
+    tokenCustomMissStart > tokenCanonicalEntryStart &&
+    tokenCustomMissEnd > tokenCustomMissStart &&
+    includesEverySourceFragment(tokenCustomMiss, [
+      "await readProductionCustomExploreDirectoryV1(",
+      "return unavailableResponse(customResponseHeaders({",
+      "isCustom = entry !== null",
+    ]) &&
+    publicToken.includes("let isCustom = false") &&
+    publicToken.includes(
+      "headers: (isCustom\n          ? customResponseHeaders\n          : canonicalResponseHeaders)(",
+    );
+  const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
+  const publicRuntimeRoutes = [
+    ...publicIdentityAndMarketRoutes,
+    publicCreatorProfile,
+    ...publicActionRoutes,
+  ];
+  const obsoletePublicBinding =
+    /readAlchemy|readDurable|valuationSnapshot|readOfficialUniswap|StateView|Chainlink|Envio|readBitqueryExploreEntriesV1|readBitqueryCreatorProfile|readBitqueryClassicV3Profile|readBitqueryStockPairedProfile|readBitqueryExploreModelV1/u;
+  const primaryResolverStart = websiteRpcProviders.indexOf(
+    "export function productionMainnetRpcPrimary(",
+  );
+  const primaryResolverEnd = websiteRpcProviders.indexOf(
+    "\nexport function ",
+    primaryResolverStart + 1,
+  );
+  const primaryResolver =
+    primaryResolverStart >= 0
+      ? websiteRpcProviders.slice(
+          primaryResolverStart,
+          primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
+        )
+      : "";
+  const publicExploreHasMarketReadStatus = publicExplore.includes(
+    '"X-Programmable-Market-Read-Status"',
+  );
+  const publicExploreLegacyHealthyHeaderContract =
+    !publicExploreHasMarketReadStatus &&
+    includesEverySourceFragment(publicExplore, [
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Read-Source": "drpc+bitquery"',
+      '"X-Programmable-Market-Source": "bitquery"',
+      '"X-Programmable-Price-Source": "bitquery"',
+    ]);
+  const publicExploreMarketReadContract =
+    publicExploreHasMarketReadStatus &&
+    includesEverySourceFragment(publicExplore, [
+      "error instanceof BitqueryMarketDataError",
+      'error.category === "transport"',
+      '(error.phase === "market-core" ||\n' +
+        '      error.phase === "market-liquidity" ||\n' +
+        '      error.phase === "market-price")',
+      "identityEntryCount > 0",
+      "marketIdentityCount > 0",
+      "!signal.aborted",
+      "marketTransportFailure === null",
+      'provider: "bitquery" as const',
+      'status: "unavailable" as const',
+      'category: "transport" as const',
+      "phase: marketTransportFailure.phase",
+      'requested: "fdv" as const',
+      'applied: "launch-order" as const',
+      '? "public, max-age=0, s-maxage=2"',
+      ': "no-store"',
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Read-Source": marketTransportFailure === null',
+      '? "drpc+bitquery"',
+      ': "drpc"',
+      '"X-Programmable-Market-Read-Status":',
+      '? "current"',
+      ': "transport-unavailable"',
+      '"X-Programmable-Market-Provider": "bitquery"',
+      '"X-Programmable-Market-Source": "bitquery"',
+      '"X-Programmable-Price-Source": "bitquery"',
+      "marketTransportFailure === null &&",
+      '"Cache-Control": marketTransportFailure === null\n' +
+        '            ? "public, max-age=0, s-maxage=2"\n' +
+        '            : "no-store",',
+      '"X-Programmable-Read-Source": marketTransportFailure === null\n' +
+        '            ? "drpc+bitquery"\n' +
+        '            : "drpc",',
+      '"X-Programmable-Market-Read-Status":\n' +
+        "            marketTransportFailure === null\n" +
+        '              ? "current"\n' +
+        '              : "transport-unavailable",',
+      "...(marketTransportFailure === null\n" +
+        "            ? {\n" +
+        '                "X-Programmable-Market-Source": "bitquery",\n' +
+        '                "X-Programmable-Price-Source": "bitquery",\n' +
+        "              }\n" +
+        "            : {}),",
+      "...(marketTransportFailure === null &&\n" +
+        "              dataQuality.valuation.asOfTime",
+    ]);
+  const primaryRpcLaunchCatalogCacheStart =
+    primaryRpcLaunchCatalog.indexOf(
+      "export function createPrimaryRpcLaunchCatalogCacheV1",
+    );
+  const primaryRpcLaunchCatalogCacheEnd = primaryRpcLaunchCatalog.indexOf(
+    "function catalogCacheKey(",
+    primaryRpcLaunchCatalogCacheStart,
+  );
+  const primaryRpcLaunchCatalogCacheBlock =
+    primaryRpcLaunchCatalogCacheStart >= 0 &&
+    primaryRpcLaunchCatalogCacheEnd > primaryRpcLaunchCatalogCacheStart
+      ? primaryRpcLaunchCatalog.slice(
+          primaryRpcLaunchCatalogCacheStart,
+          primaryRpcLaunchCatalogCacheEnd,
+        )
+      : "";
+  const primaryRpcLaunchCatalogCacheContract =
+    primaryRpcLaunchCatalog.includes(
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;",
+    ) &&
+    includesEverySourceFragment(primaryRpcLaunchCatalogCacheBlock, [
+      "const refreshes = new Map<string, PrimaryRpcLaunchCatalogCacheRefresh>();",
+      "const binding = resolveBinding();",
+      "const generatedAtMs = Date.parse(cached.catalog.generatedAt);",
+      "cacheKeyHasCommitment(cached.key, binding.endpointCommitment)",
+      "Number.isFinite(generatedAtMs)",
+      "ageMs >= 0",
+      "ageMs < PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS",
+      "cached = null;",
+      "const refreshKey = binding.endpointCommitment;",
+      "let refresh = refreshes.get(refreshKey) ?? null;",
+      "refreshes.set(refreshKey, current);",
+      "const catalog = await reader(",
+      "const completedAtMs = clock();",
+      "const generatedAtMs = Date.parse(catalog.generatedAt);",
+      'throw new PrimaryRpcLaunchCatalogError("integrity", "entries");',
+      "key: catalogCacheKey(",
+      "binding.endpointCommitment,",
+      "return await waitForCatalogRefresh(refresh, options.signal);",
+    ]) &&
+    (primaryRpcLaunchCatalogCacheBlock.match(
+      /ageMs < PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS/gu,
+    )?.length ?? 0) === 1 &&
+    (primaryRpcLaunchCatalogCacheBlock.match(
+      /ageMs >= PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS/gu,
+    )?.length ?? 0) === 1 &&
+    !primaryRpcLaunchCatalogCacheBlock.includes("catch (");
   check(
-    "ops-protected-bitquery-stage-smoke",
-    stagedBitquerySmoke > stagedWakeGateEnd &&
-      includesEverySourceFragment(
-        stagedBitquerySmokeBlock,
-        STAGED_MARKET_EVIDENCE_SOURCE_GUARDS,
+    "ops-primary-rpc-launch-catalog-cache-contract",
+    primaryRpcLaunchCatalogCacheContract,
+    "the dRPC launch catalog cache is commitment-bound, singleflight, fresh for less than 60 seconds, and never serves stale data",
+  );
+  check(
+    "ops-public-provider-split-source-contract",
+    exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&
+      publicHealth.includes("bitqueryMarketDataConfigured") &&
+      !/readDurableExploreModel|readOperationalRpcHealth|currentMarketOnchainDeployment/u.test(
+        publicHealth,
       ) &&
+      websiteRpcProviders.includes(
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+      ) &&
+      websiteRpcProviders.includes(
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+      ) &&
+      websiteRpcProviders.includes(
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      ) &&
+      primaryResolver.includes("WEBSITE_MAINNET_RPC_ENV.primaryProvider") &&
+      primaryResolver.includes("WEBSITE_MAINNET_RPC_ENV.primaryUrl") &&
+      primaryResolver.includes("WEBSITE_MAINNET_RPC_ENV.primaryCommitment") &&
+      primaryResolver.includes('primary.provider !== "drpc"') &&
+      !/secondary|fallback|quorum/iu.test(primaryResolver) &&
+      primaryRpcLaunchCatalog.includes("readPrimaryRpcExploreEntriesV1") &&
+      primaryRpcLaunchCatalog.includes("productionMainnetRpcPrimary") &&
+      primaryRpcLaunchCatalog.includes('source: "drpc"') &&
+      !/bitquery|alchemy|durable|blob|secondary|fallback|quorum|subgraph|stateview|chainlink|envio/iu.test(
+        primaryRpcLaunchCatalog,
+      ) &&
+      publicIdentityAndMarketRoutes.every((route) =>
+        route.includes("readPrimaryRpcExploreEntriesV1"),
+      ) &&
+      publicExplore.includes("readBitqueryTokenMarketDataStrictV1") &&
+      publicToken.includes("readBitqueryTokenMarketDataStrictV1") &&
+      publicChart.includes("readBitqueryMarketChartStrictV1") &&
+      (publicExploreLegacyHealthyHeaderContract ||
+        publicExploreMarketReadContract) &&
+      publicChart.includes('"X-Programmable-Launch-Source": "drpc"') &&
+      publicChart.includes(
+        '"X-Programmable-Read-Source": "drpc+bitquery"',
+      ) &&
+      publicChart.includes(
+        '"X-Programmable-Market-Source": "bitquery"',
+      ) &&
+      tokenCanonicalHeaderContract &&
+      tokenCustomHeaderContract &&
+      tokenCustomSourceContract &&
+      publicCreatorProfile.includes("readCreatorProfile") &&
+      publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
+      publicCreatorProfile.includes('"X-Programmable-Launch-Source": "drpc"') &&
+      publicCreatorProfile.includes('"X-Programmable-Read-Source": "drpc"') &&
+      publicCreatorProfile.includes(
+        '"X-Programmable-Rpc-Provider": "drpc-primary"',
+      ) &&
+      publicClassicProfileGet.includes("classicV3ActionRpcProvider") &&
+      publicStockProfileGet.includes("stockPairedActionRpcProvider") &&
+      [publicClassicProfileGet, publicStockProfileGet].every(
+        (route) =>
+          route.includes('"X-Programmable-Read-Source": "rpc"') &&
+          route.includes('"X-Programmable-Rpc-Provider": "drpc-primary"'),
+      ) &&
+      actionRpcProviders.includes("createCommittedActionRpcProvider") &&
+      actionRpcProviders.includes("tradeActionRpcProvider") &&
+      actionRpcProviders.includes("creatorClaimRpcProvider") &&
+      actionRpcProviders.includes(
+        'Object.defineProperty(provider, "endpoint"',
+      ) &&
+      actionRpcProviders.includes("enumerable: false") &&
+      actionRpcIdentity.includes("readTradeActionModelFromRpc") &&
+      actionRpcIdentity.includes("readCreatorClaimIdentityFromRpc") &&
+      !/bitquery|alchemy|durable|blob|secondary|fallback|quorum|subgraph|stateview|chainlink|envio/iu.test(
+        actionRpcIdentity,
+      ) &&
+      tradePrepare.includes("tradeActionRpcProvider") &&
+      !tradePrepare.includes("tradeActionRpcProviders") &&
+      tradePrepare.includes('"Cache-Control": "no-store"') &&
+      creatorClaimPrepare.includes("creatorClaimRpcProvider") &&
+      !creatorClaimPrepare.includes("creatorClaimRpcProviders") &&
+      creatorClaimPrepare.includes('status: "not-submitted"') &&
+      creatorClaimPrepare.includes("transactionHash: null") &&
+      creatorClaimPrepare.includes("receipt: null") &&
+      creatorClaimPrepare.includes('"Cache-Control": "no-store"') &&
+      publicActionRoutes.every(
+        (route) =>
+          !/sendTransaction|writeContract|signTransaction|signTypedData|walletClient/u.test(
+            route,
+          ),
+      ) &&
+      publicRuntimeRoutes.every(
+        (route) =>
+          !obsoletePublicBinding.test(route) &&
+          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(
+            route,
+          ),
+      ),
+    "public identity and action state use one commitment-bound dRPC primary, Custom Registry detail is a separate post-miss source, and market, FDV and charts use explicit Bitquery reads with bounded transport-unavailable Explore semantics",
+  );
+  check(
+    "ops-protected-public-provider-stage-smoke",
+    stagedBitquerySmoke >
+      deployWorkflow.indexOf("Resolve exact staged deployment") &&
       stagedBitquerySmokeBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true'",
+        "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
-      stagedBitquerySmokeBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/read-model-provider-binding.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "node --env-file=.vercel/.env.production.local",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "runtimeProductionProviderEndpoints(process.env)",
-      ) &&
-      !stagedBitquerySmokeBlock.includes("ethereum-rpc.publicnode.com") &&
-      !stagedBitquerySmokeBlock.includes("rpc.mevblocker.io") &&
-      stagedBitquerySmokeBlock.split("rpcUrls: independentRpcUrls").length - 1 ===
-        2 &&
-      !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_A") &&
-      !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_B") &&
-      !stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "runtimeProductionProviderBindingsFromUrls",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'Buffer.byteLength(\n            automationBypassSecret ?? "",\n            "utf8",\n          )',
-      ) &&
-      stagedBitquerySmokeBlock.includes("automationBypassSecretLength < 32") &&
-      stagedBitquerySmokeBlock.includes("automationBypassSecretLength > 512") &&
-      stagedBitquerySmokeBlock.includes(
-        "/[\\r\\n]/.test(automationBypassSecret)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"x-vercel-protection-bypass": automationBypassSecret',
-      ) &&
-      stagedBitquerySmokeBlock.includes("headers: bitquerySmokeRequestHeaders") &&
-      stagedBitquerySmokeBlock.includes(
-        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'readSources: Object.freeze(["operational+durable+postgres"]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes("rpcProviders: null") &&
-      stagedBitquerySmokeBlock.includes(
-        'marketSources: Object.freeze([currentPublicMarketSource]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'priceSources: Object.freeze(["stateview-chainlink"]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "const bitqueryChartContract = Object.freeze({",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-market-source",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-price-source",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-market-as-of",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-data-quality",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "!headerMatches(rpcProvider, contract.rpcProviders)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "!headerMatches(marketSource, contract.marketSources)",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
-      ) &&
-      !stagedBitquerySmokeBlock.includes("alchemyIdentityContract") &&
-      !stagedBitquerySmokeBlock.includes("/api/indexers/v1/token-list") &&
-      stagedBitquerySmokeBlock.includes(
-        '`/api/explore?limit=${marketCapPageSize}&page=1&sort=market-cap`,\n            currentPublicMarketContract,',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "marketCapTotal > maximumMarketCapTokens",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "marketCapTokens.length !== marketCapTotal",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "seenMarketCapIds.has(token.id)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "seenMarketCapAddresses.has(address)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "entry.launchCategoryProvenance.blockNumber",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "entry.launchCategoryProvenance.transactionIndex",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "entry.launchCategoryProvenance.logIndex",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "staged Bitquery newest entry has no canonical launch order",
-      ) &&
-      stagedBitquerySmokeBlock.includes("coordinates === null") &&
-      stagedBitquerySmokeBlock.includes("const newestPageSize = 100") &&
-      stagedBitquerySmokeBlock.includes("seenNewestIds") &&
-      stagedBitquerySmokeBlock.includes("newestTokens.length !== newestTotal") &&
-      stagedBitquerySmokeBlock.includes("launchChainId(entry) !== newestChainId") &&
-      stagedBitquerySmokeBlock.includes("sort=oldest") &&
-      stagedBitquerySmokeBlock.includes(
-        "staged Bitquery oldest page is not ordered oldest-first",
-      ) &&
+      stagedBitquerySmokeBlock.includes('requestJson("/api/ops/health")') &&
+      stagedBitquery503Retry &&
+      stagedBitqueryEmptyFdvRetry &&
+      stagedBitqueryMarketReadStatusContract &&
+      stagedProviderHandoff &&
+      stagedBitquerySmokeBlock.includes("sort=market-cap") &&
+      stagedBitquerySmokeBlock.includes("sort=newest") &&
       stagedBitquerySmokeBlock.includes("/api/explore/token?address=") &&
+      stagedBitquerySmokeBlock.includes("/api/explore/token/chart?address=") &&
+      stagedBitquerySmokeBlock.includes("/api/explore/profile?account=") &&
+      stagedBitquerySmokeBlock.includes("x-programmable-launch-source") &&
+      stagedBitquerySmokeBlock.includes("x-programmable-read-source") &&
+      stagedBitquerySmokeBlock.includes("x-programmable-market-source") &&
+      stagedBitquerySmokeBlock.includes('"drpc"') &&
+      stagedBitquerySmokeBlock.includes('"drpc+bitquery"') &&
+      stagedBitquerySmokeBlock.includes('"bitquery"') &&
       stagedBitquerySmokeBlock.includes(
-        "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "staged Explore exposed the non-public PCAN release canary",
-      ) &&
-      stagedBitquerySmokeBlock.includes("goldenSearch.total !== 0") &&
-      stagedBitquerySmokeBlock.includes(
-        "/api/explore/token/chart?address=${goldenTokenAddress}&range=all",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "`/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,\n            bitqueryChartContract,",
+        'profile.headers.get("x-programmable-launch-source") !== "drpc"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
+        'profile.headers.get("x-programmable-read-source") !== "drpc"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
+        'profile.headers.get("x-programmable-rpc-provider") !==',
+      ) &&
+      stagedBitquerySmokeBlock.includes('"drpc-primary"') &&
+      stagedBitquerySmokeBlock.includes(
+        'creatorClaimPrepare: "separate-live-probe-required"',
       ) &&
       stagedBitquerySmokeBlock.includes(
-        'goldenMarket?.schemaVersion !== "programmable.market-data.v1"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "goldenChart.identity?.quoteAddress,\n              goldenQuoteAddress",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery Highest FDV is not monotonically descending"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery Explore exposed unevidenced numeric FDV"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'valuation.reason === "waiting-for-first-trade"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'tokenAddress === goldenTokenAddress',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'valuation.source !== "stateview-chainlink"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'liquidity?.source !== "official-uniswap-v4-subgraph"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "provenance?.subgraphId !== officialV4SubgraphId",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "provenance?.deployment !== officialV4SubgraphDeployment",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "BigInt(liquidity.tvlUsdWad) <",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "minimumPublicFdvLiquidityUsdWad",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'token.launchModel !== "classic"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "lagBlocks <= 64n",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "expectedFdvUsdWad.toString() === valuation.valueWad",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "expectedActiveVirtualLiquidityUsdWad >=",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "price.activeVirtualLiquidityUsdWad",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "price.activeVirtualToken0Wei",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"stateview-active-liquidity-virtual-depth-usd"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged public current FDV lacks exact StateView, Chainlink and official v4 liquidity evidence"',
-      ) &&
-      stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged public market path has no current non-PCAN FDV bound to fresh official v4 liquidity"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged current detail does not independently prove an equal or newer evidence bundle"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenValuation.metric !== "fdv"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenValuation.supplyBasis !== "total"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/bitquery-golden-market-parity.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/bitquery-historical-release-gate.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "await verifyBitqueryGoldenMarketExecutionV1({",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "runtimeProductionProviderEndpoints(process.env)",
-      ) &&
-      !bitqueryGoldenParity.includes("rpc.mevblocker.io") &&
-      !bitqueryGoldenParity.includes("mainnet.gateway.tenderly.co") &&
-      !bitqueryGoldenParity.includes("ethereum-rpc.publicnode.com") &&
-      !bitqueryGoldenParity.includes("MAINNET_STATE_VIEW") &&
-      !bitqueryGoldenParity.includes("Q192") &&
-      bitqueryGoldenParity.includes(
-        "const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n",
-      ) &&
-      bitqueryGoldenParity.includes("const MINIMUM_CONFIRMATIONS = 12n") &&
-      bitqueryGoldenParity.includes(
-        '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
-      ) &&
-      bitqueryGoldenParity.includes(
-        'const MAINNET_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90"',
-      ) &&
-      bitqueryGoldenParity.includes(
-        '"eth_getTransactionReceipt"',
-      ) &&
-      bitqueryGoldenParity.includes("swapLogs.length !== 1") &&
-      bitqueryGoldenParity.includes('eventName: "Swap"') &&
-      bitqueryGoldenParity.includes("strict: true") &&
-      bitqueryGoldenParity.includes(
-        "observation.poolId !== expected.poolId",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "rpcQuantity(receipt?.status, \"receipt status\") !== 1n",
-      ) &&
-      bitqueryGoldenParity.includes("blockHash,") &&
-      bitqueryGoldenParity.includes("requireCanonical: true") &&
-      bitqueryGoldenParity.includes("sameObservation(first, second)") &&
-      bitqueryGoldenParity.includes(
-        "first.amount0 >= 0n",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "first.amount1 !== tokenAmountRaw",
-      ) &&
-      bitqueryGoldenParity.includes("provider-local trade ordinal") &&
-      bitqueryGoldenParity.includes("bitqueryTradeOrdinal,") &&
-      bitqueryGoldenParity.includes(
-        "receiptLogIndex: Number(first.logIndex)",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "executionPriceQuoteWad !== priceQuoteWad",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "executionNativeAmountWei * 10n ** BigInt(tokenDecimals)",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "executionPriceQuoteWad * first.answer",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "observation.answeredInRound < observation.roundId",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "tradeTime !== Number(first.blockTimestamp) * 1_000",
-      ) &&
-      !bitqueryGoldenParity.includes("pool?.liquidity?.valueUsdWad") &&
-      bitqueryGoldenParity.includes(
-        "Bitquery golden execution does not match its receipt witness",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "nowMs - Date.parse(valuation.asOfTime) > MAXIMUM_DEFERRED_PCAN_AGE_MS",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'throw new Error("historical PCAN release evidence exceeds the 96 hour ceiling")',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "export function classifyBitqueryStaleMarketReleaseV1",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "export function verifyBitqueryHistoricalGoldenReleaseV2",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'parity?.schemaVersion !== "programmable.bitquery-golden-market-execution.v1"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'market?.schemaVersion !== "programmable.market-data.v1"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "poolValuation.valueUsdWad !== expectedValue",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'chart?.valuation?.status !== "unavailable"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'chart.valuation.reason !== "source-unavailable"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        '"fdvUsdWad" in chart',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        '"valuationMetric" in chart',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.transactionHash !== trade?.transactionHash?.toLowerCase()",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.bitqueryTradeOrdinal !== trade?.logIndex",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.executionPriceQuoteWad !== trade?.priceQuoteWad",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId)",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "chart?.identity?.poolId !== GOLDEN_POOL_ID",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "chart?.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "lastPoint?.blockNumber !== expectedBlock",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "chart.asOfTime !== lastPoint?.observedAt",
-      ) &&
-      bitqueryHistoricalRelease.includes("!periodMedianIsPositive") &&
-      bitqueryHistoricalRelease.includes(
-        'lastPoint?.valueSemantics !== "period-median"',
-      ) &&
-      bitqueryHistoricalRelease.includes("parity.confirmations < MINIMUM_CONFIRMATIONS") &&
-      stagedBitquerySmokeBlock.includes(
-        "const historicalPaidPathVerified =",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "verifyBitqueryHistoricalGoldenReleaseV2({",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"programmable.bitquery-historical-release.v2"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "historicalGoldenRelease.confirmations >= 12",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenChart.readStatus !== "live"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenChart.readStatus === "live"',
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "currentFdvCount < 1 && !historicalPaidPathVerified",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'point?.valueSemantics !== "period-median"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged PCAN chart is not a strictly ordered positive history"',
-      ) &&
-      (stagedBitquerySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
-      !stagedBitquerySmokeBlock.includes("/api/ops/health") &&
-      !stagedBitquerySmokeBlock.includes("/api/explore/profile") &&
-      !/\b(?:database|projector|quicknode|envio|real-block|sla)\b/iu.test(
+        'tradePrepare: "separate-live-probe-required"',
+      ) &&
+      !stagedBitquerySmokeBlock.includes("/api/explore/profile/claim") &&
+      !stagedBitquerySmokeBlock.includes("/api/trade/prepare") &&
+      !/PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL|PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY|https?:\/\/[^"'\s]+rpc/iu.test(
         stagedBitquerySmokeBlock,
       ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
-      ) &&
-      !stagedBitquerySmokeBlock.includes("${automationBypassSecret}") &&
-      !stagedBitquerySmokeBlock.includes("console."),
-    "the staged API smoke binds current StateView and Chainlink FDV to official v4 liquidity while retaining Bitquery trade and chart provenance",
-  );
-  const stagedReadModelCapture = deployWorkflow.indexOf(
-    "Capture staged read-model evidence",
-  );
-  const stagedReadModelCaptureEnd = deployWorkflow.indexOf(
-    "Preserve staged read-model evidence",
-  );
-  const stagedReadModelCaptureBlock =
-    stagedReadModelCapture >= 0 && stagedReadModelCaptureEnd > stagedReadModelCapture
-      ? deployWorkflow.slice(stagedReadModelCapture, stagedReadModelCaptureEnd)
-      : "";
-  check(
-    "ops-protected-indexed-stage-capture",
-    stagedReadModelCapture > stagedBitquerySmokeEnd &&
-      stagedReadModelCaptureBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'indexed-or-shadow'",
-      ) &&
-      stagedReadModelCaptureBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedReadModelCaptureBlock.includes(
-        "PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedReadModelCaptureBlock.includes(
-        "PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
-      ) &&
-      !stagedReadModelCaptureBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
+      !/alchemy|blob|durable|graph|stateview|chainlink|envio|prewarm|secondary|fallback|quorum/iu.test(
+        stagedBitquerySmokeBlock,
       ),
-    "the indexed staged capture receives the protected deployment bypass only inside its exact step",
-  );
-  const stagedBindingReverification = deployWorkflow.indexOf(
-    "Reverify staged candidate binding",
-  );
-  const stagedDeploymentResolution = deployWorkflow.indexOf(
-    "Resolve exact staged deployment",
-  );
-  const stagedDurableRefreshGate = deployWorkflow.indexOf(
-    "      - name: Refresh and prove exact staged durable read model",
-  );
-  const stagedDurableRefreshGateEnd = deployWorkflow.indexOf(
-    "      - name: Smoke staged public market APIs",
-  );
-  const stagedHealthGate = deployWorkflow.indexOf(
-    "      - name: Gate exact staged operational health",
-  );
-  const stagedCandidateHandoff = deployWorkflow.indexOf(
-    "      - name: Record staged candidate handoff",
-  );
-  const stagedHealthGateBlock =
-    stagedHealthGate >= 0 && stagedCandidateHandoff > stagedHealthGate
-      ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff).trimEnd()
-      : "";
-  const stagedDurableRefreshGateBlock =
-    stagedDurableRefreshGate >= 0 &&
-      stagedDurableRefreshGateEnd > stagedDurableRefreshGate
-      ? deployWorkflow
-        .slice(stagedDurableRefreshGate, stagedDurableRefreshGateEnd)
-        .trimEnd()
-      : "";
-  const stagedDurableRefreshDeploymentLookup = stagedDurableRefresh.indexOf(
-    "const deployment = await fetchVercelDeployment(",
-  );
-  const stagedDurableRefreshIdentityFailureGuard =
-    stagedDurableRefresh.indexOf("if (!deploymentMatches) {");
-  const stagedDurableRefreshProtectedRequest = stagedDurableRefresh.indexOf(
-    "const refresh = await requestJson(",
-  );
-  const stagedDurableRefreshHealthRequest = stagedDurableRefresh.indexOf(
-    "health = await requestJson(",
+    "the immutable staged candidate proves dRPC identity and profile responses plus either current Bitquery market reads or an exact transport-unavailable handoff without exposing an RPC endpoint",
   );
   check(
-    "ops-staged-durable-refresh-gate",
-    packageJson?.scripts?.["perf:read-model:staged-refresh"] ===
-      "node scripts/perf/read-model-staged-refresh.mjs" &&
-      sha256(stagedDurableRefresh) === STAGED_DURABLE_REFRESH_SCRIPT_SHA256 &&
-      includesEverySourceFragment(
-        stagedDurableRefresh,
-        STAGED_DURABLE_REFRESH_SOURCE_GUARDS,
-      ) &&
-      stagedDurableRefreshDeploymentLookup >= 0 &&
-      stagedDurableRefreshIdentityFailureGuard >
-      stagedDurableRefreshDeploymentLookup &&
-      stagedDurableRefreshProtectedRequest >
-      stagedDurableRefreshIdentityFailureGuard &&
-      stagedDurableRefreshHealthRequest > stagedDurableRefreshProtectedRequest &&
-      stagedDeploymentResolution >= 0 &&
-      stagedDurableRefreshGate > stagedDeploymentResolution &&
-      stagedDurableRefreshGateEnd > stagedDurableRefreshGate &&
-      stagedBitquerySmoke > stagedDurableRefreshGate &&
-      stagedHealthGate > stagedDurableRefreshGate &&
-      stagedDurableRefreshGateBlock === STAGED_DURABLE_REFRESH_WORKFLOW_STEP &&
-      !stagedDurableRefreshGateBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
-      ) &&
-      !stagedDurableRefreshGateBlock.includes("NEXT_PUBLIC_CRON_SECRET"),
-    "the exact staged deployment refreshes the durable model and proves fresh RPC-bound visibility before market and handoff gates",
-  );
-  const stagedHealthDeploymentLookup = stagedHealth.indexOf(
-    "const deployment = await fetchVercelDeployment(",
-  );
-  const stagedHealthIdentityFailureGuard = stagedHealth.indexOf(
-    "if (deploymentFailures.length > 0) {",
-  );
-  const stagedHealthProtectedRequest = stagedHealth.indexOf(
-    "const response = await requestHealth(",
-  );
-  check(
-    "ops-staged-health-handoff-gate",
-    packageJson?.scripts?.["perf:read-model:staged-health"] ===
-      "node scripts/perf/read-model-staged-health.mjs" &&
-      sha256(stagedHealth) === STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 &&
-      includesEverySourceFragment(
-        stagedHealth,
-        STAGED_HEALTH_HANDOFF_SOURCE_GUARDS,
-      ) &&
-      stagedHealthDeploymentLookup >= 0 &&
-      stagedHealthIdentityFailureGuard > stagedHealthDeploymentLookup &&
-      stagedHealthProtectedRequest > stagedHealthIdentityFailureGuard &&
-      stagedBindingReverification >= 0 &&
-      stagedHealthGate > stagedBindingReverification &&
-      stagedCandidateHandoff > stagedHealthGate &&
-      stagedHealthGateBlock === STAGED_HEALTH_HANDOFF_WORKFLOW_STEP &&
-      stagedHealthGateBlock.includes(
-        "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
-      ) &&
-      stagedHealthGateBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedHealthGateBlock.includes(
-        "STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
-      ) &&
-      stagedHealthGateBlock.includes(
-        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedHealthGateBlock.includes("EXPECTED_GIT_HEAD: ${{ github.sha }}") &&
-      stagedHealthGateBlock.includes(
-        "npm run perf:read-model:staged-health --",
-      ) &&
-      stagedHealthGateBlock.includes('--target-url "$STAGED_TARGET_URL"') &&
-      stagedHealthGateBlock.includes(
-        '--deployment-id "$STAGED_DEPLOYMENT_ID"',
-      ) &&
-      stagedHealthGateBlock.includes('--git-head "$EXPECTED_GIT_HEAD"') &&
-      !stagedHealthGateBlock.includes("\n        if:") &&
-      !stagedHealthGateBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
+    "ops-obsolete-public-read-gates-absent",
+    !deployWorkflow.includes("perf:read-model:deploy-policy") &&
+      !deployWorkflow.includes("perf:read-model:wake-canary") &&
+      !deployWorkflow.includes("perf:read-model:staged-refresh") &&
+      !deployWorkflow.includes("perf:read-model:staged-health") &&
+      !deployWorkflow.includes("Capture staged read-model evidence") &&
+      !deployWorkflow.includes("Gate indexed or shadow read path") &&
+      !deployWorkflow.includes("StateView") &&
+      !deployWorkflow.includes("official Uniswap v4 subgraph") &&
+      !deployWorkflow.includes(
+        "Refresh and prove exact staged durable read model",
       ),
-    "the exact staged deployment must report healthy immediately before its stage-only handoff",
+    "secondary RPC, prewarm, durable, indexed and Graph availability gates are absent from Website staging",
   );
   const exactVerifyProofGateStart = deployWorkflow.indexOf("  release-gate:");
   const exactVerifyProofGateEnd = deployWorkflow.indexOf("  deploy:");
   const exactVerifyProofGate =
-    exactVerifyProofGateStart >= 0 && exactVerifyProofGateEnd > exactVerifyProofGateStart
+    exactVerifyProofGateStart >= 0 &&
+    exactVerifyProofGateEnd > exactVerifyProofGateStart
       ? deployWorkflow.slice(exactVerifyProofGateStart, exactVerifyProofGateEnd)
       : "";
   check(
@@ -2676,8 +3097,9 @@ export function evaluateReadModelOperationsSourceContracts(
       deployWorkflow.includes(
         '--meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
       ) &&
-      deployWorkflow.indexOf("Verify Sigstore provenance and exact proof contents") <
-        deployWorkflow.indexOf("vercel build --prod") &&
+      deployWorkflow.indexOf(
+        "Verify Sigstore provenance and exact proof contents",
+      ) < deployWorkflow.indexOf("vercel build --prod") &&
       deployWorkflow.indexOf(
         "Confirm consumed Verify proof identity after production approval",
       ) < deployWorkflow.indexOf("Pull production configuration"),
@@ -2713,17 +3135,21 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   check(
     "ops-post-promotion-binding",
-    deployWorkflow.includes('id: production-before') &&
+    deployWorkflow.includes("id: production-before") &&
       deployWorkflow.includes('--reject-git-head "$GITHUB_SHA"') &&
       deployWorkflow.indexOf("id: production-before") <
         deployWorkflow.indexOf("id: deploy") &&
       deployWorkflow.includes(
         "DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
       ) &&
-      deployWorkflow.includes("Stage-only: no production promotion was attempted.") &&
+      deployWorkflow.includes(
+        "Stage-only: no production promotion was attempted.",
+      ) &&
       !deployWorkflow.includes("vercel promote") &&
       !deployWorkflow.includes("vercel rollback") &&
-      operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
+      operationsRunbook.includes(
+        "stage-only and must never call `vercel promote`",
+      ) &&
       manualPromotionSequenceIsFailClosed(operationsRunbook) &&
       retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
@@ -2732,9 +3158,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes(
         "`/api/explore?limit=${EXPLORE_PAGE_SIZE}&page=1&sort=market-cap`",
       ) &&
-      postPromotion.includes(
-        '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
-      ) &&
+      postPromotion.includes('"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"') &&
       postPromotion.includes(
         '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
       ) &&
@@ -2748,9 +3172,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("exactGoldenSearch") &&
       postPromotion.includes("exactGoldenChart") &&
       postPromotion.includes("quoteAddress: GOLDEN_QUOTE_ADDRESS") &&
-      postPromotion.includes(
-        'Object.freeze(["1h", "1d", "1w", "all"])',
-      ) &&
+      postPromotion.includes('Object.freeze(["1h", "1d", "1w", "all"])') &&
       includesEverySourceFragment(
         postCurrentEvidenceBlock,
         POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS,
@@ -2777,15 +3199,11 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes(
         "return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
       ) &&
+      postPromotion.includes("tokenAddress === GOLDEN_TOKEN_ADDRESS") &&
       postPromotion.includes(
-        'tokenAddress === GOLDEN_TOKEN_ADDRESS',
+        "!sameBytes32(primary.identity.poolId, market.primaryPoolId)",
       ) &&
-      postPromotion.includes(
-        '!sameBytes32(primary.identity.poolId, market.primaryPoolId)',
-      ) &&
-      postPromotion.includes(
-        'primary.identity.protocol !== "uniswap_v4"',
-      ) &&
+      postPromotion.includes('primary.identity.protocol !== "uniswap_v4"') &&
       postPromotion.includes(
         'liquidity?.source !== "official-uniswap-v4-subgraph"',
       ) &&
@@ -2798,9 +3216,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes(
         "BigInt(liquidity.tvlUsdWad) < MINIMUM_PUBLIC_FDV_LIQUIDITY_USD_WAD",
       ) &&
-      postPromotion.includes(
-        'token.launchModel !== "classic"',
-      ) &&
+      postPromotion.includes('token.launchModel !== "classic"') &&
       postPromotion.includes(
         'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
       ) &&
@@ -2813,35 +3229,23 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes(
         "expectedFdvUsdWad.toString() === valuation.valueWad",
       ) &&
-      postPromotion.includes(
-        "expectedActiveVirtualLiquidityUsdWad >=",
-      ) &&
-      postPromotion.includes(
-        "price.activeVirtualLiquidityUsdWad",
-      ) &&
-      postPromotion.includes(
-        "price.activeVirtualToken0Wei",
-      ) &&
+      postPromotion.includes("expectedActiveVirtualLiquidityUsdWad >=") &&
+      postPromotion.includes("price.activeVirtualLiquidityUsdWad") &&
+      postPromotion.includes("price.activeVirtualToken0Wei") &&
       postPromotion.includes(
         '"stateview-active-liquidity-virtual-depth-usd"',
       ) &&
-      postPromotion.includes(
-        'id: "production-current-public-detail"',
-      ) &&
+      postPromotion.includes('id: "production-current-public-detail"') &&
       postPromotion.includes(
         'id: "production-current-public-bitquery-charts"',
       ) &&
       postPromotion.includes("MAXIMUM_EXPLORE_TOKENS") &&
       postPromotion.includes("responses.length !== totalPages") &&
-      postPromotion.includes(
-        'valuation.source !== "stateview-chainlink"',
-      ) &&
+      postPromotion.includes('valuation.source !== "stateview-chainlink"') &&
       postPromotion.includes(
         'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
       ) &&
-      postPromotion.includes(
-        'currentMarketEvidenceTime(quality.asOfTime)',
-      ) &&
+      postPromotion.includes("currentMarketEvidenceTime(quality.asOfTime)") &&
       postPromotion.includes(
         'id: "production-bitquery-golden-independent-parity"',
       ) &&
@@ -2852,12 +3256,21 @@ export function evaluateReadModelOperationsSourceContracts(
         POST_PROMOTION_TARGET_GUARD_PREFIX,
         postPromotionVerifierStart,
       ) &&
-      postPromotionOriginGuardBlock === POST_PROMOTION_PRODUCTION_ORIGIN_GUARD &&
-      postPromotion.includes('response.headers.get("x-programmable-market-source")') &&
-      postPromotion.includes('response.headers.get("x-programmable-price-source")') &&
-      postPromotion.includes('response.headers.get("x-programmable-market-as-of")') &&
+      postPromotionOriginGuardBlock ===
+        POST_PROMOTION_PRODUCTION_ORIGIN_GUARD &&
+      postPromotion.includes(
+        'response.headers.get("x-programmable-market-source")',
+      ) &&
+      postPromotion.includes(
+        'response.headers.get("x-programmable-price-source")',
+      ) &&
+      postPromotion.includes(
+        'response.headers.get("x-programmable-market-as-of")',
+      ) &&
       postPromotion.includes('"x-programmable-valuation-block"') &&
-      postPromotion.includes('response.headers.get("x-programmable-data-quality")') &&
+      postPromotion.includes(
+        'response.headers.get("x-programmable-data-quality")',
+      ) &&
       !postPromotion.includes("/api/indexers/v1/token-list") &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
     "the workflow is stage-only, the current runbook requires exact SLA-gated promotion and the historical cutover stays retired",
@@ -2880,6 +3293,9 @@ function main() {
   if (!result.ok) process.exitCode = 1;
 }
 
-if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
+if (
+  process.argv[1] &&
+  import.meta.url === new URL(process.argv[1], "file:").href
+) {
   main();
 }

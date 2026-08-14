@@ -1,7 +1,17 @@
 {
-  "schemaVersion": "programmable.custom-registry-release-policy.v2",
-  "releaseOwner": "0xc7fB6d0d2b78A30D0D3599F7F4BAd5c9b87665AF",
-  "maximumAuthorizationValiditySeconds": 300,
-  "activationAllowed": false,
-  "status": "SOURCE_BOUND_OWNER_NO_DEPLOYMENT_AUTHORIZATION"
+  "schemaVersion": "programmable.custom-registry-release-policy.v4",
+  "releaseOwner": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "maximumDispatchIntentAuthorizationValiditySeconds": 300,
+  "authorizationSemantics": "EXACT_RAW_TRANSACTION_HASH_AUTHORIZED_DURABLE_DISPATCH_INTENT_ACTIVATES_LATER_IDENTICAL_RAW_SEND_REBROADCAST_AND_INCLUSION_NO_WORKFLOW_CANCELLATION",
+  "stagedRawTransactionTrustBoundary": "OWNER_ONLY_0400_CURRENT_USER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_WORKFLOW_NOT_AN_ONCHAIN_OWNER_GATE",
+  "dispatchIntentFinalConfirmation": "EXPLICIT_EXACT_TRANSACTION_HASH_REQUIRED_IMMEDIATELY_BEFORE_DURABLE_ACTIVATION",
+  "nonceScopedJournalExclusivity": "ONE_CANONICAL_CHAIN_SIGNER_NONCE_JOURNAL_BLOCKS_CHANGED_TRANSACTION_UNTIL_NONCE_IS_CANONICALLY_CONSUMED",
+  "temporaryPublicControllerCustody": "FOUR_DISTINCT_SAFE_ONE_OF_ONE_CURRENT_USER_KEYCHAIN_CONTROLLERS_OWNER_ACCEPTED",
+  "sameHostConcentrationAccepted": true,
+  "restartReadbackRequiredForPublicActivation": false,
+  "encryptedBackupRequiredForPublicActivation": false,
+  "hardwareTwoOfThreeMigrationRequiredForPublicActivation": false,
+  "hardwareTwoOfThreeMigrationDeferred": true,
+  "activationAllowed": true,
+  "status": "SOURCE_BOUND_OWNER_TEMPORARY_PUBLIC_ONE_OF_ONE_CUSTODY_ACCEPTED_NO_DEPLOYMENT_AUTHORIZATION"
 }

@@ -1,0 +1,24 @@
+.page { min-height: 100vh; padding: 9rem max(1.25rem, 6vw) 5rem; background: #f5f2e9; color: #11110f; }
+.header { max-width: 56rem; margin-bottom: 3.5rem; }
+.eyebrow, .cardState { margin: 0 0 .8rem; font: 600 .75rem/1.2 var(--font-mono, monospace); letter-spacing: .12em; text-transform: uppercase; color: #5d5a50; }
+.header h1, .detail h1 { max-width: 14ch; margin: 0; font-size: clamp(2.7rem, 7vw, 6.6rem); line-height: .92; letter-spacing: -.065em; }
+.intro { max-width: 46rem; margin: 1.5rem 0 0; font-size: clamp(1rem, 2vw, 1.3rem); line-height: 1.5; color: #555248; }
+.status { padding: 2rem 0; font-size: 1rem; color: #5d5a50; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1px; border: 1px solid #cac5b8; background: #cac5b8; }
+.card { min-height: 20rem; padding: 1.5rem; background: #fbf9f3; display: flex; flex-direction: column; }
+.card h2 { margin: 1.2rem 0 .55rem; font-size: 1.4rem; line-height: 1.1; overflow-wrap: anywhere; }
+.card > p:not(.cardState) { margin: 0; color: #6b675d; }
+.cardFacts, .facts { margin: 2rem 0; display: grid; gap: 1rem; }
+.cardFacts div, .facts div { min-width: 0; }
+.cardFacts dt, .facts dt { margin-bottom: .25rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: #78746a; }
+.cardFacts dd, .facts dd { margin: 0; font-family: var(--font-mono, monospace); font-size: .82rem; overflow-wrap: anywhere; }
+.cardLink { margin-top: auto; color: inherit; font-weight: 650; text-decoration-thickness: 1px; text-underline-offset: .25em; }
+.back { display: inline-block; margin-bottom: 3rem; color: inherit; }
+.detail { max-width: 72rem; }
+.facts { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 3.5rem; padding: 1.5rem 0; border-block: 1px solid #cac5b8; }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
+.actions a { display: inline-flex; min-height: 2.9rem; align-items: center; padding: .65rem 1rem; border: 1px solid #11110f; color: inherit; text-decoration: none; }
+.actions a:first-child { background: #11110f; color: #f5f2e9; }
+.actions a:focus-visible, .cardLink:focus-visible, .back:focus-visible { outline: 3px solid #6e5cff; outline-offset: 3px; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 42rem) { .page { padding-top: 6.5rem; } .facts { grid-template-columns: 1fr; } .card { min-height: 17rem; } }

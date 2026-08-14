@@ -7,6 +7,8 @@ import {
 } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
 import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 
 vi.mock("server-only", () => ({}));
@@ -14,7 +16,10 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
+  readAlchemy: vi.fn(),
   readLegacy: vi.fn(),
+  readBitquery: vi.fn(),
+  readIdentity: vi.fn(),
   createPublicClient: vi.fn(),
 }));
 
@@ -47,7 +52,8 @@ const deployment = {
   stateViewRuntimeCodeHash: `0x${"77".repeat(32)}` as Hex,
   rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/alchemy-claim-key",
   rpcUrlSecondary:
-    "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/",
+    "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/" as
+      string | null,
   confirmations: 12n,
   logBlockRange: 10_000n,
 };
@@ -168,8 +174,26 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
-    getWebsiteReadOnchainDeployment: () => deployment,
+    getOnchainDeployment: () => deployment,
     readExploreModel: mocks.readLegacy,
+  };
+});
+
+vi.mock("../lib/alchemy/explore.server", () => ({
+  readAlchemyExploreModel: mocks.readAlchemy,
+}));
+
+vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({
+  readBitqueryExploreModelV1: mocks.readBitquery,
+}));
+
+vi.mock("../lib/server/action-rpc-identity.server", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../lib/server/action-rpc-identity.server")
+  >();
+  return {
+    ...actual,
+    readCreatorClaimIdentityFromRpc: mocks.readIdentity,
   };
 });
 
@@ -195,26 +219,38 @@ describe("creator claim action identity activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     deployment.rpcUrl =
-      "https://eth-mainnet.g.alchemy.com/v2/alchemy-claim-key";
-    deployment.rpcUrlSecondary =
-      "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/";
+      "https://lb.drpc.live/ethereum/drpc-claim-key";
+    deployment.rpcUrlSecondary = null;
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+      "drpc",
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+      deployment.rpcUrl,
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", deployment.rpcUrl),
+    );
     mocks.lookup.mockResolvedValue(indexedToken);
+    mocks.readAlchemy.mockResolvedValue(legacyModel);
     mocks.readLegacy.mockResolvedValue(legacyModel);
-    const clients = [
+    mocks.readBitquery.mockResolvedValue(legacyModel);
+    mocks.readIdentity.mockResolvedValue({
+      tokenAddress: token,
+      hookAddress: hook,
+      poolId,
+      creatorAddress: creator,
+      totalSwapFeeBps: 100,
+    });
+    mocks.createPublicClient.mockImplementation(() =>
       rpcClient(100_000n, 2_000_000_000n, 10n ** 18n),
-      rpcClient(110_000n, 3_000_000_000n, 9n * 10n ** 17n),
-      rpcClient(100_000n, 2_000_000_000n, 10n ** 18n),
-      rpcClient(110_000n, 3_000_000_000n, 9n * 10n ** 17n),
-    ];
-    mocks.createPublicClient
-      .mockImplementationOnce(() => clients[0])
-      .mockImplementationOnce(() => clients[1])
-      .mockImplementationOnce(() => clients[2])
-      .mockImplementationOnce(() => clients[3]);
+    );
   });
 
   it.each([true, false])(
-    "keeps two-provider runtime checks and simulations with indexed lookup %s",
+    "uses one committed provider for runtime checks and simulation with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
@@ -226,28 +262,30 @@ describe("creator claim action identity activation", () => {
         status: "ready",
         claim: { account: creator, tokenAddress: token, poolId },
         gas: {
-          estimatedGas: "110000",
-          gasPriceWei: "3000000000",
-          accountBalanceWei: "900000000000000000",
+          estimatedGas: "100000",
+          gasPriceWei: "2000000000",
+          accountBalanceWei: "1000000000000000000",
+        },
+        submission: {
+          status: "not-submitted",
+          transactionHash: null,
+          receipt: null,
         },
       });
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
-      expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
-      expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+      expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).not.toHaveBeenCalled();
+      expect(mocks.lookup).not.toHaveBeenCalled();
+      expect(mocks.readAlchemy).not.toHaveBeenCalled();
+      expect(mocks.readLegacy).not.toHaveBeenCalled();
     },
   );
 
   it("does not fall back to public providers when the private pair is unavailable", async () => {
-    const clients = [
-      unavailableRpcClient("monthly capacity exceeded"),
-      unavailableRpcClient("secondary transport unavailable"),
-      rpcClient(105_000n, 2_500_000_000n, 8n * 10n ** 17n),
-      rpcClient(108_000n, 2_700_000_000n, 7n * 10n ** 17n),
-    ];
     mocks.createPublicClient.mockReset();
-    for (const client of clients) {
-      mocks.createPublicClient.mockImplementationOnce(() => client);
-    }
+    mocks.createPublicClient.mockImplementation(() =>
+      unavailableRpcClient("monthly capacity exceeded"),
+    );
 
     const response = await POST(request());
     const payload = await response.json();
@@ -261,13 +299,31 @@ describe("creator claim action identity activation", () => {
     });
   });
 
-  it("returns a retryable typed error when fewer than two providers can be verified", async () => {
+  it("does not expose a private RPC identity-read failure", async () => {
+    mocks.readIdentity.mockRejectedValueOnce(
+      new Error("dRPC provider failed with a private detail"),
+    );
+
+    const response = await POST(request());
+    const serialized = JSON.stringify(await response.json());
+
+    expect(response.status).toBe(502);
+    expect(JSON.parse(serialized)).toMatchObject({
+      status: "blocked",
+      error: {
+        code: "simulation-failed",
+        message:
+          "The configured RPC could not prepare the creator claim from the current onchain state",
+      },
+    });
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(serialized).not.toContain("dRPC provider");
+    expect(serialized).not.toContain("private detail");
+  });
+
+  it("returns a retryable typed error when the configured provider is unavailable", async () => {
     mocks.createPublicClient.mockReset();
-    for (let index = 0; index < 4; index += 1) {
-      mocks.createPublicClient.mockImplementationOnce(() =>
-        unavailableRpcClient(),
-      );
-    }
+    mocks.createPublicClient.mockImplementation(() => unavailableRpcClient());
 
     const response = await POST(request());
     const payload = await response.json();
@@ -284,11 +340,13 @@ describe("creator claim action identity activation", () => {
   });
 
   it.each([true, false])(
-    "fails closed before simulation for same-provider aliases with indexed lookup %s",
+    "fails closed before simulation when the primary commitment is invalid with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
-      deployment.rpcUrlSecondary =
-        "https://eth-mainnet.g.alchemy.com/v2/second-claim-secret";
+      vi.stubEnv(
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+        `0x${"00".repeat(32)}`,
+      );
 
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());
@@ -298,8 +356,8 @@ describe("creator claim action identity activation", () => {
         error: { code: "rpc-unavailable" },
       });
       expect(mocks.createPublicClient).not.toHaveBeenCalled();
-      expect(serialized).not.toContain("alchemy-claim-key");
-      expect(serialized).not.toContain("second-claim-secret");
+      expect(mocks.readIdentity).not.toHaveBeenCalled();
+      expect(serialized).not.toContain("drpc-claim-key");
     },
   );
 });

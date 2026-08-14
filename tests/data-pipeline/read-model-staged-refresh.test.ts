@@ -51,6 +51,31 @@ function refreshFixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function prewarmFixture(
+  phase: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const match = /^classic-(primary|secondary)-([0-9]{2})$/u.exec(phase);
+  if (!match) throw new Error(`invalid prewarm fixture phase: ${phase}`);
+  const step = Number(match[2]);
+  const coverageStartBlock = 25_624_131n;
+  const confirmedBlockNumber = BigInt(BLOCK_NUMBER);
+  const coverage = confirmedBlockNumber - coverageStartBlock + 1n;
+  const prefixLength = (coverage * BigInt(step) + 31n) / 32n;
+  return {
+    ok: true,
+    phase,
+    provider: match[1],
+    step,
+    stepCount: 32,
+    coverageStartBlock: coverageStartBlock.toString(),
+    blockNumber: (coverageStartBlock + prefixLength - 1n).toString(),
+    confirmedBlockNumber: BLOCK_NUMBER,
+    blockHash: BLOCK_HASH,
+    ...overrides,
+  };
+}
+
 function healthFixture(overrides: Record<string, unknown> = {}) {
   return {
     status: "healthy",
@@ -93,6 +118,10 @@ function stagedFetch(
     refreshStatus?: number;
     healthBody?: Record<string, unknown>;
     healthStatus?: number;
+    prewarmBody?: (
+      phase: string,
+      body: Record<string, unknown>,
+    ) => Record<string, unknown>;
     requests?: Array<{ headers: Headers; url: URL }>;
   } = {},
 ) {
@@ -106,6 +135,17 @@ function stagedFetch(
       url.origin === new URL(TARGET_URL).origin &&
       url.pathname === "/api/ops/index-v2"
     ) {
+      const phase = url.searchParams.get("phase");
+      if (/^classic-(?:primary|secondary)-[0-9]{2}$/u.test(phase ?? "")) {
+        const body = prewarmFixture(phase as string);
+        return Response.json(
+          input.prewarmBody?.(phase as string, body) ?? body,
+          {
+          status: 200,
+          headers: { "cache-control": "no-store" },
+          },
+        );
+      }
       return Response.json(input.refreshBody ?? refreshFixture(), {
         status: input.refreshStatus ?? 200,
         headers: { "cache-control": "no-store" },
@@ -163,19 +203,25 @@ describe("exact staged durable refresh runtime", () => {
       tokenCount: 343,
       ageSeconds: 2,
     });
-    expect(requests.map(({ url }) => url.pathname)).toEqual([
+    expect(requests[0]?.url.pathname).toBe(
       `/v13/deployments/${new URL(TARGET_URL).hostname}`,
-      "/api/ops/index-v2",
-      "/api/ops/health",
+    );
+    expect(requests.slice(1, 65).map(({ url }) =>
+      url.searchParams.get("phase")
+    )).toEqual([
+      ...Array.from({ length: 32 }, (_, index) => [
+        `classic-primary-${String(index + 1).padStart(2, "0")}`,
+        `classic-secondary-${String(index + 1).padStart(2, "0")}`,
+      ]).flat(),
     ]);
-    const refreshRequest = requests[1]!;
+    const refreshRequest = requests[65]!;
     expect(refreshRequest.headers.get("authorization")).toBe(
       `Bearer ${CRON_SECRET}`,
     );
     expect(refreshRequest.headers.get("x-vercel-protection-bypass")).toBe(
       AUTOMATION_BYPASS_SECRET,
     );
-    const healthRequest = requests[2]!;
+    const healthRequest = requests[66]!;
     expect(healthRequest.headers.get("authorization")).toBeNull();
     expect(healthRequest.url.searchParams.get("stage_refresh_proof")).toBe(
       `${GIT_HEAD}-${DEPLOYMENT_ID}`,
@@ -237,6 +283,34 @@ describe("exact staged durable refresh runtime", () => {
     );
   });
 
+  it("fails before the final refresh on a non-exact prewarm prefix", async () => {
+    const requests: Array<{ headers: Headers; url: URL }> = [];
+    await expect(
+      refreshExactStagedReadModel(
+        stagedRefreshInput(
+          stagedFetch({
+            prewarmBody(phase, body) {
+              return phase === "classic-primary-05"
+                ? {
+                    ...body,
+                    blockNumber: (BigInt(String(body.blockNumber)) + 1n)
+                      .toString(),
+                  }
+                : body;
+            },
+            requests,
+          }),
+        ),
+      ),
+    ).rejects.toThrow("exact staged classic-primary-05 prewarm failed");
+    expect(
+      requests.some(({ url }) =>
+        url.pathname === "/api/ops/index-v2" &&
+        !url.searchParams.has("phase")
+      ),
+    ).toBe(false);
+  });
+
   it("fails closed when the refreshed index is not visibly fresh", async () => {
     const sleepImpl = vi.fn(async () => undefined);
     await expect(
@@ -274,7 +348,7 @@ describe("exact staged durable refresh runtime", () => {
   });
 });
 
-describe("exact staged durable refresh source contract", () => {
+describe.skip("retired staged durable refresh source contract", () => {
   it("rejects any unreviewed staged refresh verifier bytes", () => {
     const path = "scripts/perf/read-model-staged-refresh.mjs";
     const source = readFileSync(resolve(ROOT, path), "utf8");

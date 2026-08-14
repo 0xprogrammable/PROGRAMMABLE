@@ -5,35 +5,46 @@
     "schedule": "*/5 * * * *",
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
-    "sha256": "06235ff68203da970d51022fe0a9bbe3a7d0096c547ecd7fc31b1ce1d4f1da52",
+    "sha256": "ff3968534ca2360d6a6ab7d22605c3b1eeb3d014f7d65eb40f00fcc3b3792bfa",
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "73c99640515732c975600b5e9a8cd4ffb7fafbc04536a563126c76ea60b27fe6"
+        "sha256": "a31450f6444e4d495ab2adb964bc713c2191723a5f62cc94d151c71e8627c6e4"
       },
       "dependencies": [
         {
           "path": "lib/onchain/parallel-reads.ts",
           "sha256": "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e"
+        },
+        {
+          "path": "lib/onchain/historical-read-rpc.server.ts",
+          "sha256": "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d"
+        },
+        {
+          "path": "lib/onchain/persistent-rpc-cache.server.ts",
+          "sha256": "5faaaeafffb837668c5759ff85f879721c6ac4fd41e0a49bf3ee6b615fbb3af4"
         }
       ],
       "releaseRuntimes": [
         {
           "release": "classic-v3",
           "path": "lib/onchain/classic-v3-read-model.ts",
-          "sha256": "c97c6f5875bf089b8545bfc55bd20f26c1520bdbe0c640e873f70ca08b4cc4a3",
+          "sha256": "da6b9cb5e938435010e7a2c0f6ea9a597e7f04257570bd243e368f68c2d28188",
           "eventFiltersPerRange": 2
         },
         {
           "release": "stock-paired-v1-v3",
           "path": "lib/onchain/stock-paired-read-model.ts",
-          "sha256": "9c9badce8d6dfb000a29fd4abcc013701f5a81736ce9ad9fd1e72816b3a75b2f",
+          "sha256": "0f1a0713aa02b617f1ae9df6463140640d1217cdbb38964b56fc9d2b59e1d054",
           "eventFiltersPerRange": 3
         }
       ],
       "eventFiltersPerRange": 2,
       "providerPasses": 2,
-      "requestDeadlineMs": 270000
+      "requestDeadlineMs": 270000,
+      "classicPrewarmStepCount": 32,
+      "prewarmProviderConcurrency": 2,
+      "prewarmRequestDeadlineMs": 250000
     },
     "schedulerWatchdog": {
       "provider": "github-actions",
@@ -85,6 +96,39 @@
       "route": "app/api/ops/index/route.ts",
       "status": 410,
       "sha256": "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f"
+    }
+  },
+  "customLaunchReconciler": {
+    "path": "/api/ops/custom-launch/generic-v2-projector",
+    "schedule": "* * * * *",
+    "authEnvironment": "CRON_SECRET",
+    "maximumLifecycleAgeMs": 300000,
+    "refreshAfterMs": 60000,
+    "leaseMs": 55000,
+    "maximumApprovalInventory": 48,
+    "batchLimit": 16,
+    "concurrency": 8,
+    "maximumInitialLogBlocks": 20000,
+    "maximumConcurrentLogRequests": 24,
+    "route": {
+      "path": "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+      "sha256": "d2f6509eba91dd5690e58d121daf4802aa1367b3807da31ed7ec060ba84b1f14"
+    },
+    "runtime": {
+      "path": "lib/server/custom-launch/generic-launch-production-v2.ts",
+      "sha256": "b70e8d1a904ed09b1161269b182af7b4e18c93d552acb6e94a5cc66d9d76a19b"
+    },
+    "store": {
+      "path": "lib/server/custom-launch/generic-launch-postgres-v2.ts",
+      "sha256": "d542726f80bd816387240f1707e5934946b5dcf1cc9d69a015e08f3bb2d904be"
+    },
+    "registryReader": {
+      "path": "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",
+      "sha256": "a8b6607c641949ad384def4cb9b808233fecea37aadcd9517da69c9845a3dafd"
+    },
+    "migration": {
+      "path": "ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
+      "sha256": "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8"
     }
   },
   "workers": [
@@ -285,8 +329,29 @@
       "/",
       "/api/ops/health",
       "/api/explore?limit=6&page=1&sort=market-cap",
-      "/api/indexers/v1/token-list"
+      "/api/explore/token",
+      "/api/explore/token/chart",
+      "/api/explore/profile",
+      "/api/profile/classic-v3",
+      "/api/profile/stock-paired",
+      "/api/explore/profile/claim",
+      "/api/trade/prepare"
     ],
-    "evidenceRequiredForIndexedRoutes": true
+    "sources": {
+      "launchIdentity": "commitment-bound-drpc-primary",
+      "creatorIdentity": "commitment-bound-drpc-primary",
+      "actionState": "commitment-bound-drpc-primary",
+      "market": "bitquery",
+      "fdv": "bitquery",
+      "chart": "bitquery"
+    },
+    "rpc": {
+      "provider": "drpc",
+      "role": "primary",
+      "endpointCommitmentRequired": true,
+      "secondaryRequired": false
+    },
+    "fallbacks": false,
+    "providerUrlExposure": false
   }
 }

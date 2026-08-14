@@ -3,7 +3,10 @@ import "server-only";
 import type { Hex } from "viem";
 
 import { rpcProviderCommitment } from "../data-pipeline/rpc-provider-commitments";
-import { productionMainnetRpcPair } from
+import {
+  WEBSITE_MAINNET_RPC_ENV,
+  productionMainnetRpcPair,
+} from
   "../onchain/website-rpc-providers.server";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -15,6 +18,7 @@ type ActionRpcVendor =
   | "drpc"
   | "publicnode"
   | "mevblocker"
+  | "tenderly"
   | "sepolia-org"
   | "blastapi"
   | "ankr";
@@ -35,6 +39,31 @@ type QuorumInput = Readonly<{
   fallbacks?: readonly string[];
   maximumProviders?: number;
 }>;
+
+type CommittedProviderInput = Readonly<{
+  chainId: SupportedChainId;
+  endpoint: string | null | undefined;
+  endpointCommitment: string | null | undefined;
+}>;
+
+export class ActionRpcProviderError extends Error {
+  readonly code:
+    | "invalid-provider"
+    | "commitment-mismatch";
+
+  constructor(
+    code: ActionRpcProviderError["code"],
+    message = "The configured Ethereum RPC is unavailable",
+  ) {
+    super(message);
+    this.name = "ActionRpcProviderError";
+    this.code = code;
+  }
+
+  toJSON() {
+    return { name: this.name, code: this.code };
+  }
+}
 
 export class ActionRpcQuorumError extends Error {
   readonly code:
@@ -147,6 +176,14 @@ function providerVendor(
     return "mevblocker";
   }
   if (
+    chainId === 1 &&
+    value.hostname === "mainnet.gateway.tenderly.co" &&
+    rootPath &&
+    noQuery
+  ) {
+    return "tenderly";
+  }
+  if (
     chainId === 11_155_111 &&
     value.hostname === "rpc.sepolia.org" &&
     rootPath &&
@@ -225,6 +262,79 @@ function parseProvider(
     writable: false,
   });
   return Object.freeze(provider);
+}
+
+function isPrivateActionProvider(provider: ActionRpcProvider) {
+  if (provider.vendorGroup !== "drpc") {
+    return (
+      provider.vendorGroup === "alchemy" ||
+      provider.vendorGroup === "quicknode" ||
+      provider.vendorGroup === "infura"
+    );
+  }
+  return provider.endpoint.includes("lb.drpc.");
+}
+
+/**
+ * Resolves exactly one private action transport and binds it to an
+ * independently configured endpoint commitment. No secondary or fallback is
+ * consulted.
+ */
+export function createCommittedActionRpcProvider(
+  input: CommittedProviderInput,
+): ActionRpcProvider {
+  let provider: ActionRpcProvider;
+  try {
+    provider = parseProvider(input.endpoint, input.chainId);
+  } catch {
+    throw new ActionRpcProviderError("invalid-provider");
+  }
+  if (!isPrivateActionProvider(provider)) {
+    throw new ActionRpcProviderError("invalid-provider");
+  }
+  if (
+    typeof input.endpointCommitment !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(input.endpointCommitment) ||
+    provider.endpointCommitment !== input.endpointCommitment
+  ) {
+    throw new ActionRpcProviderError("commitment-mismatch");
+  }
+  return provider;
+}
+
+function productionActionRpcProvider(env: Environment) {
+  if (env[WEBSITE_MAINNET_RPC_ENV.primaryProvider] !== "drpc") {
+    throw new ActionRpcProviderError("invalid-provider");
+  }
+  return createCommittedActionRpcProvider({
+    chainId: 1,
+    endpoint: env[WEBSITE_MAINNET_RPC_ENV.primaryUrl],
+    endpointCommitment: env[WEBSITE_MAINNET_RPC_ENV.primaryCommitment],
+  });
+}
+
+export function tradeActionRpcProvider(
+  chainId: SupportedChainId,
+  env: Environment = process.env,
+) {
+  if (chainId === 1) return productionActionRpcProvider(env);
+  return createCommittedActionRpcProvider({
+    chainId,
+    endpoint: env.SEPOLIA_RPC_URL,
+    endpointCommitment:
+      env.PROGRAMMABLE_SEPOLIA_RPC_ENDPOINT_COMMITMENT ??
+      env.SEPOLIA_RPC_ENDPOINT_COMMITMENT,
+  });
+}
+
+export function creatorClaimRpcProvider(
+  deployment: Readonly<{ chainId: number }>,
+  env: Environment = process.env,
+) {
+  if (deployment.chainId !== 1 && deployment.chainId !== 11_155_111) {
+    throw new ActionRpcProviderError("invalid-provider");
+  }
+  return tradeActionRpcProvider(deployment.chainId, env);
 }
 
 function sameEndpoint(left: ActionRpcProvider, right: ActionRpcProvider) {
@@ -387,8 +497,24 @@ export function classicV3ActionRpcProviders(
   });
 }
 
+export function classicV3ActionRpcProvider(
+  environment: "production" | "rehearsal",
+  env: Environment = process.env,
+) {
+  return tradeActionRpcProvider(
+    environment === "production" ? 1 : 11_155_111,
+    env,
+  );
+}
+
 export function stockPairedActionRpcProviders(
   env: Environment = process.env,
 ) {
   return productionActionRpcProviders(env);
+}
+
+export function stockPairedActionRpcProvider(
+  env: Environment = process.env,
+) {
+  return tradeActionRpcProvider(1, env);
 }

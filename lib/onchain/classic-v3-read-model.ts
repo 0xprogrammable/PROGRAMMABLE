@@ -9,6 +9,7 @@ import {
   ResponseBodyTooLargeError,
   RpcRequestError,
   TimeoutError,
+  toEventSelector,
   type Address,
   type Hex,
   type PublicClient,
@@ -32,7 +33,12 @@ import {
 } from "./math";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
 import {
+  bindPersistentRpcIntegrityCheckpointWindow,
+  createEnvironmentPersistentRpcCacheStore,
   persistentRpcHttp,
+  persistentRpcProviderId,
+  PersistentRpcCacheError,
+  type PersistentRpcCacheStore,
   withPersistentRpcIntegrityScope,
 } from "./persistent-rpc-cache.server";
 import type { ExploreReadModel, ReadyOnchainDeployment } from "./types";
@@ -95,6 +101,7 @@ const RPC_PROVENANCE_BATCH_SIZE = 1;
 const TOKEN_HYDRATION_BATCH_SIZE = 6;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
 const MINIMUM_LOG_BLOCK_RANGE = 1n;
+const MAXIMUM_CHECKPOINT_BLOCK_RANGE = 1_000n;
 const TRANSIENT_RETRIES_PER_WINDOW = 1;
 const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;
 
@@ -113,6 +120,13 @@ function isTransientLogReadError(error: unknown) {
     error instanceof RpcRequestError &&
     error.code === -32603 &&
     error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
+
+function isPersistentCacheRangeLimitError(error: unknown) {
+  return (
+    error instanceof PersistentRpcCacheError &&
+    /^Persistent RPC cache log segment exceeds \d+ bytes$/u.test(error.message)
   );
 }
 
@@ -160,6 +174,7 @@ function clientFor(
   config: ReadyOnchainDeployment,
   endpoint: string,
   release: ClassicV3Release,
+  store?: PersistentRpcCacheStore | null,
 ) {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
@@ -167,6 +182,7 @@ function clientFor(
     transport: persistentRpcHttp(endpoint, {
       chainId: config.chainId,
       maxLogBlockRange: config.logBlockRange,
+      ...(store !== undefined ? { store } : {}),
       http: { retryCount: 1, timeout: 10_000 },
       immutableCodeBindings: [
         {
@@ -273,6 +289,7 @@ export async function readClassicV3Events(
 ) {
   const launches: LaunchRecord[] = [];
   const volumes = new Map<string, FeeVolume>();
+  const eventProvenance: string[] = [];
   let fromBlock =
     fromBlockFloor > release.startBlock
       ? fromBlockFloor
@@ -327,7 +344,8 @@ export async function readClassicV3Events(
       if (
         (transient ||
           error instanceof LimitExceededRpcError ||
-          error instanceof ResponseBodyTooLargeError) &&
+          error instanceof ResponseBodyTooLargeError ||
+          isPersistentCacheRangeLimitError(error)) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
       ) {
@@ -351,6 +369,13 @@ export async function readClassicV3Events(
       throw error;
     }
     const [launchLogs, feeLogs] = logs;
+    eventProvenance.push(
+      ...[...launchLogs, ...feeLogs].map((log) =>
+        JSON.stringify(log, (_, item) =>
+          typeof item === "bigint" ? item.toString() : item
+        )
+      ),
+    );
     for (const log of launchLogs) {
       assertCanonicalClassicV3EventSource(
         log.eventName,
@@ -400,7 +425,7 @@ export async function readClassicV3Events(
       );
     }
   }
-  return { launches, volumes };
+  return { launches, volumes, eventProvenance };
 }
 
 function eventFingerprint(
@@ -412,9 +437,133 @@ function eventFingerprint(
       volumes: [...value.volumes.entries()].sort(([left], [right]) =>
         left.localeCompare(right),
       ),
+      eventProvenance: value.eventProvenance,
     },
     (_, item) => (typeof item === "bigint" ? item.toString() : item),
   );
+}
+
+export async function readClassicV3EventsQuorum(
+  clients: readonly PublicClient[],
+  config: ReadyOnchainDeployment,
+  release: ClassicV3Release,
+  toBlock: bigint,
+  fromBlockFloor: bigint,
+) {
+  if (clients.length !== 2) {
+    throw new Error("Classic V3 checkpoints require exactly two independent RPCs");
+  }
+  const launches: LaunchRecord[] = [];
+  const volumes = new Map<string, FeeVolume>();
+  const eventProvenance: string[] = [];
+  let fromBlock = fromBlockFloor > release.startBlock
+    ? fromBlockFloor
+    : release.startBlock;
+  while (fromBlock <= toBlock) {
+    const checkpointBlockRange = minimum(
+      config.logBlockRange,
+      MAXIMUM_CHECKPOINT_BLOCK_RANGE,
+    );
+    const rangeEnd = minimum(
+      toBlock,
+      fromBlock + checkpointBlockRange - 1n,
+    );
+    const readCheckpoint = () => withPersistentRpcIntegrityScope(
+      async () => {
+        const sets = await mapInBatches(
+          clients,
+          RPC_PROVENANCE_BATCH_SIZE,
+          (client) =>
+            readClassicV3Events(
+              client,
+              config,
+              release,
+              rangeEnd,
+              fromBlock,
+            ),
+        );
+        const boundaries = await allSettledOrThrow(
+          clients.map((client) =>
+            client.getBlock({ blockNumber: rangeEnd })
+          ),
+        );
+        const fingerprint = eventFingerprint(sets[0]);
+        if (
+          sets.some((candidate) => eventFingerprint(candidate) !== fingerprint) ||
+          boundaries.some(
+            (candidate) =>
+              candidate.number !== rangeEnd ||
+              typeof candidate.hash !== "string" ||
+              !/^0x[0-9a-f]{64}$/iu.test(candidate.hash) ||
+              candidate.hash?.toLowerCase() !== boundaries[0].hash?.toLowerCase(),
+          )
+        ) {
+          throw new Error(
+            "Independent RPCs disagree on the Classic V3 checkpoint window",
+          );
+        }
+        bindPersistentRpcIntegrityCheckpointWindow({
+          fromBlock,
+          toBlock: rangeEnd,
+          boundaryBlockHash: boundaries[0].hash,
+        });
+        return sets;
+      },
+      {
+        checkpointGroup: [
+          "classic-v3-events-v2",
+          config.chainId,
+          release.startBlock.toString(),
+          release.launcher.toLowerCase(),
+          release.hook.toLowerCase(),
+          toEventSelector(launchedEvent),
+          toEventSelector(feeEvent),
+          ...[
+            config.rpcUrl,
+            ...(config.rpcUrlSecondary ? [config.rpcUrlSecondary] : []),
+          ].map(persistentRpcProviderId).sort(),
+        ].join(":"),
+        expectedCursorBindings: clients.length * 2,
+        expectedProviderCount: clients.length,
+        expectedStreamsPerProvider: 2,
+        requireCheckpointWindow: true,
+        requiredInitialFromBlock: release.startBlock,
+        requireContiguousCheckpointWindow: true,
+        allowCheckpointWindowExtension: true,
+      },
+    );
+    let eventSets: Awaited<ReturnType<typeof readCheckpoint>> | null = null;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        eventSets = await readCheckpoint();
+        break;
+      } catch (error) {
+        if (
+          attempt === 3 ||
+          !(error instanceof PersistentRpcCacheError) ||
+          error.message !== "Persistent RPC integrity checkpoint publish conflicted"
+        ) {
+          throw error;
+        }
+      }
+    }
+    if (!eventSets) {
+      throw new Error("Classic V3 checkpoint retry exhausted");
+    }
+    const agreed = eventSets[0];
+    launches.push(...agreed.launches);
+    eventProvenance.push(...agreed.eventProvenance);
+    for (const [poolId, value] of agreed.volumes) {
+      const current = volumes.get(poolId) ?? { ...EMPTY_VOLUME };
+      current.grossNativeAmount += value.grossNativeAmount;
+      current.creatorFees += value.creatorFees;
+      current.launcherFees += value.launcherFees;
+      current.swapCount += value.swapCount;
+      volumes.set(poolId, current);
+    }
+    fromBlock = rangeEnd + 1n;
+  }
+  return { launches, volumes, eventProvenance };
 }
 
 function assertUniqueLaunches(
@@ -595,10 +744,11 @@ export async function readClassicV3ExploreModel(
   if (toBlock < release.startBlock) {
     return { tokens: [], launcherFeesAccrued: 0n };
   }
+  const persistentStore = createEnvironmentPersistentRpcCacheStore();
   const clients = [
-    clientFor(config, config.rpcUrl, release),
+    clientFor(config, config.rpcUrl, release, persistentStore),
     ...(config.rpcUrlSecondary
-      ? [clientFor(config, config.rpcUrlSecondary, release)]
+      ? [clientFor(config, config.rpcUrlSecondary, release, persistentStore)]
       : []),
   ];
   await mapInBatches(
@@ -639,17 +789,12 @@ export async function readClassicV3ExploreModel(
           ),
       ),
   );
-  const eventSets = await allSettledOrThrow(
-    clients.map((client) =>
-      withPersistentRpcIntegrityScope(() =>
-        readClassicV3Events(
-          client,
-          config,
-          release,
-          toBlock,
-          options.fromBlock ?? release.startBlock,
-        ),
-      )),
+  const agreedEvents = await readClassicV3EventsQuorum(
+    clients,
+    config,
+    release,
+    toBlock,
+    options.fromBlock ?? release.startBlock,
   );
   const launcherFees = await mapInBatches(
     clients,
@@ -662,14 +807,12 @@ export async function readClassicV3ExploreModel(
           blockNumber: toBlock,
         }),
   );
-  const fingerprint = eventFingerprint(eventSets[0]);
   if (
-    eventSets.some((candidate) => eventFingerprint(candidate) !== fingerprint) ||
     launcherFees.some((value) => value !== launcherFees[0])
   ) {
     throw new Error("Independent RPCs disagree on Classic V3 state");
   }
-  const { launches, volumes } = eventSets[0];
+  const { launches, volumes } = agreedEvents;
   assertUniqueLaunches(launches, release);
   const timestamps = new Map<string, bigint>();
   await mapInBatches(

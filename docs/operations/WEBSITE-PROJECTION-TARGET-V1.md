@@ -27,20 +27,26 @@ remain separate.
 
 ## Persistence
 
-Create the fixed runtime role first, without superuser, role/database creation,
-replication, or `BYPASSRLS`, then apply these migrations with a database owner
+Use the dedicated fail-closed operator in
+`docs/operations/WEBSITE-PROJECTION-DATABASE-OPERATOR-V1.md`. It creates the
+fixed runtime role without superuser, role/database creation, replication,
+inheritance, or `BYPASSRLS`, then applies these migrations with a database owner
 before starting the runtime, in this exact order:
 
 1. `ops/website-projection-target/migrations/0001_projection_records_v1.sql`
 2. `ops/website-projection-target/migrations/0002_custom_launch_wallet_profile_v2.sql`
 3. `ops/website-projection-target/migrations/0003_registry_custom_public_read_v1.sql`
+4. `ops/website-projection-target/migrations/0004_approval_v3_artifacts_v1.sql`
+5. `ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql`
 
 `0001` creates the private schema, immutable projection and credential-use
 tables, policies and initial indexes. `0002` then upgrades finalized Custom
 Launch records to bind the launching-wallet identity and the complete
 post-launch-authority inventory hash, and replaces the GitHub-derived Custom
 profile index with the wallet-derived profile index. `0003` adds the separate
-Registry-current-state materialization. Together they provide:
+Registry-current-state materialization. `0004` adds approval-v3 artifact
+commitments. `0005` adds the Generic V2 launch, reconciliation, and
+reconciliation-attempt materializations. Together they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
@@ -75,7 +81,10 @@ GRANT SELECT, INSERT
      programmable_website_projection_v1.credential_uses
   TO programmable_website_projection_runtime;
 GRANT SELECT, INSERT
-  ON programmable_website_projection_v1.registry_custom_launch_records
+  ON programmable_website_projection_v1.registry_custom_launch_records,
+     programmable_website_projection_v1.generic_launch_materializations_v2,
+     programmable_website_projection_v1.generic_launch_reconciliations_v2,
+     programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2
   TO programmable_website_projection_runtime;
 GRANT UPDATE (
   lifecycle_generation, lifecycle_state, lifecycle_binding_hash,
@@ -83,6 +92,16 @@ GRANT UPDATE (
   record_binding_hash, launch_security_binding_hash,
   launching_wallet_namespace, launching_wallet_value, updated_at
 ) ON programmable_website_projection_v1.registry_custom_launch_records
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (
+  outcome, observation_common_head, observation_common_head_hash, observed_at
+) ON programmable_website_projection_v1.generic_launch_reconciliations_v2
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (attempted_at)
+  ON programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2
+  TO programmable_website_projection_runtime;
+GRANT EXECUTE ON FUNCTION
+  programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
   TO programmable_website_projection_runtime;
 ```
 
