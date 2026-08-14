@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const PRODUCTION_VERIFY_PROOF_SCHEMA_VERSION =
-  "programmable.production-verify-proof.v3";
+  "programmable.production-verify-proof.v4";
 export const PRODUCTION_VERIFY_PROOF_MAX_AGE_MS = 6 * 60 * 60 * 1_000;
 export const PRODUCTION_REPOSITORY = "0xprogrammable/programmable";
 export const PRODUCTION_REPOSITORY_ID = 1_314_365_508;
@@ -19,6 +19,8 @@ export const VERIFY_WORKFLOW_NAME = "Verify";
 export const VERIFY_SCOPE_JOB_NAME = "Change scope";
 export const VERIFY_AGGREGATE_JOB_NAME = "Verify aggregate";
 export const VERIFY_PROOF_JOB_NAME = "Bind production Verify proof";
+export const PRODUCTION_VERIFY_CHANGE_MODE = "change";
+export const PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE = "custom-v2-release";
 
 export const PRODUCTION_VERIFY_SCOPE_KEYS = Object.freeze([
   "contracts",
@@ -67,9 +69,13 @@ export function buildProductionVerifyProofV1(input) {
   requirePattern(input.workflowFileSha256, SHA256, "workflow SHA-256");
   requirePositiveInteger(input.runId, "run ID");
   requirePositiveInteger(input.runAttempt, "run attempt");
-  requireExact(input.eventName, "push", "workflow event");
+  const verificationMode = validateVerificationMode(
+    input.verificationMode,
+    input.eventName,
+  );
 
   const scope = validateProductionVerifyScope(input.scopeResults);
+  validateVerificationModeScope(verificationMode, scope);
   const checks = REQUIRED_PRODUCTION_VERIFY_CHECKS.map((check) => {
     const required = check.scopeKey === null ? true : scope[check.scopeKey];
     const expectedResult = required ? "success" : "skipped";
@@ -112,7 +118,8 @@ export function buildProductionVerifyProofV1(input) {
     run: Object.freeze({
       id: input.runId,
       attempt: input.runAttempt,
-      event: "push",
+      event: input.eventName,
+      verificationMode,
     }),
     checks: Object.freeze(checks),
   });
@@ -125,6 +132,8 @@ export function encodeProductionVerifyProofV1(proof) {
     workflowFileSha256: proof?.workflow?.fileSha256,
     runId: proof?.run?.id,
     runAttempt: proof?.run?.attempt,
+    eventName: proof?.run?.event,
+    verificationMode: proof?.run?.verificationMode,
   });
   return Buffer.from(`${JSON.stringify(proof, null, 2)}\n`, "utf8");
 }
@@ -200,12 +209,26 @@ export function validateProductionVerifyProofV1(proof, expected) {
     expected.workflowFileSha256,
     "proof workflow SHA-256",
   );
-  assertExactKeys(proof.run, ["id", "attempt", "event"], "proof run");
+  assertExactKeys(
+    proof.run,
+    ["id", "attempt", "event", "verificationMode"],
+    "proof run",
+  );
   requirePositiveInteger(proof.run.id, "proof run ID");
   requirePositiveInteger(proof.run.attempt, "proof run attempt");
   requireExact(proof.run.id, expected.runId, "proof run ID");
   requireExact(proof.run.attempt, expected.runAttempt, "proof run attempt");
-  requireExact(proof.run.event, "push", "proof run event");
+  const verificationMode = validateVerificationMode(
+    proof.run.verificationMode,
+    proof.run.event,
+  );
+  requireExact(proof.run.event, expected.eventName, "proof run event");
+  requireExact(
+    verificationMode,
+    expected.verificationMode,
+    "proof verification mode",
+  );
+  validateVerificationModeScope(verificationMode, scope);
   if (
     !Array.isArray(proof.checks)
     || proof.checks.length !== REQUIRED_PRODUCTION_VERIFY_CHECKS.length
@@ -243,6 +266,7 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
   requirePattern(input.commitSha, COMMIT, "expected commit");
   requirePattern(input.treeSha, COMMIT, "expected tree");
   requirePattern(input.workflowFileSha256, SHA256, "workflow SHA-256");
+  const eventName = verificationEventForMode(input.verificationMode);
   requireExact(input.githubApiUrl, EXPECTED_GITHUB_API_URL, "GitHub API origin");
   if (typeof input.githubToken !== "string" || input.githubToken.length < 1) {
     throw new Error("GitHub Actions read token is unavailable.");
@@ -270,7 +294,7 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
     ),
     fetchGitHubJson(
       `${EXPECTED_GITHUB_API_URL}/repos/${encodedRepository}/actions/workflows/verify.yml/runs`
-        + `?branch=production&event=push&head_sha=${input.commitSha}&per_page=100`,
+        + `?branch=production&event=${eventName}&head_sha=${input.commitSha}&per_page=100`,
       input.githubToken,
       fetchImpl,
     ),
@@ -282,6 +306,7 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
     workflowId,
     commitSha: input.commitSha,
     treeSha: input.treeSha,
+    eventName,
   });
 
   const [jobs, artifacts] = await Promise.all([
@@ -316,6 +341,8 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
     artifactId: artifact.id,
     artifactName: artifact.name,
     artifactDigest: artifact.digest,
+    eventName,
+    verificationMode: input.verificationMode,
   });
 }
 
@@ -367,7 +394,7 @@ function selectLatestExactVerifyRun(response, expected) {
     || run.workflow_id !== expected.workflowId
     || run.name !== VERIFY_WORKFLOW_NAME
     || run.path !== VERIFY_WORKFLOW_PATH
-    || run.event !== "push"
+    || run.event !== expected.eventName
     || run.status !== "completed"
     || run.conclusion !== "success"
     || run.head_branch !== "production"
@@ -539,13 +566,14 @@ async function runCli() {
   const argumentsByName = parseArguments(rawArguments);
   const allowedArguments = {
     create: ["repository-root", "output"],
-    resolve: ["repository-root", "github-output"],
+    resolve: ["repository-root", "verification-mode", "github-output"],
     verify: [
       "repository-root",
       "proof",
       "run-id",
       "run-attempt",
       "artifact-digest",
+      "verification-mode",
       "github-output",
     ],
   }[command];
@@ -558,7 +586,8 @@ async function runCli() {
 
   if (command === "create") {
     const output = requiredArgument(argumentsByName, "output");
-    requireExact(process.env.GITHUB_EVENT_NAME, "push", "Actions event");
+    const verificationMode = process.env.PRODUCTION_VERIFY_MODE;
+    validateVerificationMode(verificationMode, process.env.GITHUB_EVENT_NAME);
     requireExact(
       process.env.GITHUB_WORKFLOW_REF,
       `${PRODUCTION_REPOSITORY}/${VERIFY_WORKFLOW_PATH}@${PRODUCTION_REF}`,
@@ -584,6 +613,7 @@ async function runCli() {
         "Actions run attempt",
       ),
       eventName: process.env.GITHUB_EVENT_NAME,
+      verificationMode,
       scopeResults: Object.fromEntries(
         PRODUCTION_VERIFY_SCOPE_KEYS.map((key) => [
           key,
@@ -606,6 +636,11 @@ async function runCli() {
 
   if (command === "resolve") {
     const githubOutput = requiredArgument(argumentsByName, "github-output");
+    const verificationMode = requiredArgument(
+      argumentsByName,
+      "verification-mode",
+    );
+    const eventName = verificationEventForMode(verificationMode);
     const resolution = await resolveProductionVerifyProofFromGitHubV1({
       repository: process.env.GITHUB_REPOSITORY,
       repositoryId: parsePositiveInteger(
@@ -615,6 +650,7 @@ async function runCli() {
       commitSha: context.commitSha,
       treeSha: context.treeSha,
       workflowFileSha256: context.workflowFileSha256,
+      verificationMode,
       githubApiUrl: process.env.GITHUB_API_URL,
       githubToken: process.env.GITHUB_TOKEN,
       nowMs: Date.now(),
@@ -630,6 +666,8 @@ async function runCli() {
       artifact_id: resolution.artifactId,
       artifact_name: resolution.artifactName,
       artifact_digest: resolution.artifactDigest,
+      verify_event: eventName,
+      verification_mode: verificationMode,
     });
     return;
   }
@@ -647,6 +685,11 @@ async function runCli() {
     );
     const artifactDigest = requiredArgument(argumentsByName, "artifact-digest");
     requirePattern(artifactDigest, SHA256, "resolved artifact digest");
+    const verificationMode = requiredArgument(
+      argumentsByName,
+      "verification-mode",
+    );
+    const eventName = verificationEventForMode(verificationMode);
     const proofBytes = readFileSync(proofPath);
     const proof = parseProductionVerifyProofV1(proofBytes, {
       commitSha: context.commitSha,
@@ -654,6 +697,8 @@ async function runCli() {
       workflowFileSha256: context.workflowFileSha256,
       runId,
       runAttempt,
+      eventName,
+      verificationMode,
     });
     appendGitHubOutput(githubOutput, {
       verified_sha: context.commitSha,
@@ -662,6 +707,8 @@ async function runCli() {
       verify_run_attempt: runAttempt,
       proof_sha256: prefixedSha256(proofBytes),
       artifact_digest: artifactDigest,
+      verify_event: eventName,
+      verification_mode: verificationMode,
       ...Object.fromEntries(
         PRODUCTION_VERIFY_SCOPE_KEYS.map((key) => [
           `verified_${key}`,
@@ -763,6 +810,34 @@ function parseBoolean(value, name) {
   if (value === "true") return true;
   if (value === "false") return false;
   throw new Error(`${name} is invalid.`);
+}
+
+function verificationEventForMode(mode) {
+  if (mode === PRODUCTION_VERIFY_CHANGE_MODE) return "push";
+  if (mode === PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE) {
+    return "workflow_dispatch";
+  }
+  throw new Error("Production verification mode is invalid.");
+}
+
+function validateVerificationMode(mode, eventName) {
+  requireExact(
+    eventName,
+    verificationEventForMode(mode),
+    "verification mode/event",
+  );
+  return mode;
+}
+
+function validateVerificationModeScope(mode, scope) {
+  if (mode !== PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE) return;
+  for (const key of PRODUCTION_VERIFY_SCOPE_KEYS) {
+    requireExact(
+      scope[key],
+      key === "custom_v2",
+      `Custom V2 release ${key} scope`,
+    );
+  }
 }
 
 function validateProductionVerifyScope(value) {

@@ -73,12 +73,23 @@ function markAll(scope) {
   }
 }
 
-export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
+export function classifyVerifyPaths(
+  paths,
+  { forceAll = false, customV2Release = false } = {},
+) {
   const scope = { ...EMPTY_SCOPE };
+  if (typeof customV2Release !== "boolean") {
+    throw new TypeError("Custom V2 release classification must be boolean");
+  }
   if (forceAll) {
     markAll(scope);
     return scope;
   }
+
+  // A manual Generic V2 production release verifies the complete, current
+  // Custom V2 tree, even when the production tip's last diff was unrelated.
+  // This is a distinct verification intent, not a changed-path claim.
+  if (customV2Release) scope.custom_v2 = true;
 
   for (const path of paths) {
     if (!path) continue;
@@ -203,11 +214,18 @@ function printGithubOutputs(scope) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const forceAll = process.argv[2] === "--all";
-  const paths = forceAll
+  const customV2Release = process.argv[2] === "--custom-v2-release";
+  if ((forceAll || customV2Release) && process.argv.length !== 3) {
+    throw new Error("Verify scope mode does not accept a path file");
+  }
+  if (!forceAll && !customV2Release && process.argv.length !== 3) {
+    throw new Error("Exactly one changed-path file is required");
+  }
+  const paths = forceAll || customV2Release
     ? []
     : readFileSync(process.argv[2], "utf8")
         .split("\n")
         .map((path) => path.trim())
         .filter(Boolean);
-  printGithubOutputs(classifyVerifyPaths(paths, { forceAll }));
+  printGithubOutputs(classifyVerifyPaths(paths, { forceAll, customV2Release }));
 }

@@ -79,6 +79,23 @@ test("routes ordinary website changes only to the interface lane", () => {
   });
 });
 
+test("classifies an explicit Custom V2 release against the current full tree", () => {
+  assert.deepEqual(
+    classifyVerifyPaths([], { customV2Release: true }),
+    { ...none, custom_v2: true },
+  );
+  assert.deepEqual(
+    classifyVerifyPaths(["components/token-card.tsx"], {
+      customV2Release: true,
+    }),
+    { ...none, custom_v2: true, interface: true },
+  );
+  assert.throws(
+    () => classifyVerifyPaths([], { customV2Release: "true" }),
+    /must be boolean/u,
+  );
+});
+
 test("routes read-model API changes to interface and operations checks", () => {
   for (const path of [
     "app/api/explore/route.ts",

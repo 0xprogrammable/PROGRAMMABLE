@@ -20,11 +20,23 @@ change. On the first production commit, the trusted base classifier has no
 `custom_v2=true` once.
 
 The production proof schema is
-`programmable.production-verify-proof.v3`. Its exact added check is
+`programmable.production-verify-proof.v4`. Its exact added check is
 `custom-v2` / `Custom V2`, required precisely when the `custom_v2` scope is
 true. `scripts/production-verify-proof.mjs` continues to bind the production
 commit, tree, workflow digest, GitHub run and attempt, complete hosted-runner
 job inventory, immutable artifact, and Sigstore attestation.
+
+An exact Generic V2 production release first dispatches `Verify` on the
+`production` ref with `verification_mode=custom-v2-release`. That mode is
+classified as a current-tree release verification rather than as a changed
+path: it requires the complete Custom V2 lane, emits `scope.custom_v2=true`,
+and binds `run.event=workflow_dispatch` plus
+`run.verificationMode=custom-v2-release` in the v4 proof. The staging workflow
+selects that exact proof whenever any Custom V2 stage input is non-default.
+Ordinary production staging continues to consume the exact path-scoped
+`push` / `change` proof. This keeps unrelated production commits from
+silently downgrading a later Generic V2 release while never representing an
+unexecuted lane as verified.
 
 ## Workflow dispatch matrix
 
