@@ -13,6 +13,7 @@ import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
   readPrimaryRpcExploreEntriesV1: vi.fn(),
+  readBitqueryTokenFdvRankingStrictV1: vi.fn(),
   readBitqueryTokenMarketDataStrictV1: vi.fn(),
   safeBitqueryMarketDataError: vi.fn(() => ({
     name: "BitqueryMarketDataError",
@@ -29,6 +30,8 @@ vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
 }));
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
+  readBitqueryTokenFdvRankingStrictV1:
+    mocks.readBitqueryTokenFdvRankingStrictV1,
   readBitqueryTokenMarketDataStrictV1:
     mocks.readBitqueryTokenMarketDataStrictV1,
   safeBitqueryMarketDataError: mocks.safeBitqueryMarketDataError,
@@ -156,6 +159,10 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
       async (identities: readonly MarketDataIdentityV1[]) =>
         marketData(identities),
     );
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockImplementation(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        marketData(identities),
+    );
   });
 
   it("serves dRPC launch identity with current Bitquery FDV", async () => {
@@ -191,11 +198,12 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
       /quicknode|alchemy|stateview|chainlink|subgraph|snapshot/u,
     );
     expect(mocks.readPrimaryRpcExploreEntriesV1).toHaveBeenCalledOnce();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledOnce();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledWith(
+    expect(mocks.readBitqueryTokenFdvRankingStrictV1).toHaveBeenCalledOnce();
+    expect(mocks.readBitqueryTokenFdvRankingStrictV1).toHaveBeenCalledWith(
       expect.any(Array),
-      expect.objectContaining({ includeStats: false }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
   });
 
   it("sorts the lowest-FDV alias directly from Bitquery", async () => {
@@ -218,6 +226,11 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     expect((body.tokens as ExploreEntry[]).map((entry) => entry.id)).toEqual(
       [12, 11, 10].map((index) => entries[index - 1]!.id),
     );
+    expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledOnce();
+    expect(
+      mocks.readBitqueryTokenMarketDataStrictV1.mock.calls[0]?.[0],
+    ).toHaveLength(3);
+    expect(mocks.readBitqueryTokenFdvRankingStrictV1).not.toHaveBeenCalled();
   });
 
   it("applies search, social filtering, and direct pagination", async () => {
@@ -225,6 +238,9 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     const focusedBody = await json(focused);
     expect(focusedBody).toMatchObject({ total: 1, totalPages: 1 });
     expect((focusedBody.tokens as ExploreEntry[])[0]?.id).toBe(entries[6]!.id);
+    expect(
+      mocks.readBitqueryTokenMarketDataStrictV1.mock.calls[0]?.[0],
+    ).toHaveLength(1);
 
     const socialPage = await GET(
       request("socials=yes&sort=oldest&page=2&limit=2"),
@@ -235,6 +251,9 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
       entries[5]!.id,
       entries[7]!.id,
     ]);
+    expect(
+      mocks.readBitqueryTokenMarketDataStrictV1.mock.calls[1]?.[0],
+    ).toHaveLength(2);
   });
 
   it.each([
@@ -267,7 +286,7 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
   });
 
   it("returns 503 directly when the strict Bitquery market read fails", async () => {
-    mocks.readBitqueryTokenMarketDataStrictV1.mockRejectedValueOnce(
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockRejectedValueOnce(
       new Error("market unavailable"),
     );
 
@@ -280,10 +299,15 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     });
   });
 
-  it("returns 503 when Bitquery omits a required dRPC launch market", async () => {
-    mocks.readBitqueryTokenMarketDataStrictV1.mockResolvedValueOnce(new Map());
+  it("keeps a missing ranked market unavailable without misranking it", async () => {
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockResolvedValueOnce(new Map());
     const response = await GET(request("sort=market-cap"));
-    expect(response.status).toBe(503);
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ total: 12, sort: "market-cap" });
+    expect((body.tokens as ExploreEntry[]).every(
+      (entry) => entry.valuation?.status === "unavailable",
+    )).toBe(true);
     expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
     expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
   });
