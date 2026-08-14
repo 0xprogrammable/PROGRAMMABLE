@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +12,7 @@ import type {
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
-  readBitqueryExploreEntriesV1: vi.fn(),
+  readPrimaryRpcExploreEntriesV1: vi.fn(),
   readBitqueryTokenMarketDataStrictV1: vi.fn(),
   safeBitqueryMarketDataError: vi.fn(() => ({
     name: "BitqueryMarketDataError",
@@ -18,8 +20,12 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("../lib/market-data/bitquery-launches.server", () => ({
-  readBitqueryExploreEntriesV1: mocks.readBitqueryExploreEntriesV1,
+vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
+  readPrimaryRpcExploreEntriesV1: mocks.readPrimaryRpcExploreEntriesV1,
+  safePrimaryRpcLaunchCatalogError: vi.fn(() => ({
+    name: "PrimaryRpcLaunchCatalogError",
+    category: "transport",
+  })),
 }));
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
@@ -134,14 +140,14 @@ async function json(response: Response) {
   return await response.json() as Record<string, unknown>;
 }
 
-describe("Explore API strict Bitquery-only contract", () => {
+describe("Explore API strict dRPC identity and Bitquery market contract", () => {
   const entries = Array.from({ length: 12 }, (_, index) => token(index + 1));
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    mocks.readBitqueryExploreEntriesV1.mockResolvedValue({
-      source: "bitquery",
+    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
+      source: "drpc",
       entries,
       generatedAt: NOW,
       asOfBlock: "25740000",
@@ -152,7 +158,7 @@ describe("Explore API strict Bitquery-only contract", () => {
     );
   });
 
-  it("serves launches and current FDV from Bitquery only", async () => {
+  it("serves dRPC launch identity with current Bitquery FDV", async () => {
     const response = await GET(request("sort=highest-market-cap&page=1&limit=5"));
     const body = await json(response);
 
@@ -177,14 +183,14 @@ describe("Explore API strict Bitquery-only contract", () => {
         valuation: expect.objectContaining({ source: "bitquery" }),
       }),
     ]));
-    expect(response.headers.get("x-programmable-launch-source")).toBe("bitquery");
-    expect(response.headers.get("x-programmable-read-source")).toBe("bitquery");
+    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
+    expect(response.headers.get("x-programmable-read-source")).toBe("drpc+bitquery");
     expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
     expect(response.headers.get("x-programmable-price-source")).toBe("bitquery");
     expect([...response.headers.entries()].join(" ").toLowerCase()).not.toMatch(
-      /rpc|stateview|chainlink|subgraph|snapshot/u,
+      /quicknode|alchemy|stateview|chainlink|subgraph|snapshot/u,
     );
-    expect(mocks.readBitqueryExploreEntriesV1).toHaveBeenCalledOnce();
+    expect(mocks.readPrimaryRpcExploreEntriesV1).toHaveBeenCalledOnce();
     expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledOnce();
   });
 
@@ -238,11 +244,11 @@ describe("Explore API strict Bitquery-only contract", () => {
     const response = await GET(request(query));
     expect(response.status).toBe(400);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(mocks.readBitqueryExploreEntriesV1).not.toHaveBeenCalled();
+    expect(mocks.readPrimaryRpcExploreEntriesV1).not.toHaveBeenCalled();
   });
 
-  it("returns 503 directly when the Bitquery launch catalog fails", async () => {
-    mocks.readBitqueryExploreEntriesV1.mockRejectedValueOnce(
+  it("returns 503 directly when the primary dRPC launch catalog fails", async () => {
+    mocks.readPrimaryRpcExploreEntriesV1.mockRejectedValueOnce(
       new Error("catalog unavailable"),
     );
 
@@ -251,7 +257,7 @@ describe("Explore API strict Bitquery-only contract", () => {
     expect(await json(response)).toEqual({
       error: "Token data is temporarily unavailable",
     });
-    expect(response.headers.get("x-programmable-launch-source")).toBe("bitquery");
+    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
     expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
     expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
   });
@@ -268,5 +274,27 @@ describe("Explore API strict Bitquery-only contract", () => {
     expect(await json(response)).toEqual({
       error: "Token data is temporarily unavailable",
     });
+  });
+
+  it("returns 503 when Bitquery omits a required dRPC launch market", async () => {
+    mocks.readBitqueryTokenMarketDataStrictV1.mockResolvedValueOnce(new Map());
+    const response = await GET(request("sort=market-cap"));
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
+    expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
+  });
+
+  it("contains no historical Bitquery launch discovery or identity fallback", () => {
+    for (const relative of [
+      "../app/api/explore/route.ts",
+      "../app/api/explore/token/route.ts",
+      "../app/api/explore/token/chart/route.ts",
+    ]) {
+      const source = readFileSync(new URL(relative, import.meta.url), "utf8");
+      expect(source).toContain("readPrimaryRpcExploreEntriesV1");
+      expect(source).not.toContain("readBitqueryExploreEntriesV1");
+      expect(source).not.toContain("bitquery-launches.server");
+      expect(source).not.toContain("readProductionCustomExploreDirectoryV1");
+    }
   });
 });

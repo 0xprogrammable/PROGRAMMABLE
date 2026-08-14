@@ -1,25 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
-import { suppressRouterBoundCustomProjectDuplicates } from
-  "../../../../lib/alchemy/router-custom-collision";
 import {
   publicExploreEntryV1,
   withBitqueryMarketData,
   type ValuedExploreEntry,
 } from "../../../../lib/explore-financial-data";
-import { readBitqueryExploreEntriesV1 } from
-  "../../../../lib/market-data/bitquery-launches.server";
-import { readBitqueryTokenMarketDataStrictV1 } from
-  "../../../../lib/market-data/bitquery.server";
+import {
+  readBitqueryTokenMarketDataStrictV1,
+  safeBitqueryMarketDataError,
+} from "../../../../lib/market-data/bitquery.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../lib/market-data/explore-market-identities";
-import { readProductionCustomExploreDirectoryV1 } from
-  "../../../../lib/server/custom-launch/explore-directory-v1";
-import type {
-  CustomProjectExploreEntry,
-  ExploreEntry,
-} from "../../../../lib/tokens";
+import {
+  readPrimaryRpcExploreEntriesV1,
+  safePrimaryRpcLaunchCatalogError,
+} from "../../../../lib/market-data/primary-rpc-launches.server";
+import type { ExploreEntry } from "../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,16 +25,6 @@ const SUCCESS_CACHE_CONTROL = "public, max-age=0, s-maxage=2";
 
 function tokenAddress(entry: ExploreEntry): string | null {
   return entry.tokenAddress?.toLowerCase() ?? null;
-}
-
-async function readOptionalCustomProjects(
-  signal: AbortSignal,
-): Promise<readonly CustomProjectExploreEntry[]> {
-  try {
-    return await readProductionCustomExploreDirectoryV1(signal);
-  } catch {
-    return [];
-  }
 }
 
 function unavailableValuation(
@@ -54,14 +41,13 @@ function unavailableValuation(
 }
 
 function responseHeaders(input: Readonly<{
-  launchSource: "bitquery" | "registry.custom-launched";
   marketAsOf?: string;
   hasBitqueryPrice: boolean;
 }>) {
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
-    "X-Programmable-Launch-Source": input.launchSource,
-    "X-Programmable-Read-Source": "bitquery",
+    "X-Programmable-Launch-Source": "drpc",
+    "X-Programmable-Read-Source": "drpc+bitquery",
     "X-Programmable-Market-Source": "bitquery",
     ...(input.marketAsOf
       ? { "X-Programmable-Market-As-Of": input.marketAsOf }
@@ -94,38 +80,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input).toLowerCase();
-    const [catalog, registryProjects] = await Promise.all([
-      readBitqueryExploreEntriesV1({ signal: request.signal }),
-      readOptionalCustomProjects(request.signal),
-    ]);
-    const canonicalEntries = catalog.entries.filter(
-      (entry) => entry.exploreKind === "token",
-    );
-    const catalogCustomEntries = catalog.entries.filter(
-      (entry): entry is CustomProjectExploreEntry =>
-        entry.exploreKind === "custom-project",
-    );
-    const customEntries = suppressRouterBoundCustomProjectDuplicates(
-      canonicalEntries,
-      [...catalogCustomEntries, ...registryProjects],
-    );
-    const canonicalEntry = canonicalEntries.find(
-      (entry) => tokenAddress(entry) === address,
+    const catalog = await readPrimaryRpcExploreEntriesV1({
+      signal: request.signal,
+    });
+    const entry = catalog.entries.find(
+      (candidate) => candidate.exploreKind === "token" &&
+        tokenAddress(candidate) === address,
     ) ?? null;
-    const customEntry = customEntries.find(
-      (entry) => tokenAddress(entry) === address,
-    ) ?? null;
-
-    if (canonicalEntry && customEntry) {
-      throw new Error("Bitquery and Custom Registry disagree on launch category");
-    }
-
-    const entry = canonicalEntry ?? customEntry;
-    const customEntryComesFromCatalog = customEntry !== null &&
-      catalogCustomEntries.some((candidate) => candidate.id === customEntry.id);
-    const launchSource = canonicalEntry || customEntryComesFromCatalog
-      ? "bitquery" as const
-      : "registry.custom-launched" as const;
 
     if (!entry) {
       return NextResponse.json(
@@ -138,7 +99,6 @@ export async function GET(request: NextRequest) {
         {
           status: 404,
           headers: responseHeaders({
-            launchSource: "bitquery",
             hasBitqueryPrice: false,
           }),
         },
@@ -152,6 +112,9 @@ export async function GET(request: NextRequest) {
     const marketData = entry.tokenAddress
       ? marketByToken.get(entry.tokenAddress.toLowerCase())
       : undefined;
+    if (identities.length > 0 && marketData === undefined) {
+      throw new Error("Bitquery market response is incomplete");
+    }
     const valuedEntry = marketData
       ? withBitqueryMarketData(entry, marketData)
       : unavailableValuation(entry, identities.length > 0);
@@ -176,15 +139,15 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: responseHeaders({
-          launchSource,
           hasBitqueryPrice,
           ...(marketAsOf ? { marketAsOf } : {}),
         }),
       },
     );
   } catch (error) {
-    console.error("Bitquery token detail read failed", {
-      name: error instanceof Error ? error.name : "Error",
+    console.error("Token detail read failed", {
+      launch: safePrimaryRpcLaunchCatalogError(error),
+      market: safeBitqueryMarketDataError(error),
     });
     return NextResponse.json(
       { error: "Token data is temporarily unavailable" },

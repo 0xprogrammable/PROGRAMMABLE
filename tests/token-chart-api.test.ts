@@ -42,10 +42,10 @@ const mocks = vi.hoisted(() => ({
   market: vi.fn(),
 }));
 
-vi.mock("../lib/market-data/bitquery-launches.server", () => ({
-  readBitqueryExploreEntriesV1: mocks.catalog,
-  safeBitqueryLaunchCatalogError: vi.fn(() => ({
-    name: "LaunchCatalogError",
+vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
+  readPrimaryRpcExploreEntriesV1: mocks.catalog,
+  safePrimaryRpcLaunchCatalogError: vi.fn(() => ({
+    name: "PrimaryRpcLaunchCatalogError",
     category: "unexpected",
   })),
 }));
@@ -90,11 +90,11 @@ function readyChart() {
   } as const;
 }
 
-describe("strict Bitquery token chart API", () => {
+describe("dRPC identity and strict Bitquery token chart API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.catalog.mockResolvedValue({
-      source: "bitquery",
+      source: "drpc",
       generatedAt: "2026-08-14T00:00:00.000Z",
       asOfBlock: "25740002",
       asOfBlockHash: `0x${"44".repeat(32)}`,
@@ -103,11 +103,13 @@ describe("strict Bitquery token chart API", () => {
     mocks.chart.mockResolvedValue(readyChart());
   });
 
-  it("reads identity and history directly from Bitquery with no cache fallback", async () => {
+  it("reads identity from dRPC and history directly from Bitquery", async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
+    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
+    expect(response.headers.get("x-programmable-read-source")).toBe("drpc+bitquery");
     expect(mocks.chart).toHaveBeenCalledWith(expect.objectContaining({
       identity,
       range: "1d",
@@ -120,9 +122,9 @@ describe("strict Bitquery token chart API", () => {
     });
   });
 
-  it("returns 404 when the Bitquery catalog has no token", async () => {
+  it("returns 404 when the dRPC catalog has no token", async () => {
     mocks.catalog.mockResolvedValue({
-      source: "bitquery",
+      source: "drpc",
       generatedAt: "2026-08-14T00:00:00.000Z",
       asOfBlock: null,
       asOfBlockHash: null,
@@ -142,6 +144,15 @@ describe("strict Bitquery token chart API", () => {
       source: "bitquery",
       status: "unavailable",
     });
+  });
+
+  it("returns 503 when the primary dRPC identity read fails", async () => {
+    mocks.catalog.mockRejectedValue(new Error("drpc unavailable"));
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
+    expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
+    expect(mocks.chart).not.toHaveBeenCalled();
   });
 
   it.each([
