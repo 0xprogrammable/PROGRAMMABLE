@@ -36,12 +36,11 @@ export async function verifyCustomV2StageCandidateV1(input) {
     exact(input.detailRecordHash, DIGEST, "Generic V2 detail record hash");
   }
   const bypass = secret(input.automationBypassSecret, "Vercel automation bypass");
-  const audience = safeId(input.approvalAudience, "Approval V3 audience");
-  const targetBindingHash = exact(
-    input.approvalTargetBindingHash,
-    DIGEST,
-    "Approval V3 target binding",
-  );
+  const authenticated = authenticatedIngress(input);
+  if (authenticated !== null && input.registryMode !== "live") {
+    throw new Error("authenticated ingress evidence is forbidden in prelaunch mode");
+  }
+  const approvalBinding = approvalV3Binding(input, authenticated);
   const fetchImpl = input.fetchImpl ?? fetch;
   const checks = [];
   const add = (id, detail) => checks.push(Object.freeze({ id, status: "pass", detail }));
@@ -109,17 +108,17 @@ export async function verifyCustomV2StageCandidateV1(input) {
   const approvalPath = `/v2/internal/projections/approval-descriptors/${encodeURIComponent(
     `approval:${UNAUTHORIZED_APPROVAL_ID}`,
   )}`;
-  const approvalHeaders = {
-    "x-programmable-audience": audience,
+  const approvalHeaders = approvalBinding === null ? null : {
+    "x-programmable-audience": approvalBinding.audience,
     "x-programmable-projection-kind": "website.approval-v3",
-    "x-programmable-target-binding": targetBindingHash,
+    "x-programmable-target-binding": approvalBinding.targetBindingHash,
   };
   for (const [method, init] of [
-    ["GET", { headers: approvalHeaders }],
+    ["GET", { headers: approvalHeaders ?? {} }],
     ["PUT", {
       method: "PUT",
       headers: {
-        ...approvalHeaders,
+        ...(approvalHeaders ?? {}),
         "content-type": "application/json; charset=utf-8",
         "idempotency-key": `sha256:${"1".repeat(64)}`,
       },
@@ -127,13 +126,27 @@ export async function verifyCustomV2StageCandidateV1(input) {
     }],
   ]) {
     const result = await requestJson(approvalPath, init);
-    assertStatus(result, 401, `unauthorized Approval V3 ${method}`);
+    const approvalState = approvalHeaders === null
+      ? "unavailable Approval V3"
+      : "unauthorized Approval V3";
+    const expectedStatus = approvalHeaders === null ? 503 : 401;
+    const expectedCode = approvalHeaders === null
+      ? "target_unavailable"
+      : "credential_required";
+    assertStatus(result, expectedStatus, `${approvalState} ${method}`);
     assertObjectFields(result.body, {
       schemaVersion: "programmable.projection-target-error.v1",
-      code: "credential_required",
-    }, `unauthorized Approval V3 ${method}`);
+      code: expectedCode,
+    }, `${approvalState} ${method}`);
   }
-  add("approval-v3-unauthorized", "unauthenticated GET and PUT are both rejected");
+  if (approvalHeaders === null) {
+    add(
+      "approval-v3-unavailable",
+      "unconfigured Approval V3 GET and PUT fail closed",
+    );
+  } else {
+    add("approval-v3-unauthorized", "unauthenticated GET and PUT are both rejected");
+  }
 
   for (const [method, init] of [
     ["GET", {}],
@@ -156,12 +169,8 @@ export async function verifyCustomV2StageCandidateV1(input) {
   }
   add("generic-v2-projector-unauthorized", "projector and reconciliation reject missing credentials");
 
-  const authenticated = authenticatedIngress(input);
   let authenticatedApprovalId = null;
   if (authenticated !== null) {
-    if (input.registryMode !== "live") {
-      throw new Error("authenticated ingress evidence is forbidden in prelaunch mode");
-    }
     authenticatedApprovalId = await deliverAuthenticatedIngress({
       authenticated,
       requestJson,
@@ -413,6 +422,25 @@ function authenticatedIngress(input) {
     throw new Error("authenticated ingress evidence contract is invalid");
   }
   return value;
+}
+
+function approvalV3Binding(input, authenticated) {
+  const closed = input.registryMode === "prelaunch"
+    && input.genericMode === "disabled"
+    && authenticated === null;
+  const audienceAbsent = input.approvalAudience === undefined
+    || input.approvalAudience === "";
+  const targetBindingAbsent = input.approvalTargetBindingHash === undefined
+    || input.approvalTargetBindingHash === "";
+  if (closed && audienceAbsent && targetBindingAbsent) return null;
+  return Object.freeze({
+    audience: safeId(input.approvalAudience, "Approval V3 audience"),
+    targetBindingHash: exact(
+      input.approvalTargetBindingHash,
+      DIGEST,
+      "Approval V3 target binding",
+    ),
+  });
 }
 
 function assertRegistryManifest(value, expectedMode) {

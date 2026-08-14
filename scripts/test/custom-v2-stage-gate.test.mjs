@@ -93,6 +93,8 @@ function fetchMatrix({
   ready = false,
   authenticated = false,
   emptyFeed = false,
+  approvalUnavailable = false,
+  approvalUnexpectedlyAvailable = false,
 } = {}) {
   return async (input, init = {}) => {
     const url = new URL(input);
@@ -122,6 +124,27 @@ function fetchMatrix({
         });
     }
     if (url.pathname.startsWith("/v2/internal/projections/approval-descriptors/")) {
+      if (approvalUnavailable) {
+        assert.equal(init.headers?.["x-programmable-audience"], undefined);
+        assert.equal(init.headers?.["x-programmable-target-binding"], undefined);
+        return json(503, {
+          schemaVersion: "programmable.projection-target-error.v1",
+          code: "target_unavailable",
+        });
+      }
+      if (approvalUnexpectedlyAvailable) {
+        assert.equal(init.headers?.["x-programmable-audience"], undefined);
+        assert.equal(init.headers?.["x-programmable-target-binding"], undefined);
+        return json(401, {
+          schemaVersion: "programmable.projection-target-error.v1",
+          code: "credential_required",
+        });
+      }
+      assert.equal(
+        init.headers?.["x-programmable-audience"],
+        "programmable.website.approval-v3",
+      );
+      assert.equal(init.headers?.["x-programmable-target-binding"], BINDING);
       if (!init.headers?.authorization) {
         return json(401, {
           schemaVersion: "programmable.projection-target-error.v1",
@@ -236,6 +259,18 @@ test("default prelaunch and disabled matrix proves every fail-closed surface", a
   assert.doesNotMatch(JSON.stringify(evidence), /bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/u);
 });
 
+test("closed matrix requires unconfigured Approval V3 to fail closed", async () => {
+  const evidence = await verifyCustomV2StageCandidateV1(baseInput(
+    fetchMatrix({ approvalUnavailable: true }),
+    {
+      approvalAudience: undefined,
+      approvalTargetBindingHash: undefined,
+    },
+  ));
+  assert.ok(evidence.checks.some(({ id }) => id === "approval-v3-unavailable"));
+  assert.ok(!evidence.checks.some(({ id }) => id === "approval-v3-unauthorized"));
+});
+
 test("explicit live and ready matrix proves Registry, DB, signer, feed and detail", async () => {
   const evidence = await verifyCustomV2StageCandidateV1(baseInput(
     fetchMatrix({ live: true, ready: true }),
@@ -311,5 +346,29 @@ test("candidate identity and activation matrix fail closed", async () => {
       genericMode: "ready",
     })),
     /cannot be ready before Registry V2 is live/u,
+  );
+  await assert.rejects(
+    verifyCustomV2StageCandidateV1(baseInput(fetchMatrix(), {
+      approvalAudience: undefined,
+    })),
+    /Approval V3 audience is invalid/u,
+  );
+  await assert.rejects(
+    verifyCustomV2StageCandidateV1(baseInput(fetchMatrix({ live: true }), {
+      registryMode: "live",
+      approvalAudience: undefined,
+      approvalTargetBindingHash: undefined,
+    })),
+    /Approval V3 audience is invalid/u,
+  );
+  await assert.rejects(
+    verifyCustomV2StageCandidateV1(baseInput(
+      fetchMatrix({ approvalUnexpectedlyAvailable: true }),
+      {
+        approvalAudience: undefined,
+        approvalTargetBindingHash: undefined,
+      },
+    )),
+    /returned 401, expected 503/u,
   );
 });
