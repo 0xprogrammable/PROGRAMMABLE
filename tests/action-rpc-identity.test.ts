@@ -80,7 +80,7 @@ describe("single-RPC action identity", () => {
     ).toBe(true);
   });
 
-  it("derives a claim identity from one filtered launcher log and current state", async () => {
+  it("derives the fee creator from the launch event instead of token deployment authority", async () => {
     const getLogs = vi.fn().mockResolvedValue([
       {
         address: launcher,
@@ -107,7 +107,7 @@ describe("single-RPC action identity", () => {
         if (functionName === "poolKey") {
           return Promise.resolve([ZERO, token, 0, 200, hook]);
         }
-        if (functionName === "creator") return Promise.resolve(creator);
+        if (functionName === "creator") return Promise.resolve(launcher);
         throw new Error(`Unexpected function ${functionName}`);
       },
     );
@@ -142,5 +142,13 @@ describe("single-RPC action identity", () => {
         ([call]) => call.blockNumber === 100n,
       ),
     ).toBe(true);
+    expect(readContract).toHaveBeenCalledTimes(3);
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: token,
+        functionName: "creator",
+        blockNumber: 100n,
+      }),
+    );
   });
 });

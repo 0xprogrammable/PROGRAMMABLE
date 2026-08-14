@@ -443,13 +443,14 @@ export async function readCreatorClaimIdentityFromRpc(input: {
   const launch = matches[0];
   const token = getAddress(launch.args.token);
   const hook = getAddress(launch.args.feeHook);
+  const launchCreator = getAddress(launch.args.creator);
   if (!sameHex(hook, input.deployment.feeHook)) {
     throw new ActionRpcIdentityError(
       "identity-mismatch",
       "The pool does not use the canonical creator fee hook",
     );
   }
-  const [launchHash, poolKey, creator] = await Promise.all([
+  const [launchHash, poolKey, tokenCreator] = await Promise.all([
     input.client.readContract({
       address: input.deployment.launcher,
       abi: classicLauncherStateAbi,
@@ -476,10 +477,12 @@ export async function readCreatorClaimIdentityFromRpc(input: {
     token,
     hook,
   );
+  // Launcher-created UERC20s record the launcher as token creator; the fee
+  // recipient is the distinct creator committed by the launch event.
   if (
     !sameHex(launchHash, launch.args.launchHash) ||
     !sameHex(canonicalId, input.poolId) ||
-    !sameHex(creator, launch.args.creator)
+    !sameHex(tokenCreator, input.deployment.launcher)
   ) {
     throw new ActionRpcIdentityError(
       "identity-mismatch",
@@ -490,7 +493,7 @@ export async function readCreatorClaimIdentityFromRpc(input: {
     tokenAddress: token,
     hookAddress: hook,
     poolId: input.poolId,
-    creatorAddress: getAddress(creator),
+    creatorAddress: launchCreator,
     totalSwapFeeBps: launch.args.totalSwapFeeBps,
   };
 }
