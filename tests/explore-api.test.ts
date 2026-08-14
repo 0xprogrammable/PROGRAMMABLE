@@ -11,15 +11,41 @@ import type {
 } from "../lib/market-data/market-data-v1";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
-const mocks = vi.hoisted(() => ({
-  readPrimaryRpcExploreEntriesV1: vi.fn(),
-  readBitqueryTokenFdvRankingStrictV1: vi.fn(),
-  readBitqueryTokenMarketDataStrictV1: vi.fn(),
-  safeBitqueryMarketDataError: vi.fn(() => ({
-    name: "BitqueryMarketDataError",
-    category: "transport",
-  })),
-}));
+const mocks = vi.hoisted(() => {
+  class TestBitqueryMarketDataError extends Error {
+    override name = "BitqueryMarketDataError";
+
+    constructor(
+      readonly category:
+        | "configuration"
+        | "transport"
+        | "response"
+        | "integrity",
+      readonly phase = "unspecified",
+    ) {
+      super("Market data is temporarily unavailable");
+    }
+  }
+  return {
+    BitqueryMarketDataError: TestBitqueryMarketDataError,
+    readPrimaryRpcExploreEntriesV1: vi.fn(),
+    readBitqueryTokenFdvRankingStrictV1: vi.fn(),
+    readBitqueryTokenMarketDataStrictV1: vi.fn(),
+    safeBitqueryMarketDataError: vi.fn((error: unknown) =>
+      error instanceof TestBitqueryMarketDataError
+        ? {
+            name: error.name,
+            category: error.category,
+            phase: error.phase,
+          }
+        : {
+            name: "MarketDataError",
+            category: "unexpected",
+            phase: "unspecified",
+          }
+    ),
+  };
+});
 
 vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
   readPrimaryRpcExploreEntriesV1: mocks.readPrimaryRpcExploreEntriesV1,
@@ -30,6 +56,7 @@ vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
 }));
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
+  BitqueryMarketDataError: mocks.BitqueryMarketDataError,
   readBitqueryTokenFdvRankingStrictV1:
     mocks.readBitqueryTokenFdvRankingStrictV1,
   readBitqueryTokenMarketDataStrictV1:
@@ -194,6 +221,12 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     expect(response.headers.get("x-programmable-read-source")).toBe("drpc+bitquery");
     expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
     expect(response.headers.get("x-programmable-price-source")).toBe("bitquery");
+    expect(response.headers.get("x-programmable-market-read-status")).toBe(
+      "current",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBe(
+      "bitquery",
+    );
     expect([...response.headers.entries()].join(" ").toLowerCase()).not.toMatch(
       /quicknode|alchemy|stateview|chainlink|subgraph|snapshot/u,
     );
@@ -304,15 +337,182 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     });
   });
 
+  it.each(["market-cap", "market-cap-asc"] as const)(
+    "serves verified launches in launch order when %s market transport fails",
+    async (sort) => {
+      mocks.readBitqueryTokenFdvRankingStrictV1.mockRejectedValueOnce(
+        new mocks.BitqueryMarketDataError("transport", "market-core"),
+      );
+
+      const response = await GET(request(`sort=${sort}&page=1&limit=9`));
+      const body = await json(response);
+      const tokens = body.tokens as Array<ExploreEntry & {
+        valuation: { status: string; reason?: string };
+      }>;
+
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({
+        status: "ready",
+        sort,
+        marketRead: {
+          provider: "bitquery",
+          status: "unavailable",
+          category: "transport",
+          phase: "market-core",
+        },
+        ranking: {
+          status: "unavailable",
+          requested: "fdv",
+          applied: "launch-order",
+        },
+        dataQuality: {
+          status: "partial",
+          launchIdentity: { status: "current" },
+          valuation: {
+            status: "unavailable",
+            metric: "fdv",
+            available: 0,
+            unavailable: 9,
+          },
+        },
+      });
+      expect(tokens.map((entry) => entry.id)).toEqual(
+        [12, 11, 10, 9, 8, 7, 6, 5, 4].map(
+          (index) => entries[index - 1]!.id,
+        ),
+      );
+      expect(tokens.every((entry) =>
+        entry.valuation.status === "unavailable" &&
+        entry.valuation.reason === "source-unavailable"
+      )).toBe(true);
+      expect(tokens.every((entry) =>
+        !("fdvUsdWad" in entry) && !("marketData" in entry)
+      )).toBe(true);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("x-programmable-data-quality")).toBe(
+        "partial",
+      );
+      expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
+      expect(response.headers.get("x-programmable-read-source")).toBe("drpc");
+      expect(response.headers.get("x-programmable-market-read-status")).toBe(
+        "transport-unavailable",
+      );
+      expect(response.headers.get("x-programmable-market-provider")).toBe(
+        "bitquery",
+      );
+      expect(response.headers.get("x-programmable-market-source")).toBeNull();
+      expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    },
+  );
+
+  it("serves the Newest identity page when the Bitquery price transport fails", async () => {
+    mocks.readBitqueryTokenMarketDataStrictV1.mockRejectedValueOnce(
+      new mocks.BitqueryMarketDataError("transport", "market-price"),
+    );
+
+    const response = await GET(request("sort=newest&page=1&limit=3"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "ready",
+      sort: "newest",
+      marketRead: {
+        provider: "bitquery",
+        status: "unavailable",
+        category: "transport",
+        phase: "market-price",
+      },
+      dataQuality: {
+        status: "partial",
+        launchIdentity: { status: "current" },
+        valuation: { status: "unavailable", available: 0, unavailable: 3 },
+      },
+    });
+    expect(body).not.toHaveProperty("ranking");
+    expect((body.tokens as ExploreEntry[]).map((entry) => entry.id)).toEqual(
+      [12, 11, 10].map((index) => entries[index - 1]!.id),
+    );
+    expect((body.tokens as ExploreEntry[]).every((entry) =>
+      !("fdvUsdWad" in entry) && !("marketData" in entry)
+    )).toBe(true);
+    expect(response.headers.get("x-programmable-read-source")).toBe("drpc");
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+  });
+
+  it.each([
+    ["configuration", "configuration"],
+    ["response", "market-core"],
+    ["integrity", "market-core"],
+    ["transport", "market-liquidity"],
+    ["transport", "market-stats"],
+  ] as const)(
+    "keeps Bitquery %s/%s failures fail-closed",
+    async (category, phase) => {
+      mocks.readBitqueryTokenFdvRankingStrictV1.mockRejectedValueOnce(
+        new mocks.BitqueryMarketDataError(category, phase),
+      );
+
+      const response = await GET(request("sort=market-cap"));
+      expect(response.status).toBe(503);
+      expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
+      expect(await json(response)).toEqual({
+        error: "Token data is temporarily unavailable",
+      });
+    },
+  );
+
+  it("does not degrade a transport failure without launch identities", async () => {
+    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValueOnce({
+      source: "drpc",
+      entries: [],
+      generatedAt: NOW,
+      asOfBlock: "25740000",
+    });
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockRejectedValueOnce(
+      new mocks.BitqueryMarketDataError("transport", "market-core"),
+    );
+
+    const response = await GET(request("sort=market-cap"));
+    expect(response.status).toBe(503);
+  });
+
+  it("does not degrade a transport failure after the request is aborted", async () => {
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockRejectedValueOnce(
+      new mocks.BitqueryMarketDataError("transport", "market-core"),
+    );
+    const controller = new AbortController();
+    controller.abort();
+    const abortedRequest = new NextRequest(
+      "http://localhost/api/explore?sort=market-cap",
+      { signal: controller.signal },
+    );
+
+    const response = await GET(abortedRequest);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
+  });
+
   it("keeps a missing ranked market unavailable without misranking it", async () => {
-    mocks.readBitqueryTokenFdvRankingStrictV1.mockResolvedValueOnce(new Map());
+    mocks.readBitqueryTokenFdvRankingStrictV1.mockImplementationOnce(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        marketData(identities.slice(0, 1)),
+    );
     const response = await GET(request("sort=market-cap"));
     const body = await json(response);
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ total: 12, sort: "market-cap" });
-    expect((body.tokens as Array<ExploreEntry & {
+    const tokens = body.tokens as Array<ExploreEntry & {
       valuation?: { status?: string };
-    }>).every(
+    }>;
+    expect(tokens.map((entry) => entry.id)).toEqual(
+      [1, 12, 11, 10, 9, 8, 7, 6, 5].map(
+        (index) => entries[index - 1]!.id,
+      ),
+    );
+    expect(tokens[0]?.valuation?.status).toBe("available");
+    expect(tokens.slice(1).every(
       (entry) => entry.valuation?.status === "unavailable",
     )).toBe(true);
     expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");

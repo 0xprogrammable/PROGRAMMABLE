@@ -148,9 +148,10 @@ function marketDataErrorAtPhase(
   error: unknown,
   phase: BitqueryMarketDataPhase,
 ): BitqueryMarketDataError {
-  return error instanceof BitqueryMarketDataError
-    ? new BitqueryMarketDataError(error.category, phase)
-    : new BitqueryMarketDataError("transport", phase);
+  if (error instanceof BitqueryMarketDataError) {
+    return new BitqueryMarketDataError(error.category, phase);
+  }
+  throw error;
 }
 
 export function bitqueryMarketDataConfigured(
@@ -1118,7 +1119,15 @@ async function executeBitqueryGraphql(
       body: JSON.stringify({ query, variables }),
       signal: controller.signal,
     });
-    if (!response.ok) throw new BitqueryMarketDataError("transport");
+    if (!response.ok) {
+      const category = response.status === 401 || response.status === 403
+        ? "configuration" as const
+        : response.status === 408 || response.status === 425 ||
+            response.status === 429 || response.status >= 500
+          ? "transport" as const
+          : "response" as const;
+      throw new BitqueryMarketDataError(category);
+    }
     const declared = Number(response.headers.get("content-length") ?? "0");
     if (
       (Number.isFinite(declared) && declared > MAXIMUM_RESPONSE_BYTES) ||

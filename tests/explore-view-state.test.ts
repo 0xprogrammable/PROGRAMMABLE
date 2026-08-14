@@ -5,6 +5,7 @@ import {
   EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
   createExploreInitialState,
+  exploreDataQualityMessage,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
@@ -155,6 +156,47 @@ const wrongCurrencyMarketPayload = {
     valuation: { ...token.valuation, currency: "eth" },
   })),
 };
+
+const unavailableMarketDataQuality = {
+  schemaVersion: "programmable.explore-data-quality.v1",
+  status: "partial",
+  generatedAt: "2026-08-14T00:00:00.000Z",
+  launchIdentity: {
+    status: "current",
+    canonical: "current",
+    custom: "current",
+    asOfBlock: "25740000",
+    referenceBlock: "25740000",
+    lagBlocks: "0",
+    ageMs: 0,
+  },
+  valuation: {
+    status: "unavailable",
+    metric: "fdv",
+    available: 0,
+    unavailable: 1,
+    stale: 0,
+    unknown: 0,
+    asOfBlock: null,
+    asOfTime: null,
+  },
+} as const;
+
+const transportUnavailableMarketPayload = {
+  ...unvaluedMarketPayload,
+  dataQuality: unavailableMarketDataQuality,
+  marketRead: {
+    provider: "bitquery",
+    status: "unavailable",
+    category: "transport",
+    phase: "market-core",
+  },
+  ranking: {
+    status: "unavailable",
+    requested: "fdv",
+    applied: "launch-order",
+  },
+} as const;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -677,6 +719,55 @@ describe("Explore refresh state", () => {
       expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
     },
   );
+
+  it("returns a marked transport-unavailable page without retrying or caching it", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(JSON.stringify(transportUnavailableMarketPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "transport-unavailable",
+        },
+      }),
+    );
+    const search = new URLSearchParams({
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    await expect(loadExplorePayload(
+      "marked-market-transport-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: {
+        provider: "bitquery",
+        status: "unavailable",
+        category: "transport",
+        phase: "market-core",
+      },
+      ranking: {
+        status: "unavailable",
+        requested: "fdv",
+        applied: "launch-order",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(loadExplorePayload(
+      "marked-market-transport-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: { status: "unavailable" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows calm copy while market data is transport-unavailable", () => {
+    expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBe(
+      "Market data is temporarily unavailable",
+    );
+  });
 
   it("retries the first non-USD FDV and returns the second fail-closed", async () => {
     const secondPayload = { ...wrongCurrencyMarketPayload, total: 2 };

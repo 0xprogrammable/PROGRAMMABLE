@@ -102,6 +102,19 @@ type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
+type ExploreMarketRead = Readonly<{
+  provider: "bitquery";
+  status: "unavailable";
+  category: "transport";
+  phase: "market-core" | "market-price";
+}>;
+
+type ExploreRanking = Readonly<{
+  status: "unavailable";
+  requested: "fdv";
+  applied: "launch-order";
+}>;
+
 type ExplorePayload = {
   status: "ready" | "not-deployed";
   tokens: ValuedExploreEntry[];
@@ -110,6 +123,8 @@ type ExplorePayload = {
   total: number;
   totalPages: number;
   dataQuality?: ExploreDataQuality;
+  marketRead?: ExploreMarketRead;
+  ranking?: ExploreRanking;
 };
 
 type ExploreState =
@@ -715,6 +730,29 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   ) {
     throw new Error("The token registry returned invalid data quality");
   }
+  const marketRead = isRecord(value.marketRead) &&
+      value.marketRead.provider === "bitquery" &&
+      value.marketRead.status === "unavailable" &&
+      value.marketRead.category === "transport" &&
+      (value.marketRead.phase === "market-core" ||
+        value.marketRead.phase === "market-price")
+    ? value.marketRead as ExploreMarketRead
+    : null;
+  if (value.marketRead !== undefined && marketRead === null) {
+    throw new Error("The token registry returned invalid market read data");
+  }
+  const ranking = isRecord(value.ranking) &&
+      value.ranking.status === "unavailable" &&
+      value.ranking.requested === "fdv" &&
+      value.ranking.applied === "launch-order"
+    ? value.ranking as ExploreRanking
+    : null;
+  if (
+    value.ranking !== undefined &&
+    (ranking === null || marketRead === null)
+  ) {
+    throw new Error("The token registry returned invalid ranking data");
+  }
 
   const tokens = value.tokens.map(parseExploreEntry);
   if (tokens.some((token) => token === null)) {
@@ -739,6 +777,15 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   ) {
     throw new Error("The token registry returned invalid pagination data");
   }
+  if (
+    marketRead !== null &&
+    (value.dataQuality === undefined ||
+      value.dataQuality.valuation.status !== "unavailable" ||
+      value.dataQuality.valuation.available !== 0 ||
+      tokens.some((token) => token?.valuation.status !== "unavailable"))
+  ) {
+    throw new Error("The token registry returned inconsistent market read data");
+  }
 
   return {
     status: value.status,
@@ -753,6 +800,8 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     ...(value.dataQuality === undefined
       ? {}
       : { dataQuality: value.dataQuality }),
+    ...(marketRead === null ? {} : { marketRead }),
+    ...(ranking === null ? {} : { ranking }),
   };
 }
 
@@ -932,6 +981,7 @@ function cacheResolvedExplorePayload(
   payload: ExplorePayload,
 ) {
   resolvedExplorePayloads.delete(contentKey);
+  if (payload.marketRead?.status === "unavailable") return;
   resolvedExplorePayloads.set(contentKey, {
     payload,
     updatedAt: Date.now(),
@@ -977,7 +1027,28 @@ async function fetchExplorePayload(
       }
       const payload = parseExplorePayload(body);
       assertExploreResponseContract(payload, contract);
-      if (attempt === 0 && shouldRetryMissingBitqueryFdv(search, payload)) {
+      const marketReadStatus = response.headers.get(
+        "X-Programmable-Market-Read-Status",
+      );
+      if (
+        marketReadStatus === "transport-unavailable" &&
+        payload.marketRead?.status !== "unavailable"
+      ) {
+        throw new Error("The token registry returned inconsistent market read data");
+      }
+      if (
+        marketReadStatus === "current" &&
+        payload.marketRead?.status === "unavailable"
+      ) {
+        throw new Error("The token registry returned inconsistent market read data");
+      }
+      const marketTransportUnavailable =
+        marketReadStatus === "transport-unavailable";
+      if (
+        attempt === 0 &&
+        !marketTransportUnavailable &&
+        shouldRetryMissingBitqueryFdv(search, payload)
+      ) {
         continue;
       }
       return payload;
@@ -1369,6 +1440,9 @@ export function exploreDataQualityMessage(
   }
   if (quality.valuation.status === "stale") {
     return "Prices may be out of date";
+  }
+  if (quality.valuation.status === "unavailable") {
+    return "Market data is temporarily unavailable";
   }
   return null;
 }

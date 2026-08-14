@@ -204,6 +204,50 @@ describe("strict lightweight Bitquery FDV ranking", () => {
     });
   });
 
+  it.each([
+    [401, "configuration"],
+    [403, "configuration"],
+    [408, "transport"],
+    [425, "transport"],
+    [429, "transport"],
+    [500, "transport"],
+    [503, "transport"],
+    [400, "response"],
+    [404, "response"],
+    [422, "response"],
+  ] as const)(
+    "classifies Bitquery HTTP %s as %s",
+    async (status, category) => {
+      await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+        fetchImpl: vi.fn().mockResolvedValue(new Response("provider error", {
+          status,
+        })),
+        token: TOKEN,
+      })).rejects.toMatchObject({ category, phase: "market-core" });
+    },
+  );
+
+  it("does not relabel an unknown internal failure as transport", async () => {
+    const programmingError = new TypeError("unexpected internal failure");
+    const allSettled = vi.spyOn(Promise, "allSettled").mockResolvedValueOnce([
+      { status: "rejected", reason: programmingError },
+      { status: "fulfilled", value: undefined },
+    ] as never);
+    try {
+      await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+        fetchImpl: vi.fn().mockImplementation(async () => json({
+          data: {
+            Trading: { rankingTokens: [] },
+            EVM: { latestLiquidity: [] },
+          },
+        })),
+        token: TOKEN,
+      })).rejects.toBe(programmingError);
+    } finally {
+      allSettled.mockRestore();
+    }
+  });
+
   it("rejects a same-address row bound to another chain id", async () => {
     const fetchImpl = vi.fn(async (
       _url: string | URL | Request,
