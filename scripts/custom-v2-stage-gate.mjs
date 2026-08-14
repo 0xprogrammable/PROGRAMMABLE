@@ -169,6 +169,25 @@ export async function verifyCustomV2StageCandidateV1(input) {
   }
   add("generic-v2-projector-unauthorized", "projector and reconciliation reject missing credentials");
 
+  const signerProbe = await requestJson(
+    "/api/ops/custom-launch/generic-v2-signer-probe",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    },
+  );
+  assertStatus(signerProbe, 503, "disabled Generic V2 signer probe");
+  assertObjectFields(signerProbe.body, {
+    schemaVersion: "programmable.generic-launch-signer-probe-error.v1",
+    status: "error",
+    code: "probe_unavailable",
+  }, "disabled Generic V2 signer probe");
+  add(
+    "generic-v2-signer-probe-disabled",
+    "one-shot signer probe secret is absent and the clean candidate fails closed",
+  );
+
   let authenticatedApprovalId = null;
   if (authenticated !== null) {
     authenticatedApprovalId = await deliverAuthenticatedIngress({

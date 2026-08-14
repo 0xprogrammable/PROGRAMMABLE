@@ -5,4 +5,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 export const runtime = "nodejs";
 
-export const POST = handleProductionGenericLaunchReadStageProbeV1;
+export function POST(request: Request): Promise<Response> {
+  return handleProductionGenericLaunchReadStageProbeV1(request);
+}

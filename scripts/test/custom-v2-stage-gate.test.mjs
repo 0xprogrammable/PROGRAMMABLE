@@ -196,6 +196,13 @@ function fetchMatrix({
           results: [],
         });
     }
+    if (url.pathname === "/api/ops/custom-launch/generic-v2-signer-probe") {
+      return json(503, {
+        schemaVersion: "programmable.generic-launch-signer-probe-error.v1",
+        status: "error",
+        code: "probe_unavailable",
+      });
+    }
     if (url.pathname === "/api/custom-launch/generic/v2/readiness") {
       return ready ? json(200, {
         schemaVersion: "programmable.generic-launch-readiness.v2",
@@ -259,6 +266,9 @@ test("default prelaunch and disabled matrix proves every fail-closed surface", a
     authenticatedIngress: false,
   });
   assert.ok(evidence.checks.some(({ id }) => id === "generic-v2-disabled"));
+  assert.ok(evidence.checks.some(
+    ({ id }) => id === "generic-v2-signer-probe-disabled",
+  ));
   assert.ok(evidence.checks.some(({ id }) => id === "approval-v3-unauthorized"));
   assert.doesNotMatch(JSON.stringify(evidence), /bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/u);
 });

@@ -85,6 +85,66 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   );
 });
 
+test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", () => {
+  for (const input of [
+    "custom_v2_generic_signer_probe_expected_json",
+    "custom_v2_generic_signer_probe_expected_sha256",
+  ]) assert.match(deploy, new RegExp(`${input}:`, "u"));
+  const prepare = stepBlock(deploy, "Prepare one-shot Generic signer probe authority");
+  assert.match(prepare, /randomBytes\(32\)\.toString\("hex"\)/u);
+  assert.match(prepare, /::add-mask::/u);
+  assert.doesNotMatch(prepare, /secret=.*GITHUB_OUTPUT/u);
+  const probeDeploy = stepBlock(
+    deploy,
+    "Deploy one-shot unaliased Generic signer probe candidate",
+  );
+  assert.match(probeDeploy, /vercel deploy --prebuilt --prod --skip-domain/u);
+  assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u);
+  assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON/u);
+  const prove = stepBlock(
+    deploy,
+    "Prove both exact Generic signer Machines from Vercel OIDC",
+  );
+  assert.match(prove, /npm run probe:custom-v2:signer-stage/u);
+  const deletion = stepBlock(
+    deploy,
+    "Delete secret-bearing Generic signer probe deployment",
+  );
+  assert.match(deletion, /always\(\)/u);
+  assert.match(deletion, /DELETE/u);
+  assert.match(deletion, /api\.vercel\.com\/v13\/deployments/u);
+  assert.match(deletion, /404\|410/u);
+  const localCleanup = stepBlock(
+    deploy,
+    "Remove local Generic signer probe credential",
+  );
+  assert.match(localCleanup, /always\(\)/u);
+  assert.match(localCleanup, /unlinkSync\(target\)/u);
+  const clean = stepBlock(
+    deploy,
+    "Prove clean candidate carries no Generic signer probe authority",
+  );
+  assert.match(clean, /response\.status !== 503/u);
+  assert.match(clean, /probe_unavailable/u);
+  const attest = stepBlock(
+    deploy,
+    "Attest canonical Generic signer probe cleanup bundle",
+  );
+  assert.match(attest, /actions\/attest@59d89421af93a897026c735860bf21b6eb4f7b26/u);
+  assert.match(attest, /create-storage-record: false/u);
+  assert.match(
+    deploy,
+    /steps\.attest-generic-signer-probe-bundle\.outputs\.bundle-path/u,
+  );
+  assert.match(deploy, /attestations: write/u);
+  assert.match(deploy, /id-token: write/u);
+  assert.ok(
+    deploy.indexOf("Delete secret-bearing Generic signer probe deployment")
+      < deploy.indexOf("Stage production build without assigning domains"),
+  );
+  assert.doesNotMatch(deploy, /vercel (?:promote|alias)/u);
+});
+
 test("Custom-only changes do not invoke the public data smoke", () => {
   const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
   assert.match(
