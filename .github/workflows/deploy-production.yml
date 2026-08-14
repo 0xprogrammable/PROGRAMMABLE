@@ -693,6 +693,61 @@ jobs:
               Number.isSafeInteger(totalPages) &&
               totalPages === Math.ceil(total / 20);
           }
+          function exactExploreIdentity(token) {
+            if (typeof token?.id !== "string" || token.id.trim().length === 0) {
+              return null;
+            }
+            if (
+              token.exploreKind === "token" &&
+              address.test(String(token.tokenAddress ?? "").toLowerCase())
+            ) {
+              return JSON.stringify([
+                "token",
+                token.id,
+                token.tokenAddress.toLowerCase(),
+              ]);
+            }
+            if (
+              token.exploreKind === "custom-project" &&
+              /^sha256:[0-9a-f]{64}$/u.test(
+                String(token.customProjectId ?? ""),
+              ) &&
+              /^sha256:[0-9a-f]{64}$/u.test(
+                String(token.customLaunchId ?? ""),
+              )
+            ) {
+              return JSON.stringify([
+                "custom-project",
+                token.id,
+                token.customProjectId,
+                token.customLaunchId,
+              ]);
+            }
+            return null;
+          }
+          function exactDegradedLaunchOrder(
+            highest,
+            highestTokens,
+            newest,
+            newestTokens,
+          ) {
+            if (
+              highest.body?.page !== newest.body?.page ||
+              highest.body?.pageSize !== newest.body?.pageSize ||
+              highest.body?.total !== newest.body?.total ||
+              highest.body?.totalPages !== newest.body?.totalPages ||
+              highestTokens.length !== newestTokens.length
+            ) return false;
+            const highestIdentities = highestTokens.map(exactExploreIdentity);
+            const newestIdentities = newestTokens.map(exactExploreIdentity);
+            return highestIdentities.every((identity) => identity !== null) &&
+              newestIdentities.every((identity) => identity !== null) &&
+              new Set(highestIdentities).size === highestIdentities.length &&
+              new Set(newestIdentities).size === newestIdentities.length &&
+              highestIdentities.every(
+                (identity, index) => identity === newestIdentities[index],
+              );
+          }
           function exactUnavailableValuation(token) {
             const valuation = token?.valuation;
             const exactNoMarket = valuation?.reason === "no-market" &&
@@ -887,7 +942,13 @@ jobs:
                 highestTokens,
                 true,
               ) ||
-              !exactTransportUnavailableExplore(newest, newestTokens, false)
+              !exactTransportUnavailableExplore(newest, newestTokens, false) ||
+              !exactDegradedLaunchOrder(
+                highest,
+                highestTokens,
+                newest,
+                newestTokens,
+              )
             ) {
               throw new Error(
                 "Explore transport-unavailable contract is invalid",

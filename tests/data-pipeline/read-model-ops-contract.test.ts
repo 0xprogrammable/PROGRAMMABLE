@@ -1233,6 +1233,31 @@ describe("read-model operations source contract", () => {
       ": true",
     ],
     [
+      "different degraded page totals",
+      "highest.body?.total !== newest.body?.total",
+      "false",
+    ],
+    [
+      "different degraded page token counts",
+      "highestTokens.length !== newestTokens.length",
+      "false",
+    ],
+    [
+      "duplicate degraded Highest identities",
+      "new Set(highestIdentities).size === highestIdentities.length",
+      "true",
+    ],
+    [
+      "reordered degraded Highest identities",
+      "(identity, index) => identity === newestIdentities[index]",
+      "() => true",
+    ],
+    [
+      "no degraded Highest-to-Newest order gate",
+      "!exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
+      "false &&\n              exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
+    ],
+    [
       "a claimed degraded detail verification",
       'detailStatus = "skipped-provider-unavailable"',
       'detailStatus = "verified-current"',

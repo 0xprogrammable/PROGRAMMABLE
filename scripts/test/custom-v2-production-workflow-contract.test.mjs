@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const deploy = readFileSync(".github/workflows/deploy-production.yml", "utf8");
 const verify = readFileSync(".github/workflows/verify.yml", "utf8");
@@ -120,6 +121,14 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   assert.match(smoke, /exactExplorePage\(newest, newestTokens\)/u);
   assert.match(
     smoke,
+    /function exactExploreIdentity\(token\)[\s\S]*function exactDegradedLaunchOrder\([\s\S]*highest\.body\?\.total !== newest\.body\?\.total[\s\S]*highestTokens\.length !== newestTokens\.length[\s\S]*new Set\(highestIdentities\)\.size === highestIdentities\.length[\s\S]*identity === newestIdentities\[index\]/u,
+  );
+  assert.match(
+    smoke,
+    /!exactDegradedLaunchOrder\(\s*highest,\s*highestTokens,\s*newest,\s*newestTokens,\s*\)/u,
+  );
+  assert.match(
+    smoke,
     /\["current", "transport-unavailable"\]\.includes\([\s\S]*newestMarketReadStatus !== highestMarketReadStatus/u,
   );
   assert.match(
@@ -205,4 +214,60 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   ]) {
     assert.equal(deploy.includes(`      - name: ${retired}`), false);
   }
+});
+
+test("degraded Highest must match the exact Newest launch identity order", () => {
+  const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
+  const helperStart = smoke.indexOf("function exactExploreIdentity(token)");
+  const helperEnd = smoke.indexOf(
+    "function exactUnavailableValuation(token)",
+    helperStart,
+  );
+  assert.notEqual(helperStart, -1);
+  assert.notEqual(helperEnd, -1);
+  const helperSource = smoke.slice(helperStart, helperEnd);
+  const exactDegradedLaunchOrder = runInNewContext(
+    `(() => {\n${helperSource}\nreturn exactDegradedLaunchOrder;\n})()`,
+    { address: /^0x[0-9a-f]{40}$/u },
+  );
+  const canonicalAddress = `0x${"1".repeat(40)}`;
+  const canonical = {
+    exploreKind: "token",
+    id: `1:${canonicalAddress}`,
+    tokenAddress: canonicalAddress,
+  };
+  const custom = {
+    exploreKind: "custom-project",
+    id: "custom:reviewer-p1",
+    customProjectId: `sha256:${"2".repeat(64)}`,
+    customLaunchId: `sha256:${"3".repeat(64)}`,
+  };
+  const page = {
+    body: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+  };
+
+  assert.equal(
+    exactDegradedLaunchOrder(page, [canonical, custom], page, [canonical, custom]),
+    true,
+  );
+  assert.equal(
+    exactDegradedLaunchOrder(page, [custom, canonical], page, [canonical, custom]),
+    false,
+    "a reordered degraded Highest page must be rejected",
+  );
+  assert.equal(
+    exactDegradedLaunchOrder(
+      { body: { ...page.body, total: 3, totalPages: 1 } },
+      [canonical, custom],
+      page,
+      [canonical, custom],
+    ),
+    false,
+    "mismatched page totals must be rejected",
+  );
+  assert.equal(
+    exactDegradedLaunchOrder(page, [canonical, canonical], page, [canonical, canonical]),
+    false,
+    "duplicate launch identities must be rejected",
+  );
 });
