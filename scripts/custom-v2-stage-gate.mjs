@@ -201,7 +201,7 @@ export async function verifyCustomV2StageCandidateV1(input) {
     add("generic-v2-projector-delivery", "authenticated Approval V3 artifact was projected");
   }
 
-  if (input.registryMode === "live") {
+  if (input.genericMode === "ready") {
     const reconciliation = await requestJson(
       "/api/ops/custom-launch/generic-v2-projector",
       { headers: { authorization: `Bearer ${secret(input.cronSecret, "reconciliation token")}` } },
@@ -425,9 +425,7 @@ function authenticatedIngress(input) {
 }
 
 function approvalV3Binding(input, authenticated) {
-  const closed = input.registryMode === "prelaunch"
-    && input.genericMode === "disabled"
-    && authenticated === null;
+  const closed = input.genericMode === "disabled" && authenticated === null;
   const audienceAbsent = input.approvalAudience === undefined
     || input.approvalAudience === "";
   const targetBindingAbsent = input.approvalTargetBindingHash === undefined
