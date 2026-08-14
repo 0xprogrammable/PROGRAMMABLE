@@ -1,3 +1,5 @@
+const MAXIMUM_CHUNKS = 16_384;
+
 export async function readBoundedResponseText(response, options) {
   const maximumBytes = options?.maximumBytes;
   const label = options?.label;
@@ -15,8 +17,9 @@ export async function readBoundedResponseText(response, options) {
   }
   const reader = response?.body?.getReader?.();
   if (!reader) throw new Error(`${label} body is unavailable`);
-  const chunks = [];
+  const bytes = Buffer.alloc(maximumBytes);
   let length = 0;
+  let chunkCount = 0;
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -25,15 +28,20 @@ export async function readBoundedResponseText(response, options) {
         await reader.cancel("invalid response body").catch(() => {});
         throw new Error(`${label} body is invalid`);
       }
+      chunkCount += 1;
+      if (chunkCount > MAXIMUM_CHUNKS) {
+        await reader.cancel("response chunk limit exceeded").catch(() => {});
+        throw new Error(`${label} has too many chunks`);
+      }
       length += value.byteLength;
       if (length > maximumBytes) {
         await reader.cancel("response body limit exceeded").catch(() => {});
         throw new Error(`${label} is too large`);
       }
-      chunks.push(value);
+      bytes.set(value, length - value.byteLength);
     }
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks, length).toString("utf8");
+  return bytes.subarray(0, length).toString("utf8");
 }

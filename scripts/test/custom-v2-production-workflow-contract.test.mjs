@@ -214,6 +214,10 @@ test("new stage and cleanup HTTP consumers share the bounded streaming reader", 
   assert.match(boundedReader, /reader\.cancel/u);
   assert.match(boundedReader, /reader\.releaseLock\(\)/u);
   assert.match(boundedReader, /length > maximumBytes/u);
+  assert.match(boundedReader, /Buffer\.alloc\(maximumBytes\)/u);
+  assert.match(boundedReader, /bytes\.set\(value/u);
+  assert.match(boundedReader, /chunkCount > MAXIMUM_CHUNKS/u);
+  assert.doesNotMatch(boundedReader, /chunks\.push|Buffer\.concat/u);
   for (const source of [stageGate, signerProbeGate, reconciler]) {
     assert.match(source, /from "\.\/read-bounded-response\.mjs"/u);
     assert.match(source, /readBoundedResponseText/u);

@@ -20,6 +20,49 @@ test("reads a bounded response and releases its stream lock", async () => {
   assert.equal(body.locked, false);
 });
 
+test("reads many one-byte chunks through one capped destination buffer", async () => {
+  const size = 4_096;
+  let emitted = 0;
+  const body = new ReadableStream({
+    pull(controller) {
+      if (emitted === size) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(Uint8Array.of(97));
+      emitted += 1;
+    },
+  }, { highWaterMark: 1 });
+  const text = await readBoundedResponseText(new Response(body), {
+    maximumBytes: size,
+    label: "test response",
+  });
+  assert.equal(text, "a".repeat(size));
+  assert.equal(emitted, size);
+  assert.equal(body.locked, false);
+});
+
+test("cancels an adversarial one-byte chunk flood at the fixed read cap", async () => {
+  let canceled = false;
+  let emitted = 0;
+  const body = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(Uint8Array.of(97));
+      emitted += 1;
+    },
+    cancel() {
+      canceled = true;
+    },
+  }, { highWaterMark: 1 });
+  await assert.rejects(readBoundedResponseText(new Response(body), {
+    maximumBytes: 65_536,
+    label: "test response",
+  }), /test response has too many chunks/u);
+  assert.equal(emitted, 16_385);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
 test("cancels a declared oversized response before buffering", async () => {
   let canceled = false;
   const body = new ReadableStream({
