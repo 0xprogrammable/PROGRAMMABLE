@@ -381,9 +381,10 @@ test("irreversible apply confirmation binds both plan and target", async (t) => 
   }), /target/u);
 });
 
-function pgliteSql(client) {
+function pgliteSql(client, { beforeStatement } = {}) {
   const sql = {
     unsafe(statement, parameters = []) {
+      beforeStatement?.(statement);
       const normalized = statement.trimStart().toLowerCase();
       const operation = (parameters.length > 0
         || normalized.startsWith("select")
@@ -395,7 +396,7 @@ function pgliteSql(client) {
     },
     async begin(callback) {
       return await client.transaction(async (transaction) =>
-        callback(pgliteSql(transaction)));
+        callback(pgliteSql(transaction, { beforeStatement })));
     },
   };
   return sql;
@@ -436,20 +437,43 @@ async function pgliteOperatorFixture(t) {
 
 test("runtime role bootstrap rolls back with a failed first migration", async (t) => {
   const fixture = await pgliteOperatorFixture(t);
-  await fixture.database.exec("CREATE SCHEMA programmable_website_projection_v1;");
+  let bootstrapObserved = false;
+  let firstMigrationObserved = false;
+  const failingSql = pgliteSql(fixture.database, {
+    beforeStatement(statement) {
+      if (statement.includes("CREATE ROLE programmable_website_projection_runtime")) {
+        bootstrapObserved = true;
+      }
+      if (statement.includes("CREATE SCHEMA programmable_website_projection_migrations")) {
+        firstMigrationObserved = true;
+        throw new Error("injected failure after runtime role bootstrap");
+      }
+    },
+  });
   await assert.rejects(applyWebsiteProjectionMigrations({
-    sql: fixture.sql,
+    sql: failingSql,
     workspace: fixture.workspace,
     plan: fixture.plan,
     expectedProjectRef: PROJECT_REF,
     sessionIdentity: fixture.sessionIdentity,
     runtimePassword: "correct horse battery staple 2026",
-  }));
+  }), /injected failure after runtime role bootstrap/u);
+  assert.equal(bootstrapObserved, true);
+  assert.equal(firstMigrationObserved, true);
   const role = await fixture.database.query(`
     SELECT rolname FROM pg_roles
      WHERE rolname = 'programmable_website_projection_runtime'
   `);
   assert.deepEqual(role.rows, []);
+  const schemas = await fixture.database.query(`
+    SELECT nspname FROM pg_namespace
+     WHERE nspname IN (
+       'programmable_website_projection_v1',
+       'programmable_website_projection_migrations'
+     )
+     ORDER BY nspname
+  `);
+  assert.deepEqual(schemas.rows, []);
 });
 
 test("database operator bootstraps, applies, resumes and detects catalog drift", async (t) => {
