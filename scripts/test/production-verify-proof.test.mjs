@@ -248,6 +248,7 @@ test("proof binds the path scope and distinguishes skipped lanes", () => {
   const input = validProofInput();
   input.scopeResults = {
     contracts: false,
+    custom_v2: false,
     database: false,
     dependencies: false,
     indexer: false,
@@ -256,6 +257,7 @@ test("proof binds the path scope and distinguishes skipped lanes", () => {
   };
   input.checkResults = {
     "secret-scan": "success",
+    "custom-v2": "skipped",
     indexer: "skipped",
     "database-pglite": "skipped",
     interface: "success",
@@ -267,6 +269,7 @@ test("proof binds the path scope and distinguishes skipped lanes", () => {
     Object.fromEntries(proof.checks.map(({ id, required }) => [id, required])),
     {
       "secret-scan": true,
+      "custom-v2": false,
       indexer: false,
       "database-pglite": false,
       interface: true,
@@ -291,6 +294,7 @@ test("path-scoped proof rejects a skipped required lane", () => {
   const input = validProofInput();
   input.scopeResults = {
     contracts: false,
+    custom_v2: false,
     database: false,
     dependencies: false,
     indexer: false,
@@ -298,6 +302,7 @@ test("path-scoped proof rejects a skipped required lane", () => {
     read_model: false,
   };
   input.checkResults.interface = "skipped";
+  input.checkResults["custom-v2"] = "skipped";
   input.checkResults.indexer = "skipped";
   input.checkResults["database-pglite"] = "skipped";
   input.checkResults.contracts = "skipped";

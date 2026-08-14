@@ -23,6 +23,26 @@ on:
         required: false
         default: ""
         type: string
+      custom_v2_registry_live:
+        description: Expect Registry V2 to be live in the staged candidate; this does not change configuration
+        required: true
+        default: false
+        type: boolean
+      custom_v2_generic_public_read_enabled:
+        description: Expect Generic V2 public reads to be ready in the staged candidate; this does not activate them
+        required: true
+        default: false
+        type: boolean
+      custom_v2_detail_record_hash:
+        description: Optional exact public Generic V2 record hash when a ready feed can be empty
+        required: false
+        default: ""
+        type: string
+      custom_v2_authenticated_ingress_evidence_sha256:
+        description: Optional SHA-256 binding for protected short-lived Approval V3 PUT and GET evidence
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -53,6 +73,7 @@ jobs:
       proof_sha256: ${{ steps.verify-proof.outputs.proof_sha256 }}
       artifact_digest: ${{ steps.verify-proof.outputs.artifact_digest }}
       verified_contracts: ${{ steps.verify-proof.outputs.verified_contracts }}
+      verified_custom_v2: ${{ steps.verify-proof.outputs.verified_custom_v2 }}
       verified_database: ${{ steps.verify-proof.outputs.verified_database }}
       verified_dependencies: ${{ steps.verify-proof.outputs.verified_dependencies }}
       verified_indexer: ${{ steps.verify-proof.outputs.verified_indexer }}
@@ -142,6 +163,7 @@ jobs:
             echo "- Proof completed: \`$PROOF_COMPLETED_AT\`"
             echo "- Proof SHA-256: \`$PROOF_SHA256\`"
             echo "- Immutable artifact digest: \`$ARTIFACT_DIGEST\`"
+            echo "- Custom V2 lane required: \`${{ steps.verify-proof.outputs.verified_custom_v2 }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -388,6 +410,75 @@ jobs:
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
 
+      - name: Reject Custom V2 matrix outside a verified Custom V2 change
+        if: >-
+          needs.release-gate.outputs.verified_custom_v2 != 'true' &&
+          (inputs.custom_v2_registry_live ||
+          inputs.custom_v2_generic_public_read_enabled ||
+          inputs.custom_v2_detail_record_hash != '' ||
+          inputs.custom_v2_authenticated_ingress_evidence_sha256 != '')
+        run: |
+          echo "Custom V2 stage inputs require the exact Custom V2 production Verify lane" >&2
+          exit 1
+
+      - name: Gate exact unaliased Custom V2 staged candidate
+        id: custom-v2-stage
+        if: needs.release-gate.outputs.verified_custom_v2 == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PROGRAMMABLE_CUSTOM_V2_STAGE_AUTHENTICATED_EVIDENCE_V1_JSON: ${{ secrets.PROGRAMMABLE_CUSTOM_V2_STAGE_AUTHENTICATED_EVIDENCE_V1_JSON }}
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          EXPECTED_GIT_HEAD: ${{ github.sha }}
+          REGISTRY_LIVE: ${{ inputs.custom_v2_registry_live }}
+          GENERIC_PUBLIC_READ_ENABLED: ${{ inputs.custom_v2_generic_public_read_enabled }}
+          DETAIL_RECORD_HASH: ${{ inputs.custom_v2_detail_record_hash }}
+          AUTHENTICATED_INGRESS_EVIDENCE_SHA256: ${{ inputs.custom_v2_authenticated_ingress_evidence_sha256 }}
+        run: |
+          set -euo pipefail
+          registry_mode=prelaunch
+          generic_mode=disabled
+          if [ "$REGISTRY_LIVE" = true ]; then registry_mode=live; fi
+          if [ "$GENERIC_PUBLIC_READ_ENABLED" = true ]; then generic_mode=ready; fi
+          evidence_path="$RUNNER_TEMP/custom-v2-stage-evidence.json"
+          args=(
+            --target-url "$STAGED_TARGET_URL"
+            --deployment-id "$STAGED_DEPLOYMENT_ID"
+            --git-head "$EXPECTED_GIT_HEAD"
+            --registry-mode "$registry_mode"
+            --generic-mode "$generic_mode"
+            --evidence-output "$evidence_path"
+          )
+          if [ -n "$DETAIL_RECORD_HASH" ]; then
+            args+=(--detail-record-hash "$DETAIL_RECORD_HASH")
+          fi
+          if [ -n "$AUTHENTICATED_INGRESS_EVIDENCE_SHA256" ]; then
+            args+=(
+              --authenticated-ingress-evidence-sha256
+              "$AUTHENTICATED_INGRESS_EVIDENCE_SHA256"
+            )
+          fi
+          vercel env run --environment=production --token="$VERCEL_TOKEN" -- \
+            npm run probe:custom-v2:stage -- "${args[@]}"
+          evidence_sha256="$(node --input-type=module -e '
+            import { createHash } from "node:crypto";
+            import { readFileSync } from "node:fs";
+            process.stdout.write(`sha256:${createHash("sha256")
+              .update(readFileSync(process.argv[1])).digest("hex")}`);
+          ' "$evidence_path")"
+          echo "evidence_path=$evidence_path" >> "$GITHUB_OUTPUT"
+          echo "evidence_sha256=$evidence_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve exact Custom V2 staged evidence
+        if: needs.release-gate.outputs.verified_custom_v2 == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-v2-stage-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.custom-v2-stage.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Gate exact staged Custom Launch candidate
         id: custom-launch-canary
         if: steps.custom-launch-policy.outputs.staging_mode == 'enabled'
@@ -493,6 +584,10 @@ jobs:
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
 
       - name: Smoke staged Bitquery public APIs
+        if: >-
+          needs.release-gate.outputs.verified_custom_v2 != 'true' ||
+          needs.release-gate.outputs.verified_interface == 'true' ||
+          needs.release-gate.outputs.verified_read_model == 'true'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -618,6 +713,7 @@ jobs:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
+          CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
         run: |
           {
             echo "## Staged production candidate"
@@ -628,6 +724,10 @@ jobs:
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Website data provider: Bitquery"
+            echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
+            if [ "$CUSTOM_V2_REQUIRED" = true ]; then
+              echo "- Custom V2 evidence: \`${{ steps.custom-v2-stage.outputs.evidence_sha256 }}\`"
+            fi
             echo
             echo "Stage-only: no production promotion was attempted."
             echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."

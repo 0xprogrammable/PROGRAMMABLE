@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const PRODUCTION_VERIFY_PROOF_SCHEMA_VERSION =
-  "programmable.production-verify-proof.v2";
+  "programmable.production-verify-proof.v3";
 export const PRODUCTION_VERIFY_PROOF_MAX_AGE_MS = 6 * 60 * 60 * 1_000;
 export const PRODUCTION_REPOSITORY = "0xprogrammable/programmable";
 export const PRODUCTION_REPOSITORY_ID = 1_314_365_508;
@@ -22,6 +22,7 @@ export const VERIFY_PROOF_JOB_NAME = "Bind production Verify proof";
 
 export const PRODUCTION_VERIFY_SCOPE_KEYS = Object.freeze([
   "contracts",
+  "custom_v2",
   "database",
   "dependencies",
   "indexer",
@@ -31,6 +32,7 @@ export const PRODUCTION_VERIFY_SCOPE_KEYS = Object.freeze([
 
 export const REQUIRED_PRODUCTION_VERIFY_CHECKS = Object.freeze([
   Object.freeze({ id: "secret-scan", name: "Credential leak gate", scopeKey: null }),
+  Object.freeze({ id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2" }),
   Object.freeze({ id: "indexer", name: "Realtime indexer", scopeKey: "indexer" }),
   Object.freeze({ id: "database-pglite", name: "Database (PGlite)", scopeKey: "database" }),
   Object.freeze({ id: "interface", name: "Interface", scopeKey: "interface" }),
