@@ -1040,10 +1040,8 @@ describe("Explore refresh state", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("shows calm copy while market data is transport-unavailable", () => {
-    expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBe(
-      "Market data is temporarily unavailable",
-    );
+  it("does not surface a market availability banner", () => {
+    expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBeNull();
   });
 
   it("retries the first non-USD FDV and returns the second fail-closed", async () => {
