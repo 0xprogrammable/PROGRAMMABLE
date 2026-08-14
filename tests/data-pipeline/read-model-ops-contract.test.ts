@@ -883,6 +883,34 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it.each([
+    [
+      "canonical token detail headers that claim Custom Registry identity",
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Launch-Source": "registry.custom-launched"',
+    ],
+    [
+      "Custom Registry token detail headers that claim canonical identity",
+      '"X-Programmable-Launch-Source": "registry.custom-launched"',
+      '"X-Programmable-Launch-Source": "drpc"',
+    ],
+    [
+      "a canonical dRPC failure that does not return before the Custom Registry path",
+      "return unavailableResponse(canonicalResponseHeaders({",
+      "unavailableResponse(canonicalResponseHeaders({",
+    ],
+  ])("rejects %s", (_label, needle, replacement) => {
+    const path = "app/api/explore/token/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: route.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
   it("rejects a public action route that restores RPC quorum selection", () => {
     const path = "app/api/trade/prepare/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");

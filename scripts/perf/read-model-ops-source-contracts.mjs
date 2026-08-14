@@ -2471,6 +2471,89 @@ export function evaluateReadModelOperationsSourceContracts(
     stockProfilePostStart >= 0
       ? publicStockProfile.slice(0, stockProfilePostStart)
       : publicStockProfile;
+  const tokenCanonicalHeadersStart = publicToken.indexOf(
+    "function canonicalResponseHeaders(",
+  );
+  const tokenCustomHeadersStart = publicToken.indexOf(
+    "function customResponseHeaders(",
+    tokenCanonicalHeadersStart + 1,
+  );
+  const tokenUnavailableResponseStart = publicToken.indexOf(
+    "function unavailableResponse(",
+    tokenCustomHeadersStart + 1,
+  );
+  const tokenCanonicalHeaders =
+    tokenCanonicalHeadersStart >= 0 && tokenCustomHeadersStart >= 0
+      ? publicToken.slice(tokenCanonicalHeadersStart, tokenCustomHeadersStart)
+      : "";
+  const tokenCustomHeaders =
+    tokenCustomHeadersStart >= 0 && tokenUnavailableResponseStart >= 0
+      ? publicToken.slice(tokenCustomHeadersStart, tokenUnavailableResponseStart)
+      : "";
+  const tokenCatalogReadStart = publicToken.indexOf(
+    "catalog = await readPrimaryRpcExploreEntriesV1(",
+  );
+  const tokenCanonicalEntryStart = publicToken.indexOf(
+    "const canonicalEntry = catalog.entries.find(",
+    tokenCatalogReadStart + 1,
+  );
+  const tokenCatalogFailureStart = publicToken.indexOf(
+    "} catch (error) {",
+    tokenCatalogReadStart + 1,
+  );
+  const tokenCatalogFailure =
+    tokenCatalogFailureStart >= 0 && tokenCanonicalEntryStart >= 0
+      ? publicToken.slice(tokenCatalogFailureStart, tokenCanonicalEntryStart)
+      : "";
+  const tokenCustomMissStart = publicToken.indexOf(
+    "if (entry === null) {",
+    tokenCanonicalEntryStart + 1,
+  );
+  const tokenCustomMissEnd = publicToken.indexOf(
+    "if (!entry) {",
+    tokenCustomMissStart + 1,
+  );
+  const tokenCustomMiss =
+    tokenCustomMissStart >= 0 && tokenCustomMissEnd >= 0
+      ? publicToken.slice(tokenCustomMissStart, tokenCustomMissEnd)
+      : "";
+  const tokenCanonicalHeaderContract =
+    includesEverySourceFragment(tokenCanonicalHeaders, [
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Read-Source": input.marketRead ? "drpc+bitquery" : "drpc"',
+      '? { "X-Programmable-Market-Source": "bitquery" }',
+      '? { "X-Programmable-Price-Source": "bitquery" }',
+    ]) && !tokenCanonicalHeaders.includes("registry.custom-launched");
+  const tokenCustomHeaderContract = includesEverySourceFragment(
+    tokenCustomHeaders,
+    [
+      '"X-Programmable-Launch-Source": "registry.custom-launched"',
+      '? "drpc+registry.custom-launched+bitquery"',
+      ': "drpc+registry.custom-launched"',
+      '? { "X-Programmable-Market-Source": "bitquery" }',
+      '? { "X-Programmable-Price-Source": "bitquery" }',
+    ],
+  );
+  const tokenCustomSourceContract =
+    tokenCatalogReadStart >= 0 &&
+    tokenCatalogFailureStart > tokenCatalogReadStart &&
+    tokenCanonicalEntryStart > tokenCatalogFailureStart &&
+    includesEverySourceFragment(tokenCatalogFailure, [
+      "safePrimaryRpcLaunchCatalogError(error)",
+      "return unavailableResponse(canonicalResponseHeaders({",
+    ]) &&
+    !tokenCatalogFailure.includes("readProductionCustomExploreDirectoryV1") &&
+    tokenCustomMissStart > tokenCanonicalEntryStart &&
+    tokenCustomMissEnd > tokenCustomMissStart &&
+    includesEverySourceFragment(tokenCustomMiss, [
+      "await readProductionCustomExploreDirectoryV1(",
+      "return unavailableResponse(customResponseHeaders({",
+      "isCustom = entry !== null",
+    ]) &&
+    publicToken.includes("let isCustom = false") &&
+    publicToken.includes(
+      "headers: (isCustom\n          ? customResponseHeaders\n          : canonicalResponseHeaders)(",
+    );
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
   const publicRuntimeRoutes = [
     ...publicIdentityAndMarketRoutes,
@@ -2526,12 +2609,15 @@ export function evaluateReadModelOperationsSourceContracts(
       publicExplore.includes("readBitqueryTokenMarketDataStrictV1") &&
       publicToken.includes("readBitqueryTokenMarketDataStrictV1") &&
       publicChart.includes("readBitqueryMarketChartStrictV1") &&
-      publicIdentityAndMarketRoutes.every(
+      [publicExplore, publicChart].every(
         (route) =>
           route.includes('"X-Programmable-Launch-Source": "drpc"') &&
           route.includes('"X-Programmable-Read-Source": "drpc+bitquery"') &&
           route.includes('"X-Programmable-Market-Source": "bitquery"'),
       ) &&
+      tokenCanonicalHeaderContract &&
+      tokenCustomHeaderContract &&
+      tokenCustomSourceContract &&
       publicCreatorProfile.includes("readCreatorProfile") &&
       publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
       publicCreatorProfile.includes('"X-Programmable-Launch-Source": "drpc"') &&
@@ -2580,7 +2666,7 @@ export function evaluateReadModelOperationsSourceContracts(
             route,
           ),
       ),
-    "public identity and action state use one commitment-bound dRPC primary while market, FDV and charts use strict Bitquery reads",
+    "public identity and action state use one commitment-bound dRPC primary, Custom Registry detail is a separate post-miss source, and market, FDV and charts use strict Bitquery reads",
   );
   check(
     "ops-protected-public-provider-stage-smoke",
