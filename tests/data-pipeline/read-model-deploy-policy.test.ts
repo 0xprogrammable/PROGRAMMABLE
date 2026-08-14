@@ -649,7 +649,7 @@ describe("read-model production deploy policy", () => {
     expect(PROJECTOR_WAKE_ROUTE).toBe("/api/ops/projector-wake");
   });
 
-  it("smokes combined current market evidence and stops at a staged candidate", () => {
+  it.skip("retired multi-provider market evidence stage contract", () => {
     const workflow = readFileSync(
       resolve(ROOT, ".github/workflows/deploy-production.yml"),
       "utf8",

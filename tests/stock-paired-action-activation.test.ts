@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
   readLegacy: vi.fn(),
+  readBitquery: vi.fn(),
   createPublicClient: vi.fn(),
   verifyClaimReceipt: vi.fn(),
   resolveTradeDeployment: vi.fn(),
@@ -223,6 +224,10 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({
+  readBitqueryExploreModelV1: mocks.readBitquery,
+}));
+
 vi.mock("../lib/stock-paired", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/stock-paired")>();
   return {
@@ -326,6 +331,7 @@ describe("Stock-Paired action identity activation", () => {
     );
     mocks.lookup.mockResolvedValue(actionReward);
     mocks.readLegacy.mockResolvedValue(legacyModel);
+    mocks.readBitquery.mockResolvedValue(legacyModel);
     mocks.verifyClaimReceipt.mockResolvedValue(
       BigInt(actionReward.claimableRaw),
     );
@@ -373,7 +379,7 @@ describe("Stock-Paired action identity activation", () => {
   });
 
   it.each([true, false])(
-    "uses the same multi-provider state checks and simulations with indexed lookup %s",
+    "uses one configured RPC with Bitquery identity when indexed lookup is %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
@@ -392,11 +398,10 @@ describe("Stock-Paired action identity activation", () => {
           to: vault,
         },
       });
-      expect(mocks.createPublicClient.mock.calls.length).toBeGreaterThanOrEqual(
-        2,
-      );
-      expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
-      expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).toHaveBeenCalledTimes(1);
+      expect(mocks.lookup).not.toHaveBeenCalled();
+      expect(mocks.readLegacy).not.toHaveBeenCalled();
     },
   );
 
@@ -404,7 +409,7 @@ describe("Stock-Paired action identity activation", () => {
     mocks.indexedEnabled = true;
     mocks.verifyClaimReceipt.mockRejectedValue(
       new StockPairedClaimReceiptError(
-        "The claim receipt is still pending across Ethereum RPCs",
+        "The claim receipt is still pending on Ethereum",
         "pending",
       ),
     );
@@ -415,7 +420,7 @@ describe("Stock-Paired action identity activation", () => {
     await expect(response.json()).resolves.toEqual({
       status: "pending",
       code: "stock-paired-claim-receipt-pending",
-      error: "The claim receipt is still pending across Ethereum RPCs",
+      error: "The claim receipt is still pending on Ethereum",
     });
   });
 
@@ -436,7 +441,7 @@ describe("Stock-Paired action identity activation", () => {
   });
 
   it.each([true, false])(
-    "fails closed on same-provider aliases with indexed lookup %s",
+    "ignores the secondary RPC configuration with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
@@ -447,8 +452,8 @@ describe("Stock-Paired action identity activation", () => {
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());
 
-      expect(response.status).toBe(503);
-      expect(mocks.createPublicClient).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
       expect(serialized).not.toContain("drpc-stock-key");
       expect(serialized).not.toContain("second-stock-secret");
     },

@@ -134,6 +134,43 @@ export async function readBitqueryTokenMarketDataV1(
   return readBitqueryTokenMarketDataUncachedV1(unique, options, now);
 }
 
+/**
+ * Reads Bitquery directly for public surfaces that deliberately have no
+ * provider or cache fallback. Provider, schema and integrity failures reject
+ * the whole read; an otherwise valid market with no trades remains a normal
+ * `waiting-for-first-trade` result.
+ */
+export async function readBitqueryTokenMarketDataStrictV1(
+  identities: readonly MarketDataIdentityV1[],
+  options: BitqueryReaderOptions = {},
+): Promise<ReadonlyMap<string, TokenMarketDataV1>> {
+  const now = options.now ?? new Date();
+  const unique = canonicalMarketIdentities(identities);
+  if (unique.length === 0) return new Map();
+  const token = resolveToken(options.token);
+  if (token === null) throw new BitqueryMarketDataError("configuration");
+  const pools = new Map<string, MarketPoolDataV1>();
+  const batches: MarketDataIdentityV1[][] = [];
+  for (let offset = 0; offset < unique.length; offset += MARKET_BATCH_SIZE) {
+    batches.push(unique.slice(offset, offset + MARKET_BATCH_SIZE));
+  }
+  await mapWithConcurrency(batches, MARKET_BATCH_CONCURRENCY, async (batch) => {
+    const result = await readMarketBatch(batch, {
+      ...options,
+      token,
+      now,
+      strict: true,
+    });
+    for (const value of result) {
+      if (value.status === "unavailable") {
+        throw new BitqueryMarketDataError("integrity");
+      }
+      pools.set(value.identity.poolId, value);
+    }
+  });
+  return groupTokenMarketData(unique, pools, now);
+}
+
 async function readBitqueryTokenMarketDataUncachedV1(
   unique: readonly MarketDataIdentityV1[],
   options: BitqueryReaderOptions,
@@ -300,6 +337,29 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   range: "1h" | "1d" | "1w" | "all";
   historyStart?: string;
 }> & BitqueryReaderOptions): Promise<MarketChartV1> {
+  return readBitqueryMarketChart(input, false);
+}
+
+/**
+ * Reads chart data directly from Bitquery. It never reads or writes the
+ * in-process chart cache and rejects provider, schema and integrity failures.
+ */
+export async function readBitqueryMarketChartStrictV1(input: Readonly<{
+  identity: MarketChartIdentityV1;
+  range: "1h" | "1d" | "1w" | "all";
+  historyStart?: string;
+}> & BitqueryReaderOptions): Promise<MarketChartV1> {
+  return readBitqueryMarketChart(input, true);
+}
+
+async function readBitqueryMarketChart(
+  input: Readonly<{
+    identity: MarketChartIdentityV1;
+    range: "1h" | "1d" | "1w" | "all";
+    historyStart?: string;
+  }> & BitqueryReaderOptions,
+  strict: boolean,
+): Promise<MarketChartV1> {
   const now = input.now ?? new Date();
   const identity = canonicalMarketChartIdentity(input.identity);
   const since = chartRangeStart(input.range, now, input.historyStart);
@@ -311,9 +371,10 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   );
   const token = resolveToken(input.token);
   if (token === null) {
+    if (strict) throw new BitqueryMarketDataError("configuration");
     return cachedChartOrUnavailable(identity, input.range, cacheKey, now);
   }
-  const currentCached = currentCachedChart(cacheKey, now);
+  const currentCached = strict ? null : currentCachedChart(cacheKey, now);
   if (currentCached !== null) return currentCached;
 
   const chartController = new AbortController();
@@ -396,7 +457,9 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
         },
         truncated: false,
       };
-      chartCache.set(cacheKey, { storedAt: now.getTime(), value: waiting });
+      if (!strict) {
+        chartCache.set(cacheKey, { storedAt: now.getTime(), value: waiting });
+      }
       return waiting;
     }
 
@@ -425,9 +488,12 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
     if (!isMarketChartV1(chart)) {
       throw new BitqueryMarketDataError("integrity");
     }
-    chartCache.set(cacheKey, { storedAt: now.getTime(), value: chart });
+    if (!strict) {
+      chartCache.set(cacheKey, { storedAt: now.getTime(), value: chart });
+    }
     return chart;
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return cachedChartOrUnavailable(identity, input.range, cacheKey, now);
   } finally {
     clearTimeout(chartTimeout);
@@ -513,7 +579,11 @@ export function ingestBitqueryMarketStreamPayloadV1(input: Readonly<{
 
 async function readMarketBatch(
   identities: readonly MarketDataIdentityV1[],
-  options: BitqueryReaderOptions & Readonly<{ token: string; now: Date }>,
+  options: BitqueryReaderOptions & Readonly<{
+    token: string;
+    now: Date;
+    strict?: boolean;
+  }>,
 ): Promise<readonly MarketPoolDataV1[]> {
   const coreRequest = marketBatchQuery(identities);
   const liquidityRequest = marketLiquidityQuery(identities);
@@ -523,7 +593,7 @@ async function readMarketBatch(
     coreRequest.variables,
     options,
   );
-  const supplementaryReads = Promise.allSettled([
+  const supplementaryOperations = [
     executeBitqueryGraphql(
       liquidityRequest.query,
       liquidityRequest.variables,
@@ -534,8 +604,21 @@ async function readMarketBatch(
       statsRequest.variables,
       options,
     ),
+  ] as const;
+  const supplementaryReads = Promise.allSettled(supplementaryOperations);
+  const [coreResult, supplementaryResults] = await Promise.allSettled([
+    coreRead,
+    supplementaryReads,
   ]);
-  const response = await coreRead;
+  if (coreResult.status === "rejected") throw coreResult.reason;
+  const response = coreResult.value;
+  const [liquidityResult, statsResult] = supplementaryResults.status ===
+      "fulfilled"
+    ? supplementaryResults.value
+    : [supplementaryResults, supplementaryResults];
+  if (options.strict && response.partial) {
+    throw new BitqueryMarketDataError("response");
+  }
   const evm = record(response.data.EVM);
   const trading = record(response.data.Trading);
   if (evm === null) throw new BitqueryMarketDataError("response");
@@ -554,11 +637,8 @@ async function readMarketBatch(
       ? [{ index, trade }]
       : []
   );
-  const [[priceResult], [liquidityResult, statsResult]] = await Promise.all([
-    Promise.allSettled([
-      readIndexedPriceObservations(priceCandidates, options),
-    ]),
-    supplementaryReads,
+  const [priceResult] = await Promise.allSettled([
+    readIndexedPriceObservations(priceCandidates, options),
   ]);
 
   const indexedPricesByIndex = priceResult.status === "fulfilled"
@@ -566,12 +646,22 @@ async function readMarketBatch(
     : new Map<number, TokenPriceObservation | null>();
   const priceLookupWasPartial = priceResult.status !== "fulfilled" ||
     priceResult.value.partial;
+  if (options.strict && priceLookupWasPartial) {
+    throw new BitqueryMarketDataError("response");
+  }
   const liquidityEvm = liquidityResult.status === "fulfilled"
     ? record(liquidityResult.value.data.EVM)
     : null;
   const statsEvm = statsResult.status === "fulfilled"
     ? record(statsResult.value.data.EVM)
     : null;
+  if (
+    options.strict &&
+    (liquidityEvm === null || statsEvm === null ||
+      liquidityResult.status !== "fulfilled" ||
+      statsResult.status !== "fulfilled" ||
+      liquidityResult.value.partial || statsResult.value.partial)
+  ) throw new BitqueryMarketDataError("response");
 
   const liquidityByPool = indexUniqueRows(
     array(liquidityEvm?.latestLiquidity),
@@ -656,7 +746,10 @@ type IndexedPriceCandidate = Readonly<{
 
 async function readIndexedPriceObservations(
   candidates: readonly IndexedPriceCandidate[],
-  options: BitqueryReaderOptions & Readonly<{ token: string }>,
+  options: BitqueryReaderOptions & Readonly<{
+    token: string;
+    strict?: boolean;
+  }>,
 ): Promise<Readonly<{
   observations: Map<number, TokenPriceObservation | null>;
   partial: boolean;
@@ -694,7 +787,8 @@ async function readIndexedPriceObservations(
             observations.set(candidate.index, observation);
           }
         }
-      } catch {
+      } catch (error) {
+        if (options.strict) throw error;
         partial = true;
       }
     },

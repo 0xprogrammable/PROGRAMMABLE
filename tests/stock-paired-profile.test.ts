@@ -266,7 +266,7 @@ describe("Stock-Paired profile rewards", () => {
       json: async () => ({
         status: "pending",
         code: "stock-paired-claim-receipt-pending",
-        error: "The claim receipt is still pending across Ethereum RPCs",
+        error: "The claim receipt is still pending on Ethereum",
       }),
     }));
 

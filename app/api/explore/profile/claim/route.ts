@@ -12,26 +12,19 @@ import {
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 
-import { readAlchemyExploreModel } from "../../../../../lib/alchemy/explore.server";
 import {
   CreatorClaimInputError,
   CreatorClaimUnavailableError,
   buildPreparedCreatorClaim,
-  getWebsiteReadOnchainDeployment,
+  getOnchainDeployment,
   parseCreatorClaimRequest,
-  readExploreModel,
 } from "../../../../../lib/onchain";
 import { creatorFeeHookReadAbi } from "../../../../../lib/onchain/abis";
+import { readBitqueryExploreModelV1 } from
+  "../../../../../lib/market-data/bitquery-explore-model.server";
 import {
-  ActionLookupError,
-  lookupActionTokenByPoolId,
-  type ActionTokenLookup,
-} from "../../../../../lib/data-pipeline/action-lookup";
-import { indexedLaunchLookupEnabled } from "../../../../../lib/data-pipeline/route-activation.server";
-import { currentMarketOnchainDeployment } from "../../../../../lib/market-data/current-market-rpc.server";
-import {
-  ActionRpcQuorumError,
-  creatorClaimRpcProviders,
+  ActionRpcProviderError,
+  creatorClaimRpcProvider,
 } from "../../../../../lib/server/action-rpc-quorum.server";
 import {
   errorChainIncludesData,
@@ -75,16 +68,8 @@ function canonicalClaimPoolId(
   });
 }
 
-function maximum(left: bigint, right: bigint) {
-  return left > right ? left : right;
-}
-
-function minimum(left: bigint, right: bigint) {
-  return left < right ? left : right;
-}
-
 function claimClient(
-  deployment: ReturnType<typeof getWebsiteReadOnchainDeployment>,
+  deployment: ReturnType<typeof getOnchainDeployment>,
   endpoint: string,
 ) {
   return createPublicClient({
@@ -100,170 +85,20 @@ function claimRpcUnavailable() {
   );
 }
 
-function claimReadDeployment(
-  deployment: Extract<
-    ReturnType<typeof getWebsiteReadOnchainDeployment>,
-    { status: "ready" }
-  >,
-) {
-  if (deployment.chainId !== 1) return deployment;
+async function currentClaimSnapshot(client: PublicClient) {
   try {
-    return currentMarketOnchainDeployment(deployment);
-  } catch {
+    const blockNumber = await client.getBlockNumber();
+    const block = await client.getBlock({ blockNumber });
+    if (!block.hash) throw claimRpcUnavailable();
+    return { blockNumber, blockHash: block.hash as Hex };
+  } catch (error) {
+    if (error instanceof CreatorClaimUnavailableError) throw error;
     throw claimRpcUnavailable();
   }
-}
-
-async function sharedVerifiedBlock(clients: readonly PublicClient[]) {
-  if (clients.length < 2) {
-    throw claimRpcUnavailable();
-  }
-
-  const headResults = await Promise.allSettled(
-    clients.map((client) => client.getBlockNumber()),
-  );
-  const available = headResults.flatMap((result, index) =>
-    result.status === "fulfilled"
-      ? [{ client: clients[index]!, head: result.value }]
-      : [],
-  );
-  if (available.length < 2) {
-    throw claimRpcUnavailable();
-  }
-
-  const descendingHeads = available
-    .map(({ head }) => head)
-    .sort((left, right) => (left > right ? -1 : left < right ? 1 : 0));
-  const candidateBlocks = [...new Set(descendingHeads.slice(1).map(String))]
-    .map((value) => BigInt(value))
-    .sort((left, right) => (left > right ? -1 : left < right ? 1 : 0));
-  let sawBlockDisagreement = false;
-
-  for (const blockNumber of candidateBlocks) {
-    const eligible = available.filter(({ head }) => head >= blockNumber);
-    const blockResults = await Promise.allSettled(
-      eligible.map(async ({ client }) => ({
-        client,
-        block: await client.getBlock({ blockNumber }),
-      })),
-    );
-    const groups = new Map<
-      string,
-      { blockHash: Hex; clients: PublicClient[] }
-    >();
-    for (const result of blockResults) {
-      if (result.status !== "fulfilled" || !result.value.block.hash) continue;
-      const blockHash = result.value.block.hash as Hex;
-      const key = blockHash.toLowerCase();
-      const group = groups.get(key) ?? { blockHash, clients: [] };
-      group.clients.push(result.value.client);
-      groups.set(key, group);
-    }
-    const agreeing = [...groups.values()].sort(
-      (left, right) => right.clients.length - left.clients.length,
-    )[0];
-    if (agreeing && agreeing.clients.length >= 2) {
-      return {
-        blockNumber,
-        blockHash: agreeing.blockHash,
-        clients: agreeing.clients,
-      };
-    }
-    if (groups.size > 1) sawBlockDisagreement = true;
-  }
-
-  if (sawBlockDisagreement) {
-    throw new CreatorClaimUnavailableError(
-      "rpc-disagreement",
-      "Independent Ethereum RPCs disagree on the current claim state",
-    );
-  }
-  throw claimRpcUnavailable();
-}
-
-async function sharedCurrentClaimState(input: {
-  clients: readonly PublicClient[];
-  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>;
-  token: CreatorClaimTokenIdentity;
-  blockNumber: bigint;
-}) {
-  const results = await Promise.allSettled(
-    input.clients.map(async (client) => ({
-      client,
-      state: await readCurrentClaimState({
-        client,
-        deployment: input.deployment,
-        token: input.token,
-        blockNumber: input.blockNumber,
-      }),
-    })),
-  );
-  const groups = new Map<
-    string,
-    { claimable: bigint; clients: PublicClient[] }
-  >();
-  for (const result of results) {
-    if (result.status !== "fulfilled") continue;
-    const key = result.value.state.claimable.toString();
-    const group = groups.get(key) ?? {
-      claimable: result.value.state.claimable,
-      clients: [],
-    };
-    group.clients.push(result.value.client);
-    groups.set(key, group);
-  }
-  const agreeing = [...groups.values()].sort(
-    (left, right) => right.clients.length - left.clients.length,
-  )[0];
-  if (agreeing && agreeing.clients.length >= 2) return agreeing;
-  if (groups.size > 1) {
-    throw new CreatorClaimUnavailableError(
-      "rpc-disagreement",
-      "Independent Ethereum RPCs disagree on the current claim balance",
-    );
-  }
-
-  const deterministicFailures = new Map<
-    string,
-    CreatorClaimUnavailableError[]
-  >();
-  for (const result of results) {
-    if (
-      result.status !== "rejected" ||
-      !(result.reason instanceof CreatorClaimUnavailableError) ||
-      (result.reason.code !== "runtime-mismatch" &&
-        result.reason.code !== "identity-mismatch")
-    ) {
-      continue;
-    }
-    const failures = deterministicFailures.get(result.reason.code) ?? [];
-    failures.push(result.reason);
-    deterministicFailures.set(result.reason.code, failures);
-  }
-  const verifiedFailure = [...deterministicFailures.values()].find(
-    (failures) => failures.length >= 2,
-  )?.[0];
-  if (verifiedFailure) throw verifiedFailure;
-  throw claimRpcUnavailable();
-}
-
-function revertFingerprint(error: unknown) {
-  const summary = safeServerErrorSummary(error);
-  const selector = summary.chain.find((entry) => entry.dataSelector)
-    ?.dataSelector;
-  if (selector) return `data:${selector}`;
-  const reverted = summary.chain.find(
-    (entry) =>
-      entry.name === "ContractFunctionRevertedError" ||
-      entry.message?.toLowerCase().includes("execution reverted"),
-  );
-  return reverted
-    ? `revert:${reverted.message?.toLowerCase() ?? reverted.name}`
-    : null;
 }
 
 async function simulateCreatorClaim(input: {
-  clients: readonly PublicClient[];
+  client: PublicClient;
   transaction: {
     account: Address;
     to: Address;
@@ -272,47 +107,27 @@ async function simulateCreatorClaim(input: {
   };
   blockNumber: bigint;
 }) {
-  const results = await Promise.allSettled(
-    input.clients.map(async (client) => {
-      await client.call({ ...input.transaction, blockNumber: input.blockNumber });
-      const [estimatedGas, gasPrice, accountBalance] = await Promise.all([
-        client.estimateGas({
-          ...input.transaction,
-          blockNumber: input.blockNumber,
-        }),
-        client.getGasPrice(),
-        client.getBalance({
-          address: input.transaction.account,
-          blockNumber: input.blockNumber,
-        }),
-      ]);
-      return { estimatedGas, gasPrice, accountBalance };
+  await input.client.call({
+    ...input.transaction,
+    blockNumber: input.blockNumber,
+  });
+  const [estimatedGas, gasPrice, accountBalance] = await Promise.all([
+    input.client.estimateGas({
+      ...input.transaction,
+      blockNumber: input.blockNumber,
     }),
-  );
-  const simulations = results.flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  );
-  if (simulations.length >= 2) return simulations;
-
-  const failures = new Map<string, unknown[]>();
-  for (const result of results) {
-    if (result.status !== "rejected") continue;
-    const fingerprint = revertFingerprint(result.reason);
-    if (!fingerprint) continue;
-    const matching = failures.get(fingerprint) ?? [];
-    matching.push(result.reason);
-    failures.set(fingerprint, matching);
-  }
-  const verifiedFailure = [...failures.values()].find(
-    (matching) => matching.length >= 2,
-  )?.[0];
-  if (verifiedFailure) throw verifiedFailure;
-  throw claimRpcUnavailable();
+    input.client.getGasPrice(),
+    input.client.getBalance({
+      address: input.transaction.account,
+      blockNumber: input.blockNumber,
+    }),
+  ]);
+  return { estimatedGas, gasPrice, accountBalance };
 }
 
 async function readCurrentClaimState(input: {
   client: PublicClient;
-  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>;
+  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>;
   token: CreatorClaimTokenIdentity;
   blockNumber: bigint;
 }) {
@@ -373,47 +188,15 @@ async function readCurrentClaimState(input: {
   return { claimable };
 }
 
-function indexedClaimToken(
-  token: ActionTokenLookup,
-  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>,
-): CreatorClaimTokenIdentity {
-  if (
-    token.releaseVersion !== "classic-v2" ||
-    token.modelVersion !== "classic" ||
-    token.hookAddress.toLowerCase() !== deployment.feeHook.toLowerCase() ||
-    canonicalClaimPoolId(token.tokenAddress, token.hookAddress).toLowerCase() !==
-      token.poolId.toLowerCase() ||
-    token.creatorFeeBps === null
-  ) {
-    throw new CreatorClaimUnavailableError(
-      "noncanonical-hook",
-      "The pool does not use the canonical creator fee hook",
-    );
-  }
-  return {
-    tokenAddress: token.tokenAddress,
-    hookAddress: token.hookAddress,
-    poolId: token.poolId,
-    creatorAddress: token.creatorAddress,
-    totalSwapFeeBps: token.totalSwapFeeBps,
-    buySwapFeeBps: token.buySwapFeeBps,
-    sellSwapFeeBps: token.sellSwapFeeBps,
-    creatorFeeBps: token.creatorFeeBps,
-    launcherFeeBps: token.launcherFeeBps,
-    transferTaxBps: token.transferTaxBps,
-    lpFeePips: token.lpFeePips,
-  };
-}
-
-async function legacyClaimToken(
+async function bitqueryClaimToken(
   request: ReturnType<typeof parseCreatorClaimRequest>,
-  deployment: Extract<ReturnType<typeof getWebsiteReadOnchainDeployment>, { status: "ready" }>,
+  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>,
+  signal?: AbortSignal,
 ): Promise<CreatorClaimTokenIdentity> {
-  let model: Awaited<ReturnType<typeof readExploreModel>>;
+  let model: Awaited<ReturnType<typeof readBitqueryExploreModelV1>>;
   try {
-    model = deployment.chainId === 1
-      ? await readAlchemyExploreModel()
-      : await readExploreModel(deployment);
+    if (deployment.chainId !== 1) throw new Error("unsupported chain");
+    model = await readBitqueryExploreModelV1({ signal });
   } catch {
     throw new CreatorClaimUnavailableError(
       "registry-unavailable",
@@ -555,7 +338,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const claimRequest = parseCreatorClaimRequest(input);
-    const deployment = getWebsiteReadOnchainDeployment();
+    const deployment = getOnchainDeployment();
     if (deployment.status !== "ready") {
       throw new CreatorClaimUnavailableError(
         "not-deployed",
@@ -568,15 +351,11 @@ export async function POST(request: NextRequest) {
         `Switch to chain ${deployment.chainId}`,
       );
     }
-    const token = indexedLaunchLookupEnabled()
-      ? indexedClaimToken(
-          await lookupActionTokenByPoolId({
-            chainId: deployment.chainId,
-            poolId: claimRequest.poolId,
-          }),
-          deployment,
-        )
-      : await legacyClaimToken(claimRequest, deployment);
+    const token = await bitqueryClaimToken(
+      claimRequest,
+      deployment,
+      request.signal,
+    );
     if (
       token.creatorAddress.toLowerCase() !== claimRequest.account.toLowerCase()
     ) {
@@ -586,14 +365,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const claimDeployment = claimReadDeployment(deployment);
-    const clients = creatorClaimRpcProviders(claimDeployment).map((provider) =>
-      claimClient(claimDeployment, provider.endpoint),
-    );
-    const snapshot = await sharedVerifiedBlock(clients);
-    const state = await sharedCurrentClaimState({
-      clients: snapshot.clients,
-      deployment: claimDeployment,
+    const provider = creatorClaimRpcProvider(deployment);
+    const client = claimClient(deployment, provider.endpoint);
+    const snapshot = await currentClaimSnapshot(client);
+    const state = await readCurrentClaimState({
+      client,
+      deployment,
       token,
       blockNumber: snapshot.blockNumber,
     });
@@ -616,8 +393,8 @@ export async function POST(request: NextRequest) {
       data,
       value,
     };
-    const simulations = await simulateCreatorClaim({
-      clients: state.clients,
+    const simulation = await simulateCreatorClaim({
+      client,
       transaction,
       blockNumber: snapshot.blockNumber,
     });
@@ -644,33 +421,12 @@ export async function POST(request: NextRequest) {
       },
     };
     const response = buildPreparedCreatorClaim(intent, {
-      estimatedGas: maximum(
-        simulations[0]!.estimatedGas,
-        simulations[1]!.estimatedGas,
-      ),
-      gasPriceWei: maximum(
-        simulations[0]!.gasPrice,
-        simulations[1]!.gasPrice,
-      ),
-      accountBalanceWei: minimum(
-        simulations[0]!.accountBalance,
-        simulations[1]!.accountBalance,
-      ),
+      estimatedGas: simulation.estimatedGas,
+      gasPriceWei: simulation.gasPrice,
+      accountBalanceWei: simulation.accountBalance,
     });
     return json(response);
   } catch (error) {
-    if (error instanceof ActionLookupError) {
-      return json(
-        blockedResponse(
-          "blocked",
-          error.code === "not-found" ? "unknown-pool" : "registry-unavailable",
-          error.code === "not-found"
-            ? "This pool is not a verified Programmable launch"
-            : "The verified Programmable launch registry is unavailable",
-        ),
-        409,
-      );
-    }
     if (error instanceof CreatorClaimInputError) {
       return json(
         blockedResponse("blocked", error.code, error.message),
@@ -679,15 +435,14 @@ export async function POST(request: NextRequest) {
     }
     if (
       error instanceof CreatorClaimUnavailableError ||
-      error instanceof ActionRpcQuorumError
+      error instanceof ActionRpcProviderError
     ) {
       const unavailable =
-        error instanceof ActionRpcQuorumError
+        error instanceof ActionRpcProviderError
           ? claimRpcUnavailable()
           : error;
       const retryable =
         unavailable.code === "rpc-unavailable" ||
-        unavailable.code === "rpc-disagreement" ||
         unavailable.code === "registry-unavailable";
       return json(
         blockedResponse(
@@ -718,7 +473,7 @@ export async function POST(request: NextRequest) {
       blockedResponse(
         "blocked",
         "simulation-failed",
-        "The creator claim could not be simulated from the current onchain state",
+        "The configured RPC could not prepare the creator claim from the current onchain state",
       ),
       502,
     );

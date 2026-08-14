@@ -10,6 +10,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
+  readProfile: vi.fn(),
   createPublicClient: vi.fn(),
   runtimeHashes: {
     "0x01":
@@ -161,6 +162,8 @@ function identityClient() {
   };
 }
 
+void identityClient;
+
 function actionClient(index: number) {
   return {
     getCode: vi.fn(({ address }: { address: Address }) =>
@@ -191,6 +194,15 @@ vi.mock("../lib/data-pipeline/action-lookup", async (importOriginal) => {
     lookupActionReward: mocks.lookup,
   };
 });
+
+vi.mock("../lib/market-data/bitquery-profile.server", () => ({
+  readBitqueryClassicV3Profile: mocks.readProfile,
+  readBitqueryClassicV3Launch: vi.fn(),
+  safeBitqueryProfileError: vi.fn(() => ({
+    name: "BitqueryProfileError",
+    category: "unexpected",
+  })),
+}));
 
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
@@ -243,21 +255,23 @@ describe("Classic V3 action identity activation", () => {
       rpcProviderCommitment("endpoint", quickNodeRpcUrl),
     );
     mocks.lookup.mockResolvedValue(actionReward);
-    const legacyClient = identityClient();
-    const actionClients = [actionClient(0), actionClient(1)];
-    let actionIndex = 0;
-    let legacyReturned = false;
-    mocks.createPublicClient.mockImplementation(() => {
-      if (!mocks.indexedEnabled && !legacyReturned) {
-        legacyReturned = true;
-        return legacyClient;
-      }
-      return actionClients[actionIndex++];
+    mocks.readProfile.mockResolvedValue({
+      status: "ready",
+      account,
+      chainId: 1,
+      rewards: [{
+        vaultAddress: vault,
+        poolId,
+        buySwapFeeBps: 100,
+        sellSwapFeeBps: 100,
+        platformFeeBps: 10,
+      }],
     });
+    mocks.createPublicClient.mockImplementation(() => actionClient(0));
   });
 
   it.each([true, false])(
-    "uses the same two-provider state checks and simulations with indexed lookup %s",
+    "uses Bitquery identity and one RPC when indexed lookup is %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
@@ -276,15 +290,14 @@ describe("Classic V3 action identity activation", () => {
           to: vault,
         },
       });
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(
-        indexedEnabled ? 2 : 3,
-      );
-      expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+      expect(mocks.readProfile).toHaveBeenCalledTimes(1);
+      expect(mocks.lookup).not.toHaveBeenCalled();
     },
   );
 
   it.each([true, false])(
-    "fails closed when the action RPCs are same-provider aliases with indexed lookup %s",
+    "ignores the secondary RPC when indexed lookup is %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
@@ -295,8 +308,8 @@ describe("Classic V3 action identity activation", () => {
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());
 
-      expect(response.status).toBe(502);
-      expect(mocks.createPublicClient).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
       expect(serialized).not.toContain("drpc-classic-key");
       expect(serialized).not.toContain("second-classic-secret");
     },

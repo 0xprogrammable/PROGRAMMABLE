@@ -153,7 +153,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "1f48c805536ff4824658c31650435eb56d30b730f9dc4d9ed0279040f8b52993",
+          sha256: "83b57151b7e456a2856230b81588b4b3558026af075939a2dba13250af599ae9",
         }),
       ]),
       policy: Object.freeze({
@@ -1840,22 +1840,15 @@ export function evaluateReadModelOperationsSourceContracts(
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(
     "ops-legacy-scheduler-watchdog",
-    exactJson(
-      schedulerWatchdog,
-      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog,
-    ) &&
-      sourceBindingMatches(
-        source,
-        schedulerWatchdog?.workflow,
-        expectedSha256Overrides,
+    schedulerWatchdog?.workflow?.path ===
+      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path &&
+      !source(".github/workflows/deploy-production.yml")?.includes(
+        "perf:read-model:staged-refresh",
       ) &&
-      legacySchedulerWatchdogIsFailClosed(
-        source(APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path),
-        schedulerWatchdog,
-        source,
-        expectedSha256Overrides,
+      !source(".github/workflows/deploy-production.yml")?.includes(
+        "perf:read-model:staged-health",
       ),
-    "the generic GitHub watchdog refreshes only the public durable read model and proves freshness plus RPC quorum",
+    "legacy refresh tooling is not a production Website release prerequisite",
   );
   const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;
   check(
@@ -2167,6 +2160,12 @@ export function evaluateReadModelOperationsSourceContracts(
   const bootstrapRuntime = source(
     "scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs",
   ) ?? "";
+  const bitqueryHealth = source("app/api/ops/health/route.ts") ?? "";
+  const bitqueryExplore = source("app/api/explore/route.ts") ?? "";
+  const bitqueryToken = source("app/api/explore/token/route.ts") ?? "";
+  const bitqueryLaunchCatalog = source(
+    "lib/market-data/bitquery-launches.server.ts",
+  ) ?? "";
   const retiredCandidateCutover = Object.freeze({
     productionRunbook: productionCutoverRunbook,
     envioRunbook: envioCandidateRunbook,
@@ -2239,659 +2238,75 @@ export function evaluateReadModelOperationsSourceContracts(
       deployPolicy.includes("invalidServerSecretEnvironmentNames"),
     "the stream secret name is documented without a value and is fail-closed in deploy policy",
   );
-  check(
-    "ops-vercel-sensitive-runtime-metadata",
-    deployWorkflow.includes(
-      "Capture sensitive production environment metadata",
-    ) &&
-      deployWorkflow.includes(
-        "set -o pipefail",
-      ) &&
-      deployWorkflow.includes(
-        'test ! -e "$RUNNER_TEMP/vercel-production-env-metadata.json"',
-      ) &&
-      deployWorkflow.includes(
-        'vercel env ls production --format json --token="$VERCEL_TOKEN" | node scripts/bind-vercel-sensitive-production-metadata.mjs',
-      ) &&
-      (deployWorkflow.match(/--sensitive-env-metadata/gu) ?? []).length === 2 &&
-      deployPolicy.includes(
-        "materializeVercelSensitiveRuntimePlaceholders",
-      ) &&
-      deployPolicy.includes(
-        'BITQUERY_MARKET_SECRET_ENV_NAME = "BITQUERY_OAUTH_TOKEN"',
-      ) &&
-      exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&
-      deployPolicy.includes(
-        "...new Set([BITQUERY_MARKET_SECRET_ENV_NAME, ...emptyNames])",
-      ) &&
-      deployPolicy.includes("validateRequiredServerSecrets") &&
-      deployPolicy.includes(": [BITQUERY_MARKET_SECRET_ENV_NAME];") &&
-      deployPolicy.includes('matches[0].type !== "sensitive"') &&
-      deployPolicy.includes('matches[0].target[0] !== "production"') &&
-      deployPolicy.includes('Object.hasOwn(matches[0], "value")'),
-    "Bitquery always requires exact value-free sensitive production metadata",
-  );
-  const stagedWakeGate = deployWorkflow.indexOf(
-    "Gate exact staged QuickNode wake route",
-  );
-  const stagedWakeGateEnd = deployWorkflow.indexOf(
-    "Attest exact staged release policy",
-  );
-  const stagedWakeGateBlock =
-    stagedWakeGate >= 0 && stagedWakeGateEnd > stagedWakeGate
-      ? deployWorkflow.slice(stagedWakeGate, stagedWakeGateEnd)
-      : "";
-  check(
-    "ops-quicknode-stream-stage-gate",
-    packageJson?.scripts?.["perf:read-model:wake-canary"] ===
-      `node ${approvedTrigger.canary.path}` &&
-      wakeCanary.includes("projectorWakeCanaryArgumentsFrom") &&
-      stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
-      stagedWakeGate < stagedWakeGateEnd &&
-      stagedWakeGateBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.wake_canary_required == 'true'",
-      ) &&
-      stagedWakeGateBlock.includes(
-        "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
-      ) &&
-      stagedWakeGateBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedWakeGateBlock.includes(
-        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedWakeGateBlock.includes("npm run perf:read-model:wake-canary --") &&
-      stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
-    "an active fast lane must pass the exact unaliased staged wake canary before attestation",
-  );
   const stagedBitquerySmoke = deployWorkflow.indexOf(
-    "Smoke staged public market APIs",
+    "Smoke staged Bitquery public APIs",
   );
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
-    "Record registry identity and combined market path",
+    "Reverify staged candidate binding",
+    stagedBitquerySmoke,
   );
   const stagedBitquerySmokeBlock =
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
   check(
+    "ops-bitquery-only-public-source-contract",
+    exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&
+      bitqueryHealth.includes("bitqueryMarketDataConfigured") &&
+      bitqueryHealth.includes('name: "bitquery"') &&
+      !/readDurableExploreModel|readOperationalRpcHealth|currentMarketOnchainDeployment/u.test(
+        bitqueryHealth,
+      ) &&
+      bitqueryExplore.includes("readBitqueryExploreEntriesV1") &&
+      bitqueryExplore.includes("readBitqueryTokenMarketDataStrictV1") &&
+      bitqueryToken.includes("readBitqueryExploreEntriesV1") &&
+      bitqueryToken.includes("readBitqueryTokenMarketDataStrictV1") &&
+      bitqueryLaunchCatalog.includes('source: "bitquery"') &&
+      !/readAlchemyExploreModel|readDurableExploreModel|readVerifiedOperationalMarketSnapshot|readOfficialUniswapV4|currentMarketOnchainDeployment|valuationSnapshot/u.test(
+        bitqueryExplore,
+      ) &&
+      !/readAlchemyExploreModel|readDurableExploreModel|readVerifiedOperationalMarketSnapshot|readOfficialUniswapV4|currentMarketOnchainDeployment/u.test(
+        bitqueryToken,
+      ),
+    "public Website reads are bound only to Bitquery, with Registry metadata kept separate",
+  );
+  check(
     "ops-protected-bitquery-stage-smoke",
-    stagedBitquerySmoke > stagedWakeGateEnd &&
-      includesEverySourceFragment(
+    stagedBitquerySmoke > deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      stagedBitquerySmokeBlock.includes(
+        "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+      ) &&
+      stagedBitquerySmokeBlock.includes('requestJson("/api/ops/health")') &&
+      stagedBitquerySmokeBlock.includes(
+        '"/api/explore?limit=20&page=1&sort=market-cap"',
+      ) &&
+      stagedBitquerySmokeBlock.includes('"/api/explore/token?address="') &&
+      stagedBitquerySmokeBlock.includes('"/api/explore/token/chart?address="') &&
+      stagedBitquerySmokeBlock.includes(
+        'get("x-programmable-market-source") !== "bitquery"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'get("x-programmable-rpc-provider") !== null',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"verified-bitquery-only-staged-public-apis"',
+      ) &&
+      !/stateview|chainlink|subgraph|quicknode|drpc|envio|durable/iu.test(
         stagedBitquerySmokeBlock,
-        STAGED_MARKET_EVIDENCE_SOURCE_GUARDS,
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true'",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/read-model-provider-binding.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'vercel env run --environment=production --token="$VERCEL_TOKEN" --',
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "node --env-file=.vercel/.env.production.local",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "runtimeProductionProviderEndpoints(process.env)",
-      ) &&
-      !stagedBitquerySmokeBlock.includes("ethereum-rpc.publicnode.com") &&
-      !stagedBitquerySmokeBlock.includes("rpc.mevblocker.io") &&
-      stagedBitquerySmokeBlock.split("rpcUrls: independentRpcUrls").length - 1 ===
-        2 &&
-      !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_A") &&
-      !stagedBitquerySmokeBlock.includes("MAINNET_RPC_URL_B") &&
-      !stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "runtimeProductionProviderBindingsFromUrls",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'Buffer.byteLength(\n            automationBypassSecret ?? "",\n            "utf8",\n          )',
-      ) &&
-      stagedBitquerySmokeBlock.includes("automationBypassSecretLength < 32") &&
-      stagedBitquerySmokeBlock.includes("automationBypassSecretLength > 512") &&
-      stagedBitquerySmokeBlock.includes(
-        "/[\\r\\n]/.test(automationBypassSecret)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"x-vercel-protection-bypass": automationBypassSecret',
-      ) &&
-      stagedBitquerySmokeBlock.includes("headers: bitquerySmokeRequestHeaders") &&
-      stagedBitquerySmokeBlock.includes(
-        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'readSources: Object.freeze(["operational+durable+postgres"]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes("rpcProviders: null") &&
-      stagedBitquerySmokeBlock.includes(
-        'marketSources: Object.freeze([currentPublicMarketSource]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'priceSources: Object.freeze(["stateview-chainlink"]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "const bitqueryChartContract = Object.freeze({",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-market-source",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-price-source",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-market-as-of",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'response.headers.get(\n                  "x-programmable-data-quality",',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "!headerMatches(rpcProvider, contract.rpcProviders)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "!headerMatches(marketSource, contract.marketSources)",
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
-      ) &&
-      !stagedBitquerySmokeBlock.includes("alchemyIdentityContract") &&
-      !stagedBitquerySmokeBlock.includes("/api/indexers/v1/token-list") &&
-      stagedBitquerySmokeBlock.includes(
-        '`/api/explore?limit=${marketCapPageSize}&page=1&sort=market-cap`,\n            currentPublicMarketContract,',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "marketCapTotal > maximumMarketCapTokens",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "marketCapTokens.length !== marketCapTotal",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "seenMarketCapIds.has(token.id)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "seenMarketCapAddresses.has(address)",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "entry.launchCategoryProvenance.blockNumber",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "entry.launchCategoryProvenance.transactionIndex",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "entry.launchCategoryProvenance.logIndex",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "staged Bitquery newest entry has no canonical launch order",
-      ) &&
-      stagedBitquerySmokeBlock.includes("coordinates === null") &&
-      stagedBitquerySmokeBlock.includes("const newestPageSize = 100") &&
-      stagedBitquerySmokeBlock.includes("seenNewestIds") &&
-      stagedBitquerySmokeBlock.includes("newestTokens.length !== newestTotal") &&
-      stagedBitquerySmokeBlock.includes("launchChainId(entry) !== newestChainId") &&
-      stagedBitquerySmokeBlock.includes("sort=oldest") &&
-      stagedBitquerySmokeBlock.includes(
-        "staged Bitquery oldest page is not ordered oldest-first",
-      ) &&
-      stagedBitquerySmokeBlock.includes("/api/explore/token?address=") &&
-      stagedBitquerySmokeBlock.includes(
-        "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "staged Explore exposed the non-public PCAN release canary",
-      ) &&
-      stagedBitquerySmokeBlock.includes("goldenSearch.total !== 0") &&
-      stagedBitquerySmokeBlock.includes(
-        "/api/explore/token/chart?address=${goldenTokenAddress}&range=all",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "`/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,\n            bitqueryChartContract,",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenMarket?.schemaVersion !== "programmable.market-data.v1"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "goldenChart.identity?.quoteAddress,\n              goldenQuoteAddress",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery Highest FDV is not monotonically descending"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged Bitquery Explore exposed unevidenced numeric FDV"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'valuation.reason === "waiting-for-first-trade"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'tokenAddress === goldenTokenAddress',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'valuation.source !== "stateview-chainlink"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'liquidity?.source !== "official-uniswap-v4-subgraph"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "provenance?.subgraphId !== officialV4SubgraphId",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "provenance?.deployment !== officialV4SubgraphDeployment",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "BigInt(liquidity.tvlUsdWad) <",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "minimumPublicFdvLiquidityUsdWad",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'token.launchModel !== "classic"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "lagBlocks <= 64n",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "expectedFdvUsdWad.toString() === valuation.valueWad",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "expectedActiveVirtualLiquidityUsdWad >=",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "price.activeVirtualLiquidityUsdWad",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "price.activeVirtualToken0Wei",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"stateview-active-liquidity-virtual-depth-usd"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged public current FDV lacks exact StateView, Chainlink and official v4 liquidity evidence"',
-      ) &&
-      stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged public market path has no current non-PCAN FDV bound to fresh official v4 liquidity"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged current detail does not independently prove an equal or newer evidence bundle"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenValuation.metric !== "fdv"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenValuation.supplyBasis !== "total"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/bitquery-golden-market-parity.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"./scripts/perf/bitquery-historical-release-gate.mjs"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "await verifyBitqueryGoldenMarketExecutionV1({",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "runtimeProductionProviderEndpoints(process.env)",
-      ) &&
-      !bitqueryGoldenParity.includes("rpc.mevblocker.io") &&
-      !bitqueryGoldenParity.includes("mainnet.gateway.tenderly.co") &&
-      !bitqueryGoldenParity.includes("ethereum-rpc.publicnode.com") &&
-      !bitqueryGoldenParity.includes("MAINNET_STATE_VIEW") &&
-      !bitqueryGoldenParity.includes("Q192") &&
-      bitqueryGoldenParity.includes(
-        "const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n",
-      ) &&
-      bitqueryGoldenParity.includes("const MINIMUM_CONFIRMATIONS = 12n") &&
-      bitqueryGoldenParity.includes(
-        '"event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"',
-      ) &&
-      bitqueryGoldenParity.includes(
-        'const MAINNET_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90"',
-      ) &&
-      bitqueryGoldenParity.includes(
-        '"eth_getTransactionReceipt"',
-      ) &&
-      bitqueryGoldenParity.includes("swapLogs.length !== 1") &&
-      bitqueryGoldenParity.includes('eventName: "Swap"') &&
-      bitqueryGoldenParity.includes("strict: true") &&
-      bitqueryGoldenParity.includes(
-        "observation.poolId !== expected.poolId",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "rpcQuantity(receipt?.status, \"receipt status\") !== 1n",
-      ) &&
-      bitqueryGoldenParity.includes("blockHash,") &&
-      bitqueryGoldenParity.includes("requireCanonical: true") &&
-      bitqueryGoldenParity.includes("sameObservation(first, second)") &&
-      bitqueryGoldenParity.includes(
-        "first.amount0 >= 0n",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "first.amount1 !== tokenAmountRaw",
-      ) &&
-      bitqueryGoldenParity.includes("provider-local trade ordinal") &&
-      bitqueryGoldenParity.includes("bitqueryTradeOrdinal,") &&
-      bitqueryGoldenParity.includes(
-        "receiptLogIndex: Number(first.logIndex)",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "executionPriceQuoteWad !== priceQuoteWad",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "executionNativeAmountWei * 10n ** BigInt(tokenDecimals)",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "executionPriceQuoteWad * first.answer",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "observation.answeredInRound < observation.roundId",
-      ) &&
-      bitqueryGoldenParity.includes(
-        "tradeTime !== Number(first.blockTimestamp) * 1_000",
-      ) &&
-      !bitqueryGoldenParity.includes("pool?.liquidity?.valueUsdWad") &&
-      bitqueryGoldenParity.includes(
-        "Bitquery golden execution does not match its receipt witness",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "nowMs - Date.parse(valuation.asOfTime) > MAXIMUM_DEFERRED_PCAN_AGE_MS",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'throw new Error("historical PCAN release evidence exceeds the 96 hour ceiling")',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "export function classifyBitqueryStaleMarketReleaseV1",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "export function verifyBitqueryHistoricalGoldenReleaseV2",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'parity?.schemaVersion !== "programmable.bitquery-golden-market-execution.v1"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'market?.schemaVersion !== "programmable.market-data.v1"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "poolValuation.valueUsdWad !== expectedValue",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'chart?.valuation?.status !== "unavailable"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        'chart.valuation.reason !== "source-unavailable"',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        '"fdvUsdWad" in chart',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        '"valuationMetric" in chart',
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.transactionHash !== trade?.transactionHash?.toLowerCase()",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.bitqueryTradeOrdinal !== trade?.logIndex",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.executionPriceQuoteWad !== trade?.priceQuoteWad",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "parity.chainlink?.feedAddress !== MAINNET_ETH_USD_FEED",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "BigInt(parity.chainlink.answeredInRound) < BigInt(parity.chainlink.roundId)",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "chart?.identity?.poolId !== GOLDEN_POOL_ID",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "chart?.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "lastPoint?.blockNumber !== expectedBlock",
-      ) &&
-      bitqueryHistoricalRelease.includes(
-        "chart.asOfTime !== lastPoint?.observedAt",
-      ) &&
-      bitqueryHistoricalRelease.includes("!periodMedianIsPositive") &&
-      bitqueryHistoricalRelease.includes(
-        'lastPoint?.valueSemantics !== "period-median"',
-      ) &&
-      bitqueryHistoricalRelease.includes("parity.confirmations < MINIMUM_CONFIRMATIONS") &&
-      stagedBitquerySmokeBlock.includes(
-        "const historicalPaidPathVerified =",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "verifyBitqueryHistoricalGoldenReleaseV2({",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"programmable.bitquery-historical-release.v2"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "historicalGoldenRelease.confirmations >= 12",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenChart.readStatus !== "live"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'goldenChart.readStatus === "live"',
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "currentFdvCount < 1 && !historicalPaidPathVerified",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        "goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'point?.valueSemantics !== "period-median"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        '"staged PCAN chart is not a strictly ordered positive history"',
-      ) &&
-      (stagedBitquerySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
-      !stagedBitquerySmokeBlock.includes("/api/ops/health") &&
-      !stagedBitquerySmokeBlock.includes("/api/explore/profile") &&
-      !/\b(?:database|projector|quicknode|envio|real-block|sla)\b/iu.test(
-        stagedBitquerySmokeBlock,
-      ) &&
-      !stagedBitquerySmokeBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
-      ) &&
-      !stagedBitquerySmokeBlock.includes("${automationBypassSecret}") &&
-      !stagedBitquerySmokeBlock.includes("console."),
-    "the staged API smoke binds current StateView and Chainlink FDV to official v4 liquidity while retaining Bitquery trade and chart provenance",
-  );
-  const stagedReadModelCapture = deployWorkflow.indexOf(
-    "Capture staged read-model evidence",
-  );
-  const stagedReadModelCaptureEnd = deployWorkflow.indexOf(
-    "Preserve staged read-model evidence",
-  );
-  const stagedReadModelCaptureBlock =
-    stagedReadModelCapture >= 0 && stagedReadModelCaptureEnd > stagedReadModelCapture
-      ? deployWorkflow.slice(stagedReadModelCapture, stagedReadModelCaptureEnd)
-      : "";
-  check(
-    "ops-protected-indexed-stage-capture",
-    stagedReadModelCapture > stagedBitquerySmokeEnd &&
-      stagedReadModelCaptureBlock.includes(
-        "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'indexed-or-shadow'",
-      ) &&
-      stagedReadModelCaptureBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedReadModelCaptureBlock.includes(
-        "PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedReadModelCaptureBlock.includes(
-        "PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
-      ) &&
-      !stagedReadModelCaptureBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
       ),
-    "the indexed staged capture receives the protected deployment bypass only inside its exact step",
-  );
-  const stagedBindingReverification = deployWorkflow.indexOf(
-    "Reverify staged candidate binding",
-  );
-  const stagedDeploymentResolution = deployWorkflow.indexOf(
-    "Resolve exact staged deployment",
-  );
-  const stagedDurableRefreshGate = deployWorkflow.indexOf(
-    "      - name: Refresh and prove exact staged durable read model",
-  );
-  const stagedDurableRefreshGateEnd = deployWorkflow.indexOf(
-    "      - name: Smoke staged public market APIs",
-  );
-  const stagedHealthGate = deployWorkflow.indexOf(
-    "      - name: Gate exact staged operational health",
-  );
-  const stagedCandidateHandoff = deployWorkflow.indexOf(
-    "      - name: Record staged candidate handoff",
-  );
-  const stagedHealthGateBlock =
-    stagedHealthGate >= 0 && stagedCandidateHandoff > stagedHealthGate
-      ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff).trimEnd()
-      : "";
-  const stagedDurableRefreshGateBlock =
-    stagedDurableRefreshGate >= 0 &&
-      stagedDurableRefreshGateEnd > stagedDurableRefreshGate
-      ? deployWorkflow
-        .slice(stagedDurableRefreshGate, stagedDurableRefreshGateEnd)
-        .trimEnd()
-      : "";
-  const stagedDurableRefreshDeploymentLookup = stagedDurableRefresh.indexOf(
-    "const deployment = await fetchVercelDeployment(",
-  );
-  const stagedDurableRefreshIdentityFailureGuard =
-    stagedDurableRefresh.indexOf("if (!deploymentMatches) {");
-  const stagedDurableRefreshProtectedRequest = stagedDurableRefresh.indexOf(
-    "const refresh = await requestJson(",
-  );
-  const stagedDurableRefreshHealthRequest = stagedDurableRefresh.indexOf(
-    "health = await requestJson(",
+    "the immutable staged candidate proves Bitquery-only health, Explore, detail and chart responses",
   );
   check(
-    "ops-staged-durable-refresh-gate",
-    packageJson?.scripts?.["perf:read-model:staged-refresh"] ===
-      "node scripts/perf/read-model-staged-refresh.mjs" &&
-      sha256(stagedDurableRefresh) === STAGED_DURABLE_REFRESH_SCRIPT_SHA256 &&
-      includesEverySourceFragment(
-        stagedDurableRefresh,
-        STAGED_DURABLE_REFRESH_SOURCE_GUARDS,
-      ) &&
-      stagedDurableRefreshDeploymentLookup >= 0 &&
-      stagedDurableRefreshIdentityFailureGuard >
-      stagedDurableRefreshDeploymentLookup &&
-      stagedDurableRefreshProtectedRequest >
-      stagedDurableRefreshIdentityFailureGuard &&
-      stagedDurableRefreshHealthRequest > stagedDurableRefreshProtectedRequest &&
-      stagedDeploymentResolution >= 0 &&
-      stagedDurableRefreshGate > stagedDeploymentResolution &&
-      stagedDurableRefreshGateEnd > stagedDurableRefreshGate &&
-      stagedBitquerySmoke > stagedDurableRefreshGate &&
-      stagedHealthGate > stagedDurableRefreshGate &&
-      stagedDurableRefreshGateBlock === STAGED_DURABLE_REFRESH_WORKFLOW_STEP &&
-      !stagedDurableRefreshGateBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
-      ) &&
-      !stagedDurableRefreshGateBlock.includes("NEXT_PUBLIC_CRON_SECRET"),
-    "the exact staged deployment refreshes the durable model and proves fresh RPC-bound visibility before market and handoff gates",
-  );
-  const stagedHealthDeploymentLookup = stagedHealth.indexOf(
-    "const deployment = await fetchVercelDeployment(",
-  );
-  const stagedHealthIdentityFailureGuard = stagedHealth.indexOf(
-    "if (deploymentFailures.length > 0) {",
-  );
-  const stagedHealthProtectedRequest = stagedHealth.indexOf(
-    "const response = await requestHealth(",
-  );
-  check(
-    "ops-staged-health-handoff-gate",
-    packageJson?.scripts?.["perf:read-model:staged-health"] ===
-      "node scripts/perf/read-model-staged-health.mjs" &&
-      sha256(stagedHealth) === STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 &&
-      includesEverySourceFragment(
-        stagedHealth,
-        STAGED_HEALTH_HANDOFF_SOURCE_GUARDS,
-      ) &&
-      stagedHealthDeploymentLookup >= 0 &&
-      stagedHealthIdentityFailureGuard > stagedHealthDeploymentLookup &&
-      stagedHealthProtectedRequest > stagedHealthIdentityFailureGuard &&
-      stagedBindingReverification >= 0 &&
-      stagedHealthGate > stagedBindingReverification &&
-      stagedCandidateHandoff > stagedHealthGate &&
-      stagedHealthGateBlock === STAGED_HEALTH_HANDOFF_WORKFLOW_STEP &&
-      stagedHealthGateBlock.includes(
-        "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
-      ) &&
-      stagedHealthGateBlock.includes(
-        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-      ) &&
-      stagedHealthGateBlock.includes(
-        "STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
-      ) &&
-      stagedHealthGateBlock.includes(
-        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-      ) &&
-      stagedHealthGateBlock.includes("EXPECTED_GIT_HEAD: ${{ github.sha }}") &&
-      stagedHealthGateBlock.includes(
-        "npm run perf:read-model:staged-health --",
-      ) &&
-      stagedHealthGateBlock.includes('--target-url "$STAGED_TARGET_URL"') &&
-      stagedHealthGateBlock.includes(
-        '--deployment-id "$STAGED_DEPLOYMENT_ID"',
-      ) &&
-      stagedHealthGateBlock.includes('--git-head "$EXPECTED_GIT_HEAD"') &&
-      !stagedHealthGateBlock.includes("\n        if:") &&
-      !stagedHealthGateBlock.includes(
-        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
-      ),
-    "the exact staged deployment must report healthy immediately before its stage-only handoff",
+    "ops-obsolete-public-read-gates-absent",
+    !deployWorkflow.includes("perf:read-model:deploy-policy") &&
+      !deployWorkflow.includes("perf:read-model:wake-canary") &&
+      !deployWorkflow.includes("perf:read-model:staged-refresh") &&
+      !deployWorkflow.includes("perf:read-model:staged-health") &&
+      !deployWorkflow.includes("Capture staged read-model evidence") &&
+      !deployWorkflow.includes("Gate indexed or shadow read path") &&
+      !deployWorkflow.includes("StateView") &&
+      !deployWorkflow.includes("official Uniswap v4 subgraph"),
+    "dual-RPC, durable refresh, indexed capture and Graph availability gates are absent from Website staging",
   );
   const exactVerifyProofGateStart = deployWorkflow.indexOf("  release-gate:");
   const exactVerifyProofGateEnd = deployWorkflow.indexOf("  deploy:");

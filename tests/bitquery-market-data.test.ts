@@ -6,6 +6,7 @@ import {
   BITQUERY_HTTP_ENDPOINT,
   clearBitqueryMarketDataCachesForTests,
   readBitqueryMarketChartV1,
+  readBitqueryTokenMarketDataStrictV1,
   readBitqueryTokenMarketDataV1,
   safeBitqueryMarketDataError,
 } from "../lib/market-data/bitquery.server";
@@ -49,6 +50,22 @@ const SECOND_CUSTOM: MarketChartIdentityV1 = {
   poolId: `0x${"33".repeat(32)}`,
   protocol: "uniswap_v4",
 };
+
+describe("strict Bitquery market reads", () => {
+  it("rejects provider failure without using cached market data", async () => {
+    await expect(readBitqueryTokenMarketDataStrictV1([PCAN], {
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:00:01.000Z"),
+      fetchImpl: vi.fn().mockRejectedValue(new Error("offline")),
+    })).rejects.toMatchObject({ category: "transport" });
+  });
+
+  it("rejects missing credentials instead of returning unavailable data", async () => {
+    await expect(readBitqueryTokenMarketDataStrictV1([PCAN], {
+      token: null,
+    })).rejects.toMatchObject({ category: "configuration" });
+  });
+});
 
 function generatedIdentity(index: number): MarketChartIdentityV1 {
   return {

@@ -5,12 +5,16 @@ vi.mock("server-only", () => ({}));
 import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 import {
+  ActionRpcProviderError,
   ActionRpcQuorumError,
   classicV3ActionRpcProviders,
+  createCommittedActionRpcProvider,
   createActionRpcQuorum,
+  creatorClaimRpcProvider,
   creatorClaimRpcProviders,
   protocolRevenueRpcProviders,
   stockPairedActionRpcProviders,
+  tradeActionRpcProvider,
   tradeActionRpcProviders,
 } from "../lib/server/action-rpc-quorum.server";
 
@@ -167,6 +171,62 @@ describe("action RPC provider identity", () => {
       "mevblocker",
       "tenderly",
     ]);
+  });
+});
+
+describe("single committed action RPC", () => {
+  it("binds one private provider without exposing its endpoint", () => {
+    const provider = createCommittedActionRpcProvider({
+      chainId: 1,
+      endpoint: DRPC_PAID_MAINNET,
+      endpointCommitment: rpcProviderCommitment(
+        "endpoint",
+        DRPC_PAID_MAINNET,
+      ),
+    });
+
+    expect(provider.vendorGroup).toBe("drpc");
+    expect(provider.endpoint).toBe(DRPC_PAID_MAINNET);
+    expect(Object.keys(provider)).not.toContain("endpoint");
+    expect(JSON.stringify(provider)).not.toContain("drpc-key-one");
+  });
+
+  it("rejects public providers and commitment drift", () => {
+    expect(() =>
+      createCommittedActionRpcProvider({
+        chainId: 1,
+        endpoint: "https://ethereum-rpc.publicnode.com",
+        endpointCommitment: rpcProviderCommitment(
+          "endpoint",
+          "https://ethereum-rpc.publicnode.com",
+        ),
+      }),
+    ).toThrow(ActionRpcProviderError);
+    expect(() =>
+      createCommittedActionRpcProvider({
+        chainId: 1,
+        endpoint: DRPC_PAID_MAINNET,
+        endpointCommitment: `0x${"00".repeat(32)}`,
+      }),
+    ).toThrow(ActionRpcProviderError);
+  });
+
+  it("uses only the role-bound Mainnet primary for trades and claims", () => {
+    const env = productionPairEnvironment({
+      PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL:
+        "not-a-valid-secondary",
+      PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT:
+        "not-a-commitment",
+    });
+
+    const tradeProvider = tradeActionRpcProvider(1, env);
+    const claimProvider = creatorClaimRpcProvider({ chainId: 1 }, env);
+    expect(tradeProvider.endpointCommitment).toBe(
+      rpcProviderCommitment("endpoint", DRPC_PAID_MAINNET),
+    );
+    expect(claimProvider.endpointCommitment).toBe(
+      tradeProvider.endpointCommitment,
+    );
   });
 });
 
