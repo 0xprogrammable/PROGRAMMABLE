@@ -37,10 +37,12 @@ import {
 } from "../stock-paired";
 import type { ExploreEntry, LauncherToken } from "../tokens";
 
-const REQUEST_TIMEOUT_MS = 12_000;
-const INITIAL_LOG_RANGE = 8_192n;
-const MAXIMUM_LOG_RANGE = 8_192n;
-const MINIMUM_LOG_RANGE = 128n;
+export const PRIMARY_RPC_LAUNCH_CATALOG_BUDGET_MS = 18_000;
+
+const REQUEST_TIMEOUT_MS = 4_000;
+const LOG_WINDOW_RANGE = 4_096n;
+const MAXIMUM_CONCURRENT_LOG_WINDOWS = 6;
+const MAXIMUM_LOG_WINDOW_ATTEMPTS = 2;
 const MAXIMUM_LOGS = 10_000;
 const MAXIMUM_LAUNCHES = 5_000;
 const MAXIMUM_CONCURRENT_RPC_READS = 100;
@@ -57,6 +59,9 @@ const memeLiquidityConfiguredV2Event = parseAbiItem(
 const stockPairedTokenLaunchedEvent = parseAbiItem(
   "event StockPairedTokenLaunched(address indexed deployer,address indexed token,address indexed quoteAsset,bytes32 poolId,address rewardVault,address positionRecipient,uint256 positionTokenId,bytes32 launchHash)",
 );
+const stockPairedEthTokenLaunchedEvent = parseAbiItem(
+  "event StockPairedEthTokenLaunched(address indexed creator,address indexed token,address indexed quoteAsset,uint256 initialBuyEthAmount,uint256 initialBuyQuoteAmount,uint256 initialBuyTokenAmount,bytes32 launchHash)",
+);
 const stockPairedLiquidityConfiguredEvent = parseAbiItem(
   "event StockPairedLiquidityConfigured(address indexed token,address indexed quoteAsset,uint256 totalSupply,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,int24 initialTick,int24 tickLower,int24 tickUpper,uint24 lpFeePips,bytes32 launchHash)",
 );
@@ -67,6 +72,7 @@ const SPARSE_LAUNCH_EVENTS = Object.freeze([
   memeTokenLaunchedV2Event,
   memeLiquidityConfiguredV2Event,
   stockPairedTokenLaunchedEvent,
+  stockPairedEthTokenLaunchedEvent,
   stockPairedLiquidityConfiguredEvent,
 ] satisfies readonly AbiEvent[]);
 
@@ -79,6 +85,7 @@ type ReleaseDefinition = Readonly<{
     | "stock-paired-v3";
   model: "classic" | "stock-paired";
   launcher: Address;
+  ethLaunchCoordinator: Address | null;
   hook: Address;
   startBlock: bigint;
   launchEvent:
@@ -143,6 +150,15 @@ const RELEASES = Object.freeze([
 const RELEASE_BY_LAUNCHER = new Map(
   RELEASES.map((release) => [release.launcher, release] as const),
 );
+const RELEASE_BY_ETH_LAUNCH_COORDINATOR = new Map(
+  RELEASES.flatMap((release) => release.ethLaunchCoordinator === null
+    ? []
+    : [[release.ethLaunchCoordinator, release] as const]),
+);
+const SPARSE_EVENT_ADDRESSES = Object.freeze([
+  ...RELEASE_BY_LAUNCHER.keys(),
+  ...RELEASE_BY_ETH_LAUNCH_COORDINATOR.keys(),
+]);
 const EARLIEST_START_BLOCK = RELEASES.reduce(
   (minimum, release) => release.startBlock < minimum
     ? release.startBlock
@@ -237,6 +253,7 @@ export type PrimaryRpcLaunchCatalogReaderOptions = Readonly<{
 
 type RpcEvent = Readonly<{
   release: ReleaseDefinition;
+  source: "launcher" | "eth-launch-coordinator";
   name: string;
   blockNumber: bigint;
   blockHash: Hex;
@@ -244,6 +261,15 @@ type RpcEvent = Readonly<{
   transactionIndex: number;
   logIndex: number;
   args: Readonly<Record<string, unknown>>;
+}>;
+
+type ParsedStockCreatorIdentity = Readonly<{
+  release: ReleaseDefinition;
+  event: RpcEvent;
+  creator: Address;
+  token: Address;
+  quoteAsset: Address;
+  launchHash: Hex;
 }>;
 
 type ParsedLaunch = Readonly<{
@@ -296,39 +322,55 @@ type BoundBlock = Readonly<{
 export async function readPrimaryRpcExploreEntriesV1(
   options: PrimaryRpcLaunchCatalogReaderOptions = {},
 ): Promise<PrimaryRpcExploreEntriesV1> {
+  const budget = createCatalogBudget(options.signal);
+  const signal = budget.signal;
   let phase: PrimaryRpcLaunchCatalogPhase = "initialization";
   try {
+    assertNotAborted(signal);
     const requestedToken = options.requestedTokenAddress === undefined
       ? null
       : canonicalAddress(options.requestedTokenAddress);
     if (options.requestedTokenAddress !== undefined && requestedToken === null) {
       throw new PrimaryRpcLaunchCatalogError("configuration");
     }
-    const client = options.client ?? createPrimaryRpcClient(options.environment);
+    const client = options.client ?? createPrimaryRpcClient(
+      options.environment,
+      signal,
+    );
     const now = options.now ?? new Date();
 
     phase = "head";
-    const headNumber = await providerCall(() => client.getBlockNumber());
+    const headNumber = await providerCall(
+      () => client.getBlockNumber(),
+      signal,
+    );
     if (typeof headNumber !== "bigint" || headNumber < EARLIEST_START_BLOCK) {
       throw new PrimaryRpcLaunchCatalogError("response");
     }
     const head = parseBlock(
-      await providerCall(() => client.getBlock({ blockNumber: headNumber })),
+      await providerCall(
+        () => client.getBlock({ blockNumber: headNumber }),
+        signal,
+      ),
       headNumber,
     );
 
     phase = "logs";
-    const rawLogs = await scanSparseLogs(client, head.number, options.signal);
-    const events = rawLogs.map(parseRpcEvent);
+    const rawLogs = await scanSparseLogs(client, head.number, signal);
+    const events = rawLogs.map(parseRpcEvent).sort(compareRpcEvents);
     const parsed = parseLaunchEvents(events);
-    if (parsed.launches.length > MAXIMUM_LAUNCHES) {
+    const boundLaunches = bindStockCreatorIdentities(
+      parsed.launches,
+      parsed.stockCreatorIdentities,
+    );
+    if (boundLaunches.length > MAXIMUM_LAUNCHES) {
       throw new PrimaryRpcLaunchCatalogError("integrity");
     }
 
     phase = "selection";
     const launches = requestedToken === null
-      ? parsed.launches
-      : parsed.launches.filter((launch) => launch.token === requestedToken);
+      ? boundLaunches
+      : boundLaunches.filter((launch) => launch.token === requestedToken);
     const liquidities = requestedToken === null
       ? parsed.liquidities
       : parsed.liquidities.filter((liquidity) =>
@@ -350,17 +392,18 @@ export async function readPrimaryRpcExploreEntriesV1(
         launch.quoteAsset ? [launch.quoteAsset] : []
       ))],
       head.number,
-      options.signal,
+      signal,
     );
 
     phase = "blocks";
     const launchBlocks = await readLaunchBlocks(
       client,
       launches,
-      options.signal,
+      signal,
     );
 
     phase = "entries";
+    assertNotAborted(signal);
     const entries = launches.map((launch) => buildExploreEntry(
       launch,
       requireLiquidity(launch, liquidities),
@@ -371,6 +414,7 @@ export async function readPrimaryRpcExploreEntriesV1(
       throw new PrimaryRpcLaunchCatalogError("integrity");
     }
     assertUniqueCatalog(entries);
+    assertNotAborted(signal);
     return {
       source: "drpc",
       generatedAt: now.toISOString(),
@@ -380,6 +424,8 @@ export async function readPrimaryRpcExploreEntriesV1(
     };
   } catch (error) {
     throw normalizedCatalogError(error, phase);
+  } finally {
+    budget.dispose();
   }
 }
 
@@ -395,6 +441,7 @@ function emptyCatalog(now: Date, head: BoundBlock): PrimaryRpcExploreEntriesV1 {
 
 function createPrimaryRpcClient(
   environment: Readonly<Record<string, string | undefined>> | undefined,
+  signal: AbortSignal,
 ): PrimaryRpcLaunchCatalogClient {
   let binding;
   try {
@@ -406,6 +453,7 @@ function createPrimaryRpcClient(
     chain: mainnet,
     transport: http(binding.url, {
       batch: { batchSize: 100, wait: 0 },
+      fetchOptions: { signal },
       retryCount: 0,
       timeout: REQUEST_TIMEOUT_MS,
     }),
@@ -460,45 +508,68 @@ async function scanSparseLogs(
   head: bigint,
   signal: AbortSignal | undefined,
 ): Promise<readonly unknown[]> {
-  const logs: unknown[] = [];
-  let fromBlock = EARLIEST_START_BLOCK;
-  let range = INITIAL_LOG_RANGE;
-  while (fromBlock <= head) {
+  const windows: Array<Readonly<{ fromBlock: bigint; toBlock: bigint }>> = [];
+  for (
+    let fromBlock = EARLIEST_START_BLOCK;
+    fromBlock <= head;
+    fromBlock += LOG_WINDOW_RANGE
+  ) {
+    windows.push({
+      fromBlock,
+      toBlock: minBigInt(head, fromBlock + LOG_WINDOW_RANGE - 1n),
+    });
+  }
+  const pages = await mapBounded(
+    windows,
+    (window) => readSparseLogWindow(client, window, signal),
+    MAXIMUM_CONCURRENT_LOG_WINDOWS,
+  );
+  const logs = pages.flat();
+  if (logs.length > MAXIMUM_LOGS) {
+    throw new PrimaryRpcLaunchCatalogError("integrity");
+  }
+  return logs;
+}
+
+async function readSparseLogWindow(
+  client: PrimaryRpcLaunchCatalogClient,
+  window: Readonly<{ fromBlock: bigint; toBlock: bigint }>,
+  signal: AbortSignal | undefined,
+): Promise<readonly unknown[]> {
+  for (let attempt = 1; attempt <= MAXIMUM_LOG_WINDOW_ATTEMPTS; attempt += 1) {
     assertNotAborted(signal);
-    const toBlock = minBigInt(head, fromBlock + range - 1n);
     try {
-      const page = await client.getLogs({
-        address: RELEASES.map((release) => release.launcher),
+      const page = await abortableCall(() => client.getLogs({
+        address: SPARSE_EVENT_ADDRESSES,
         events: SPARSE_LAUNCH_EVENTS,
-        fromBlock,
-        toBlock,
+        fromBlock: window.fromBlock,
+        toBlock: window.toBlock,
         strict: true,
-      });
+      }), signal);
       if (!Array.isArray(page)) {
         throw new PrimaryRpcLaunchCatalogError("response");
       }
-      logs.push(...page);
-      if (logs.length > MAXIMUM_LOGS) {
-        throw new PrimaryRpcLaunchCatalogError("integrity");
-      }
-      fromBlock = toBlock + 1n;
-      range = minBigInt(MAXIMUM_LOG_RANGE, range * 2n);
+      return page;
     } catch (error) {
       if (error instanceof PrimaryRpcLaunchCatalogError) throw error;
       assertNotAborted(signal);
-      if (range <= MINIMUM_LOG_RANGE) {
+      if (attempt === MAXIMUM_LOG_WINDOW_ATTEMPTS) {
         throw new PrimaryRpcLaunchCatalogError("transport");
       }
-      range = maxBigInt(MINIMUM_LOG_RANGE, range / 2n);
     }
   }
-  return logs;
+  throw new PrimaryRpcLaunchCatalogError("runtime");
 }
 
 function parseRpcEvent(value: unknown): RpcEvent {
   const row = record(value);
   const address = canonicalAddress(row?.address);
-  const release = address === null ? undefined : RELEASE_BY_LAUNCHER.get(address);
+  const launcherRelease = address === null
+    ? undefined
+    : RELEASE_BY_LAUNCHER.get(address);
+  const coordinatorRelease = address === null
+    ? undefined
+    : RELEASE_BY_ETH_LAUNCH_COORDINATOR.get(address);
   const name = nonEmptyString(row?.eventName);
   const blockNumber = unsignedBigInt(row?.blockNumber);
   const blockHash = canonicalBytes32(row?.blockHash);
@@ -506,17 +577,28 @@ function parseRpcEvent(value: unknown): RpcEvent {
   const transactionIndex = nonNegativeSafeInteger(row?.transactionIndex);
   const logIndex = nonNegativeSafeInteger(row?.logIndex);
   const args = record(row?.args);
+  const source = launcherRelease === undefined
+    ? coordinatorRelease === undefined ? null : "eth-launch-coordinator"
+    : coordinatorRelease === undefined ? "launcher" : null;
+  const release = launcherRelease ?? coordinatorRelease;
+  const expectedEvent = source === "launcher"
+    ? name === release?.launchEvent || name === release?.liquidityEvent
+    : source === "eth-launch-coordinator"
+      ? name === "StockPairedEthTokenLaunched" &&
+        release?.model === "stock-paired"
+      : false;
   if (
     release === undefined || name === null || blockNumber === null ||
     blockHash === null || transactionHash === null ||
     transactionIndex === null || logIndex === null || args === null ||
     row?.removed === true || blockNumber < release.startBlock ||
-    (name !== release.launchEvent && name !== release.liquidityEvent)
+    source === null || !expectedEvent
   ) {
     throw new PrimaryRpcLaunchCatalogError("integrity");
   }
   return {
     release,
+    source,
     name,
     blockNumber,
     blockHash,
@@ -530,23 +612,85 @@ function parseRpcEvent(value: unknown): RpcEvent {
 function parseLaunchEvents(events: readonly RpcEvent[]): Readonly<{
   launches: ParsedLaunch[];
   liquidities: ParsedLiquidity[];
+  stockCreatorIdentities: ParsedStockCreatorIdentity[];
 }> {
   const launches: ParsedLaunch[] = [];
   const liquidities: ParsedLiquidity[] = [];
+  const stockCreatorIdentities: ParsedStockCreatorIdentity[] = [];
   const coordinates = new Set<string>();
   for (const event of events) {
-    const coordinate = `${event.blockNumber}:${event.transactionIndex}:${event.logIndex}`;
+    const coordinate = eventCoordinate(event);
     if (coordinates.has(coordinate)) {
       throw new PrimaryRpcLaunchCatalogError("integrity");
     }
     coordinates.add(coordinate);
-    if (event.name === event.release.launchEvent) {
+    if (event.source === "eth-launch-coordinator") {
+      stockCreatorIdentities.push(parseStockCreatorIdentity(event));
+    } else if (event.name === event.release.launchEvent) {
       launches.push(parseLaunch(event));
     } else {
       liquidities.push(parseLiquidity(event));
     }
   }
-  return { launches, liquidities };
+  return { launches, liquidities, stockCreatorIdentities };
+}
+
+function parseStockCreatorIdentity(
+  event: RpcEvent,
+): ParsedStockCreatorIdentity {
+  if (
+    event.source !== "eth-launch-coordinator" ||
+    event.release.model !== "stock-paired" ||
+    event.release.ethLaunchCoordinator === null
+  ) {
+    throw new PrimaryRpcLaunchCatalogError("integrity");
+  }
+  return {
+    release: event.release,
+    event,
+    creator: requiredAddress(event.args, "creator"),
+    token: requiredAddress(event.args, "token"),
+    quoteAsset: requiredAddress(event.args, "quoteAsset"),
+    launchHash: requiredBytes32(event.args, "launchHash"),
+  };
+}
+
+function bindStockCreatorIdentities(
+  launches: readonly ParsedLaunch[],
+  identities: readonly ParsedStockCreatorIdentity[],
+): ParsedLaunch[] {
+  const consumedIdentities = new Set<string>();
+  const bound = launches.map((launch): ParsedLaunch => {
+    if (launch.release.model !== "stock-paired") return launch;
+    const coordinator = launch.release.ethLaunchCoordinator;
+    if (
+      coordinator === null ||
+      requiredAddress(launch.event.args, "deployer") !== coordinator ||
+      launch.quoteAsset === undefined
+    ) {
+      throw new PrimaryRpcLaunchCatalogError("integrity");
+    }
+    const matches = identities.filter((identity) =>
+      identity.release === launch.release &&
+      identity.event.blockNumber === launch.event.blockNumber &&
+      identity.event.blockHash === launch.event.blockHash &&
+      identity.event.transactionHash === launch.event.transactionHash &&
+      identity.event.transactionIndex === launch.event.transactionIndex &&
+      identity.token === launch.token &&
+      identity.quoteAsset === launch.quoteAsset &&
+      identity.launchHash === launch.launchHash
+    );
+    if (matches.length !== 1) {
+      throw new PrimaryRpcLaunchCatalogError("integrity");
+    }
+    const identity = matches[0]!;
+    consumedIdentities.add(eventCoordinate(identity.event));
+    return { ...launch, creator: identity.creator };
+  });
+  if (consumedIdentities.size !== identities.length) {
+    throw new PrimaryRpcLaunchCatalogError("integrity");
+  }
+  return bound;
 }
 
 function parseLaunch(event: RpcEvent): ParsedLaunch {
@@ -665,18 +809,23 @@ async function readMetadata(
   const addresses = [...new Set([...tokenAddresses, ...quoteAddresses])];
   const rows = await mapBounded(addresses, async (address) => {
     assertNotAborted(signal);
-    const [name, symbol, decimals] = await providerCall(() =>
-      Promise.all([
+    const [name, symbol, decimals] = await providerCall(
+      () => Promise.all([
         client.readContract({ address, functionName: "name", blockNumber }),
         client.readContract({ address, functionName: "symbol", blockNumber }),
         client.readContract({ address, functionName: "decimals", blockNumber }),
-      ]));
+      ]),
+      signal,
+    );
     const rawMetadata = tokenSet.has(address)
-      ? await providerCall(() => client.readContract({
-          address,
-          functionName: "metadata",
-          blockNumber,
-        }))
+      ? await providerCall(
+          () => client.readContract({
+            address,
+            functionName: "metadata",
+            blockNumber,
+          }),
+          signal,
+        )
       : null;
     return [
       address,
@@ -736,7 +885,10 @@ async function readLaunchBlocks(
   const blocks = await mapBounded(numbers, async (blockNumber) => {
     assertNotAborted(signal);
     const block = parseBlock(
-      await providerCall(() => client.getBlock({ blockNumber })),
+      await providerCall(
+        () => client.getBlock({ blockNumber }),
+        signal,
+      ),
       blockNumber,
     );
     return [blockNumber.toString(), block] as const;
@@ -873,11 +1025,15 @@ function releaseDefinition(input: Readonly<{
   const manifest = record(input.manifest);
   const addresses = record(manifest?.addresses);
   const launcher = canonicalAddress(addresses?.[input.launcherKey]);
+  const ethLaunchCoordinator = input.model === "stock-paired"
+    ? canonicalAddress(addresses?.ethLaunchCoordinator)
+    : null;
   const hook = canonicalAddress(addresses?.feeHook);
   const startBlock = unsignedBigInt(input.startBlock);
   if (
     manifest?.chainId !== 1 || launcher === null || hook === null ||
-    startBlock === null
+    startBlock === null ||
+    (input.model === "stock-paired" && ethLaunchCoordinator === null)
   ) {
     throw new PrimaryRpcLaunchCatalogError("configuration");
   }
@@ -885,6 +1041,7 @@ function releaseDefinition(input: Readonly<{
     releaseId: input.releaseId,
     model: input.model,
     launcher,
+    ethLaunchCoordinator,
     hook,
     startBlock,
     launchEvent: input.launchEvent,
@@ -915,13 +1072,75 @@ function compareEntries(first: ExploreEntry, second: ExploreEntry): number {
   return first.id.localeCompare(second.id);
 }
 
-async function providerCall<T>(operation: () => Promise<T>): Promise<T> {
+function compareRpcEvents(first: RpcEvent, second: RpcEvent): number {
+  if (first.blockNumber !== second.blockNumber) {
+    return first.blockNumber < second.blockNumber ? -1 : 1;
+  }
+  if (first.transactionIndex !== second.transactionIndex) {
+    return first.transactionIndex - second.transactionIndex;
+  }
+  if (first.logIndex !== second.logIndex) {
+    return first.logIndex - second.logIndex;
+  }
+  return first.transactionHash.localeCompare(second.transactionHash);
+}
+
+function eventCoordinate(event: RpcEvent): string {
+  return `${event.blockNumber}:${event.transactionIndex}:${event.logIndex}`;
+}
+
+async function providerCall<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
   try {
-    return await operation();
+    return await abortableCall(operation, signal);
   } catch (error) {
     if (error instanceof PrimaryRpcLaunchCatalogError) throw error;
     throw new PrimaryRpcLaunchCatalogError("transport");
   }
+}
+
+async function abortableCall<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  assertNotAborted(signal);
+  let pending: Promise<T>;
+  try {
+    pending = operation();
+  } catch (error) {
+    throw error;
+  }
+  if (signal === undefined) return pending;
+  return await new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new PrimaryRpcLaunchCatalogError("transport"));
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", abort);
+    });
+  });
+}
+
+function createCatalogBudget(externalSignal: AbortSignal | undefined): Readonly<{
+  signal: AbortSignal;
+  dispose(): void;
+}> {
+  const deadline = new AbortController();
+  const timeout = setTimeout(
+    () => deadline.abort(),
+    PRIMARY_RPC_LAUNCH_CATALOG_BUDGET_MS,
+  );
+  const signal = externalSignal === undefined
+    ? deadline.signal
+    : AbortSignal.any([externalSignal, deadline.signal]);
+  return {
+    signal,
+    dispose() {
+      clearTimeout(timeout);
+      deadline.abort();
+    },
+  };
 }
 
 function normalizedCatalogError(
@@ -939,11 +1158,12 @@ function normalizedCatalogError(
 async function mapBounded<T, R>(
   values: readonly T[],
   operation: (value: T) => Promise<R>,
+  maximumConcurrency = MAXIMUM_CONCURRENT_RPC_READS,
 ): Promise<R[]> {
   const results = new Array<R>(values.length);
   let nextIndex = 0;
   const workers = Array.from(
-    { length: Math.min(MAXIMUM_CONCURRENT_RPC_READS, values.length) },
+    { length: Math.min(maximumConcurrency, values.length) },
     async () => {
       while (nextIndex < values.length) {
         const index = nextIndex;
@@ -1075,8 +1295,4 @@ function timestampToIso(timestamp: bigint): string {
 
 function minBigInt(first: bigint, second: bigint): bigint {
   return first < second ? first : second;
-}
-
-function maxBigInt(first: bigint, second: bigint): bigint {
-  return first > second ? first : second;
 }
