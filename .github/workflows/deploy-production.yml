@@ -74,6 +74,8 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      PRODUCTION_VERIFY_MODE: ${{ (inputs.custom_v2_registry_live || inputs.custom_v2_generic_public_read_enabled || inputs.custom_v2_detail_record_hash != '' || inputs.custom_v2_authenticated_ingress_evidence_sha256 != '' || inputs.custom_v2_generic_signer_probe_expected_json != '' || inputs.custom_v2_generic_signer_probe_expected_sha256 != '') && 'custom-v2-release' || 'change' }}
     outputs:
       verified_sha: ${{ steps.verify-proof.outputs.verified_sha }}
       verified_tree: ${{ steps.verify-proof.outputs.verified_tree }}
@@ -89,6 +91,8 @@ jobs:
       verified_indexer: ${{ steps.verify-proof.outputs.verified_indexer }}
       verified_interface: ${{ steps.verify-proof.outputs.verified_interface }}
       verified_read_model: ${{ steps.verify-proof.outputs.verified_read_model }}
+      verification_mode: ${{ steps.verify-proof.outputs.verification_mode }}
+      verify_event: ${{ steps.verify-proof.outputs.verify_event }}
 
     steps:
       - name: Check out exact production commit
@@ -111,6 +115,7 @@ jobs:
         run: >-
           node scripts/production-verify-proof.mjs resolve
           --repository-root "$GITHUB_WORKSPACE"
+          --verification-mode "$PRODUCTION_VERIFY_MODE"
           --github-output "$GITHUB_OUTPUT"
 
       - name: Download exact immutable production Verify proof
@@ -130,6 +135,7 @@ jobs:
           ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
           VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
           VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
+          VERIFY_MODE: ${{ steps.resolve-proof.outputs.verification_mode }}
         run: |
           set -euo pipefail
           proof="$RUNNER_TEMP/production-verify-proof/production-verify-proof.json"
@@ -156,6 +162,7 @@ jobs:
             --run-id "$VERIFY_RUN_ID" \
             --run-attempt "$VERIFY_RUN_ATTEMPT" \
             --artifact-digest "$ARTIFACT_DIGEST" \
+            --verification-mode "$VERIFY_MODE" \
             --github-output "$GITHUB_OUTPUT"
 
       - name: Record consumed production Verify proof
@@ -164,6 +171,8 @@ jobs:
           PROOF_COMPLETED_AT: ${{ steps.resolve-proof.outputs.proof_completed_at }}
           PROOF_SHA256: ${{ steps.verify-proof.outputs.proof_sha256 }}
           ARTIFACT_DIGEST: ${{ steps.verify-proof.outputs.artifact_digest }}
+          VERIFY_EVENT: ${{ steps.verify-proof.outputs.verify_event }}
+          VERIFY_MODE: ${{ steps.verify-proof.outputs.verification_mode }}
         run: |
           {
             echo "## Consumed production Verify proof"
@@ -171,6 +180,7 @@ jobs:
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Verify run: $VERIFY_RUN_URL"
             echo "- Proof completed: \`$PROOF_COMPLETED_AT\`"
+            echo "- Verification: \`$VERIFY_EVENT\` / \`$VERIFY_MODE\`"
             echo "- Proof SHA-256: \`$PROOF_SHA256\`"
             echo "- Immutable artifact digest: \`$ARTIFACT_DIGEST\`"
             echo "- Custom V2 lane required: \`${{ steps.verify-proof.outputs.verified_custom_v2 }}\`"
@@ -219,6 +229,7 @@ jobs:
         run: >-
           node scripts/production-verify-proof.mjs resolve
           --repository-root "$GITHUB_WORKSPACE"
+          --verification-mode "${{ needs.release-gate.outputs.verification_mode }}"
           --github-output "$GITHUB_OUTPUT"
 
       - name: Confirm consumed Verify proof identity after production approval
@@ -229,12 +240,16 @@ jobs:
           EXPECTED_RUN_ATTEMPT: ${{ needs.release-gate.outputs.verify_run_attempt }}
           EXPECTED_ARTIFACT_ID: ${{ needs.release-gate.outputs.artifact_id }}
           EXPECTED_ARTIFACT_DIGEST: ${{ needs.release-gate.outputs.artifact_digest }}
+          EXPECTED_VERIFY_EVENT: ${{ needs.release-gate.outputs.verify_event }}
+          EXPECTED_VERIFY_MODE: ${{ needs.release-gate.outputs.verification_mode }}
           REVALIDATED_SHA: ${{ steps.revalidate-proof.outputs.verified_sha }}
           REVALIDATED_TREE: ${{ steps.revalidate-proof.outputs.verified_tree }}
           REVALIDATED_RUN_ID: ${{ steps.revalidate-proof.outputs.verify_run_id }}
           REVALIDATED_RUN_ATTEMPT: ${{ steps.revalidate-proof.outputs.verify_run_attempt }}
           REVALIDATED_ARTIFACT_ID: ${{ steps.revalidate-proof.outputs.artifact_id }}
           REVALIDATED_ARTIFACT_DIGEST: ${{ steps.revalidate-proof.outputs.artifact_digest }}
+          REVALIDATED_VERIFY_EVENT: ${{ steps.revalidate-proof.outputs.verify_event }}
+          REVALIDATED_VERIFY_MODE: ${{ steps.revalidate-proof.outputs.verification_mode }}
         run: |
           set -euo pipefail
           test "$GITHUB_SHA" = "$EXPECTED_SHA"
@@ -244,6 +259,8 @@ jobs:
           test "$REVALIDATED_RUN_ATTEMPT" = "$EXPECTED_RUN_ATTEMPT"
           test "$REVALIDATED_ARTIFACT_ID" = "$EXPECTED_ARTIFACT_ID"
           test "$REVALIDATED_ARTIFACT_DIGEST" = "$EXPECTED_ARTIFACT_DIGEST"
+          test "$REVALIDATED_VERIFY_EVENT" = "$EXPECTED_VERIFY_EVENT"
+          test "$REVALIDATED_VERIFY_MODE" = "$EXPECTED_VERIFY_MODE"
 
       - name: Install dependencies
         run: npm ci

@@ -5,6 +5,8 @@ import {
   PRODUCTION_REF,
   PRODUCTION_REPOSITORY,
   PRODUCTION_REPOSITORY_ID,
+  PRODUCTION_VERIFY_CHANGE_MODE,
+  PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE,
   PRODUCTION_VERIFY_PROOF_MAX_AGE_MS,
   PRODUCTION_VERIFY_SCOPE_KEYS,
   REQUIRED_PRODUCTION_VERIFY_CHECKS,
@@ -44,6 +46,7 @@ function validProofInput() {
     runId: RUN_ID,
     runAttempt: RUN_ATTEMPT,
     eventName: "push",
+    verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
     scopeResults: Object.fromEntries(
       PRODUCTION_VERIFY_SCOPE_KEYS.map((key) => [key, true]),
     ),
@@ -191,7 +194,10 @@ function mockGitHub(fixtures) {
     let value;
     if (url.pathname.endsWith("/actions/workflows/verify.yml/runs")) {
       assert.equal(url.searchParams.get("branch"), "production");
-      assert.equal(url.searchParams.get("event"), "push");
+      assert.equal(
+        url.searchParams.get("event"),
+        fixtures.runs.workflow_runs[0].event,
+      );
       assert.equal(url.searchParams.get("head_sha"), COMMIT);
       value = fixtures.runs;
     } else if (url.pathname.endsWith("/actions/workflows/verify.yml")) {
@@ -219,6 +225,7 @@ async function resolveFixtures(fixtures = validApiFixtures(), overrides = {}) {
     commitSha: COMMIT,
     treeSha: TREE,
     workflowFileSha256: WORKFLOW_SHA256,
+    verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
     githubApiUrl: "https://api.github.com",
     githubToken: "test-token",
     nowMs: NOW_MS,
@@ -239,6 +246,8 @@ test("full production Verify proof is deterministic and exact", () => {
       workflowFileSha256: WORKFLOW_SHA256,
       runId: RUN_ID,
       runAttempt: RUN_ATTEMPT,
+      eventName: "push",
+      verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
     }),
     proof,
   );
@@ -285,6 +294,8 @@ test("proof binds the path scope and distinguishes skipped lanes", () => {
         workflowFileSha256: WORKFLOW_SHA256,
         runId: RUN_ID,
         runAttempt: RUN_ATTEMPT,
+        eventName: "push",
+        verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
       },
     ),
   );
@@ -335,6 +346,8 @@ test("downloaded proof rejects identity, schema, run, and byte drift", () => {
     workflowFileSha256: WORKFLOW_SHA256,
     runId: RUN_ID,
     runAttempt: RUN_ATTEMPT,
+    eventName: "push",
+    verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
   };
   const mutations = [
     (value) => { value.schemaVersion = "programmable.production-verify-proof.v0"; },
@@ -370,7 +383,58 @@ test("resolver accepts only a fresh exact successful run and immutable artifact"
     artifactId: 777,
     artifactName: `production-verify-proof-${RUN_ID}-${RUN_ATTEMPT}`,
     artifactDigest: ARTIFACT_DIGEST,
+    eventName: "push",
+    verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
   });
+});
+
+test("manual Custom V2 release proof binds dispatch intent and full-tree lane", async () => {
+  const input = validProofInput();
+  input.eventName = "workflow_dispatch";
+  input.verificationMode = PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE;
+  input.scopeResults = {
+    contracts: false,
+    custom_v2: true,
+    database: false,
+    dependencies: false,
+    indexer: false,
+    interface: false,
+    read_model: false,
+  };
+  input.checkResults = {
+    "secret-scan": "success",
+    "custom-v2": "success",
+    indexer: "skipped",
+    "database-pglite": "skipped",
+    interface: "skipped",
+    contracts: "skipped",
+  };
+  const proof = buildProductionVerifyProofV1(input);
+  assert.equal(proof.run.event, "workflow_dispatch");
+  assert.equal(
+    proof.run.verificationMode,
+    PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE,
+  );
+  assert.equal(proof.scope.custom_v2, true);
+
+  const fixtures = validApiFixtures();
+  fixtures.runs.workflow_runs[0].event = "workflow_dispatch";
+  assert.equal(
+    (await resolveFixtures(fixtures, {
+      verificationMode: PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE,
+    })).eventName,
+    "workflow_dispatch",
+  );
+});
+
+test("manual Custom V2 release proof rejects event or scope substitution", () => {
+  const input = validProofInput();
+  input.eventName = "workflow_dispatch";
+  input.verificationMode = PRODUCTION_VERIFY_CUSTOM_V2_RELEASE_MODE;
+  assert.throws(() => buildProductionVerifyProofV1(input), /release .* scope/u);
+
+  input.eventName = "push";
+  assert.throws(() => buildProductionVerifyProofV1(input), /mode\/event/u);
 });
 
 test("resolver rejects a newer canceled run instead of falling back to old success", async () => {

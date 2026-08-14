@@ -31,7 +31,7 @@ function stepBlock(source, name) {
 }
 
 test("Custom V2 production proof is a dedicated versioned protected lane", () => {
-  assert.match(proof, /programmable\.production-verify-proof\.v3/u);
+  assert.match(proof, /programmable\.production-verify-proof\.v4/u);
   assert.match(proof, /"custom_v2"/u);
   assert.match(proof, /id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2"/u);
   assert.match(verify, /^  custom-v2:$/mu);
@@ -47,6 +47,40 @@ test("Custom V2 production proof is a dedicated versioned protected lane", () =>
   assert.match(verify, /PRODUCTION_VERIFY_SCOPE_CUSTOM_V2:/u);
   assert.match(verify, /PRODUCTION_VERIFY_CUSTOM_V2_RESULT:/u);
   assert.match(verify, /verified Custom V2|CUSTOM_V2_RESULT/u);
+});
+
+test("manual Generic release verification runs the complete current Custom V2 tree", () => {
+  assert.match(
+    verify,
+    /^  workflow_dispatch:[\s\S]*verification_mode:[\s\S]*custom-v2-release/mu,
+  );
+  const scope = stepBlock(verify, "Classify changed paths");
+  assert.match(scope, /VERIFICATION_MODE:/u);
+  assert.match(scope, /test "\$GITHUB_EVENT_NAME" = workflow_dispatch/u);
+  assert.match(scope, /test "\$GITHUB_REF" = refs\/heads\/production/u);
+  assert.match(
+    scope,
+    /classify-verify-paths\.mjs --custom-v2-release/u,
+  );
+  assert.match(
+    verify,
+    /name: Bind production Verify proof[\s\S]*github\.event_name == 'workflow_dispatch'[\s\S]*inputs\.verification_mode == 'custom-v2-release'/u,
+  );
+  assert.match(proof, /verificationMode/u);
+  assert.match(proof, /workflow_dispatch/u);
+  assert.match(proof, /validateVerificationModeScope/u);
+  assert.match(
+    deploy,
+    /PRODUCTION_VERIFY_MODE:[\s\S]*custom-v2-release[\s\S]*--verification-mode "\$PRODUCTION_VERIFY_MODE"/u,
+  );
+  assert.match(
+    deploy,
+    /--verification-mode "\$VERIFY_MODE"/u,
+  );
+  assert.match(
+    deploy,
+    /--verification-mode "\$\{\{ needs\.release-gate\.outputs\.verification_mode \}\}"/u,
+  );
 });
 
 test("trusted-base classification bootstraps Custom V2 without narrowing legacy lanes", () => {
