@@ -1,0 +1,155 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import type { GenericLaunchRecordV2 } from
+  "@/lib/server/custom-launch/generic-launch-contract-v2";
+import styles from "./generic-launch-directory-v2.module.css";
+
+type FeedState =
+  | Readonly<{ status: "loading" }>
+  | Readonly<{ status: "error" }>
+  | Readonly<{ status: "ready"; records: readonly GenericLaunchRecordV2[] }>;
+
+export function GenericLaunchDirectoryV2() {
+  const [state, setState] = useState<FeedState>({ status: "loading" });
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/custom-launch/generic/v2/launches?limit=24", {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) throw new TypeError("launch feed unavailable");
+      const value = await response.json() as Readonly<{
+        schemaVersion?: unknown;
+        records?: unknown;
+      }>;
+      if (value.schemaVersion !== "programmable.generic-launch-feed.v2"
+        || !Array.isArray(value.records)) throw new TypeError("launch feed invalid");
+      setState({
+        status: "ready",
+        records: value.records as readonly GenericLaunchRecordV2[],
+      });
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setState({ status: "error" });
+      void error;
+    });
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <p className={styles.eyebrow}>Custom launches</p>
+        <h1>Launched from an approved revision.</h1>
+        <p className={styles.intro}>
+          Each record joins the signed source revision to its finalized,
+          non-revoked Registry lifecycle.
+        </p>
+      </header>
+      {state.status === "loading" ? (
+        <p role="status" className={styles.status}>Loading launch records…</p>
+      ) : state.status === "error" ? (
+        <p role="status" className={styles.status}>
+          Custom launch records are not active yet.
+        </p>
+      ) : state.records.length === 0 ? (
+        <p role="status" className={styles.status}>No finalized launches yet.</p>
+      ) : (
+        <section aria-label="Finalized custom launches" className={styles.grid}>
+          {state.records.map((record) => (
+            <LaunchCard key={record.recordHash} record={record} />
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}
+
+export function GenericLaunchDetailV2({ recordHash }: { recordHash: string }) {
+  const [record, setRecord] = useState<GenericLaunchRecordV2 | null | undefined>();
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(`/api/custom-launch/generic/v2/launches/${encodeURIComponent(recordHash)}`, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) throw new TypeError("launch unavailable");
+      const value = await response.json() as Readonly<{
+        schemaVersion?: unknown;
+        record?: GenericLaunchRecordV2;
+      }>;
+      if (value.schemaVersion !== "programmable.generic-launch-view.v2"
+        || value.record === undefined) throw new TypeError("launch invalid");
+      setRecord(value.record);
+    }).catch(() => {
+      if (!controller.signal.aborted) setRecord(null);
+    });
+    return () => controller.abort();
+  }, [recordHash]);
+  if (record === undefined) {
+    return <main className={styles.page}><p role="status" className={styles.status}>Loading launch…</p></main>;
+  }
+  if (record === null) {
+    return <main className={styles.page}><p role="status" className={styles.status}>This launch record is unavailable.</p></main>;
+  }
+  const source = record.sourceProjection;
+  return (
+    <main className={styles.page}>
+      <Link className={styles.back} href="/custom-launches">← Custom launches</Link>
+      <article className={styles.detail} aria-labelledby="launch-title">
+        <p className={styles.eyebrow}>Finalized custom launch</p>
+        <h1 id="launch-title">{source.sourceRevision.repositoryFullName}</h1>
+        <p className={styles.intro}>
+          Approval revision {source.approval.approvalRevision} · source {short(source.sourceRevision.commitObjectId)}
+        </p>
+        <dl className={styles.facts}>
+          <Fact label="Launch ID" value={source.descriptor.launchId} />
+          <Fact label="Descriptor" value={source.descriptor.descriptorHash} />
+          <Fact label="Launch wallet" value={source.descriptor.launchWallet} />
+          <Fact label="Primary contract" value={source.descriptor.primaryContract} />
+          <Fact label="Source tree" value={source.sourceRevision.treeObjectId} />
+          <Fact label="Finalized block" value={source.lifecycle.finalization.blockNumber} />
+          <Fact label="Common verified head" value={source.lifecycle.latestCommonHead} />
+          <Fact label="Record hash" value={record.recordHash} />
+        </dl>
+        <div className={styles.actions}>
+          <a href={`https://etherscan.io/address/${source.descriptor.primaryContract}`} target="_blank" rel="noreferrer">
+            View contract<span className={styles.srOnly}> on Etherscan</span>
+          </a>
+          <a href={`https://github.com/${source.sourceRevision.repositoryFullName}/tree/${source.sourceRevision.commitObjectId}`} target="_blank" rel="noreferrer">
+            View source revision
+          </a>
+          <Link href="/launch">Launch a project</Link>
+        </div>
+      </article>
+    </main>
+  );
+}
+
+function LaunchCard({ record }: { record: GenericLaunchRecordV2 }) {
+  const source = record.sourceProjection;
+  return (
+    <article className={styles.card}>
+      <p className={styles.cardState}>Finalized · non-revoked</p>
+      <h2>{source.sourceRevision.repositoryFullName}</h2>
+      <p>Revision {source.approval.approvalRevision} · {short(source.sourceRevision.commitObjectId)}</p>
+      <dl className={styles.cardFacts}>
+        <Fact label="Launch ID" value={short(source.descriptor.launchId)} />
+        <Fact label="Wallet" value={short(source.descriptor.launchWallet)} />
+      </dl>
+      <Link className={styles.cardLink} href={`/custom-launches/${record.recordHash}`}>
+        View verified launch<span aria-hidden="true"> ↗</span>
+      </Link>
+    </article>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return <div><dt>{label}</dt><dd title={value}>{value}</dd></div>;
+}
+
+function short(value: string): string {
+  return value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
+}

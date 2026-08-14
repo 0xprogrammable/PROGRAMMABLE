@@ -235,7 +235,8 @@ function fixtureMap(
   const result = new Map<ProjectionTargetLaneV1, Readonly<NormalizedFixtureV1>>();
   const idempotency = new Set<string>();
   for (const value of values) {
-    if (!LANES.includes(value.lane) || result.has(value.lane)) {
+    if (!(LANES as readonly ProjectionTargetLaneV1[]).includes(value.lane)
+      || result.has(value.lane)) {
       throw new TypeError("projection target conformance fixture lane is invalid or duplicated");
     }
     if (typeof value.canonicalWrite !== "string" || Buffer.byteLength(value.canonicalWrite) > 4_194_304) {
@@ -278,7 +279,8 @@ function laneMap(
 ): ReadonlyMap<ProjectionTargetLaneV1, ProjectionTargetLaneConfigurationV1> {
   const result = new Map<ProjectionTargetLaneV1, ProjectionTargetLaneConfigurationV1>();
   for (const value of values) {
-    if (!LANES.includes(value.lane) || result.has(value.lane)
+    if (!(LANES as readonly ProjectionTargetLaneV1[]).includes(value.lane)
+      || result.has(value.lane)
       || typeof value.audience !== "string" || value.audience.length < 1
       || value.audience.length > 256 || /[\u0000-\u001f\u007f]/u.test(value.audience)) {
       throw new TypeError("projection target conformance lane is invalid or duplicated");

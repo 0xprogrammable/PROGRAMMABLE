@@ -103,6 +103,39 @@ const APPROVED_OPERATIONS = Object.freeze({
       sha256: "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f",
     }),
   }),
+  customLaunchReconciler: Object.freeze({
+    path: "/api/ops/custom-launch/generic-v2-projector",
+    schedule: "* * * * *",
+    authEnvironment: "CRON_SECRET",
+    maximumLifecycleAgeMs: 300_000,
+    refreshAfterMs: 60_000,
+    leaseMs: 55_000,
+    maximumApprovalInventory: 48,
+    batchLimit: 16,
+    concurrency: 8,
+    maximumInitialLogBlocks: 20_000,
+    maximumConcurrentLogRequests: 24,
+    route: Object.freeze({
+      path: "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+      sha256: "d2f6509eba91dd5690e58d121daf4802aa1367b3807da31ed7ec060ba84b1f14",
+    }),
+    runtime: Object.freeze({
+      path: "lib/server/custom-launch/generic-launch-production-v2.ts",
+      sha256: "b70e8d1a904ed09b1161269b182af7b4e18c93d552acb6e94a5cc66d9d76a19b",
+    }),
+    store: Object.freeze({
+      path: "lib/server/custom-launch/generic-launch-postgres-v2.ts",
+      sha256: "d542726f80bd816387240f1707e5934946b5dcf1cc9d69a015e08f3bb2d904be",
+    }),
+    registryReader: Object.freeze({
+      path: "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",
+      sha256: "a8b6607c641949ad384def4cb9b808233fecea37aadcd9517da69c9845a3dafd",
+    }),
+    migration: Object.freeze({
+      path: "ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
+      sha256: "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8",
+    }),
+  }),
   independentCrons: Object.freeze([
     Object.freeze({
       id: "protocol-revenue",
@@ -1441,11 +1474,14 @@ export function evaluateReadModelOperationsSourceContracts(
     ? operations.eventTriggers
     : [];
   const releaseGates = operations?.releaseGates;
+  const customLaunchReconciler = operations?.customLaunchReconciler;
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
   const approvedCrons = new Map([
     [APPROVED_OPERATIONS.legacyIndexer.path, APPROVED_OPERATIONS.legacyIndexer.schedule],
+    [APPROVED_OPERATIONS.customLaunchReconciler.path,
+      APPROVED_OPERATIONS.customLaunchReconciler.schedule],
     ...APPROVED_OPERATIONS.workers.map((worker) => [worker.path, worker.schedule]),
     ...APPROVED_OPERATIONS.independentCrons.map((cron) => [cron.path, cron.schedule]),
   ]);
@@ -1454,10 +1490,66 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-config-schema",
     operations?.schemaVersion === 1 &&
       exactJson(operations?.legacyIndexer, APPROVED_OPERATIONS.legacyIndexer) &&
+      exactJson(customLaunchReconciler, APPROVED_OPERATIONS.customLaunchReconciler) &&
       exactJson(workers, APPROVED_OPERATIONS.workers) &&
       exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers) &&
       exactJson(releaseGates, APPROVED_OPERATIONS.releaseGates),
     "the manifest exactly binds the reviewed indexers, workers, event trigger and release gates",
+  );
+  const customReconciler = APPROVED_OPERATIONS.customLaunchReconciler;
+  const customReconcilerRoute = source(customReconciler.route.path);
+  const customReconcilerRuntime = source(customReconciler.runtime.path);
+  check(
+    "ops-custom-launch-reconciler-schedule",
+    crons?.get(customReconciler.path) === customReconciler.schedule,
+    "Custom Launch V2 reconciliation has its fixed production schedule",
+  );
+  check(
+    "ops-custom-launch-reconciler-source-digests",
+    [customReconciler.route, customReconciler.runtime, customReconciler.store,
+      customReconciler.registryReader, customReconciler.migration].every(
+      (binding) => sourceBindingMatches(source, binding, expectedSha256Overrides),
+    ),
+    "Custom Launch V2 reconciler is byte-bound to route, runtime, store, Registry reader and migration",
+  );
+  check(
+    "ops-custom-launch-reconciler-route-auth",
+    customReconcilerRoute.includes(
+      `authorized(request.headers, process.env.${customReconciler.authEnvironment})`,
+    ) && /Buffer\.byteLength\(expectedValue,\s*["']utf8["']\)\s*<\s*32/u
+      .test(customReconcilerRoute) &&
+      /Buffer\.byteLength\(expectedValue,\s*["']utf8["']\)\s*>\s*1_024/u
+        .test(customReconcilerRoute) &&
+      /timingSafeEqual\(expected,\s*actual\)/u.test(customReconcilerRoute) &&
+      /response\(401,\s*["']unauthorized["']\)/u.test(customReconcilerRoute) &&
+      /response\(503,\s*["']reconciliation_unavailable["']\)/u
+        .test(customReconcilerRoute) &&
+      /["']cache-control["']:\s*["']no-store["']/u.test(customReconcilerRoute),
+    "Custom Launch V2 cron requires the bounded timing-safe cron secret",
+  );
+  check(
+    "ops-custom-launch-reconciler-freshness",
+    /GENERIC_LAUNCH_LIFECYCLE_MAXIMUM_AGE_MS\s*=\s*300_000/u
+      .test(customReconcilerRuntime) &&
+      /GENERIC_LAUNCH_LIFECYCLE_REFRESH_AFTER_MS\s*=\s*60_000/u
+        .test(customReconcilerRuntime) &&
+      /GENERIC_LAUNCH_RECONCILIATION_LEASE_MS\s*=\s*55_000/u
+        .test(customReconcilerRuntime) &&
+      /GENERIC_LAUNCH_RECONCILIATION_CONCURRENCY\s*=\s*8/u
+        .test(customReconcilerRuntime) &&
+      customReconciler.maximumLifecycleAgeMs === 300_000 &&
+      customReconciler.refreshAfterMs === 60_000 &&
+      customReconciler.leaseMs === 55_000 &&
+      customReconciler.maximumApprovalInventory === 48 &&
+      customReconciler.concurrency === 8 &&
+      customReconciler.maximumInitialLogBlocks === 20_000 &&
+      customReconciler.maximumConcurrentLogRequests === 24 &&
+      /MAXIMUM_INITIAL_LOG_BLOCKS\s*=\s*20_000n/u
+        .test(source(customReconciler.registryReader.path)) &&
+      /MAXIMUM_CONCURRENT_LOG_REQUESTS\s*=\s*24/u
+        .test(source(customReconciler.registryReader.path)) &&
+      customReconcilerRoute.includes(`limit: ${customReconciler.batchLimit}`),
+    "Custom Launch V2 public reads fail closed on the reviewed lifecycle age and bounded sweep",
   );
   check(
     "ops-cron-exact-set",

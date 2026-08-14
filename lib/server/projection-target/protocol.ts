@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   canonicalizeJson,
   parseStrictJson,
@@ -16,12 +18,15 @@ const DEFAULT_MAXIMUM_DEPTH = 128;
 const V1_REGISTRY_ROUTE = "/v1/internal/projections/registry";
 const V1_WEBSITE_ROUTE = "/v1/internal/projections/website-entitlements";
 const V2_WEBSITE_ROUTE = "/v2/internal/projections/custom-launches";
+const V2_APPROVAL_V3_ROUTE = "/v2/internal/projections/approval-descriptors";
+const HASH32 = /^0x[0-9a-f]{64}$/u;
 
 export type ProjectionTargetLaneV1 =
   | "registry.publication"
   | "website.entitlement"
   | "registry.custom-launched"
-  | "website.custom-launched";
+  | "website.custom-launched"
+  | "website.approval-v3";
 
 export const PROJECTION_TARGET_REFERENCE_CONTRACT_V1 = Object.freeze({
   schemaVersion: "programmable.projection-target-reference-contract.v1",
@@ -30,6 +35,7 @@ export const PROJECTION_TARGET_REFERENCE_CONTRACT_V1 = Object.freeze({
     "website.entitlement": `${V1_WEBSITE_ROUTE}/{projectionKey}`,
     "registry.custom-launched": "{configuredRegistryEndpointPath}/v2/custom-launches/{projectionKey}",
     "website.custom-launched": `${V2_WEBSITE_ROUTE}/{projectionKey}`,
+    "website.approval-v3": `${V2_APPROVAL_V3_ROUTE}/{projectionKey}`,
   }),
   methods: Object.freeze(["GET", "PUT"] as const),
   createdStatus: 201,
@@ -581,7 +587,7 @@ function resolveRoute(
 }
 
 interface ValidatedProjectionWriteV1 {
-  readonly version: 1 | 2;
+  readonly version: 1 | 2 | 3;
   readonly value: Readonly<Record<string, JsonValue>>;
   readonly idempotencyKey: Sha256Digest;
   readonly requestDigest: Sha256Digest;
@@ -630,6 +636,103 @@ function validateProjectionWrite(
       withoutRequestDigest,
     )) throw httpError(400, "write_digest_mismatch");
     return Object.freeze({ version: 1, value: write, idempotencyKey, requestDigest, recordDigest: projectionDigest });
+  }
+
+  if (route.lane === "website.approval-v3") {
+    exactKeys(write, [
+      "approvalEvidenceHash", "approvalId", "authorization",
+      "authorizationDigest", "descriptorHash", "idempotencyKey", "launchId",
+      "projectionKey", "projectionKind", "registryObservationDigest",
+      "requestDigest", "schemaVersion", "signedReceiptArtifactHash",
+      "targetBindingHash",
+    ], "Approval v3 artifact projection write");
+    if (
+      write.schemaVersion
+        !== "programmable.approval-v3-artifact-projection-write.v1"
+      || write.targetBindingHash !== route.targetBindingHash
+      || write.projectionKind !== route.lane
+      || write.projectionKey !== route.projectionKey
+      || write.idempotencyKey !== headerIdempotencyKey
+    ) throw httpError(400, "write_contract_mismatch");
+    const approvalId = nonzeroHash32(write.approvalId, "Approval v3 approval ID");
+    const descriptorHash = nonzeroHash32(
+      write.descriptorHash,
+      "Approval v3 descriptor hash",
+    );
+    const launchId = nonzeroHash32(write.launchId, "Approval v3 launch ID");
+    const signedReceiptArtifactHash = digest(
+      write.signedReceiptArtifactHash,
+      "Approval v3 signed artifact hash",
+    );
+    const approvalEvidenceHash = nonzeroHash32(
+      write.approvalEvidenceHash,
+      "Approval v3 evidence hash",
+    );
+    const authorizationDigest = digest(
+      write.authorizationDigest,
+      "Approval v3 authorization digest",
+    );
+    digest(write.registryObservationDigest, "Approval v3 Registry observation");
+    const idempotencyKey = digest(
+      write.idempotencyKey,
+      "Approval v3 idempotency key",
+    );
+    const requestDigest = digest(
+      write.requestDigest,
+      "Approval v3 request digest",
+    );
+    const authorization = jsonRecord(
+      write.authorization,
+      "Approval v3 authorization",
+    );
+    exactKeys(authorization, [
+      "approvalEvidenceHash", "artifact", "signedReceiptArtifactHash",
+    ], "Approval v3 authorization");
+    const artifact = jsonRecord(
+      authorization.artifact,
+      "Approval v3 signed artifact",
+    );
+    exactKeys(artifact, ["envelope", "payload"], "Approval v3 signed artifact");
+    const payload = jsonRecord(artifact.payload, "Approval v3 artifact payload");
+    const envelope = jsonRecord(artifact.envelope, "Approval v3 artifact envelope");
+    const payloadAuthorization = jsonRecord(
+      payload.authorization,
+      "Approval v3 payload authorization",
+    );
+    if (
+      write.projectionKey !== `approval:${approvalId}`
+      || payload.schemaVersion
+        !== "programmable.approval-registry-descriptor-binding.v3"
+      || payloadAuthorization.approvalId !== approvalId
+      || payload.descriptorHash !== descriptorHash
+      || payload.launchId !== launchId
+      || envelope.schemaVersion !== "1.0.0"
+      || envelope.domain
+        !== "programmable.approval-registry-descriptor-binding.v3"
+      || envelope.audience !== "programmable.custom-registry.v2"
+      || authorization.signedReceiptArtifactHash !== signedReceiptArtifactHash
+      || authorization.approvalEvidenceHash !== approvalEvidenceHash
+      || rawCanonicalSha256(artifact) !== signedReceiptArtifactHash
+      || approvalEvidenceHash !== `0x${signedReceiptArtifactHash.slice(7)}`
+      || rawCanonicalSha256(authorization) !== authorizationDigest
+      || canonicalSha256(
+        "programmable.approval-v3-website-artifact-idempotency.v1",
+        { approvalId, descriptorHash, launchId, signedReceiptArtifactHash },
+      ) !== idempotencyKey
+    ) throw httpError(400, "write_digest_mismatch");
+    const { requestDigest: _ignored, ...withoutRequestDigest } = write;
+    void _ignored;
+    if (canonicalSha256(
+      "programmable.approval-v3-artifact-projection-write.v1",
+      withoutRequestDigest,
+    ) !== requestDigest) throw httpError(400, "write_digest_mismatch");
+    return Object.freeze({
+      version: 3,
+      value: write,
+      idempotencyKey,
+      requestDigest,
+      recordDigest: authorizationDigest,
+    });
   }
 
   exactKeys(write, [
@@ -712,6 +815,41 @@ function buildResponseMaterial(
       payloadDigest: value.payloadDigest!,
       projectionDigest: value.projectionDigest!,
       projection: value.projection!,
+      externalReference,
+      targetRevision,
+      observedAt: now,
+    }) as JsonValue;
+    return Object.freeze({ acknowledgement, readback });
+  }
+  if (write.version === 3) {
+    const value = write.value;
+    const common = Object.freeze({
+      targetBindingHash: value.targetBindingHash!,
+      projectionKind: value.projectionKind!,
+      projectionKey: value.projectionKey!,
+      approvalId: value.approvalId!,
+      descriptorHash: value.descriptorHash!,
+      launchId: value.launchId!,
+      signedReceiptArtifactHash: value.signedReceiptArtifactHash!,
+      approvalEvidenceHash: value.approvalEvidenceHash!,
+      authorizationDigest: value.authorizationDigest!,
+      registryObservationDigest: value.registryObservationDigest!,
+      idempotencyKey: value.idempotencyKey!,
+      requestDigest: value.requestDigest!,
+    });
+    const acknowledgement = Object.freeze({
+      schemaVersion:
+        "programmable.approval-v3-artifact-projection-write-ack.v1",
+      ...common,
+      externalReference,
+      targetRevision,
+      acknowledgedAt: now,
+    }) as JsonValue;
+    const readback = Object.freeze({
+      schemaVersion:
+        "programmable.approval-v3-artifact-projection-readback.v1",
+      ...common,
+      authorization: value.authorization!,
       externalReference,
       targetRevision,
       observedAt: now,
@@ -875,6 +1013,7 @@ function validateHandlerOptions(input: Readonly<{
   const supported = new Set<ProjectionTargetLaneV1>([
     "registry.publication", "website.entitlement",
     "registry.custom-launched", "website.custom-launched",
+    "website.approval-v3",
   ]);
   const lanes = new Map<ProjectionTargetLaneV1, Readonly<ValidatedLaneV1>>();
   for (const value of input.lanes) {
@@ -888,6 +1027,8 @@ function validateHandlerOptions(input: Readonly<{
       ? V1_REGISTRY_ROUTE
       : value.lane === "website.entitlement"
         ? V1_WEBSITE_ROUTE
+        : value.lane === "website.approval-v3"
+          ? V2_APPROVAL_V3_ROUTE
         : value.lane === "website.custom-launched"
           ? V2_WEBSITE_ROUTE
           : `${registryV2EndpointPath!}/v2/custom-launches`;
@@ -1060,7 +1201,10 @@ function assertRouteHeaders(
     || headers.get("x-programmable-target-binding") !== route.targetBindingHash
   ) throw httpError(403, "target_binding_rejected");
   const kind = headers.get("x-programmable-projection-kind");
-  if (route.lane.endsWith(".custom-launched")) {
+  if (
+    route.lane.endsWith(".custom-launched")
+    || route.lane === "website.approval-v3"
+  ) {
     if (headers.get("x-programmable-projection-kind") !== route.lane) {
       throw httpError(403, "projection_lane_rejected");
     }
@@ -1209,6 +1353,21 @@ function digest(value: unknown, label: string): Sha256Digest {
   return value as Sha256Digest;
 }
 
+function nonzeroHash32(value: unknown, label: string): string {
+  if (
+    typeof value !== "string"
+    || !HASH32.test(value)
+    || value === `0x${"0".repeat(64)}`
+  ) throw new TypeError(`${label} is invalid`);
+  return value;
+}
+
+function rawCanonicalSha256(value: JsonValue): Sha256Digest {
+  return `sha256:${createHash("sha256")
+    .update(canonicalizeJson(value), "utf8")
+    .digest("hex")}`;
+}
+
 function identityKey(lane: ProjectionTargetLaneV1, projectionKey: string): string {
   return `${lane}\u0000${projectionKey}`;
 }
@@ -1217,5 +1376,6 @@ function isLane(value: unknown): value is ProjectionTargetLaneV1 {
   return value === "registry.publication"
     || value === "website.entitlement"
     || value === "registry.custom-launched"
-    || value === "website.custom-launched";
+    || value === "website.custom-launched"
+    || value === "website.approval-v3";
 }
