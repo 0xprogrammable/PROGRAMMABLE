@@ -185,17 +185,20 @@ describe("canonical Router stamp surfaces", () => {
   });
 
   it("parses and labels both Router categories from the stamp", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
         status: "ready",
         tokens: [customGraphExploreEntry, stampedClassicExploreEntry],
         page: 1,
         pageSize: 9,
         total: 2,
         totalPages: 1,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
       }),
-    }));
+    );
+    vi.stubGlobal("fetch", fetchMock);
 
     const payload = await loadExplorePayload(
       `router-stamp-${Date.now()}`,
@@ -211,6 +214,7 @@ describe("canonical Router stamp surfaces", () => {
     expect(payload.tokens[0]).toMatchObject({
       launchStampProvenance: { kind: "custom-graph" },
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("fills missing Router card copy without inventing market data", () => {
