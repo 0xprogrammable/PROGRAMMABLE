@@ -108,6 +108,54 @@ const payload = {
   totalPages: 2,
 };
 
+const bitqueryMarketEntry = classicEntry({
+  id: "1:bitquery-market",
+  name: "Bitquery market",
+  symbol: "BQM",
+  tokenAddress: "0x1111111111111111111111111111111111111111",
+  hookAddress: "0x2222222222222222222222222222222222222222",
+  poolId: `0x${"33".repeat(32)}`,
+  launchedAt: "2026-08-11T14:00:00.000Z",
+  totalSwapFeeBps: 100,
+  liquidityPath: "meme",
+});
+
+const unvaluedMarketPayload = {
+  ...payload,
+  tokens: [{
+    ...bitqueryMarketEntry,
+    valuation: { status: "unavailable", reason: "source-unavailable" },
+  }],
+  total: 1,
+  totalPages: 1,
+};
+
+const valuedMarketPayload = {
+  ...payload,
+  tokens: [{
+    ...bitqueryMarketEntry,
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: "125000000000000000000",
+      freshness: "current",
+      source: "bitquery",
+    },
+  }],
+  total: 1,
+  totalPages: 1,
+};
+
+const wrongCurrencyMarketPayload = {
+  ...valuedMarketPayload,
+  tokens: valuedMarketPayload.tokens.map((token) => ({
+    ...token,
+    valuation: { ...token.valuation, currency: "eth" },
+  })),
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -582,7 +630,7 @@ describe("Explore refresh state", () => {
     );
     const search = new URLSearchParams({
       q: "",
-      sort: "market-cap",
+      sort: "newest",
       page: "1",
       limit: "9",
     });
@@ -592,6 +640,121 @@ describe("Explore refresh state", () => {
 
     expect(second).toBe(first);
     await expect(first).resolves.toEqual(marketPayload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["market-cap", "market-cap-asc"])(
+    "retries a valid zero-valuation %s response and returns the valued retry",
+    async (sort) => {
+      const first = new Response(JSON.stringify(unvaluedMarketPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+      const firstJson = vi.spyOn(first, "json");
+      const fetchMock = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(new Response(
+          JSON.stringify(valuedMarketPayload),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ));
+
+      const result = await loadExplorePayload(
+        `${sort}-zero-then-valued`,
+        new URLSearchParams({ sort, page: "1", limit: "9" }),
+      );
+
+      expect(result.tokens[0]?.valuation).toMatchObject({
+        status: "available",
+        metric: "fdv",
+        freshness: "current",
+        source: "bitquery",
+      });
+      expect(firstJson).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+    },
+  );
+
+  it("retries the first non-USD FDV and returns the second fail-closed", async () => {
+    const secondPayload = { ...wrongCurrencyMarketPayload, total: 2 };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(wrongCurrencyMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(secondPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+
+    await expect(loadExplorePayload(
+      "market-cap-wrong-currency",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({
+      total: 2,
+      tokens: [expect.objectContaining({
+        valuation: expect.objectContaining({ currency: "eth" }),
+      })],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the second valid zero-valuation response without a third attempt", async () => {
+    const secondPayload = { ...unvaluedMarketPayload, total: 2 };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(unvaluedMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify(secondPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+
+    await expect(loadExplorePayload(
+      "market-cap-zero-twice",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({ total: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a valid zero-valuation response for Newest", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(unvaluedMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(valuedMarketPayload),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+
+    await expect(loadExplorePayload(
+      "newest-zero-no-retry",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({
+      tokens: [expect.objectContaining({
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      })],
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -606,7 +769,7 @@ describe("Explore refresh state", () => {
     const firstJson = vi.spyOn(first, "json");
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(first)
-      .mockResolvedValueOnce(new Response(JSON.stringify(payload), {
+      .mockResolvedValueOnce(new Response(JSON.stringify(unvaluedMarketPayload), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }));
@@ -619,7 +782,11 @@ describe("Explore refresh state", () => {
 
     const request = loadExplorePayload("bitquery-one-retry", search);
     expect(loadExplorePayload("bitquery-one-retry", search)).toBe(request);
-    await expect(request).resolves.toEqual(payload);
+    await expect(request).resolves.toMatchObject({
+      tokens: [expect.objectContaining({
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      })],
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
@@ -722,7 +889,12 @@ describe("Explore refresh state", () => {
             resolveOld = resolve;
           });
         }
-        return new Response(JSON.stringify({ ...payload, page: 2 }), {
+        return new Response(JSON.stringify({
+          ...valuedMarketPayload,
+          page: 2,
+          total: 18,
+          totalPages: 2,
+        }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
@@ -787,6 +959,66 @@ describe("Explore refresh state", () => {
       currentSearch,
     )).resolves.toMatchObject({ page: 2 });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache an empty-FDV response when its retry is aborted as stale", async () => {
+    let resolveOldRetry: ((response: Response) => void) | undefined;
+    let oldRetrySignal: AbortSignal | undefined;
+    let pageOneCalls = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init) => {
+        const url = new URL(String(input), "https://example.test");
+        if (url.searchParams.get("page") === "1") {
+          pageOneCalls += 1;
+          if (pageOneCalls === 1) {
+            return new Response(JSON.stringify(unvaluedMarketPayload), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          oldRetrySignal = init?.signal ?? undefined;
+          return await new Promise<Response>((resolve) => {
+            resolveOldRetry = resolve;
+          });
+        }
+        return new Response(JSON.stringify({
+          ...valuedMarketPayload,
+          page: 2,
+          total: 18,
+          totalPages: 2,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    const oldRequest = loadExplorePayload(
+      "aborted-empty-fdv-no-stale-cache",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const currentSearch = new URLSearchParams({
+      sort: "market-cap",
+      page: "2",
+      limit: "9",
+    });
+    const currentRequest = loadExplorePayload(
+      "aborted-empty-fdv-no-stale-cache",
+      currentSearch,
+    );
+    resolveOldRetry?.(new Response(JSON.stringify(valuedMarketPayload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(oldRequest).rejects.toMatchObject({ name: "AbortError" });
+    await expect(currentRequest).resolves.toMatchObject({ page: 2 });
+    await expect(loadExplorePayload(
+      "aborted-empty-fdv-no-stale-cache",
+      currentSearch,
+    )).resolves.toMatchObject({ page: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(oldRetrySignal?.aborted).toBe(true);
   });
 
   it("rejects Router provenance on a custom project without a complete stamp", async () => {

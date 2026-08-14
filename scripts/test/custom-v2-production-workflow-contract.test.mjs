@@ -94,6 +94,23 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   assert.match(smoke, /\/api\/explore\/profile\?account=/u);
   assert.match(
     smoke,
+    /const requestUrl = new URL\(path, target\);[\s\S]*for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{[\s\S]*const response = await fetch\(requestUrl, \{[\s\S]*if \(response\.status === 503 && attempt === 0\) continue;[\s\S]*if \(!response\.ok\)/u,
+  );
+  assert.match(
+    smoke,
+    /response\.status === 200[\s\S]*retryWhen\?\.\(result\) === true/u,
+  );
+  assert.match(
+    smoke,
+    /token\.valuation\.freshness === "current"[\s\S]*\["market-cap", "market-cap-asc"\]\.includes\(expectedSort\)[\s\S]*response\.body\?\.sort === expectedSort/u,
+  );
+  assert.match(
+    smoke,
+    /sort=market-cap",\s*\(response\) =>\s*emptyCurrentBitqueryFdvRanking\(response, "market-cap"\),/u,
+  );
+  assert.equal(smoke.match(/emptyCurrentBitqueryFdvRanking/gu)?.length, 2);
+  assert.match(
+    smoke,
     /x-programmable-launch-source"\) ===[\s\S]*"drpc"/u,
   );
   assert.match(

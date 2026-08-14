@@ -613,24 +613,44 @@ jobs:
             "x-vercel-protection-bypass": bypass,
             "x-vercel-set-bypass-cookie": "false",
           };
-          async function requestJson(path) {
-            const response = await fetch(new URL(path, target), {
-              headers,
-              redirect: "error",
-              signal: AbortSignal.timeout(30_000),
-            });
-            if (!response.ok) {
-              throw new Error(
-                "Bitquery public API returned HTTP " + response.status,
-              );
+          async function requestJson(path, retryWhen = null) {
+            const requestUrl = new URL(path, target);
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+              const response = await fetch(requestUrl, {
+                headers,
+                redirect: "error",
+                signal: AbortSignal.timeout(30_000),
+              });
+              if (response.status === 503 && attempt === 0) continue;
+              if (!response.ok) {
+                throw new Error(
+                  "Bitquery public API returned HTTP " + response.status,
+                );
+              }
+              const result = {
+                body: await response.json(),
+                headers: response.headers,
+              };
+              if (
+                response.status === 200 &&
+                attempt === 0 &&
+                retryWhen?.(result) === true
+              ) continue;
+              return result;
             }
-            return {
-              body: await response.json(),
-              headers: response.headers,
-            };
+            throw new Error("Bitquery public API retry contract is unreachable");
           }
           const address = /^0x[0-9a-f]{40}$/u;
           const positiveInteger = /^[1-9][0-9]*$/u;
+          function integrityQualifiedBitqueryFdv(token) {
+            return token?.valuation?.status === "available" &&
+              token.valuation.metric === "fdv" &&
+              token.valuation.supplyBasis === "total" &&
+              token.valuation.currency === "usd" &&
+              token.valuation.freshness === "current" &&
+              token.valuation.source === "bitquery" &&
+              positiveInteger.test(String(token.valuation.valueWad ?? ""));
+          }
           function exactExploreSources(response) {
             return response.headers.get("x-programmable-launch-source") ===
                 "drpc" &&
@@ -640,6 +660,18 @@ jobs:
                 "bitquery" &&
               response.headers.get("x-programmable-price-source") ===
                 "bitquery";
+          }
+          function emptyCurrentBitqueryFdvRanking(response, expectedSort) {
+            const tokens = Array.isArray(response.body?.tokens)
+              ? response.body.tokens
+              : [];
+            return ["market-cap", "market-cap-asc"].includes(expectedSort) &&
+              response.body?.status === "ready" &&
+              response.body?.sort === expectedSort &&
+              response.body?.sortMetric === "fdv" &&
+              tokens.length > 0 &&
+              exactExploreSources(response) &&
+              !tokens.some(integrityQualifiedBitqueryFdv);
           }
           const health = await requestJson("/api/ops/health");
           if (
@@ -651,6 +683,8 @@ jobs:
           }
           const highest = await requestJson(
             "/api/explore?limit=20&page=1&sort=market-cap",
+            (response) =>
+              emptyCurrentBitqueryFdvRanking(response, "market-cap"),
           );
           const highestTokens = Array.isArray(highest.body?.tokens)
             ? highest.body.tokens
@@ -665,10 +699,7 @@ jobs:
             throw new Error("Highest FDV is not ready");
           }
           const valuedHighest = highestTokens.filter(
-            (token) =>
-              token?.valuation?.status === "available" &&
-              token.valuation.source === "bitquery" &&
-              positiveInteger.test(String(token.valuation.valueWad ?? "")),
+            integrityQualifiedBitqueryFdv,
           );
           if (valuedHighest.length < 1) {
             throw new Error("Highest FDV returned no Bitquery valuation");

@@ -944,6 +944,64 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it.each([
+    ["more than one retry", "attempt < 2", "attempt < 3"],
+    [
+      "a response other than HTTP 503",
+      "response.status === 503 && attempt === 0",
+      "response.status >= 500 && attempt === 0",
+    ],
+    ["a rebuilt URL", "fetch(requestUrl, {", "fetch(new URL(path, target), {"],
+  ])("rejects staged Bitquery smoke retrying %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    [
+      "an FDV response other than HTTP 200",
+      "response.status === 200",
+      "response.ok",
+    ],
+    [
+      "a non-current valuation",
+      'token.valuation.freshness === "current"',
+      'token.valuation.freshness !== "unknown"',
+    ],
+    [
+      "the Newest route on empty FDV data",
+      '["market-cap", "market-cap-asc"].includes(expectedSort)',
+      '["market-cap", "market-cap-asc", "newest"].includes(expectedSort)',
+    ],
+    [
+      "a response sort different from the requested FDV sort",
+      "response.body?.sort === expectedSort",
+      '["market-cap", "market-cap-asc"].includes(response.body?.sort)',
+    ],
+    [
+      "without the exact Highest callback",
+      '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
+      "              false,",
+    ],
+  ])("rejects staged Bitquery data retrying %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
   it("rejects restored staged read-model availability gates", () => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
