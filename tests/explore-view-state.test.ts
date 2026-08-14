@@ -595,18 +595,21 @@ describe("Explore refresh state", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not retry a Bitquery 503", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify({
-          status: "unavailable",
-          error: "Bitquery is temporarily unavailable",
-        }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+  it("retries the identical Explore request once after a 503", async () => {
+    const first = new Response(JSON.stringify({
+      status: "ready",
+      tokens: [{ forged: "must-not-be-parsed" }],
+    }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+    const firstJson = vi.spyOn(first, "json");
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
     const search = new URLSearchParams({
       q: "",
       sort: "market-cap",
@@ -614,32 +617,177 @@ describe("Explore refresh state", () => {
       limit: "9",
     });
 
-    await expect(loadExplorePayload("bitquery-no-retry", search))
-      .rejects.toThrow("Bitquery is temporarily unavailable");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = loadExplorePayload("bitquery-one-retry", search);
+    expect(loadExplorePayload("bitquery-one-retry", search)).toBe(request);
+    await expect(request).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: { Accept: "application/json" },
+    });
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).not.toBe(
+      fetchMock.mock.calls[0]?.[1]?.signal,
+    );
+    expect(firstJson).not.toHaveBeenCalled();
   });
 
-  it.each(["newest", "market-cap", "market-cap-asc"])(
-    "does not retry a 503 for the %s sort",
+  it.each(["newest", "oldest", "market-cap", "market-cap-asc"])(
+    "stops after one automatic 503 retry for the %s sort",
     async (sort) => {
-      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({
+      const first = new Response("not launch data", { status: 503 });
+      const firstJson = vi.spyOn(first, "json");
+      const fetchMock = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(new Response(JSON.stringify({
           status: "unavailable",
           error: "Launch data is temporarily unavailable",
           retryable: true,
         }), {
           status: 503,
           headers: { "Content-Type": "application/json" },
-        }),
-      );
+        }));
 
       await expect(loadExplorePayload(
-        `${sort}-does-not-retry`,
+        `${sort}-one-retry-terminal`,
         new URLSearchParams({ sort, page: "1", limit: "9" }),
       )).rejects.toThrow("Launch data is temporarily unavailable");
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+      expect(firstJson).not.toHaveBeenCalled();
     },
   );
+
+  it("does not retry a non-503 response", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "Invalid Explore request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      "non-503-no-retry",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("Invalid Explore request");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a late 503 retry its own full twelve-second deadline", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => {
+        calls += 1;
+        if (calls === 1) {
+          return await new Promise<Response>((resolve) => {
+            globalThis.setTimeout(
+              () => resolve(new Response("ignored", { status: 503 })),
+              11_000,
+            );
+          });
+        }
+        return await new Promise<Response>((resolve) => {
+          globalThis.setTimeout(() => resolve(new Response(
+            JSON.stringify(payload),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          )), 6_000);
+        });
+      },
+    );
+    const request = loadExplorePayload(
+      "late-503-fresh-attempt-deadline",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await expect(request).resolves.toEqual(payload);
+  });
+
+  it("does not retry an aborted 503 request", async () => {
+    let resolveOld: ((response: Response) => void) | undefined;
+    let oldAttemptSignal: AbortSignal | undefined;
+    const requests: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("page=1")) {
+          oldAttemptSignal = init?.signal ?? undefined;
+          return await new Promise<Response>((resolve) => {
+            resolveOld = resolve;
+          });
+        }
+        return new Response(JSON.stringify({ ...payload, page: 2 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    const first = loadExplorePayload(
+      "aborted-503-no-retry",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    await vi.waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+    const current = loadExplorePayload(
+      "aborted-503-no-retry",
+      new URLSearchParams({ sort: "market-cap", page: "2", limit: "9" }),
+    );
+    resolveOld?.(new Response("ignored", { status: 503 }));
+
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await expect(current).resolves.toMatchObject({ page: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requests.filter((url) => url.includes("page=1"))).toHaveLength(1);
+    expect(oldAttemptSignal?.aborted).toBe(true);
+  });
+
+  it("never caches a successful response from an aborted stale request", async () => {
+    let resolveOld: ((response: Response) => void) | undefined;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = String(input);
+        if (url.includes("page=1")) {
+          return await new Promise<Response>((resolve) => {
+            resolveOld = resolve;
+          });
+        }
+        return new Response(JSON.stringify({ ...payload, page: 2 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    const first = loadExplorePayload(
+      "aborted-success-no-stale-cache",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    );
+    await vi.waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+    const currentSearch = new URLSearchParams({
+      sort: "newest",
+      page: "2",
+      limit: "9",
+    });
+    const current = loadExplorePayload(
+      "aborted-success-no-stale-cache",
+      currentSearch,
+    );
+    await expect(current).resolves.toMatchObject({ page: 2 });
+    resolveOld?.(new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await expect(loadExplorePayload(
+      "aborted-success-no-stale-cache",
+      currentSearch,
+    )).resolves.toMatchObject({ page: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 
   it("rejects Router provenance on a custom project without a complete stamp", async () => {
     const project = customEntry(91);

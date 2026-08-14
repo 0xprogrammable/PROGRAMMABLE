@@ -931,17 +931,45 @@ async function fetchExplorePayload(
   contract: ExploreRequestContract,
 ) {
   const requestUrl = `/api/explore?${search.toString()}`;
-  const response = await fetch(requestUrl, {
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(readApiError(body));
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    signal.throwIfAborted();
+    const attemptController = new AbortController();
+    let timedOut = false;
+    const abortAttempt = () => attemptController.abort(signal.reason);
+    signal.addEventListener("abort", abortAttempt, { once: true });
+    const timeout = globalThis.setTimeout(() => {
+      timedOut = true;
+      attemptController.abort();
+    }, EXPLORE_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(requestUrl, {
+        headers: { Accept: "application/json" },
+        signal: attemptController.signal,
+      });
+      signal.throwIfAborted();
+      if (timedOut) throw new Error("Tokens took too long to respond");
+      if (response.status === 503 && attempt === 0) {
+        continue;
+      }
+      const body: unknown = await response.json().catch(() => null);
+      signal.throwIfAborted();
+      if (timedOut) throw new Error("Tokens took too long to respond");
+      if (response.status !== 200) {
+        throw new Error(readApiError(body));
+      }
+      const payload = parseExplorePayload(body);
+      assertExploreResponseContract(payload, contract);
+      return payload;
+    } catch (error) {
+      signal.throwIfAborted();
+      if (timedOut) throw new Error("Tokens took too long to respond");
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeout);
+      signal.removeEventListener("abort", abortAttempt);
+    }
   }
-  const payload = parseExplorePayload(body);
-  assertExploreResponseContract(payload, contract);
-  return payload;
+  throw new Error("Tokens are temporarily unavailable");
 }
 
 export function loadExplorePayload(
@@ -974,28 +1002,15 @@ export function loadExplorePayload(
   }
 
   const controller = new AbortController();
-  let timedOut = false;
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, EXPLORE_REQUEST_TIMEOUT_MS);
   const request = (async (): Promise<ExplorePayload> => {
-    try {
-      const payload = await fetchExplorePayload(
-        search,
-        controller.signal,
-        contract,
-      );
-      cacheResolvedExplorePayload(contentKey, payload);
-      return payload;
-    } catch (error) {
-      if (timedOut) {
-        throw new Error("Tokens took too long to respond");
-      }
-      throw error;
-    } finally {
-      globalThis.clearTimeout(timeout);
-    }
+    const payload = await fetchExplorePayload(
+      search,
+      controller.signal,
+      contract,
+    );
+    controller.signal.throwIfAborted();
+    cacheResolvedExplorePayload(contentKey, payload);
+    return payload;
   })();
 
   const entry = { controller, promise: request, requestIdentity };
