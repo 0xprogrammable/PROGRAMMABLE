@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   readAlchemy: vi.fn(),
   readLegacy: vi.fn(),
   readBitquery: vi.fn(),
+  readIdentity: vi.fn(),
   createPublicClient: vi.fn(),
 }));
 
@@ -186,6 +187,16 @@ vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({
   readBitqueryExploreModelV1: mocks.readBitquery,
 }));
 
+vi.mock("../lib/server/action-rpc-identity.server", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../lib/server/action-rpc-identity.server")
+  >();
+  return {
+    ...actual,
+    readCreatorClaimIdentityFromRpc: mocks.readIdentity,
+  };
+});
+
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
@@ -226,6 +237,13 @@ describe("creator claim action identity activation", () => {
     mocks.readAlchemy.mockResolvedValue(legacyModel);
     mocks.readLegacy.mockResolvedValue(legacyModel);
     mocks.readBitquery.mockResolvedValue(legacyModel);
+    mocks.readIdentity.mockResolvedValue({
+      tokenAddress: token,
+      hookAddress: hook,
+      poolId,
+      creatorAddress: creator,
+      totalSwapFeeBps: 100,
+    });
     mocks.createPublicClient.mockImplementation(() =>
       rpcClient(100_000n, 2_000_000_000n, 10n ** 18n),
     );
@@ -248,9 +266,15 @@ describe("creator claim action identity activation", () => {
           gasPriceWei: "2000000000",
           accountBalanceWei: "1000000000000000000",
         },
+        submission: {
+          status: "not-submitted",
+          transactionHash: null,
+          receipt: null,
+        },
       });
       expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
-      expect(mocks.readBitquery).toHaveBeenCalledTimes(1);
+      expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).not.toHaveBeenCalled();
       expect(mocks.lookup).not.toHaveBeenCalled();
       expect(mocks.readAlchemy).not.toHaveBeenCalled();
       expect(mocks.readLegacy).not.toHaveBeenCalled();
@@ -275,25 +299,25 @@ describe("creator claim action identity activation", () => {
     });
   });
 
-  it("reports a mainnet registry outage before starting any claim RPC read", async () => {
-    mocks.readBitquery.mockRejectedValueOnce(
-      new Error("Bitquery provider failed with a private detail"),
+  it("does not expose a private RPC identity-read failure", async () => {
+    mocks.readIdentity.mockRejectedValueOnce(
+      new Error("dRPC provider failed with a private detail"),
     );
 
     const response = await POST(request());
     const serialized = JSON.stringify(await response.json());
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(502);
     expect(JSON.parse(serialized)).toMatchObject({
       status: "blocked",
       error: {
-        code: "registry-unavailable",
+        code: "simulation-failed",
         message:
-          "The verified Programmable launch registry is temporarily unavailable",
+          "The configured RPC could not prepare the creator claim from the current onchain state",
       },
     });
-    expect(mocks.createPublicClient).not.toHaveBeenCalled();
-    expect(serialized).not.toContain("Bitquery provider");
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(serialized).not.toContain("dRPC provider");
     expect(serialized).not.toContain("private detail");
   });
 
@@ -332,6 +356,7 @@ describe("creator claim action identity activation", () => {
         error: { code: "rpc-unavailable" },
       });
       expect(mocks.createPublicClient).not.toHaveBeenCalled();
+      expect(mocks.readIdentity).not.toHaveBeenCalled();
       expect(serialized).not.toContain("drpc-claim-key");
     },
   );

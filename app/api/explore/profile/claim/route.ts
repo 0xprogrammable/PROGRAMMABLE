@@ -20,8 +20,11 @@ import {
   parseCreatorClaimRequest,
 } from "../../../../../lib/onchain";
 import { creatorFeeHookReadAbi } from "../../../../../lib/onchain/abis";
-import { readBitqueryExploreModelV1 } from
-  "../../../../../lib/market-data/bitquery-explore-model.server";
+import {
+  ActionRpcIdentityError,
+  readCreatorClaimIdentityFromRpc,
+  type CreatorClaimTokenIdentity,
+} from "../../../../../lib/server/action-rpc-identity.server";
 import {
   ActionRpcProviderError,
   creatorClaimRpcProvider,
@@ -30,43 +33,14 @@ import {
   errorChainIncludesData,
   safeServerErrorSummary,
 } from "../../../../../lib/server/safe-error";
-import { computeOfficialV4PoolId } from "../../../../../lib/uniswap/liquidity-launcher-sdk";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 2_048;
 const NO_FEES_TO_CLAIM_SELECTOR = "0x846d8c5c";
-const NATIVE_ETH = "0x0000000000000000000000000000000000000000" as Address;
 const CLAIM_RPC_UNAVAILABLE_MESSAGE =
   "Creator claim reads are temporarily unavailable. Try again";
-
-type CreatorClaimTokenIdentity = Readonly<{
-  tokenAddress: Address;
-  hookAddress: Address;
-  poolId: Hex;
-  creatorAddress: Address;
-  totalSwapFeeBps: number;
-  buySwapFeeBps: number;
-  sellSwapFeeBps: number;
-  creatorFeeBps: number;
-  launcherFeeBps: number;
-  transferTaxBps: number;
-  lpFeePips: number;
-}>;
-
-function canonicalClaimPoolId(
-  tokenAddress: Address,
-  hookAddress: Address,
-) {
-  return computeOfficialV4PoolId({
-    currency0: NATIVE_ETH,
-    currency1: tokenAddress,
-    fee: 0,
-    tickSpacing: 200,
-    hooks: hookAddress,
-  });
-}
 
 function claimClient(
   deployment: ReturnType<typeof getOnchainDeployment>,
@@ -166,104 +140,21 @@ async function readCurrentClaimState(input: {
     );
   }
   const [creator, registrar, totalSwapFeeBps, registered, claimable] = config;
-  const [buyFee, sellFee, creatorFee, launcherFee, transferTax, lpFee] =
-    disclosure;
   if (
     !registered ||
     getAddress(creator).toLowerCase() !== token.creatorAddress.toLowerCase() ||
     getAddress(registrar).toLowerCase() !== deployment.launcher.toLowerCase() ||
     Number(totalSwapFeeBps) !== token.totalSwapFeeBps ||
-    Number(buyFee) !== token.buySwapFeeBps ||
-    Number(sellFee) !== token.sellSwapFeeBps ||
-    Number(creatorFee) !== token.creatorFeeBps ||
-    Number(launcherFee) !== token.launcherFeeBps ||
-    Number(transferTax) !== token.transferTaxBps ||
-    Number(lpFee) !== token.lpFeePips
-  ) {
-    throw new CreatorClaimUnavailableError(
-      "identity-mismatch",
-      "The current creator fee state does not match the indexed launch",
-    );
-  }
-  return { claimable };
-}
-
-async function bitqueryClaimToken(
-  request: ReturnType<typeof parseCreatorClaimRequest>,
-  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>,
-  signal?: AbortSignal,
-): Promise<CreatorClaimTokenIdentity> {
-  let model: Awaited<ReturnType<typeof readBitqueryExploreModelV1>>;
-  try {
-    if (deployment.chainId !== 1) throw new Error("unsupported chain");
-    model = await readBitqueryExploreModelV1({ signal });
-  } catch {
-    throw new CreatorClaimUnavailableError(
-      "registry-unavailable",
-      "The verified Programmable launch registry is temporarily unavailable",
-    );
-  }
-  if (model.status !== "ready" || model.snapshot.chainId !== deployment.chainId) {
-    throw new CreatorClaimUnavailableError(
-      "registry-unavailable",
-      "The verified Programmable launch registry is unavailable",
-    );
-  }
-  const token = model.tokens.find(
-    (candidate) =>
-      candidate.poolId.toLowerCase() === request.poolId.toLowerCase(),
-  );
-  if (!token) {
-    throw new CreatorClaimUnavailableError(
-      "unknown-pool",
-      "This pool is not a verified Programmable launch",
-    );
-  }
-  const feeValues = [
-    token.buyHookFeeBps,
-    token.sellHookFeeBps,
-    token.creatorFeeBps,
-    token.launcherFeeBps,
-    token.transferTaxBps,
-    token.lpFeePips,
-  ];
-  if (
-    token.launchModel !== "classic" ||
-    token.launchStampProvenance !== undefined ||
-    token.hookAddress.toLowerCase() !== deployment.feeHook.toLowerCase() ||
-    !token.creatorAddress ||
-    typeof token.totalSwapFeeBps !== "number" ||
-    !Number.isSafeInteger(token.totalSwapFeeBps) ||
-    token.totalSwapFeeBps < 0 ||
-    canonicalClaimPoolId(
-      getAddress(token.tokenAddress),
-      getAddress(token.hookAddress),
-    ).toLowerCase() !== request.poolId.toLowerCase() ||
-    feeValues.some(
-      (value) =>
-        typeof value !== "number" ||
-        !Number.isSafeInteger(value) ||
-        value < 0,
+    disclosure.some(
+      (value) => !Number.isSafeInteger(Number(value)) || Number(value) < 0,
     )
   ) {
     throw new CreatorClaimUnavailableError(
-      "noncanonical-hook",
-      "The pool does not use the canonical creator fee hook",
+      "identity-mismatch",
+      "The current creator fee state does not match the requested launch",
     );
   }
-  return {
-    tokenAddress: getAddress(token.tokenAddress),
-    hookAddress: getAddress(token.hookAddress),
-    poolId: request.poolId,
-    creatorAddress: getAddress(token.creatorAddress),
-    totalSwapFeeBps: token.totalSwapFeeBps,
-    buySwapFeeBps: token.buyHookFeeBps!,
-    sellSwapFeeBps: token.sellHookFeeBps!,
-    creatorFeeBps: token.creatorFeeBps!,
-    launcherFeeBps: token.launcherFeeBps!,
-    transferTaxBps: token.transferTaxBps!,
-    lpFeePips: token.lpFeePips!,
-  };
+  return { claimable };
 }
 
 function json(body: unknown, status = 200) {
@@ -351,11 +242,15 @@ export async function POST(request: NextRequest) {
         `Switch to chain ${deployment.chainId}`,
       );
     }
-    const token = await bitqueryClaimToken(
-      claimRequest,
+    const provider = creatorClaimRpcProvider(deployment);
+    const client = claimClient(deployment, provider.endpoint);
+    const snapshot = await currentClaimSnapshot(client);
+    const token = await readCreatorClaimIdentityFromRpc({
+      client,
       deployment,
-      request.signal,
-    );
+      poolId: claimRequest.poolId,
+      blockNumber: snapshot.blockNumber,
+    });
     if (
       token.creatorAddress.toLowerCase() !== claimRequest.account.toLowerCase()
     ) {
@@ -364,10 +259,6 @@ export async function POST(request: NextRequest) {
         "This account is not the recorded creator for the pool",
       );
     }
-
-    const provider = creatorClaimRpcProvider(deployment);
-    const client = claimClient(deployment, provider.endpoint);
-    const snapshot = await currentClaimSnapshot(client);
     const state = await readCurrentClaimState({
       client,
       deployment,
@@ -435,15 +326,16 @@ export async function POST(request: NextRequest) {
     }
     if (
       error instanceof CreatorClaimUnavailableError ||
-      error instanceof ActionRpcProviderError
+      error instanceof ActionRpcProviderError ||
+      error instanceof ActionRpcIdentityError
     ) {
       const unavailable =
         error instanceof ActionRpcProviderError
           ? claimRpcUnavailable()
-          : error;
-      const retryable =
-        unavailable.code === "rpc-unavailable" ||
-        unavailable.code === "registry-unavailable";
+          : error instanceof ActionRpcIdentityError
+            ? new CreatorClaimUnavailableError(error.code, error.message)
+            : error;
+      const retryable = unavailable.code === "rpc-unavailable";
       return json(
         blockedResponse(
           unavailable.code === "not-deployed" ? "not-deployed" : "blocked",
