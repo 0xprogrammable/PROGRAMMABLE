@@ -18,6 +18,7 @@ import {
   PrimaryRpcLaunchCatalogError,
   readPrimaryRpcExploreEntriesV1,
   safePrimaryRpcLaunchCatalogError,
+  type PrimaryRpcContractRead,
   type PrimaryRpcLaunchCatalogClient,
   type PrimaryRpcLogQuery,
 } from "../lib/market-data/primary-rpc-launches.server";
@@ -168,6 +169,7 @@ describe("single-primary dRPC launch catalog", () => {
     expect(safePrimaryRpcLaunchCatalogError(error)).toEqual({
       name: "PrimaryRpcLaunchCatalogError",
       category: "transport",
+      phase: "logs",
       status: 503,
     });
     expect(JSON.stringify(error)).not.toContain("private-key");
@@ -183,6 +185,73 @@ describe("single-primary dRPC launch catalog", () => {
       "configuration",
     );
     expect(safePrimaryRpcLaunchCatalogError(error).status).toBe(503);
+  });
+
+  it("hydrates only the requested token after the complete sparse log scan", async () => {
+    const target = RELEASES[3]!;
+    const logs = RELEASES.flatMap(releaseLogs);
+    const queries: PrimaryRpcLogQuery[] = [];
+    const blockReads: bigint[] = [];
+    const contractReads: PrimaryRpcContractRead[] = [];
+    const defaults = mockClient();
+    const client = mockClient({
+      getLogs: async (query) => {
+        queries.push(query);
+        return logs.filter((log) =>
+          log.blockNumber >= query.fromBlock &&
+          log.blockNumber <= query.toBlock
+        );
+      },
+      getBlock: async (input) => {
+        blockReads.push(input.blockNumber);
+        return defaults.getBlock(input);
+      },
+      readContract: async (input) => {
+        contractReads.push(input);
+        return defaults.readContract(input);
+      },
+    });
+
+    const result = await readPrimaryRpcExploreEntriesV1({
+      client,
+      requestedTokenAddress: target.token,
+    });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({ tokenAddress: target.token });
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.every((query) => query.address.length === 5)).toBe(true);
+    expect(blockReads).toEqual([HEAD, target.blockNumber]);
+    expect(contractReads).toHaveLength(7);
+    expect(new Set(contractReads.map((read) => read.address))).toEqual(
+      new Set([target.token, QUOTE]),
+    );
+    expect(contractReads.filter((read) =>
+      read.functionName === "metadata"
+    )).toEqual([
+      expect.objectContaining({ address: target.token }),
+    ]);
+  });
+
+  it("normalizes synchronous runtime failures with a safe phase and 503", async () => {
+    const error = await readPrimaryRpcExploreEntriesV1({
+      client: mockClient(),
+      now: new Date(Number.NaN),
+    }).catch((value: unknown) => value);
+
+    expect(error).toBeInstanceOf(PrimaryRpcLaunchCatalogError);
+    expect(safePrimaryRpcLaunchCatalogError(error)).toEqual({
+      name: "PrimaryRpcLaunchCatalogError",
+      category: "runtime",
+      phase: "selection",
+      status: 503,
+    });
+    expect(safePrimaryRpcLaunchCatalogError(new Error("foreign"))).toEqual({
+      name: "LaunchCatalogError",
+      category: "unexpected",
+      phase: "external",
+      status: 503,
+    });
   });
 
   it("contains no alternate catalog or secondary-provider dependency", () => {

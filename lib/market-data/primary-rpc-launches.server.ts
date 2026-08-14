@@ -43,7 +43,7 @@ const MAXIMUM_LOG_RANGE = 8_192n;
 const MINIMUM_LOG_RANGE = 128n;
 const MAXIMUM_LOGS = 10_000;
 const MAXIMUM_LAUNCHES = 5_000;
-const MAXIMUM_CONCURRENT_RPC_READS = 20;
+const MAXIMUM_CONCURRENT_RPC_READS = 100;
 
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
@@ -162,12 +162,25 @@ export type PrimaryRpcLaunchCatalogErrorCategory =
   | "configuration"
   | "transport"
   | "response"
-  | "integrity";
+  | "integrity"
+  | "runtime";
+
+export type PrimaryRpcLaunchCatalogPhase =
+  | "initialization"
+  | "head"
+  | "logs"
+  | "selection"
+  | "metadata"
+  | "blocks"
+  | "entries";
 
 export class PrimaryRpcLaunchCatalogError extends Error {
   override name = "PrimaryRpcLaunchCatalogError";
 
-  constructor(readonly category: PrimaryRpcLaunchCatalogErrorCategory) {
+  constructor(
+    readonly category: PrimaryRpcLaunchCatalogErrorCategory,
+    readonly phase: PrimaryRpcLaunchCatalogPhase | "unassigned" = "unassigned",
+  ) {
     super("Launch catalog is temporarily unavailable");
   }
 }
@@ -175,11 +188,22 @@ export class PrimaryRpcLaunchCatalogError extends Error {
 export function safePrimaryRpcLaunchCatalogError(error: unknown): Readonly<{
   name: string;
   category: PrimaryRpcLaunchCatalogErrorCategory | "unexpected";
-  status: 500 | 503;
+  phase: PrimaryRpcLaunchCatalogPhase | "unassigned" | "external";
+  status: 503;
 }> {
   return error instanceof PrimaryRpcLaunchCatalogError
-    ? { name: error.name, category: error.category, status: 503 }
-    : { name: "LaunchCatalogError", category: "unexpected", status: 500 };
+    ? {
+        name: error.name,
+        category: error.category,
+        phase: error.phase,
+        status: 503,
+      }
+    : {
+        name: "LaunchCatalogError",
+        category: "unexpected",
+        phase: "external",
+        status: 503,
+      };
 }
 
 export type PrimaryRpcLogQuery = Readonly<{
@@ -206,6 +230,7 @@ export type PrimaryRpcLaunchCatalogClient = Readonly<{
 export type PrimaryRpcLaunchCatalogReaderOptions = Readonly<{
   signal?: AbortSignal;
   now?: Date;
+  requestedTokenAddress?: Address;
   environment?: Readonly<Record<string, string | undefined>>;
   client?: PrimaryRpcLaunchCatalogClient;
 }>;
@@ -271,65 +296,100 @@ type BoundBlock = Readonly<{
 export async function readPrimaryRpcExploreEntriesV1(
   options: PrimaryRpcLaunchCatalogReaderOptions = {},
 ): Promise<PrimaryRpcExploreEntriesV1> {
-  const client = options.client ?? createPrimaryRpcClient(options.environment);
-  const now = options.now ?? new Date();
-  const headNumber = await providerCall(() => client.getBlockNumber());
-  if (typeof headNumber !== "bigint" || headNumber < EARLIEST_START_BLOCK) {
-    throw new PrimaryRpcLaunchCatalogError("response");
-  }
-  const head = parseBlock(
-    await providerCall(() => client.getBlock({ blockNumber: headNumber })),
-    headNumber,
-  );
-  const rawLogs = await scanSparseLogs(client, head.number, options.signal);
-  const events = rawLogs.map(parseRpcEvent);
-  const { launches, liquidities } = parseLaunchEvents(events);
-  if (launches.length > MAXIMUM_LAUNCHES) {
-    throw new PrimaryRpcLaunchCatalogError("integrity");
-  }
-  if (launches.length === 0) {
-    if (liquidities.length !== 0) {
+  let phase: PrimaryRpcLaunchCatalogPhase = "initialization";
+  try {
+    const requestedToken = options.requestedTokenAddress === undefined
+      ? null
+      : canonicalAddress(options.requestedTokenAddress);
+    if (options.requestedTokenAddress !== undefined && requestedToken === null) {
+      throw new PrimaryRpcLaunchCatalogError("configuration");
+    }
+    const client = options.client ?? createPrimaryRpcClient(options.environment);
+    const now = options.now ?? new Date();
+
+    phase = "head";
+    const headNumber = await providerCall(() => client.getBlockNumber());
+    if (typeof headNumber !== "bigint" || headNumber < EARLIEST_START_BLOCK) {
+      throw new PrimaryRpcLaunchCatalogError("response");
+    }
+    const head = parseBlock(
+      await providerCall(() => client.getBlock({ blockNumber: headNumber })),
+      headNumber,
+    );
+
+    phase = "logs";
+    const rawLogs = await scanSparseLogs(client, head.number, options.signal);
+    const events = rawLogs.map(parseRpcEvent);
+    const parsed = parseLaunchEvents(events);
+    if (parsed.launches.length > MAXIMUM_LAUNCHES) {
       throw new PrimaryRpcLaunchCatalogError("integrity");
     }
+
+    phase = "selection";
+    const launches = requestedToken === null
+      ? parsed.launches
+      : parsed.launches.filter((launch) => launch.token === requestedToken);
+    const liquidities = requestedToken === null
+      ? parsed.liquidities
+      : parsed.liquidities.filter((liquidity) =>
+          liquidity.token === requestedToken
+        );
+    if (launches.length === 0) {
+      if (liquidities.length !== 0 ||
+          (requestedToken === null && parsed.liquidities.length !== 0)) {
+        throw new PrimaryRpcLaunchCatalogError("integrity");
+      }
+      return emptyCatalog(now, head);
+    }
+
+    phase = "metadata";
+    const metadata = await readMetadata(
+      client,
+      [...new Set(launches.map((launch) => launch.token))],
+      [...new Set(launches.flatMap((launch) =>
+        launch.quoteAsset ? [launch.quoteAsset] : []
+      ))],
+      head.number,
+      options.signal,
+    );
+
+    phase = "blocks";
+    const launchBlocks = await readLaunchBlocks(
+      client,
+      launches,
+      options.signal,
+    );
+
+    phase = "entries";
+    const entries = launches.map((launch) => buildExploreEntry(
+      launch,
+      requireLiquidity(launch, liquidities),
+      requireLaunchBlock(launch, launchBlocks),
+      metadata,
+    ));
+    if (liquidities.length !== launches.length) {
+      throw new PrimaryRpcLaunchCatalogError("integrity");
+    }
+    assertUniqueCatalog(entries);
     return {
       source: "drpc",
       generatedAt: now.toISOString(),
       asOfBlock: head.number.toString(),
       asOfBlockHash: head.hash,
-      entries: [],
+      entries: entries.sort(compareEntries),
     };
+  } catch (error) {
+    throw normalizedCatalogError(error, phase);
   }
+}
 
-  const metadata = await readMetadata(
-    client,
-    [...new Set(launches.map((launch) => launch.token))],
-    [...new Set(launches.flatMap((launch) =>
-      launch.quoteAsset ? [launch.quoteAsset] : []
-    ))],
-    head.number,
-    options.signal,
-  );
-  const launchBlocks = await readLaunchBlocks(
-    client,
-    launches,
-    options.signal,
-  );
-  const entries = launches.map((launch) => buildExploreEntry(
-    launch,
-    requireLiquidity(launch, liquidities),
-    requireLaunchBlock(launch, launchBlocks),
-    metadata,
-  ));
-  if (liquidities.length !== launches.length) {
-    throw new PrimaryRpcLaunchCatalogError("integrity");
-  }
-  assertUniqueCatalog(entries);
+function emptyCatalog(now: Date, head: BoundBlock): PrimaryRpcExploreEntriesV1 {
   return {
     source: "drpc",
     generatedAt: now.toISOString(),
     asOfBlock: head.number.toString(),
     asOfBlockHash: head.hash,
-    entries: entries.sort(compareEntries),
+    entries: [],
   };
 }
 
@@ -345,7 +405,7 @@ function createPrimaryRpcClient(
   const publicClient = createPublicClient({
     chain: mainnet,
     transport: http(binding.url, {
-      batch: true,
+      batch: { batchSize: 100, wait: 0 },
       retryCount: 0,
       timeout: REQUEST_TIMEOUT_MS,
     }),
@@ -862,6 +922,18 @@ async function providerCall<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof PrimaryRpcLaunchCatalogError) throw error;
     throw new PrimaryRpcLaunchCatalogError("transport");
   }
+}
+
+function normalizedCatalogError(
+  error: unknown,
+  phase: PrimaryRpcLaunchCatalogPhase,
+): PrimaryRpcLaunchCatalogError {
+  if (error instanceof PrimaryRpcLaunchCatalogError) {
+    return error.phase === "unassigned"
+      ? new PrimaryRpcLaunchCatalogError(error.category, phase)
+      : error;
+  }
+  return new PrimaryRpcLaunchCatalogError("runtime", phase);
 }
 
 async function mapBounded<T, R>(
