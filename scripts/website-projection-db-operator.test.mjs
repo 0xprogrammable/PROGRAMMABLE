@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -22,8 +30,10 @@ import {
   adoptExistingWebsiteProjectionDatabase,
   applyWebsiteProjectionMigrations,
   assertWebsiteProjectionAdoptionLiveInventory,
+  assertWebsiteProjectionAdoptionProtectedSnapshots,
   buildCanonicalWebsiteProjectionAdoptionReference,
   inspectWebsiteProjectionDatabase,
+  readWebsiteProjectionAdoptionProtectedSnapshots,
 } from "./website-projection-db-postgres.mjs";
 
 const COMMIT = "76ebd54e2f0e31d055cfe6c36b7474b0e850de90";
@@ -501,6 +511,75 @@ test("protected adoption inventory validator rejects catalog, role, data and leg
       /adopt-existing/u,
     );
   }
+});
+
+test("protected snapshot reader rejects symlinks, broad modes, raw drift and target drift", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "website-projection-snapshot-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const target = path.join(root, "target.json");
+  const baseLink = path.join(root, "base-link.json");
+  const expandedLink = path.join(root, "expanded-link.json");
+  await writeFile(target, "{}\n", { mode: 0o600 });
+  await symlink(target, baseLink);
+  await symlink(target, expandedLink);
+  await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshotPath: baseLink,
+    expandedSnapshotPath: expandedLink,
+    expectedProjectRef: PROJECT_REF,
+  }), /ELOOP|symbolic links/u);
+
+  const broadBase = path.join(root, "broad-base.json");
+  const broadExpanded = path.join(root, "broad-expanded.json");
+  await writeFile(broadBase, "{}\n", { mode: 0o600 });
+  await writeFile(broadExpanded, "{}\n", { mode: 0o600 });
+  await chmod(broadBase, 0o644);
+  await chmod(broadExpanded, 0o644);
+  await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshotPath: broadBase,
+    expandedSnapshotPath: broadExpanded,
+    expectedProjectRef: PROJECT_REF,
+  }), /owner-only regular file/u);
+
+  const driftedBase = path.join(root, "drifted-base.json");
+  const driftedExpanded = path.join(root, "drifted-expanded.json");
+  await writeFile(driftedBase, "{}\n", { mode: 0o600 });
+  await writeFile(driftedExpanded, "{}\n", { mode: 0o600 });
+  await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshotPath: driftedBase,
+    expandedSnapshotPath: driftedExpanded,
+    expectedProjectRef: PROJECT_REF,
+  }), /raw hash mismatch/u);
+
+  const source = {
+    repositoryCommit: COMMIT,
+    repositoryTree: TREE,
+    planSha256:
+      "0xf0fc7bca18c16da02be83f75d25e404bfe0b7ec7f10c29ecfbea93fcb0d7e973",
+  };
+  const targetIdentity = {
+    projectRef: PROJECT_REF,
+    host: `db.${PROJECT_REF}.supabase.co`,
+    port: 5432,
+    database: "postgres",
+    sslMode: "verify-full",
+  };
+  const baseSnapshot = {
+    kind: "programmable-website-projection-hosted-catalog-snapshot-v1",
+    source,
+    target: targetIdentity,
+  };
+  assert.throws(() => assertWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshot,
+    expandedSnapshot: {
+      kind: "programmable-website-projection-hosted-catalog-snapshot-v2",
+      schemaVersion: 2,
+      source,
+      target: targetIdentity,
+      baseSnapshot: { rawSha256: BASE_SNAPSHOT },
+      applicationCatalog: baseSnapshot,
+    },
+    expectedProjectRef: "z".repeat(20),
+  }), /protected snapshot identity mismatch/u);
 });
 
 test("irreversible apply confirmation binds both plan and target", async (t) => {
@@ -1061,6 +1140,12 @@ test("adopt-existing rolls back evidence DDL and rows on failure", async (t) => 
       AS evidence_schema
   `);
   assert.equal(evidenceSchema.rows[0].evidence_schema, null);
+  const runtimeRole = await fixture.database.query(`
+    SELECT rolinherit
+      FROM pg_roles
+     WHERE rolname = 'programmable_website_projection_runtime'
+  `);
+  assert.deepEqual(runtimeRole.rows, [{ rolinherit: true }]);
   const relations = await fixture.database.query(`
     SELECT count(*)::integer AS relation_count
       FROM pg_class class
