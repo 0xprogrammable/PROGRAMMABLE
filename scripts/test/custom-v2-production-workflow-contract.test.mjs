@@ -4,6 +4,10 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const deploy = readFileSync(".github/workflows/deploy-production.yml", "utf8");
+const standaloneReconcile = readFileSync(
+  ".github/workflows/reconcile-generic-signer-probes.yml",
+  "utf8",
+);
 const verify = readFileSync(".github/workflows/verify.yml", "utf8");
 const proof = readFileSync("scripts/production-verify-proof.mjs", "utf8");
 const exactTransportUnavailableMarketPhases =
@@ -93,7 +97,20 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   const prepare = stepBlock(deploy, "Prepare one-shot Generic signer probe authority");
   assert.match(prepare, /randomBytes\(32\)\.toString\("hex"\)/u);
   assert.match(prepare, /::add-mask::/u);
+  assert.match(prepare, /generic-launch-read-stage-probe-operation\.v1/u);
+  assert.match(prepare, /recoveryId/u);
   assert.doesNotMatch(prepare, /secret=.*GITHUB_OUTPUT/u);
+  const preflight = stepBlock(
+    deploy,
+    "Reconcile all residual Generic signer probes before new authority",
+  );
+  assert.match(preflight, /--scope all-project-probes/u);
+  assert.match(preflight, /reconcile-generic-signer-probe-deployments\.mjs/u);
+  const operationRecord = stepBlock(
+    deploy,
+    "Preserve pre-mutation Generic signer probe operation record",
+  );
+  assert.match(operationRecord, /actions\/upload-artifact@043fb46/u);
   const probeDeploy = stepBlock(
     deploy,
     "Deploy one-shot unaliased Generic signer probe candidate",
@@ -101,19 +118,25 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   assert.match(probeDeploy, /vercel deploy --prebuilt --prod --skip-domain/u);
   assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u);
   assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON/u);
+  assert.match(probeDeploy, /programmableGenericSignerProbeRecoveryId/u);
+  assert.match(probeDeploy, /programmableGenericSignerProbe=one-shot-v1/u);
+  assert.match(probeDeploy, /programmableRepositoryId=1314365508/u);
   const prove = stepBlock(
     deploy,
     "Prove both exact Generic signer Machines from Vercel OIDC",
   );
   assert.match(prove, /npm run probe:custom-v2:signer-stage/u);
-  const deletion = stepBlock(
+  const reconciliation = stepBlock(
     deploy,
-    "Delete secret-bearing Generic signer probe deployment",
+    "Reconcile every secret-bearing Generic signer probe deployment",
   );
-  assert.match(deletion, /always\(\)/u);
-  assert.match(deletion, /DELETE/u);
-  assert.match(deletion, /api\.vercel\.com\/v13\/deployments/u);
-  assert.match(deletion, /404\|410/u);
+  assert.match(reconciliation, /always\(\)/u);
+  assert.match(reconciliation, /generic-signer-probe-authority\.outcome == 'success'/u);
+  assert.doesNotMatch(reconciliation, /generic-signer-probe-deploy\.outcome == 'success'/u);
+  assert.match(
+    reconciliation,
+    /reconcile-generic-signer-probe-deployments\.mjs/u,
+  );
   const localCleanup = stepBlock(
     deploy,
     "Remove local Generic signer probe credential",
@@ -139,8 +162,36 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   assert.match(deploy, /attestations: write/u);
   assert.match(deploy, /id-token: write/u);
   assert.ok(
-    deploy.indexOf("Delete secret-bearing Generic signer probe deployment")
+    deploy.indexOf("Reconcile every secret-bearing Generic signer probe deployment")
       < deploy.indexOf("Stage production build without assigning domains"),
+  );
+  assert.ok(
+    deploy.indexOf("Reconcile all residual Generic signer probes before new authority")
+      < deploy.indexOf("Prepare one-shot Generic signer probe authority"),
+  );
+  assert.ok(
+    deploy.indexOf("Preserve pre-mutation Generic signer probe operation record")
+      < deploy.indexOf("Deploy one-shot unaliased Generic signer probe candidate"),
+  );
+  assert.match(deploy, /^  generic-signer-probe-reconcile:$/mu);
+  assert.match(
+    deploy,
+    /generic-signer-probe-reconcile:[\s\S]*needs: \[release-gate, deploy\][\s\S]*always\(\)[\s\S]*Delete every residual exact probe deployment and prove absence[\s\S]*reconcile-generic-signer-probe-deployments\.mjs/u,
+  );
+  assert.match(standaloneReconcile, /^name: Reconcile Generic Signer Probes$/mu);
+  assert.match(standaloneReconcile, /^  workflow_dispatch:$/mu);
+  assert.match(standaloneReconcile, /group: programmable-production/u);
+  assert.match(standaloneReconcile, /cancel-in-progress: false/u);
+  assert.match(standaloneReconcile, /environment:[\s\S]*name: production/u);
+  assert.match(standaloneReconcile, /--scope all-project-probes/u);
+  assert.match(
+    standaloneReconcile,
+    /reconcile-generic-signer-probe-deployments\.mjs/u,
+  );
+  assert.match(standaloneReconcile, /actions\/attest@59d89421/u);
+  assert.doesNotMatch(
+    standaloneReconcile,
+    /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u,
   );
   assert.doesNotMatch(deploy, /vercel (?:promote|alias)/u);
 });

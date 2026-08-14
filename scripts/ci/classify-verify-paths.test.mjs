@@ -34,7 +34,9 @@ test("routes the versioned Custom V2 surface without legacy market lanes", () =>
     "lib/server/custom-launch/generic-launch-read-production-probe-v1.ts",
     "lib/server/custom-launch/registry-manifest-v2.ts",
     "scripts/custom-v2-read-model-contract-v2.mjs",
+    "scripts/reconcile-generic-signer-probe-deployments.mjs",
     "scripts/test/custom-v2-read-model-contract-v2.test.mjs",
+    "scripts/test/reconcile-generic-signer-probe-deployments.test.mjs",
     "tests/generic-launch-read-v2.test.ts",
     "tests/generic-launch-read-production-probe-v1.test.ts",
   ]) {

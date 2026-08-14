@@ -1,0 +1,71 @@
+name: Reconcile Generic Signer Probes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: programmable-production
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Remove every residual one-shot signer probe
+    if: >-
+      github.repository == '0xprogrammable/programmable' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production'
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Check out exact production cleanup source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Delete all residual exact project probes and prove absence
+        id: reconcile
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: >-
+          node scripts/reconcile-generic-signer-probe-deployments.mjs
+          --scope all-project-probes
+          --output "$RUNNER_TEMP/generic-signer-probe-standalone-reconciliation.json"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Attest standalone reconciliation receipt
+        id: attest
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.reconcile.outputs.reconciliation_path }}
+          create-storage-record: false
+
+      - name: Preserve standalone reconciliation receipt and DSSE
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generic-signer-probe-standalone-reconciliation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.reconcile.outputs.reconciliation_path }}
+            ${{ steps.attest.outputs.bundle-path }}
+          if-no-files-found: error
+          retention-days: 90
