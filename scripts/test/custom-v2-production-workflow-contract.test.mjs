@@ -78,15 +78,50 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   );
 });
 
-test("Custom-only changes do not invoke the Bitquery Explore smoke", () => {
+test("Custom-only changes do not invoke the public data smoke", () => {
   const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
   assert.match(
     smoke,
     /if: >-[\s\S]*verified_custom_v2 != 'true'[\s\S]*verified_interface == 'true'[\s\S]*verified_read_model == 'true'/u,
   );
-  assert.match(smoke, /\/api\/explore/u);
+  assert.match(
+    smoke,
+    /\/api\/explore\?limit=20&page=1&sort=market-cap/u,
+  );
+  assert.match(smoke, /\/api\/explore\?limit=20&page=1&sort=newest/u);
   assert.match(smoke, /\/api\/explore\/token\?address=/u);
   assert.match(smoke, /\/api\/explore\/token\/chart\?address=/u);
+  assert.match(smoke, /\/api\/explore\/profile\?account=/u);
+  assert.match(
+    smoke,
+    /x-programmable-launch-source"\) ===[\s\S]*"drpc"/u,
+  );
+  assert.match(
+    smoke,
+    /x-programmable-read-source"\) ===[\s\S]*"drpc\+bitquery"/u,
+  );
+  assert.match(
+    smoke,
+    /x-programmable-market-source"\) ===[\s\S]*"bitquery"/u,
+  );
+  assert.match(
+    smoke,
+    /profile\.headers\.get\("x-programmable-launch-source"\) !== "drpc"/u,
+  );
+  assert.match(
+    smoke,
+    /profile\.headers\.get\("x-programmable-read-source"\) !== "drpc"/u,
+  );
+  assert.match(
+    smoke,
+    /profile\.headers\.get\("x-programmable-rpc-provider"\) !==[\s\S]*"drpc-primary"/u,
+  );
+  assert.match(smoke, /verified-staged-drpc-bitquery-public-apis/u);
+  assert.match(smoke, /creatorClaimPrepare: "separate-live-probe-required"/u);
+  assert.match(smoke, /tradePrepare: "separate-live-probe-required"/u);
+  assert.doesNotMatch(smoke, /\/api\/explore\/profile\/claim/u);
+  assert.doesNotMatch(smoke, /\/api\/trade\/prepare/u);
+  assert.doesNotMatch(smoke, /method:\s*"POST"/u);
 
   for (const retired of [
     "Resolve read-model release policy",
