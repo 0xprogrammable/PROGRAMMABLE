@@ -43,6 +43,16 @@ on:
         required: false
         default: ""
         type: string
+      custom_v2_generic_signer_probe_expected_json:
+        description: Canonical public two-Machine Generic signer probe contract; contains no credential
+        required: false
+        default: ""
+        type: string
+      custom_v2_generic_signer_probe_expected_sha256:
+        description: Plain SHA-256 of the exact canonical public Generic signer probe contract
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -176,11 +186,12 @@ jobs:
       needs.release-gate.outputs.verified_sha == github.sha
     permissions:
       actions: read
-      attestations: read
+      attestations: write
       contents: read
       deployments: write
+      id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment:
       name: production
       url: ${{ steps.deploy.outputs.url }}
@@ -385,6 +396,232 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
+      - name: Reconcile all residual Generic signer probes before new authority
+        id: generic-signer-probe-preflight
+        if: >-
+          needs.release-gate.outputs.verified_custom_v2 == 'true' &&
+          inputs.custom_v2_generic_public_read_enabled
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: >-
+          node scripts/reconcile-generic-signer-probe-deployments.mjs
+          --scope all-project-probes
+          --output "$RUNNER_TEMP/generic-signer-probe-reconciliation-preflight.json"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Preserve pre-mutation Generic signer probe reconciliation
+        id: generic-signer-probe-preflight-record
+        if: steps.generic-signer-probe-preflight.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generic-signer-probe-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.generic-signer-probe-preflight.outputs.reconciliation_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Prepare one-shot Generic signer probe authority
+        id: generic-signer-probe-authority
+        if: steps.generic-signer-probe-preflight-record.outcome == 'success'
+        env:
+          EXPECTED_JSON: ${{ inputs.custom_v2_generic_signer_probe_expected_json }}
+          EXPECTED_SHA256: ${{ inputs.custom_v2_generic_signer_probe_expected_sha256 }}
+        run: |
+          set -euo pipefail
+          contract_path="$RUNNER_TEMP/generic-signer-probe-expected.json"
+          secret_path="$RUNNER_TEMP/generic-signer-probe-secret"
+          operation_record_path="$RUNNER_TEMP/generic-signer-probe-operation.json"
+          CONTRACT_PATH="$contract_path" SECRET_PATH="$secret_path" \
+          OPERATION_RECORD_PATH="$operation_record_path" \
+            node --input-type=module <<'NODE'
+          import { createHash, randomBytes } from "node:crypto";
+          import { writeFileSync } from "node:fs";
+          const canonical = (value) => {
+            if (value === null || ["boolean", "number", "string"].includes(typeof value)) {
+              return JSON.stringify(value);
+            }
+            if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+            return `{${Object.keys(value).sort().map((key) =>
+              `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+          };
+          const source = (process.env.EXPECTED_JSON ?? "").trim();
+          const expected = process.env.EXPECTED_SHA256 ?? "";
+          const digest = `sha256:${createHash("sha256")
+            .update(source, "utf8").digest("hex")}`;
+          if (!/^sha256:[0-9a-f]{64}$/u.test(expected) || digest !== expected) {
+            throw new Error("Generic signer probe contract digest is invalid");
+          }
+          const value = JSON.parse(source);
+          if (value?.schemaVersion !==
+              "programmable.website-generic-launch-read-stage-probe-expected.v1") {
+            throw new Error("Generic signer probe contract schema is invalid");
+          }
+          if (source !== canonical(value)) {
+            throw new Error("Generic signer probe contract is not canonical");
+          }
+          const runId = process.env.GITHUB_RUN_ID;
+          const runAttempt = process.env.GITHUB_RUN_ATTEMPT;
+          const headSha = process.env.GITHUB_SHA;
+          const projectId = process.env.VERCEL_PROJECT_ID;
+          if (!/^[0-9]{1,20}$/u.test(runId ?? "")
+            || !/^[1-9][0-9]{0,5}$/u.test(runAttempt ?? "")
+            || !/^[0-9a-f]{40}$/u.test(headSha ?? "")
+            || !/^prj_[A-Za-z0-9]{20,80}$/u.test(projectId ?? "")
+            || !/^[0-9a-f]{32}$/u.test(value.operationId ?? "")) {
+            throw new Error("Generic signer probe recovery identity is invalid");
+          }
+          const recoveryId = `${value.operationId}.${runId}.${runAttempt}.${headSha}`;
+          const operationRecord = {
+            schemaVersion:
+              "programmable.website-generic-launch-read-stage-probe-operation.v1",
+            status: "prepared",
+            recoveryId,
+            operationId: value.operationId,
+            sourceCommit: value.sourceCommit,
+            sourceTree: value.sourceTree,
+            websiteHead: headSha,
+            projectId,
+            workflowAuthority: {
+              repositoryId: "1314365508",
+              workflowPath: ".github/workflows/deploy-production.yml",
+              runId,
+              runAttempt,
+              environment: "production",
+            },
+          };
+          writeFileSync(process.env.CONTRACT_PATH, source, {
+            flag: "wx", mode: 0o600,
+          });
+          const secret = randomBytes(32).toString("hex");
+          writeFileSync(process.env.SECRET_PATH, secret, {
+            flag: "wx", mode: 0o600,
+          });
+          writeFileSync(
+            process.env.OPERATION_RECORD_PATH,
+            `${canonical(operationRecord)}\n`,
+            { flag: "wx", mode: 0o600 },
+          );
+          process.stdout.write(`::add-mask::${secret}\n`);
+          process.stdout.write(`recovery_id=${recoveryId}\n`);
+          NODE
+          echo "contract_path=$contract_path" >> "$GITHUB_OUTPUT"
+          echo "secret_path=$secret_path" >> "$GITHUB_OUTPUT"
+          echo "operation_record_path=$operation_record_path" >> "$GITHUB_OUTPUT"
+          operation_record_sha256="$(shasum -a 256 "$operation_record_path" | awk '{print $1}')"
+          echo "operation_record_sha256=sha256:$operation_record_sha256" >> "$GITHUB_OUTPUT"
+          recovery_id="$(node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const value = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            process.stdout.write(value.recoveryId);
+          ' "$operation_record_path")"
+          echo "recovery_id=$recovery_id" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve pre-mutation Generic signer probe operation record
+        id: generic-signer-probe-operation-record
+        if: steps.generic-signer-probe-authority.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generic-signer-probe-operation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.generic-signer-probe-authority.outputs.operation_record_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Deploy one-shot unaliased Generic signer probe candidate
+        id: generic-signer-probe-deploy
+        if: steps.generic-signer-probe-operation-record.outcome == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROBE_RECOVERY_ID: ${{ steps.generic-signer-probe-authority.outputs.recovery_id }}
+        run: |
+          set -euo pipefail
+          probe_secret="$(<"${{ steps.generic-signer-probe-authority.outputs.secret_path }}")"
+          probe_contract="$(<"${{ steps.generic-signer-probe-authority.outputs.contract_path }}")"
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            --meta programmableGenericSignerProbe=one-shot-v1 \
+            --meta programmableRepositoryId=1314365508 \
+            --meta programmableGenericSignerProbeRecoveryId="$PROBE_RECOVERY_ID" \
+            --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" \
+            --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" \
+            --env PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN="$probe_secret" \
+            --env PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON="$probe_contract" \
+            --token="$VERCEL_TOKEN")"
+          case "$deployment_url" in https://*.vercel.app) ;; *) exit 1 ;; esac
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve exact one-shot Generic signer probe deployment
+        id: generic-signer-probe-deployment
+        if: steps.generic-signer-probe-deploy.outcome == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.generic-signer-probe-deploy.outputs.url }}
+        run: >-
+          npm run perf:read-model:staged-deployment --
+          --target-url "$DEPLOYMENT_URL"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Prove both exact Generic signer Machines from Vercel OIDC
+        id: generic-signer-probe
+        if: steps.generic-signer-probe-deployment.outcome == 'success'
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PROBE_TARGET_URL: ${{ steps.generic-signer-probe-deployment.outputs.target_url }}
+          PROBE_DEPLOYMENT_ID: ${{ steps.generic-signer-probe-deployment.outputs.deployment_id }}
+          EXPECTED_SHA256: ${{ inputs.custom_v2_generic_signer_probe_expected_sha256 }}
+        run: |
+          set -euo pipefail
+          export PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN="$(<"${{ steps.generic-signer-probe-authority.outputs.secret_path }}")"
+          export PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON="$(<"${{ steps.generic-signer-probe-authority.outputs.contract_path }}")"
+          output_directory="$RUNNER_TEMP/generic-signer-probe-receipts"
+          npm run probe:custom-v2:signer-stage -- \
+            --target-url "$PROBE_TARGET_URL" \
+            --deployment-id "$PROBE_DEPLOYMENT_ID" \
+            --git-head "$GITHUB_SHA" \
+            --expected-sha256 "$EXPECTED_SHA256" \
+            --output-directory "$output_directory"
+          echo "receipt_directory=$output_directory" >> "$GITHUB_OUTPUT"
+
+      - name: Reconcile every secret-bearing Generic signer probe deployment
+        id: generic-signer-probe-delete
+        if: >-
+          always() &&
+          steps.generic-signer-probe-authority.outcome == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROBE_RECOVERY_ID: ${{ steps.generic-signer-probe-authority.outputs.recovery_id }}
+          EXPECTED_DEPLOYMENT_ID: ${{ steps.generic-signer-probe-deployment.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/generic-signer-probe-reconciliation-main.json"
+          args=(
+            --recovery-id "$PROBE_RECOVERY_ID"
+            --website-head "$GITHUB_SHA"
+            --output "$output"
+            --github-output "$GITHUB_OUTPUT"
+          )
+          if [[ "$EXPECTED_DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]{20,80}$ ]]; then
+            args+=(--expected-deployment-id "$EXPECTED_DEPLOYMENT_ID")
+          fi
+          node scripts/reconcile-generic-signer-probe-deployments.mjs "${args[@]}"
+
+      - name: Remove local Generic signer probe credential
+        if: >-
+          always() &&
+          steps.generic-signer-probe-authority.outcome == 'success'
+        env:
+          SECRET_PATH: ${{ steps.generic-signer-probe-authority.outputs.secret_path }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { lstatSync, unlinkSync } from "node:fs";
+          import { resolve } from "node:path";
+          const runnerTemp = `${resolve(process.env.RUNNER_TEMP)}/`;
+          const target = resolve(process.env.SECRET_PATH);
+          if (!target.startsWith(runnerTemp) || !lstatSync(target).isFile()) {
+            throw new Error("probe credential path is not an exact runner file");
+          }
+          unlinkSync(target);
+          NODE
+
       - name: Stage production build without assigning domains
         id: deploy
         env:
@@ -409,6 +646,51 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Prove clean candidate carries no Generic signer probe authority
+        id: generic-signer-probe-clean
+        if: steps.generic-signer-probe-delete.outcome == 'success'
+        env:
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+          import { readBoundedResponseText } from "./scripts/read-bounded-response.mjs";
+          const response = await fetch(new URL(
+            "/api/ops/custom-launch/generic-v2-signer-probe",
+            process.env.STAGED_TARGET_URL,
+          ), {
+            method: "POST",
+            redirect: "error",
+            headers: {
+              "content-type": "application/json",
+              "x-vercel-protection-bypass":
+                process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+              "x-vercel-set-bypass-cookie": "false",
+            },
+            body: "{}",
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (!response.headers.get("content-type")?.toLowerCase()
+            .startsWith("application/json")) {
+            await response.body?.cancel("unexpected content type").catch(() => {});
+            throw new Error("clean candidate signer probe did not return JSON");
+          }
+          const body = JSON.parse(await readBoundedResponseText(response, {
+            maximumBytes: 65_536,
+            label: "clean candidate signer probe response",
+          }));
+          if (response.status !== 503
+            || body?.schemaVersion !==
+              "programmable.generic-launch-signer-probe-error.v1"
+            || body?.code !== "probe_unavailable") {
+            throw new Error("clean candidate signer probe is not disabled");
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT,
+            `status=503\ncode=probe_unavailable\nobserved_at=${new Date().toISOString()}\n`);
+          NODE
 
       - name: Reject Custom V2 matrix outside a verified Custom V2 change
         if: >-
@@ -476,6 +758,179 @@ jobs:
         with:
           name: custom-v2-stage-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.custom-v2-stage.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create canonical Generic signer probe cleanup bundle
+        id: generic-signer-probe-bundle
+        if: >-
+          steps.generic-signer-probe-clean.outcome == 'success' &&
+          steps.custom-v2-stage.outcome == 'success'
+        env:
+          EXPECTED_CONTRACT_PATH: ${{ steps.generic-signer-probe-authority.outputs.contract_path }}
+          RECEIPT_DIRECTORY: ${{ steps.generic-signer-probe.outputs.receipt_directory }}
+          RECOVERY_ID: ${{ steps.generic-signer-probe-authority.outputs.recovery_id }}
+          OPERATION_RECORD_ARTIFACT_ID: ${{ steps.generic-signer-probe-operation-record.outputs.artifact-id }}
+          OPERATION_RECORD_ARTIFACT_DIGEST: ${{ steps.generic-signer-probe-operation-record.outputs.artifact-digest }}
+          OPERATION_RECORD_SHA256: ${{ steps.generic-signer-probe-authority.outputs.operation_record_sha256 }}
+          RECONCILIATION_PATH: ${{ steps.generic-signer-probe-delete.outputs.reconciliation_path }}
+          PROBE_DEPLOYMENT_ID: ${{ steps.generic-signer-probe-deployment.outputs.deployment_id }}
+          PROBE_TARGET_URL: ${{ steps.generic-signer-probe-deployment.outputs.target_url }}
+          CLEAN_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          CLEAN_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          CLEAN_ROUTE_STATUS: ${{ steps.generic-signer-probe-clean.outputs.status }}
+          CLEAN_ROUTE_CODE: ${{ steps.generic-signer-probe-clean.outputs.code }}
+          CLEAN_OBSERVED_AT: ${{ steps.generic-signer-probe-clean.outputs.observed_at }}
+        run: |
+          set -euo pipefail
+          bundle_path="$RUNNER_TEMP/generic-signer-probe-bundle.json"
+          BUNDLE_PATH="$bundle_path" node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+          const canonical = (value) => {
+            if (value === null || ["boolean", "number", "string"].includes(typeof value)) {
+              return JSON.stringify(value);
+            }
+            if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+            return `{${Object.keys(value).sort().map((key) =>
+              `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+          };
+          const sha256 = (bytes) => `sha256:${createHash("sha256")
+            .update(bytes).digest("hex")}`;
+          const expected = JSON.parse(readFileSync(
+            process.env.EXPECTED_CONTRACT_PATH,
+            "utf8",
+          ));
+          const reconciliation = JSON.parse(readFileSync(
+            process.env.RECONCILIATION_PATH,
+            "utf8",
+          ));
+          const files = readdirSync(process.env.RECEIPT_DIRECTORY)
+            .filter((file) => /^generic-signer-probe-[0-9a-f]{14}\.json$/u.test(file))
+            .sort();
+          if (files.length !== 2) throw new Error("two probe receipts are required");
+          const receiptFiles = files.map((file) => {
+            const bytes = readFileSync(`${process.env.RECEIPT_DIRECTORY}/${file}`);
+            return { bytes, receipt: JSON.parse(bytes.toString("utf8")) };
+          });
+          const probeReceipts = receiptFiles.map(({ bytes, receipt }) => ({
+            targetMachineId: receipt.targetMachineId,
+            sha256: sha256(bytes),
+          }));
+          if (probeReceipts.map(({ targetMachineId }) => targetMachineId)
+            .join("\n") !== [...expected.machineIds].sort().join("\n")) {
+            throw new Error("probe receipt Machine set differs");
+          }
+          const probeOrigin = process.env.PROBE_TARGET_URL.replace(/\/$/u, "");
+          if (reconciliation.schemaVersion !==
+              "programmable.website-generic-launch-read-stage-probe-reconciliation.v1"
+            || reconciliation.status !== "clean"
+            || reconciliation.recoveryId !== process.env.RECOVERY_ID
+            || reconciliation.websiteHead !== process.env.GITHUB_SHA
+            || reconciliation.projectId !== process.env.VERCEL_PROJECT_ID
+            || reconciliation.providerListAbsent !== true
+            || reconciliation.matchedDeployments?.length !== 1
+            || reconciliation.deletion?.length !== 1
+            || reconciliation.matchedDeployments[0].id !==
+              process.env.PROBE_DEPLOYMENT_ID
+            || reconciliation.matchedDeployments[0].origin !== probeOrigin
+            || reconciliation.deletion[0].deploymentId !==
+              process.env.PROBE_DEPLOYMENT_ID
+            || reconciliation.deletion[0].origin !== probeOrigin
+            || ![200, 204].includes(
+              reconciliation.deletion[0].providerDeleteStatus,
+            )
+            || reconciliation.deletion[0].providerGetAfterStatus !== 404
+            || ![404, 410].includes(
+              reconciliation.deletion[0].publicOriginStatus,
+            )) {
+            throw new Error("probe reconciliation is not exact and complete");
+          }
+          if (!/^[1-9][0-9]{0,19}$/u.test(
+            process.env.OPERATION_RECORD_ARTIFACT_ID ?? "",
+          )
+            || !/^sha256:[0-9a-f]{64}$/u.test(
+              process.env.OPERATION_RECORD_ARTIFACT_DIGEST ?? "",
+            )
+            || !/^sha256:[0-9a-f]{64}$/u.test(
+              process.env.OPERATION_RECORD_SHA256 ?? "",
+            )) {
+            throw new Error("pre-mutation operation record binding is invalid");
+          }
+          const cleanup = {
+            schemaVersion:
+              "programmable.website-generic-launch-read-stage-probe-cleanup.v1",
+            status: "clean",
+            operationId: expected.operationId,
+            recoveryId: process.env.RECOVERY_ID,
+            sourceCommit: expected.sourceCommit,
+            sourceTree: expected.sourceTree,
+            projectId: process.env.VERCEL_PROJECT_ID,
+            operationRecord: {
+              artifactId: process.env.OPERATION_RECORD_ARTIFACT_ID,
+              artifactDigest: process.env.OPERATION_RECORD_ARTIFACT_DIGEST,
+              sha256: process.env.OPERATION_RECORD_SHA256,
+            },
+            probeDeployment: {
+              deploymentId: process.env.PROBE_DEPLOYMENT_ID,
+              origin: probeOrigin,
+              gitCommitSha: process.env.GITHUB_SHA,
+            },
+            probeReceipts,
+            reconciliation,
+            cleanDeployment: {
+              deploymentId: process.env.CLEAN_DEPLOYMENT_ID,
+              origin: process.env.CLEAN_TARGET_URL.replace(/\/$/u, ""),
+              gitCommitSha: process.env.GITHUB_SHA,
+              probeRouteStatus: Number(process.env.CLEAN_ROUTE_STATUS),
+              probeRouteCode: process.env.CLEAN_ROUTE_CODE,
+              observedAt: process.env.CLEAN_OBSERVED_AT,
+            },
+            workflowAuthority: {
+              repositoryId: "1314365508",
+              workflowPath: ".github/workflows/deploy-production.yml",
+              runId: process.env.GITHUB_RUN_ID,
+              runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+              environment: "production",
+              headSha: process.env.GITHUB_SHA,
+            },
+          };
+          if (cleanup.probeDeployment.deploymentId ===
+              cleanup.cleanDeployment.deploymentId
+            || cleanup.probeDeployment.origin === cleanup.cleanDeployment.origin) {
+            throw new Error("clean deployment is not distinct from probe deployment");
+          }
+          const bundle = {
+            schemaVersion:
+              "programmable.website-generic-launch-read-stage-probe-bundle.v1",
+            operationId: expected.operationId,
+            sourceCommit: expected.sourceCommit,
+            sourceTree: expected.sourceTree,
+            probeReceipts: receiptFiles.map(({ receipt }) => receipt),
+            cleanup,
+          };
+          const bytes = Buffer.from(`${canonical(bundle)}\n`, "utf8");
+          writeFileSync(process.env.BUNDLE_PATH, bytes, { flag: "wx", mode: 0o600 });
+          process.stdout.write(`bundle_sha256=${sha256(bytes)}\n`);
+          NODE
+          echo "bundle_path=$bundle_path" >> "$GITHUB_OUTPUT"
+
+      - name: Attest canonical Generic signer probe cleanup bundle
+        id: attest-generic-signer-probe-bundle
+        if: steps.generic-signer-probe-bundle.outcome == 'success'
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.generic-signer-probe-bundle.outputs.bundle_path }}
+          create-storage-record: false
+
+      - name: Preserve canonical Generic signer probe cleanup bundle
+        if: steps.generic-signer-probe-bundle.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generic-signer-probe-bundle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.generic-signer-probe-bundle.outputs.bundle_path }}
+            ${{ steps.attest-generic-signer-probe-bundle.outputs.bundle-path }}
           if-no-files-found: error
           retention-days: 90
 
@@ -1083,3 +1538,101 @@ jobs:
             echo "Stage-only: no production promotion was attempted."
             echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  generic-signer-probe-reconcile:
+    name: Reconcile one-shot Generic signer probe authority
+    needs: [release-gate, deploy]
+    if: >-
+      always() &&
+      github.repository == '0xprogrammable/programmable' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production' &&
+      needs.release-gate.result == 'success' &&
+      needs.release-gate.outputs.verified_sha == github.sha &&
+      needs.release-gate.outputs.verified_custom_v2 == 'true' &&
+      inputs.custom_v2_generic_public_read_enabled
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Check out exact production cleanup source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.release-gate.outputs.verified_sha }}
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Independently rederive exact probe recovery identity
+        id: recovery-identity
+        env:
+          EXPECTED_JSON: ${{ inputs.custom_v2_generic_signer_probe_expected_json }}
+          EXPECTED_SHA256: ${{ inputs.custom_v2_generic_signer_probe_expected_sha256 }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { appendFileSync } from "node:fs";
+          const canonical = (value) => {
+            if (value === null || ["boolean", "number", "string"].includes(typeof value)) {
+              return JSON.stringify(value);
+            }
+            if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+            return `{${Object.keys(value).sort().map((key) =>
+              `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+          };
+          const source = (process.env.EXPECTED_JSON ?? "").trim();
+          const value = JSON.parse(source);
+          const digest = `sha256:${createHash("sha256")
+            .update(source, "utf8").digest("hex")}`;
+          if (source !== canonical(value)
+            || digest !== process.env.EXPECTED_SHA256
+            || value.schemaVersion !==
+              "programmable.website-generic-launch-read-stage-probe-expected.v1"
+            || !/^[0-9a-f]{32}$/u.test(value.operationId ?? "")
+            || !/^[0-9]{1,20}$/u.test(process.env.GITHUB_RUN_ID ?? "")
+            || !/^[1-9][0-9]{0,5}$/u.test(process.env.GITHUB_RUN_ATTEMPT ?? "")
+            || !/^[0-9a-f]{40}$/u.test(process.env.GITHUB_SHA ?? "")) {
+            throw new Error("probe recovery identity cannot be rederived");
+          }
+          const recoveryId = [
+            value.operationId,
+            process.env.GITHUB_RUN_ID,
+            process.env.GITHUB_RUN_ATTEMPT,
+            process.env.GITHUB_SHA,
+          ].join(".");
+          appendFileSync(process.env.GITHUB_OUTPUT, `recovery_id=${recoveryId}\n`);
+          NODE
+
+      - name: Delete every residual exact probe deployment and prove absence
+        id: reconcile
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROBE_RECOVERY_ID: ${{ steps.recovery-identity.outputs.recovery_id }}
+        run: >-
+          node scripts/reconcile-generic-signer-probe-deployments.mjs
+          --recovery-id "$PROBE_RECOVERY_ID"
+          --website-head "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/generic-signer-probe-reconciliation-backstop.json"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Preserve cancellation-safe probe reconciliation
+        if: steps.reconcile.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generic-signer-probe-reconciliation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.reconcile.outputs.reconciliation_path }}
+          if-no-files-found: error
+          retention-days: 90

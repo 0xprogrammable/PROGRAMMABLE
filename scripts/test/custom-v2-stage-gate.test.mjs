@@ -196,6 +196,13 @@ function fetchMatrix({
           results: [],
         });
     }
+    if (url.pathname === "/api/ops/custom-launch/generic-v2-signer-probe") {
+      return json(503, {
+        schemaVersion: "programmable.generic-launch-signer-probe-error.v1",
+        status: "error",
+        code: "probe_unavailable",
+      });
+    }
     if (url.pathname === "/api/custom-launch/generic/v2/readiness") {
       return ready ? json(200, {
         schemaVersion: "programmable.generic-launch-readiness.v2",
@@ -259,6 +266,9 @@ test("default prelaunch and disabled matrix proves every fail-closed surface", a
     authenticatedIngress: false,
   });
   assert.ok(evidence.checks.some(({ id }) => id === "generic-v2-disabled"));
+  assert.ok(evidence.checks.some(
+    ({ id }) => id === "generic-v2-signer-probe-disabled",
+  ));
   assert.ok(evidence.checks.some(({ id }) => id === "approval-v3-unauthorized"));
   assert.doesNotMatch(JSON.stringify(evidence), /bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/u);
 });
@@ -365,6 +375,27 @@ test("authenticated ingress is digest-bound, delivered, read back and projected"
   assert.ok(evidence.checks.some(
     ({ id }) => id === "approval-v3-authenticated-delivery",
   ));
+});
+
+test("cancels an oversized chunked staged JSON response before buffering", async () => {
+  let canceled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(3_000_000));
+      controller.enqueue(new Uint8Array(1_300_000));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await assert.rejects(verifyCustomV2StageCandidateV1(baseInput(
+    async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  )), /response is too large/u);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
 });
 
 test("candidate identity and activation matrix fail closed", async () => {

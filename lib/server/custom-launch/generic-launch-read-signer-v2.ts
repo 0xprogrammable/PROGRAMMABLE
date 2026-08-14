@@ -38,6 +38,10 @@ const BASE64URL_SIGNATURE = /^[A-Za-z0-9_-]{86}$/u;
 const BASE64URL_SPKI = /^[A-Za-z0-9_-]{59}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const VERCEL_OIDC = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u;
+const FLY_MACHINE_ID = /^[0-9a-f]{14}$/u;
+const VERCEL_OWNER_OR_PROJECT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const VERCEL_OWNER_ID = /^team_[A-Za-z0-9]{20,80}$/u;
+const VERCEL_PROJECT_ID = /^prj_[A-Za-z0-9]{20,80}$/u;
 const moduleFetch = globalThis.fetch.bind(globalThis);
 
 export type GenericLaunchReadSignerBindingV2 = Readonly<{
@@ -61,7 +65,7 @@ export interface GenericLaunchReadSignerV2 {
   }>): Promise<string>;
 }
 
-type ProviderReceiptV2 = Readonly<{
+export type RemoteSigningProviderReceiptV2 = Readonly<{
   schemaVersion: "programmable.remote-signing-provider-receipt.v2";
   outcome: "completed";
   audience: typeof GENERIC_LAUNCH_READ_SIGNER_AUDIENCE_V2;
@@ -76,6 +80,53 @@ type ProviderReceiptV2 = Readonly<{
   observedAt: string;
   expiresAt: string;
 }>;
+
+export type RemoteSigningAuthenticatedResponseV2 = Readonly<{
+  schemaVersion: "programmable.remote-signing-authenticated-response.v2";
+  providerReceipt: RemoteSigningProviderReceiptV2;
+  providerReceiptDigest: Sha256Digest;
+  providerReceiptSignature: string;
+}>;
+
+export type SignedGenericLaunchReadEnvelopeV2 = Readonly<{
+  schemaVersion: "programmable.signed-generic-launch-read-envelope.v2";
+  activationBindingHash: Sha256Digest;
+  readModelBindingHash: Sha256Digest;
+  requestBindingHash: Sha256Digest;
+  payload: JsonValue;
+  signatureBase64Url: string;
+}>;
+
+export type GenericLaunchReadSignatureEvidenceV2 = Readonly<{
+  signedEnvelope: SignedGenericLaunchReadEnvelopeV2;
+  providerResponse: RemoteSigningAuthenticatedResponseV2;
+}>;
+
+export type VercelWorkloadIdentityV1 = Readonly<{
+  schemaVersion: "programmable.vercel-workload-identity.v1";
+  issuer: string;
+  audience: string;
+  subject: string;
+  owner: string;
+  ownerId: string;
+  project: string;
+  projectId: string;
+  environment: "production";
+  issuedAt: string;
+  notBefore: string;
+  expiresAt: string;
+}>;
+
+export interface GenericLaunchReadProbeSignerV1 {
+  readonly binding: GenericLaunchReadSignerBindingV2;
+  readonly workloadIdentity: VercelWorkloadIdentityV1;
+  signWithEvidence(input: Readonly<{
+    requestBindingHash: Sha256Digest;
+    payload: JsonValue;
+    targetMachineId: string;
+    signal?: AbortSignal;
+  }>): Promise<GenericLaunchReadSignatureEvidenceV2>;
+}
 
 export function parseGenericLaunchReadSignerBindingV2(
   value: unknown,
@@ -185,6 +236,58 @@ export async function createProductionGenericLaunchReadSignerV2(
   });
 }
 
+export async function createProductionGenericLaunchReadProbeSignerV1(
+  options: Readonly<{
+    activeReadBinding: GenericLaunchReadBindingV2;
+    environment?: Readonly<Record<string, string | undefined>>;
+    credentialProvider?: () => Promise<string>;
+    fetch?: typeof fetch;
+    now?: () => Date;
+    timeoutMs?: number;
+  }>,
+): Promise<GenericLaunchReadProbeSignerV1> {
+  const environment = options.environment ?? process.env;
+  const binding = productionGenericLaunchReadSignerBindingV2(
+    options.activeReadBinding,
+    environment,
+  );
+  const credential = (await (
+    options.credentialProvider ?? getVercelOidcToken
+  )()).trim();
+  if (
+    credential.length < 20
+    || credential.length > 131_072
+    || !VERCEL_OIDC.test(credential)
+  ) throw new TypeError("Vercel workload identity is unavailable");
+  const now = options.now ?? (() => new Date());
+  const workloadIdentity = parseVercelWorkloadIdentityV1(credential, now());
+  const remote = createRemoteGenericLaunchReadEvidenceSignerV2({
+    binding,
+    activeReadBinding: options.activeReadBinding,
+    credential,
+    fetch: options.fetch ?? moduleFetch,
+    now,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  });
+  return Object.freeze({
+    binding,
+    workloadIdentity,
+    async signWithEvidence(
+      input: Parameters<GenericLaunchReadProbeSignerV1["signWithEvidence"]>[0],
+    ) {
+      if (!FLY_MACHINE_ID.test(input.targetMachineId)) {
+        throw new TypeError("Generic launch V2 target Machine ID is invalid");
+      }
+      return await remote.signWithEvidence({
+        requestBindingHash: input.requestBindingHash,
+        payload: input.payload,
+        providerInstanceId: input.targetMachineId,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+    },
+  });
+}
+
 export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
   binding: GenericLaunchReadSignerBindingV2;
   activeReadBinding: GenericLaunchReadBindingV2;
@@ -193,6 +296,26 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
   now?: () => Date;
   timeoutMs?: number;
 }>): GenericLaunchReadSignerV2 {
+  const remote = createRemoteGenericLaunchReadEvidenceSignerV2(input);
+  return Object.freeze({
+    binding: remote.binding,
+    async sign(
+      signingInput: Parameters<GenericLaunchReadSignerV2["sign"]>[0],
+    ) {
+      const evidence = await remote.signWithEvidence(signingInput);
+      return canonicalizeJson(evidence.signedEnvelope);
+    },
+  });
+}
+
+function createRemoteGenericLaunchReadEvidenceSignerV2(input: Readonly<{
+  binding: GenericLaunchReadSignerBindingV2;
+  activeReadBinding: GenericLaunchReadBindingV2;
+  credential: string;
+  fetch: typeof fetch;
+  now?: () => Date;
+  timeoutMs?: number;
+}>) {
   const binding = parseGenericLaunchReadSignerBindingV2(input.binding);
   const activeReadBinding = assertActiveVerifierMatch(
     input.activeReadBinding,
@@ -222,10 +345,17 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
 
   return Object.freeze({
     binding,
-    async sign(
-      signingInput: Parameters<GenericLaunchReadSignerV2["sign"]>[0],
-    ): Promise<string> {
+    async signWithEvidence(signingInput: Readonly<{
+      requestBindingHash: Sha256Digest;
+      payload: JsonValue;
+      providerInstanceId?: string;
+      signal?: AbortSignal;
+    }>): Promise<GenericLaunchReadSignatureEvidenceV2> {
       signingInput.signal?.throwIfAborted();
+      if (signingInput.providerInstanceId !== undefined
+        && !FLY_MACHINE_ID.test(signingInput.providerInstanceId)) {
+        throw new TypeError("Generic launch V2 target Machine ID is invalid");
+      }
       const requestBindingHash = digest(
         signingInput.requestBindingHash,
         "Generic launch V2 signing request binding",
@@ -300,6 +430,9 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
             accept: "application/json",
             authorization: `Bearer ${credential}`,
             "content-type": "application/json",
+            ...(signingInput.providerInstanceId === undefined ? {} : {
+              "fly-force-instance-id": signingInput.providerInstanceId,
+            }),
             "idempotency-key": idempotencyKey,
             "x-programmable-operation": "sign-v2",
             "x-programmable-request-digest": requestDigest,
@@ -348,18 +481,21 @@ export function createRemoteGenericLaunchReadSignerV2(input: Readonly<{
           providerReceiptSignature,
         )
       ) throw new TypeError("Generic launch V2 signer signature is invalid");
-      const envelope = canonicalizeJson(Object.freeze({
+      const signedEnvelope = Object.freeze({
         schemaVersion: "programmable.signed-generic-launch-read-envelope.v2" as const,
         activationBindingHash: activeReadBinding.activationBindingHash,
         readModelBindingHash: activeReadBinding.readModelBindingHash,
         requestBindingHash,
         payload: snapshot.payload as JsonValue,
         signatureBase64Url: providerReceipt.signature,
-      }));
-      if (Buffer.byteLength(envelope, "utf8") > MAXIMUM_SIGNED_ENVELOPE_BYTES) {
+      });
+      if (Buffer.byteLength(
+        canonicalizeJson(signedEnvelope),
+        "utf8",
+      ) > MAXIMUM_SIGNED_ENVELOPE_BYTES) {
         throw new TypeError("Generic launch V2 signed envelope is too large");
       }
-      return envelope;
+      return Object.freeze({ signedEnvelope, providerResponse: authenticated });
       } catch (error) {
         if (controller.signal.aborted && !signingInput.signal?.aborted) {
           throw new TypeError("Generic launch V2 signer deadline exceeded");
@@ -391,11 +527,9 @@ function assertActiveVerifierMatch(
   return readBinding;
 }
 
-function parseAuthenticatedResponse(bytes: Uint8Array): Readonly<{
-  providerReceipt: ProviderReceiptV2;
-  providerReceiptDigest: Sha256Digest;
-  providerReceiptSignature: string;
-}> {
+function parseAuthenticatedResponse(
+  bytes: Uint8Array,
+): RemoteSigningAuthenticatedResponseV2 {
   const parsed = record(parseStrictJson(Buffer.from(bytes).toString("utf8"), {
     maximumBytes: MAXIMUM_RESPONSE_BYTES,
     maximumDepth: 8,
@@ -424,6 +558,7 @@ function parseAuthenticatedResponse(bytes: Uint8Array): Readonly<{
     || receipt.algorithm !== "Ed25519"
   ) throw new TypeError("Generic launch V2 signer provider receipt is invalid");
   return Object.freeze({
+    schemaVersion: "programmable.remote-signing-authenticated-response.v2" as const,
     providerReceipt: Object.freeze({
       schemaVersion: receipt.schemaVersion,
       outcome: receipt.outcome,
@@ -522,7 +657,10 @@ async function readWithAbort(
   });
 }
 
-function validateProviderWindow(receipt: ProviderReceiptV2, now: Date): void {
+function validateProviderWindow(
+  receipt: RemoteSigningProviderReceiptV2,
+  now: Date,
+): void {
   const observedMs = Date.parse(receipt.observedAt);
   const expiresMs = Date.parse(receipt.expiresAt);
   const nowMs = now.getTime();
@@ -532,6 +670,107 @@ function validateProviderWindow(receipt: ProviderReceiptV2, now: Date): void {
     || nowMs >= expiresMs
     || expiresMs - observedMs > MAXIMUM_PROVIDER_RECEIPT_AGE_MS
   ) throw new TypeError("Generic launch V2 signer provider window is invalid");
+}
+
+function parseVercelWorkloadIdentityV1(
+  credential: string,
+  now: Date,
+): VercelWorkloadIdentityV1 {
+  const encoded = credential.split(".")[1];
+  if (encoded === undefined || Buffer.from(encoded, "base64url")
+    .toString("base64url") !== encoded) {
+    throw new TypeError("Vercel workload identity is invalid");
+  }
+  const claims = record(parseStrictJson(
+    Buffer.from(encoded, "base64url").toString("utf8"),
+    { maximumBytes: 16_384, maximumDepth: 4 },
+  ), "Vercel workload identity claims");
+  const issuer = exactText(claims.iss, "Vercel workload issuer", 512);
+  const audience = exactText(claims.aud, "Vercel workload audience", 512);
+  const subject = exactText(claims.sub, "Vercel workload subject", 512);
+  const owner = exactPattern(
+    claims.owner,
+    VERCEL_OWNER_OR_PROJECT,
+    "Vercel workload owner",
+  );
+  const ownerId = exactPattern(
+    claims.owner_id,
+    VERCEL_OWNER_ID,
+    "Vercel workload owner ID",
+  );
+  const project = exactPattern(
+    claims.project,
+    VERCEL_OWNER_OR_PROJECT,
+    "Vercel workload project",
+  );
+  const projectId = exactPattern(
+    claims.project_id,
+    VERCEL_PROJECT_ID,
+    "Vercel workload project ID",
+  );
+  if (claims.environment !== "production"
+    || subject !== `owner:${owner}:project:${project}:environment:production`) {
+    throw new TypeError("Vercel workload identity is not production");
+  }
+  const issuerUrl = new URL(issuer);
+  if (issuerUrl.protocol !== "https:"
+    || issuerUrl.hostname !== "oidc.vercel.com"
+    || issuerUrl.username !== "" || issuerUrl.password !== ""
+    || issuerUrl.port !== "" || issuerUrl.search !== "" || issuerUrl.hash !== ""
+    || !["/", `/${owner}`].includes(issuerUrl.pathname)) {
+    throw new TypeError("Vercel workload issuer is invalid");
+  }
+  const issuedAt = jwtTimestamp(claims.iat, "Vercel workload issued-at");
+  const notBefore = jwtTimestamp(claims.nbf, "Vercel workload not-before");
+  const expiresAt = jwtTimestamp(claims.exp, "Vercel workload expiry");
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)
+    || Date.parse(notBefore) > nowMs
+    || nowMs >= Date.parse(expiresAt)
+    || Date.parse(issuedAt) > Date.parse(notBefore)
+    || Date.parse(expiresAt) - Date.parse(issuedAt) > 3_600_000) {
+    throw new TypeError("Vercel workload identity window is invalid");
+  }
+  return Object.freeze({
+    schemaVersion: "programmable.vercel-workload-identity.v1" as const,
+    issuer,
+    audience,
+    subject,
+    owner,
+    ownerId,
+    project,
+    projectId,
+    environment: "production" as const,
+    issuedAt,
+    notBefore,
+    expiresAt,
+  });
+}
+
+function jwtTimestamp(value: unknown, label: string): string {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return new Date(Number(value) * 1_000).toISOString();
+}
+
+function exactText(value: unknown, label: string, maximum: number): string {
+  if (typeof value !== "string" || value.length < 1 || value.length > maximum
+    || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return value;
+}
+
+function exactPattern(
+  value: unknown,
+  pattern: RegExp,
+  label: string,
+): string {
+  if (typeof value !== "string" || !pattern.test(value)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return value;
 }
 
 function publicKeyFromSpki(spki: Uint8Array): KeyObject {

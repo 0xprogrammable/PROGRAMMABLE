@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
+import { readBoundedResponseText } from "./read-bounded-response.mjs";
+
 export const CUSTOM_V2_STAGE_EVIDENCE_SCHEMA_VERSION =
   "programmable.custom-v2-stage-evidence.v1";
 export const CUSTOM_V2_AUTHENTICATED_INGRESS_SCHEMA_VERSION =
@@ -55,12 +57,15 @@ export async function verifyCustomV2StageCandidateV1(input) {
       headers: { ...commonHeaders, ...(init.headers ?? {}) },
       signal: init.signal ?? AbortSignal.timeout(30_000),
     });
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > MAXIMUM_JSON_BYTES
-      || !response.headers.get("content-type")?.toLowerCase()
-        .startsWith("application/json")) {
+    if (!response.headers.get("content-type")?.toLowerCase()
+      .startsWith("application/json")) {
+      await response.body?.cancel("unexpected content type").catch(() => {});
       throw new Error(`${path} did not return bounded JSON`);
     }
+    const text = await readBoundedResponseText(response, {
+      maximumBytes: MAXIMUM_JSON_BYTES,
+      label: `${path} response`,
+    });
     let body;
     try {
       body = JSON.parse(text);
@@ -168,6 +173,25 @@ export async function verifyCustomV2StageCandidateV1(input) {
     }, `unauthorized Generic V2 projector ${method}`);
   }
   add("generic-v2-projector-unauthorized", "projector and reconciliation reject missing credentials");
+
+  const signerProbe = await requestJson(
+    "/api/ops/custom-launch/generic-v2-signer-probe",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    },
+  );
+  assertStatus(signerProbe, 503, "disabled Generic V2 signer probe");
+  assertObjectFields(signerProbe.body, {
+    schemaVersion: "programmable.generic-launch-signer-probe-error.v1",
+    status: "error",
+    code: "probe_unavailable",
+  }, "disabled Generic V2 signer probe");
+  add(
+    "generic-v2-signer-probe-disabled",
+    "one-shot signer probe secret is absent and the clean candidate fails closed",
+  );
 
   let authenticatedApprovalId = null;
   if (authenticated !== null) {

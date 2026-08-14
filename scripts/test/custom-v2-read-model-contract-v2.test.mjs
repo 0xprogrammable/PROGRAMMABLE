@@ -77,6 +77,7 @@ async function fixture() {
     "app/api/custom-launch/generic/v2/launches/route.ts": "feed\n",
     "app/api/custom-launch/generic/v2/readiness/route.ts": "readiness\n",
     "app/api/ops/custom-launch/generic-v2-projector/route.ts": "project\n",
+    "app/api/ops/custom-launch/generic-v2-signer-probe/route.ts": "probe\n",
     "app/v2/internal/projections/approval-descriptors/[projectionKey]/route.ts":
       "ingress\n",
     "config/custom-registry-v2.deployment.prelaunch.json":
@@ -86,6 +87,8 @@ async function fixture() {
     "lib/server/custom-launch/generic-launch-postgres-v2.ts": "persistence\n",
     "lib/server/custom-launch/generic-launch-production-v2.ts": "production\n",
     "lib/server/custom-launch/generic-launch-projector-v2.ts": "projector\n",
+    "lib/server/custom-launch/generic-launch-read-production-probe-v1.ts":
+      "production probe\n",
     "lib/server/custom-launch/generic-launch-read-signer-v2.ts": "signer\n",
     "lib/server/custom-launch/generic-launch-read-v2.ts": "reader\n",
     "lib/server/custom-launch/generic-launch-registry-reader-v2.ts": "registry\n",
@@ -205,7 +208,9 @@ async function fixture() {
         artifact("app/api/custom-launch/generic/v2/launches/[recordHash]/route.ts"),
         artifact("app/api/custom-launch/generic/v2/launches/route.ts"),
         artifact("app/api/custom-launch/generic/v2/readiness/route.ts"),
+        artifact("app/api/ops/custom-launch/generic-v2-signer-probe/route.ts"),
         artifact("config/generic-launch-public.v2.schema.json"),
+        artifact("lib/server/custom-launch/generic-launch-read-production-probe-v1.ts"),
         artifact("lib/server/custom-launch/generic-launch-read-signer-v2.ts"),
         artifact("lib/server/custom-launch/generic-launch-read-v2.ts"),
       ],
