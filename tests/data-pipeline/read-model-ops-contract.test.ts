@@ -289,42 +289,6 @@ function fixtureDigests() {
   );
 }
 
-const EXPLORE_MARKET_READ_SOURCE_CONTRACT = `
-  error instanceof BitqueryMarketDataError;
-  error.category === "transport";
-  (error.phase === "market-core" || error.phase === "market-price");
-  identityEntryCount > 0;
-  marketIdentityCount > 0;
-  !signal.aborted;
-  marketTransportFailure === null;
-  provider: "bitquery" as const;
-  status: "unavailable" as const;
-  category: "transport" as const;
-  phase: marketTransportFailure.phase;
-  requested: "fdv" as const;
-  applied: "launch-order" as const;
-  "Cache-Control": marketTransportFailure === null
-            ? "public, max-age=0, s-maxage=2"
-            : "no-store",
-  "X-Programmable-Launch-Source": "drpc";
-  "X-Programmable-Read-Source": marketTransportFailure === null
-            ? "drpc+bitquery"
-            : "drpc",
-  "X-Programmable-Market-Read-Status":
-            marketTransportFailure === null
-              ? "current"
-              : "transport-unavailable",
-  "X-Programmable-Market-Provider": "bitquery";
-  ...(marketTransportFailure === null
-            ? {
-                "X-Programmable-Market-Source": "bitquery",
-                "X-Programmable-Price-Source": "bitquery",
-              }
-            : {}),
-  ...(marketTransportFailure === null &&
-              dataQuality.valuation.asOfTime);
-`;
-
 describe("read-model operations source contract", () => {
   it("executes the exact watchdog program only after block-bound freshness and quorum proof", async () => {
     const requests: Array<{ authorization: string | null; url: string }> = [];
@@ -865,8 +829,7 @@ describe("read-model operations source contract", () => {
 
   it("accepts the exact Explore transport-unavailable provider taxonomy", () => {
     const path = "app/api/explore/route.ts";
-    const route = readFileSync(resolve(ROOT, path), "utf8") +
-      EXPLORE_MARKET_READ_SOURCE_CONTRACT;
+    const route = readFileSync(resolve(ROOT, path), "utf8");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: route },
     });
@@ -913,8 +876,7 @@ describe("read-model operations source contract", () => {
     ],
   ])("rejects the Explore source contract with %s", (_label, needle, replacement) => {
     const path = "app/api/explore/route.ts";
-    const route = readFileSync(resolve(ROOT, path), "utf8") +
-      EXPLORE_MARKET_READ_SOURCE_CONTRACT;
+    const route = readFileSync(resolve(ROOT, path), "utf8");
     expect(route).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: route.replace(needle, replacement) },
