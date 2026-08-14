@@ -26,14 +26,17 @@ test("routes the versioned Custom V2 surface without legacy market lanes", () =>
     "app/api/custom-launch/registry/v2/manifest/route.ts",
     "app/api/custom-launch/generic/v2/readiness/route.ts",
     "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+    "app/api/ops/custom-launch/generic-v2-signer-probe/route.ts",
     "app/v2/internal/projections/approval-descriptors/[projectionKey]/route.ts",
     "app/custom-launches/page.tsx",
     "components/generic-launch-directory-v2.tsx",
     "lib/server/custom-launch/generic-launch-production-v2.ts",
+    "lib/server/custom-launch/generic-launch-read-production-probe-v1.ts",
     "lib/server/custom-launch/registry-manifest-v2.ts",
     "scripts/custom-v2-read-model-contract-v2.mjs",
     "scripts/test/custom-v2-read-model-contract-v2.test.mjs",
     "tests/generic-launch-read-v2.test.ts",
+    "tests/generic-launch-read-production-probe-v1.test.ts",
   ]) {
     assert.deepEqual(classifyVerifyPaths([path]), {
       ...none,

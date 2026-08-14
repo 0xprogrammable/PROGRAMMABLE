@@ -40,7 +40,9 @@ const QUERY_ARTIFACTS = Object.freeze([
   "app/api/custom-launch/generic/v2/launches/[recordHash]/route.ts",
   "app/api/custom-launch/generic/v2/launches/route.ts",
   "app/api/custom-launch/generic/v2/readiness/route.ts",
+  "app/api/ops/custom-launch/generic-v2-signer-probe/route.ts",
   "config/generic-launch-public.v2.schema.json",
+  "lib/server/custom-launch/generic-launch-read-production-probe-v1.ts",
   "lib/server/custom-launch/generic-launch-read-signer-v2.ts",
   "lib/server/custom-launch/generic-launch-read-v2.ts",
 ]);

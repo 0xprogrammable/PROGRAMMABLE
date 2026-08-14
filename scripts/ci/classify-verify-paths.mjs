@@ -30,12 +30,12 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
 function isCustomV2OnlyPath(path) {
   return CUSTOM_V2_EXACT_PATHS.has(path)
     || /^app\/api\/custom-launch\/(?:generic|registry)\/v2\//u.test(path)
-    || /^app\/api\/ops\/custom-launch\/generic-v2-projector\//u.test(path)
+    || /^app\/api\/ops\/custom-launch\/generic-v2-(?:projector|signer-probe)\//u.test(path)
     || /^app\/v2\/internal\/projections\/approval-descriptors\//u.test(path)
     || /^app\/custom-launches\//u.test(path)
     || /^components\/generic-launch-directory-v2(?:\.module\.css|\.tsx)$/u.test(path)
-    || /^lib\/server\/custom-launch\/generic-launch-[^/]*-v2\.ts$/u.test(path)
-    || /^tests\/(?:approval-v3-artifact-projection-target|custom-registry-v2-(?:bindings|public-release)|generic-launch-(?:postgres-v2|projector-v2|read-signer-v2|read-v2|record-v2))\.test\.ts$/u.test(path);
+    || /^lib\/server\/custom-launch\/generic-launch-[^/]*-v[12]\.ts$/u.test(path)
+    || /^tests\/(?:approval-v3-artifact-projection-target|custom-registry-v2-(?:bindings|public-release)|generic-launch-(?:postgres-v2|projector-v2|read-production-probe-v1|read-signer-v2|read-v2|record-v2))\.test\.ts$/u.test(path);
 }
 
 export const CONTRACT_RELEASE_TEST_PATHS = Object.freeze([
