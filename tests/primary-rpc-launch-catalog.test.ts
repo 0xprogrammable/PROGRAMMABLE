@@ -104,6 +104,135 @@ const RELEASES: readonly FixtureRelease[] = [
 ];
 
 describe("single-primary dRPC launch catalog", () => {
+  it("retries the primary dRPC head number once after a transport failure", async () => {
+    let attempts = 0;
+    const result = await readPrimaryRpcExploreEntriesV1({
+      client: mockClient({
+        getBlockNumber: async () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("temporary dRPC failure");
+          return HEAD;
+        },
+      }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+    });
+
+    expect(attempts).toBe(2);
+    expect(result).toMatchObject({
+      source: "drpc",
+      asOfBlock: HEAD.toString(),
+      asOfBlockHash: HEAD_HASH,
+    });
+  });
+
+  it("retries the exact primary dRPC head block once after transport failure", async () => {
+    const defaults = mockClient();
+    let attempts = 0;
+    const requestedBlocks: bigint[] = [];
+    const result = await readPrimaryRpcExploreEntriesV1({
+      client: mockClient({
+        getBlock: async (input) => {
+          attempts += 1;
+          requestedBlocks.push(input.blockNumber);
+          if (attempts === 1) throw new Error("temporary dRPC failure");
+          return defaults.getBlock(input);
+        },
+      }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+    });
+
+    expect(attempts).toBe(2);
+    expect(requestedBlocks).toEqual([HEAD, HEAD]);
+    expect(result).toMatchObject({
+      source: "drpc",
+      asOfBlock: HEAD.toString(),
+      asOfBlockHash: HEAD_HASH,
+    });
+  });
+
+  it("bounds an exhausted primary dRPC head read to two attempts", async () => {
+    let attempts = 0;
+    const error = await readPrimaryRpcExploreEntriesV1({
+      client: mockClient({
+        getBlockNumber: async () => {
+          attempts += 1;
+          throw new Error("temporary dRPC failure");
+        },
+      }),
+    }).catch((value: unknown) => value);
+
+    expect(attempts).toBe(2);
+    expect(safePrimaryRpcLaunchCatalogError(error)).toEqual({
+      name: "PrimaryRpcLaunchCatalogError",
+      category: "transport",
+      phase: "head",
+      status: 503,
+    });
+  });
+
+  it.each(["configuration", "response", "integrity"] as const)(
+    "does not retry a typed %s head failure",
+    async (category) => {
+      let attempts = 0;
+      const error = await readPrimaryRpcExploreEntriesV1({
+        client: mockClient({
+          getBlockNumber: async () => {
+            attempts += 1;
+            throw new PrimaryRpcLaunchCatalogError(category);
+          },
+        }),
+      }).catch((value: unknown) => value);
+
+      expect(attempts).toBe(1);
+      expect(safePrimaryRpcLaunchCatalogError(error)).toMatchObject({
+        category,
+        phase: "head",
+        status: 503,
+      });
+    },
+  );
+
+  it("does not retry an invalid successful head response", async () => {
+    let attempts = 0;
+    const error = await readPrimaryRpcExploreEntriesV1({
+      client: mockClient({
+        getBlockNumber: async () => {
+          attempts += 1;
+          return 0n;
+        },
+      }),
+    }).catch((value: unknown) => value);
+
+    expect(attempts).toBe(1);
+    expect(safePrimaryRpcLaunchCatalogError(error)).toMatchObject({
+      category: "response",
+      phase: "head",
+      status: 503,
+    });
+  });
+
+  it("does not retry the dRPC head after outer cancellation", async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const error = await readPrimaryRpcExploreEntriesV1({
+      signal: controller.signal,
+      client: mockClient({
+        getBlockNumber: async () => {
+          attempts += 1;
+          controller.abort();
+          throw new Error("temporary dRPC failure");
+        },
+      }),
+    }).catch((value: unknown) => value);
+
+    expect(attempts).toBe(1);
+    expect(safePrimaryRpcLaunchCatalogError(error)).toMatchObject({
+      category: "transport",
+      phase: "head",
+      status: 503,
+    });
+  });
+
   it("reads all five canonical releases from bounded sparse log ranges", async () => {
     const queries: PrimaryRpcLogQuery[] = [];
     const logs = RELEASES.flatMap(releaseLogs);
@@ -337,9 +466,13 @@ describe("single-primary dRPC launch catalog", () => {
   it("enforces one hard end-to-end budget even when a client ignores aborts", async () => {
     vi.useFakeTimers();
     try {
+      let attempts = 0;
       const pending = readPrimaryRpcExploreEntriesV1({
         client: mockClient({
-          getBlockNumber: () => new Promise<bigint>(() => {}),
+          getBlockNumber: () => {
+            attempts += 1;
+            return new Promise<bigint>(() => {});
+          },
         }),
       }).catch((value: unknown) => value);
 
@@ -355,6 +488,7 @@ describe("single-primary dRPC launch catalog", () => {
         phase: "head",
         status: 503,
       });
+      expect(attempts).toBe(1);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();

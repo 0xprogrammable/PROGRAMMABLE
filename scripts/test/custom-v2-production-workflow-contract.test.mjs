@@ -6,6 +6,8 @@ import { runInNewContext } from "node:vm";
 const deploy = readFileSync(".github/workflows/deploy-production.yml", "utf8");
 const verify = readFileSync(".github/workflows/verify.yml", "utf8");
 const proof = readFileSync("scripts/production-verify-proof.mjs", "utf8");
+const exactTransportUnavailableMarketPhases =
+  /\["market-core", "market-liquidity", "market-price"\]\.includes\(\s*marketRead\.phase,\s*\)/u;
 
 function stepBlock(source, name) {
   const start = source.indexOf(`      - name: ${name}`);
@@ -145,8 +147,9 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   );
   assert.match(
     smoke,
-    /marketRead\?\.provider === "bitquery"[\s\S]*marketRead\.status === "unavailable"[\s\S]*marketRead\.category === "transport"[\s\S]*\["market-core", "market-price"\]\.includes\(marketRead\.phase\)/u,
+    /marketRead\?\.provider === "bitquery"[\s\S]*marketRead\.status === "unavailable"[\s\S]*marketRead\.category === "transport"/u,
   );
+  assert.match(smoke, exactTransportUnavailableMarketPhases);
   assert.match(
     smoke,
     /valuation\?\.status === "unavailable"[\s\S]*valuation\.available === 0[\s\S]*valuation\.unavailable === tokens\.length[\s\S]*tokens\.every\(exactUnavailableValuation\)/u,
@@ -214,6 +217,13 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   ]) {
     assert.equal(deploy.includes(`      - name: ${retired}`), false);
   }
+});
+
+test("the staged transport contract rejects removal of exact-pool liquidity", () => {
+  const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
+  const mutated = smoke.replace('"market-liquidity", ', "");
+  assert.notEqual(mutated, smoke);
+  assert.doesNotMatch(mutated, exactTransportUnavailableMarketPhases);
 });
 
 test("degraded Highest must match the exact Newest launch identity order", () => {

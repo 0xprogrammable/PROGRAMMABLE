@@ -232,9 +232,10 @@ export async function readBitqueryTokenMarketDataStrictV1(
  *
  * Token price, supply and provider-computed FDV come from `Trading.Tokens`.
  * Pool liquidity comes from the realtime `EVM(network: eth)` dataset. The
- * token read is strict, while absent or malformed liquidity fails closed for
- * that valuation without taking down launch discovery. This path never reads
- * DEX trades, statistics, caches or another provider.
+ * token read is strict. A valid liquidity response without an exact pool row
+ * fails closed for that valuation, while provider and malformed-response
+ * failures reject with their exact taxonomy. This path never reads DEX trades,
+ * statistics, caches or another provider.
  */
 export async function readBitqueryTokenFdvRankingStrictV1(
   identities: readonly MarketDataIdentityV1[],
@@ -294,20 +295,27 @@ export async function readBitqueryTokenFdvRankingStrictV1(
     }
   }
 
-  let liquidityRows: ReadonlyMap<string, unknown> = new Map();
-  if (liquidityResult.status === "fulfilled" && !liquidityResult.value.partial) {
-    const evm = record(liquidityResult.value.data.EVM);
-    if (evm !== null) {
-      try {
-        liquidityRows = indexUniqueRows(
-          array(evm.latestLiquidity),
-          liquidityRowPoolId,
-        );
-      } catch {
-        // Liquidity gates FDV publication, but never launch discovery.
-        liquidityRows = new Map();
-      }
-    }
+  if (liquidityResult.status === "rejected") {
+    throw marketDataErrorAtPhase(
+      liquidityResult.reason,
+      "market-liquidity",
+    );
+  }
+  if (liquidityResult.value.partial) {
+    throw new BitqueryMarketDataError("response", "market-liquidity");
+  }
+  const evm = record(liquidityResult.value.data.EVM);
+  if (evm === null) {
+    throw new BitqueryMarketDataError("response", "market-liquidity");
+  }
+  let liquidityRows: ReadonlyMap<string, unknown>;
+  try {
+    liquidityRows = indexUniqueRows(
+      array(evm.latestLiquidity),
+      liquidityRowPoolId,
+    );
+  } catch (error) {
+    throw marketDataErrorAtPhase(error, "market-liquidity");
   }
 
   const pools = new Map<string, MarketPoolDataV1>();
