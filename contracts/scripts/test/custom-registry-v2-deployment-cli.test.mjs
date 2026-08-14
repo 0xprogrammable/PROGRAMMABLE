@@ -83,6 +83,29 @@ test("both broadcasters require explicit exact-hash dispatch-intent activation",
   }
 });
 
+test("main Registry broadcaster imports the dispatch-window guard it executes before submission", async () => {
+  const source = await readFile(
+    path.join(scripts, "broadcast-custom-registry-v2-deployment.mjs"),
+    "utf8",
+  );
+  const journalImport = source.match(
+    /import\s*\{(?<names>[^{}]*)\}\s*from\s*"\.\/custom-registry-v2-transaction-journal\.mjs";/u,
+  );
+  assert.ok(journalImport, "transaction-journal import must exist");
+  assert.match(
+    journalImport.groups.names,
+    /\bassertSignedDispatchIntentWindow\b/u,
+  );
+  const guardCallIndex = source.indexOf("assertSignedDispatchIntentWindow({");
+  assert.notEqual(guardCallIndex, -1);
+  assert.ok(
+    guardCallIndex < source.indexOf("DISPATCH_INTENT_ACTIVATED"),
+  );
+  assert.ok(
+    guardCallIndex < source.lastIndexOf("sendRawTransaction"),
+  );
+});
+
 test("Safe prediction input generator binds each owner and produces fresh distinct salts", async () => {
   const source = await readFile(
     path.join(

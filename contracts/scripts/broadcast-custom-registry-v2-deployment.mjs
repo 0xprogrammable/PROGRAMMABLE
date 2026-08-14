@@ -28,6 +28,7 @@ import {
   assertBroadcastObservationEvidence,
   assertDispatchAuthorizedJournal,
   assertExactSerializedEip1559Transaction,
+  assertSignedDispatchIntentWindow,
   assertStagedTransactionEvidence,
   assertTransactionDiscoveryEvidence,
   createDurableJsonLines,
