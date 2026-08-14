@@ -827,6 +827,57 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("pins the dRPC launch catalog cache to one fresh commitment-bound singleflight", () => {
+    const result = evaluateReadModelOperationsSourceContracts(ROOT);
+    expect(result.failures).toEqual([]);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ops-primary-rpc-launch-catalog-cache-contract",
+          status: "pass",
+        }),
+      ]),
+    );
+  });
+
+  it.each([
+    [
+      "a ten-minute TTL",
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;",
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 600_000;",
+    ],
+    [
+      "no literal TTL",
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;\n",
+      "",
+    ],
+    [
+      "an unbound cache hit",
+      "cacheKeyHasCommitment(cached.key, binding.endpointCommitment)",
+      "true",
+    ],
+    [
+      "no shared in-flight refresh",
+      "let refresh = refreshes.get(refreshKey) ?? null;",
+      "let refresh = null;",
+    ],
+    [
+      "a stale cache return",
+      "cached = null;",
+      "return cached.catalog;",
+    ],
+  ])("rejects the dRPC launch catalog cache with %s", (_label, needle, replacement) => {
+    const path = "lib/market-data/primary-rpc-launches.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-primary-rpc-launch-catalog-cache-contract",
+    );
+  });
+
   it("accepts the exact Explore transport-unavailable provider taxonomy", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
@@ -1134,6 +1185,26 @@ describe("read-model operations source contract", () => {
       "a non-current launch identity",
       'launchIdentity?.status === "current"',
       'launchIdentity?.status !== "unavailable"',
+    ],
+    [
+      "a ten-minute launch identity age",
+      "launchIdentity.ageMs < 60_000",
+      "launchIdentity.ageMs < 600_000",
+    ],
+    [
+      "a non-integer launch identity age",
+      "Number.isSafeInteger(launchIdentity.ageMs)",
+      "Number.isFinite(launchIdentity.ageMs)",
+    ],
+    [
+      "a nullable launch identity block",
+      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
+      "launchIdentity.asOfBlock !== undefined",
+    ],
+    [
+      "a nullable launch identity reference block",
+      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
+      "launchIdentity.referenceBlock !== undefined",
     ],
     [
       "an available degraded market read",

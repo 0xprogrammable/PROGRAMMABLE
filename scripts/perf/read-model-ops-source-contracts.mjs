@@ -2504,12 +2504,41 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedProfileProbe = stagedBitquerySmokeBlock.indexOf(
     "const profileToken =",
   );
+  const stagedLaunchIdentityContractStart = stagedBitquerySmokeBlock.indexOf(
+    "function exactCurrentLaunchIdentity(response)",
+  );
+  const stagedLaunchIdentityContractEnd = stagedBitquerySmokeBlock.indexOf(
+    "function exactExploreIdentity(token)",
+    stagedLaunchIdentityContractStart,
+  );
+  const stagedLaunchIdentityContractBlock =
+    stagedLaunchIdentityContractStart >= 0 &&
+    stagedLaunchIdentityContractEnd > stagedLaunchIdentityContractStart
+      ? stagedBitquerySmokeBlock.slice(
+          stagedLaunchIdentityContractStart,
+          stagedLaunchIdentityContractEnd,
+        )
+      : "";
+  const stagedLaunchIdentityContract = includesEverySourceFragment(
+    stagedLaunchIdentityContractBlock,
+    [
+      'launchIdentity?.status === "current"',
+      'launchIdentity.canonical === "current"',
+      'launchIdentity.custom === "current"',
+      "Number.isSafeInteger(launchIdentity.ageMs)",
+      "launchIdentity.ageMs >= 0",
+      "launchIdentity.ageMs < 60_000",
+      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
+      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
+    ],
+  );
   const stagedBitqueryMarketReadStatusContract =
     stagedCurrentMarketBranch >= 0 &&
     stagedDetailProbe > stagedCurrentMarketBranch &&
     stagedChartProbe > stagedDetailProbe &&
     stagedDegradedMarketBranch > stagedChartProbe &&
     stagedProfileProbe > stagedDegradedMarketBranch &&
+    stagedLaunchIdentityContract &&
     includesEverySourceFragment(stagedBitquerySmokeBlock, [
       "status: response.status",
       "highest.status !== 200",
@@ -2523,6 +2552,17 @@ export function evaluateReadModelOperationsSourceContracts(
       "exactExplorePage(response, tokens) &&",
       "exactExplorePage(highest, highestTokens)",
       "exactExplorePage(newest, newestTokens)",
+      "function exactCurrentLaunchIdentity(response)",
+      'launchIdentity?.status === "current"',
+      'launchIdentity.canonical === "current"',
+      'launchIdentity.custom === "current"',
+      "Number.isSafeInteger(launchIdentity.ageMs)",
+      "launchIdentity.ageMs >= 0",
+      "launchIdentity.ageMs < 60_000",
+      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
+      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
+      "!exactCurrentLaunchIdentity(highest)",
+      "!exactCurrentLaunchIdentity(newest)",
       "response.body?.page === 1",
       "response.body?.pageSize === 20",
       "total >= tokens.length",
@@ -2797,6 +2837,58 @@ export function evaluateReadModelOperationsSourceContracts(
       "...(marketTransportFailure === null &&\n" +
         "              dataQuality.valuation.asOfTime",
     ]);
+  const primaryRpcLaunchCatalogCacheStart =
+    primaryRpcLaunchCatalog.indexOf(
+      "export function createPrimaryRpcLaunchCatalogCacheV1",
+    );
+  const primaryRpcLaunchCatalogCacheEnd = primaryRpcLaunchCatalog.indexOf(
+    "function catalogCacheKey(",
+    primaryRpcLaunchCatalogCacheStart,
+  );
+  const primaryRpcLaunchCatalogCacheBlock =
+    primaryRpcLaunchCatalogCacheStart >= 0 &&
+    primaryRpcLaunchCatalogCacheEnd > primaryRpcLaunchCatalogCacheStart
+      ? primaryRpcLaunchCatalog.slice(
+          primaryRpcLaunchCatalogCacheStart,
+          primaryRpcLaunchCatalogCacheEnd,
+        )
+      : "";
+  const primaryRpcLaunchCatalogCacheContract =
+    primaryRpcLaunchCatalog.includes(
+      "export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;",
+    ) &&
+    includesEverySourceFragment(primaryRpcLaunchCatalogCacheBlock, [
+      "const refreshes = new Map<string, PrimaryRpcLaunchCatalogCacheRefresh>();",
+      "const binding = resolveBinding();",
+      "const generatedAtMs = Date.parse(cached.catalog.generatedAt);",
+      "cacheKeyHasCommitment(cached.key, binding.endpointCommitment)",
+      "Number.isFinite(generatedAtMs)",
+      "ageMs >= 0",
+      "ageMs < PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS",
+      "cached = null;",
+      "const refreshKey = binding.endpointCommitment;",
+      "let refresh = refreshes.get(refreshKey) ?? null;",
+      "refreshes.set(refreshKey, current);",
+      "const catalog = await reader(",
+      "const completedAtMs = clock();",
+      "const generatedAtMs = Date.parse(catalog.generatedAt);",
+      'throw new PrimaryRpcLaunchCatalogError("integrity", "entries");',
+      "key: catalogCacheKey(",
+      "binding.endpointCommitment,",
+      "return await waitForCatalogRefresh(refresh, options.signal);",
+    ]) &&
+    (primaryRpcLaunchCatalogCacheBlock.match(
+      /ageMs < PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS/gu,
+    )?.length ?? 0) === 1 &&
+    (primaryRpcLaunchCatalogCacheBlock.match(
+      /ageMs >= PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS/gu,
+    )?.length ?? 0) === 1 &&
+    !primaryRpcLaunchCatalogCacheBlock.includes("catch (");
+  check(
+    "ops-primary-rpc-launch-catalog-cache-contract",
+    primaryRpcLaunchCatalogCacheContract,
+    "the dRPC launch catalog cache is commitment-bound, singleflight, fresh for less than 60 seconds, and never serves stale data",
+  );
   check(
     "ops-public-provider-split-source-contract",
     exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&

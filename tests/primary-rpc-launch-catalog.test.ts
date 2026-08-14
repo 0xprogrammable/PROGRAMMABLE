@@ -18,10 +18,13 @@ import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 import {
   PRIMARY_RPC_LAUNCH_CATALOG_BUDGET_MS,
+  PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS,
   PrimaryRpcLaunchCatalogError,
+  createPrimaryRpcLaunchCatalogCacheV1,
   readPrimaryRpcExploreEntriesV1,
   safePrimaryRpcLaunchCatalogError,
   type PrimaryRpcContractRead,
+  type PrimaryRpcExploreEntriesV1,
   type PrimaryRpcLaunchCatalogClient,
   type PrimaryRpcLogQuery,
 } from "../lib/market-data/primary-rpc-launches.server";
@@ -33,6 +36,220 @@ const QUOTE = address(900);
 const RECIPIENT = address(901);
 const CREATOR = address(902);
 const VAULT = address(903);
+
+describe("verified dRPC Explore catalog cache", () => {
+  it("shares one verified catalog across query, sort, and page requests", async () => {
+    const nowMs = 1_800_000_000_001;
+    let reads = 0;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(async () => {
+      reads += 1;
+      return catalog(reads, nowMs);
+    }, () => cacheBinding(), () => nowMs);
+
+    const queryResult = await cache.read();
+    const sortResult = await cache.read();
+    const pageResult = await cache.read();
+
+    expect(reads).toBe(1);
+    expect(sortResult).toBe(queryResult);
+    expect(pageResult).toBe(queryResult);
+    expect(pageResult).toMatchObject({
+      source: "drpc",
+      asOfBlock: "25650001",
+      asOfBlockHash: bytes32(25_650_001),
+    });
+  });
+
+  it("coalesces concurrent cold requests into one dRPC catalog refresh", async () => {
+    const nowMs = 1_800_000_000_001;
+    let reads = 0;
+    let resolveRead!: (value: PrimaryRpcExploreEntriesV1) => void;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(() => {
+      reads += 1;
+      return new Promise((resolve) => {
+        resolveRead = resolve;
+      });
+    }, () => cacheBinding(), () => nowMs);
+
+    const newest = cache.read();
+    const highest = cache.read();
+    expect(reads).toBe(1);
+    resolveRead(catalog(1, nowMs));
+
+    await expect(Promise.all([newest, highest])).resolves.toEqual([
+      catalog(1, nowMs),
+      catalog(1, nowMs),
+    ]);
+    expect(reads).toBe(1);
+  });
+
+  it("refreshes dRPC at the exact 60-second TTL boundary", async () => {
+    let nowMs = 1_800_000_000_000;
+    let reads = 0;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(async () => {
+      reads += 1;
+      return catalog(reads, nowMs);
+    }, () => cacheBinding(), () => nowMs);
+
+    const initial = await cache.read();
+    nowMs += PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS - 1;
+    const fresh = await cache.read();
+    nowMs += 1;
+    const refreshed = await cache.read();
+
+    expect(reads).toBe(2);
+    expect(fresh).toBe(initial);
+    expect(refreshed).not.toBe(initial);
+    expect(refreshed.asOfBlock).toBe("25650002");
+  });
+
+  it("never serves stale data or caches a failed TTL refresh", async () => {
+    let nowMs = 1_800_000_000_000;
+    let reads = 0;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(async () => {
+      reads += 1;
+      if (reads === 2) {
+        throw new PrimaryRpcLaunchCatalogError("transport", "head");
+      }
+      return catalog(reads, nowMs);
+    }, () => cacheBinding(), () => nowMs);
+
+    await expect(cache.read()).resolves.toEqual(catalog(1, nowMs));
+    nowMs += PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS;
+    await expect(cache.read()).rejects.toMatchObject({
+      category: "transport",
+      phase: "head",
+    });
+    await expect(cache.read()).resolves.toEqual(catalog(3, nowMs));
+
+    expect(reads).toBe(3);
+  });
+
+  it("does not cache a refresh after its only request aborts", async () => {
+    const nowMs = 1_800_000_000_001;
+    let reads = 0;
+    let resolveFirst!: (value: PrimaryRpcExploreEntriesV1) => void;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(() => {
+      reads += 1;
+      if (reads === 1) {
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve(catalog(reads, nowMs));
+    }, () => cacheBinding(), () => nowMs);
+    const controller = new AbortController();
+    const aborted = cache.read({ signal: controller.signal });
+
+    controller.abort();
+    resolveFirst(catalog(1, nowMs));
+    await expect(aborted).rejects.toMatchObject({
+      category: "transport",
+      phase: "initialization",
+    });
+    await Promise.resolve();
+    await expect(cache.read()).resolves.toEqual(catalog(2, nowMs));
+
+    expect(reads).toBe(2);
+  });
+
+  it("keeps a shared fill alive when only one concurrent waiter aborts", async () => {
+    const nowMs = 1_800_000_000_001;
+    let reads = 0;
+    let resolveRead!: (value: PrimaryRpcExploreEntriesV1) => void;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(() => {
+      reads += 1;
+      return new Promise((resolve) => {
+        resolveRead = resolve;
+      });
+    }, () => cacheBinding(), () => nowMs);
+    const controller = new AbortController();
+
+    const aborted = cache.read({ signal: controller.signal });
+    const active = cache.read();
+    controller.abort();
+    resolveRead(catalog(1, nowMs));
+
+    await expect(aborted).rejects.toMatchObject({
+      category: "transport",
+      phase: "initialization",
+    });
+    await expect(active).resolves.toEqual(catalog(1, nowMs));
+    await expect(cache.read()).resolves.toEqual(catalog(1, nowMs));
+    expect(reads).toBe(1);
+  });
+
+  it("validates the commitment binding before a hit and refreshes on rotation", async () => {
+    const nowMs = 1_800_000_000_001;
+    let reads = 0;
+    let bindingReads = 0;
+    let commitment = bytes32(700);
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(async () => {
+      reads += 1;
+      return catalog(reads, nowMs);
+    }, () => {
+      bindingReads += 1;
+      return cacheBinding(commitment);
+    }, () => nowMs);
+
+    await cache.read();
+    await cache.read();
+    commitment = bytes32(701);
+    const rotated = await cache.read();
+
+    expect(bindingReads).toBe(3);
+    expect(reads).toBe(2);
+    expect(rotated.asOfBlock).toBe("25650002");
+  });
+
+  it("does not cache a cold refresh error and retries the exact failure", async () => {
+    const nowMs = 1_800_000_000_001;
+    let reads = 0;
+    const cache = createPrimaryRpcLaunchCatalogCacheV1(async () => {
+      reads += 1;
+      if (reads < 3) {
+        throw new PrimaryRpcLaunchCatalogError("transport", "logs");
+      }
+      return catalog(reads, nowMs);
+    }, () => cacheBinding(), () => nowMs);
+
+    await expect(cache.read()).rejects.toMatchObject({
+      category: "transport",
+      phase: "logs",
+    });
+    await expect(cache.read()).rejects.toMatchObject({
+      category: "transport",
+      phase: "logs",
+    });
+    await expect(cache.read()).resolves.toEqual(catalog(3, nowMs));
+    expect(reads).toBe(3);
+  });
+
+  it.each([
+    ["future", 1],
+    ["60 seconds old", -PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS],
+  ] as const)(
+    "fails closed instead of serving a %s generatedAt",
+    async (_label, generatedAtOffsetMs) => {
+      const nowMs = 1_800_000_000_001;
+      let reads = 0;
+      const cache = createPrimaryRpcLaunchCatalogCacheV1(async () => {
+        reads += 1;
+        return catalog(reads, nowMs + generatedAtOffsetMs);
+      }, () => cacheBinding(), () => nowMs);
+
+      await expect(cache.read()).rejects.toMatchObject({
+        category: "integrity",
+        phase: "entries",
+      });
+      await expect(cache.read()).rejects.toMatchObject({
+        category: "integrity",
+        phase: "entries",
+      });
+      expect(reads).toBe(2);
+    },
+  );
+});
 
 type FixtureRelease = Readonly<{
   launcher: `0x${string}`;
@@ -719,4 +936,22 @@ function address(value: number): `0x${string}` {
 
 function bytes32(value: bigint | number): `0x${string}` {
   return `0x${BigInt(value).toString(16).padStart(64, "0")}`;
+}
+
+function catalog(
+  sequence: number,
+  generatedAtMs = 1_800_000_000_000 + sequence,
+): PrimaryRpcExploreEntriesV1 {
+  const block = 25_650_000 + sequence;
+  return Object.freeze({
+    source: "drpc" as const,
+    generatedAt: new Date(generatedAtMs).toISOString(),
+    asOfBlock: String(block),
+    asOfBlockHash: bytes32(block),
+    entries: Object.freeze([]),
+  });
+}
+
+function cacheBinding(endpointCommitment = bytes32(700)) {
+  return Object.freeze({ endpointCommitment });
 }

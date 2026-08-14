@@ -30,6 +30,8 @@ import {
 import { buildTokenLinks, sanitizeImageUrl } from "../onchain/metadata";
 import { productionMainnetRpcPrimary } from
   "../onchain/website-rpc-providers.server";
+import type { WebsiteRpcBinding } from
+  "../onchain/website-rpc-providers.server";
 import {
   STOCK_PAIRED_CREATOR_FEE_BPS,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
@@ -38,6 +40,7 @@ import {
 import type { ExploreEntry, LauncherToken } from "../tokens";
 
 export const PRIMARY_RPC_LAUNCH_CATALOG_BUDGET_MS = 18_000;
+export const PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS = 60_000;
 
 const REQUEST_TIMEOUT_MS = 4_000;
 const LOG_WINDOW_RANGE = 4_096n;
@@ -252,6 +255,129 @@ export type PrimaryRpcLaunchCatalogReaderOptions = Readonly<{
   client?: PrimaryRpcLaunchCatalogClient;
 }>;
 
+type PrimaryRpcLaunchCatalogCacheReadOptions = Readonly<{
+  signal?: AbortSignal;
+}>;
+
+type PrimaryRpcLaunchCatalogCacheRefresh = {
+  readonly controller: AbortController;
+  readonly key: string;
+  waiters: number;
+  promise: Promise<PrimaryRpcExploreEntriesV1>;
+};
+
+type PrimaryRpcLaunchCatalogCacheBinding = Readonly<{
+  endpointCommitment: string;
+}>;
+
+export type PrimaryRpcLaunchCatalogCacheV1 = Readonly<{
+  read(
+    options?: PrimaryRpcLaunchCatalogCacheReadOptions,
+  ): Promise<PrimaryRpcExploreEntriesV1>;
+}>;
+
+export function createPrimaryRpcLaunchCatalogCacheV1<
+  Binding extends PrimaryRpcLaunchCatalogCacheBinding,
+>(
+  reader: (
+    options: PrimaryRpcLaunchCatalogCacheReadOptions,
+    binding: Binding,
+  ) => Promise<PrimaryRpcExploreEntriesV1>,
+  resolveBinding: () => Binding,
+  clock: () => number = Date.now,
+): PrimaryRpcLaunchCatalogCacheV1 {
+  let cached: Readonly<{
+    catalog: PrimaryRpcExploreEntriesV1;
+    key: string;
+  }> | null = null;
+  const refreshes = new Map<string, PrimaryRpcLaunchCatalogCacheRefresh>();
+
+  return Object.freeze({
+    async read(
+      options: PrimaryRpcLaunchCatalogCacheReadOptions = {},
+    ): Promise<PrimaryRpcExploreEntriesV1> {
+      if (options.signal?.aborted) throw catalogCacheAbortError();
+
+      const binding = resolveBinding();
+      const nowMs = clock();
+      if (cached !== null) {
+        const generatedAtMs = Date.parse(cached.catalog.generatedAt);
+        const ageMs = nowMs - generatedAtMs;
+        if (
+          cacheKeyHasCommitment(cached.key, binding.endpointCommitment) &&
+          Number.isFinite(generatedAtMs) &&
+          ageMs >= 0 &&
+          ageMs < PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS
+        ) {
+          return cached.catalog;
+        }
+        cached = null;
+      }
+
+      const refreshKey = binding.endpointCommitment;
+      let refresh = refreshes.get(refreshKey) ?? null;
+      if (refresh === null || refresh.controller.signal.aborted) {
+        const current: PrimaryRpcLaunchCatalogCacheRefresh = {
+          controller: new AbortController(),
+          key: refreshKey,
+          waiters: 0,
+          promise: Promise.resolve(undefined as never),
+        };
+        current.promise = (async () => {
+          try {
+            const catalog = await reader(
+              { signal: current.controller.signal },
+              binding,
+            );
+            if (current.controller.signal.aborted || current.waiters === 0) {
+              throw catalogCacheAbortError();
+            }
+            const completedAtMs = clock();
+            const generatedAtMs = Date.parse(catalog.generatedAt);
+            const ageMs = completedAtMs - generatedAtMs;
+            if (
+              !Number.isFinite(generatedAtMs) ||
+              ageMs < 0 ||
+              ageMs >= PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS
+            ) {
+              throw new PrimaryRpcLaunchCatalogError("integrity", "entries");
+            }
+            cached = Object.freeze({
+              catalog,
+              key: catalogCacheKey(
+                binding.endpointCommitment,
+                generatedAtMs,
+              ),
+            });
+            return catalog;
+          } finally {
+            if (refreshes.get(current.key) === current) {
+              refreshes.delete(current.key);
+            }
+          }
+        })();
+        refreshes.set(refreshKey, current);
+        refresh = current;
+      }
+
+      return await waitForCatalogRefresh(refresh, options.signal);
+    },
+  });
+}
+
+function catalogCacheKey(endpointCommitment: string, timeMs: number): string {
+  return `${endpointCommitment}:${Math.floor(
+    timeMs / PRIMARY_RPC_LAUNCH_CATALOG_CACHE_TTL_MS,
+  )}`;
+}
+
+function cacheKeyHasCommitment(
+  key: string,
+  endpointCommitment: string,
+): boolean {
+  return key.startsWith(`${endpointCommitment}:`);
+}
+
 type RpcEvent = Readonly<{
   release: ReleaseDefinition;
   source: "launcher" | "eth-launch-coordinator";
@@ -320,8 +446,27 @@ type BoundBlock = Readonly<{
   timestamp: bigint;
 }>;
 
+const primaryRpcLaunchCatalogCache = createPrimaryRpcLaunchCatalogCacheV1(
+  (options, binding) => readPrimaryRpcExploreEntriesUncachedV1({
+    ...options,
+    resolvedBinding: binding,
+  }),
+  resolvePrimaryRpcLaunchCatalogBinding,
+);
+
 export async function readPrimaryRpcExploreEntriesV1(
   options: PrimaryRpcLaunchCatalogReaderOptions = {},
+): Promise<PrimaryRpcExploreEntriesV1> {
+  if (isSharedExploreCatalogRead(options)) {
+    return await primaryRpcLaunchCatalogCache.read({ signal: options.signal });
+  }
+  return await readPrimaryRpcExploreEntriesUncachedV1(options);
+}
+
+async function readPrimaryRpcExploreEntriesUncachedV1(
+  options: PrimaryRpcLaunchCatalogReaderOptions & Readonly<{
+    resolvedBinding?: WebsiteRpcBinding;
+  }>,
 ): Promise<PrimaryRpcExploreEntriesV1> {
   const budget = createCatalogBudget(options.signal);
   const signal = budget.signal;
@@ -337,6 +482,7 @@ export async function readPrimaryRpcExploreEntriesV1(
     const client = options.client ?? createPrimaryRpcClient(
       options.environment,
       signal,
+      options.resolvedBinding,
     );
     const now = options.now ?? new Date();
 
@@ -430,6 +576,62 @@ export async function readPrimaryRpcExploreEntriesV1(
   }
 }
 
+function isSharedExploreCatalogRead(
+  options: PrimaryRpcLaunchCatalogReaderOptions,
+): boolean {
+  return options.requestedTokenAddress === undefined &&
+    options.environment === undefined &&
+    options.client === undefined &&
+    options.now === undefined;
+}
+
+function catalogCacheAbortError(): PrimaryRpcLaunchCatalogError {
+  return new PrimaryRpcLaunchCatalogError("transport", "initialization");
+}
+
+function resolvePrimaryRpcLaunchCatalogBinding(): WebsiteRpcBinding {
+  try {
+    return productionMainnetRpcPrimary();
+  } catch {
+    throw new PrimaryRpcLaunchCatalogError("configuration", "initialization");
+  }
+}
+
+function waitForCatalogRefresh(
+  refresh: PrimaryRpcLaunchCatalogCacheRefresh,
+  signal: AbortSignal | undefined,
+): Promise<PrimaryRpcExploreEntriesV1> {
+  refresh.waiters += 1;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const beginFinish = () => {
+      if (settled) return false;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      refresh.waiters -= 1;
+      return true;
+    };
+    const onAbort = () => {
+      if (!beginFinish()) return;
+      reject(catalogCacheAbortError());
+      if (refresh.waiters === 0) refresh.controller.abort();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    void refresh.promise.then(
+      (catalog) => {
+        if (beginFinish()) resolve(catalog);
+      },
+      (error: unknown) => {
+        if (beginFinish()) reject(error);
+      },
+    );
+  });
+}
+
 function emptyCatalog(now: Date, head: BoundBlock): PrimaryRpcExploreEntriesV1 {
   return {
     source: "drpc",
@@ -443,13 +645,11 @@ function emptyCatalog(now: Date, head: BoundBlock): PrimaryRpcExploreEntriesV1 {
 function createPrimaryRpcClient(
   environment: Readonly<Record<string, string | undefined>> | undefined,
   signal: AbortSignal,
+  resolvedBinding?: WebsiteRpcBinding,
 ): PrimaryRpcLaunchCatalogClient {
-  let binding;
-  try {
-    binding = productionMainnetRpcPrimary(environment);
-  } catch {
-    throw new PrimaryRpcLaunchCatalogError("configuration");
-  }
+  const binding = resolvedBinding ?? resolvePrimaryRpcLaunchCatalogBindingFrom(
+    environment,
+  );
   const publicClient = createPublicClient({
     chain: mainnet,
     transport: http(binding.url, {
@@ -502,6 +702,16 @@ function createPrimaryRpcClient(
       });
     },
   };
+}
+
+function resolvePrimaryRpcLaunchCatalogBindingFrom(
+  environment: Readonly<Record<string, string | undefined>> | undefined,
+): WebsiteRpcBinding {
+  try {
+    return productionMainnetRpcPrimary(environment);
+  } catch {
+    throw new PrimaryRpcLaunchCatalogError("configuration");
+  }
 }
 
 async function scanSparseLogs(

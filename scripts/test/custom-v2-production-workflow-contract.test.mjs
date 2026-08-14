@@ -127,6 +127,12 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   assert.match(smoke, /exactExplorePage\(newest, newestTokens\)/u);
   assert.match(
     smoke,
+    /function exactCurrentLaunchIdentity\(response\)[\s\S]*launchIdentity\?\.status === "current"[\s\S]*launchIdentity\.canonical === "current"[\s\S]*launchIdentity\.custom === "current"[\s\S]*Number\.isSafeInteger\(launchIdentity\.ageMs\)[\s\S]*launchIdentity\.ageMs >= 0[\s\S]*launchIdentity\.ageMs < 60_000[\s\S]*positiveInteger\.test\(String\(launchIdentity\.asOfBlock \?\? ""\)\)[\s\S]*String\(launchIdentity\.referenceBlock \?\? ""\)/u,
+  );
+  assert.match(smoke, /!exactCurrentLaunchIdentity\(highest\)/u);
+  assert.match(smoke, /!exactCurrentLaunchIdentity\(newest\)/u);
+  assert.match(
+    smoke,
     /function exactExploreIdentity\(token\)[\s\S]*function exactDegradedLaunchOrder\([\s\S]*highest\.body\?\.total !== newest\.body\?\.total[\s\S]*highestTokens\.length !== newestTokens\.length[\s\S]*new Set\(highestIdentities\)\.size === highestIdentities\.length[\s\S]*identity === newestIdentities\[index\]/u,
   );
   assert.match(
