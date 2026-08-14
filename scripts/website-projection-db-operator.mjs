@@ -10,14 +10,18 @@ import {
   safeFailure,
 } from "./data-pipeline/hosted-db-operator-core.mjs";
 import {
+  assertWebsiteProjectionAdoptExistingConfirmation,
   assertWebsiteProjectionApplyConfirmation,
   assertWebsiteProjectionCheckoutClean,
   discoverWebsiteProjectionPlan,
   validateWebsiteProjectionPlan,
+  WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256,
 } from "./website-projection-db-operator-core.mjs";
 import {
+  adoptExistingWebsiteProjectionDatabase,
   applyWebsiteProjectionMigrations,
   inspectWebsiteProjectionDatabase,
+  readWebsiteProjectionAdoptionProtectedSnapshots,
 } from "./website-projection-db-postgres.mjs";
 import {
   closeHostedDatabase,
@@ -35,6 +39,7 @@ const HELP = `Usage:
   node scripts/website-projection-db-operator.mjs dry-run --plan FILE --expected-project-ref REF
   node scripts/website-projection-db-operator.mjs verify --plan FILE --expected-project-ref REF
   node scripts/website-projection-db-operator.mjs apply --plan FILE --expected-project-ref REF --confirm-apply PLAN_SHA256 --confirm-target REF
+  node scripts/website-projection-db-operator.mjs adopt-existing --plan FILE --expected-project-ref REF --source-base-snapshot FILE --source-expanded-snapshot FILE --confirm-adopt-existing PLAN_SHA256 --confirm-target REF --confirm-source-snapshot SNAPSHOT_SHA256 --confirm-adopt-through 0003
 
 Database credentials are accepted only through PROGRAMMABLE_MIGRATOR_DATABASE_URL.
 The CA certificate is accepted only through PROGRAMMABLE_POSTGRES_SSL_CA_PEM.
@@ -131,6 +136,16 @@ async function writeOutput(value, outputPath) {
 async function runDatabaseCommand(command, flags) {
   const allowed = ["--plan", "--expected-project-ref"];
   if (command === "apply") allowed.push("--confirm-apply", "--confirm-target");
+  if (command === "adopt-existing") {
+    allowed.push(
+      "--confirm-adopt-existing",
+      "--confirm-target",
+      "--confirm-source-snapshot",
+      "--confirm-adopt-through",
+      "--source-base-snapshot",
+      "--source-expanded-snapshot",
+    );
+  }
   exactFlags(flags, allowed);
   const plan = await readReviewedPlan(flags.get("--plan"));
   const expectedProjectRef = flags.get("--expected-project-ref");
@@ -142,6 +157,25 @@ async function runDatabaseCommand(command, flags) {
       confirmTarget: flags.get("--confirm-target"),
     });
   }
+  if (command === "adopt-existing") {
+    assertWebsiteProjectionAdoptExistingConfirmation({
+      plan,
+      expectedProjectRef,
+      expectedSourceSnapshotSha256:
+        WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256,
+      confirmAdoptExisting: flags.get("--confirm-adopt-existing"),
+      confirmTarget: flags.get("--confirm-target"),
+      confirmSourceSnapshot: flags.get("--confirm-source-snapshot"),
+      confirmAdoptThrough: flags.get("--confirm-adopt-through"),
+    });
+  }
+  const protectedSnapshots = command === "adopt-existing"
+    ? await readWebsiteProjectionAdoptionProtectedSnapshots({
+      baseSnapshotPath: flags.get("--source-base-snapshot"),
+      expandedSnapshotPath: flags.get("--source-expanded-snapshot"),
+      expectedProjectRef,
+    })
+    : null;
   const connection = await openHostedDatabase({
     databaseUrl: process.env.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
     expectedProjectRef,
@@ -158,7 +192,20 @@ async function runDatabaseCommand(command, flags) {
           runtimePassword:
             process.env.PROGRAMMABLE_WEBSITE_PROJECTION_RUNTIME_PASSWORD,
         })
-      : await inspectWebsiteProjectionDatabase({
+      : command === "adopt-existing"
+        ? await adoptExistingWebsiteProjectionDatabase({
+          sql: connection.sql,
+          workspace,
+          plan,
+          expectedProjectRef,
+          sessionIdentity: connection.sessionIdentity,
+          expectedSourceSnapshotSha256:
+            WEBSITE_PROJECTION_ADOPTION_SOURCE_SNAPSHOT_SHA256,
+          operatorCommit: await gitObject("HEAD"),
+          operatorTree: await gitObject("HEAD^{tree}"),
+          protectedSnapshots,
+        })
+        : await inspectWebsiteProjectionDatabase({
           sql: connection.sql,
           plan,
           expectedProjectRef,
@@ -172,7 +219,8 @@ async function runDatabaseCommand(command, flags) {
       target: connection.target,
       operatorIdentity: connection.operatorIdentity,
       state,
-      changed: command === "apply" && state.appliedThisRun.length > 0,
+      changed: (command === "apply" && state.appliedThisRun.length > 0)
+        || (command === "adopt-existing" && state.adoptedThisRun.length > 0),
     });
     if (command === "verify" && state.status !== "current") process.exitCode = 2;
   } finally {
@@ -194,7 +242,7 @@ async function main() {
     );
     return;
   }
-  if (["dry-run", "verify", "apply"].includes(command)) {
+  if (["dry-run", "verify", "apply", "adopt-existing"].includes(command)) {
     await runDatabaseCommand(command, flags);
     return;
   }

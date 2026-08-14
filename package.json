@@ -166,6 +166,7 @@
     "@metamask/smart-accounts-kit": "1.7.0",
     "@privy-io/node": "^0.27.0",
     "@privy-io/react-auth": "3.35.2",
+    "@electric-sql/pglite": "0.5.4",
     "@uniswap/liquidity-launcher-sdk": "1.0.1",
     "@uniswap/sdk-core": "7.19.0",
     "@uniswap/universal-router-sdk": "5.11.1",
@@ -183,7 +184,6 @@
     "viem": "2.55.5"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.4",
     "@playwright/test": "1.62.1",
     "@types/node": "26.1.1",
     "@types/pg": "8.20.4",

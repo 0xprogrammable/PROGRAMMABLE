@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,23 +15,34 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 import {
+  assertWebsiteProjectionAdoptExistingConfirmation,
   assertWebsiteProjectionApplyConfirmation,
   assertWebsiteProjectionCheckoutClean,
   assertWebsiteProjectionRoleGraph,
   catalogSnapshotSha256,
   compareWebsiteProjectionEvidence,
   discoverWebsiteProjectionPlan,
+  unwrapWebsiteProjectionMigration,
   validateWebsiteProjectionPlan,
   validateWebsiteProjectionRuntimePassword,
 } from "./website-projection-db-operator-core.mjs";
 import {
+  adoptExistingWebsiteProjectionDatabase,
   applyWebsiteProjectionMigrations,
+  assertWebsiteProjectionAdoptionLiveInventory,
+  assertWebsiteProjectionAdoptionProtectedSnapshots,
+  buildCanonicalWebsiteProjectionAdoptionReference,
   inspectWebsiteProjectionDatabase,
+  readWebsiteProjectionAdoptionProtectedSnapshots,
 } from "./website-projection-db-postgres.mjs";
 
-const COMMIT = "a".repeat(40);
-const TREE = "b".repeat(40);
-const PROJECT_REF = "abcdefghijklmnopqrst";
+const COMMIT = "76ebd54e2f0e31d055cfe6c36b7474b0e850de90";
+const TREE = "8e4ddd9a73818ce70f1284f3b2731bc87b005f27";
+const PROJECT_REF = "mnnvlrqwhfoppogslsje";
+const SOURCE_SNAPSHOT =
+  "0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284";
+const BASE_SNAPSHOT =
+  "0xac4a1fe60ebf677865a0f8ca6160162d9c457dc2bd401aa60fd820c8f2fdcc58";
 const MIGRATIONS = [
   "0001_projection_records_v1.sql",
   "0002_custom_launch_wallet_profile_v2.sql",
@@ -170,6 +189,13 @@ test("evidence comparison permits only an exact prefix on the exact target", asy
     target_project_ref: PROJECT_REF,
     catalog_sha256: `0x${"e".repeat(64)}`,
     operator_catalog_sha256: `0x${"f".repeat(64)}`,
+    evidence_kind: "applied",
+    adoption_source_snapshot_sha256: null,
+    adoption_source_catalog_sha256: null,
+    adoption_source_data_sha256: null,
+    adoption_attestation_sha256: null,
+    adoption_operator_commit: null,
+    adoption_operator_tree: null,
   };
   const state = compareWebsiteProjectionEvidence({
     plan,
@@ -263,6 +289,9 @@ function safeRole(name, overrides = {}) {
     rolcanlogin: false,
     rolreplication: false,
     rolbypassrls: false,
+    rolconnlimit: -1,
+    rolvaliduntil: null,
+    rolconfig: null,
     ...overrides,
   };
 }
@@ -285,11 +314,24 @@ test("role graph accepts only the constrained runtime and disconnected provider 
       safeRole("programmable_website_projection_runtime", { rolcanlogin: true }),
       ...providerRoles,
     ],
-    memberships: [{
-      member_name: "authenticator",
-      role_name: "authenticated",
-      admin_option: false,
-    }],
+    memberships: [
+      {
+        member_name: "authenticator",
+        role_name: "authenticated",
+        grantor_name: "postgres",
+        admin_option: false,
+        inherit_option: true,
+        set_option: true,
+      },
+      {
+        member_name: "postgres",
+        role_name: "programmable_website_projection_runtime",
+        grantor_name: "supabase_admin",
+        admin_option: true,
+        inherit_option: false,
+        set_option: false,
+      },
+    ],
     appliedCount: 5,
   });
   assert.equal(current.runtimeRoleStatus, "current");
@@ -320,7 +362,10 @@ test("role graph accepts only the constrained runtime and disconnected provider 
     memberships: [{
       member_name: "service_role",
       role_name: "postgres",
+      grantor_name: "postgres",
       admin_option: false,
+      inherit_option: true,
+      set_option: true,
     }],
     appliedCount: 0,
   }), /outgoing role membership/u);
@@ -333,7 +378,10 @@ test("role graph accepts only the constrained runtime and disconnected provider 
     memberships: [{
       member_name: "operator_helper",
       role_name: "programmable_website_projection_runtime",
+      grantor_name: "postgres",
       admin_option: false,
+      inherit_option: true,
+      set_option: true,
     }],
     appliedCount: 0,
   }), /outgoing role membership/u);
@@ -351,6 +399,187 @@ test("catalog fingerprints are canonical and reject non-row data", () => {
   assert.equal(left, right);
   assert.match(left, /^0x[0-9a-f]{64}$/u);
   assert.throws(() => catalogSnapshotSha256({ tables: "not rows" }), /catalog/u);
+});
+
+test("protected adoption inventory validator rejects catalog, role, data and legacy drift", () => {
+  const structure = {
+    namespaces: [{ nspname: "programmable_website_projection_v1", owner_name: "postgres" }],
+    relations: [],
+    columns: [],
+    constraints: [],
+    indexes: [],
+    policies: [],
+    triggers: [],
+    functions: [],
+    schemaAcl: [],
+    relationAcl: [],
+    columnAcl: [],
+    functionAcl: [],
+  };
+  const roles = [
+    safeRole("anon", { rolinherit: true }),
+    safeRole("authenticated", { rolinherit: true }),
+    safeRole("postgres", { rolinherit: true, rolcanlogin: true }),
+    safeRole("programmable_website_projection_runtime", {
+      rolinherit: true,
+      rolcanlogin: true,
+    }),
+    safeRole("service_role", { rolinherit: true, rolbypassrls: true }),
+    safeRole("supabase_admin", { rolinherit: true, rolcanlogin: true }),
+  ];
+  const memberships = [{
+    member_name: "postgres",
+    role_name: "programmable_website_projection_runtime",
+    grantor_name: "supabase_admin",
+    admin_option: true,
+    inherit_option: false,
+    set_option: false,
+  }];
+  const sourceData = { rowPresence: [
+    { relation_name: "credential_uses", has_rows: false },
+    { relation_name: "projection_records", has_rows: false },
+    { relation_name: "registry_custom_launch_records", has_rows: false },
+  ] };
+  const legacyInventory = {
+    relations: [
+      {
+        nspname: "supabase_migrations",
+        relname: "programmable_migration_evidence",
+        relkind: "r",
+      },
+      {
+        nspname: "supabase_migrations",
+        relname: "schema_migrations",
+        relkind: "r",
+      },
+    ],
+    columns: [],
+    schemaRows: [],
+    evidenceRows: [],
+    publicCanonicalSha256:
+      "0x93e41eab957ab8add897a8b277bcaaa0a5f10eebeb27f47db5bc0e59640484a2",
+  };
+  const protectedSnapshots = {
+    expandedSnapshot: {
+      applicationCatalog: {
+        schemas: structure.namespaces,
+        ...Object.fromEntries(Object.entries(structure).filter(([key]) =>
+          key !== "namespaces")),
+        applicationRowCounts: sourceData.rowPresence.map(
+          ({ relation_name: table_name }) => ({ table_name, row_count: "0" }),
+        ),
+      },
+      roleExtended: roles,
+      membershipExtended: memberships,
+      legacySupabaseInventory: {
+        columns: [],
+        schemaRows: [],
+        evidenceRows: [],
+      },
+    },
+  };
+  const valid = {
+    sourceCatalog: {
+      roles: roles.filter(({ rolname }) => rolname !== "supabase_admin"),
+      memberships,
+      ...structure,
+    },
+    sourceData,
+    extendedRoleInventory: { roles, memberships },
+    legacyInventory,
+    protectedSnapshots,
+  };
+  assert.equal(assertWebsiteProjectionAdoptionLiveInventory(valid), true);
+  for (const mutate of [
+    (value) => { value.sourceCatalog.relations.push({ relname: "extra" }); },
+    (value) => { value.sourceCatalog.roles[3].rolinherit = false; },
+    (value) => { value.sourceCatalog.memberships[0].grantor_name = "postgres"; },
+    (value) => { value.extendedRoleInventory.roles[3].rolconnlimit = 1; },
+    (value) => { value.extendedRoleInventory.memberships[0].set_option = true; },
+    (value) => { value.sourceData.rowPresence[0].has_rows = true; },
+    (value) => { value.legacyInventory.relations.push({ relname: "extra" }); },
+    (value) => { value.legacyInventory.columns.push({ column_name: "extra" }); },
+    (value) => { value.legacyInventory.schemaRows.push({ version: "extra" }); },
+    (value) => { value.legacyInventory.evidenceRows.push({ version: "extra" }); },
+    (value) => { value.legacyInventory.publicCanonicalSha256 = `0x${"0".repeat(64)}`; },
+  ]) {
+    const drifted = structuredClone(valid);
+    drifted.protectedSnapshots = structuredClone(protectedSnapshots);
+    mutate(drifted);
+    assert.throws(
+      () => assertWebsiteProjectionAdoptionLiveInventory(drifted),
+      /adopt-existing/u,
+    );
+  }
+});
+
+test("protected snapshot reader rejects symlinks, broad modes, raw drift and target drift", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "website-projection-snapshot-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const target = path.join(root, "target.json");
+  const baseLink = path.join(root, "base-link.json");
+  const expandedLink = path.join(root, "expanded-link.json");
+  await writeFile(target, "{}\n", { mode: 0o600 });
+  await symlink(target, baseLink);
+  await symlink(target, expandedLink);
+  await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshotPath: baseLink,
+    expandedSnapshotPath: expandedLink,
+    expectedProjectRef: PROJECT_REF,
+  }), /ELOOP|symbolic links/u);
+
+  const broadBase = path.join(root, "broad-base.json");
+  const broadExpanded = path.join(root, "broad-expanded.json");
+  await writeFile(broadBase, "{}\n", { mode: 0o600 });
+  await writeFile(broadExpanded, "{}\n", { mode: 0o600 });
+  await chmod(broadBase, 0o644);
+  await chmod(broadExpanded, 0o644);
+  await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshotPath: broadBase,
+    expandedSnapshotPath: broadExpanded,
+    expectedProjectRef: PROJECT_REF,
+  }), /owner-only regular file/u);
+
+  const driftedBase = path.join(root, "drifted-base.json");
+  const driftedExpanded = path.join(root, "drifted-expanded.json");
+  await writeFile(driftedBase, "{}\n", { mode: 0o600 });
+  await writeFile(driftedExpanded, "{}\n", { mode: 0o600 });
+  await assert.rejects(readWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshotPath: driftedBase,
+    expandedSnapshotPath: driftedExpanded,
+    expectedProjectRef: PROJECT_REF,
+  }), /raw hash mismatch/u);
+
+  const source = {
+    repositoryCommit: COMMIT,
+    repositoryTree: TREE,
+    planSha256:
+      "0xf0fc7bca18c16da02be83f75d25e404bfe0b7ec7f10c29ecfbea93fcb0d7e973",
+  };
+  const targetIdentity = {
+    projectRef: PROJECT_REF,
+    host: `db.${PROJECT_REF}.supabase.co`,
+    port: 5432,
+    database: "postgres",
+    sslMode: "verify-full",
+  };
+  const baseSnapshot = {
+    kind: "programmable-website-projection-hosted-catalog-snapshot-v1",
+    source,
+    target: targetIdentity,
+  };
+  assert.throws(() => assertWebsiteProjectionAdoptionProtectedSnapshots({
+    baseSnapshot,
+    expandedSnapshot: {
+      kind: "programmable-website-projection-hosted-catalog-snapshot-v2",
+      schemaVersion: 2,
+      source,
+      target: targetIdentity,
+      baseSnapshot: { rawSha256: BASE_SNAPSHOT },
+      applicationCatalog: baseSnapshot,
+    },
+    expectedProjectRef: "z".repeat(20),
+  }), /protected snapshot identity mismatch/u);
 });
 
 test("irreversible apply confirmation binds both plan and target", async (t) => {
@@ -381,7 +610,61 @@ test("irreversible apply confirmation binds both plan and target", async (t) => 
   }), /target/u);
 });
 
-function pgliteSql(client, { beforeStatement } = {}) {
+test("adopt-existing confirmation is distinct and binds plan and target", async () => {
+  const workspace = path.resolve(new URL("..", import.meta.url).pathname);
+  const plan = await discoverWebsiteProjectionPlan({
+    workspace,
+    repositoryCommit: COMMIT,
+    repositoryTree: TREE,
+  });
+  assert.doesNotThrow(() => assertWebsiteProjectionAdoptExistingConfirmation({
+    plan,
+    expectedProjectRef: PROJECT_REF,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+    confirmAdoptExisting: plan.planSha256,
+    confirmTarget: PROJECT_REF,
+    confirmSourceSnapshot: SOURCE_SNAPSHOT,
+    confirmAdoptThrough: "0003",
+  }));
+  assert.throws(() => assertWebsiteProjectionAdoptExistingConfirmation({
+    plan,
+    expectedProjectRef: PROJECT_REF,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+    confirmAdoptExisting: `0x${"f".repeat(64)}`,
+    confirmTarget: PROJECT_REF,
+    confirmSourceSnapshot: SOURCE_SNAPSHOT,
+    confirmAdoptThrough: "0003",
+  }), /adopt-existing confirmation/u);
+  assert.throws(() => assertWebsiteProjectionAdoptExistingConfirmation({
+    plan,
+    expectedProjectRef: PROJECT_REF,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+    confirmAdoptExisting: plan.planSha256,
+    confirmTarget: "z".repeat(20),
+    confirmSourceSnapshot: SOURCE_SNAPSHOT,
+    confirmAdoptThrough: "0003",
+  }), /adopt-existing target/u);
+  assert.throws(() => assertWebsiteProjectionAdoptExistingConfirmation({
+    plan,
+    expectedProjectRef: PROJECT_REF,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+    confirmAdoptExisting: plan.planSha256,
+    confirmTarget: PROJECT_REF,
+    confirmSourceSnapshot: `0x${"e".repeat(64)}`,
+    confirmAdoptThrough: "0003",
+  }), /source snapshot/u);
+  assert.throws(() => assertWebsiteProjectionAdoptExistingConfirmation({
+    plan,
+    expectedProjectRef: PROJECT_REF,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+    confirmAdoptExisting: plan.planSha256,
+    confirmTarget: PROJECT_REF,
+    confirmSourceSnapshot: SOURCE_SNAPSHOT,
+    confirmAdoptThrough: "0005",
+  }), /through confirmation/u);
+});
+
+function pgliteSql(client, { beforeStatement, afterRows } = {}) {
   const sql = {
     unsafe(statement, parameters = []) {
       beforeStatement?.(statement);
@@ -391,12 +674,14 @@ function pgliteSql(client, { beforeStatement } = {}) {
         || normalized.startsWith("with"))
         ? client.query(statement, parameters).then(({ rows }) => rows)
         : client.exec(statement).then((results) => results.at(-1)?.rows ?? []);
-      operation.simple = () => operation;
-      return operation;
+      const transformed = operation.then((resultRows) =>
+        afterRows?.(statement, resultRows) ?? resultRows);
+      transformed.simple = () => transformed;
+      return transformed;
     },
     async begin(callback) {
       return await client.transaction(async (transaction) =>
-        callback(pgliteSql(transaction, { beforeStatement })));
+        callback(pgliteSql(transaction, { beforeStatement, afterRows })));
     },
   };
   return sql;
@@ -406,6 +691,7 @@ async function pgliteOperatorFixture(t) {
   const database = new PGlite();
   t.after(() => database.close());
   await database.exec(`
+    CREATE ROLE supabase_admin SUPERUSER NOLOGIN;
     CREATE ROLE anon NOLOGIN;
     CREATE ROLE authenticated NOLOGIN;
     CREATE ROLE service_role NOLOGIN;
@@ -431,6 +717,101 @@ async function pgliteOperatorFixture(t) {
       backendPid: Number(identity.backend_pid),
       sessionUser: identity.session_user,
       currentRole: identity.current_role,
+    },
+  };
+}
+
+async function pgliteExistingApplicationFixture(t) {
+  const fixture = await pgliteOperatorFixture(t);
+  await fixture.database.exec(`
+    CREATE ROLE programmable_website_projection_runtime WITH
+      LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+      PASSWORD 'correct horse battery staple 2026';
+    SET ROLE supabase_admin;
+    GRANT programmable_website_projection_runtime TO postgres
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+    RESET ROLE;
+  `);
+  for (const migration of fixture.plan.migrations.slice(0, 3)) {
+    const source = await readFile(
+      path.join(fixture.workspace, migration.file),
+      "utf8",
+    );
+    await fixture.database.exec(unwrapWebsiteProjectionMigration(source));
+  }
+  await fixture.database.exec(`
+    REVOKE ALL ON SCHEMA programmable_website_projection_v1
+      FROM PUBLIC, anon, authenticated, service_role,
+           programmable_website_projection_runtime;
+    GRANT USAGE ON SCHEMA programmable_website_projection_v1
+      TO programmable_website_projection_runtime;
+    REVOKE ALL ON ALL TABLES IN SCHEMA programmable_website_projection_v1
+      FROM PUBLIC, anon, authenticated, service_role,
+           programmable_website_projection_runtime;
+    GRANT SELECT, INSERT
+      ON programmable_website_projection_v1.projection_records,
+         programmable_website_projection_v1.credential_uses,
+         programmable_website_projection_v1.registry_custom_launch_records
+      TO programmable_website_projection_runtime;
+    GRANT UPDATE (
+      lifecycle_generation, lifecycle_state, lifecycle_binding_hash,
+      observed_at, canonical_materialization, canonical_public_record,
+      record_binding_hash, launch_security_binding_hash,
+      launching_wallet_namespace, launching_wallet_value, updated_at
+    ) ON programmable_website_projection_v1.registry_custom_launch_records
+      TO programmable_website_projection_runtime;
+  `);
+  fixture.sql = pgliteSql(fixture.database, { afterRows: pgliteHostedRows });
+  return fixture;
+}
+
+function pgliteHostedRows(statement, resultRows) {
+  if (!statement.includes("/* website-projection:memberships */")) {
+    return resultRows;
+  }
+  return resultRows.map((row) =>
+    row.member_name === "postgres"
+      && row.role_name === "programmable_website_projection_runtime"
+      ? { ...row, grantor_name: "supabase_admin" }
+      : row);
+}
+
+function lockRejectedSql(sql, sessionIdentity) {
+  return {
+    ...sql,
+    unsafe(statement, parameters = []) {
+      if (statement.includes("/* website-projection:lock */")) {
+        const operation = Promise.resolve([{
+          acquired: false,
+          backend_pid: sessionIdentity.backendPid,
+          session_user: sessionIdentity.sessionUser,
+          current_role: sessionIdentity.currentRole,
+        }]);
+        operation.simple = () => operation;
+        return operation;
+      }
+      return sql.unsafe(statement, parameters);
+    },
+  };
+}
+
+function pgliteAdoptionAuditOptions() {
+  return {
+    protectedSnapshots: {
+      sourceSnapshotSha256: SOURCE_SNAPSHOT,
+      baseSnapshotSha256: BASE_SNAPSHOT,
+      expandedSnapshot: {},
+    },
+    legacyInventoryReader: async () => ({ fixture: true }),
+    liveInventoryValidator({ sourceData }) {
+      const expected = [
+        { relation_name: "credential_uses", has_rows: false },
+        { relation_name: "projection_records", has_rows: false },
+        { relation_name: "registry_custom_launch_records", has_rows: false },
+      ];
+      if (JSON.stringify(sourceData.rowPresence) !== JSON.stringify(expected)) {
+        throw new Error("adopt-existing rejects unproven application data");
+      }
     },
   };
 }
@@ -523,4 +904,254 @@ test("database operator bootstraps, applies, resumes and detects catalog drift",
     expectedProjectRef: PROJECT_REF,
     sessionIdentity,
   }), /catalog fingerprint mismatch/u);
+});
+
+test("adopt-existing records exact evidence atomically without replaying application DDL", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  const targetStatements = [];
+  const trackedSql = pgliteSql(fixture.database, {
+    beforeStatement(statement) {
+      targetStatements.push(statement);
+    },
+    afterRows: pgliteHostedRows,
+  });
+  const reference = await buildCanonicalWebsiteProjectionAdoptionReference({
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+  });
+  const adopted = await adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: trackedSql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    canonicalReference: reference,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  });
+  assert.equal(adopted.status, "pending");
+  assert.equal(adopted.appliedCount, 3);
+  assert.equal(adopted.adoptedExisting, true);
+  assert.deepEqual(adopted.adoptedThisRun, [
+    "0001", "0002", "0003",
+  ]);
+  assert.match(adopted.catalogSha256, /^0x[0-9a-f]{64}$/u);
+  assert.match(adopted.adoptionDataSha256, /^0x[0-9a-f]{64}$/u);
+  assert.equal(targetStatements.some((statement) =>
+    /(?:CREATE|ALTER|DROP)\s+(?:TABLE|FUNCTION|TRIGGER|POLICY|INDEX)\s+programmable_website_projection_v1/iu
+      .test(statement)), false);
+
+  const evidence = await fixture.database.query(`
+    SELECT evidence_kind, adoption_source_catalog_sha256,
+           adoption_source_data_sha256, adoption_source_snapshot_sha256,
+           adoption_attestation_sha256
+      FROM programmable_website_projection_migrations.migration_evidence_v1
+     ORDER BY ordinal
+  `);
+  assert.equal(evidence.rows.length, 3);
+  assert.ok(evidence.rows.every(({ evidence_kind }) =>
+    evidence_kind === "adopted-existing-prefix-v1"));
+  assert.ok(evidence.rows.every(({ adoption_source_snapshot_sha256 }) =>
+    adoption_source_snapshot_sha256 === SOURCE_SNAPSHOT));
+  assert.ok(evidence.rows.every(({ adoption_source_catalog_sha256 }) =>
+    adoption_source_catalog_sha256 === adopted.adoptionSourceCatalogSha256));
+  assert.ok(evidence.rows.every(({ adoption_source_data_sha256 }) =>
+    adoption_source_data_sha256 === adopted.adoptionDataSha256));
+  assert.ok(evidence.rows.every(({ adoption_attestation_sha256 }) =>
+    adoption_attestation_sha256 === adopted.adoptionAttestationSha256));
+  const adoptionEvidence = await fixture.database.query(`
+    SELECT evidence_kind, adopted_through_version,
+           credential_uses_count, projection_records_count,
+           registry_custom_launch_records_count,
+           runtime_rolinherit_before, runtime_rolinherit_after
+      FROM programmable_website_projection_migrations.adoption_evidence_v1
+  `);
+  assert.deepEqual(adoptionEvidence.rows, [{
+    evidence_kind: "adopted-existing-prefix-v1",
+    adopted_through_version: "0003",
+    credential_uses_count: 0,
+    projection_records_count: 0,
+    registry_custom_launch_records_count: 0,
+    runtime_rolinherit_before: true,
+    runtime_rolinherit_after: false,
+  }]);
+
+  const continued = await applyWebsiteProjectionMigrations({
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.equal(continued.status, "current");
+  assert.deepEqual(continued.appliedThisRun, ["0004", "0005"]);
+});
+
+test("adopt-existing rejects every nonempty unproven application state", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  await fixture.database.exec(`
+    INSERT INTO programmable_website_projection_v1.credential_uses (
+      credential_id, request_binding_hash, canonical_use
+    ) VALUES (
+      'unproven-row',
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      '{}'
+    );
+  `);
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /unproven application data/u);
+  const evidenceSchema = await fixture.database.query(`
+    SELECT to_regnamespace('programmable_website_projection_migrations')::text
+      AS evidence_schema
+  `);
+  assert.equal(evidenceSchema.rows[0].evidence_schema, null);
+});
+
+test("adopt-existing rejects forbidden catalog extras", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  await fixture.database.exec(`
+    CREATE TABLE programmable_website_projection_v1.unreviewed_extra (
+      id bigint PRIMARY KEY
+    );
+  `);
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /catalog does not exactly match/u);
+});
+
+test("adopt-existing rejects partial or existing operator evidence", async (t) => {
+  const partial = await pgliteExistingApplicationFixture(t);
+  await partial.database.exec(`
+    CREATE SCHEMA programmable_website_projection_migrations;
+  `);
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: partial.sql,
+    workspace: partial.workspace,
+    plan: partial.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: partial.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /evidence infrastructure is partial/u);
+
+  const existing = await pgliteOperatorFixture(t);
+  await applyWebsiteProjectionMigrations({
+    sql: existing.sql,
+    workspace: existing.workspace,
+    plan: existing.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: existing.sessionIdentity,
+    runtimePassword: "correct horse battery staple 2026",
+  });
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: existing.sql,
+    workspace: existing.workspace,
+    plan: existing.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: existing.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /operator evidence must be absent/u);
+});
+
+test("adopt-existing rejects grant drift before writing evidence", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  await fixture.database.exec(`
+    GRANT UPDATE ON programmable_website_projection_v1.projection_records
+      TO programmable_website_projection_runtime;
+  `);
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /catalog does not exactly match/u);
+});
+
+test("adopt-existing permits only the reviewed runtime INHERIT drift", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  await fixture.database.exec(`
+    ALTER ROLE programmable_website_projection_runtime CREATEDB;
+  `);
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /source runtime role posture/u);
+});
+
+test("adopt-existing fails closed when another operator owns the lock", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: lockRejectedSql(fixture.sql, fixture.sessionIdentity),
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /another website projection migration operator holds the lock/u);
+});
+
+test("adopt-existing rolls back evidence DDL and rows on failure", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  let insertObserved = false;
+  const failingSql = pgliteSql(fixture.database, {
+    beforeStatement(statement) {
+      if (statement.includes("INSERT INTO programmable_website_projection_migrations.migration_evidence_v1")) {
+        insertObserved = true;
+        throw new Error("injected adoption evidence failure");
+      }
+    },
+    afterRows: pgliteHostedRows,
+  });
+  await assert.rejects(adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: failingSql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  }), /injected adoption evidence failure/u);
+  assert.equal(insertObserved, true);
+  const evidenceSchema = await fixture.database.query(`
+    SELECT to_regnamespace('programmable_website_projection_migrations')::text
+      AS evidence_schema
+  `);
+  assert.equal(evidenceSchema.rows[0].evidence_schema, null);
+  const runtimeRole = await fixture.database.query(`
+    SELECT rolinherit
+      FROM pg_roles
+     WHERE rolname = 'programmable_website_projection_runtime'
+  `);
+  assert.deepEqual(runtimeRole.rows, [{ rolinherit: true }]);
+  const relations = await fixture.database.query(`
+    SELECT count(*)::integer AS relation_count
+      FROM pg_class class
+      JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
+     WHERE namespace.nspname = 'programmable_website_projection_v1'
+       AND class.relkind = 'r'
+  `);
+  assert.equal(relations.rows[0].relation_count, 3);
 });

@@ -22,6 +22,72 @@ The operator refuses pooled endpoints, a different target, server major version
 below 15, session change, role/privilege/catalog drift, partial evidence, or any
 migration history other than the exact reviewed prefix.
 
+## One bounded existing-prefix adoption
+
+`adopt-existing` is a one-source recovery path, not a generic migration-history
+repair. It accepts only all of these exact facts:
+
+- source commit `76ebd54e2f0e31d055cfe6c36b7474b0e850de90`, tree
+  `8e4ddd9a73818ce70f1284f3b2731bc87b005f27`, and plan
+  `0xf0fc7bca18c16da02be83f75d25e404bfe0b7ec7f10c29ecfbea93fcb0d7e973`;
+- protected base snapshot
+  `0xac4a1fe60ebf677865a0f8ca6160162d9c457dc2bd401aa60fd820c8f2fdcc58`
+  and expanded snapshot
+  `0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284`;
+- the exact normalized catalog, RLS, policies, grants, functions and triggers
+  after `0001` through `0003`, including the captured schema `USAGE`, three
+  table `SELECT`/`INSERT` grants and eleven registry column `UPDATE` grants,
+  with no `0004` or `0005` object;
+- exactly zero rows in `credential_uses`, `projection_records`, and
+  `registry_custom_launch_records`;
+- no operator or adoption evidence schema/table/history;
+- the exact legacy `supabase_migrations` inventory: two allowlisted tables,
+  42 schema rows, 42 evidence rows, public canonical hash
+  `0x93e41eab957ab8add897a8b277bcaaa0a5f10eebeb27f47db5bc0e59640484a2`
+  and protected full-inventory hash
+  `0xd32953874c1466be82433d97e6532d0572ddcf80eed261efa119b25f17e0f5b3`;
+- the constrained runtime role with the sole accepted drift
+  `rolinherit = true`, plus exactly the provider-owned
+  `postgres -> programmable_website_projection_runtime WITH ADMIN OPTION`
+  membership with `INHERIT FALSE`, `SET FALSE`, grantor `supabase_admin`, and
+  no other runtime/provider edge.
+
+The protected operator checkout may be a clean reviewed successor commit only
+when all five migration file/execution hashes still equal the source plan. The
+command takes the migration advisory lock and one database transaction, locks
+all three application tables, then re-reads every precondition. It changes only
+the runtime role to `NOINHERIT`, creates private operator/adoption evidence, and
+records a distinct `adopted-existing-prefix-v1` prefix for `0001` through
+`0003`. Those records attest adoption; they do not claim that the DDL was
+replayed. The transaction records the protected snapshot, live pre/post catalog
+hashes, zero-row hash and counts, exact role delta, source and operator Git
+identities, plan, target and adoption attestation hash.
+
+Run only after independently reviewing the protected snapshot and exact target:
+
+```sh
+npm run --silent db:website-projection:operator -- adopt-existing \
+  --plan /secure/operator/website-projection-successor-plan.json \
+  --expected-project-ref 'mnnvlrqwhfoppogslsje' \
+  --source-base-snapshot \
+    /secure/operator/programmable-website-projection-hosted-catalog-snapshot-76ebd54.json \
+  --source-expanded-snapshot \
+    /secure/operator/programmable-website-projection-hosted-catalog-snapshot-v2-76ebd54.json \
+  --confirm-adopt-existing \
+    '<exact-successor-planSha256>' \
+  --confirm-target 'mnnvlrqwhfoppogslsje' \
+  --confirm-source-snapshot \
+    '0x8cb9841f0131b48fb67eac0082d72f51158500a61482c0b21e0c7b7cc2f19284' \
+  --confirm-adopt-through '0003'
+```
+
+Any row, extra object, missing object, alternate membership, other role-bit
+drift, partial evidence, lock race, or re-read drift rolls the complete
+transaction back. After a successful adoption, retain its JSON result, run the
+normal `apply` command with the same exact successor plan to apply only `0004` and
+`0005`, then run `verify`. Adoption, apply, and verify remain database evidence
+only; they do not enable Custom or authorize a Website deployment.
+
 ## Secret-manager session
 
 Export without printing or placing values in shell history:
