@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   lazy,
@@ -228,6 +229,60 @@ export function LaunchModelPicker({
     void loadCustomLaunch();
   };
 
+  const customCardContent = (
+    <>
+      <span
+        className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
+        aria-hidden="true"
+      >
+        <Image
+          className={launchExperience.artImage}
+          src="/brand/create/custom-galaxy-v3.webp"
+          alt=""
+          fill
+          loading="eager"
+          sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"
+          priority
+        />
+        <Image
+          className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
+          src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
+          alt=""
+          width={1536}
+          height={1536}
+          sizes="128px"
+        />
+      </span>
+      <span
+        className={`launch-model-card-body ${launchExperience.modelBody}`}
+      >
+        <span
+          className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+        >
+          <strong id="launch-model-custom-title">Custom Hook</strong>
+          <small data-status={customLaunchPublicEnabled ? "available" : "review"}>
+            {customLaunchPublicEnabled ? "Available" : "Review required"}
+          </small>
+        </span>
+        <span
+          className={`launch-model-description ${launchExperience.modelDescription}`}
+          id="launch-model-custom-description"
+        >
+          Launch a project only after its exact GitHub revision has been
+          reviewed and approved by Programmable.
+        </span>
+        <span
+          className={`launch-model-action ${launchExperience.modelAction}`}
+        >
+          {customLaunchPublicEnabled
+            ? "Open approved Custom Hook launch"
+            : "View Custom Hook requirements"}
+          <ArrowRight aria-hidden="true" size={16} />
+        </span>
+      </span>
+    </>
+  );
+
   return (
     <div
       className={`launch-model-page page-width ${launchExperience.pickerPage}`}
@@ -254,55 +309,21 @@ export function LaunchModelPicker({
             onFocus={preloadCustomLaunch}
             onClick={() => onChoose("custom")}
           >
-            <span
-              className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
-              aria-hidden="true"
-            >
-              <Image
-                className={launchExperience.artImage}
-                src="/brand/create/custom-galaxy-v3.webp"
-                alt=""
-                fill
-                loading="eager"
-                sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
-                priority
-              />
-              <Image
-                className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
-                src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
-                alt=""
-                width={1536}
-                height={1536}
-                sizes="128px"
-              />
-            </span>
-            <span
-              className={`launch-model-card-body ${launchExperience.modelBody}`}
-            >
-              <span
-                className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-              >
-                <strong id="launch-model-custom-title">
-                  Custom Hook
-                </strong>
-                <small data-status="available">Available</small>
-              </span>
-              <span
-                className={`launch-model-description ${launchExperience.modelDescription}`}
-                id="launch-model-custom-description"
-              >
-                Launch a project only after its exact GitHub revision has been
-                reviewed and approved by Programmable.
-              </span>
-              <span
-                className={`launch-model-action ${launchExperience.modelAction}`}
-              >
-                Open approved Custom Hook launch
-                <ArrowRight aria-hidden="true" size={16} />
-              </span>
-            </span>
+            {customCardContent}
           </button>
-        ) : null}
+        ) : (
+          <Link
+            className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
+            data-launch-model-option="custom"
+            data-launch-model-available="false"
+            data-launch-model-launchable="false"
+            href="/docs/models/custom"
+            aria-labelledby="launch-model-custom-title"
+            aria-describedby="launch-model-custom-description"
+          >
+            {customCardContent}
+          </Link>
+        )}
 
         <button
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
@@ -328,7 +349,7 @@ export function LaunchModelPicker({
               src="/brand/create/classic-botanical-v4.webp"
               alt=""
               fill
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"
               priority
             />
             <Image

@@ -23,6 +23,8 @@ describe("launch model artwork", () => {
     expect(source).toContain(
       'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
     );
+    expect(source).toContain('calc((100vw - 96px) / 2), 560px');
+    expect(source).not.toContain('calc((100vw - 96px) / 4), 260px');
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }

@@ -450,7 +450,6 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .modelCard.modelCard[data-launch-model-available="true"]:hover,
   .modelCard.modelCard[data-launch-model-available="true"]:hover {
     background: var(--liquid-glass-control-background-hover);
     border-color: var(--liquid-glass-border-strong);
