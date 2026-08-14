@@ -268,6 +268,12 @@ export function validateWebsiteProjectionRuntimePassword(value) {
   return value;
 }
 
+export function assertWebsiteProjectionCheckoutClean(status) {
+  if (typeof status !== "string" || status.trim() !== "") {
+    throw new Error("operator checkout must match the exact reviewed commit");
+  }
+}
+
 export function assertWebsiteProjectionRoleGraph({
   roles,
   memberships,
@@ -294,8 +300,24 @@ export function assertWebsiteProjectionRoleGraph({
       throw new Error(`required database role is missing: ${roleName}`);
     }
   }
-  if (memberships.length > 0) {
-    throw new Error("website projection owner, runtime and provider role membership is forbidden");
+  for (const membership of memberships) {
+    if (!isPlainObject(membership)
+      || typeof membership.member_name !== "string"
+      || typeof membership.role_name !== "string"
+      || typeof membership.admin_option !== "boolean") {
+      throw new Error("website projection role graph is invalid");
+    }
+    if ([
+      WEBSITE_PROJECTION_RUNTIME_ROLE,
+      "anon",
+      "authenticated",
+      "service_role",
+    ].includes(membership.member_name)
+      || membership.role_name === WEBSITE_PROJECTION_RUNTIME_ROLE) {
+      throw new Error(
+        "website projection runtime and provider outgoing role membership is forbidden",
+      );
+    }
   }
   const runtime = roleByName.get(WEBSITE_PROJECTION_RUNTIME_ROLE);
   if (!runtime) {

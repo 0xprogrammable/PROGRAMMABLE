@@ -63,8 +63,9 @@ npm run --silent db:website-projection:operator -- apply \
 ```
 
 The operator takes a dedicated advisory lock, creates the role only when absent,
-and applies only the pending exact prefix. Each migration and evidence row are
-atomic; source bytes are re-hashed immediately before execution. The runtime is
+and applies only the pending exact prefix. Runtime bootstrap, migration `0001`,
+and its evidence row share one transaction; every later migration and evidence
+row are also atomic. Source bytes are re-hashed immediately before execution. The runtime is
 `LOGIN NOINHERIT`, non-elevated, owns no application objects, and has no provider
 membership. The owner owns all objects. `PUBLIC` and provider roles receive no
 application or evidence privileges. Retain the JSON result as apply evidence.

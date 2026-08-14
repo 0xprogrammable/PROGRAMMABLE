@@ -8,6 +8,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 import {
   assertWebsiteProjectionApplyConfirmation,
+  assertWebsiteProjectionCheckoutClean,
   assertWebsiteProjectionRoleGraph,
   catalogSnapshotSha256,
   compareWebsiteProjectionEvidence,
@@ -238,6 +239,20 @@ test("runtime bootstrap password is secret-only and bounded", () => {
   );
 });
 
+test("operator checkout must be entirely clean, not only the migration root", () => {
+  assert.doesNotThrow(() => assertWebsiteProjectionCheckoutClean(""));
+  assert.throws(
+    () => assertWebsiteProjectionCheckoutClean(
+      " M scripts/website-projection-db-operator.mjs\n",
+    ),
+    /exact reviewed commit/u,
+  );
+  assert.throws(
+    () => assertWebsiteProjectionCheckoutClean("?? untracked-operator-wrapper.mjs\n"),
+    /exact reviewed commit/u,
+  );
+});
+
 function safeRole(name, overrides = {}) {
   return {
     rolname: name,
@@ -270,7 +285,11 @@ test("role graph accepts only the constrained runtime and disconnected provider 
       safeRole("programmable_website_projection_runtime", { rolcanlogin: true }),
       ...providerRoles,
     ],
-    memberships: [],
+    memberships: [{
+      member_name: "authenticator",
+      role_name: "authenticated",
+      admin_option: false,
+    }],
     appliedCount: 5,
   });
   assert.equal(current.runtimeRoleStatus, "current");
@@ -298,9 +317,26 @@ test("role graph accepts only the constrained runtime and disconnected provider 
       safeRole("programmable_website_projection_runtime", { rolcanlogin: true }),
       ...providerRoles,
     ],
-    memberships: [{ member_name: "service_role", role_name: "postgres" }],
+    memberships: [{
+      member_name: "service_role",
+      role_name: "postgres",
+      admin_option: false,
+    }],
     appliedCount: 0,
-  }), /role membership/u);
+  }), /outgoing role membership/u);
+  assert.throws(() => assertWebsiteProjectionRoleGraph({
+    roles: [
+      safeRole("postgres", { rolsuper: true }),
+      safeRole("programmable_website_projection_runtime", { rolcanlogin: true }),
+      ...providerRoles,
+    ],
+    memberships: [{
+      member_name: "operator_helper",
+      role_name: "programmable_website_projection_runtime",
+      admin_option: false,
+    }],
+    appliedCount: 0,
+  }), /outgoing role membership/u);
 });
 
 test("catalog fingerprints are canonical and reject non-row data", () => {
@@ -365,31 +401,60 @@ function pgliteSql(client) {
   return sql;
 }
 
-test("database operator bootstraps, applies, resumes and detects catalog drift", async (t) => {
+async function pgliteOperatorFixture(t) {
   const database = new PGlite();
   t.after(() => database.close());
   await database.exec(`
     CREATE ROLE anon NOLOGIN;
     CREATE ROLE authenticated NOLOGIN;
     CREATE ROLE service_role NOLOGIN;
+    CREATE ROLE authenticator NOLOGIN;
+    GRANT anon, authenticated, service_role TO authenticator;
   `);
-  const sql = pgliteSql(database);
   const [identity] = (await database.query(`
     SELECT pg_backend_pid() AS backend_pid,
            session_user::text AS session_user,
            current_role::text AS current_role
   `)).rows;
   const workspace = path.resolve(new URL("..", import.meta.url).pathname);
-  const plan = await discoverWebsiteProjectionPlan({
+  return {
+    database,
+    sql: pgliteSql(database),
     workspace,
-    repositoryCommit: COMMIT,
-    repositoryTree: TREE,
-  });
-  const sessionIdentity = {
-    backendPid: Number(identity.backend_pid),
-    sessionUser: identity.session_user,
-    currentRole: identity.current_role,
+    plan: await discoverWebsiteProjectionPlan({
+      workspace,
+      repositoryCommit: COMMIT,
+      repositoryTree: TREE,
+    }),
+    sessionIdentity: {
+      backendPid: Number(identity.backend_pid),
+      sessionUser: identity.session_user,
+      currentRole: identity.current_role,
+    },
   };
+}
+
+test("runtime role bootstrap rolls back with a failed first migration", async (t) => {
+  const fixture = await pgliteOperatorFixture(t);
+  await fixture.database.exec("CREATE SCHEMA programmable_website_projection_v1;");
+  await assert.rejects(applyWebsiteProjectionMigrations({
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: fixture.plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    runtimePassword: "correct horse battery staple 2026",
+  }));
+  const role = await fixture.database.query(`
+    SELECT rolname FROM pg_roles
+     WHERE rolname = 'programmable_website_projection_runtime'
+  `);
+  assert.deepEqual(role.rows, []);
+});
+
+test("database operator bootstraps, applies, resumes and detects catalog drift", async (t) => {
+  const { database, sql, workspace, plan, sessionIdentity } =
+    await pgliteOperatorFixture(t);
   const applied = await applyWebsiteProjectionMigrations({
     sql,
     workspace,

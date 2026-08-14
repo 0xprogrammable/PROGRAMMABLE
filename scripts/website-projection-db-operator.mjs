@@ -11,6 +11,7 @@ import {
 } from "./data-pipeline/hosted-db-operator-core.mjs";
 import {
   assertWebsiteProjectionApplyConfirmation,
+  assertWebsiteProjectionCheckoutClean,
   discoverWebsiteProjectionPlan,
   validateWebsiteProjectionPlan,
 } from "./website-projection-db-operator-core.mjs";
@@ -76,15 +77,13 @@ async function assertMigrationCheckoutIsTrackedAndClean() {
   const [{ stdout: status }, { stdout: tracked }, commit, tree] =
     await Promise.all([
       run("git", [
-        "status", "--porcelain=v1", "--untracked-files=all", "--", migrationRoot,
+        "status", "--porcelain=v1", "--untracked-files=all",
       ], { cwd: workspace }),
       run("git", ["ls-files", "--", migrationRoot], { cwd: workspace }),
       gitObject("HEAD"),
       gitObject("HEAD^{tree}"),
     ]);
-  if (status.trim() !== "") {
-    throw new Error("migration directory must match the exact commit");
-  }
+  assertWebsiteProjectionCheckoutClean(status);
   const plan = await discoverWebsiteProjectionPlan({
     workspace,
     repositoryCommit: commit,

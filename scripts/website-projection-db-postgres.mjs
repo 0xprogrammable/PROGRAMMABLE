@@ -589,44 +589,42 @@ export async function inspectWebsiteProjectionDatabase({
   });
 }
 
-async function bootstrapRuntimeRole(sql, runtimePassword) {
-  const before = await readRoleGraph(sql, 0);
+async function bootstrapRuntimeRole(transaction, runtimePassword) {
+  const before = await readRoleGraph(transaction, 0);
   if (before.runtimeRoleStatus === "current") return false;
   const password = validateWebsiteProjectionRuntimePassword(runtimePassword);
-  await sql.begin(async (transaction) => {
-    await queryRows(transaction, `
-      SELECT pg_catalog.set_config(
-        'programmable.website_projection_runtime_password', $1, true
-      ) AS configured
-    `, [password]);
-    await executeSimple(transaction, `
-      DO $runtime_role$
-      DECLARE
-        runtime_password text := pg_catalog.current_setting(
-          'programmable.website_projection_runtime_password', true
-        );
-      BEGIN
-        IF runtime_password IS NULL OR pg_catalog.octet_length(runtime_password) < 24 THEN
-          RAISE EXCEPTION 'website projection runtime password is unavailable';
-        END IF;
-        IF EXISTS (
-          SELECT 1 FROM pg_catalog.pg_roles
-           WHERE rolname = 'programmable_website_projection_runtime'
-        ) THEN
-          RAISE EXCEPTION 'website projection runtime role changed during bootstrap';
-        END IF;
-        EXECUTE pg_catalog.format(
-          'CREATE ROLE programmable_website_projection_runtime WITH LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
-          runtime_password
-        );
-        PERFORM pg_catalog.set_config(
-          'programmable.website_projection_runtime_password', '', true
-        );
-      END
-      $runtime_role$;
-    `);
-  });
-  const after = await readRoleGraph(sql, 0);
+  await queryRows(transaction, `
+    SELECT pg_catalog.set_config(
+      'programmable.website_projection_runtime_password', $1, true
+    ) AS configured
+  `, [password]);
+  await executeSimple(transaction, `
+    DO $runtime_role$
+    DECLARE
+      runtime_password text := pg_catalog.current_setting(
+        'programmable.website_projection_runtime_password', true
+      );
+    BEGIN
+      IF runtime_password IS NULL OR pg_catalog.octet_length(runtime_password) < 24 THEN
+        RAISE EXCEPTION 'website projection runtime password is unavailable';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM pg_catalog.pg_roles
+         WHERE rolname = 'programmable_website_projection_runtime'
+      ) THEN
+        RAISE EXCEPTION 'website projection runtime role changed during bootstrap';
+      END IF;
+      EXECUTE pg_catalog.format(
+        'CREATE ROLE programmable_website_projection_runtime WITH LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
+        runtime_password
+      );
+      PERFORM pg_catalog.set_config(
+        'programmable.website_projection_runtime_password', '', true
+      );
+    END
+    $runtime_role$;
+  `);
+  const after = await readRoleGraph(transaction, 0);
   if (after.runtimeRoleStatus !== "current") {
     throw new Error("website projection runtime role bootstrap failed");
   }
@@ -685,6 +683,7 @@ async function applyOneMigration({
   migration,
   expectedProjectRef,
   session,
+  bootstrapRuntimePassword,
 }) {
   const executionSource = await readAndValidateMigration(workspace, migration);
   await assertSession(sql, session);
@@ -692,6 +691,9 @@ async function applyOneMigration({
     await assertSession(transaction, session);
     await executeSimple(transaction,
       "SET LOCAL lock_timeout = '4s'; SET LOCAL statement_timeout = '15min';");
+    if (bootstrapRuntimePassword !== null) {
+      await bootstrapRuntimeRole(transaction, bootstrapRuntimePassword);
+    }
     if (migration.ordinal === 1) {
       await executeSimple(transaction, EVIDENCE_DDL);
     }
@@ -760,9 +762,7 @@ export async function applyWebsiteProjectionMigrations({
         roleCreated: false,
       });
     }
-    const roleCreated = initial.runtimeRoleStatus === "missing"
-      ? await bootstrapRuntimeRole(sql, runtimePassword)
-      : false;
+    const roleCreated = initial.runtimeRoleStatus === "missing";
     const appliedThisRun = [];
     for (const pending of initial.pending) {
       const migration = plan.migrations.find(
@@ -778,6 +778,8 @@ export async function applyWebsiteProjectionMigrations({
         migration,
         expectedProjectRef,
         session,
+        bootstrapRuntimePassword:
+          roleCreated && migration.ordinal === 1 ? runtimePassword : null,
       });
       appliedThisRun.push(migration.version);
     }
