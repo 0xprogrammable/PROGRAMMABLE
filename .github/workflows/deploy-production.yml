@@ -629,6 +629,18 @@ jobs:
               headers: response.headers,
             };
           }
+          const address = /^0x[0-9a-f]{40}$/u;
+          const positiveInteger = /^[1-9][0-9]*$/u;
+          function exactExploreSources(response) {
+            return response.headers.get("x-programmable-launch-source") ===
+                "drpc" &&
+              response.headers.get("x-programmable-read-source") ===
+                "drpc+bitquery" &&
+              response.headers.get("x-programmable-market-source") ===
+                "bitquery" &&
+              response.headers.get("x-programmable-price-source") ===
+                "bitquery";
+          }
           const health = await requestJson("/api/ops/health");
           if (
             health.body?.status !== "ready" ||
@@ -637,28 +649,72 @@ jobs:
           ) {
             throw new Error("Bitquery health is not ready");
           }
-          const explore = await requestJson(
+          const highest = await requestJson(
             "/api/explore?limit=20&page=1&sort=market-cap",
           );
-          const tokens = Array.isArray(explore.body?.tokens)
-            ? explore.body.tokens
+          const highestTokens = Array.isArray(highest.body?.tokens)
+            ? highest.body.tokens
             : [];
           if (
-            explore.body?.status !== "ready" ||
-            tokens.length < 1 ||
-            explore.headers.get("x-programmable-market-source") !== "bitquery" ||
-            explore.headers.get("x-programmable-rpc-provider") !== null
+            highest.body?.status !== "ready" ||
+            highest.body?.sort !== "market-cap" ||
+            highest.body?.sortMetric !== "fdv" ||
+            highestTokens.length < 1 ||
+            !exactExploreSources(highest)
           ) {
-            throw new Error("Bitquery Explore is not ready");
+            throw new Error("Highest FDV is not ready");
           }
-          const tokenAddress = tokens.find(
-            (token) => /^0x[0-9a-f]{40}$/u.test(
-              String(token?.tokenAddress ?? "").toLowerCase(),
-            ),
-          )?.tokenAddress;
-          if (!tokenAddress) {
-            throw new Error("Bitquery Explore returned no token identity");
+          const valuedHighest = highestTokens.filter(
+            (token) =>
+              token?.valuation?.status === "available" &&
+              token.valuation.source === "bitquery" &&
+              positiveInteger.test(String(token.valuation.valueWad ?? "")),
+          );
+          if (valuedHighest.length < 1) {
+            throw new Error("Highest FDV returned no Bitquery valuation");
           }
+          for (let index = 1; index < valuedHighest.length; index += 1) {
+            if (
+              BigInt(valuedHighest[index - 1].valuation.valueWad) <
+                BigInt(valuedHighest[index].valuation.valueWad)
+            ) {
+              throw new Error("Highest FDV is not ordered descending");
+            }
+          }
+          const newest = await requestJson(
+            "/api/explore?limit=20&page=1&sort=newest",
+          );
+          const newestTokens = Array.isArray(newest.body?.tokens)
+            ? newest.body.tokens
+            : [];
+          if (
+            newest.body?.status !== "ready" ||
+            newest.body?.sort !== "newest" ||
+            newestTokens.length < 1 ||
+            !exactExploreSources(newest)
+          ) {
+            throw new Error("Newest launches are not ready");
+          }
+          for (let index = 1; index < newestTokens.length; index += 1) {
+            const previous = Date.parse(newestTokens[index - 1]?.launchedAt ?? "");
+            const current = Date.parse(newestTokens[index]?.launchedAt ?? "");
+            if (
+              !Number.isFinite(previous) ||
+              !Number.isFinite(current) ||
+              previous < current
+            ) {
+              throw new Error("Newest launches are not ordered descending");
+            }
+          }
+          const marketToken = valuedHighest.find(
+            (token) =>
+              address.test(String(token?.tokenAddress ?? "").toLowerCase()) &&
+              token?.marketData?.source === "bitquery",
+          );
+          if (!marketToken) {
+            throw new Error("Highest FDV returned no canonical market token");
+          }
+          const tokenAddress = marketToken.tokenAddress;
           const detail = await requestJson(
             "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
           );
@@ -666,10 +722,12 @@ jobs:
             detail.body?.status !== "ready" ||
             detail.body?.token?.tokenAddress?.toLowerCase() !==
               tokenAddress.toLowerCase() ||
+            detail.body?.token?.marketData?.source !== "bitquery" ||
+            detail.body?.token?.valuation?.source !== "bitquery" ||
             detail.headers.get("x-programmable-market-source") !== "bitquery" ||
-            detail.headers.get("x-programmable-rpc-provider") !== null
+            detail.headers.get("x-programmable-price-source") !== "bitquery"
           ) {
-            throw new Error("Bitquery token detail is not ready");
+            throw new Error("Token detail market data is not ready");
           }
           const chart = await requestJson(
             "/api/explore/token/chart?address=" +
@@ -678,17 +736,50 @@ jobs:
           );
           if (
             chart.body?.source !== "bitquery" ||
+            chart.body?.readStatus !== "live" ||
             !["ready", "insufficient-history"].includes(chart.body?.status) ||
             chart.headers.get("x-programmable-market-source") !== "bitquery" ||
-            chart.headers.get("x-programmable-rpc-provider") !== null
+            chart.headers.get("x-programmable-price-source") !== "bitquery"
           ) {
             throw new Error("Bitquery chart is not ready");
           }
+          const profileToken = [...newestTokens, ...highestTokens].find(
+            (token) =>
+              address.test(String(token?.creatorAddress ?? "").toLowerCase()),
+          );
+          if (!profileToken) {
+            throw new Error("Launches returned no creator profile identity");
+          }
+          const profileAccount = profileToken.creatorAddress;
+          const profile = await requestJson(
+            "/api/explore/profile?account=" +
+              encodeURIComponent(profileAccount),
+          );
+          if (
+            profile.body?.status !== "ready" ||
+            profile.body?.account?.toLowerCase() !==
+              profileAccount.toLowerCase() ||
+            !Array.isArray(profile.body?.tokens) ||
+            !Array.isArray(profile.body?.pools) ||
+            !Array.isArray(profile.body?.claims) ||
+            !/^(?:0|[1-9][0-9]*)$/u.test(
+              String(profile.body?.totals?.claimableWei ?? ""),
+            ) ||
+            profile.headers.get("x-programmable-launch-source") !== "drpc" ||
+            profile.headers.get("x-programmable-read-source") !== "drpc" ||
+            profile.headers.get("x-programmable-rpc-provider") !==
+              "drpc-primary"
+          ) {
+            throw new Error("Creator profile is not ready");
+          }
           process.stdout.write(
             JSON.stringify({
-              status: "verified-bitquery-only-staged-public-apis",
+              status: "verified-staged-drpc-bitquery-public-apis",
               tokenAddress,
+              profileAccount,
               chartStatus: chart.body.status,
+              creatorClaimPrepare: "separate-live-probe-required",
+              tradePrepare: "separate-live-probe-required",
             }) + "\n",
           );
           NODE
@@ -723,7 +814,8 @@ jobs:
             echo "- Target: $STAGED_TARGET_URL"
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
-            echo "- Website data provider: Bitquery"
+            echo "- Launch identity provider: commitment-bound dRPC primary"
+            echo "- Market data provider: Bitquery"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then
               echo "- Custom V2 evidence: \`${{ steps.custom-v2-stage.outputs.evidence_sha256 }}\`"

@@ -330,9 +330,28 @@
       "/api/ops/health",
       "/api/explore?limit=6&page=1&sort=market-cap",
       "/api/explore/token",
-      "/api/explore/token/chart"
+      "/api/explore/token/chart",
+      "/api/explore/profile",
+      "/api/profile/classic-v3",
+      "/api/profile/stock-paired",
+      "/api/explore/profile/claim",
+      "/api/trade/prepare"
     ],
-    "publicDataProvider": "bitquery",
-    "fallbacks": false
+    "sources": {
+      "launchIdentity": "commitment-bound-drpc-primary",
+      "creatorIdentity": "commitment-bound-drpc-primary",
+      "actionState": "commitment-bound-drpc-primary",
+      "market": "bitquery",
+      "fdv": "bitquery",
+      "chart": "bitquery"
+    },
+    "rpc": {
+      "provider": "drpc",
+      "role": "primary",
+      "endpointCommitmentRequired": true,
+      "secondaryRequired": false
+    },
+    "fallbacks": false,
+    "providerUrlExposure": false
   }
 }

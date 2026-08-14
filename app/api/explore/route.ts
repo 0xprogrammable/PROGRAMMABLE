@@ -8,13 +8,21 @@ import {
   type ValuedExploreEntry,
 } from "../../../lib/explore-financial-data";
 import {
+  readBitqueryTokenFdvRankingStrictV1,
   readBitqueryTokenMarketDataStrictV1,
   safeBitqueryMarketDataError,
 } from "../../../lib/market-data/bitquery.server";
-import { readBitqueryExploreEntriesV1 } from
-  "../../../lib/market-data/bitquery-launches.server";
-import { exploreEntriesMarketIdentitiesV1 } from
+import {
+  exploreEntriesMarketIdentitiesV1,
+  exploreEntryMarketIdentitiesV1,
+} from
   "../../../lib/market-data/explore-market-identities";
+import type { TokenMarketDataV1 } from
+  "../../../lib/market-data/market-data-v1";
+import {
+  readPrimaryRpcExploreEntriesV1,
+  safePrimaryRpcLaunchCatalogError,
+} from "../../../lib/market-data/primary-rpc-launches.server";
 import { parseExploreSort } from "../../../lib/onchain/query";
 import type { ExploreSort } from "../../../lib/onchain/types";
 import type { ExploreEntry } from "../../../lib/tokens";
@@ -179,6 +187,35 @@ function filterExploreEntries(
   });
 }
 
+function withBitqueryRankingData(
+  entry: ExploreEntry,
+  marketData: TokenMarketDataV1,
+): ValuedExploreEntry {
+  const primary = marketData.pools.find(
+    (pool) => pool.identity.poolId === marketData.primaryPoolId,
+  );
+  const value = primary?.valuation;
+  return {
+    ...entry,
+    marketData,
+    valuation: value?.status === "available"
+      ? {
+          status: "available",
+          metric: "fdv",
+          supplyBasis: "total",
+          currency: "usd",
+          valueWad: value.valueUsdWad,
+          freshness: value.freshness,
+          source: "bitquery",
+          asOfTime: value.asOfTime,
+        }
+      : {
+          status: "unavailable",
+          reason: "source-unavailable",
+        },
+  };
+}
+
 export function dedupeExploreEntriesV1(
   entries: readonly ExploreEntry[],
 ): ExploreEntry[] {
@@ -189,13 +226,13 @@ export function dedupeExploreEntriesV1(
     const existingId = byId.get(entry.id);
     if (existingId !== undefined) {
       if (JSON.stringify(existingId) === JSON.stringify(entry)) continue;
-      throw new Error(`Bitquery returned conflicting launch ${entry.id}`);
+      throw new Error(`Launch catalog returned conflicting launch ${entry.id}`);
     }
     const address = entry.tokenAddress?.toLowerCase();
     const existingAddress = address ? byTokenAddress.get(address) : undefined;
     if (existingAddress !== undefined) {
       if (JSON.stringify(existingAddress) === JSON.stringify(entry)) continue;
-      throw new Error(`Bitquery returned conflicting token ${entry.tokenAddress}`);
+      throw new Error(`Launch catalog returned conflicting token ${entry.tokenAddress}`);
     }
     byId.set(entry.id, entry);
     if (address) byTokenAddress.set(address, entry);
@@ -266,33 +303,67 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
-    const launches = await readBitqueryExploreEntriesV1({
+    const launches = await readPrimaryRpcExploreEntriesV1({
       signal: request.signal,
     });
     const identityEntries = dedupeExploreEntriesV1(launches.entries);
-    const marketByToken = await readBitqueryTokenMarketDataStrictV1(
-      exploreEntriesMarketIdentitiesV1(identityEntries),
-      { signal: request.signal },
-    );
     const now = new Date();
-    const valuedEntries: ValuedExploreEntry[] = identityEntries.map((entry) => {
-      const marketData = entry.tokenAddress
-        ? marketByToken.get(entry.tokenAddress.toLowerCase())
-        : undefined;
-      return marketData
-        ? withBitqueryMarketData(entry, marketData, { now })
-        : {
-            ...entry,
-            valuation: {
-              status: "unavailable" as const,
-              reason: entry.exploreKind === "custom-project" &&
-                  entry.markets.length === 0
-                ? "no-market" as const
-                : "source-unavailable" as const,
-            },
-          };
-    });
-    const paginated = paginateExploreEntriesV1(valuedEntries, options);
+    let paginated: ReturnType<typeof paginateExploreEntriesV1>;
+    if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
+      const filtered = filterExploreEntries(
+        identityEntries,
+        options.query,
+        options.socials,
+      );
+      const marketByToken = await readBitqueryTokenFdvRankingStrictV1(
+        exploreEntriesMarketIdentitiesV1(filtered),
+        { signal: request.signal },
+      );
+      const valued = filtered.map((entry): ValuedExploreEntry => {
+        const marketData = entry.tokenAddress
+          ? marketByToken.get(entry.tokenAddress.toLowerCase())
+          : undefined;
+        return marketData
+          ? withBitqueryRankingData(entry, marketData)
+          : {
+              ...entry,
+              valuation: { status: "unavailable", reason: "source-unavailable" },
+            };
+      });
+      paginated = paginateExploreEntriesV1(valued, {
+        ...options,
+        query: "",
+        socials: null,
+      });
+    } else {
+      const identityPage = paginateExploreEntriesV1(identityEntries, options);
+      const marketByToken = await readBitqueryTokenMarketDataStrictV1(
+        exploreEntriesMarketIdentitiesV1(identityPage.tokens),
+        { signal: request.signal, includeStats: false },
+      );
+      const valued = identityPage.tokens.map((entry): ValuedExploreEntry => {
+        const marketData = entry.tokenAddress
+          ? marketByToken.get(entry.tokenAddress.toLowerCase())
+          : undefined;
+        const marketIsRequired = exploreEntryMarketIdentitiesV1(entry).length > 0;
+        if (marketIsRequired && marketData === undefined) {
+          throw new Error("Bitquery market response is incomplete");
+        }
+        return marketData
+          ? withBitqueryMarketData(entry, marketData, { now })
+          : {
+              ...entry,
+              valuation: {
+                status: "unavailable",
+                reason: entry.exploreKind === "custom-project" &&
+                    entry.markets.length === 0
+                  ? "no-market"
+                  : "source-unavailable",
+              },
+            };
+      });
+      paginated = { ...identityPage, tokens: valued };
+    }
     const pageEntries = paginated.tokens as ValuedExploreEntry[];
     const dataQuality = buildExploreDataQuality({
       entries: pageEntries,
@@ -318,8 +389,8 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control": "public, max-age=0, s-maxage=2",
           "X-Programmable-Data-Quality": dataQuality.status,
-          "X-Programmable-Launch-Source": "bitquery",
-          "X-Programmable-Read-Source": "bitquery",
+          "X-Programmable-Launch-Source": "drpc",
+          "X-Programmable-Read-Source": "drpc+bitquery",
           "X-Programmable-Market-Source": "bitquery",
           "X-Programmable-Price-Source": "bitquery",
           ...(dataQuality.valuation.asOfTime
@@ -329,7 +400,10 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    console.error("Bitquery Explore read failed", safeBitqueryMarketDataError(error));
+    console.error("Explore read failed", {
+      launch: safePrimaryRpcLaunchCatalogError(error),
+      market: safeBitqueryMarketDataError(error),
+    });
     return NextResponse.json(
       { error: "Token data is temporarily unavailable" },
       {
@@ -337,8 +411,8 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control": "no-store",
           "Retry-After": "5",
-          "X-Programmable-Launch-Source": "bitquery",
-          "X-Programmable-Read-Source": "bitquery",
+          "X-Programmable-Launch-Source": "drpc",
+          "X-Programmable-Read-Source": "drpc+bitquery",
           "X-Programmable-Market-Source": "bitquery",
         },
       },

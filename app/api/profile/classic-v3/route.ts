@@ -27,9 +27,7 @@ import {
 } from "@/lib/classic-v3-release";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import {
-  readBitqueryClassicV3Launch,
   readBitqueryClassicV3Profile,
-  safeBitqueryProfileError,
 } from "@/lib/market-data/bitquery-profile.server";
 import { safeOperationalRpcError } from
   "@/lib/onchain/operational-rpc-failover.server";
@@ -144,6 +142,7 @@ async function readLaunchLogs(
   launcher: Address,
   fromBlock: bigint,
   toBlock: bigint,
+  deployer?: Address,
 ) {
   const logs = [];
   for (
@@ -155,6 +154,7 @@ async function readLaunchLogs(
       ...(await client.getLogs({
         address: launcher,
         event: classicV3LaunchEvent,
+        ...(deployer ? { args: { deployer } } : {}),
         fromBlock: rangeStart,
         toBlock: minimum(toBlock, rangeStart + LOG_RANGE - 1n),
         strict: true,
@@ -162,6 +162,69 @@ async function readLaunchLogs(
     );
   }
   return logs;
+}
+
+async function readLaunchByTransactionFromClient(
+  account: Address,
+  transactionHash: Hex,
+  client: PublicClient,
+) {
+  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
+    return { status: "not-deployed" as const, launch: null };
+  }
+  const launcher = getAddress(manifest.memeLaunchV2 as string);
+  await assertCodeHash(
+    client,
+    launcher,
+    manifest.runtimeCodeHashes?.memeLaunchV2 as string,
+    "Classic launcher",
+  );
+  const latestBlock = await client.getBlockNumber();
+  const snapshotBlock = latestBlock > CONFIRMATIONS
+    ? latestBlock - CONFIRMATIONS
+    : latestBlock;
+  const deploymentBlock = BigInt(
+    manifest.deploymentBlocks?.memeLaunchV2 as number,
+  );
+  const logs = deploymentBlock <= snapshotBlock
+    ? await readLaunchLogs(
+        client,
+        launcher,
+        deploymentBlock,
+        snapshotBlock,
+        account,
+      )
+    : [];
+  const launch = logs.find(
+    (candidate) =>
+      !candidate.removed &&
+      candidate.transactionHash.toLowerCase() === transactionHash.toLowerCase(),
+  );
+  if (!launch) return { status: "ready" as const, launch: null };
+  const tokenAddress = getAddress(launch.args.token);
+  const [name, symbol] = await Promise.all([
+    client.readContract({
+      address: tokenAddress,
+      abi: uerc20ReadAbi,
+      functionName: "name",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: tokenAddress,
+      abi: uerc20ReadAbi,
+      functionName: "symbol",
+      blockNumber: snapshotBlock,
+    }),
+  ]);
+  return {
+    status: "ready" as const,
+    launch: {
+      tokenAddress,
+      name,
+      symbol,
+      launchTransactionHash: launch.transactionHash,
+    },
+  };
 }
 
 function prospectiveAllocation(
@@ -614,10 +677,6 @@ async function readRewardsFromClient(
   };
 }
 
-// Kept as a pure legacy-accounting verifier for focused fixtures; production
-// GET and POST identity reads use Bitquery directly.
-void readRewardsFromClient;
-
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   if (
@@ -639,26 +698,37 @@ export async function GET(request: NextRequest) {
       if (!isHex(launch, { strict: true }) || launch.length !== 66) {
         return json({ error: "Enter a valid launch transaction hash" }, 400);
       }
-      return json(
-        await readBitqueryClassicV3Launch(
+      const client = createActionClients()[0]!;
+      return NextResponse.json(
+        await readLaunchByTransactionFromClient(
           getAddress(input),
           launch as Hex,
+          client,
         ),
+        {
+          headers: {
+            "Cache-Control": "private, max-age=0, s-maxage=15",
+            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Rpc-Provider": "drpc-primary",
+          },
+        },
       );
     }
+    const client = createActionClients()[0]!;
     return NextResponse.json(
-      await readBitqueryClassicV3Profile(getAddress(input)),
+      await readRewardsFromClient(getAddress(input), client),
       {
         headers: {
           "Cache-Control": "private, max-age=0, s-maxage=15",
-          "X-Programmable-Read-Source": "bitquery",
+          "X-Programmable-Read-Source": "rpc",
+          "X-Programmable-Rpc-Provider": "drpc-primary",
         },
       },
     );
   } catch (error) {
     console.error(
-      "Bitquery Classic profile read failed",
-      safeBitqueryProfileError(error),
+      "dRPC Classic profile read failed",
+      safeOperationalRpcError(error),
     );
     return json(classicV3ProfileApiError("temporary"), 503);
   }

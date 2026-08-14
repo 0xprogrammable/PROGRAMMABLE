@@ -249,3 +249,26 @@ export function productionMainnetRpcPair(
   }
   return resolved;
 }
+
+/**
+ * Resolves only the commitment-bound production dRPC primary. Public read
+ * paths that intentionally use one provider must not require, inspect or
+ * retain a secondary binding.
+ */
+export function productionMainnetRpcPrimary(
+  environment: RuntimeEnvironment = process.env,
+): WebsiteRpcBinding {
+  const primary = binding(
+    providerId(
+      environment[WEBSITE_MAINNET_RPC_ENV.primaryProvider],
+      "primary",
+    ),
+    environment[WEBSITE_MAINNET_RPC_ENV.primaryUrl],
+    environment[WEBSITE_MAINNET_RPC_ENV.primaryCommitment],
+    "primary",
+  );
+  if (primary.provider !== "drpc") {
+    throw new Error("Production primary RPC provider role is invalid");
+  }
+  return primary;
+}

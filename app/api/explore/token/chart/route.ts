@@ -2,16 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  readBitqueryExploreEntriesV1,
-  safeBitqueryLaunchCatalogError,
-} from "../../../../../lib/market-data/bitquery-launches.server";
-import {
   readBitqueryMarketChartStrictV1,
   readBitqueryTokenMarketDataStrictV1,
   safeBitqueryMarketDataError,
 } from "../../../../../lib/market-data/bitquery.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
+import {
+  readPrimaryRpcExploreEntriesV1,
+  safePrimaryRpcLaunchCatalogError,
+} from "../../../../../lib/market-data/primary-rpc-launches.server";
 import {
   PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION,
   type MarketChartV1,
@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
   const address = getAddress(rawAddress);
 
   try {
-    const catalog = await readBitqueryExploreEntriesV1({
+    const catalog = await readPrimaryRpcExploreEntriesV1({
+      requestedTokenAddress: address,
       signal: request.signal,
     });
     const entry = catalog.entries.find((candidate) =>
@@ -93,6 +94,8 @@ export async function GET(request: NextRequest) {
       headers: {
         "Cache-Control": "no-store",
         "X-Programmable-Data-Quality": chart.status,
+        "X-Programmable-Launch-Source": "drpc",
+        "X-Programmable-Read-Source": "drpc+bitquery",
         "X-Programmable-Market-Source": "bitquery",
         ...(hasPrice ? { "X-Programmable-Price-Source": "bitquery" } : {}),
         ...(chart.asOfTime
@@ -102,7 +105,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Bitquery token chart read failed", {
-      catalog: safeBitqueryLaunchCatalogError(error),
+      catalog: safePrimaryRpcLaunchCatalogError(error),
       market: safeBitqueryMarketDataError(error),
     });
     return unavailable(address, range, "Price history is temporarily unavailable");
@@ -138,6 +141,8 @@ function unavailable(
         "Cache-Control": "no-store",
         "Retry-After": "5",
         "X-Programmable-Data-Quality": "unavailable",
+        "X-Programmable-Launch-Source": "drpc",
+        "X-Programmable-Read-Source": "drpc+bitquery",
         "X-Programmable-Market-Source": "bitquery",
       },
     },

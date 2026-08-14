@@ -11,8 +11,12 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   readLegacy: vi.fn(),
   readBitquery: vi.fn(),
+  readIdentity: vi.fn(),
   prepare: vi.fn(),
-  createPublicClient: vi.fn(() => ({})),
+  createPublicClient: vi.fn(() => ({
+    getBlockNumber: vi.fn().mockResolvedValue(100n),
+    getBlock: vi.fn().mockResolvedValue({ hash: `0x${"22".repeat(32)}` }),
+  })),
 }));
 
 const token = "0x1111111111111111111111111111111111111111";
@@ -73,6 +77,16 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({
   readBitqueryExploreModelV1: mocks.readBitquery,
 }));
+
+vi.mock("../lib/server/action-rpc-identity.server", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../lib/server/action-rpc-identity.server")
+  >();
+  return {
+    ...actual,
+    readTradeActionModelFromRpc: mocks.readIdentity,
+  };
+});
 
 vi.mock("../lib/trade/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/trade/server")>();
@@ -139,6 +153,7 @@ describe("trade action identity activation", () => {
     mocks.lookup.mockResolvedValue({});
     mocks.readLegacy.mockResolvedValue(registry);
     mocks.readBitquery.mockResolvedValue(registry);
+    mocks.readIdentity.mockResolvedValue(registry);
     mocks.prepare.mockResolvedValue({
       quote: { amountOut: "100" },
       transaction: { kind: "swap" },
@@ -155,7 +170,8 @@ describe("trade action identity activation", () => {
       expect(response.status).toBe(200);
       expect(mocks.prepare).toHaveBeenCalledTimes(1);
       expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
-      expect(mocks.readBitquery).toHaveBeenCalledTimes(1);
+      expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).not.toHaveBeenCalled();
       expect(mocks.lookup).not.toHaveBeenCalled();
       expect(mocks.readLegacy).not.toHaveBeenCalled();
       await expect(response.json()).resolves.toMatchObject({
@@ -179,6 +195,8 @@ describe("trade action identity activation", () => {
       expect(response.status).toBe(200);
       expect(mocks.prepare).toHaveBeenCalledTimes(1);
       expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+      expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
+      expect(mocks.readBitquery).not.toHaveBeenCalled();
       expect(serialized).not.toContain("drpc-action-key");
       expect(serialized).not.toContain("second-secret-key");
     },
@@ -200,5 +218,6 @@ describe("trade action identity activation", () => {
     });
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.createPublicClient).not.toHaveBeenCalled();
+    expect(mocks.readIdentity).not.toHaveBeenCalled();
   });
 });

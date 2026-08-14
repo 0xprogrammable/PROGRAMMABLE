@@ -374,7 +374,7 @@ describe("Bitquery-only market data", () => {
   });
 
   it("binds PCAN to its exact v4 PoolId and ignores Bitquery's cap estimates", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe(BITQUERY_HTTP_ENDPOINT);
       expect(init?.headers).toMatchObject({
         Accept: "application/json",
@@ -427,10 +427,12 @@ describe("Bitquery-only market data", () => {
       }
       if (request.query.includes("ProgrammableMarketLiquidity")) {
         expect(request.variables).toEqual({ pools: [PCAN.poolId] });
+        expect(request.query).toContain("EVM(network: eth) {");
+        expect(request.query).not.toContain("dataset: combined");
         expect(request.query).toContain("latestLiquidity: DEXPoolEvents(");
         expect(request.query).toContain("CurrencyA { SmartContract Symbol }");
-        expect(request.query).toContain("AmountCurrencyA");
-        expect(request.query).toContain("AmountCurrencyB");
+        expect(request.query).toContain("AmountCurrencyAInUSD");
+        expect(request.query).toContain("AmountCurrencyBInUSD");
         expect(request.query).toContain("Log { Index }");
         expect(request.query).toContain("Transaction { Hash Index }");
         expect(request.query).not.toContain("latestTrades: DEXTrades(");
@@ -464,7 +466,8 @@ describe("Bitquery-only market data", () => {
         });
       }
       throw new Error("unexpected market request");
-    }) as typeof fetch;
+    });
+    const fetchImpl = fetchMock as typeof fetch;
 
     const values = await readBitqueryTokenMarketDataV1([PCAN], {
       fetchImpl,
@@ -473,7 +476,7 @@ describe("Bitquery-only market data", () => {
     });
     const market = values.get(PCAN.tokenAddress);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(market && isTokenMarketDataV1(market)).toBe(true);
     expect(market).toMatchObject({
       source: "bitquery",
@@ -482,6 +485,7 @@ describe("Bitquery-only market data", () => {
       pools: [{
         identity: marketIdentity(PCAN),
         status: "current",
+        quality: "complete",
         latestTrade: {
           priceUsdWad: "250000000000000000",
           priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
@@ -712,7 +716,7 @@ describe("Bitquery-only market data", () => {
     });
   });
 
-  it("derives exact-pool USD liquidity from event reserves and the bound native trade", async () => {
+  it("uses a current realtime native pool event while retaining the bound trade", async () => {
     const nativeEth = "0x0000000000000000000000000000000000000000";
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       trade: tradeRow({
@@ -737,10 +741,10 @@ describe("Bitquery-only market data", () => {
         priceUsdWad: "250000000000000000",
         quoteAddress: nativeEth,
       },
-      liquidity: {
-        valueUsdWad: "50025000000000000000000",
-        asOfBlock: "25740000",
-      },
+    });
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.liquidity).toMatchObject({
+      freshness: "current",
+      valueUsdWad: "50025000000000000000000",
     });
   });
 
@@ -770,7 +774,7 @@ describe("Bitquery-only market data", () => {
     );
   });
 
-  it("keeps a legitimate zero reserve while requiring positive total liquidity", async () => {
+  it("keeps a legitimate zero reserve in the realtime liquidity total", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       liquidity: liquidityRow(PCAN, {
         amountFirst: "0",
@@ -786,8 +790,8 @@ describe("Bitquery-only market data", () => {
     });
 
     expect(values.get(PCAN.tokenAddress)?.pools[0]?.liquidity).toMatchObject({
-      valueUsdWad: "50000000000000000000000",
       freshness: "current",
+      valueUsdWad: "50000000000000000000000",
     });
   });
 
@@ -1212,6 +1216,123 @@ describe("Bitquery-only market data", () => {
       priceUsdWad: "250000000000000000",
       priceUsdSource: "bitquery-token-price-index-v1",
     });
+  });
+
+  it("keeps missing strict prices unavailable without singleton retries", async () => {
+    let priceCalls = 0;
+    const identities = [PCAN, CLASSIC];
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestTrades: identities.map((identity) => tradeRow({
+                identity,
+                omitPriceUsd: true,
+                omitQuotePriceUsd: true,
+              })),
+            },
+            Trading: {
+              tokenSupplies: identities.map((identity) => supplyRow({ identity })),
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketPrices")) {
+        priceCalls += 1;
+        expect(request.query.match(/price\d+: Tokens/gu)).toHaveLength(2);
+        return jsonResponse({
+          data: { Trading: { price0: [], price1: [] } },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestLiquidity: identities.map((identity) => liquidityRow(identity)),
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketStats")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              stats: identities.map((identity) => ({
+                Trade: {
+                  PoolId: identity.poolId,
+                  Currency: { SmartContract: identity.tokenAddress },
+                },
+                count: "1",
+                volumeUsd: "10",
+              })),
+            },
+          },
+        });
+      }
+      throw new Error("unexpected market request");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataStrictV1(identities, {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(priceCalls).toBe(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    for (const identity of identities) {
+      expect(values.get(identity.tokenAddress)?.pools[0]?.valuation).toEqual({
+        status: "unavailable",
+        reason: "price-unavailable",
+      });
+    }
+  });
+
+  it("uses one bounded 339-market list batch and skips 24h stats", async () => {
+    const identities = Array.from(
+      { length: 339 },
+      (_, index) => generatedIdentity(index + 1),
+    );
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      expect(request.query).not.toContain("ProgrammableMarketStats");
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        expect(request.query).toContain("limit: { count: 339 }");
+        expect(request.variables.pools).toHaveLength(339);
+        return jsonResponse({
+          data: { EVM: { latestTrades: [] }, Trading: { tokenSupplies: [] } },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        expect(request.query).toContain("EVM(network: eth) {");
+        expect(request.query).not.toContain("dataset: combined");
+        expect(request.query).toContain("limit: { count: 339 }");
+        expect(request.variables.pools).toHaveLength(339);
+        return jsonResponse({ data: { EVM: { latestLiquidity: [] } } });
+      }
+      throw new Error("unexpected market request");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataStrictV1(identities, {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+      includeStats: false,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(values.size).toBe(339);
+    expect([...values.values()].every(
+      (value) => value.status === "waiting-for-first-trade",
+    )).toBe(true);
   });
 
   it("uses exact total supply when circulating supply is absent", async () => {

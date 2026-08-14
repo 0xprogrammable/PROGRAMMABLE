@@ -4,11 +4,10 @@ import {
   http,
   type Address,
   type Hex,
+  type PublicClient,
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 
-import { readBitqueryExploreModelV1 } from
-  "../../../../lib/market-data/bitquery-explore-model.server";
 import {
   ClassicTradeInputError,
 } from "../../../../lib/trade/classic";
@@ -25,6 +24,10 @@ import {
   resolveStockPairedTradeDeployment,
   StockPairedTradeUnavailableError,
 } from "../../../../lib/trade/stock-paired";
+import {
+  ActionRpcIdentityError,
+  readTradeActionModelFromRpc,
+} from "../../../../lib/server/action-rpc-identity.server";
 import { tradeActionRpcProvider } from "../../../../lib/server/action-rpc-quorum.server";
 import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
 
@@ -43,18 +46,8 @@ function json(body: unknown, status = 200) {
 }
 
 function runtimeClient(
-  chainId: number,
-  endpoint: string,
+  client: PublicClient,
 ): ClassicTradeRuntimeClient {
-  const chain = chainId === 1 ? mainnet : sepolia;
-  const client = createPublicClient({
-    chain,
-    transport: http(endpoint, {
-      retryCount: 1,
-      timeout: 12_000,
-    }),
-  });
-
   return {
     getChainId: () => client.getChainId(),
     async getBlock() {
@@ -131,11 +124,26 @@ export async function POST(request: NextRequest) {
           })();
     if (actionChainId !== 1) {
       throw new ClassicTradeUnavailableError(
-        "Bitquery trading identity is only available on Ethereum mainnet",
+        "Trading identity is only available on Ethereum mainnet",
       );
     }
-    const registry = await readBitqueryExploreModelV1({
-      signal: request.signal,
+    const provider = tradeActionRpcProvider(actionChainId);
+    const client = createPublicClient({
+      chain: actionChainId === 1 ? mainnet : sepolia,
+      transport: http(provider.endpoint, {
+        retryCount: 1,
+        timeout: 12_000,
+      }),
+    });
+    const blockNumber = await client.getBlockNumber();
+    const block = await client.getBlock({ blockNumber });
+    if (!block.hash) throw new Error("The action snapshot has no block hash");
+    const registry = await readTradeActionModelFromRpc({
+      client,
+      chainId: actionChainId,
+      token: tradeRequest.token,
+      blockNumber,
+      blockHash: block.hash,
     });
     const indexedToken = registry.tokens.find(
       (candidate) =>
@@ -148,9 +156,8 @@ export async function POST(request: NextRequest) {
         registry,
         tradeRequest.token,
       );
-      const provider = tradeActionRpcProvider(tradeRequest.chainId);
       const prepared = await prepareStockPairedTrade(
-        runtimeClient(tradeRequest.chainId, provider.endpoint),
+        runtimeClient(client),
         deployment,
         tradeRequest,
       );
@@ -161,9 +168,8 @@ export async function POST(request: NextRequest) {
       registry,
       tradeRequest.token,
     );
-    const provider = tradeActionRpcProvider(tradeRequest.chainId);
     const prepared = await prepareClassicTrade(
-      runtimeClient(tradeRequest.chainId, provider.endpoint),
+      runtimeClient(client),
       deployment,
       tradeRequest,
       registry,
@@ -175,7 +181,8 @@ export async function POST(request: NextRequest) {
     }
     if (
       error instanceof ClassicTradeUnavailableError ||
-      error instanceof StockPairedTradeUnavailableError
+      error instanceof StockPairedTradeUnavailableError ||
+      error instanceof ActionRpcIdentityError
     ) {
       return json({ error: error.message }, 409);
     }

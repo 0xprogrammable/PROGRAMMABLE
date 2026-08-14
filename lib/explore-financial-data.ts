@@ -612,10 +612,19 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
         },
       };
     }
+    if (!pool.liquidity) {
+      return {
+        ...pool,
+        quality: "partial",
+        valuation: {
+          status: "unavailable",
+          reason: "source-unavailable",
+        },
+      };
+    }
     if (
-      pool.liquidity &&
-      (liquidity === null ||
-        liquidity < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD))
+      liquidity === null ||
+      liquidity < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD)
     ) {
       return {
         ...pool,

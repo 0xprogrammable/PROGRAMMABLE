@@ -45,6 +45,7 @@ const configurationHash = `0x${"bb".repeat(32)}` as Hex;
 
 const release = {
   internalContractRelease: "stock-paired-v1" as const,
+  startBlock: 100,
   addresses: {
     feeHook: hook,
     feeSplitVaultFactory: factory,
@@ -139,6 +140,7 @@ const legacyModel = {
 function rpcClient(index: number) {
   return {
     getBlockNumber: vi.fn().mockResolvedValue(120n),
+    getLogs: vi.fn().mockResolvedValue([]),
     getBlock: vi.fn().mockResolvedValue({ hash: blockHash }),
     getCode: vi.fn(({ address }: { address: Address }) => {
       const normalized = address.toLowerCase();
@@ -245,6 +247,7 @@ vi.mock("../lib/stock-paired-release", async (importOriginal) => {
   return {
     ...actual,
     getConfiguredStockPairedReleaseByHookAndVersion: () => release,
+    getConfiguredStockPairedReleases: () => [release],
   };
 });
 
@@ -281,7 +284,7 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-import { POST } from "../app/api/profile/stock-paired/route";
+import { GET, POST } from "../app/api/profile/stock-paired/route";
 import { StockPairedClaimReceiptError } from "../lib/server/stock-paired-claim-receipt";
 
 function request(action: "claim" | "convert-to-eth" = "claim") {
@@ -404,6 +407,43 @@ describe("Stock-Paired action identity activation", () => {
       expect(mocks.readLegacy).not.toHaveBeenCalled();
     },
   );
+
+  it("uses exactly one committed dRPC client for the public profile GET", async () => {
+    const response = await GET(new NextRequest(
+      `http://localhost/api/profile/stock-paired?account=${account}`,
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "ready",
+      account,
+      chainId: 1,
+      snapshotBlock: "120",
+      rewards: [],
+    });
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readBitquery).not.toHaveBeenCalled();
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe("rpc");
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "drpc-primary",
+    );
+  });
+
+  it("returns 503 without fallback when the sole profile provider fails", async () => {
+    const failedClient = rpcClient(0);
+    failedClient.getBlockNumber.mockRejectedValueOnce(
+      new Error("dRPC unavailable"),
+    );
+    mocks.createPublicClient.mockReturnValueOnce(failedClient);
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/profile/stock-paired?account=${account}`,
+    ));
+
+    expect(response.status).toBe(503);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readBitquery).not.toHaveBeenCalled();
+  });
 
   it("returns a stable conflict before preparing a conversion for a pending claim receipt", async () => {
     mocks.indexedEnabled = true;
