@@ -457,7 +457,7 @@ describe("Explore financial-data semantics", () => {
     expect(published).not.toHaveProperty("tokenPriceQuoteWad");
   });
 
-  it("preserves exact historical detail but removes FDV beyond the public stale ceiling", () => {
+  it("keeps FDV unavailable when exact-pool liquidity evidence is absent", () => {
     const poolId = `0x${"34".repeat(32)}` as const;
     const marketData = {
       schemaVersion: "programmable.market-data.v1",
@@ -495,12 +495,9 @@ describe("Explore financial-data semantics", () => {
       marketData,
     );
 
-    expect(entry.valuation).toMatchObject({
-      status: "available",
-      source: "bitquery",
-      freshness: "stale",
-      metric: "fdv",
-      supplyBasis: "total",
+    expect(entry.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
     });
     expect(valuationSortValue(entry)).toBeNull();
     expect(publicExploreEntryV1(entry)).not.toHaveProperty("fdvUsdWad");
@@ -515,11 +512,11 @@ describe("Explore financial-data semantics", () => {
     );
     expect(publicEntry.valuation).toEqual({
       status: "unavailable",
-      reason: "price-unavailable",
+      reason: "source-unavailable",
     });
     expect(publicEntry.marketData?.pools[0]?.valuation).toEqual({
       status: "unavailable",
-      reason: "price-unavailable",
+      reason: "source-unavailable",
     });
     expect(valuationSortValue(publicEntry)).toBeNull();
   });

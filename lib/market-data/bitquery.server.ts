@@ -31,6 +31,8 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const MAXIMUM_RESPONSE_BYTES = 1_500_000;
 const MARKET_BATCH_SIZE = 100;
 const MARKET_BATCH_CONCURRENCY = 2;
+const MARKET_LIST_BATCH_SIZE = 384;
+const MARKET_LIST_BATCH_CONCURRENCY = 1;
 const INDEXED_PRICE_BATCH_SIZE = 20;
 const INDEXED_PRICE_BATCH_CONCURRENCY = 2;
 const INDEXED_PRICE_RECOVERY_CONCURRENCY = 4;
@@ -64,11 +66,21 @@ type GraphqlResponse = Readonly<{
   partial: boolean;
 }>;
 
+type BitqueryMarketDataPhase =
+  | "configuration"
+  | "market-core"
+  | "market-liquidity"
+  | "market-price"
+  | "market-stats"
+  | "chart"
+  | "unspecified";
+
 type BitqueryReaderOptions = Readonly<{
   fetchImpl?: FetchImplementation;
   token?: string | null;
   now?: Date;
   signal?: AbortSignal;
+  includeStats?: boolean;
 }>;
 
 type MarketCacheEntry = Readonly<{
@@ -93,6 +105,7 @@ export class BitqueryMarketDataError extends Error {
       | "transport"
       | "response"
       | "integrity",
+    readonly phase: BitqueryMarketDataPhase = "unspecified",
   ) {
     super("Market data is temporarily unavailable");
   }
@@ -101,10 +114,24 @@ export class BitqueryMarketDataError extends Error {
 export function safeBitqueryMarketDataError(error: unknown): Readonly<{
   name: string;
   category: string;
+  phase: string;
 }> {
   return error instanceof BitqueryMarketDataError
-    ? { name: error.name, category: error.category }
-    : { name: "MarketDataError", category: "unexpected" };
+    ? { name: error.name, category: error.category, phase: error.phase }
+    : {
+        name: "MarketDataError",
+        category: "unexpected",
+        phase: "unspecified",
+      };
+}
+
+function marketDataErrorAtPhase(
+  error: unknown,
+  phase: BitqueryMarketDataPhase,
+): BitqueryMarketDataError {
+  return error instanceof BitqueryMarketDataError
+    ? new BitqueryMarketDataError(error.category, phase)
+    : new BitqueryMarketDataError("transport", phase);
 }
 
 export function bitqueryMarketDataConfigured(
@@ -124,7 +151,8 @@ export async function readBitqueryTokenMarketDataV1(
     process.env.NODE_ENV !== "test" &&
     options.fetchImpl === undefined &&
     options.token === undefined &&
-    options.now === undefined
+    options.now === undefined &&
+    options.includeStats === undefined
   ) {
     const entries = await readDurablyCachedBitqueryMarketData(
       JSON.stringify(unique),
@@ -148,13 +176,21 @@ export async function readBitqueryTokenMarketDataStrictV1(
   const unique = canonicalMarketIdentities(identities);
   if (unique.length === 0) return new Map();
   const token = resolveToken(options.token);
-  if (token === null) throw new BitqueryMarketDataError("configuration");
+  if (token === null) {
+    throw new BitqueryMarketDataError("configuration", "configuration");
+  }
   const pools = new Map<string, MarketPoolDataV1>();
   const batches: MarketDataIdentityV1[][] = [];
-  for (let offset = 0; offset < unique.length; offset += MARKET_BATCH_SIZE) {
-    batches.push(unique.slice(offset, offset + MARKET_BATCH_SIZE));
+  const batchSize = options.includeStats === false
+    ? MARKET_LIST_BATCH_SIZE
+    : MARKET_BATCH_SIZE;
+  const batchConcurrency = options.includeStats === false
+    ? MARKET_LIST_BATCH_CONCURRENCY
+    : MARKET_BATCH_CONCURRENCY;
+  for (let offset = 0; offset < unique.length; offset += batchSize) {
+    batches.push(unique.slice(offset, offset + batchSize));
   }
-  await mapWithConcurrency(batches, MARKET_BATCH_CONCURRENCY, async (batch) => {
+  await mapWithConcurrency(batches, batchConcurrency, async (batch) => {
     const result = await readMarketBatch(batch, {
       ...options,
       token,
@@ -163,7 +199,7 @@ export async function readBitqueryTokenMarketDataStrictV1(
     });
     for (const value of result) {
       if (value.status === "unavailable") {
-        throw new BitqueryMarketDataError("integrity");
+        throw new BitqueryMarketDataError("integrity", "market-core");
       }
       pools.set(value.identity.poolId, value);
     }
@@ -493,7 +529,7 @@ async function readBitqueryMarketChart(
     }
     return chart;
   } catch (error) {
-    if (strict) throw error;
+    if (strict) throw marketDataErrorAtPhase(error, "chart");
     return cachedChartOrUnavailable(identity, input.range, cacheKey, now);
   } finally {
     clearTimeout(chartTimeout);
@@ -586,36 +622,44 @@ async function readMarketBatch(
   }>,
 ): Promise<readonly MarketPoolDataV1[]> {
   const coreRequest = marketBatchQuery(identities);
-  const statsRequest = marketStatsQuery(identities);
+  const liquidityRequest = marketLiquidityQuery(identities);
   const coreRead = executeBitqueryGraphql(
     coreRequest.query,
     coreRequest.variables,
     options,
   );
-  const supplementaryOperations = [
-    executeBitqueryGraphql(
-      statsRequest.query,
-      statsRequest.variables,
-      options,
-    ),
-  ] as const;
-  const supplementaryReads = Promise.allSettled(supplementaryOperations);
-  const [coreResult, supplementaryResults] = await Promise.allSettled([
+  const liquidityRead = executeBitqueryGraphql(
+    liquidityRequest.query,
+    liquidityRequest.variables,
+    options,
+  );
+  const statsRead: Promise<GraphqlResponse | null> = options.includeStats === false
+    ? Promise.resolve(null)
+    : (() => {
+        const statsRequest = marketStatsQuery(identities);
+        return executeBitqueryGraphql(
+          statsRequest.query,
+          statsRequest.variables,
+          options,
+        );
+      })();
+  const [coreResult, liquidityResult, statsResult] = await Promise.allSettled([
     coreRead,
-    supplementaryReads,
+    liquidityRead,
+    statsRead,
   ]);
-  if (coreResult.status === "rejected") throw coreResult.reason;
+  if (coreResult.status === "rejected") {
+    throw marketDataErrorAtPhase(coreResult.reason, "market-core");
+  }
   const response = coreResult.value;
-  const [statsResult] = supplementaryResults.status ===
-      "fulfilled"
-    ? supplementaryResults.value
-    : [supplementaryResults];
   if (options.strict && response.partial) {
-    throw new BitqueryMarketDataError("response");
+    throw new BitqueryMarketDataError("response", "market-core");
   }
   const evm = record(response.data.EVM);
   const trading = record(response.data.Trading);
-  if (evm === null) throw new BitqueryMarketDataError("response");
+  if (evm === null) {
+    throw new BitqueryMarketDataError("response", "market-core");
+  }
   const tradesByPool = indexUniqueRows(array(evm.latestTrades), tradeRowPoolId);
   const parsedTrades = identities.map((identity) => {
     const row = tradesByPool.get(identity.poolId);
@@ -640,18 +684,47 @@ async function readMarketBatch(
     : new Map<number, TokenPriceObservation | null>();
   const priceLookupWasPartial = priceResult.status !== "fulfilled" ||
     priceResult.value.partial;
-  if (options.strict && priceLookupWasPartial) {
-    throw new BitqueryMarketDataError("response");
+  if (options.strict && priceResult.status === "rejected") {
+    throw marketDataErrorAtPhase(priceResult.reason, "market-price");
   }
-  const statsEvm = statsResult.status === "fulfilled"
+  if (
+    options.strict && priceResult.status === "fulfilled" &&
+    priceResult.value.partial
+  ) {
+    throw new BitqueryMarketDataError("response", "market-price");
+  }
+  const liquidityEvm = liquidityResult.status === "fulfilled" &&
+      !liquidityResult.value.partial
+    ? record(liquidityResult.value.data.EVM)
+    : null;
+  const statsEvm = statsResult.status === "fulfilled" && statsResult.value !== null
     ? record(statsResult.value.data.EVM)
     : null;
   if (
-    options.strict &&
+    options.strict && options.includeStats !== false &&
+    statsResult.status === "rejected"
+  ) throw marketDataErrorAtPhase(statsResult.reason, "market-stats");
+  if (
+    options.strict && options.includeStats !== false &&
     (statsEvm === null || statsResult.status !== "fulfilled" ||
-      statsResult.value.partial)
-  ) throw new BitqueryMarketDataError("response");
+      statsResult.value === null || statsResult.value.partial)
+  ) throw new BitqueryMarketDataError("response", "market-stats");
 
+  let liquidityReadPartial = liquidityResult.status !== "fulfilled" ||
+    liquidityResult.value.partial || liquidityEvm === null;
+  let liquidityByPool: ReadonlyMap<string, unknown> = new Map();
+  if (!liquidityReadPartial && liquidityEvm !== null) {
+    try {
+      liquidityByPool = indexUniqueRows(
+        array(liquidityEvm.latestLiquidity),
+        liquidityRowPoolId,
+      );
+    } catch {
+      // Liquidity is eligibility evidence, not launch discovery. A malformed
+      // optional row removes FDV eligibility without taking down the catalog.
+      liquidityReadPartial = true;
+    }
+  }
   const statsByMarket = indexUniqueRows(
     array(statsEvm?.stats),
     (row) => {
@@ -689,6 +762,8 @@ async function readMarketBatch(
       identity,
       latestTradeRows,
       latestTrade,
+      liquidityPriceTrade: parsedTrade,
+      liquidityRow: liquidityByPool.get(identity.poolId),
       stats: parseStats(statsByMarket.get(
         marketStatsKey(identity.poolId, identity.tokenAddress),
       )),
@@ -697,19 +772,27 @@ async function readMarketBatch(
   });
 
   return parsed.map((value) => {
+    const liquidity = parseLiquidity(
+      value.liquidityRow,
+      value.identity,
+      options.now,
+      value.liquidityPriceTrade,
+    );
     return marketPoolData({
       identity: value.identity,
       latestTrade: value.latestTrade,
       tradeObserved: value.latestTradeRows.length > 0,
-      liquidity: null,
+      liquidity,
       stats: value.stats,
       supply: value.supply,
       now: options.now,
       partialResponse:
         response.partial ||
         priceLookupWasPartial ||
-        statsResult.status !== "fulfilled" ||
-        statsResult.value.partial,
+        liquidityReadPartial ||
+        (options.includeStats !== false &&
+          (statsResult.status !== "fulfilled" ||
+            statsResult.value === null || statsResult.value.partial)),
     });
   });
 }
@@ -763,11 +846,20 @@ async function readIndexedPriceObservations(
           }
         }
       } catch (error) {
-        if (options.strict) throw error;
+        if (options.strict) {
+          throw marketDataErrorAtPhase(error, "market-price");
+        }
         partial = true;
       }
     },
   );
+
+  if (options.strict) {
+    for (const { index } of candidates) {
+      if (!observations.has(index)) observations.set(index, null);
+    }
+    return { observations, partial };
+  }
 
   const missing = candidates.filter(
     ({ index }) => !observations.has(index),
@@ -957,6 +1049,11 @@ function tradeRowPoolId(row: unknown): `0x${string}` | null {
   return canonicalBytes32(record(record(row)?.Trade)?.PoolId);
 }
 
+function liquidityRowPoolId(row: unknown): `0x${string}` | null {
+  const event = record(record(row)?.PoolEvent);
+  return canonicalBytes32(record(event?.Pool)?.PoolId);
+}
+
 function marketStatsKey(
   poolId: `0x${string}`,
   tokenAddress: `0x${string}`,
@@ -1029,6 +1126,34 @@ function marketPriceQuery(trades: readonly MarketTradeV1[]) {
       Trading { ${selections} }
     }`,
     variables: {},
+  };
+}
+
+function marketLiquidityQuery(identities: readonly MarketDataIdentityV1[]) {
+  const pools = identities.map(({ poolId }) => poolId);
+  const rowLimit = Math.max(1, identities.length);
+  return {
+    query: `query ProgrammableMarketLiquidity($pools: [String!]!) {
+      EVM(network: eth) {
+        latestLiquidity: DEXPoolEvents(
+          limit: { count: ${rowLimit} }
+          limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }
+          orderBy: [
+            { descending: Block_Number }
+            { descending: Transaction_Index }
+            { descending: Log_Index }
+          ]
+          where: {
+            TransactionStatus: { Success: true }
+            PoolEvent: {
+              Dex: { ProtocolName: { is: "uniswap_v4" } }
+              Pool: { PoolId: { in: $pools } }
+            }
+          }
+        ) { ${liquiditySelection()} }
+      }
+    }`,
+    variables: { pools },
   };
 }
 
@@ -1253,6 +1378,27 @@ function tradeSelection() {
       Sell { Currency { SmartContract Symbol } Amount AmountInUSD Price PriceInUSD }
     }
     Transaction { Hash Index }
+  `;
+}
+
+function liquiditySelection() {
+  return `
+    Block { Number Time }
+    Log { Index }
+    Transaction { Hash Index }
+    PoolEvent {
+      Pool {
+        PoolId
+        CurrencyA { SmartContract Symbol }
+        CurrencyB { SmartContract Symbol }
+      }
+      Liquidity {
+        AmountCurrencyA
+        AmountCurrencyAInUSD
+        AmountCurrencyB
+        AmountCurrencyBInUSD
+      }
+    }
   `;
 }
 
@@ -1640,6 +1786,9 @@ function marketPoolData(input: Readonly<{
     ? null
     : BigInt(input.liquidity.valueUsdWad);
   const valuation = sourceValuation.status === "available" &&
+      liquidityValue === null
+    ? { status: "unavailable" as const, reason: "source-unavailable" as const }
+    : sourceValuation.status === "available" &&
       liquidityValue !== null &&
       liquidityValue < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD)
     ? { status: "unavailable" as const, reason: "inconsistent-market-data" as const }

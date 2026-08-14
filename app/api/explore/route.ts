@@ -277,7 +277,7 @@ export async function GET(request: NextRequest) {
     const identityEntries = dedupeExploreEntriesV1(launches.entries);
     const marketByToken = await readBitqueryTokenMarketDataStrictV1(
       exploreEntriesMarketIdentitiesV1(identityEntries),
-      { signal: request.signal },
+      { signal: request.signal, includeStats: false },
     );
     const now = new Date();
     const valuedEntries: ValuedExploreEntry[] = identityEntries.map((entry) => {

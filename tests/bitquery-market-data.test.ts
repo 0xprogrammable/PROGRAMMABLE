@@ -425,6 +425,21 @@ describe("Bitquery-only market data", () => {
           data: { Trading: { price0: [tradingPriceRow()] } },
         });
       }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        expect(request.variables).toEqual({ pools: [PCAN.poolId] });
+        expect(request.query).toContain("EVM(network: eth) {");
+        expect(request.query).not.toContain("dataset: combined");
+        expect(request.query).toContain("latestLiquidity: DEXPoolEvents(");
+        expect(request.query).toContain("CurrencyA { SmartContract Symbol }");
+        expect(request.query).toContain("AmountCurrencyAInUSD");
+        expect(request.query).toContain("AmountCurrencyBInUSD");
+        expect(request.query).toContain("Log { Index }");
+        expect(request.query).toContain("Transaction { Hash Index }");
+        expect(request.query).not.toContain("latestTrades: DEXTrades(");
+        return jsonResponse({
+          data: { EVM: { latestLiquidity: [liquidityRow(PCAN)] } },
+        });
+      }
       if (request.query.includes("ProgrammableMarketStats")) {
         expect(request.variables).toEqual({
           pools: [PCAN.poolId],
@@ -461,19 +476,16 @@ describe("Bitquery-only market data", () => {
     });
     const market = values.get(PCAN.tokenAddress);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    for (const [, init] of fetchMock.mock.calls) {
-      expect(String(init?.body)).not.toContain("DEXPoolEvents");
-    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(market && isTokenMarketDataV1(market)).toBe(true);
     expect(market).toMatchObject({
       source: "bitquery",
-      status: "partial",
+      status: "current",
       primaryPoolId: PCAN.poolId,
       pools: [{
         identity: marketIdentity(PCAN),
         status: "current",
-        quality: "partial",
+        quality: "complete",
         latestTrade: {
           priceUsdWad: "250000000000000000",
           priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
@@ -482,6 +494,7 @@ describe("Bitquery-only market data", () => {
         },
         volume24hUsdWad: "12345670000000000000000",
         tradeCount24h: 42,
+        liquidity: { valueUsdWad: "150000000000000000000000" },
         valuation: {
           status: "available",
           metric: "fdv",
@@ -505,6 +518,8 @@ describe("Bitquery-only market data", () => {
       if (request.query.includes("ProgrammableMarketSnapshot")) {
         started.add("core");
         await corePending;
+      } else if (request.query.includes("ProgrammableMarketLiquidity")) {
+        started.add("liquidity");
       } else if (request.query.includes("ProgrammableMarketStats")) {
         started.add("stats");
       } else {
@@ -520,7 +535,7 @@ describe("Bitquery-only market data", () => {
     });
     try {
       await vi.waitFor(() => {
-        expect([...started].sort()).toEqual(["core", "stats"]);
+        expect([...started].sort()).toEqual(["core", "liquidity", "stats"]);
       });
     } finally {
       releaseCore?.();
@@ -528,7 +543,7 @@ describe("Bitquery-only market data", () => {
 
     const values = await read;
     expect(values.get(PCAN.tokenAddress)).toMatchObject({ source: "bitquery" });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
   it.each([
@@ -564,7 +579,7 @@ describe("Bitquery-only market data", () => {
     });
     const pool = values.get(PCAN.tokenAddress)?.pools[0];
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(pool?.latestTrade).toMatchObject({
       priceUsdWad: "250000000000000000",
       priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
@@ -626,7 +641,7 @@ describe("Bitquery-only market data", () => {
     });
   });
 
-  it("does not require unsupported historical pool events to publish FDV", async () => {
+  it("keeps a dust-liquidity pool discoverable but makes its FDV unavailable", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       liquidity: liquidityRow(PCAN, {
         amountFirstUsd: "4999",
@@ -641,11 +656,10 @@ describe("Bitquery-only market data", () => {
     const pool = values.get(PCAN.tokenAddress)?.pools[0];
 
     expect(pool?.identity).toEqual(marketIdentity(PCAN));
-    expect(pool).not.toHaveProperty("liquidity");
-    expect(pool?.valuation).toMatchObject({
-      status: "available",
-      metric: "fdv",
-      supplyBasis: "total",
+    expect(pool?.liquidity?.valueUsdWad).toBe("9999000000000000000000");
+    expect(pool?.valuation).toEqual({
+      status: "unavailable",
+      reason: "inconsistent-market-data",
     });
   });
 
@@ -702,7 +716,7 @@ describe("Bitquery-only market data", () => {
     });
   });
 
-  it("omits historical pool-event liquidity while retaining the bound trade", async () => {
+  it("uses a current realtime native pool event while retaining the bound trade", async () => {
     const nativeEth = "0x0000000000000000000000000000000000000000";
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       trade: tradeRow({
@@ -728,9 +742,10 @@ describe("Bitquery-only market data", () => {
         quoteAddress: nativeEth,
       },
     });
-    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
-      "liquidity",
-    );
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.liquidity).toMatchObject({
+      freshness: "current",
+      valueUsdWad: "50025000000000000000000",
+    });
   });
 
   it("does not treat an indexed native price as transaction-bound liquidity evidence", async () => {
@@ -759,7 +774,7 @@ describe("Bitquery-only market data", () => {
     );
   });
 
-  it("does not expose liquidity from an unsupported pool-event dataset", async () => {
+  it("keeps a legitimate zero reserve in the realtime liquidity total", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       liquidity: liquidityRow(PCAN, {
         amountFirst: "0",
@@ -774,9 +789,10 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
-    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
-      "liquidity",
-    );
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.liquidity).toMatchObject({
+      freshness: "current",
+      valueUsdWad: "50000000000000000000000",
+    });
   });
 
   it("does not publish zero total liquidity", async () => {
@@ -975,7 +991,7 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(values.get(PCAN.tokenAddress)?.pools[0]?.identity).toEqual(
       marketIdentity(PCAN),
     );
@@ -1042,7 +1058,7 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     expect(priceBatchSizes.sort((first, second) => first - second)).toEqual([
       1,
       20,
@@ -1125,7 +1141,7 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     expect(values.get(PCAN.tokenAddress)?.pools[0]?.latestTrade).toMatchObject({
       priceUsdWad: "250000000000000000",
       priceUsdSource: "bitquery-token-price-index-v1",
@@ -1195,11 +1211,128 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
     expect(values.get(PCAN.tokenAddress)?.pools[0]?.latestTrade).toMatchObject({
       priceUsdWad: "250000000000000000",
       priceUsdSource: "bitquery-token-price-index-v1",
     });
+  });
+
+  it("keeps missing strict prices unavailable without singleton retries", async () => {
+    let priceCalls = 0;
+    const identities = [PCAN, CLASSIC];
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestTrades: identities.map((identity) => tradeRow({
+                identity,
+                omitPriceUsd: true,
+                omitQuotePriceUsd: true,
+              })),
+            },
+            Trading: {
+              tokenSupplies: identities.map((identity) => supplyRow({ identity })),
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketPrices")) {
+        priceCalls += 1;
+        expect(request.query.match(/price\d+: Tokens/gu)).toHaveLength(2);
+        return jsonResponse({
+          data: { Trading: { price0: [], price1: [] } },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestLiquidity: identities.map((identity) => liquidityRow(identity)),
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketStats")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              stats: identities.map((identity) => ({
+                Trade: {
+                  PoolId: identity.poolId,
+                  Currency: { SmartContract: identity.tokenAddress },
+                },
+                count: "1",
+                volumeUsd: "10",
+              })),
+            },
+          },
+        });
+      }
+      throw new Error("unexpected market request");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataStrictV1(identities, {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(priceCalls).toBe(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    for (const identity of identities) {
+      expect(values.get(identity.tokenAddress)?.pools[0]?.valuation).toEqual({
+        status: "unavailable",
+        reason: "price-unavailable",
+      });
+    }
+  });
+
+  it("uses one bounded 339-market list batch and skips 24h stats", async () => {
+    const identities = Array.from(
+      { length: 339 },
+      (_, index) => generatedIdentity(index + 1),
+    );
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      expect(request.query).not.toContain("ProgrammableMarketStats");
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        expect(request.query).toContain("limit: { count: 339 }");
+        expect(request.variables.pools).toHaveLength(339);
+        return jsonResponse({
+          data: { EVM: { latestTrades: [] }, Trading: { tokenSupplies: [] } },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        expect(request.query).toContain("EVM(network: eth) {");
+        expect(request.query).not.toContain("dataset: combined");
+        expect(request.query).toContain("limit: { count: 339 }");
+        expect(request.variables.pools).toHaveLength(339);
+        return jsonResponse({ data: { EVM: { latestLiquidity: [] } } });
+      }
+      throw new Error("unexpected market request");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataStrictV1(identities, {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+      includeStats: false,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(values.size).toBe(339);
+    expect([...values.values()].every(
+      (value) => value.status === "waiting-for-first-trade",
+    )).toBe(true);
   });
 
   it("uses exact total supply when circulating supply is absent", async () => {

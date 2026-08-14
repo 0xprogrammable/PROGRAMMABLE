@@ -192,6 +192,10 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     );
     expect(mocks.readPrimaryRpcExploreEntriesV1).toHaveBeenCalledOnce();
     expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledOnce();
+    expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ includeStats: false }),
+    );
   });
 
   it("sorts the lowest-FDV alias directly from Bitquery", async () => {
