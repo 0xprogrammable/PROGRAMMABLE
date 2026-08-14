@@ -55,6 +55,16 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
     using StateLibrary for IPoolManager;
 
     uint16 public constant BASIS_POINTS = 10_000;
+
+    /// @notice The Programmable treasury that receives the fixed 0.10 percentage-point launcher share.
+    /// @dev Hardcoded rather than accepted as a constructor argument. The launcher share is Programmable's own
+    ///      protocol revenue, not a parameter a deployer should be able to redirect; enforcing it as a constant
+    ///      makes an incorrect or malicious value impossible to deploy rather than merely validated against at
+    ///      construction. This is the same address Classic's own mainnet deployment pays. The builder beneficiary
+    ///      remains a constructor argument -- that one legitimately varies per accepted hook and is not
+    ///      Programmable's own wallet.
+    address public constant PROGRAMMABLE_TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
+
     uint16 public constant LAUNCHER_FEE_BPS = 10;
     uint16 public constant BUILDER_FEE_BPS = 10;
     /// @dev The floor must exceed the two fixed shares so that a creator configuration can never be constructed in
@@ -126,6 +136,18 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
     uint256 public builderFeesAccrued;
     uint256 public totalNativeFeesAccrued;
 
+    /// @dev Fractional-wei remainder (scaled by BASIS_POINTS) not yet resolved into a whole wei, carried forward
+    ///      across swaps so the launcher and builder shares converge exactly to their bps of cumulative volume
+    ///      rather than losing precision to per-swap flooring.
+    uint256 private _launcherFeeRemainderNumerator;
+    uint256 private _builderFeeRemainderNumerator;
+
+    /// @dev Whole wei resolved as owed to the launcher or builder but not yet paid, because the swap that resolved
+    ///      it had too small a totalFee to cover it. Carried forward and retried on every subsequent swap until
+    ///      paid in full; never dropped.
+    uint256 private _launcherFeeOwedWei;
+    uint256 private _builderFeeOwedWei;
+
     error AlreadyRegistered(bytes32 poolId);
     error DwellOutOfRange(uint32 dwellBlocks);
     error InvalidCurrencyOrder(address currency0, address currency1);
@@ -194,20 +216,16 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
         address indexed builder, address indexed recipient, address indexed caller, uint256 amount
     );
 
-    constructor(
-        IPoolManager poolManager_,
-        address launcherFeeRecipient_,
-        address builderFeeRecipient_,
-        FeeSplitVaultFactoryV1 feeSplitVaultFactory_
-    ) BaseHook(poolManager_) {
+    constructor(IPoolManager poolManager_, address builderFeeRecipient_, FeeSplitVaultFactoryV1 feeSplitVaultFactory_)
+        BaseHook(poolManager_)
+    {
         if (
-            address(poolManager_) == address(0) || launcherFeeRecipient_ == address(0)
-                || builderFeeRecipient_ == address(0) || address(feeSplitVaultFactory_) == address(0)
-                || address(feeSplitVaultFactory_).code.length == 0
+            address(poolManager_) == address(0) || builderFeeRecipient_ == address(0)
+                || address(feeSplitVaultFactory_) == address(0) || address(feeSplitVaultFactory_).code.length == 0
         ) {
             revert ZeroAddress();
         }
-        launcherFeeRecipient = launcherFeeRecipient_;
+        launcherFeeRecipient = PROGRAMMABLE_TREASURY;
         builderFeeRecipient = builderFeeRecipient_;
         feeSplitVaultFactory = feeSplitVaultFactory_;
     }
@@ -634,18 +652,51 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
         totalFee = creatorFee + launcherFee + builderFee;
         if (totalFee == 0) return 0;
 
-        _accrue(
-            poolId,
-            config,
-            sender,
-            isBuy,
-            appliedFeeBps,
-            nativeAmount + (amountIsNet ? totalFee : 0),
-            creatorFee,
-            launcherFee,
-            builderFee
-        );
+        uint256 grossNativeAmount = nativeAmount + (amountIsNet ? totalFee : 0);
+
+        // The launcher and builder shares are recomputed here rather than taken from _feesForNet/_feesForGross
+        // above, which floor independently per swap and can be driven to zero by splitting one trade into many
+        // tiny ones while creatorFee still accrues. _accrueFixedShares tracks what has been earned but not yet
+        // paid and carries it forward, so the two fixed shares converge exactly to their bps of cumulative volume
+        // regardless of how it is split into swaps. totalFee itself is unchanged; only how it divides shifts.
+        (launcherFee, builderFee) = _accrueFixedShares(grossNativeAmount, totalFee);
+        creatorFee = totalFee - launcherFee - builderFee;
+
+        _accrue(poolId, config, sender, isBuy, appliedFeeBps, grossNativeAmount, creatorFee, launcherFee, builderFee);
         NATIVE.take(poolManager, address(this), totalFee, true);
+    }
+
+    /// @dev Returns the launcher and builder fee to collect on a swap of `grossNativeAmount`, given a `totalFee`
+    ///      ceiling this swap can actually supply.
+    ///
+    ///      Two kinds of loss are avoided, not just one. `_launcherFeeRemainderNumerator` (scaled by BASIS_POINTS)
+    ///      carries forward the fractional wei each individual mulDiv floors away, so the sum of what this function
+    ///      returns over any sequence of swaps converges exactly to floor(cumulative grossNativeAmount * bps /
+    ///      BASIS_POINTS) -- splitting a trade into many tiny swaps no longer lets the fixed shares round to zero
+    ///      every time while creatorFee keeps accruing. `_launcherFeeOwedWei` separately carries forward any whole
+    ///      wei that was resolved as owed but could not be paid because that swap's totalFee was too small to cover
+    ///      it (the fixed shares are a small fraction of the pool's own swap fee, so this is rare, but a low-fee
+    ///      pool combined with a large previously-accumulated remainder is a real case). An owed amount is retried
+    ///      on every subsequent swap until it is paid in full; it is never silently dropped the way it would be if
+    ///      the remainder numerator were reset before confirming the payment actually went through.
+    function _accrueFixedShares(uint256 grossNativeAmount, uint256 totalFee)
+        private
+        returns (uint256 launcherFee, uint256 builderFee)
+    {
+        uint256 launcherNumerator = grossNativeAmount * LAUNCHER_FEE_BPS + _launcherFeeRemainderNumerator;
+        uint256 launcherOwed = _launcherFeeOwedWei + launcherNumerator / BASIS_POINTS;
+        _launcherFeeRemainderNumerator = launcherNumerator % BASIS_POINTS;
+
+        uint256 builderNumerator = grossNativeAmount * BUILDER_FEE_BPS + _builderFeeRemainderNumerator;
+        uint256 builderOwed = _builderFeeOwedWei + builderNumerator / BASIS_POINTS;
+        _builderFeeRemainderNumerator = builderNumerator % BASIS_POINTS;
+
+        launcherFee = launcherOwed <= totalFee ? launcherOwed : totalFee;
+        uint256 remainingAfterLauncher = totalFee - launcherFee;
+        builderFee = builderOwed <= remainingAfterLauncher ? builderOwed : remainingAfterLauncher;
+
+        _launcherFeeOwedWei = launcherOwed - launcherFee;
+        _builderFeeOwedWei = builderOwed - builderFee;
     }
 
     function _redeemNative(address recipient, uint256 amount) private {

@@ -43,11 +43,6 @@ contract LadderForkToken is MockERC20 {
 ///      and `PoolModifyLiquidityTest` routers the rest of the suite uses, deployed fresh and pointed at the real,
 ///      pinned `PoolManager` address, since those are testing utilities with no canonical mainnet deployment to pin.
 contract EthLadderFeeHookV1MainnetForkTest is Test {
-    // PoolManager refunds any ETH sent in excess of what a modifyLiquidity or swap call actually needs. Unlike the
-    // Deployers-based integration suite, this contract inherits only forge-std's Test, which has no receive
-    // function, so that refund would otherwise revert.
-    receive() external payable { }
-
     uint256 internal constant SNAPSHOT_BLOCK = 25_639_000;
     address internal constant POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     bytes32 internal constant POOL_MANAGER_CODE_HASH =
@@ -74,7 +69,6 @@ contract EthLadderFeeHookV1MainnetForkTest is Test {
     bytes32 internal poolId;
     uint64 internal anchorBlock;
 
-    address internal treasury;
     address internal builder;
     address internal creatorPayout;
     address internal alice;
@@ -93,7 +87,6 @@ contract EthLadderFeeHookV1MainnetForkTest is Test {
         swapRouter = new PoolSwapTest(poolManager);
         modifyLiquidityRouter = new PoolModifyLiquidityTest(poolManager);
 
-        treasury = makeAddr("forkTreasury");
         builder = makeAddr("forkBuilder");
         creatorPayout = makeAddr("forkCreatorPayout");
         alice = makeAddr("forkAlice");
@@ -101,6 +94,7 @@ contract EthLadderFeeHookV1MainnetForkTest is Test {
         trader = makeAddr("forkTrader");
         vm.deal(address(this), 1000 ether);
         vm.deal(trader, 200 ether);
+        vm.roll(1_000_000);
 
         vaultFactory = new FeeSplitVaultFactoryV1();
         walletFactory = new ClassicPerformanceUnlockWalletFactoryV1();
@@ -114,9 +108,9 @@ contract EthLadderFeeHookV1MainnetForkTest is Test {
             address(hookFactory),
             flags,
             type(EthLadderFeeHookV1).creationCode,
-            abi.encode(poolManager, treasury, builder, vaultFactory)
+            abi.encode(poolManager, builder, vaultFactory)
         );
-        hook = hookFactory.deploy(hookSalt, poolManager, treasury, builder, vaultFactory);
+        hook = hookFactory.deploy(hookSalt, poolManager, builder, vaultFactory);
 
         token = new LadderForkToken(address(this));
         token.mint(address(this), 10_000_000 ether);
@@ -158,6 +152,11 @@ contract EthLadderFeeHookV1MainnetForkTest is Test {
         );
     }
 
+    // PoolManager refunds any ETH sent in excess of what a modifyLiquidity or swap call actually needs. This
+    // contract inherits only forge-std's Test, which has no receive function, so that refund would otherwise
+    // revert.
+    receive() external payable { }
+
     /// @dev Registration, breach observation, unlock timing, custody release and forfeiture, all against the real
     ///      mainnet PoolManager. Mirrors the properties already proven in the Deployers-based integration suite;
     ///      the point of running it again here is the PoolManager underneath, not new behavior.
@@ -188,6 +187,7 @@ contract EthLadderFeeHookV1MainnetForkTest is Test {
         // The sell leg below needs the trader to spend LDRF back into the pool.
         vm.prank(trader);
         token.approve(address(swapRouter), type(uint256).max);
+
         assertLt(_currentTick(), TICK_3, "setup: price clears the top rung");
         assertEq(hook.trancheBreachBlock(poolId, 0), 0);
 

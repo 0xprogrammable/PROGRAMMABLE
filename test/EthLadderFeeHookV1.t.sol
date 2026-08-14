@@ -31,14 +31,13 @@ contract LadderCreatorToken is MockERC20 {
 }
 
 /// @dev End-to-end coverage for the Ladder model against a live PoolManager: registration, fee accounting,
-///      observation through real swaps, unlock transitions, custody release and forfeiture.
+///      observation through real swaps, unlock timing, custody release and forfeiture.
 contract EthLadderFeeHookV1Test is Deployers {
     uint16 internal constant BUY_FEE_BPS = 200;
     uint16 internal constant SELL_FEE_BPS = 700;
     uint256 internal constant BASIS_POINTS = 10_000;
     uint32 internal constant DWELL = 7200;
 
-    // A lower tick is a higher token price: ETH is currency0, so the tick falls as the token appreciates.
     int24 internal constant TICK_1 = -200;
     int24 internal constant TICK_2 = -600;
     int24 internal constant TICK_3 = -1200;
@@ -53,7 +52,6 @@ contract EthLadderFeeHookV1Test is Deployers {
     bytes32 internal poolId;
     uint64 internal anchorBlock;
 
-    address internal treasury;
     address internal builder;
     address internal creatorPayout;
     address internal alice;
@@ -67,7 +65,6 @@ contract EthLadderFeeHookV1Test is Deployers {
         vm.deal(address(this), 10_000 ether);
         vm.roll(1_000_000);
 
-        treasury = makeAddr("programmableTreasury");
         builder = makeAddr("hookBuilder");
         creatorPayout = makeAddr("creatorPayout");
         alice = makeAddr("alice");
@@ -96,8 +93,6 @@ contract EthLadderFeeHookV1Test is Deployers {
         manager.initialize(hookKey, SQRT_PRICE_1_1);
         anchorBlock = uint64(block.number);
 
-        // 20 units across +/-12000 ticks holds roughly 16.4 ETH and 25 tokens. Swaps below are sized well inside
-        // that so the tick moves without exhausting the position.
         LIQUIDITY_PARAMS =
             ModifyLiquidityParams({ tickLower: -12_000, tickUpper: 12_000, liquidityDelta: 20 ether, salt: 0 });
         modifyLiquidityRouter.modifyLiquidity{ value: 500 ether }(hookKey, LIQUIDITY_PARAMS, ZERO_BYTES);
@@ -164,8 +159,8 @@ contract EthLadderFeeHookV1Test is Deployers {
     }
 
     function test_rejectsAscendingTicks() public {
-        (PoolKey memory key, bytes32 id) = _freshPool("descending");
-        FeeSplitVaultV1 v = _deployVaultFor(id, bytes32("descending"));
+        (PoolKey memory key, bytes32 id) = _freshPool("ascending");
+        FeeSplitVaultV1 v = _deployVaultFor(id, bytes32("ascending"));
 
         int24[] memory ticks = new int24[](2);
         ticks[0] = TICK_2;
@@ -238,14 +233,55 @@ contract EthLadderFeeHookV1Test is Deployers {
         uint256 accrued = hook.builderFeesAccrued();
         assertGt(accrued, 0);
 
-        vm.prank(treasury);
-        vm.expectRevert(abi.encodeWithSelector(EthLadderFeeHookV1.UnauthorizedFeeRedirect.selector, treasury, builder));
+        address notTheBuilder = makeAddr("notTheBuilder");
+        vm.prank(notTheBuilder);
+        vm.expectRevert(
+            abi.encodeWithSelector(EthLadderFeeHookV1.UnauthorizedFeeRedirect.selector, notTheBuilder, builder)
+        );
         hook.claimBuilderFees();
 
         vm.prank(builder);
         hook.claimBuilderFees();
         assertEq(builder.balance, accrued);
         assertEq(hook.builderFeesAccrued(), 0);
+    }
+
+    /// @dev The launcher share can only ever go to Programmable's real treasury, not to a value a deployer
+    ///      supplies. Hardcoded as a constant rather than merely checked at construction, so an incorrect address
+    ///      is not a possible deployment, not just one that was validated against at the time.
+    function test_launcherFeeRecipientIsTheEnforcedProgrammableTreasury() public view {
+        assertEq(hook.PROGRAMMABLE_TREASURY(), 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c);
+        assertEq(hook.launcherFeeRecipient(), hook.PROGRAMMABLE_TREASURY());
+    }
+
+    /// @dev The exploit this guards against: previously, if a single swap's gross amount was small enough that the
+    ///      fixed 10 bps launcher/builder share floored to zero -- while creatorFee at the pool's higher total rate
+    ///      still accrued -- repeating that swap indefinitely never paid the launcher or builder anything, because
+    ///      each swap independently floored to zero and forgot. Cumulative accounting closes this: summed over many
+    ///      swaps, the two fixed shares converge to their exact bps of cumulative volume.
+    function test_launcherAndBuilderFeesConvergeAcrossManyTinySwaps() public {
+        uint256 tinyBuy = 60; // wei
+        (uint256 tinyCreatorFee, uint256 tinyLauncherFee, uint256 tinyBuilderFee) =
+            hook.quoteGrossFees(tinyBuy, BUY_FEE_BPS);
+        assertGt(tinyCreatorFee, 0, "setup: creator fee is still nonzero at this size");
+        assertEq(tinyLauncherFee, 0, "setup: the naive per-swap launcher share floors to zero");
+        assertEq(tinyBuilderFee, 0, "setup: the naive per-swap builder share floors to zero");
+
+        uint256 repeats = 400;
+        for (uint256 i = 0; i < repeats; ++i) {
+            _buy(tinyBuy);
+        }
+
+        uint256 expectedLauncher = (repeats * tinyBuy * hook.LAUNCHER_FEE_BPS()) / BASIS_POINTS;
+        uint256 expectedBuilder = (repeats * tinyBuy * hook.BUILDER_FEE_BPS()) / BASIS_POINTS;
+        assertGt(expectedLauncher, 0, "setup: repeated enough times the exact total is nonzero");
+
+        assertApproxEqAbs(
+            hook.launcherFeesAccrued(), expectedLauncher, 1, "launcher fees converge to the exact cumulative total"
+        );
+        assertApproxEqAbs(
+            hook.builderFeesAccrued(), expectedBuilder, 1, "builder fees converge to the exact cumulative total"
+        );
     }
 
     // --- Observation ------------------------------------------------------------------------------------------
@@ -425,11 +461,11 @@ contract EthLadderFeeHookV1Test is Deployers {
             Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
         );
-        bytes memory args = abi.encode(manager, treasury, builder, vaultFactory);
+        bytes memory args = abi.encode(manager, builder, vaultFactory);
         (address expected, bytes32 salt) =
             HookMiner.find(address(this), flags, type(EthLadderFeeHookV1).creationCode, args);
 
-        deployed = new EthLadderFeeHookV1{ salt: salt }(manager, treasury, builder, vaultFactory);
+        deployed = new EthLadderFeeHookV1{ salt: salt }(manager, builder, vaultFactory);
         assertEq(address(deployed), expected, "mined hook address mismatch");
     }
 
@@ -462,12 +498,8 @@ contract EthLadderFeeHookV1Test is Deployers {
         return _swap(true, -int256(ethIn), ethIn);
     }
 
-    /// @dev Sells until the token's price falls back under `target`, which means the tick rises above it.
-    ///
-    ///      Increments are small relative to the range's depth so that no single swap can exhaust the position and
-    ///      trip the partial-fill invariant, which is asserted separately.
     function _sellUntilPriceBelow(int24 target) private {
-        for (uint256 i = 0; i < 120; ++i) {
+        for (uint256 i = 0; i < 60; ++i) {
             if (_currentTick() > target) return;
             _swap(false, -int256(0.5 ether), 0);
         }

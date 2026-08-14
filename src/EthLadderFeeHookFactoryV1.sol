@@ -30,7 +30,6 @@ contract EthLadderFeeHookFactoryV1 {
     event EthLadderFeeHookDeployed(
         address indexed hook,
         address indexed poolManager,
-        address indexed launcherFeeRecipient,
         address builderFeeRecipient,
         address feeSplitVaultFactory,
         bytes32 salt,
@@ -40,12 +39,10 @@ contract EthLadderFeeHookFactoryV1 {
     function deploy(
         bytes32 salt,
         IPoolManager poolManager,
-        address launcherFeeRecipient,
         address builderFeeRecipient,
         FeeSplitVaultFactoryV1 feeSplitVaultFactory
     ) external returns (EthLadderFeeHookV1 hook) {
-        bytes memory code =
-            initCode(poolManager, launcherFeeRecipient, builderFeeRecipient, feeSplitVaultFactory);
+        bytes memory code = initCode(poolManager, builderFeeRecipient, feeSplitVaultFactory);
         address predicted = Create2.computeAddress(salt, keccak256(code));
         if ((uint160(predicted) & ALL_HOOK_MASK) != REQUIRED_HOOK_FLAGS) {
             revert InvalidHookAddress(predicted, uint160(predicted) & ALL_HOOK_MASK, REQUIRED_HOOK_FLAGS);
@@ -56,18 +53,16 @@ contract EthLadderFeeHookFactoryV1 {
         if (deployed != predicted) revert DeploymentAddressMismatch(deployed, predicted);
         hook = EthLadderFeeHookV1(deployed);
 
-        _recordAndEmit(salt, deployed, poolManager, launcherFeeRecipient, builderFeeRecipient, feeSplitVaultFactory);
+        _recordAndEmit(salt, deployed, poolManager, builderFeeRecipient, feeSplitVaultFactory);
     }
 
     /// @dev Split out of `deploy` because computing the configuration hash and emitting the full event inline, on
     ///      top of the deployment locals already live in that function, exceeded the EVM's stack depth under the
-    ///      non-IR pipeline this repository builds with. Ladder carries one more constructor argument than Classic's
-    ///      factory (the builder fee recipient), which was enough to tip an already-tight function over the limit.
+    ///      non-IR pipeline this repository builds with.
     function _recordAndEmit(
         bytes32 salt,
         address deployed,
         IPoolManager poolManager,
-        address launcherFeeRecipient,
         address builderFeeRecipient,
         FeeSplitVaultFactoryV1 feeSplitVaultFactory
     ) private {
@@ -77,55 +72,42 @@ contract EthLadderFeeHookFactoryV1 {
                 address(this),
                 deployed,
                 address(poolManager),
-                launcherFeeRecipient,
                 builderFeeRecipient,
                 address(feeSplitVaultFactory)
             )
         );
         configurationHashOf[deployed] = configurationHash;
         emit EthLadderFeeHookDeployed(
-            deployed,
-            address(poolManager),
-            launcherFeeRecipient,
-            builderFeeRecipient,
-            address(feeSplitVaultFactory),
-            salt,
-            configurationHash
+            deployed, address(poolManager), builderFeeRecipient, address(feeSplitVaultFactory), salt, configurationHash
         );
     }
 
     function predict(
         bytes32 salt,
         IPoolManager poolManager,
-        address launcherFeeRecipient,
         address builderFeeRecipient,
         FeeSplitVaultFactoryV1 feeSplitVaultFactory
     ) external view returns (address) {
-        return Create2.computeAddress(
-            salt, initCodeHash(poolManager, launcherFeeRecipient, builderFeeRecipient, feeSplitVaultFactory)
-        );
+        return Create2.computeAddress(salt, initCodeHash(poolManager, builderFeeRecipient, feeSplitVaultFactory));
     }
 
     function initCode(
         IPoolManager poolManager,
-        address launcherFeeRecipient,
         address builderFeeRecipient,
         FeeSplitVaultFactoryV1 feeSplitVaultFactory
     ) public pure returns (bytes memory) {
         // slither-disable-next-line too-many-digits
         return abi.encodePacked(
-            type(EthLadderFeeHookV1).creationCode,
-            abi.encode(poolManager, launcherFeeRecipient, builderFeeRecipient, feeSplitVaultFactory)
+            type(EthLadderFeeHookV1).creationCode, abi.encode(poolManager, builderFeeRecipient, feeSplitVaultFactory)
         );
     }
 
     function initCodeHash(
         IPoolManager poolManager,
-        address launcherFeeRecipient,
         address builderFeeRecipient,
         FeeSplitVaultFactoryV1 feeSplitVaultFactory
     ) public pure returns (bytes32) {
-        return keccak256(initCode(poolManager, launcherFeeRecipient, builderFeeRecipient, feeSplitVaultFactory));
+        return keccak256(initCode(poolManager, builderFeeRecipient, feeSplitVaultFactory));
     }
 
     function isFactoryHook(address hook) external view returns (bool) {
