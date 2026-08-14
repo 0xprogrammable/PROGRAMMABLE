@@ -693,6 +693,19 @@ jobs:
               Number.isSafeInteger(totalPages) &&
               totalPages === Math.ceil(total / 20);
           }
+          function exactCurrentLaunchIdentity(response) {
+            const launchIdentity = response.body?.dataQuality?.launchIdentity;
+            return launchIdentity?.status === "current" &&
+              launchIdentity.canonical === "current" &&
+              launchIdentity.custom === "current" &&
+              Number.isSafeInteger(launchIdentity.ageMs) &&
+              launchIdentity.ageMs >= 0 &&
+              launchIdentity.ageMs < 60_000 &&
+              positiveInteger.test(String(launchIdentity.asOfBlock ?? "")) &&
+              positiveInteger.test(
+                String(launchIdentity.referenceBlock ?? ""),
+              );
+          }
           function exactExploreIdentity(token) {
             if (typeof token?.id !== "string" || token.id.trim().length === 0) {
               return null;
@@ -829,7 +842,8 @@ jobs:
             highest.body?.sort !== "market-cap" ||
             highest.body?.sortMetric !== "fdv" ||
             highestTokens.length < 1 ||
-            !exactExplorePage(highest, highestTokens)
+            !exactExplorePage(highest, highestTokens) ||
+            !exactCurrentLaunchIdentity(highest)
           ) {
             throw new Error("Highest FDV is not ready");
           }
@@ -844,7 +858,8 @@ jobs:
             newest.body?.status !== "ready" ||
             newest.body?.sort !== "newest" ||
             newestTokens.length < 1 ||
-            !exactExplorePage(newest, newestTokens)
+            !exactExplorePage(newest, newestTokens) ||
+            !exactCurrentLaunchIdentity(newest)
           ) {
             throw new Error("Newest launches are not ready");
           }
