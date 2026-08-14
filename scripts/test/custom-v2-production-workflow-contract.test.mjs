@@ -19,6 +19,10 @@ test("Custom V2 production proof is a dedicated versioned protected lane", () =>
   assert.match(proof, /id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2"/u);
   assert.match(verify, /^  custom-v2:$/mu);
   assert.match(verify, /name: Verify exact Custom V2 surface[\s\S]*npm run verify:custom-v2:ci/u);
+  assert.match(
+    verify,
+    /name: Verify exact Website projection database operator[\s\S]*node --test scripts\/website-projection-db-operator\.test\.mjs/u,
+  );
   assert.match(verify, /PRODUCTION_VERIFY_SCOPE_CUSTOM_V2:/u);
   assert.match(verify, /PRODUCTION_VERIFY_CUSTOM_V2_RESULT:/u);
   assert.match(verify, /verified Custom V2|CUSTOM_V2_RESULT/u);
@@ -74,8 +78,17 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   );
 });
 
-test("Custom-only changes do not invoke global market read-model gates", () => {
-  for (const name of [
+test("Custom-only changes do not invoke the Bitquery Explore smoke", () => {
+  const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
+  assert.match(
+    smoke,
+    /if: >-[\s\S]*verified_custom_v2 != 'true'[\s\S]*verified_interface == 'true'[\s\S]*verified_read_model == 'true'/u,
+  );
+  assert.match(smoke, /\/api\/explore/u);
+  assert.match(smoke, /\/api\/explore\/token\?address=/u);
+  assert.match(smoke, /\/api\/explore\/token\/chart\?address=/u);
+
+  for (const retired of [
     "Resolve read-model release policy",
     "Attest exact staged release policy",
     "Preserve staged release attestation",
@@ -84,11 +97,6 @@ test("Custom-only changes do not invoke global market read-model gates", () => {
     "Smoke staged public market APIs",
     "Gate exact staged operational health",
   ]) {
-    assert.match(
-      stepBlock(deploy, name),
-      /if: needs\.release-gate\.outputs\.verified_read_model == 'true'/u,
-      `${name} must stay on the global read-model scope`,
-    );
+    assert.equal(deploy.includes(`      - name: ${retired}`), false);
   }
-  assert.match(deploy, /global market gates not invoked/u);
 });

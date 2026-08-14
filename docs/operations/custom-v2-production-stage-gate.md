@@ -95,10 +95,11 @@ The Custom V2 probe verifies:
 - stable `/custom-launches` and `/custom-launches/{recordHash}` HTML routes
 - fail-closed prelaunch and disabled responses when activation is not expected
 
-Global read-model release policy, attestation, Classic/Stock/Explore market
-smoke, durable read-model refresh/capture, and `/api/ops/health` gates remain
-conditional on `verified_read_model=true`. They are not invoked by a
-Custom-V2-only change.
+The production workflow's Bitquery public API smoke remains required for every
+non-Custom release and for changes that combine Custom V2 with `interface` or
+`read_model`. A pure Custom-V2-only change skips that unrelated Explore smoke
+and is proved by the Registry, Generic readiness/feed/detail, and Custom UI
+route checks above. The retired global read-model gates are not reintroduced.
 
 ## Handoff boundary
 

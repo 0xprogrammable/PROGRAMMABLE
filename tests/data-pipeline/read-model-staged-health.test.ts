@@ -245,11 +245,11 @@ describe.skip("retired staged health handoff source contract", () => {
     );
   });
 
-  it("fails when the staged health gate leaves the exact read-model scope", () => {
+  it("fails when the staged health gate is conditional", () => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
     const conditional = workflow.replace(
-      "      - name: Gate exact staged operational health\n        if: needs.release-gate.outputs.verified_read_model == 'true'\n        env:\n",
+      "      - name: Gate exact staged operational health\n        env:\n",
       "      - name: Gate exact staged operational health\n        if: false\n        env:\n",
     );
     expect(conditional).not.toBe(workflow);
@@ -266,8 +266,8 @@ describe.skip("retired staged health handoff source contract", () => {
       "continues on error",
       (workflow: string) =>
         workflow.replace(
-          "      - name: Gate exact staged operational health\n        if: needs.release-gate.outputs.verified_read_model == 'true'\n        env:\n",
-          "      - name: Gate exact staged operational health\n        if: needs.release-gate.outputs.verified_read_model == 'true'\n        continue-on-error: true\n        env:\n",
+          "      - name: Gate exact staged operational health\n        env:\n",
+          "      - name: Gate exact staged operational health\n        continue-on-error: true\n        env:\n",
         ),
     ],
     [
