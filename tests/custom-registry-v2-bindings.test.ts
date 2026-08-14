@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -115,22 +116,40 @@ describe("Custom Registry V2 offchain bindings", () => {
     );
   });
 
-  it("keeps the deployment and index source fail closed", () => {
+  it("binds the finalized deployment and immutable release artifacts", () => {
     const deployment = JSON.parse(readFileSync(resolve(
       process.cwd(),
       "config/custom-registry-v2.deployment.prelaunch.json",
     ), "utf8"));
     expect(deployment).toMatchObject({
-      status: "prelaunch",
+      status: "live",
       generation: "2",
-      publicReadEnabled: false,
-      indexingEnabled: false,
+      publicReadEnabled: true,
+      indexingEnabled: true,
       registry: {
-        address: null,
-        runtimeCodeKeccak256: null,
-        deploymentTransactionHash: null,
-        deploymentBlock: null,
-        deploymentBlockHash: null,
+        address: "0x845506084a1AfB969fa4DeF444A2bdeEe794AAad",
+        runtimeCodeKeccak256:
+          "0x74d8196e2d40d030c66b147e835cbdf6dd0ab61c964fb3ef3890d86ed7daf074",
+        deploymentTransactionHash:
+          "0x49d3f19cf9f8afdc307892a95a880652ad7c6c4763458e5846eef78ef60b2ed5",
+        deploymentBlock: "25749665",
+        deploymentBlockHash:
+          "0x84eeb4d264b75c2b89fb56ce5b941dfd8ef6de18181b6d2bff34fbb7c9692127",
+      },
+      release: {
+        sourceCommit: "269ffbd4efc26f0f9c666b025a397b67c425b03f",
+        sourceTree: "41a137ab93cc6ce9eff4f4d61d6d85581b8e5048",
+        sourceArtifactSha256:
+          "sha256:a456dd803d9322a886481cb31e066c60b02fd7d995ea32d6e5e20f034f16480a",
+        abiArtifactSha256:
+          "sha256:46d0aebd00c0eb7b9a152cb0e230f7777e367397e8c2f1b130c276c1309df4eb",
+        eventSetSha256:
+          "sha256:e6bf7f9affb1141bb2e4e1b347616e66ca8055aeb7e072ff600de85cfbeb1ef5",
+      },
+      finality: {
+        minimumConfirmations: "12",
+        policyBindingHash:
+          "0xa51733b58306cf89580bd3c4f39935583db3196c3ab62ecd73644fff2e13b892",
       },
       profiles: {
         NoMarket0: { marketMode: 0, protocolFeeBps: 0 },
@@ -138,6 +157,23 @@ describe("Custom Registry V2 offchain bindings", () => {
       },
     });
 
+    for (const [path, expected] of [
+      [
+        "docs/security/abi/ProgrammableCustomRegistryV2.json",
+        "46d0aebd00c0eb7b9a152cb0e230f7777e367397e8c2f1b130c276c1309df4eb",
+      ],
+      [
+        "docs/security/CUSTOM_REGISTRY_EVENT_SET_V2.json",
+        "e6bf7f9affb1141bb2e4e1b347616e66ca8055aeb7e072ff600de85cfbeb1ef5",
+      ],
+    ] as const) {
+      expect(createHash("sha256").update(readFileSync(resolve(
+        process.cwd(), path,
+      ))).digest("hex")).toBe(expected);
+    }
+  });
+
+  it("keeps the separate indexer source fail closed", () => {
     const config = readFileSync(resolve(
       process.cwd(),
       "indexer/config.custom-registry-v2.prelaunch.yaml",
