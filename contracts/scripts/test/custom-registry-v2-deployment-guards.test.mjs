@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import { decodeAbiParameters, encodeAbiParameters, keccak256 } from "viem";
+import {
+  decodeAbiParameters,
+  encodeAbiParameters,
+  getAddress,
+  keccak256,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import {
@@ -36,6 +43,37 @@ import {
   requireDistinctRpcOrigins,
   verifyReviewedAuthorizationSignature,
 } from "../custom-registry-v2-deployment-guards.mjs";
+
+test("verifier canonicalizes address arrays without Array.map chain IDs", () => {
+  const inputs = [
+    ZERO_ADDRESS,
+    "0xd60858E400460aE6EDEe06504FC4eb7BB94d3De6",
+  ];
+  const broken = inputs.map(getAddress);
+  assert.notEqual(broken[1], getAddress(inputs[1]));
+  assert.throws(
+    () => encodeAbiParameters([{ type: "address" }], [broken[1]]),
+    /Address .* is invalid/u,
+  );
+
+  const verifier = readFileSync(
+    path.resolve(
+      import.meta.dirname,
+      "../verify-custom-registry-v2-deployment.mjs",
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(verifier, /\.map\(getAddress\)/u);
+  assert.equal(
+    verifier.match(/\.map\(\(value\) => getAddress\(value\)\)/gu)?.length,
+    3,
+  );
+  for (const address of inputs.map((value) => getAddress(value))) {
+    assert.doesNotThrow(() =>
+      encodeAbiParameters([{ type: "address" }], [address]),
+    );
+  }
+});
 
 test("requires genuinely distinct RPC origins", () => {
   assert.throws(

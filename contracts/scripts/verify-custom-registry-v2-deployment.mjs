@@ -415,7 +415,7 @@ const readAll = async (client) => {
     plan.constructor.initialRegistrar,
     plan.constructor.initialFinalizer,
     plan.constructor.initialRevoker,
-  ].map(getAddress);
+  ].map((value) => getAddress(value));
   const [
     platformId,
     category,
@@ -480,7 +480,7 @@ const readAll = async (client) => {
     plan.releaseAuthorization.owner,
     ...plan.safeControllers.controllers.map(({ owner }) => owner),
     ...expectedControllers,
-  ].map(getAddress);
+  ].map((value) => getAddress(value));
   const roleAssignments = await Promise.all(
     roleValues.map(async (role, index) => {
       const assignments = await Promise.all(
@@ -585,7 +585,7 @@ const expectedControllers = [
   plan.constructor.initialRegistrar,
   plan.constructor.initialFinalizer,
   plan.constructor.initialRevoker,
-].map(getAddress);
+].map((value) => getAddress(value));
 assertPostDeploymentBinding({
   actual: { runtimeA, runtimeB, ...state },
   expected: {
