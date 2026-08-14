@@ -93,6 +93,25 @@ type ChartCacheEntry = Readonly<{
   value: MarketChartV1;
 }>;
 
+type BitqueryFdvRankingObservation = Readonly<{
+  asOfTime: string;
+  priceUsdWad: string;
+  fdvUsdWad: string;
+  totalSupply: string;
+  maxSupply?: string;
+  freshness: "current" | "stale";
+}>;
+
+type BitqueryFdvRankingParseResult =
+  | Readonly<{ observation: BitqueryFdvRankingObservation; reason?: never }>
+  | Readonly<{
+      observation?: never;
+      reason: Extract<
+        MarketValuationV1,
+        { status: "unavailable" }
+      >["reason"];
+    }>;
+
 const marketCache = new Map<string, MarketCacheEntry>();
 const chartCache = new Map<string, ChartCacheEntry>();
 
@@ -204,6 +223,102 @@ export async function readBitqueryTokenMarketDataStrictV1(
       pools.set(value.identity.poolId, value);
     }
   });
+  return groupTokenMarketData(unique, pools, now);
+}
+
+/**
+ * Reads only the bounded data needed to rank Explore entries by current FDV.
+ *
+ * Token price, supply and provider-computed FDV come from `Trading.Tokens`.
+ * Pool liquidity comes from the realtime `EVM(network: eth)` dataset. The
+ * token read is strict, while absent or malformed liquidity fails closed for
+ * that valuation without taking down launch discovery. This path never reads
+ * DEX trades, statistics, caches or another provider.
+ */
+export async function readBitqueryTokenFdvRankingStrictV1(
+  identities: readonly MarketDataIdentityV1[],
+  options: BitqueryReaderOptions = {},
+): Promise<ReadonlyMap<string, TokenMarketDataV1>> {
+  const now = options.now ?? new Date();
+  const unique = canonicalMarketIdentities(identities);
+  if (unique.length === 0) return new Map();
+  if (unique.length > MARKET_LIST_BATCH_SIZE) {
+    throw new BitqueryMarketDataError("integrity", "market-core");
+  }
+  const token = resolveToken(options.token);
+  if (token === null) {
+    throw new BitqueryMarketDataError("configuration", "configuration");
+  }
+
+  const tokenRequest = marketFdvRankingQuery(unique);
+  const liquidityRequest = marketLiquidityQuery(unique);
+  const [tokenResult, liquidityResult] = await Promise.allSettled([
+    executeBitqueryGraphql(
+      tokenRequest.query,
+      tokenRequest.variables,
+      { ...options, token },
+    ),
+    executeBitqueryGraphql(
+      liquidityRequest.query,
+      liquidityRequest.variables,
+      { ...options, token },
+    ),
+  ]);
+  if (tokenResult.status === "rejected") {
+    throw marketDataErrorAtPhase(tokenResult.reason, "market-core");
+  }
+  if (tokenResult.value.partial) {
+    throw new BitqueryMarketDataError("response", "market-core");
+  }
+  const trading = record(tokenResult.value.data.Trading);
+  if (trading === null) {
+    throw new BitqueryMarketDataError("response", "market-core");
+  }
+
+  const expectedTokens = new Set(unique.map(({ tokenAddress }) => tokenAddress));
+  const tokenRows = indexUniqueRows(
+    array(trading.rankingTokens),
+    (row) => canonicalAddress(record(record(row)?.Token)?.Address),
+  );
+  for (const tokenAddress of tokenRows.keys()) {
+    if (!expectedTokens.has(tokenAddress as `0x${string}`)) {
+      throw new BitqueryMarketDataError("integrity", "market-core");
+    }
+  }
+
+  let liquidityRows: ReadonlyMap<string, unknown> = new Map();
+  if (liquidityResult.status === "fulfilled" && !liquidityResult.value.partial) {
+    const evm = record(liquidityResult.value.data.EVM);
+    if (evm !== null) {
+      try {
+        liquidityRows = indexUniqueRows(
+          array(evm.latestLiquidity),
+          liquidityRowPoolId,
+        );
+      } catch {
+        // Liquidity gates FDV publication, but never launch discovery.
+        liquidityRows = new Map();
+      }
+    }
+  }
+
+  const pools = new Map<string, MarketPoolDataV1>();
+  for (const identity of unique) {
+    const tokenValue = parseFdvRankingToken(
+      tokenRows.get(identity.tokenAddress),
+      identity,
+      now,
+    );
+    const liquidity = parseLiquidity(
+      liquidityRows.get(identity.poolId),
+      identity,
+      now,
+    );
+    pools.set(
+      identity.poolId,
+      fdvRankingPoolData(identity, tokenValue, liquidity),
+    );
+  }
   return groupTokenMarketData(unique, pools, now);
 }
 
@@ -1102,6 +1217,42 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
   };
 }
 
+function marketFdvRankingQuery(
+  identities: readonly MarketDataIdentityV1[],
+) {
+  const tokenAddresses = [...new Set(
+    identities.map(({ tokenAddress }) => tokenAddress),
+  )].sort();
+  const rowLimit = Math.max(1, tokenAddresses.length);
+  return {
+    query: `query ProgrammableExploreFdvRanking(
+      $tokenAddresses: [String!]!
+    ) {
+      Trading {
+        rankingTokens: Tokens(
+          limit: { count: ${rowLimit} }
+          limitBy: { by: Token_Address, count: 1 }
+          orderBy: { descending: Block_Time }
+          where: {
+            Token: { Address: { in: $tokenAddresses } }
+            Price: { IsQuotedInUsd: true }
+          }
+        ) {
+          Token { Id Address }
+          Block { Time }
+          Supply {
+            TotalSupply
+            MaxSupply
+            FullyDilutedValuationUsd
+          }
+          Price { IsQuotedInUsd Ohlc { Close } }
+        }
+      }
+    }`,
+    variables: { tokenAddresses },
+  };
+}
+
 function marketPriceQuery(trades: readonly MarketTradeV1[]) {
   // The legacy Trades filter `Token: { Id: { is: "bid:eth" } }` did not
   // provide a reliable USD observation. The Tokens price index requires the
@@ -1709,6 +1860,156 @@ type ParsedSupply = Readonly<{
   circulatingSupply?: string;
   maxSupply?: string;
 }> | null;
+
+function parseFdvRankingToken(
+  value: unknown,
+  identity: MarketDataIdentityV1,
+  now: Date,
+): BitqueryFdvRankingParseResult {
+  if (value === undefined) {
+    return { reason: "source-unavailable" };
+  }
+  const row = record(value);
+  const token = record(row?.Token);
+  const block = record(row?.Block);
+  const supply = record(row?.Supply);
+  const price = record(row?.Price);
+  const ohlc = record(price?.Ohlc);
+  if (!row || !token || !block || !supply || !price || !ohlc) {
+    return { reason: "source-unavailable" };
+  }
+  const address = canonicalAddress(token.Address);
+  const id = nonEmptyString(token.Id)?.toLowerCase();
+  if (
+    address !== identity.tokenAddress ||
+    (id !== `eth:${identity.tokenAddress}` &&
+      id !== `bid:eth:${identity.tokenAddress}`)
+  ) {
+    return { reason: "inconsistent-market-data" };
+  }
+  const asOfTime = isoTime(block.Time);
+  const totalSupply = positiveDecimal(supply.TotalSupply);
+  const maxSupply = positiveDecimal(supply.MaxSupply);
+  const priceUsdWad = price.IsQuotedInUsd === true
+    ? decimalToWad(ohlc.Close)
+    : null;
+  const fdvUsdWad = decimalToWad(supply.FullyDilutedValuationUsd);
+  if (asOfTime === null) return { reason: "inconsistent-market-data" };
+  if (priceUsdWad === null) return { reason: "price-unavailable" };
+  if (totalSupply === null || fdvUsdWad === null) {
+    return { reason: "supply-unavailable" };
+  }
+  if (
+    maxSupply !== null && comparePositiveDecimals(totalSupply, maxSupply) > 0
+  ) {
+    return { reason: "inconsistent-market-data" };
+  }
+  const computedFdvUsdWad = multiplyWadByDecimal(priceUsdWad, totalSupply);
+  if (
+    computedFdvUsdWad === null ||
+    !usdPricesWithinConfidence(fdvUsdWad, computedFdvUsdWad)
+  ) {
+    return { reason: "inconsistent-market-data" };
+  }
+  const age = now.getTime() - Date.parse(asOfTime);
+  if (age < -MAXIMUM_FUTURE_SKEW_MS) {
+    return { reason: "inconsistent-market-data" };
+  }
+  return {
+    observation: {
+      asOfTime,
+      priceUsdWad: priceUsdWad.toString(),
+      fdvUsdWad: fdvUsdWad.toString(),
+      totalSupply,
+      ...(maxSupply === null ? {} : { maxSupply }),
+      freshness: age > MARKET_DATA_CURRENT_MAX_AGE_MS ? "stale" : "current",
+    },
+  };
+}
+
+function fdvRankingPoolData(
+  identity: MarketDataIdentityV1,
+  tokenValue: BitqueryFdvRankingParseResult,
+  liquidity: MarketLiquidityV1 | null,
+): MarketPoolDataV1 {
+  if (tokenValue.observation === undefined) {
+    return unavailablePool(identity, tokenValue.reason);
+  }
+  const observation = tokenValue.observation;
+  const status = observation.freshness === "current" &&
+      liquidity?.freshness !== "stale"
+    ? "current" as const
+    : "stale" as const;
+  if (liquidity === null) {
+    return {
+      identity,
+      source: "bitquery",
+      status,
+      quality: "partial",
+      asOfTime: observation.asOfTime,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    };
+  }
+  if (
+    observation.freshness !== "current" ||
+    liquidity.freshness !== "current"
+  ) {
+    return {
+      identity,
+      source: "bitquery",
+      status: "stale",
+      quality: "partial",
+      asOfTime: new Date(Math.min(
+        Date.parse(observation.asOfTime),
+        Date.parse(liquidity.asOfTime),
+      )).toISOString(),
+      liquidity,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    };
+  }
+  if (
+    BigInt(liquidity.valueUsdWad) <
+      BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD)
+  ) {
+    return {
+      identity,
+      source: "bitquery",
+      status: "current",
+      quality: "partial",
+      asOfTime: observation.asOfTime,
+      liquidity,
+      valuation: {
+        status: "unavailable",
+        reason: "inconsistent-market-data",
+      },
+    };
+  }
+  const asOfTime = new Date(Math.min(
+    Date.parse(observation.asOfTime),
+    Date.parse(liquidity.asOfTime),
+  )).toISOString();
+  return {
+    identity,
+    source: "bitquery",
+    status: "current",
+    quality: "complete",
+    asOfTime,
+    liquidity,
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      valueUsdWad: observation.fdvUsdWad,
+      fdvUsdWad: observation.fdvUsdWad,
+      totalSupply: observation.totalSupply,
+      ...(observation.maxSupply === undefined
+        ? {}
+        : { maxSupply: observation.maxSupply }),
+      asOfTime,
+      freshness: "current",
+    },
+  };
+}
 
 function parseSupply(
   value: unknown,
