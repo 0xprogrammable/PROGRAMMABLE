@@ -584,6 +584,7 @@ jobs:
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
 
       - name: Smoke staged Bitquery public APIs
+        id: public-provider-smoke
         if: >-
           needs.release-gate.outputs.verified_custom_v2 != 'true' ||
           needs.release-gate.outputs.verified_interface == 'true' ||
@@ -593,6 +594,8 @@ jobs:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+
           const target = new URL(process.env.STAGED_TARGET_URL);
           if (
             target.protocol !== "https:" ||
@@ -628,6 +631,7 @@ jobs:
                 );
               }
               const result = {
+                status: response.status,
                 body: await response.json(),
                 headers: response.headers,
               };
@@ -651,7 +655,7 @@ jobs:
               token.valuation.source === "bitquery" &&
               positiveInteger.test(String(token.valuation.valueWad ?? ""));
           }
-          function exactExploreSources(response) {
+          function exactCurrentExploreSources(response) {
             return response.headers.get("x-programmable-launch-source") ===
                 "drpc" &&
               response.headers.get("x-programmable-read-source") ===
@@ -659,6 +663,10 @@ jobs:
               response.headers.get("x-programmable-market-source") ===
                 "bitquery" &&
               response.headers.get("x-programmable-price-source") ===
+                "bitquery" &&
+              response.headers.get("x-programmable-market-read-status") ===
+                "current" &&
+              response.headers.get("x-programmable-market-provider") ===
                 "bitquery";
           }
           function emptyCurrentBitqueryFdvRanking(response, expectedSort) {
@@ -670,8 +678,77 @@ jobs:
               response.body?.sort === expectedSort &&
               response.body?.sortMetric === "fdv" &&
               tokens.length > 0 &&
-              exactExploreSources(response) &&
+              exactExplorePage(response, tokens) &&
+              exactCurrentExploreSources(response) &&
               !tokens.some(integrityQualifiedBitqueryFdv);
+          }
+          function exactExplorePage(response, tokens) {
+            const total = response.body?.total;
+            const totalPages = response.body?.totalPages;
+            return response.body?.page === 1 &&
+              response.body?.pageSize === 20 &&
+              Number.isSafeInteger(total) &&
+              total >= tokens.length &&
+              tokens.length === Math.min(20, total) &&
+              Number.isSafeInteger(totalPages) &&
+              totalPages === Math.ceil(total / 20);
+          }
+          function exactUnavailableValuation(token) {
+            const valuation = token?.valuation;
+            const exactNoMarket = valuation?.reason === "no-market" &&
+              token?.exploreKind === "custom-project" &&
+              Array.isArray(token.markets) &&
+              token.markets.length === 0;
+            return valuation?.status === "unavailable" &&
+              (valuation.reason === "source-unavailable" || exactNoMarket) &&
+              Object.keys(valuation).length === 2 &&
+              token?.fdvUsdWad === undefined &&
+              token?.marketData === undefined;
+          }
+          function exactTransportUnavailableExplore(
+            response,
+            tokens,
+            rankingRequired,
+          ) {
+            const marketRead = response.body?.marketRead;
+            const launchIdentity = response.body?.dataQuality?.launchIdentity;
+            const valuation = response.body?.dataQuality?.valuation;
+            const ranking = response.body?.ranking;
+            return response.status === 200 &&
+              response.headers.get("cache-control") === "no-store" &&
+              response.headers.get("x-programmable-launch-source") === "drpc" &&
+              response.headers.get("x-programmable-read-source") === "drpc" &&
+              response.headers.get("x-programmable-data-quality") === "partial" &&
+              response.headers.get("x-programmable-market-read-status") ===
+                "transport-unavailable" &&
+              response.headers.get("x-programmable-market-provider") ===
+                "bitquery" &&
+              !response.headers.has("x-programmable-market-source") &&
+              !response.headers.has("x-programmable-price-source") &&
+              !response.headers.has("x-programmable-market-as-of") &&
+              response.body?.dataQuality?.status === "partial" &&
+              launchIdentity?.status === "current" &&
+              launchIdentity.canonical === "current" &&
+              launchIdentity.custom === "current" &&
+              marketRead?.provider === "bitquery" &&
+              marketRead.status === "unavailable" &&
+              marketRead.category === "transport" &&
+              ["market-core", "market-price"].includes(marketRead.phase) &&
+              valuation?.status === "unavailable" &&
+              valuation.metric === "fdv" &&
+              valuation.available === 0 &&
+              valuation.unavailable === tokens.length &&
+              valuation.stale === 0 &&
+              valuation.unknown === 0 &&
+              valuation.asOfBlock === null &&
+              valuation.asOfTime === null &&
+              tokens.length > 0 &&
+              tokens.every(exactUnavailableValuation) &&
+              (rankingRequired
+                ? ranking?.status === "unavailable" &&
+                  ranking.requested === "fdv" &&
+                  ranking.applied === "launch-order"
+                : ranking === undefined);
           }
           const health = await requestJson("/api/ops/health");
           if (
@@ -690,27 +767,14 @@ jobs:
             ? highest.body.tokens
             : [];
           if (
+            highest.status !== 200 ||
             highest.body?.status !== "ready" ||
             highest.body?.sort !== "market-cap" ||
             highest.body?.sortMetric !== "fdv" ||
             highestTokens.length < 1 ||
-            !exactExploreSources(highest)
+            !exactExplorePage(highest, highestTokens)
           ) {
             throw new Error("Highest FDV is not ready");
-          }
-          const valuedHighest = highestTokens.filter(
-            integrityQualifiedBitqueryFdv,
-          );
-          if (valuedHighest.length < 1) {
-            throw new Error("Highest FDV returned no Bitquery valuation");
-          }
-          for (let index = 1; index < valuedHighest.length; index += 1) {
-            if (
-              BigInt(valuedHighest[index - 1].valuation.valueWad) <
-                BigInt(valuedHighest[index].valuation.valueWad)
-            ) {
-              throw new Error("Highest FDV is not ordered descending");
-            }
           }
           const newest = await requestJson(
             "/api/explore?limit=20&page=1&sort=newest",
@@ -719,10 +783,11 @@ jobs:
             ? newest.body.tokens
             : [];
           if (
+            newest.status !== 200 ||
             newest.body?.status !== "ready" ||
             newest.body?.sort !== "newest" ||
             newestTokens.length < 1 ||
-            !exactExploreSources(newest)
+            !exactExplorePage(newest, newestTokens)
           ) {
             throw new Error("Newest launches are not ready");
           }
@@ -737,42 +802,102 @@ jobs:
               throw new Error("Newest launches are not ordered descending");
             }
           }
-          const marketToken = valuedHighest.find(
-            (token) =>
-              address.test(String(token?.tokenAddress ?? "").toLowerCase()) &&
-              token?.marketData?.source === "bitquery",
+          const highestMarketReadStatus = highest.headers.get(
+            "x-programmable-market-read-status",
           );
-          if (!marketToken) {
-            throw new Error("Highest FDV returned no canonical market token");
-          }
-          const tokenAddress = marketToken.tokenAddress;
-          const detail = await requestJson(
-            "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
+          const newestMarketReadStatus = newest.headers.get(
+            "x-programmable-market-read-status",
           );
           if (
-            detail.body?.status !== "ready" ||
-            detail.body?.token?.tokenAddress?.toLowerCase() !==
-              tokenAddress.toLowerCase() ||
-            detail.body?.token?.marketData?.source !== "bitquery" ||
-            detail.body?.token?.valuation?.source !== "bitquery" ||
-            detail.headers.get("x-programmable-market-source") !== "bitquery" ||
-            detail.headers.get("x-programmable-price-source") !== "bitquery"
+            !["current", "transport-unavailable"].includes(
+              highestMarketReadStatus,
+            ) ||
+            newestMarketReadStatus !== highestMarketReadStatus
           ) {
-            throw new Error("Token detail market data is not ready");
+            throw new Error("Explore market read status is invalid");
           }
-          const chart = await requestJson(
-            "/api/explore/token/chart?address=" +
-              encodeURIComponent(tokenAddress) +
-              "&range=1d",
-          );
-          if (
-            chart.body?.source !== "bitquery" ||
-            chart.body?.readStatus !== "live" ||
-            !["ready", "insufficient-history"].includes(chart.body?.status) ||
-            chart.headers.get("x-programmable-market-source") !== "bitquery" ||
-            chart.headers.get("x-programmable-price-source") !== "bitquery"
-          ) {
-            throw new Error("Bitquery chart is not ready");
+          const marketReadStatus = highestMarketReadStatus;
+          let tokenAddress = null;
+          let detailStatus;
+          let chartStatus;
+          if (marketReadStatus === "current") {
+            if (!exactCurrentExploreSources(highest)) {
+              throw new Error("Highest FDV is not ready");
+            }
+            if (!exactCurrentExploreSources(newest)) {
+              throw new Error("Newest launches are not ready");
+            }
+            const valuedHighest = highestTokens.filter(
+              integrityQualifiedBitqueryFdv,
+            );
+            if (valuedHighest.length < 1) {
+              throw new Error("Highest FDV returned no Bitquery valuation");
+            }
+            for (let index = 1; index < valuedHighest.length; index += 1) {
+              if (
+                BigInt(valuedHighest[index - 1].valuation.valueWad) <
+                  BigInt(valuedHighest[index].valuation.valueWad)
+              ) {
+                throw new Error("Highest FDV is not ordered descending");
+              }
+            }
+            const marketToken = valuedHighest.find(
+              (token) =>
+                address.test(String(token?.tokenAddress ?? "").toLowerCase()) &&
+                token?.marketData?.source === "bitquery",
+            );
+            if (!marketToken) {
+              throw new Error("Highest FDV returned no canonical market token");
+            }
+            tokenAddress = marketToken.tokenAddress;
+            const detail = await requestJson(
+              "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
+            );
+            if (
+              detail.body?.status !== "ready" ||
+              detail.body?.token?.tokenAddress?.toLowerCase() !==
+                tokenAddress.toLowerCase() ||
+              detail.body?.token?.marketData?.source !== "bitquery" ||
+              detail.body?.token?.valuation?.source !== "bitquery" ||
+              detail.headers.get("x-programmable-market-source") !== "bitquery" ||
+              detail.headers.get("x-programmable-price-source") !== "bitquery"
+            ) {
+              throw new Error("Token detail market data is not ready");
+            }
+            detailStatus = "verified-current";
+            const chart = await requestJson(
+              "/api/explore/token/chart?address=" +
+                encodeURIComponent(tokenAddress) +
+                "&range=1d",
+            );
+            if (
+              chart.body?.source !== "bitquery" ||
+              chart.body?.readStatus !== "live" ||
+              !["ready", "insufficient-history"].includes(chart.body?.status) ||
+              chart.headers.get("x-programmable-market-source") !== "bitquery" ||
+              chart.headers.get("x-programmable-price-source") !== "bitquery"
+            ) {
+              throw new Error("Bitquery chart is not ready");
+            }
+            chartStatus = "verified-" + chart.body.status;
+          } else {
+            if (
+              !exactTransportUnavailableExplore(
+                highest,
+                highestTokens,
+                true,
+              ) ||
+              !exactTransportUnavailableExplore(newest, newestTokens, false)
+            ) {
+              throw new Error(
+                "Explore transport-unavailable contract is invalid",
+              );
+            }
+            tokenAddress = highestTokens.find((token) =>
+              address.test(String(token?.tokenAddress ?? "").toLowerCase())
+            )?.tokenAddress ?? null;
+            detailStatus = "skipped-provider-unavailable";
+            chartStatus = "skipped-provider-unavailable";
           }
           const profileToken = [...newestTokens, ...highestTokens].find(
             (token) =>
@@ -803,12 +928,31 @@ jobs:
           ) {
             throw new Error("Creator profile is not ready");
           }
+          const smokeStatus = marketReadStatus === "current"
+            ? "verified-staged-drpc-bitquery-public-apis"
+            : "verified-staged-drpc-launches-bitquery-transport-unavailable";
+          const githubOutput = process.env.GITHUB_OUTPUT;
+          if (!githubOutput) {
+            throw new Error("GitHub output path is unavailable");
+          }
+          appendFileSync(
+            githubOutput,
+            [
+              "market_read_status=" + marketReadStatus,
+              "detail_status=" + detailStatus,
+              "chart_status=" + chartStatus,
+            ].join("\n") + "\n",
+            "utf8",
+          );
           process.stdout.write(
             JSON.stringify({
-              status: "verified-staged-drpc-bitquery-public-apis",
+              status: smokeStatus,
+              marketProvider: "bitquery",
+              marketReadStatus,
               tokenAddress,
               profileAccount,
-              chartStatus: chart.body.status,
+              detailStatus,
+              chartStatus,
               creatorClaimPrepare: "separate-live-probe-required",
               tradePrepare: "separate-live-probe-required",
             }) + "\n",
@@ -836,6 +980,9 @@ jobs:
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
+          MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
+          DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
+          CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
         run: |
           {
             echo "## Staged production candidate"
@@ -847,6 +994,9 @@ jobs:
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Launch identity provider: commitment-bound dRPC primary"
             echo "- Market data provider: Bitquery"
+            echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
+            echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
+            echo "- Market chart smoke: \`${CHART_SMOKE_STATUS:-not-run}\`"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then
               echo "- Custom V2 evidence: \`${{ steps.custom-v2-stage.outputs.evidence_sha256 }}\`"
