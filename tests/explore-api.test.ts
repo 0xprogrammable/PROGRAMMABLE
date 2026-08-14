@@ -215,6 +215,11 @@ describe("Explore API strict dRPC identity and Bitquery market contract", () => 
     expect((body.tokens as ExploreEntry[]).map((entry) => entry.id)).toEqual(
       [1, 2, 3, 4].map((index) => entries[index - 1]!.id),
     );
+    expect(mocks.readBitqueryTokenFdvRankingStrictV1).toHaveBeenCalledOnce();
+    expect(
+      mocks.readBitqueryTokenFdvRankingStrictV1.mock.calls[0]?.[0],
+    ).toHaveLength(entries.length);
+    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
   });
 
   it("sorts newest launches without a valuation snapshot", async () => {
