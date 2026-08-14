@@ -14,7 +14,13 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { evaluateReadModelOperationsSourceContracts } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
+import {
+  exactCurrentPublicFdvLiquidity,
+  exactExploreValuationSnapshot,
+  exploreContinuationPath,
+  verifyCurrentPublicOnchainEvidenceV1,
+  verifyPostPromotion,
+} from "../../scripts/perf/read-model-post-promotion.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { resolveProductionBinding } from "../../scripts/perf/read-model-production-binding.mjs";
 
@@ -356,7 +362,9 @@ describe("read-model operations source contract", () => {
       AbortSignal,
       URL,
       setTimeout,
-      { log: (value: string) => logged.push(value) },
+      {
+        log: (value: string) => logged.push(value),
+      },
     );
     expect(requests).toHaveLength(2);
     expect(requests[0]?.url).toBe(
@@ -561,7 +569,9 @@ describe("read-model operations source contract", () => {
         AbortSignal,
         URL,
         setTimeout,
-        { log: () => undefined },
+        {
+          log: () => undefined,
+        },
       ),
     ).rejects.toThrow("production read-model refresh failed (200)");
   });
@@ -802,17 +812,17 @@ describe("read-model operations source contract", () => {
     },
   );
 
-  it("binds public Website releases to Bitquery without availability fallbacks", () => {
+  it("binds public identity to one dRPC primary and public market reads to Bitquery", () => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT);
     expect(result.failures).toEqual([]);
     expect(result.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "ops-bitquery-only-public-source-contract",
+          id: "ops-public-provider-split-source-contract",
           status: "pass",
         }),
         expect.objectContaining({
-          id: "ops-protected-bitquery-stage-smoke",
+          id: "ops-protected-public-provider-stage-smoke",
           status: "pass",
         }),
         expect.objectContaining({
@@ -823,7 +833,7 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("rejects a public route that restores durable or RPC availability reads", () => {
+  it("rejects a public route that restores a durable availability read", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
@@ -832,7 +842,83 @@ describe("read-model operations source contract", () => {
       },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-bitquery-only-public-source-contract",
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a public release manifest that requires a secondary RPC", () => {
+    const path = "config/read-model-operations.v1.json";
+    const manifest = JSON.parse(
+      readFileSync(resolve(ROOT, path), "utf8"),
+    ) as Record<string, unknown>;
+    const postPromotion = manifest.postPromotion as Record<string, unknown>;
+    const rpc = postPromotion.rpc as Record<string, unknown>;
+    const drifted = JSON.stringify(
+      {
+        ...manifest,
+        postPromotion: {
+          ...postPromotion,
+          rpc: { ...rpc, secondaryRequired: true },
+        },
+      },
+      null,
+      2,
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-config-schema",
+    );
+  });
+
+  it("rejects a public launch route that restores Bitquery identity discovery", () => {
+    const path = "app/api/explore/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain("readPrimaryRpcExploreEntriesV1");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replaceAll(
+          "readPrimaryRpcExploreEntriesV1",
+          "readBitqueryExploreEntriesV1",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a public action route that restores RPC quorum selection", () => {
+    const path = "app/api/trade/prepare/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    expect(route).toContain("tradeActionRpcProvider");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replaceAll(
+          "tradeActionRpcProvider",
+          "tradeActionRpcProviders",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a staged public smoke that exposes an RPC provider URL", () => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: workflow.replace(
+          "Smoke staged Bitquery public APIs",
+          "Smoke staged Bitquery public APIs\n# PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
     );
   });
 
