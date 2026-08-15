@@ -2488,6 +2488,10 @@ export function evaluateReadModelOperationsSourceContracts(
         '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
     ) &&
     (stagedBitquerySmokeBlock.match(/emptyCurrentBitqueryFdvRanking/gu)?.length ?? 0) === 2;
+  const stagedAllowedMarketReadStatuses =
+    /\[\s*"current",\s*"transport-unavailable",\s*"response-unavailable",?\s*\]\.includes\(\s*highestMarketReadStatus,?\s*\)/u.test(
+      stagedBitquerySmokeBlock,
+    );
   const stagedCurrentMarketBranch = stagedBitquerySmokeBlock.indexOf(
     'if (marketReadStatus === "current")',
   );
@@ -2539,12 +2543,13 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedDegradedMarketBranch > stagedChartProbe &&
     stagedProfileProbe > stagedDegradedMarketBranch &&
     stagedLaunchIdentityContract &&
+    stagedAllowedMarketReadStatuses &&
     includesEverySourceFragment(stagedBitquerySmokeBlock, [
       "status: response.status",
       "highest.status !== 200",
       "newest.status !== 200",
       '"x-programmable-market-read-status"',
-      '["current", "transport-unavailable"].includes(',
+      '"current",\n              "transport-unavailable",\n              "response-unavailable",',
       "newestMarketReadStatus !== highestMarketReadStatus",
       "exactCurrentExploreSources(highest)",
       "exactCurrentExploreSources(newest)",
@@ -2605,12 +2610,21 @@ export function evaluateReadModelOperationsSourceContracts(
       'launchIdentity?.status === "current"',
       'launchIdentity.canonical === "current"',
       'launchIdentity.custom === "current"',
+      "function exactUnavailableMarketRead(marketRead, readStatus)",
       'marketRead?.provider === "bitquery"',
       'marketRead.status === "unavailable"',
-      'marketRead.category === "transport"',
       '["market-core", "market-liquidity", "market-price"].includes(\n' +
         "                marketRead.phase,\n" +
         "              )",
+      'readStatus === "transport-unavailable"',
+      'marketRead.category === "transport"',
+      "marketRead.reason === undefined",
+      "marketRead.httpStatus === undefined",
+      'readStatus === "response-unavailable"',
+      'marketRead.category === "response"',
+      'marketRead.reason === "http-status"',
+      "marketRead.httpStatus === 402",
+      "exactUnavailableMarketRead(marketRead, readStatus)",
       'valuation?.status === "unavailable"',
       'valuation.metric === "fdv"',
       "valuation.available === 0",
@@ -2628,18 +2642,25 @@ export function evaluateReadModelOperationsSourceContracts(
       'valuation.reason === "source-unavailable" || exactNoMarket',
       "Object.keys(valuation).length === 2",
       "token?.fdvUsdWad === undefined",
+      "token?.marketCapUsdWad === undefined",
+      "token?.marketCapEthWad === undefined",
+      "token?.priceUsdWad === undefined",
+      "token?.priceEthWad === undefined",
+      "token?.liquidityEvidence === undefined",
       "token?.marketData === undefined",
+      "token?.uniswapV4Pool === undefined",
       'ranking?.status === "unavailable"',
       'ranking.requested === "fdv"',
       'ranking.applied === "launch-order"',
       ": ranking === undefined",
-      "exactTransportUnavailableExplore(\n                highest,\n                highestTokens,\n                true,",
-      "exactTransportUnavailableExplore(newest, newestTokens, false)",
+      "exactUnavailableExplore(\n                highest,\n                highestTokens,\n                true,",
+      "exactUnavailableExplore(newest, newestTokens, false)",
       "!exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
       'detailStatus = "skipped-provider-unavailable"',
       'chartStatus = "skipped-provider-unavailable"',
       '"verified-staged-drpc-bitquery-public-apis"',
       '"verified-staged-drpc-launches-bitquery-transport-unavailable"',
+      '"verified-staged-drpc-launches-bitquery-response-unavailable"',
       '"market_read_status=" + marketReadStatus',
       '"detail_status=" + detailStatus',
       '"chart_status=" + chartStatus',
@@ -2779,6 +2800,35 @@ export function evaluateReadModelOperationsSourceContracts(
   const publicExploreHasMarketReadStatus = publicExplore.includes(
     '"X-Programmable-Market-Read-Status"',
   );
+  const publicExploreFailSoftStart = publicExplore.indexOf(
+    "function isFailSoftMarketReadFailure(",
+  );
+  const publicExploreFailSoftEnd = publicExplore.indexOf(
+    "function unavailableMarketReadStatus(",
+    publicExploreFailSoftStart,
+  );
+  const publicExploreFailSoftBlock =
+    publicExploreFailSoftStart >= 0 &&
+    publicExploreFailSoftEnd > publicExploreFailSoftStart
+      ? publicExplore.slice(publicExploreFailSoftStart, publicExploreFailSoftEnd)
+      : "";
+  const publicExploreFailSoftContract = includesEverySourceFragment(
+    publicExploreFailSoftBlock,
+    [
+      "identityEntryCount > 0",
+      "marketIdentityCount > 0",
+      "!signal.aborted",
+      "error instanceof BitqueryMarketDataError",
+      "): error is FailSoftMarketReadFailure {",
+      'error.category === "transport"',
+      'error.category === "response"',
+      'error.reason === "http-status"',
+      "error.httpStatus === 402",
+      '(error.phase === "market-core" ||\n' +
+        '      error.phase === "market-liquidity" ||\n' +
+        '      error.phase === "market-price")',
+    ],
+  );
   const publicExploreLegacyHealthyHeaderContract =
     !publicExploreHasMarketReadStatus &&
     includesEverySourceFragment(publicExplore, [
@@ -2789,52 +2839,61 @@ export function evaluateReadModelOperationsSourceContracts(
     ]);
   const publicExploreMarketReadContract =
     publicExploreHasMarketReadStatus &&
+    publicExploreFailSoftContract &&
     includesEverySourceFragment(publicExplore, [
-      "error instanceof BitqueryMarketDataError",
-      'error.category === "transport"',
-      '(error.phase === "market-core" ||\n' +
-        '      error.phase === "market-liquidity" ||\n' +
-        '      error.phase === "market-price")',
-      "identityEntryCount > 0",
-      "marketIdentityCount > 0",
-      "!signal.aborted",
-      "marketTransportFailure === null",
+      "function isFailSoftMarketReadFailure(",
+      "type FailSoftMarketReadFailure =",
+      "category: \"transport\";",
+      "category: \"response\";",
+      'reason: "http-status";',
+      "httpStatus: 402;",
+      "function unavailableMarketReadStatus(error: FailSoftMarketReadFailure)",
+      '? "transport-unavailable" as const',
+      ': "response-unavailable" as const',
+      "marketReadFailure === null",
+      "let marketReadFailure: FailSoftMarketReadFailure | null = null",
+      "marketReadFailure = error",
+      "marketByToken = new Map()",
+      'console.error("Explore market read unavailable", {',
+      "market: safeBitqueryMarketDataError(error)",
       'provider: "bitquery" as const',
       'status: "unavailable" as const',
-      'category: "transport" as const',
-      "phase: marketTransportFailure.phase",
+      "category: marketReadFailure.category",
+      "phase: marketReadFailure.phase",
+      'reason: "http-status" as const',
+      "httpStatus: 402 as const",
       'requested: "fdv" as const',
       'applied: "launch-order" as const',
       '? "public, max-age=0, s-maxage=2"',
       ': "no-store"',
       '"X-Programmable-Launch-Source": "drpc"',
-      '"X-Programmable-Read-Source": marketTransportFailure === null',
+      '"X-Programmable-Read-Source": marketReadFailure === null',
       '? "drpc+bitquery"',
       ': "drpc"',
       '"X-Programmable-Market-Read-Status":',
       '? "current"',
-      ': "transport-unavailable"',
+      ': unavailableMarketReadStatus(marketReadFailure)',
       '"X-Programmable-Market-Provider": "bitquery"',
       '"X-Programmable-Market-Source": "bitquery"',
       '"X-Programmable-Price-Source": "bitquery"',
-      "marketTransportFailure === null &&",
-      '"Cache-Control": marketTransportFailure === null\n' +
+      "marketReadFailure === null &&",
+      '"Cache-Control": marketReadFailure === null\n' +
         '            ? "public, max-age=0, s-maxage=2"\n' +
         '            : "no-store",',
-      '"X-Programmable-Read-Source": marketTransportFailure === null\n' +
+      '"X-Programmable-Read-Source": marketReadFailure === null\n' +
         '            ? "drpc+bitquery"\n' +
         '            : "drpc",',
       '"X-Programmable-Market-Read-Status":\n' +
-        "            marketTransportFailure === null\n" +
+        "            marketReadFailure === null\n" +
         '              ? "current"\n' +
-        '              : "transport-unavailable",',
-      "...(marketTransportFailure === null\n" +
+        "              : unavailableMarketReadStatus(marketReadFailure),",
+      "...(marketReadFailure === null\n" +
         "            ? {\n" +
         '                "X-Programmable-Market-Source": "bitquery",\n' +
         '                "X-Programmable-Price-Source": "bitquery",\n' +
         "              }\n" +
         "            : {}),",
-      "...(marketTransportFailure === null &&\n" +
+      "...(marketReadFailure === null &&\n" +
         "              dataQuality.valuation.asOfTime",
     ]);
   const primaryRpcLaunchCatalogCacheStart =
@@ -2982,7 +3041,7 @@ export function evaluateReadModelOperationsSourceContracts(
             route,
           ),
       ),
-    "public identity and action state use one commitment-bound dRPC primary, Custom Registry detail is a separate post-miss source, and market, FDV and charts use explicit Bitquery reads with bounded transport-unavailable Explore semantics",
+    "public identity and action state use one commitment-bound dRPC primary, Custom Registry detail is a separate post-miss source, and market, FDV and charts use explicit Bitquery reads with bounded transport or exact HTTP 402 Explore degradation",
   );
   check(
     "ops-protected-public-provider-stage-smoke",
@@ -3031,7 +3090,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !/alchemy|blob|durable|graph|stateview|chainlink|envio|prewarm|secondary|fallback|quorum/iu.test(
         stagedBitquerySmokeBlock,
       ),
-    "the immutable staged candidate proves dRPC identity and profile responses plus either current Bitquery market reads or an exact transport-unavailable handoff without exposing an RPC endpoint",
+    "the immutable staged candidate proves dRPC identity and profile responses plus either current Bitquery market reads or an exact transport or HTTP 402 unavailable handoff without exposing an RPC endpoint",
   );
   check(
     "ops-obsolete-public-read-gates-absent",

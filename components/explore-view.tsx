@@ -107,12 +107,23 @@ type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
-type ExploreMarketRead = Readonly<{
+type ExploreMarketReadBase = Readonly<{
   provider: "bitquery";
   status: "unavailable";
-  category: "transport";
-  phase: "market-core" | "market-price";
+  phase: "market-core" | "market-liquidity" | "market-price";
 }>;
+
+type ExploreMarketRead =
+  | ExploreMarketReadBase & Readonly<{
+      category: "transport";
+      reason?: never;
+      httpStatus?: never;
+    }>
+  | ExploreMarketReadBase & Readonly<{
+      category: "response";
+      reason: "http-status";
+      httpStatus: 402;
+    }>;
 
 type ExploreRanking = Readonly<{
   status: "unavailable";
@@ -719,6 +730,28 @@ function positiveInteger(value: unknown, fallback: number) {
     : fallback;
 }
 
+function parseExploreMarketRead(value: unknown): ExploreMarketRead | null {
+  if (
+    !isRecord(value) ||
+    value.provider !== "bitquery" ||
+    value.status !== "unavailable" ||
+    (value.phase !== "market-core" &&
+      value.phase !== "market-liquidity" &&
+      value.phase !== "market-price")
+  ) return null;
+  if (
+    value.category === "transport" &&
+    value.reason === undefined &&
+    value.httpStatus === undefined
+  ) return value as ExploreMarketRead;
+  if (
+    value.category === "response" &&
+    value.reason === "http-status" &&
+    value.httpStatus === 402
+  ) return value as ExploreMarketRead;
+  return null;
+}
+
 function parseExplorePayload(value: unknown): ExplorePayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -735,14 +768,7 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   ) {
     throw new Error("The token registry returned invalid data quality");
   }
-  const marketRead = isRecord(value.marketRead) &&
-      value.marketRead.provider === "bitquery" &&
-      value.marketRead.status === "unavailable" &&
-      value.marketRead.category === "transport" &&
-      (value.marketRead.phase === "market-core" ||
-        value.marketRead.phase === "market-price")
-    ? value.marketRead as ExploreMarketRead
-    : null;
+  const marketRead = parseExploreMarketRead(value.marketRead);
   if (value.marketRead !== undefined && marketRead === null) {
     throw new Error("The token registry returned invalid market read data");
   }
@@ -1035,9 +1061,26 @@ async function fetchExplorePayload(
       const marketReadStatus = response.headers.get(
         "X-Programmable-Market-Read-Status",
       );
+      const expectedUnavailableStatus = payload.marketRead?.category === "transport"
+        ? "transport-unavailable"
+        : payload.marketRead?.category === "response"
+          ? "response-unavailable"
+          : null;
+      if (
+        expectedUnavailableStatus !== null &&
+        marketReadStatus !== expectedUnavailableStatus
+      ) {
+        throw new Error("The token registry returned inconsistent market read data");
+      }
       if (
         marketReadStatus === "transport-unavailable" &&
-        payload.marketRead?.status !== "unavailable"
+        payload.marketRead?.category !== "transport"
+      ) {
+        throw new Error("The token registry returned inconsistent market read data");
+      }
+      if (
+        marketReadStatus === "response-unavailable" &&
+        payload.marketRead?.category !== "response"
       ) {
         throw new Error("The token registry returned inconsistent market read data");
       }
@@ -1047,11 +1090,12 @@ async function fetchExplorePayload(
       ) {
         throw new Error("The token registry returned inconsistent market read data");
       }
-      const marketTransportUnavailable =
-        marketReadStatus === "transport-unavailable";
+      const marketReadUnavailable =
+        marketReadStatus === "transport-unavailable" ||
+        marketReadStatus === "response-unavailable";
       if (
         attempt === 0 &&
-        !marketTransportUnavailable &&
+        !marketReadUnavailable &&
         shouldRetryMissingBitqueryFdv(search, payload)
       ) {
         continue;
@@ -1193,6 +1237,8 @@ export async function loadExploreModelDataset(
       payload.marketRead?.status === degradedPage.marketRead?.status &&
       payload.marketRead?.category === degradedPage.marketRead?.category &&
       payload.marketRead?.phase === degradedPage.marketRead?.phase &&
+      payload.marketRead?.reason === degradedPage.marketRead?.reason &&
+      payload.marketRead?.httpStatus === degradedPage.marketRead?.httpStatus &&
       payload.ranking?.status === degradedPage.ranking?.status &&
       payload.ranking?.requested === degradedPage.ranking?.requested &&
       payload.ranking?.applied === degradedPage.ranking?.applied

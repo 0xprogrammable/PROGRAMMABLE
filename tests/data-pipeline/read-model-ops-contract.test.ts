@@ -878,7 +878,7 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("accepts the exact Explore transport-unavailable provider taxonomy", () => {
+  it("accepts the exact Explore transport and HTTP 402 provider taxonomy", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
     expect(route).toContain('error.phase === "market-liquidity"');
@@ -897,6 +897,11 @@ describe("read-model operations source contract", () => {
       'error.category === "schema"',
     ],
     [
+      "an unbounded response status",
+      "error.httpStatus === 402",
+      "error.httpStatus >= 400",
+    ],
+    [
       "an unbounded failure phase",
       '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
       "Boolean(error.phase)",
@@ -908,13 +913,13 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a combined degraded read source",
-      '"X-Programmable-Read-Source": marketTransportFailure === null\n            ? "drpc+bitquery"\n            : "drpc",',
-      '"X-Programmable-Read-Source": marketTransportFailure === null\n            ? "drpc+bitquery"\n            : "drpc+bitquery",',
+      '"X-Programmable-Read-Source": marketReadFailure === null\n            ? "drpc+bitquery"\n            : "drpc",',
+      '"X-Programmable-Read-Source": marketReadFailure === null\n            ? "drpc+bitquery"\n            : "drpc+bitquery",',
     ],
     [
       "an unknown degraded market marker",
-      '"X-Programmable-Market-Read-Status":\n            marketTransportFailure === null\n              ? "current"\n              : "transport-unavailable",',
-      '"X-Programmable-Market-Read-Status":\n            marketTransportFailure === null\n              ? "current"\n              : "unknown",',
+      ': unavailableMarketReadStatus(marketReadFailure),',
+      ': "unknown",',
     ],
     [
       "a different market provider",
@@ -923,8 +928,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a healthy degraded cache policy",
-      '"Cache-Control": marketTransportFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "no-store",',
-      '"Cache-Control": marketTransportFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "public, max-age=0, s-maxage=2",',
+      '"Cache-Control": marketReadFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "no-store",',
+      '"Cache-Control": marketReadFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "public, max-age=0, s-maxage=2",',
     ],
     [
       "FDV ordering during provider degradation",
@@ -1126,8 +1131,8 @@ describe("read-model operations source contract", () => {
   it.each([
     [
       "an unknown market-read marker",
-      '["current", "transport-unavailable"].includes(',
-      '["current", "transport-unavailable", "unknown"].includes(',
+      '"current",\n              "transport-unavailable",\n              "response-unavailable",',
+      '"current",\n              "transport-unavailable",\n              "response-unavailable",\n              "unknown",',
     ],
     [
       "mixed Highest and Newest market-read states",
@@ -1217,6 +1222,16 @@ describe("read-model operations source contract", () => {
       'marketRead.category !== "schema"',
     ],
     [
+      "an arbitrary degraded response reason",
+      'marketRead.reason === "http-status"',
+      'marketRead.reason !== "schema"',
+    ],
+    [
+      "an arbitrary degraded response status",
+      "marketRead.httpStatus === 402",
+      "marketRead.httpStatus >= 400",
+    ],
+    [
       "an unbounded degraded failure phase",
       '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
       "Boolean(marketRead.phase)",
@@ -1254,6 +1269,16 @@ describe("read-model operations source contract", () => {
     [
       "fabricated degraded market data",
       "token?.marketData === undefined",
+      "true",
+    ],
+    [
+      "fabricated degraded liquidity evidence",
+      "token?.liquidityEvidence === undefined",
+      "true",
+    ],
+    [
+      "fabricated degraded price",
+      "token?.priceUsdWad === undefined",
       "true",
     ],
     [

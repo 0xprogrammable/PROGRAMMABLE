@@ -20,7 +20,7 @@ const reconciler = readFileSync(
   "utf8",
 );
 const boundedReader = readFileSync("scripts/read-bounded-response.mjs", "utf8");
-const exactTransportUnavailableMarketPhases =
+const exactUnavailableMarketPhases =
   /\["market-core", "market-liquidity", "market-price"\]\.includes\(\s*marketRead\.phase,\s*\)/u;
 
 function stepBlock(source, name) {
@@ -321,7 +321,7 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   );
   assert.match(
     smoke,
-    /\["current", "transport-unavailable"\]\.includes\([\s\S]*newestMarketReadStatus !== highestMarketReadStatus/u,
+    /"current",\s*"transport-unavailable",\s*"response-unavailable",[\s\S]*newestMarketReadStatus !== highestMarketReadStatus/u,
   );
   assert.match(
     smoke,
@@ -329,7 +329,7 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   );
   assert.match(
     smoke,
-    /x-programmable-read-source"\) === "drpc"[\s\S]*x-programmable-data-quality"\) === "partial"[\s\S]*x-programmable-market-read-status"\) ===[\s\S]*"transport-unavailable"[\s\S]*x-programmable-market-provider"\) ===[\s\S]*"bitquery"/u,
+    /x-programmable-read-source"\) === "drpc"[\s\S]*x-programmable-data-quality"\) === "partial"[\s\S]*"transport-unavailable", "response-unavailable"[\s\S]*x-programmable-market-provider"\) ===[\s\S]*"bitquery"/u,
   );
   assert.match(
     smoke,
@@ -337,12 +337,16 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   );
   assert.match(
     smoke,
-    /marketRead\?\.provider === "bitquery"[\s\S]*marketRead\.status === "unavailable"[\s\S]*marketRead\.category === "transport"/u,
+    /function exactUnavailableMarketRead\(marketRead, readStatus\)[\s\S]*marketRead\?\.provider === "bitquery"[\s\S]*marketRead\.status === "unavailable"[\s\S]*readStatus === "transport-unavailable"[\s\S]*marketRead\.category === "transport"[\s\S]*marketRead\.reason === undefined[\s\S]*marketRead\.httpStatus === undefined[\s\S]*readStatus === "response-unavailable"[\s\S]*marketRead\.category === "response"[\s\S]*marketRead\.reason === "http-status"[\s\S]*marketRead\.httpStatus === 402/u,
   );
-  assert.match(smoke, exactTransportUnavailableMarketPhases);
+  assert.match(smoke, exactUnavailableMarketPhases);
   assert.match(
     smoke,
     /valuation\?\.status === "unavailable"[\s\S]*valuation\.available === 0[\s\S]*valuation\.unavailable === tokens\.length[\s\S]*tokens\.every\(exactUnavailableValuation\)/u,
+  );
+  assert.match(
+    smoke,
+    /token\?\.fdvUsdWad === undefined[\s\S]*token\?\.marketCapUsdWad === undefined[\s\S]*token\?\.marketCapEthWad === undefined[\s\S]*token\?\.priceUsdWad === undefined[\s\S]*token\?\.priceEthWad === undefined[\s\S]*token\?\.liquidityEvidence === undefined[\s\S]*token\?\.marketData === undefined[\s\S]*token\?\.uniswapV4Pool === undefined/u,
   );
   assert.match(
     smoke,
@@ -381,6 +385,10 @@ test("Custom-only changes do not invoke the public data smoke", () => {
     /profile\.headers\.get\("x-programmable-rpc-provider"\) !==[\s\S]*"drpc-primary"/u,
   );
   assert.match(smoke, /verified-staged-drpc-bitquery-public-apis/u);
+  assert.match(
+    smoke,
+    /verified-staged-drpc-launches-bitquery-response-unavailable/u,
+  );
   assert.match(smoke, /creatorClaimPrepare: "separate-live-probe-required"/u);
   assert.match(smoke, /tradePrepare: "separate-live-probe-required"/u);
   assert.doesNotMatch(smoke, /\/api\/explore\/profile\/claim/u);
@@ -409,11 +417,11 @@ test("Custom-only changes do not invoke the public data smoke", () => {
   }
 });
 
-test("the staged transport contract rejects removal of exact-pool liquidity", () => {
+test("the staged unavailable-market contract rejects removal of exact-pool liquidity", () => {
   const smoke = stepBlock(deploy, "Smoke staged Bitquery public APIs");
   const mutated = smoke.replace('"market-liquidity", ', "");
   assert.notEqual(mutated, smoke);
-  assert.doesNotMatch(mutated, exactTransportUnavailableMarketPhases);
+  assert.doesNotMatch(mutated, exactUnavailableMarketPhases);
 });
 
 test("degraded Highest must match the exact Newest launch identity order", () => {

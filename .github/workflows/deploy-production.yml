@@ -1243,14 +1243,42 @@ jobs:
               (valuation.reason === "source-unavailable" || exactNoMarket) &&
               Object.keys(valuation).length === 2 &&
               token?.fdvUsdWad === undefined &&
-              token?.marketData === undefined;
+              token?.marketCapUsdWad === undefined &&
+              token?.marketCapEthWad === undefined &&
+              token?.priceUsdWad === undefined &&
+              token?.priceEthWad === undefined &&
+              token?.liquidityEvidence === undefined &&
+              token?.marketData === undefined &&
+              token?.uniswapV4Pool === undefined;
           }
-          function exactTransportUnavailableExplore(
+          function exactUnavailableMarketRead(marketRead, readStatus) {
+            const common = marketRead?.provider === "bitquery" &&
+              marketRead.status === "unavailable" &&
+              ["market-core", "market-liquidity", "market-price"].includes(
+                marketRead.phase,
+              );
+            if (!common) return false;
+            if (readStatus === "transport-unavailable") {
+              return marketRead.category === "transport" &&
+                marketRead.reason === undefined &&
+                marketRead.httpStatus === undefined;
+            }
+            if (readStatus === "response-unavailable") {
+              return marketRead.category === "response" &&
+                marketRead.reason === "http-status" &&
+                marketRead.httpStatus === 402;
+            }
+            return false;
+          }
+          function exactUnavailableExplore(
             response,
             tokens,
             rankingRequired,
           ) {
             const marketRead = response.body?.marketRead;
+            const readStatus = response.headers.get(
+              "x-programmable-market-read-status",
+            );
             const launchIdentity = response.body?.dataQuality?.launchIdentity;
             const valuation = response.body?.dataQuality?.valuation;
             const ranking = response.body?.ranking;
@@ -1259,8 +1287,9 @@ jobs:
               response.headers.get("x-programmable-launch-source") === "drpc" &&
               response.headers.get("x-programmable-read-source") === "drpc" &&
               response.headers.get("x-programmable-data-quality") === "partial" &&
-              response.headers.get("x-programmable-market-read-status") ===
-                "transport-unavailable" &&
+              ["transport-unavailable", "response-unavailable"].includes(
+                readStatus,
+              ) &&
               response.headers.get("x-programmable-market-provider") ===
                 "bitquery" &&
               !response.headers.has("x-programmable-market-source") &&
@@ -1270,12 +1299,7 @@ jobs:
               launchIdentity?.status === "current" &&
               launchIdentity.canonical === "current" &&
               launchIdentity.custom === "current" &&
-              marketRead?.provider === "bitquery" &&
-              marketRead.status === "unavailable" &&
-              marketRead.category === "transport" &&
-              ["market-core", "market-liquidity", "market-price"].includes(
-                marketRead.phase,
-              ) &&
+              exactUnavailableMarketRead(marketRead, readStatus) &&
               valuation?.status === "unavailable" &&
               valuation.metric === "fdv" &&
               valuation.available === 0 &&
@@ -1353,7 +1377,11 @@ jobs:
             "x-programmable-market-read-status",
           );
           if (
-            !["current", "transport-unavailable"].includes(
+            ![
+              "current",
+              "transport-unavailable",
+              "response-unavailable",
+            ].includes(
               highestMarketReadStatus,
             ) ||
             newestMarketReadStatus !== highestMarketReadStatus
@@ -1426,12 +1454,12 @@ jobs:
             chartStatus = "verified-" + chart.body.status;
           } else {
             if (
-              !exactTransportUnavailableExplore(
+              !exactUnavailableExplore(
                 highest,
                 highestTokens,
                 true,
               ) ||
-              !exactTransportUnavailableExplore(newest, newestTokens, false) ||
+              !exactUnavailableExplore(newest, newestTokens, false) ||
               !exactDegradedLaunchOrder(
                 highest,
                 highestTokens,
@@ -1440,7 +1468,7 @@ jobs:
               )
             ) {
               throw new Error(
-                "Explore transport-unavailable contract is invalid",
+                "Explore unavailable market-read contract is invalid",
               );
             }
             tokenAddress = highestTokens.find((token) =>
@@ -1480,7 +1508,9 @@ jobs:
           }
           const smokeStatus = marketReadStatus === "current"
             ? "verified-staged-drpc-bitquery-public-apis"
-            : "verified-staged-drpc-launches-bitquery-transport-unavailable";
+            : marketReadStatus === "transport-unavailable"
+              ? "verified-staged-drpc-launches-bitquery-transport-unavailable"
+              : "verified-staged-drpc-launches-bitquery-response-unavailable";
           const githubOutput = process.env.GITHUB_OUTPUT;
           if (!githubOutput) {
             throw new Error("GitHub output path is unavailable");
