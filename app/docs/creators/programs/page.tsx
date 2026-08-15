@@ -1,21 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
-import styles from "@/components/docs-hub.module.css";
 import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Creator programs · Programmable",
   description:
-    "Understand Programmable Hookathons, partnerships and contribution opportunities.",
+    "Understand Programmable partnerships and contribution opportunities.",
   alternates: { canonical: "/docs/creators/programs" },
 };
 
 const sections = [
-  { id: "hookathons", label: "Hookathons" },
   { id: "partnerships", label: "Partnerships" },
   { id: "contributions", label: "Contributions" },
   { id: "support", label: "Support" },
@@ -31,22 +28,6 @@ export default function CreatorProgramsDocsPage() {
       sections={sections}
       title="Creator programs"
     >
-      <section id="hookathons">
-        <h2>Hookathons</h2>
-        <p>
-          Programmable runs Hookathons to fund useful experiments and bring new
-          hook projects onchain. Each event publishes its own deadline, award,
-          eligibility and submission path.
-        </p>
-        <p>
-          These permanent docs do not copy the current prize or countdown.
-          Always use the event page for those details.
-        </p>
-        <p className={styles.inlineAction}>
-          <Link href="/hookathon">Open Hookathon events</Link>
-        </p>
-      </section>
-
       <section id="partnerships">
         <h2>Partnerships</h2>
         <p>

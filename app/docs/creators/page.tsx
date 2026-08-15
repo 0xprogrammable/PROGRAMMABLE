@@ -161,23 +161,11 @@ export default function CreatorsDocsPage() {
             </a>
           </li>
           <li>
-            <Link href="/hookathon">
-              <span>
-                <strong>Hookathons</strong>
-                <small>
-                  Open the event page for its deadline, award and submission
-                  instructions.
-                </small>
-              </span>
-              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
-            </Link>
-          </li>
-          <li>
             <Link href="/docs/creators/programs">
               <span>
                 <strong>Creator programs</strong>
                 <small>
-                  Understand Hookathons, partnerships and contribution work.
+                  Understand partnerships and contribution work.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />

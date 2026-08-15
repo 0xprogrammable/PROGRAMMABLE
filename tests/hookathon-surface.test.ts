@@ -1,13 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { generateMetadata } from "@/app/hookathon/page";
+import HookathonRoute, { metadata } from "@/app/hookathon/page";
 import { HookathonPage } from "@/components/hookathon-page";
 import { hookathonConfig } from "@/lib/hookathon/config";
 
 const confirmation = Date.parse(hookathonConfig.confirmationIso);
 const deadline = Date.parse(hookathonConfig.deadlineIso);
+const root = process.cwd();
 
 function renderHookathon(initialNowMs: number) {
   return renderToStaticMarkup(
@@ -18,10 +21,6 @@ function renderHookathon(initialNowMs: number) {
 }
 
 describe("Hookathon surface", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it("renders the complete compact running state from one config", () => {
     const html = renderHookathon(confirmation);
 
@@ -69,41 +68,28 @@ describe("Hookathon surface", () => {
     expect(html).not.toContain("Copy builder prompt");
   });
 
-  it("keeps the local draft canonical but out of search indexes", () => {
-    vi.stubEnv("VERCEL_ENV", undefined);
-    expect(generateMetadata().robots).toMatchObject({
-      index: false,
-      follow: false,
-      noarchive: true,
-    });
-
-    vi.stubEnv("VERCEL_ENV", "preview");
-    vi.stubEnv("NODE_ENV", "production");
-    const metadata = generateMetadata();
-
-    expect(metadata.alternates).toEqual({ canonical: "/hookathon" });
+  it("keeps the retired route out of navigation and search indexes", () => {
     expect(metadata.robots).toMatchObject({
       index: false,
       follow: false,
       noarchive: true,
-      googleBot: {
-        index: false,
-        follow: false,
-        noimageindex: true,
-      },
     });
-    expect(metadata.openGraph).toBeNull();
-    expect(metadata.twitter).toBeNull();
+    expect(() => HookathonRoute()).toThrow("NEXT_HTTP_ERROR_FALLBACK;404");
   });
 
-  it("allows indexing only for the explicit production release", () => {
-    vi.stubEnv("VERCEL_ENV", "production");
-    vi.stubEnv("NODE_ENV", "test");
-    const metadata = generateMetadata();
+  it("removes every public Hookathon entry point", () => {
+    const publicSurfaces = [
+      "components/site-navigation.tsx",
+      "app/docs/creators/page.tsx",
+      "app/docs/creators/programs/page.tsx",
+      "components/docs-data.ts",
+      "docs/public/SUMMARY.md",
+      "docs/public/creators/programs.md",
+    ];
 
-    expect(metadata.robots).toEqual({ index: true, follow: true });
-    expect(metadata.alternates).toEqual({ canonical: "/hookathon" });
-    expect(metadata.openGraph).toBeNull();
-    expect(metadata.twitter).toBeNull();
+    for (const path of publicSurfaces) {
+      const source = readFileSync(join(root, path), "utf8");
+      expect(source, path).not.toMatch(/hookathons?|\/hookathon/i);
+    }
   });
 });
