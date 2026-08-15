@@ -199,6 +199,24 @@ const transportUnavailableMarketPayload = {
   },
 } as const;
 
+const responseUnavailableMarketPayload = {
+  ...unvaluedMarketPayload,
+  dataQuality: unavailableMarketDataQuality,
+  marketRead: {
+    provider: "bitquery",
+    status: "unavailable",
+    category: "response",
+    phase: "market-core",
+    reason: "http-status",
+    httpStatus: 402,
+  },
+  ranking: {
+    status: "unavailable",
+    requested: "fdv",
+    applied: "launch-order",
+  },
+} as const;
+
 function modelCompatibilityMarketData() {
   return {
     schemaVersion: "programmable.market-data.v1" as const,
@@ -1038,6 +1056,82 @@ describe("Explore refresh state", () => {
       marketRead: { status: "unavailable" },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns an honest HTTP 402 response-unavailable page without retrying or caching it", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(JSON.stringify(responseUnavailableMarketPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "response-unavailable",
+        },
+      }),
+    );
+    const search = new URLSearchParams({
+      sort: "market-cap",
+      page: "1",
+      limit: "9",
+    });
+
+    const result = await loadExplorePayload(
+      "marked-market-http-402-response-unavailable",
+      search,
+    );
+
+    expect(result).toMatchObject({
+      marketRead: {
+        provider: "bitquery",
+        status: "unavailable",
+        category: "response",
+        phase: "market-core",
+        reason: "http-status",
+        httpStatus: 402,
+      },
+      ranking: {
+        status: "unavailable",
+        requested: "fdv",
+        applied: "launch-order",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getTokenCards(result.tokens)).toEqual([
+      expect.objectContaining({
+        valuation: undefined,
+        marketStatus: "Unavailable",
+      }),
+    ]);
+
+    await expect(loadExplorePayload(
+      "marked-market-http-402-response-unavailable",
+      search,
+    )).resolves.toMatchObject({
+      marketRead: {
+        status: "unavailable",
+        category: "response",
+        reason: "http-status",
+        httpStatus: 402,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects an HTTP 402 marker without its exact response-unavailable header", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(responseUnavailableMarketPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "transport-unavailable",
+        },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      "mismatched-market-http-402-response-unavailable",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("inconsistent market read data");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not surface a market availability banner", () => {

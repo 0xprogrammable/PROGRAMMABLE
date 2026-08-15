@@ -279,20 +279,41 @@ function generatedAgeMs(generatedAt: string): number | null {
   return Number.isFinite(value) ? Math.max(0, Date.now() - value) : null;
 }
 
-function isFailSoftMarketTransportFailure(
+type FailSoftMarketReadFailure =
+  | BitqueryMarketDataError & Readonly<{
+      category: "transport";
+      phase: "market-core" | "market-liquidity" | "market-price";
+    }>
+  | BitqueryMarketDataError & Readonly<{
+      category: "response";
+      phase: "market-core" | "market-liquidity" | "market-price";
+      reason: "http-status";
+      httpStatus: 402;
+    }>;
+
+function isFailSoftMarketReadFailure(
   error: unknown,
   signal: AbortSignal,
   identityEntryCount: number,
   marketIdentityCount: number,
-): error is BitqueryMarketDataError {
+): error is FailSoftMarketReadFailure {
   return identityEntryCount > 0 &&
     marketIdentityCount > 0 &&
     !signal.aborted &&
     error instanceof BitqueryMarketDataError &&
-    error.category === "transport" &&
+    (error.category === "transport" ||
+      (error.category === "response" &&
+        error.reason === "http-status" &&
+        error.httpStatus === 402)) &&
     (error.phase === "market-core" ||
       error.phase === "market-liquidity" ||
       error.phase === "market-price");
+}
+
+function unavailableMarketReadStatus(error: FailSoftMarketReadFailure) {
+  return error.category === "transport"
+    ? "transport-unavailable" as const
+    : "response-unavailable" as const;
 }
 
 export async function GET(request: NextRequest) {
@@ -325,7 +346,7 @@ export async function GET(request: NextRequest) {
     });
     const identityEntries = dedupeExploreEntriesV1(launches.entries);
     const now = new Date();
-    let marketTransportFailure: BitqueryMarketDataError | null = null;
+    let marketReadFailure: FailSoftMarketReadFailure | null = null;
     let paginated: ReturnType<typeof paginateExploreEntriesV1>;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
       const filtered = filterExploreEntries(
@@ -341,16 +362,16 @@ export async function GET(request: NextRequest) {
           { signal: request.signal },
         );
       } catch (error) {
-        if (!isFailSoftMarketTransportFailure(
+        if (!isFailSoftMarketReadFailure(
           error,
           request.signal,
           identityEntries.length,
           marketIdentities.length,
         )) throw error;
-        console.error("Explore market transport unavailable", {
+        console.error("Explore market read unavailable", {
           market: safeBitqueryMarketDataError(error),
         });
-        marketTransportFailure = error;
+        marketReadFailure = error;
         marketByToken = new Map();
       }
       const valued = filtered.map((entry): ValuedExploreEntry => {
@@ -381,16 +402,16 @@ export async function GET(request: NextRequest) {
           { signal: request.signal, includeStats: false },
         );
       } catch (error) {
-        if (!isFailSoftMarketTransportFailure(
+        if (!isFailSoftMarketReadFailure(
           error,
           request.signal,
           identityEntries.length,
           marketIdentities.length,
         )) throw error;
-        console.error("Explore market transport unavailable", {
+        console.error("Explore market read unavailable", {
           market: safeBitqueryMarketDataError(error),
         });
-        marketTransportFailure = error;
+        marketReadFailure = error;
         marketByToken = new Map();
       }
       const valued = identityPage.tokens.map((entry): ValuedExploreEntry => {
@@ -401,7 +422,7 @@ export async function GET(request: NextRequest) {
         if (
           marketIsRequired &&
           marketData === undefined &&
-          marketTransportFailure === null
+          marketReadFailure === null
         ) {
           throw new Error("Bitquery market response is incomplete");
         }
@@ -440,17 +461,23 @@ export async function GET(request: NextRequest) {
         sortMetric: "fdv" as const,
         dataQuality,
         snapshot: null,
-        ...(marketTransportFailure === null
+        ...(marketReadFailure === null
           ? {}
           : {
               marketRead: {
                 provider: "bitquery" as const,
                 status: "unavailable" as const,
-                category: "transport" as const,
-                phase: marketTransportFailure.phase,
+                category: marketReadFailure.category,
+                phase: marketReadFailure.phase,
+                ...(marketReadFailure.category === "response"
+                  ? {
+                      reason: "http-status" as const,
+                      httpStatus: 402 as const,
+                    }
+                  : {}),
               },
             }),
-        ...(marketTransportFailure !== null &&
+        ...(marketReadFailure !== null &&
             (options.sort === "market-cap" ||
               options.sort === "market-cap-asc")
           ? {
@@ -464,26 +491,26 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": marketTransportFailure === null
+          "Cache-Control": marketReadFailure === null
             ? "public, max-age=0, s-maxage=2"
             : "no-store",
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Launch-Source": "drpc",
-          "X-Programmable-Read-Source": marketTransportFailure === null
+          "X-Programmable-Read-Source": marketReadFailure === null
             ? "drpc+bitquery"
             : "drpc",
           "X-Programmable-Market-Read-Status":
-            marketTransportFailure === null
+            marketReadFailure === null
               ? "current"
-              : "transport-unavailable",
+              : unavailableMarketReadStatus(marketReadFailure),
           "X-Programmable-Market-Provider": "bitquery",
-          ...(marketTransportFailure === null
+          ...(marketReadFailure === null
             ? {
                 "X-Programmable-Market-Source": "bitquery",
                 "X-Programmable-Price-Source": "bitquery",
               }
             : {}),
-          ...(marketTransportFailure === null &&
+          ...(marketReadFailure === null &&
               dataQuality.valuation.asOfTime
             ? { "X-Programmable-Market-As-Of": dataQuality.valuation.asOfTime }
             : {}),
