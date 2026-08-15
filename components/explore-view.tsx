@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  SlidersHorizontal,
   X as CloseIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,7 +18,10 @@ import {
 } from "@/components/animated-market-cap";
 import { XBrandIcon } from "@/components/brand-icons";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
-import { useInterfacePreview } from "@/components/interface-preview";
+import {
+  isInterfacePreviewHost,
+  useInterfacePreview,
+} from "@/components/interface-preview";
 import { SiteFooter } from "@/components/site-footer";
 import {
   LIVE_DATA_REFRESH_INTERVAL_MS,
@@ -58,6 +60,7 @@ import styles from "./explore-experience.module.css";
 type TokenCard = {
   id: string;
   name: string;
+  symbol: string;
   description?: string;
   imageUrl: string;
   links: readonly TokenLink[];
@@ -1446,6 +1449,7 @@ export function getTokenCards(
     return {
       id: token.id,
       name: token.name,
+      symbol: token.symbol?.trim() ?? "",
       description: exploreTokenCardDescription(token),
       imageUrl:
         token.imageUrl?.trim() ||
@@ -1626,7 +1630,14 @@ export function ExploreView({
   }, []);
 
   useEffect(() => {
-    if (preview || loadingOnly) return;
+    if (
+      preview ||
+      loadingOnly ||
+      (typeof window !== "undefined" &&
+        isInterfacePreviewHost(window.location.hostname))
+    ) {
+      return;
+    }
 
     if (handledRequestKey.current === requestKey) {
       activeExploreContentKey.current = activeRequestContentKey;
@@ -1784,7 +1795,6 @@ export function ExploreView({
   );
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
-  const paginationItems = getExplorePaginationItems(activePage, pageCount);
   const resultLabel =
     displayState.phase === "error" ? "" : resultRangeLabel(payload);
   const dataQualityMessage = exploreDataQualityMessage(payload?.dataQuality);
@@ -1943,13 +1953,22 @@ export function ExploreView({
               <div className={styles.runnerBody}>
                 <header className={styles.runnerHeading}>
                   <h3 title={token.name}>{token.name}</h3>
+                  {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-
-                {token.description ? (
-                  <p className={styles.runnerDescription}>
-                    {token.description}
-                  </p>
-                ) : null}
+                <div className={styles.runnerData}>
+                  <span>
+                    <small>{token.valuationMetric ?? "Market cap"}</small>
+                    <strong>{valuationLabel ?? "Unavailable"}</strong>
+                  </span>
+                  {token.tokenAddress ? (
+                    <span>
+                      <small>CA</small>
+                      <strong title={token.tokenAddress}>
+                        {`${token.tokenAddress.slice(0, 6)}…${token.tokenAddress.slice(-4)}`}
+                      </strong>
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </>
           );
@@ -1973,22 +1992,6 @@ export function ExploreView({
                   <span className="sr-only">Launch type: </span>
                   {token.launchCategory}
                 </span>
-                {valuationLabel ? (
-                  <span className={styles.runnerMarketCap}>
-                    <span className="sr-only">
-                      {`${token.valuationMetric ?? "Valuation"}: `}
-                    </span>
-                    <span
-                      className={styles.runnerMarketCapLabel}
-                      aria-hidden="true"
-                    >
-                      {token.valuationMetric ?? "Value"}
-                    </span>
-                    <span className={styles.runnerMarketCapValue}>
-                      {valuationLabel}
-                    </span>
-                  </span>
-                ) : null}
                 {token.marketStatus ? (
                   <span
                     className={styles.runnerMarketStatus}
@@ -2033,7 +2036,7 @@ export function ExploreView({
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Explore Launches</h1>
+          <h1>Explore Hooks</h1>
         </header>
 
         <section
@@ -2064,7 +2067,7 @@ export function ExploreView({
                       autoComplete="off"
                       spellCheck={false}
                       value={query}
-                      placeholder="Search by name, symbol or contract address"
+                      placeholder="Search"
                       onChange={(event) => setQuery(event.target.value)}
                     />
                     {query ? (
@@ -2107,8 +2110,7 @@ export function ExploreView({
                             } active`
                       }
                     >
-                      <SlidersHorizontal aria-hidden="true" size={16} />
-                      <span>{activeSortLabel}</span>
+                      <span>Sort by</span>
                       {activeFilterCount > 0 ? (
                         <span
                           className={styles.activeFilterCount}
@@ -2132,20 +2134,71 @@ export function ExploreView({
                       <div
                         className={styles.filterGroup}
                         role="group"
-                        aria-labelledby="explore-sort-label"
+                        aria-labelledby="explore-model-label"
                       >
-                        <p
-                          className={styles.filterLabel}
-                          id="explore-sort-label"
-                        >
-                          Sort by
+                        <p className={styles.filterLabel} id="explore-model-label">
+                          Hook Type
                         </p>
-                        {sortOptions.map((option) => (
+                        {modelFilterOptions.map((option) => (
                           <button
                             key={option.id}
                             className={
-                              sort === option.id ? "active" : undefined
+                              modelFilter === option.id ? "active" : undefined
                             }
+                            type="button"
+                            aria-pressed={modelFilter === option.id}
+                            onClick={() => {
+                              setModelFilter((current) =>
+                                current === option.id ? "all" : option.id,
+                              );
+                              setCurrentPage(1);
+                            }}
+                          >
+                            <span>{option.label}</span>
+                            {modelFilter === option.id ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div
+                        className={styles.filterGroup}
+                        role="group"
+                        aria-labelledby="explore-market-cap-label"
+                      >
+                        <p className={styles.filterLabel} id="explore-market-cap-label">
+                          Market Cap
+                        </p>
+                        {sortOptions.slice(2).map((option) => (
+                          <button
+                            key={option.id}
+                            className={sort === option.id ? "active" : undefined}
+                            type="button"
+                            aria-pressed={sort === option.id}
+                            onClick={() => {
+                              setSort(option.id);
+                              setCurrentPage(1);
+                            }}
+                          >
+                            <span>{option.id === "market-cap" ? "Highest" : "Lowest"}</span>
+                            {sort === option.id ? <Check aria-hidden="true" size={15} /> : null}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div
+                        className={styles.filterGroup}
+                        role="group"
+                        aria-labelledby="explore-age-label"
+                      >
+                        <p className={styles.filterLabel} id="explore-age-label">
+                          Age
+                        </p>
+                        {sortOptions.slice(0, 2).map((option) => (
+                          <button
+                            key={option.id}
+                            className={sort === option.id ? "active" : undefined}
                             type="button"
                             aria-pressed={sort === option.id}
                             onClick={() => {
@@ -2154,9 +2207,7 @@ export function ExploreView({
                             }}
                           >
                             <span>{option.label}</span>
-                            {sort === option.id ? (
-                              <Check aria-hidden="true" size={15} />
-                            ) : null}
+                            {sort === option.id ? <Check aria-hidden="true" size={15} /> : null}
                           </button>
                         ))}
                       </div>
@@ -2195,39 +2246,6 @@ export function ExploreView({
                         ))}
                       </div>
 
-                      <div
-                        className={styles.filterGroup}
-                        role="group"
-                        aria-labelledby="explore-model-label"
-                      >
-                        <p
-                          className={styles.filterLabel}
-                          id="explore-model-label"
-                        >
-                          Model
-                        </p>
-                        {modelFilterOptions.map((option) => (
-                          <button
-                            key={option.id}
-                            className={
-                              modelFilter === option.id ? "active" : undefined
-                            }
-                            type="button"
-                            aria-pressed={modelFilter === option.id}
-                            onClick={() => {
-                              setModelFilter((current) =>
-                                current === option.id ? "all" : option.id,
-                              );
-                              setCurrentPage(1);
-                            }}
-                          >
-                            <span>{option.label}</span>
-                            {modelFilter === option.id ? (
-                              <Check aria-hidden="true" size={15} />
-                            ) : null}
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </details>
 
@@ -2252,35 +2270,9 @@ export function ExploreView({
                         <ChevronLeft aria-hidden="true" size={15} />
                       </button>
 
-                      <div className="token-pagination-pages">
-                        {paginationItems.map((item) =>
-                          typeof item === "number" ? (
-                            <button
-                              key={item}
-                              className={
-                                activePage === item ? "active" : undefined
-                              }
-                              type="button"
-                              aria-label={`Launch page ${item}`}
-                              aria-current={
-                                activePage === item ? "page" : undefined
-                              }
-                              aria-disabled={busy}
-                              disabled={busy}
-                              onClick={() => {
-                                if (busy) return;
-                                setCurrentPage(item);
-                              }}
-                            >
-                              {item}
-                            </button>
-                          ) : (
-                            <span key={item} aria-hidden="true">
-                              …
-                            </span>
-                          ),
-                        )}
-                      </div>
+                      <span className="token-pagination-pages" aria-live="polite">
+                        {activePage} / {pageCount}
+                      </span>
 
                       <button
                         type="button"

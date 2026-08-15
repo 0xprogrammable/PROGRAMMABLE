@@ -120,7 +120,8 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(source).toContain("const TWINKLE_COUNT = 36");
+    expect(source).toContain("const TWINKLE_COUNT = 72");
+    expect(source).toContain("const LOWER_TWINKLE_COUNT = 24");
     expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toMatch(
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
@@ -174,7 +175,7 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("removes landing chrome while keeping its supporting links accessible", () => {
+  it("keeps the shared landing navigation and supporting links accessible", () => {
     const source = readFileSync(
       join(root, "components/site-navigation.tsx"),
       "utf8",
@@ -188,17 +189,14 @@ describe("interaction accessibility", () => {
       "utf8",
     );
 
-    expect(source).toContain('if (pathname === "/") return null;');
-    expect(landing).toContain('aria-label="Programmable links"');
-    expect(landing).toContain('aria-label="Programmable on X"');
-    expect(landing).toContain('aria-label="Programmable on GitHub"');
-    expect(landing).toContain('aria-label="Programmable on Discord"');
-    expect(landing).toContain('aria-label="Programmable on Dexscreener"');
-    expect(landing).toMatch(/>\s*Docs\s*</);
-    expect(css).toMatch(
-      /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
-    );
-    expect(css).toMatch(/\.docsLink\s*\{[^}]*min-height:\s*44px;/s);
+    expect(source).not.toContain('if (pathname === "/") return null;');
+    expect(source).toContain('aria-label="Programmable on X"');
+    expect(source).toContain('aria-label="Programmable on GitHub"');
+    expect(source).toContain('aria-label="Programmable on Discord"');
+    expect(source).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing).toContain('href="#what-is-programmable"');
+    expect(landing).toContain('href="/docs"');
+    expect(css).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);
   });
 
   it("keeps all four primary routes semantic and reflow-safe in mobile navigation", () => {

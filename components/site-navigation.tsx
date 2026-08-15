@@ -20,8 +20,8 @@ import styles from "@/components/site-navigation.module.css";
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
-  { href: "/docs", label: "Docs" },
   { href: "/profile", label: "Profile" },
+  { href: "/docs", label: "Docs" },
 ];
 
 const mobileNavItems = desktopNavItems;
@@ -68,8 +68,6 @@ export function SiteHeader() {
     };
   }, [menuOpen]);
 
-  if (pathname === "/") return null;
-
   return (
     <header
       ref={headerRef}
@@ -80,7 +78,7 @@ export function SiteHeader() {
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
               className="wordmark-logo"
-              src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
+              src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"
               alt=""
               width={1168}
               height={1536}
@@ -210,8 +208,6 @@ export function MobileNavigation({
   onNavigate,
 }: MobileNavigationProps = {}) {
   const pathname = usePathname();
-
-  if (pathname === "/") return null;
 
   // AppShell retains this export for compatibility. The responsive navigation
   // is rendered inside SiteHeader so its visual and keyboard order stay at the

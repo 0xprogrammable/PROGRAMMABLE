@@ -20,6 +20,13 @@ const safeAvatarDataUrlPattern =
 export type LocalProfile = {
   username: string;
   avatarDataUrl: string;
+  bannerDataUrl?: string;
+  bannerPositionX?: number;
+  bannerPositionY?: number;
+  bio?: string;
+  xUrl?: string;
+  websiteUrl?: string;
+  githubUrl?: string;
 };
 
 type ProfileStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
@@ -30,9 +37,16 @@ type AvatarFileMetadata = {
 };
 
 type StoredProfile = {
-  version: 1;
+  version: 1 | 2;
   username: string;
   avatarDataUrl: string;
+  bannerDataUrl?: string;
+  bannerPositionX?: number;
+  bannerPositionY?: number;
+  bio?: string;
+  xUrl?: string;
+  websiteUrl?: string;
+  githubUrl?: string;
 };
 
 export const EMPTY_LOCAL_PROFILE: Readonly<LocalProfile> = Object.freeze({
@@ -115,7 +129,9 @@ export function parseLocalProfile(value: string | null): LocalProfile {
 
   try {
     const stored = JSON.parse(value) as Partial<StoredProfile>;
-    if (stored.version !== 1) return { ...EMPTY_LOCAL_PROFILE };
+    if (stored.version !== 1 && stored.version !== 2) {
+      return { ...EMPTY_LOCAL_PROFILE };
+    }
 
     const username =
       typeof stored.username === "string"
@@ -127,9 +143,33 @@ export function parseLocalProfile(value: string | null): LocalProfile {
         ? stored.avatarDataUrl
         : "";
 
-    return {
+    const baseProfile: LocalProfile = {
       username: getProfileUsernameError(username) ? "" : username,
       avatarDataUrl,
+    };
+    if (stored.version === 1) return baseProfile;
+
+    const bannerDataUrl =
+      typeof stored.bannerDataUrl === "string" &&
+      isSafeAvatarDataUrl(stored.bannerDataUrl)
+        ? stored.bannerDataUrl
+        : "";
+    const position = (value: unknown) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.max(0, Math.min(100, value))
+        : 50;
+    const text = (value: unknown, maximum: number) =>
+      typeof value === "string" ? value.trim().slice(0, maximum) : "";
+
+    return {
+      ...baseProfile,
+      bannerDataUrl,
+      bannerPositionX: position(stored.bannerPositionX),
+      bannerPositionY: position(stored.bannerPositionY),
+      bio: text(stored.bio, 240),
+      xUrl: text(stored.xUrl, 200),
+      websiteUrl: text(stored.websiteUrl, 200),
+      githubUrl: text(stored.githubUrl, 200),
     };
   } catch {
     return { ...EMPTY_LOCAL_PROFILE };
@@ -159,17 +199,46 @@ export function writeLocalProfile(
     throw new Error("The prepared image is not safe to store");
   }
 
+  if (!isSafeAvatarDataUrl(profile.bannerDataUrl ?? "")) {
+    throw new Error("The prepared banner is not safe to store");
+  }
+
   const key = getProfileStorageKey(address);
 
-  if (!username && !profile.avatarDataUrl) {
+  const hasExtendedProfile = Boolean(
+    profile.bannerDataUrl ||
+      profile.bio ||
+      profile.xUrl ||
+      profile.websiteUrl ||
+      profile.githubUrl,
+  );
+
+  if (!username && !profile.avatarDataUrl && !hasExtendedProfile) {
     storage.removeItem(key);
     return;
   }
 
   const storedProfile: StoredProfile = {
-    version: 1,
+    version: hasExtendedProfile ? 2 : 1,
     username,
     avatarDataUrl: profile.avatarDataUrl,
+    ...(hasExtendedProfile
+      ? {
+          bannerDataUrl: profile.bannerDataUrl ?? "",
+          bannerPositionX: Math.max(
+            0,
+            Math.min(100, profile.bannerPositionX ?? 50),
+          ),
+          bannerPositionY: Math.max(
+            0,
+            Math.min(100, profile.bannerPositionY ?? 50),
+          ),
+          bio: (profile.bio ?? "").trim().slice(0, 240),
+          xUrl: (profile.xUrl ?? "").trim().slice(0, 200),
+          websiteUrl: (profile.websiteUrl ?? "").trim().slice(0, 200),
+          githubUrl: (profile.githubUrl ?? "").trim().slice(0, 200),
+        }
+      : {}),
   };
 
   storage.setItem(key, JSON.stringify(storedProfile));

@@ -5,6 +5,7 @@ import {
 } from "./local-profile";
 
 const avatarOutputSize = 512;
+const bannerMaximumDimension = 1800;
 
 function loadImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -58,6 +59,43 @@ export async function prepareAvatarImage(file: File) {
       throw new Error("The prepared image is too large to store");
     }
 
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+export async function prepareProfileBannerImage(file: File) {
+  const fileError = getAvatarFileError(file);
+  if (fileError) throw new Error(fileError);
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(objectUrl);
+    const dimensionsError = getAvatarDimensionsError(
+      image.naturalWidth,
+      image.naturalHeight,
+    );
+    if (dimensionsError) throw new Error(dimensionsError);
+
+    const scale = Math.min(
+      1,
+      bannerMaximumDimension /
+        Math.max(image.naturalWidth, image.naturalHeight),
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("The image could not be prepared");
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/webp", 0.82);
+    if (!isSafeAvatarDataUrl(dataUrl)) {
+      throw new Error("The prepared banner is too large to store");
+    }
     return dataUrl;
   } finally {
     URL.revokeObjectURL(objectUrl);

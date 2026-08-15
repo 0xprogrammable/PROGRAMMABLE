@@ -33,7 +33,7 @@ describe("Explore UI contract", () => {
       "useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)",
     );
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
-    expect(source).toContain("<h1>Explore Launches</h1>");
+    expect(source).toContain("<h1>Explore Hooks</h1>");
     expect(source).not.toContain("ExploreGridSkeleton");
     expect(source).toContain('className={styles.loadingState} aria-busy="true"');
   });
@@ -44,9 +44,10 @@ describe("Explore UI contract", () => {
       "utf8",
     );
 
-    expect(source).toContain('id="explore-sort-label"');
-    expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('id="explore-model-label"');
+    expect(source).toContain('id="explore-market-cap-label"');
+    expect(source).toContain('id="explore-age-label"');
+    expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
     expect(source).toContain(
       '{ id: "custom-hook", label: "Custom" }',
@@ -54,7 +55,16 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       'Number(socialFilter !== "all") + Number(modelFilter !== "all")',
     );
-    expect(source).toContain("<span>{activeSortLabel}</span>");
+    expect(source).toContain("<span>Sort by</span>");
+    expect(source.indexOf('id="explore-model-label"')).toBeLessThan(
+      source.indexOf('id="explore-market-cap-label"'),
+    );
+    expect(source.indexOf('id="explore-market-cap-label"')).toBeLessThan(
+      source.indexOf('id="explore-age-label"'),
+    );
+    expect(source.indexOf('id="explore-age-label"')).toBeLessThan(
+      source.indexOf('id="explore-socials-label"'),
+    );
     expect(source).toContain(
       'useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)',
     );

@@ -1,0 +1,253 @@
+:root {
+  --webde-canvas: #000;
+  --webde-surface: #181818;
+  --webde-surface-raised: #202020;
+  --webde-control: #242424;
+  --webde-line: #323232;
+  --webde-ink: #fff;
+  --webde-muted: #b7b7b3;
+  --webde-dim: #858582;
+  --webde-page: 80rem;
+  --webde-radius-card: 16px;
+  --webde-radius-control: 8px;
+  --webde-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+html,
+body {
+  background: var(--webde-canvas);
+  color: var(--webde-ink);
+}
+
+body {
+  cursor: default;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-instrument), Arial, sans-serif;
+}
+
+.app-frame,
+.app-frame::before {
+  background: transparent !important;
+}
+
+.page-width {
+  max-width: var(--webde-page);
+  width: min(calc(100% - 5rem), var(--webde-page));
+}
+
+.atmosphere-backdrop {
+  background: var(--webde-canvas);
+}
+
+.atmosphere-ground-glow,
+.atmosphere-botanicals,
+.atmosphere-veil {
+  display: none;
+}
+
+.atmosphere-stars-primary,
+.atmosphere-stars-secondary {
+  opacity: 0.48;
+}
+
+.atmosphere-sparkles i {
+  background: #fff;
+  box-shadow: 0 0 3px rgb(255 255 255 / 0.58);
+  opacity: 0.08;
+}
+
+.site-header,
+body:has([data-docs-shell]) .site-header {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  height: 88px;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+}
+
+body:has([data-docs-shell]) .site-header::before {
+  display: none;
+}
+
+.header-inner {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  height: 88px;
+  max-width: 1440px;
+  padding-inline: 32px;
+}
+
+.wordmark,
+.header-social-link {
+  background: transparent;
+  border: 0;
+  color: var(--webde-ink);
+  height: 48px;
+  width: 48px;
+}
+
+.wordmark-logo {
+  filter: grayscale(1) brightness(0) invert(1);
+  height: 40px;
+  object-fit: contain;
+  width: 32px;
+}
+
+.desktop-nav {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  gap: 26px;
+  padding: 0;
+}
+
+.desktop-nav a,
+.desktop-nav a.active {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--webde-ink);
+  font-size: 18px;
+  font-weight: 500;
+  min-height: 48px;
+  opacity: 0.78;
+  padding: 0;
+}
+
+.desktop-nav a.active {
+  opacity: 1;
+}
+
+.desktop-nav a::after,
+.desktop-nav a.active::after {
+  display: none;
+}
+
+.header-actions {
+  gap: 10px;
+}
+
+.header-socials {
+  gap: 0;
+}
+
+.header-social-link svg,
+.header-social-link img {
+  color: var(--webde-ink);
+  height: 22px;
+  opacity: 0.9;
+  width: 22px;
+}
+
+.header-social-logo {
+  filter: grayscale(1) contrast(12) brightness(1.25);
+  opacity: 0.9;
+}
+
+.header-actions .wallet-button,
+.header-actions .wallet-button.liquid-glass-control {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--webde-ink);
+  font-size: 14px;
+  font-weight: 600;
+  height: 48px;
+  min-height: 48px;
+  opacity: 1;
+  padding: 0 0 0 8px;
+}
+
+.wallet-menu {
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  background: rgb(24 24 24 / 0.98);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 0.55);
+  color: var(--webde-ink);
+}
+
+.wallet-menu-account span,
+.wallet-menu > p {
+  color: var(--webde-dim);
+}
+
+.route-transition {
+  animation: webde-page-enter 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.app-frame:has(.landing-page-root) .route-transition {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+@keyframes webde-page-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wordmark:hover,
+  .desktop-nav a:hover,
+  .header-social-link:hover,
+  .header-actions .wallet-button:hover {
+    background: transparent;
+    color: var(--webde-ink);
+    filter: drop-shadow(0 0 7px rgb(255 255 255 / 0.38));
+    opacity: 1;
+  }
+
+  .wallet-menu > a:hover,
+  .wallet-menu > button:hover {
+    background: var(--webde-control);
+    color: var(--webde-ink);
+  }
+}
+
+@media (max-width: 60rem) {
+  .site-header,
+  .header-inner {
+    height: 72px;
+    min-height: 72px;
+  }
+
+  .header-inner {
+    padding-inline: 16px;
+  }
+
+  .wordmark-logo {
+    height: 34px;
+    width: 28px;
+  }
+
+  .page-width {
+    width: min(calc(100% - 2rem), var(--webde-page));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition {
+    animation-duration: 0.01ms;
+  }
+}

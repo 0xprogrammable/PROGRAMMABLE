@@ -16,13 +16,13 @@ describe("Explore interface preview", () => {
   });
 
   it("provides a complete, unique project index", () => {
-    expect(EXPLORE_PREVIEW_TOKENS).toHaveLength(6);
+    expect(EXPLORE_PREVIEW_TOKENS).toHaveLength(9);
     expect(
       new Set(EXPLORE_PREVIEW_TOKENS.map((token) => token.tokenAddress)).size,
     ).toBe(EXPLORE_PREVIEW_TOKENS.length);
 
     for (const token of EXPLORE_PREVIEW_TOKENS) {
-      expect(token.imageUrl).toMatch(/^\/brand\/.+\.webp$/);
+      expect(token.imageUrl).toMatch(/^\/brand\/.+\.(?:avif|webp)$/);
       expect(token.links).toHaveLength(3);
       expect(getExplorePreviewProject(token.tokenAddress)).toMatchObject({
         contributors: expect.any(Number),

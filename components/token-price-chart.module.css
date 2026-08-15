@@ -316,3 +316,48 @@
     transition-duration: 1ms;
   }
 }
+
+.shell {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
+}
+
+.ranges {
+  background: #111;
+  border-color: var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  box-shadow: none;
+  padding: 2px;
+}
+
+.rangeButton {
+  border-radius: 6px;
+  height: 40px;
+  min-width: 42px;
+}
+
+.rangeButton[aria-pressed="true"] {
+  background: var(--webde-control);
+}
+
+.line {
+  stroke: #fff;
+  stroke-width: 1.7;
+}
+
+.inspectionDot {
+  background: #000;
+  border-color: #fff;
+}
+
+.tooltip {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  background: rgb(24 24 24 / 0.96);
+  border-color: var(--webde-line);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 0.5);
+}

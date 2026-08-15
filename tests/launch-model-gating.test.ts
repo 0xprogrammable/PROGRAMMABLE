@@ -167,7 +167,7 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("opens the generic Custom Hook launcher only behind the public readiness gate", () => {
+  it("keeps Custom visibly deferred even when the public readiness gate is true", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         customLaunchPublicEnabled: true,
@@ -176,8 +176,7 @@ describe("unreleased launch model gating", () => {
     );
 
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
-    expect(html).toContain("<h1>Choose your launch model</h1>");
-    expect(html).not.toContain("Choose a launch model, then configure");
+    expect(html).toContain("<h1>Choose a Launch Model</h1>");
     expect(html).toContain('data-launch-model-option="classic"');
     const classicCard = html.match(
       /<button[^>]*data-launch-model-option="classic"[^>]*>/,
@@ -190,23 +189,22 @@ describe("unreleased launch model gating", () => {
     const customCard = html.match(
       /<button[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
-    expect(customCard).toContain('data-launch-model-launchable="true"');
+    expect(customCard).toContain('data-launch-model-available="false"');
+    expect(customCard).toContain('data-launch-model-launchable="false"');
+    expect(customCard).toContain("disabled");
     expect(html).toContain(
-      'id="launch-model-custom-title">Custom Hook</strong>',
+      'id="launch-model-custom-title">Custom</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain("Open approved Custom Hook launch");
-    expect(html).toContain('data-status="available">Available</small>');
-    expect(html).not.toContain(">Ready</small>");
-    expect(html).not.toContain("Build or resume");
-    expect(html).not.toContain("Coming soon");
+    expect(html).toContain('data-status="pending">Soon</small>');
+    expect(html).toContain("Custom launch models are coming soon.");
+    expect(html).not.toContain("Open approved Custom Hook launch");
     for (const marker of removedPartnerMarkers) {
       expect(html).not.toContain(marker);
     }
     // Next/Image may emit the source as an encoded optimizer URL. Assert the
     // asset identity without coupling this contract to that transport detail.
-    expect(html).toContain("classic-botanical-v4.webp");
-    expect(html).toContain("custom-galaxy-v3.webp");
+    expect(html.match(/programmable-floral-hooks-v1\.avif/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");
@@ -219,7 +217,7 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("keeps Custom Hook visible without implying that a closed launch is available", () => {
+  it("keeps Custom visible and non-interactive while it is marked Soon", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
@@ -228,13 +226,11 @@ describe("unreleased launch model gating", () => {
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
     expect(html).toContain('data-launch-model-option="custom"');
     expect(html).toContain('id="launch-model-custom-title"');
-    expect(html).toContain('href="/docs/models/custom"');
     expect(html).toContain('data-launch-model-available="false"');
     expect(html).toContain('data-launch-model-launchable="false"');
-    expect(html).toContain("Review required");
-    expect(html).toContain("View Custom Hook requirements");
+    expect(html).toContain('data-status="pending">Soon</small>');
+    expect(html).toContain("Custom launch models are coming soon.");
     expect(html).not.toContain("Open approved Custom Hook launch");
-    expect(html).not.toContain("Coming soon");
     expect(html).not.toContain("Build or resume");
   });
 

@@ -75,16 +75,16 @@ describe("Programmable branding assets", () => {
 
   it("uses the compact, transparent loop asset without enlarging the header hit box", () => {
     const navigation = read("components/site-navigation.tsx");
-    const css = read("app/interface.css");
+    const css = read("app/webde-final-ui.css");
 
     expect(navigation).toContain(
-      'src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"',
+      'src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"',
     );
     expect(css).toMatch(
-      /\.wordmark-logo\s*{[^}]*height: 30px;[^}]*width: auto;/s,
+      /\.wordmark-logo\s*{[^}]*height: 40px;[^}]*width: 32px;/s,
     );
     expect(css).toMatch(
-      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 44px;[^}]*width: 44px;/s,
+      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 48px;[^}]*width: 48px;/s,
     );
   });
 

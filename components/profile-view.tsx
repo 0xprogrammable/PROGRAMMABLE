@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Globe2, X } from "lucide-react";
 import { formatUnits, parseUnits, type Hex } from "viem";
 import {
   useCallback,
@@ -21,7 +21,11 @@ import {
 import { useWallet } from "@/components/wallet-provider";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
-import { prepareAvatarImage } from "@/lib/profile/avatar";
+import {
+  prepareAvatarImage,
+  prepareProfileBannerImage,
+} from "@/lib/profile/avatar";
+import { GitHubBrandIcon, XBrandIcon } from "@/components/brand-icons";
 import {
   ClassicV3ProfileReadError,
   EMPTY_CLASSIC_V3_PROFILE,
@@ -428,6 +432,40 @@ const ethereumBytes32Pattern = /^0x[0-9a-f]{64}$/;
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
+}
+
+type ProfileLinkKind = "x" | "website" | "github";
+
+function resolveProfileLink(value: string, kind: ProfileLinkKind) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const withoutAt = trimmed.replace(/^@/, "");
+  const candidate = /^https?:\/\//iu.test(trimmed)
+    ? trimmed
+    : kind === "x"
+      ? `https://x.com/${withoutAt}`
+      : kind === "github"
+        ? `https://github.com/${withoutAt}`
+        : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    if (
+      (url.protocol !== "https:" && url.protocol !== "http:") ||
+      url.username ||
+      url.password ||
+      !url.hostname
+    ) {
+      return null;
+    }
+    const label =
+      kind === "website"
+        ? url.hostname.replace(/^www\./iu, "")
+        : url.pathname.split("/").filter(Boolean)[0] ?? url.hostname;
+    return { href: url.toString(), label };
+  } catch {
+    return null;
+  }
 }
 
 function getFallbackTokenImage(address: string) {
@@ -1067,6 +1105,14 @@ export function withoutClosedDeepProfileData(
 export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const { wallet, openWallet, sendTransaction, connecting } = useWallet();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const bannerDragRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const account = wallet?.account;
   const activeAccountRef = useRef(account);
   const transactionPollControllersRef = useRef<Set<AbortController>>(
@@ -1086,8 +1132,18 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const [editingAccount, setEditingAccount] = useState("");
   const [usernameDraft, setUsernameDraft] = useState("");
   const [avatarDraft, setAvatarDraft] = useState("");
+  const [bannerDraft, setBannerDraft] = useState("");
+  const [bannerPositionDraft, setBannerPositionDraft] = useState({
+    x: 50,
+    y: 50,
+  });
+  const [bioDraft, setBioDraft] = useState("");
+  const [xUrlDraft, setXUrlDraft] = useState("");
+  const [websiteUrlDraft, setWebsiteUrlDraft] = useState("");
+  const [githubUrlDraft, setGithubUrlDraft] = useState("");
   const [usernameError, setUsernameError] = useState("");
   const [avatarError, setAvatarError] = useState("");
+  const [bannerError, setBannerError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [preparingImage, setPreparingImage] = useState(false);
   const [remoteOnchainData, setRemoteOnchainData] =
@@ -1471,8 +1527,18 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   function beginEditingProfile() {
     setUsernameDraft(savedProfile.username);
     setAvatarDraft(savedProfile.avatarDataUrl);
+    setBannerDraft(savedProfile.bannerDataUrl ?? "");
+    setBannerPositionDraft({
+      x: savedProfile.bannerPositionX ?? 50,
+      y: savedProfile.bannerPositionY ?? 50,
+    });
+    setBioDraft(savedProfile.bio ?? "");
+    setXUrlDraft(savedProfile.xUrl ?? "");
+    setWebsiteUrlDraft(savedProfile.websiteUrl ?? "");
+    setGithubUrlDraft(savedProfile.githubUrl ?? "");
     setUsernameError("");
     setAvatarError("");
+    setBannerError("");
     setSaveError("");
     setEditingAccount(account?.toLowerCase() ?? "");
   }
@@ -1480,8 +1546,18 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   function cancelEditingProfile() {
     setUsernameDraft(savedProfile.username);
     setAvatarDraft(savedProfile.avatarDataUrl);
+    setBannerDraft(savedProfile.bannerDataUrl ?? "");
+    setBannerPositionDraft({
+      x: savedProfile.bannerPositionX ?? 50,
+      y: savedProfile.bannerPositionY ?? 50,
+    });
+    setBioDraft(savedProfile.bio ?? "");
+    setXUrlDraft(savedProfile.xUrl ?? "");
+    setWebsiteUrlDraft(savedProfile.websiteUrl ?? "");
+    setGithubUrlDraft(savedProfile.githubUrl ?? "");
     setUsernameError("");
     setAvatarError("");
+    setBannerError("");
     setSaveError("");
     setEditingAccount("");
   }
@@ -1501,6 +1577,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     const nextProfile = {
       username: nextUsername,
       avatarDataUrl: avatarDraft,
+      bannerDataUrl: bannerDraft,
+      bannerPositionX: bannerPositionDraft.x,
+      bannerPositionY: bannerPositionDraft.y,
+      bio: bioDraft.trim().slice(0, 240),
+      xUrl: xUrlDraft.trim(),
+      websiteUrl: websiteUrlDraft.trim(),
+      githubUrl: githubUrlDraft.trim(),
     };
 
     try {
@@ -1513,6 +1596,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     setUsernameDraft(nextUsername);
     setUsernameError("");
     setAvatarError("");
+    setBannerError("");
     setSaveError("");
     setEditingAccount("");
     window.dispatchEvent(
@@ -1544,6 +1628,76 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       );
     } finally {
       setPreparingImage(false);
+    }
+  }
+
+  async function prepareBanner(file: File | undefined) {
+    if (!file) return;
+    setPreparingImage(true);
+    setBannerError("");
+    setSaveError("");
+    try {
+      setBannerDraft(await prepareProfileBannerImage(file));
+      setBannerPositionDraft({ x: 50, y: 50 });
+    } catch (caught) {
+      setBannerError(
+        caught instanceof Error
+          ? caught.message
+          : "The banner could not be prepared",
+      );
+    } finally {
+      setPreparingImage(false);
+    }
+  }
+
+  async function selectBanner(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    await prepareBanner(file);
+  }
+
+  function startBannerDrag(event: PointerEvent<HTMLDivElement>) {
+    if (!editingProfile || !bannerDraft) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    bannerDragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: bannerPositionDraft.x,
+      startY: bannerPositionDraft.y,
+    };
+  }
+
+  function moveBannerDrag(event: PointerEvent<HTMLDivElement>) {
+    const drag = bannerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    setBannerPositionDraft({
+      x: Math.max(
+        0,
+        Math.min(
+          100,
+          drag.startX -
+            ((event.clientX - drag.startClientX) / bounds.width) * 100,
+        ),
+      ),
+      y: Math.max(
+        0,
+        Math.min(
+          100,
+          drag.startY -
+            ((event.clientY - drag.startClientY) / bounds.height) * 100,
+        ),
+      ),
+    });
+  }
+
+  function stopBannerDrag(event: PointerEvent<HTMLDivElement>) {
+    if (bannerDragRef.current?.pointerId !== event.pointerId) return;
+    bannerDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
 
@@ -2537,6 +2691,35 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     ? savedProfile.username || "Profile"
     : "Profile";
   const avatarImage = editingProfile ? avatarDraft : savedProfile.avatarDataUrl;
+  const bannerImage = editingProfile
+    ? bannerDraft
+    : (savedProfile.bannerDataUrl ?? "");
+  const bannerPosition = editingProfile
+    ? bannerPositionDraft
+    : {
+        x: savedProfile.bannerPositionX ?? 50,
+        y: savedProfile.bannerPositionY ?? 50,
+      };
+  const visibleProfileLinks = [
+    {
+      kind: "x" as const,
+      value: savedProfile.xUrl ?? "",
+      icon: <XBrandIcon aria-hidden="true" />,
+    },
+    {
+      kind: "website" as const,
+      value: savedProfile.websiteUrl ?? "",
+      icon: <Globe2 aria-hidden="true" />,
+    },
+    {
+      kind: "github" as const,
+      value: savedProfile.githubUrl ?? "",
+      icon: <GitHubBrandIcon aria-hidden="true" />,
+    },
+  ].flatMap((link) => {
+    const resolved = resolveProfileLink(link.value, link.kind);
+    return resolved ? [{ ...link, ...resolved }] : [];
+  });
   const avatarFallback = account
     ? (savedProfile.username || account.slice(2, 4)).slice(0, 2).toUpperCase()
     : "P";
@@ -2609,6 +2792,64 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           editingProfile ? styles.heroEditing : ""
         }`}
       >
+        <div
+          className={`${styles.profileBanner} ${
+            editingProfile ? styles.profileBannerEditing : ""
+          }`}
+          onPointerDown={startBannerDrag}
+          onPointerMove={moveBannerDrag}
+          onPointerUp={stopBannerDrag}
+          onPointerCancel={stopBannerDrag}
+          onDragOver={(event) => {
+            if (!editingProfile) return;
+            event.preventDefault();
+          }}
+          onDrop={(event) => {
+            if (!editingProfile) return;
+            event.preventDefault();
+            void prepareBanner(event.dataTransfer.files[0]);
+          }}
+        >
+          {bannerImage ? (
+            <Image
+              src={bannerImage}
+              alt=""
+              fill
+              sizes="(max-width: 820px) calc(100vw - 32px), 1160px"
+              style={{
+                objectFit: "cover",
+                objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
+              }}
+              unoptimized
+            />
+          ) : null}
+          {editingProfile ? (
+            <div className={styles.bannerActions}>
+              <input
+                ref={bannerInputRef}
+                hidden
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={selectBanner}
+              />
+              <button
+                className={styles.imageAction}
+                type="button"
+                disabled={preparingImage}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => bannerInputRef.current?.click()}
+              >
+                {preparingImage ? "Preparing…" : "Choose banner"}
+              </button>
+              {bannerDraft ? (
+                <span>Drag the image to choose the visible area</span>
+              ) : (
+                <span>Choose or drop an image · 3000 × 1000 recommended</span>
+              )}
+            </div>
+          ) : null}
+        </div>
+
         <div className={styles.avatar}>
           {avatarImage ? (
             <Image
@@ -2636,7 +2877,24 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               </button>
             ) : null}
           </div>
-          <p className={styles.address}>{shortenAddress(account)}</p>
+          {!editingProfile && savedProfile.bio ? (
+            <p className={styles.profileBio}>{savedProfile.bio}</p>
+          ) : null}
+          {!editingProfile && visibleProfileLinks.length ? (
+            <div className={styles.profileLinks} aria-label="Profile links">
+              {visibleProfileLinks.map((link) => (
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  key={link.kind}
+                >
+                  {link.icon}
+                  <span>{link.label}</span>
+                </a>
+              ))}
+            </div>
+          ) : null}
 
           {editingProfile ? (
             <form className={styles.editForm} onSubmit={saveProfile}>
@@ -2717,24 +2975,76 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                     </button>
                   </div>
                 </div>
+
+                <div className={styles.bioControl}>
+                  <label className={styles.fieldLabel} htmlFor="profile-bio">
+                    Bio
+                  </label>
+                  <textarea
+                    id="profile-bio"
+                    value={bioDraft}
+                    maxLength={240}
+                    rows={3}
+                    placeholder="A short introduction"
+                    onChange={(event) => {
+                      setBioDraft(event.target.value);
+                      setSaveError("");
+                    }}
+                  />
+                </div>
+
+                <div className={styles.profileLinkFields}>
+                  <label>
+                    <span className={styles.fieldLabel}>X</span>
+                    <input
+                      value={xUrlDraft}
+                      inputMode="url"
+                      placeholder="username or x.com/username"
+                      onChange={(event) => setXUrlDraft(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span className={styles.fieldLabel}>Website</span>
+                    <input
+                      value={websiteUrlDraft}
+                      inputMode="url"
+                      placeholder="domain.com"
+                      onChange={(event) =>
+                        setWebsiteUrlDraft(event.target.value)
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span className={styles.fieldLabel}>GitHub</span>
+                    <input
+                      value={githubUrlDraft}
+                      inputMode="url"
+                      placeholder="username or github.com/username"
+                      onChange={(event) =>
+                        setGithubUrlDraft(event.target.value)
+                      }
+                    />
+                  </label>
+                </div>
               </div>
               <p
                 id="profile-username-help"
                 className={`${styles.formHelp} ${
-                  usernameError || avatarError || saveError
+                  usernameError || avatarError || bannerError || saveError
                     ? styles.formError
                     : ""
                 }`}
                 role={
-                  usernameError || avatarError || saveError
+                  usernameError || avatarError || bannerError || saveError
                     ? "alert"
                     : undefined
                 }
               >
                 {usernameError ||
                   avatarError ||
+                  bannerError ||
                   saveError ||
-                  "3–12 letters or numbers · square JPG, PNG or WebP"}
+                  "3–12 letters or numbers · profile image 1000 × 1000 recommended"}
               </p>
             </form>
           ) : null}
@@ -3122,21 +3432,6 @@ function confirmedForAccount(
   );
 }
 
-function profileStockRewardConfirmed(
-  reward: StockPairedReward,
-  account: string | undefined,
-  actionStates: ProfileActionStateCollections,
-) {
-  const vault = reward.vaultAddress.toLowerCase();
-  return (
-    confirmedForAccount(actionStates.stockPaired[`${vault}:claim`], account) ||
-    confirmedForAccount(
-      actionStates.stockPaired[`${vault}:claim-as-eth`],
-      account,
-    )
-  );
-}
-
 function profileEntryOptimisticallyClaimedWei(
   entry: ProfilePortfolioEntry,
   account: string | undefined,
@@ -3504,13 +3799,7 @@ export function ProfileRouterLaunches({
       aria-labelledby="profile-launches-title"
     >
       <header className={styles.launchesHeader}>
-        <div>
-          <h2 id="profile-launches-title">Launches</h2>
-          <p>Tokens launched from this wallet.</p>
-        </div>
-        <span>
-          {entries.length} {entries.length === 1 ? "launch" : "launches"}
-        </span>
+        <h2 id="profile-launches-title">Launches</h2>
       </header>
 
       <div className={styles.launchList}>
@@ -3691,12 +3980,6 @@ function ProfileAccountWorkspace({
     deep: deepActionStates,
     stockPaired: stockPairedActionStates,
   };
-  const nativeClaimable = entries.reduce(
-    (total, entry) =>
-      total +
-      profileEntryActionableNativeWei(entry, account, actionStates),
-    0n,
-  );
   const recordedNativeClaimed =
     (currentReady && data.claimedWei ? BigInt(data.claimedWei) : 0n) +
     (classicReady
@@ -3719,16 +4002,6 @@ function ProfileAccountWorkspace({
         profileEntryOptimisticallyClaimedWei(entry, account, actionStates),
       0n,
     );
-  const stockRewardCount = entries.reduce(
-    (total, entry) =>
-      total +
-      profileRewardsForAccount(entry.stockPairedRewards, account).filter(
-        (reward) =>
-          BigInt(reward.claimableRaw) > 0n &&
-          !profileStockRewardConfirmed(reward, account, actionStates),
-      ).length,
-    0,
-  );
   const claimableEntries = sortProfileClaimableEntries(
     entries.filter((entry) =>
       profileEntryHasActionableReward(entry, account, actionStates),
@@ -3816,15 +4089,10 @@ function ProfileAccountWorkspace({
         className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
         <FeeEarningsPanel
-          nativeClaimable={
-            rewardDataQuality === "partial" ? null : nativeClaimable
-          }
           nativeClaimed={
             rewardDataQuality === "partial" ? null : nativeClaimed
           }
-          stockRewardCount={stockRewardCount}
           activity={currentReady ? data.activity : []}
-          dataQuality={rewardDataQuality}
         />
 
         <section
@@ -3834,7 +4102,7 @@ function ProfileAccountWorkspace({
           aria-labelledby="profile-claimable-title"
         >
           <header className={styles.panelHeader}>
-            <h2 id="profile-claimable-title">Claimable</h2>
+            <h2 id="profile-claimable-title">Claim rewards</h2>
             {loading ? (
               <span className={styles.visuallyHidden} role="status">
                 Refreshing rewards
@@ -3911,19 +4179,14 @@ function ProfileAccountWorkspace({
 }
 
 function FeeEarningsPanel({
-  nativeClaimable,
   nativeClaimed,
-  stockRewardCount,
   activity,
-  dataQuality,
 }: {
-  nativeClaimable: bigint | null;
   nativeClaimed: bigint | null;
-  stockRewardCount: number;
   activity: readonly ProfileActivity[];
-  dataQuality: ProfileRewardDataQuality;
 }) {
   const [chartNowMs, setChartNowMs] = useState<number | null>(null);
+  const [range, setRange] = useState<FeeEarningsRange>("all");
   const initialChartReferenceMs = useMemo(
     () =>
       timestampedFeeClaims(activity).reduce(
@@ -3952,10 +4215,10 @@ function FeeEarningsPanel({
       0n,
       {
         nowMs: chartReferenceMs,
-        range: "all",
+        range,
       },
     );
-  }, [activity, chartReferenceMs, nativeClaimed]);
+  }, [activity, chartReferenceMs, nativeClaimed, range]);
   const [activePointIndex, setActivePointIndex] = useState(-1);
   const activePointIndexRef = useRef(-1);
   const gradientId = useId().replaceAll(":", "");
@@ -3972,18 +4235,10 @@ function FeeEarningsPanel({
   const displayedPoint = chart
     ? (activePoint ?? chart.points[chart.points.length - 1])
     : undefined;
-  const verifiedTotal =
-    nativeClaimed === null || nativeClaimable === null
-      ? null
-      : nativeClaimed + nativeClaimable;
   const displayedHistoryMoment =
     chart && displayedPoint
       ? formatFeeChartMoment(displayedPoint.timestampMs, chart.nowMs)
       : "Now";
-  const claimedShare =
-    verifiedTotal !== null && verifiedTotal > 0n && nativeClaimed !== null
-      ? Number((nativeClaimed * 10_000n) / verifiedTotal) / 100
-      : 0;
 
   function resetActivePoint() {
     if (activePointIndexRef.current === -1) return;
@@ -4046,86 +4301,42 @@ function FeeEarningsPanel({
       className={styles.feePanel}
       aria-labelledby="fee-earnings-title"
     >
-      <header className={styles.feePanelHeader}>
-        <div>
-          <h2 id="fee-earnings-title">Verified ETH fees</h2>
-          <p>
-            {dataQuality === "current"
-              ? "Claimed and currently claimable onchain"
-              : dataQuality === "stale"
-                ? "Includes the last verified Classic values"
-                : "Current totals are temporarily unavailable"}
-          </p>
-        </div>
-      </header>
-
-      <div className={styles.feeSummary}>
-        <span className={styles.feeSummaryLabel}>
-          {dataQuality === "current"
-            ? "All-time verified total"
-            : dataQuality === "stale"
-              ? "Last verified total"
-              : "Current verified total"}
-        </span>
-        <strong>
-          {verifiedTotal === null ? "Unavailable" : formatWei(verifiedTotal)}
-        </strong>
-        {verifiedTotal !== null &&
-        nativeClaimed !== null &&
-        nativeClaimable !== null ? (
-          <div
-            className={styles.feeComposition}
-            role="img"
-            aria-label={`${formatWei(nativeClaimed)} claimed and ${formatWei(nativeClaimable)} ${
-              dataQuality === "stale" ? "last verified claimable" : "claimable now"
-            }`}
-          >
-            <span
-              className={styles.feeCompositionClaimed}
-              style={{ width: `${claimedShare}%` }}
-            />
-            <span
-              className={styles.feeCompositionClaimable}
-              style={{ width: `${100 - claimedShare}%` }}
-            />
-          </div>
-        ) : null}
-        <div className={styles.feeBreakdown}>
-          {nativeClaimable === null || nativeClaimed === null ? (
-            <span>Refresh to verify current reward totals.</span>
-          ) : (
-            <>
-              <span>
-                <b>{formatWei(nativeClaimable)}</b>{" "}
-                {dataQuality === "stale"
-                  ? "last verified claimable"
-                  : "claimable now"}
-              </span>
-              <span>
-                <b>{formatWei(nativeClaimed)}</b> claimed
-              </span>
-              {stockRewardCount > 0 ? (
-                <span>
-                  <b>{stockRewardCount}</b> quote{" "}
-                  {stockRewardCount === 1 ? "reward" : "rewards"}
-                </span>
-              ) : null}
-            </>
-          )}
-        </div>
-      </div>
+      <h2 className={styles.visuallyHidden} id="fee-earnings-title">
+        Reward history
+      </h2>
 
       <figure
         className={styles.feeChart}
         aria-label="Confirmed claim history"
       >
         <figcaption className={styles.chartHeading}>
-          <span>Confirmed claim history</span>
-          {chart && displayedPoint ? (
+          <span>
             <strong>
-              {formatWei(displayedPoint.valueWei)} · {displayedHistoryMoment}
+              {chart && displayedPoint
+                ? formatWei(displayedPoint.valueWei)
+                : nativeClaimed === null
+                  ? "Unavailable"
+                  : formatWei(nativeClaimed)}
             </strong>
-          ) : null}
+            <small>{displayedHistoryMoment}</small>
+          </span>
+          <div className={styles.timeframeControls} aria-label="Chart range">
+            {feeEarningsRanges.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-label={`Show ${option.description}`}
+                aria-pressed={range === option.value}
+                onClick={() => {
+                  setRange(option.value);
+                  activePointIndexRef.current = -1;
+                  setActivePointIndex(-1);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </figcaption>
         <div className={styles.chartGrid} aria-hidden="true" />
         {chart && displayedPoint ? (
@@ -4229,9 +4440,8 @@ const feeEarningsRanges: ReadonlyArray<{
   label: string;
   value: FeeEarningsRange;
 }> = [
-  { description: "the last hour", label: "1H", value: "1h" },
   { description: "the last day", label: "1D", value: "1d" },
-  { description: "the last week", label: "1W", value: "1w" },
+  { description: "the last seven days", label: "7D", value: "1w" },
   { description: "all time", label: "ALL", value: "all" },
 ];
 
@@ -4436,10 +4646,9 @@ type ProfileClaimDialogGroup = {
 
 function claimDialogActionLabel(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
-  fallback: string,
 ) {
   const stateLabel = actionLabel(state);
-  return stateLabel === "Claim" ? fallback : stateLabel;
+  return stateLabel === "Claim" ? "Claim" : stateLabel;
 }
 
 function ProfileClaimDialog({
@@ -4528,7 +4737,7 @@ function ProfileClaimDialog({
                           : styles.secondaryAction
                       }
                       type="button"
-                      aria-label={`${action.label} from ${group.source} for ${tokenName} (${tokenSymbol})`}
+                      aria-label={`${action.label}: ${action.description} from ${group.source} for ${tokenName} (${tokenSymbol})`}
                       aria-busy={actionPending(action.state) || undefined}
                       disabled={action.disabled}
                       onClick={() => {
@@ -4722,10 +4931,7 @@ function ProfileClaimRow({
       actions: [
         {
           id: "claim-position",
-          label: claimDialogActionLabel(
-            activeClaimState,
-            "Receive in Ethereum",
-          ),
+          label: claimDialogActionLabel(activeClaimState),
           description: `Receive ETH at ${recipient}`,
           state: activeClaimState,
           disabled:
@@ -4748,7 +4954,7 @@ function ProfileClaimRow({
       actions: [
         {
           id: "claim-classic",
-          label: claimDialogActionLabel(state, "Receive in Ethereum"),
+          label: claimDialogActionLabel(state),
           description: `Receive ETH at ${recipient}`,
           state,
           disabled:
@@ -4770,7 +4976,7 @@ function ProfileClaimRow({
       actions: [
         {
           id: "claim-deep",
-          label: claimDialogActionLabel(state, "Receive in Ethereum"),
+          label: claimDialogActionLabel(state),
           description: `Receive ETH at ${shortenAddress(reward.payoutAddress)}`,
           state,
           disabled:
@@ -4806,10 +5012,7 @@ function ProfileClaimRow({
     const actions: ProfileClaimDialogAction[] = [
       {
         id: "claim-quote-asset",
-        label: claimDialogActionLabel(
-          stockClaimState,
-          "Receive in Stocks",
-        ),
+        label: claimDialogActionLabel(stockClaimState),
         description: `Receive ${reward.quoteAssetSymbol} at ${shortenAddress(reward.payoutAddress)}`,
         state: stockClaimState,
         disabled:
@@ -4825,7 +5028,7 @@ function ProfileClaimRow({
     if (showEthPath) {
       actions.push({
         id: "claim-and-convert-to-eth",
-        label: claimDialogActionLabel(ethState, "Receive in Ethereum"),
+        label: claimDialogActionLabel(ethState),
         description: `Claim ${reward.quoteAssetSymbol}, then swap on Uniswap${estimate ? ` · ${estimate}` : ""}`,
         state: ethState,
         disabled:
@@ -4896,7 +5099,7 @@ function ProfileClaimRow({
           disabled={rowActionPending || claimGroups.length === 0}
           onClick={() => setClaimDialogOpen(true)}
         >
-          Claim rewards
+          {rowActionPending ? "Claiming" : "Claim rewards"}
         </button>
       </div>
 
