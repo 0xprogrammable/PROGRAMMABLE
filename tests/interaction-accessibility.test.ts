@@ -201,7 +201,7 @@ describe("interaction accessibility", () => {
     expect(css).toMatch(/\.docsLink\s*\{[^}]*min-height:\s*44px;/s);
   });
 
-  it("keeps all five primary routes semantic and reflow-safe in mobile navigation", () => {
+  it("keeps all four primary routes semantic and reflow-safe in mobile navigation", () => {
     const source = readFileSync(
       join(root, "components/site-navigation.tsx"),
       "utf8",
@@ -224,9 +224,8 @@ describe("interaction accessibility", () => {
     });
 
     expect(source).toContain('const mobileNavItems = desktopNavItems;');
-    expect(source).toMatch(
-      /\{ href: "\/profile", label: "Profile" \},\s*\{ href: "\/hookathon", label: "Hookathon" \}/,
-    );
+    expect(source).toContain('{ href: "/profile", label: "Profile" },');
+    expect(source).not.toContain('/hookathon');
     expect(source).toContain(
       '<nav className="mobile-nav" aria-label="Primary navigation">',
     );
@@ -238,7 +237,7 @@ describe("interaction accessibility", () => {
     expect(mobileMediaSegments).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/,
+          /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
         ),
         expect.stringMatching(
           /\.mobile-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*height:\s*56px/,

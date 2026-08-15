@@ -1,38 +1,20 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
-import { HookathonPage } from "@/components/hookathon-page";
-import { readHookathonServerNowMs } from "@/lib/hookathon/server-clock";
-
-export const dynamic = "force-dynamic";
-
-export function generateMetadata(): Metadata {
-  const isExactProduction = process.env.VERCEL_ENV === "production";
-
-  return {
-    title: "Hookathon · Programmable",
-    description: "Build, submit and launch a Programmable v4 hook project.",
-    alternates: {
-      canonical: "/hookathon",
+export const metadata: Metadata = {
+  title: "Not found · Programmable",
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
     },
-    robots: isExactProduction
-      ? { index: true, follow: true }
-      : {
-          index: false,
-          follow: false,
-          noarchive: true,
-          googleBot: {
-            index: false,
-            follow: false,
-            noimageindex: true,
-          },
-        },
-    openGraph: null,
-    twitter: null,
-  };
-}
+  },
+};
 
-export default async function HookathonRoute() {
-  const initialNowMs = await readHookathonServerNowMs();
-
-  return <HookathonPage initialNowMs={initialNowMs} />;
+export default function HookathonRoute(): never {
+  notFound();
 }

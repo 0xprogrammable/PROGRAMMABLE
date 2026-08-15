@@ -179,9 +179,9 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Creator programs",
     description:
-      "Find Hookathons, partnerships and contribution opportunities.",
+      "Find partnerships and contribution opportunities.",
     href: "/docs/creators/programs",
-    keywords: ["hookathon", "grant", "bounty"],
+    keywords: ["partnership", "grant", "bounty"],
   },
   {
     title: "Economics",

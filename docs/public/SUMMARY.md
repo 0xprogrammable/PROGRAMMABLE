@@ -8,7 +8,7 @@
   - [Launch a project](creators/launch.md)
   - [Public templates](creators/templates.md)
   - [Creator earnings](creators/earnings.md)
-  - [Programs and Hookathons](creators/programs.md)
+  - [Creator programs](creators/programs.md)
 - [Fees and revenue](economics.md)
 - [V4 token](v4-token.md)
 - [How Programmable works](infrastructure.md)
