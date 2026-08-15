@@ -90,4 +90,23 @@ describe("launch model artwork", () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.classicArt \.artImage[\s\S]*?animation:\s*none;/,
     );
   });
+
+  it("keeps the final Create hierarchy centered and the Classic controls neutral", () => {
+    const css = read("components/launch-experience.module.css");
+
+    expect(css).toMatch(
+      /\/\* Create polish:[\s\S]*?\.pickerHeading\.pickerHeading\s*\{[\s\S]*?text-align:\s*center;/,
+    );
+    expect(css).toMatch(
+      /\.pickerHeading\.pickerHeading h1\s*\{[\s\S]*?letter-spacing:\s*-0\.035em;[\s\S]*?line-height:\s*1;/,
+    );
+    expect(css).toContain(
+      '.formPage.formPage[data-launch-model="classic-v3"]',
+    );
+    expect(css).toContain("--classic-control-surface: rgb(17 17 17 / 0.86)");
+    expect(css).toContain("--classic-control-surface-selected: #242424");
+    expect(css).toMatch(
+      /\.formPage\.formPage\s+:global\(\.classic-launch-button\)\s*\{[\s\S]*?background:\s*#fff;[\s\S]*?color:\s*#000;/,
+    );
+  });
 });

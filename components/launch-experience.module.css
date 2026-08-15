@@ -1234,6 +1234,344 @@
   }
 }
 
+/* Create polish: keep the model choice calm, centered and in the same neutral
+   material language as Profile. Repeated module classes intentionally win the
+   earlier WEBDE handoff overrides without introducing !important rules. */
+.pickerHeading.pickerHeading {
+  margin-inline: auto;
+  max-width: 100%;
+  text-align: center;
+}
+
+.pickerHeading.pickerHeading h1 {
+  font-size: clamp(42px, 5.6vw, 72px);
+  font-weight: 540;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  margin-inline: auto;
+  max-width: 16ch;
+  text-wrap: balance;
+}
+
+.modelGrid.modelGrid {
+  margin-top: 48px;
+}
+
+.modelCard.modelCard {
+  background: rgb(24 24 24 / 0.92);
+  border-color: var(--webde-line);
+  color: var(--webde-ink);
+  transition:
+    background-color 160ms var(--webde-ease),
+    border-color 160ms var(--webde-ease),
+    box-shadow 160ms var(--webde-ease),
+    transform 160ms var(--webde-ease);
+}
+
+.modelCard.modelCard:focus-visible {
+  border-color: #fff;
+  border-radius: var(--webde-radius-card);
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+.modelHeading strong {
+  color: #fff;
+}
+
+.modelHeading small {
+  color: var(--webde-dim);
+}
+
+.modelAction {
+  color: #fff;
+  opacity: 0.82;
+}
+
+.modelCard.modelCard:disabled {
+  opacity: 0.54;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"] {
+  --classic-control-surface: rgb(17 17 17 / 0.86);
+  --classic-control-surface-hover: rgb(32 32 32 / 0.96);
+  --classic-control-surface-selected: #242424;
+  --classic-control-border: var(--webde-line);
+  --classic-control-border-strong: #555;
+  --classic-popover-surface: rgb(24 24 24 / 0.98);
+}
+
+.formPage.formPage :global(.launch-model-back),
+.formPage.formPage :global(.classic-launch-button),
+.formPage.formPage :global(.token-image-upload),
+.formPage.formPage :global(.classic-link-disclosure summary),
+.formPage.formPage :global(.launch-select-trigger),
+.formPage.formPage :global(.launch-select-option),
+.formPage.formPage :global(.classic-v3-reward-mode button),
+.formPage.formPage
+  :global(.classic-v3-initial-buy .meme-dev-buy-input button),
+.formPage.formPage :global(.classic-v3-add-recipient),
+.formPage.formPage :global(.classic-v3-split-row .icon-button) {
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    background-color 150ms var(--webde-ease),
+    border-color 150ms var(--webde-ease),
+    color 150ms var(--webde-ease),
+    opacity 150ms var(--webde-ease),
+    transform 120ms var(--webde-ease);
+}
+
+.formPage.formPage :global(.launch-model-back),
+.formPage.formPage :global(.classic-v3-add-recipient),
+.formPage.formPage :global(.classic-v3-split-row .icon-button) {
+  background: var(--webde-control);
+  border-color: var(--webde-line);
+  box-shadow: none;
+  color: var(--webde-ink);
+}
+
+.formPage.formPage :global(.classic-launch-sheet) {
+  background: rgb(24 24 24 / 0.92);
+  border-color: var(--webde-line);
+}
+
+.formPage.formPage :global(.classic-launch-footer) {
+  background: rgb(17 17 17 / 0.9);
+  border-color: var(--webde-line);
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-fees),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-reward-mode),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-initial-buy .meme-dev-buy),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-custody) {
+  background: rgb(17 17 17 / 0.86);
+  border: 1px solid var(--webde-line);
+  box-shadow: none;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.token-image-upload),
+.formPage.formPage[data-launch-model="classic-v3"] :global(.field input),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.field textarea),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.meme-dev-buy-input),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-trigger),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-address-field input),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-split-row input),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-custody input),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-link-disclosure summary) {
+  background: rgb(17 17 17 / 0.86);
+  border-color: var(--webde-line);
+  box-shadow: none;
+  color: var(--webde-ink);
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.field input::placeholder),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.field textarea::placeholder),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-address-field input::placeholder),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-split-row input::placeholder) {
+  color: var(--webde-dim);
+  opacity: 1;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-reward-mode > div) {
+  background: #0a0a0a;
+  border-color: var(--webde-line);
+  box-shadow: none;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-reward-mode button) {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--webde-muted);
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-reward-mode button.is-selected) {
+  background: var(--webde-control);
+  border-color: var(--webde-line);
+  box-shadow: none;
+  color: #fff;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-trigger[aria-expanded="true"]) {
+  background: var(--webde-surface-raised);
+  border-color: #555;
+  box-shadow: none;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-menu) {
+  background: rgb(24 24 24 / 0.98);
+  border-color: var(--webde-line);
+  box-shadow: 0 22px 58px rgb(0 0 0 / 0.55);
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-option) {
+  background: transparent;
+  color: var(--webde-muted);
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-option[data-active="true"]),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-option[aria-selected="true"]) {
+  background: var(--webde-control);
+  color: #fff;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.launch-select-option > svg) {
+  color: #fff;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-initial-buy .meme-dev-buy-input button) {
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
+  color: #fff;
+}
+
+.formPage.formPage :global(.classic-launch-button) {
+  background: #fff;
+  border-color: #fff;
+  box-shadow: none;
+  color: #000;
+}
+
+.formPage.formPage :global(.launch-model-back:focus-visible),
+.formPage.formPage :global(.classic-launch-button:focus-visible),
+.formPage.formPage :global(.token-image-upload:focus-visible),
+.formPage.formPage :global(.classic-link-disclosure summary:focus-visible),
+.formPage.formPage :global(.launch-select-trigger:focus-visible),
+.formPage.formPage :global(.launch-select-option:focus-visible),
+.formPage.formPage
+  :global(.classic-v3-reward-mode button:focus-visible),
+.formPage.formPage
+  :global(.classic-v3-initial-buy .meme-dev-buy-input button:focus-visible),
+.formPage.formPage :global(.classic-v3-add-recipient:focus-visible),
+.formPage.formPage :global(.classic-v3-split-row .icon-button:focus-visible),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.field input:focus-visible),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.field textarea:focus-visible),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-address-field input:focus-visible),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-split-row input:focus-visible),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-custody input:focus-visible),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.meme-dev-buy-input:focus-within) {
+  border-color: #fff;
+  box-shadow: none;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .modelCard.modelCard[data-launch-model-available="true"]:hover {
+    background: var(--webde-surface-raised);
+    border-color: #505050;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 0.34);
+    transform: translate3d(0, -2px, 0);
+  }
+
+  .formPage.formPage :global(.launch-model-back:hover),
+  .formPage.formPage :global(.classic-v3-add-recipient:hover),
+  .formPage.formPage :global(.classic-v3-split-row .icon-button:hover) {
+    background: #333;
+    border-color: #555;
+    color: #fff;
+  }
+
+  .formPage.formPage[data-launch-model="classic-v3"]
+    :global(.token-image-upload:hover),
+  .formPage.formPage[data-launch-model="classic-v3"]
+    :global(.classic-link-disclosure summary:hover),
+  .formPage.formPage[data-launch-model="classic-v3"]
+    :global(.launch-select-trigger:hover),
+  .formPage.formPage[data-launch-model="classic-v3"]
+    :global(.classic-v3-reward-mode button:not(.is-selected):hover),
+  .formPage.formPage[data-launch-model="classic-v3"]
+    :global(.classic-v3-initial-buy .meme-dev-buy-input button:hover) {
+    background: var(--webde-surface-raised);
+    border-color: #555;
+    color: #fff;
+  }
+
+  .formPage.formPage :global(.classic-launch-button:hover) {
+    background: #e7e7e7;
+    border-color: #e7e7e7;
+    color: #000;
+  }
+}
+
+.modelCard.modelCard[data-launch-model-available="true"]:active,
+.formPage.formPage :global(.launch-model-back:active),
+.formPage.formPage :global(.classic-launch-button:not(:disabled):active),
+.formPage.formPage :global(.token-image-upload:not(:disabled):active),
+.formPage.formPage
+  :global(.classic-v3-reward-mode button:not(:disabled):active),
+.formPage.formPage
+  :global(.classic-v3-initial-buy .meme-dev-buy-input button:not(:disabled):active),
+.formPage.formPage :global(.classic-v3-add-recipient:not(:disabled):active),
+.formPage.formPage
+  :global(.classic-v3-split-row .icon-button:not(:disabled):active) {
+  transform: scale(0.96);
+}
+
+.formPage.formPage :global(button:disabled) {
+  opacity: 0.46;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modelCard.modelCard,
+  .formPage.formPage :global(.launch-model-back),
+  .formPage.formPage :global(.classic-launch-button),
+  .formPage.formPage :global(.token-image-upload),
+  .formPage.formPage :global(.classic-link-disclosure summary),
+  .formPage.formPage :global(.launch-select-trigger),
+  .formPage.formPage :global(.launch-select-option),
+  .formPage.formPage :global(.classic-v3-reward-mode button),
+  .formPage.formPage
+    :global(.classic-v3-initial-buy .meme-dev-buy-input button),
+  .formPage.formPage :global(.classic-v3-add-recipient),
+  .formPage.formPage :global(.classic-v3-split-row .icon-button) {
+    transition-duration: 0.01ms;
+  }
+}
+
+@media (max-width: 760px) {
+  .pickerHeading.pickerHeading h1 {
+    font-size: clamp(42px, 12vw, 54px);
+    max-width: 11ch;
+  }
+
+  .modelGrid.modelGrid {
+    margin-top: 32px;
+  }
+}
+
 .formPage {
   --launch-control-height: 48px;
   max-width: 1280px;
