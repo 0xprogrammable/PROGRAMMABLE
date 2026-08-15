@@ -6,6 +6,14 @@ on:
     branches:
       - main
       - production
+  workflow_dispatch:
+    inputs:
+      verification_mode:
+        description: Verify the complete current Custom V2 tree for an exact Generic production release
+        required: true
+        type: choice
+        options:
+          - custom-v2-release
 
 permissions:
   contents: read
@@ -39,11 +47,19 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VERIFICATION_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.verification_mode || 'change' }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}"; then
+          if [ "$VERIFICATION_MODE" = custom-v2-release ]; then
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch
+            test "$GITHUB_REF" = refs/heads/production
+            node scripts/ci/classify-verify-paths.mjs --custom-v2-release > "$RUNNER_TEMP/verify-scope.txt"
+          elif [ "$VERIFICATION_MODE" != change ]; then
+            echo "Verification mode is invalid" >&2
+            exit 1
+          elif [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}"; then
             node scripts/ci/classify-verify-paths.mjs --all > "$RUNNER_TEMP/verify-scope.txt"
           else
             git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
@@ -324,7 +340,11 @@ jobs:
 
   production-proof:
     name: Bind production Verify proof
-    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+    if: >-
+      github.ref == 'refs/heads/production' &&
+      (github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+      inputs.verification_mode == 'custom-v2-release'))
     needs:
       - scope
       - secret-scan
@@ -356,6 +376,7 @@ jobs:
 
       - name: Create exact production Verify proof
         env:
+          PRODUCTION_VERIFY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.verification_mode || 'change' }}
           PRODUCTION_VERIFY_SCOPE_CONTRACTS: ${{ needs.scope.outputs.contracts }}
           PRODUCTION_VERIFY_SCOPE_CUSTOM_V2: ${{ needs.scope.outputs.custom_v2 }}
           PRODUCTION_VERIFY_SCOPE_DATABASE: ${{ needs.scope.outputs.database }}
@@ -393,12 +414,14 @@ jobs:
         env:
           ATTESTATION_URL: ${{ steps.attest-proof.outputs.attestation-url }}
           ARTIFACT_DIGEST: ${{ steps.upload-proof.outputs.artifact-digest }}
+          PRODUCTION_VERIFY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.verification_mode || 'change' }}
         run: |
           {
             echo "## Production Verify proof"
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Run: \`$GITHUB_RUN_ID\` attempt \`$GITHUB_RUN_ATTEMPT\`"
+            echo "- Event/mode: \`$GITHUB_EVENT_NAME\` / \`$PRODUCTION_VERIFY_MODE\`"
             echo "- Artifact SHA-256: \`$ARTIFACT_DIGEST\`"
             echo "- Sigstore attestation: $ATTESTATION_URL"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -406,7 +429,8 @@ jobs:
   aggregate:
     # Keep one stable, always-run PR context while the lane jobs remain
     # independently addressable and path-routed. The production proof above
-    # remains separate and binds the exact path-scoped push verification.
+    # remains separate and binds either exact path-scoped push verification or
+    # an explicit current-tree Custom V2 release verification.
     name: Verify aggregate
     needs:
       - scope

@@ -20,6 +20,7 @@ import {
   type GenericLaunchReadStoreV2,
 } from "../lib/server/custom-launch/generic-launch-read-v2";
 import {
+  createProductionGenericLaunchReadProbeSignerV1,
   createProductionGenericLaunchReadSignerV2,
   createRemoteGenericLaunchReadSignerV2,
   GENERIC_LAUNCH_READ_SIGNER_AUDIENCE_V2,
@@ -237,6 +238,53 @@ describe("Generic launch V2 remote read signer", () => {
     expect(authorization).toBe(`Bearer ${CREDENTIAL}`);
   });
 
+  it("probes one exact Fly Machine with the same in-process Vercel workload identity", async () => {
+    const harness = signerHarness();
+    const credential = vercelCredential();
+    let forcedMachine = "";
+    let authorization = "";
+    const signer = await createProductionGenericLaunchReadProbeSignerV1({
+      activeReadBinding: harness.readBinding,
+      environment: {
+        [GENERIC_LAUNCH_READ_SIGNER_BINDING_ENV_V2]:
+          canonicalizeJson(harness.signerBinding as unknown as JsonValue),
+      },
+      credentialProvider: async () => credential,
+      fetch: async (url, init) => {
+        const headers = new Headers(init?.headers);
+        forcedMachine = headers.get("fly-force-instance-id") ?? "";
+        authorization = headers.get("authorization") ?? "";
+        return harness.fetch(url, init);
+      },
+      now: () => NOW,
+    });
+
+    const evidence = await signer.signWithEvidence({
+      requestBindingHash: REQUEST_HASH,
+      payload: { kind: "values-free-probe" },
+      targetMachineId: "abcdef12345678",
+    });
+
+    expect(forcedMachine).toBe("abcdef12345678");
+    expect(authorization).toBe(`Bearer ${credential}`);
+    expect(signer.workloadIdentity).toMatchObject({
+      schemaVersion: "programmable.vercel-workload-identity.v1",
+      issuer: "https://oidc.vercel.com/aficialais-projects",
+      subject:
+        "owner:aficialais-projects:project:launcher-v4:environment:production",
+      ownerId: "team_x9QVubeZTF27TMYRLZWRvltj",
+      projectId: "prj_MM8nbhoztJnz1yhimwc9CVFYhAd7",
+      environment: "production",
+    });
+    expect(evidence.providerResponse.schemaVersion).toBe(
+      "programmable.remote-signing-authenticated-response.v2",
+    );
+    expect(evidence.signedEnvelope.payload).toEqual({ kind: "values-free-probe" });
+    expect(evidence.signedEnvelope.signatureBase64Url).toBe(
+      evidence.providerResponse.providerReceipt.signature,
+    );
+  });
+
   it("fails closed on timeout, redirects and unauthenticated provider responses", async () => {
     const harness = signerHarness();
     const common = {
@@ -451,4 +499,30 @@ function digest(nibble: string): Sha256Digest {
 
 function rawDigest(bytes: Uint8Array): Sha256Digest {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function vercelCredential(): string {
+  const seconds = Math.floor(NOW.getTime() / 1_000);
+  const encode = (value: unknown) => Buffer.from(
+    JSON.stringify(value),
+    "utf8",
+  ).toString("base64url");
+  return [
+    encode({ alg: "RS256", typ: "JWT", kid: "vercel-key" }),
+    encode({
+      iss: "https://oidc.vercel.com/aficialais-projects",
+      aud: "https://vercel.com/aficialais-projects",
+      sub:
+        "owner:aficialais-projects:project:launcher-v4:environment:production",
+      iat: seconds - 60,
+      nbf: seconds - 60,
+      exp: seconds + 3_000,
+      owner: "aficialais-projects",
+      owner_id: "team_x9QVubeZTF27TMYRLZWRvltj",
+      project: "launcher-v4",
+      project_id: "prj_MM8nbhoztJnz1yhimwc9CVFYhAd7",
+      environment: "production",
+    }),
+    "signature",
+  ].join(".");
 }

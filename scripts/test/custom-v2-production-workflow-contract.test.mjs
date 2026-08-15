@@ -4,8 +4,22 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const deploy = readFileSync(".github/workflows/deploy-production.yml", "utf8");
+const standaloneReconcile = readFileSync(
+  ".github/workflows/reconcile-generic-signer-probes.yml",
+  "utf8",
+);
 const verify = readFileSync(".github/workflows/verify.yml", "utf8");
 const proof = readFileSync("scripts/production-verify-proof.mjs", "utf8");
+const stageGate = readFileSync("scripts/custom-v2-stage-gate.mjs", "utf8");
+const signerProbeGate = readFileSync(
+  "scripts/custom-v2-signer-probe-gate.mjs",
+  "utf8",
+);
+const reconciler = readFileSync(
+  "scripts/reconcile-generic-signer-probe-deployments.mjs",
+  "utf8",
+);
+const boundedReader = readFileSync("scripts/read-bounded-response.mjs", "utf8");
 const exactTransportUnavailableMarketPhases =
   /\["market-core", "market-liquidity", "market-price"\]\.includes\(\s*marketRead\.phase,\s*\)/u;
 
@@ -17,7 +31,7 @@ function stepBlock(source, name) {
 }
 
 test("Custom V2 production proof is a dedicated versioned protected lane", () => {
-  assert.match(proof, /programmable\.production-verify-proof\.v3/u);
+  assert.match(proof, /programmable\.production-verify-proof\.v4/u);
   assert.match(proof, /"custom_v2"/u);
   assert.match(proof, /id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2"/u);
   assert.match(verify, /^  custom-v2:$/mu);
@@ -33,6 +47,40 @@ test("Custom V2 production proof is a dedicated versioned protected lane", () =>
   assert.match(verify, /PRODUCTION_VERIFY_SCOPE_CUSTOM_V2:/u);
   assert.match(verify, /PRODUCTION_VERIFY_CUSTOM_V2_RESULT:/u);
   assert.match(verify, /verified Custom V2|CUSTOM_V2_RESULT/u);
+});
+
+test("manual Generic release verification runs the complete current Custom V2 tree", () => {
+  assert.match(
+    verify,
+    /^  workflow_dispatch:[\s\S]*verification_mode:[\s\S]*custom-v2-release/mu,
+  );
+  const scope = stepBlock(verify, "Classify changed paths");
+  assert.match(scope, /VERIFICATION_MODE:/u);
+  assert.match(scope, /test "\$GITHUB_EVENT_NAME" = workflow_dispatch/u);
+  assert.match(scope, /test "\$GITHUB_REF" = refs\/heads\/production/u);
+  assert.match(
+    scope,
+    /classify-verify-paths\.mjs --custom-v2-release/u,
+  );
+  assert.match(
+    verify,
+    /name: Bind production Verify proof[\s\S]*github\.event_name == 'workflow_dispatch'[\s\S]*inputs\.verification_mode == 'custom-v2-release'/u,
+  );
+  assert.match(proof, /verificationMode/u);
+  assert.match(proof, /workflow_dispatch/u);
+  assert.match(proof, /validateVerificationModeScope/u);
+  assert.match(
+    deploy,
+    /PRODUCTION_VERIFY_MODE:[\s\S]*custom-v2-release[\s\S]*--verification-mode "\$PRODUCTION_VERIFY_MODE"/u,
+  );
+  assert.match(
+    deploy,
+    /--verification-mode "\$VERIFY_MODE"/u,
+  );
+  assert.match(
+    deploy,
+    /--verification-mode "\$\{\{ needs\.release-gate\.outputs\.verification_mode \}\}"/u,
+  );
 });
 
 test("trusted-base classification bootstraps Custom V2 without narrowing legacy lanes", () => {
@@ -83,6 +131,138 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
     deploy.indexOf("Gate exact unaliased Custom V2 staged candidate")
       < deploy.indexOf("Reverify staged candidate binding"),
   );
+});
+
+test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", () => {
+  for (const input of [
+    "custom_v2_generic_signer_probe_expected_json",
+    "custom_v2_generic_signer_probe_expected_sha256",
+  ]) assert.match(deploy, new RegExp(`${input}:`, "u"));
+  const prepare = stepBlock(deploy, "Prepare one-shot Generic signer probe authority");
+  assert.match(prepare, /randomBytes\(32\)\.toString\("hex"\)/u);
+  assert.match(prepare, /::add-mask::/u);
+  assert.match(prepare, /generic-launch-read-stage-probe-operation\.v1/u);
+  assert.match(prepare, /recoveryId/u);
+  assert.doesNotMatch(prepare, /secret=.*GITHUB_OUTPUT/u);
+  const preflight = stepBlock(
+    deploy,
+    "Reconcile all residual Generic signer probes before new authority",
+  );
+  assert.match(preflight, /--scope all-project-probes/u);
+  assert.match(preflight, /reconcile-generic-signer-probe-deployments\.mjs/u);
+  const operationRecord = stepBlock(
+    deploy,
+    "Preserve pre-mutation Generic signer probe operation record",
+  );
+  assert.match(operationRecord, /actions\/upload-artifact@043fb46/u);
+  const probeDeploy = stepBlock(
+    deploy,
+    "Deploy one-shot unaliased Generic signer probe candidate",
+  );
+  assert.match(probeDeploy, /vercel deploy --prebuilt --prod --skip-domain/u);
+  assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u);
+  assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON/u);
+  assert.match(probeDeploy, /programmableGenericSignerProbeRecoveryId/u);
+  assert.match(probeDeploy, /programmableGenericSignerProbe=one-shot-v1/u);
+  assert.match(probeDeploy, /programmableRepositoryId=1314365508/u);
+  const prove = stepBlock(
+    deploy,
+    "Prove both exact Generic signer Machines from Vercel OIDC",
+  );
+  assert.match(prove, /npm run probe:custom-v2:signer-stage/u);
+  const reconciliation = stepBlock(
+    deploy,
+    "Reconcile every secret-bearing Generic signer probe deployment",
+  );
+  assert.match(reconciliation, /always\(\)/u);
+  assert.match(reconciliation, /generic-signer-probe-authority\.outcome == 'success'/u);
+  assert.doesNotMatch(reconciliation, /generic-signer-probe-deploy\.outcome == 'success'/u);
+  assert.match(
+    reconciliation,
+    /reconcile-generic-signer-probe-deployments\.mjs/u,
+  );
+  const localCleanup = stepBlock(
+    deploy,
+    "Remove local Generic signer probe credential",
+  );
+  assert.match(localCleanup, /always\(\)/u);
+  assert.match(localCleanup, /unlinkSync\(target\)/u);
+  const clean = stepBlock(
+    deploy,
+    "Prove clean candidate carries no Generic signer probe authority",
+  );
+  assert.match(clean, /response\.status !== 503/u);
+  assert.match(clean, /probe_unavailable/u);
+  assert.match(clean, /readBoundedResponseText/u);
+  assert.doesNotMatch(clean, /response\.(?:json|text)\(\)/u);
+  const attest = stepBlock(
+    deploy,
+    "Attest canonical Generic signer probe cleanup bundle",
+  );
+  assert.match(attest, /actions\/attest@59d89421af93a897026c735860bf21b6eb4f7b26/u);
+  assert.match(attest, /create-storage-record: false/u);
+  assert.match(
+    deploy,
+    /steps\.attest-generic-signer-probe-bundle\.outputs\.bundle-path/u,
+  );
+  assert.match(deploy, /attestations: write/u);
+  assert.match(deploy, /id-token: write/u);
+  assert.ok(
+    deploy.indexOf("Reconcile every secret-bearing Generic signer probe deployment")
+      < deploy.indexOf("Stage production build without assigning domains"),
+  );
+  assert.ok(
+    deploy.indexOf("Reconcile all residual Generic signer probes before new authority")
+      < deploy.indexOf("Prepare one-shot Generic signer probe authority"),
+  );
+  assert.ok(
+    deploy.indexOf("Preserve pre-mutation Generic signer probe operation record")
+      < deploy.indexOf("Deploy one-shot unaliased Generic signer probe candidate"),
+  );
+  assert.match(deploy, /^  generic-signer-probe-reconcile:$/mu);
+  assert.match(
+    deploy,
+    /generic-signer-probe-reconcile:[\s\S]*needs: \[release-gate, deploy\][\s\S]*always\(\)[\s\S]*Delete every residual exact probe deployment and prove absence[\s\S]*reconcile-generic-signer-probe-deployments\.mjs/u,
+  );
+  assert.match(standaloneReconcile, /^name: Reconcile Generic Signer Probes$/mu);
+  assert.match(standaloneReconcile, /^  workflow_dispatch:$/mu);
+  assert.match(standaloneReconcile, /group: programmable-production/u);
+  assert.match(standaloneReconcile, /cancel-in-progress: false/u);
+  assert.match(standaloneReconcile, /environment:[\s\S]*name: production/u);
+  assert.match(standaloneReconcile, /--scope all-project-probes/u);
+  assert.match(
+    standaloneReconcile,
+    /reconcile-generic-signer-probe-deployments\.mjs/u,
+  );
+  assert.match(standaloneReconcile, /actions\/attest@59d89421/u);
+  assert.doesNotMatch(
+    standaloneReconcile,
+    /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u,
+  );
+  assert.doesNotMatch(deploy, /vercel (?:promote|alias)/u);
+});
+
+test("new stage and cleanup HTTP consumers share the bounded streaming reader", () => {
+  assert.match(boundedReader, /headers\?\.get\?\.\("content-length"\)/u);
+  assert.match(boundedReader, /body\?\.getReader\?\.\(\)/u);
+  assert.match(boundedReader, /reader\.cancel/u);
+  assert.match(boundedReader, /reader\.releaseLock\(\)/u);
+  assert.match(boundedReader, /length > maximumBytes/u);
+  assert.match(boundedReader, /Buffer\.alloc\(maximumBytes\)/u);
+  assert.match(boundedReader, /bytes\.set\(value/u);
+  assert.match(boundedReader, /chunkCount > MAXIMUM_CHUNKS/u);
+  assert.doesNotMatch(boundedReader, /chunks\.push|Buffer\.concat/u);
+  for (const source of [stageGate, signerProbeGate, reconciler]) {
+    assert.match(source, /from "\.\/read-bounded-response\.mjs"/u);
+    assert.match(source, /readBoundedResponseText/u);
+  }
+  const stagedJsonHelper = stageGate.slice(
+    stageGate.indexOf("const requestJson ="),
+    stageGate.indexOf("const manifestResult ="),
+  );
+  assert.doesNotMatch(stagedJsonHelper, /response\.(?:json|text)\(\)/u);
+  assert.doesNotMatch(signerProbeGate, /response\.(?:json|text)\(\)/u);
+  assert.doesNotMatch(reconciler, /response\.(?:json|text)\(\)/u);
 });
 
 test("Custom-only changes do not invoke the public data smoke", () => {

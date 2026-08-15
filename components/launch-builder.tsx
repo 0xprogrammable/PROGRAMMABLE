@@ -177,6 +177,7 @@ const STOCK_PAIRED_DISPLAY_NAMES: Record<string, string> = {
 const LAUNCH_RECEIPT_POLL_ATTEMPTS = 12;
 export const LAUNCH_INDEX_POLL_ATTEMPTS = 18;
 export const PENDING_LAUNCH_STALE_AFTER_MS = 24 * 60 * 60 * 1_000;
+export const LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS = 30 * 60 * 1_000;
 const PENDING_LAUNCH_MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
 const PENDING_LAUNCH_STORAGE_PREFIX = "programmable.pending-launch.v2";
 const PENDING_LAUNCH_CHANGED_EVENT = "programmable:pending-launch-changed";
@@ -230,6 +231,32 @@ export function launchSubmissionUsesCurrentDraft(
         currentDraftSubmissionHash.toLowerCase() &&
       submittedDraftVersion !== null &&
       currentDraftVersion === submittedDraftVersion,
+  );
+}
+
+export function shouldCelebrateIndexedLaunch({
+  submission,
+  currentDraftSubmissionHash,
+  currentDraftVersion,
+  submittedDraftVersion,
+  nowMs = Date.now(),
+}: {
+  submission: PendingLaunchSubmission;
+  currentDraftSubmissionHash: string;
+  currentDraftVersion: number;
+  submittedDraftVersion: number | null;
+  nowMs?: number;
+}) {
+  const submissionAgeMs = nowMs - submission.submittedAtMs;
+  return (
+    launchSubmissionUsesCurrentDraft(
+      submission.transactionHash,
+      currentDraftSubmissionHash,
+      currentDraftVersion,
+      submittedDraftVersion,
+    ) &&
+    submissionAgeMs >= -PENDING_LAUNCH_MAX_CLOCK_SKEW_MS &&
+    submissionAgeMs < LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS
   );
 }
 
@@ -1386,8 +1413,14 @@ function LaunchBuilderFormView({
           submission: confirmedSubmission,
         });
         clearSubmissionPhase();
-        setSuccessOpen(true);
-        setNotice("Token created");
+        const celebrateLaunch = shouldCelebrateIndexedLaunch({
+          submission: confirmedSubmission,
+          currentDraftSubmissionHash,
+          currentDraftVersion: draftVersion.current,
+          submittedDraftVersion,
+        });
+        setSuccessOpen(celebrateLaunch);
+        setNotice(celebrateLaunch ? "Token created" : "");
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
@@ -1407,7 +1440,9 @@ function LaunchBuilderFormView({
     submittedAccount,
     submittedChainId,
     clearSubmissionPhase,
+    currentDraftSubmissionHash,
     setSubmissionPhaseFor,
+    submittedDraftVersion,
     transactionHash,
   ]);
 

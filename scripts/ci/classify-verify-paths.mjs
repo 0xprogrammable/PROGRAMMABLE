@@ -22,7 +22,13 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
   "lib/server/projection-target/approval-v3-target.ts",
   "scripts/custom-v2-read-model-contract-v2.mjs",
   "scripts/custom-v2-stage-gate.mjs",
+  "scripts/custom-v2-signer-probe-gate.mjs",
+  "scripts/read-bounded-response.mjs",
+  "scripts/reconcile-generic-signer-probe-deployments.mjs",
   "scripts/test/custom-v2-read-model-contract-v2.test.mjs",
+  "scripts/test/custom-v2-signer-probe-gate.test.mjs",
+  "scripts/test/read-bounded-response.test.mjs",
+  "scripts/test/reconcile-generic-signer-probe-deployments.test.mjs",
   "scripts/test/custom-v2-stage-gate.test.mjs",
   "scripts/test/custom-v2-production-workflow-contract.test.mjs",
 ]);
@@ -30,12 +36,12 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
 function isCustomV2OnlyPath(path) {
   return CUSTOM_V2_EXACT_PATHS.has(path)
     || /^app\/api\/custom-launch\/(?:generic|registry)\/v2\//u.test(path)
-    || /^app\/api\/ops\/custom-launch\/generic-v2-projector\//u.test(path)
+    || /^app\/api\/ops\/custom-launch\/generic-v2-(?:projector|signer-probe)\//u.test(path)
     || /^app\/v2\/internal\/projections\/approval-descriptors\//u.test(path)
     || /^app\/custom-launches\//u.test(path)
     || /^components\/generic-launch-directory-v2(?:\.module\.css|\.tsx)$/u.test(path)
-    || /^lib\/server\/custom-launch\/generic-launch-[^/]*-v2\.ts$/u.test(path)
-    || /^tests\/(?:approval-v3-artifact-projection-target|custom-registry-v2-(?:bindings|public-release)|generic-launch-(?:postgres-v2|projector-v2|read-signer-v2|read-v2|record-v2))\.test\.ts$/u.test(path);
+    || /^lib\/server\/custom-launch\/generic-launch-[^/]*-v[12]\.ts$/u.test(path)
+    || /^tests\/(?:approval-v3-artifact-projection-target|custom-registry-v2-(?:bindings|public-release)|generic-launch-(?:postgres-v2|projector-v2|read-production-probe-v1|read-signer-v2|read-v2|record-v2))\.test\.ts$/u.test(path);
 }
 
 export const CONTRACT_RELEASE_TEST_PATHS = Object.freeze([
@@ -67,12 +73,23 @@ function markAll(scope) {
   }
 }
 
-export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
+export function classifyVerifyPaths(
+  paths,
+  { forceAll = false, customV2Release = false } = {},
+) {
   const scope = { ...EMPTY_SCOPE };
+  if (typeof customV2Release !== "boolean") {
+    throw new TypeError("Custom V2 release classification must be boolean");
+  }
   if (forceAll) {
     markAll(scope);
     return scope;
   }
+
+  // A manual Generic V2 production release verifies the complete, current
+  // Custom V2 tree, even when the production tip's last diff was unrelated.
+  // This is a distinct verification intent, not a changed-path claim.
+  if (customV2Release) scope.custom_v2 = true;
 
   for (const path of paths) {
     if (!path) continue;
@@ -197,11 +214,18 @@ function printGithubOutputs(scope) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const forceAll = process.argv[2] === "--all";
-  const paths = forceAll
+  const customV2Release = process.argv[2] === "--custom-v2-release";
+  if ((forceAll || customV2Release) && process.argv.length !== 3) {
+    throw new Error("Verify scope mode does not accept a path file");
+  }
+  if (!forceAll && !customV2Release && process.argv.length !== 3) {
+    throw new Error("Exactly one changed-path file is required");
+  }
+  const paths = forceAll || customV2Release
     ? []
     : readFileSync(process.argv[2], "utf8")
         .split("\n")
         .map((path) => path.trim())
         .filter(Boolean);
-  printGithubOutputs(classifyVerifyPaths(paths, { forceAll }));
+  printGithubOutputs(classifyVerifyPaths(paths, { forceAll, customV2Release }));
 }

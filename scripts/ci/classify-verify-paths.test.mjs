@@ -26,14 +26,21 @@ test("routes the versioned Custom V2 surface without legacy market lanes", () =>
     "app/api/custom-launch/registry/v2/manifest/route.ts",
     "app/api/custom-launch/generic/v2/readiness/route.ts",
     "app/api/ops/custom-launch/generic-v2-projector/route.ts",
+    "app/api/ops/custom-launch/generic-v2-signer-probe/route.ts",
     "app/v2/internal/projections/approval-descriptors/[projectionKey]/route.ts",
     "app/custom-launches/page.tsx",
     "components/generic-launch-directory-v2.tsx",
     "lib/server/custom-launch/generic-launch-production-v2.ts",
+    "lib/server/custom-launch/generic-launch-read-production-probe-v1.ts",
     "lib/server/custom-launch/registry-manifest-v2.ts",
     "scripts/custom-v2-read-model-contract-v2.mjs",
+    "scripts/read-bounded-response.mjs",
+    "scripts/reconcile-generic-signer-probe-deployments.mjs",
     "scripts/test/custom-v2-read-model-contract-v2.test.mjs",
+    "scripts/test/read-bounded-response.test.mjs",
+    "scripts/test/reconcile-generic-signer-probe-deployments.test.mjs",
     "tests/generic-launch-read-v2.test.ts",
+    "tests/generic-launch-read-production-probe-v1.test.ts",
   ]) {
     assert.deepEqual(classifyVerifyPaths([path]), {
       ...none,
@@ -70,6 +77,23 @@ test("routes ordinary website changes only to the interface lane", () => {
     ...none,
     interface: true,
   });
+});
+
+test("classifies an explicit Custom V2 release against the current full tree", () => {
+  assert.deepEqual(
+    classifyVerifyPaths([], { customV2Release: true }),
+    { ...none, custom_v2: true },
+  );
+  assert.deepEqual(
+    classifyVerifyPaths(["components/token-card.tsx"], {
+      customV2Release: true,
+    }),
+    { ...none, custom_v2: true, interface: true },
+  );
+  assert.throws(
+    () => classifyVerifyPaths([], { customV2Release: "true" }),
+    /must be boolean/u,
+  );
 });
 
 test("routes read-model API changes to interface and operations checks", () => {
