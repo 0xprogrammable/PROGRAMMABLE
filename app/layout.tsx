@@ -20,10 +20,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 const siteUrl = new URL("https://programmable.market");
-const siteDescription =
-  "Create tokens with a clear launch model and programmable onchain behavior.";
+const siteDescription = "Shape what assets can do";
 const socialImageUrl = new URL(
-  "/og/programmable-night-garden-og-1200x630.png",
+  "/og/programmable-loop-og-1200x630.png",
   siteUrl,
 );
 
@@ -77,7 +76,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/png",
-        alt: "A starry night garden with pink wildflowers and a violet glow",
+        alt: "The white Programmable mark in a vivid floral night garden",
       },
     ],
   },
@@ -89,7 +88,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: socialImageUrl,
-        alt: "A starry night garden with pink wildflowers and a violet glow",
+        alt: "The white Programmable mark in a vivid floral night garden",
       },
     ],
   },

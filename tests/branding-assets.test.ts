@@ -140,25 +140,43 @@ describe("Programmable branding assets", () => {
     ).toBe(true);
   });
 
-  it("uses the text-free Night Garden social preview at both exact sizes", async () => {
+  it("uses the black-sky floral link preview and exact product description", async () => {
     const layout = read("app/layout.tsx");
-    const docs = read("app/docs/developers/page.tsx");
-    const expected = [
-      ["public/og/programmable-night-garden-og-1200x630.png", 1200, 630],
-      ["public/og/programmable-night-garden-og-2400x1260.png", 2400, 1260],
-    ] as const;
+    const path = "public/og/programmable-loop-og-1200x630.png";
+    const metadata = await sharp(join(root, path)).metadata();
+    const topCenter = await sharp(join(root, path))
+      .extract({ left: 598, top: 10, width: 4, height: 4 })
+      .removeAlpha()
+      .raw()
+      .toBuffer();
 
-    expect(layout).toContain('"/og/programmable-night-garden-og-1200x630.png"');
-    expect(docs).toContain(
-      'url: "/og/programmable-night-garden-og-1200x630.png"',
+    expect(layout).toContain('const siteDescription = "Shape what assets can do"');
+    expect(layout).not.toContain("Create tokens with a clear launch model");
+    expect(layout).toContain('"/og/programmable-loop-og-1200x630.png"');
+    expect(metadata.format).toBe("png");
+    expect(metadata.width).toBe(1200);
+    expect(metadata.height).toBe(630);
+    expect(statSync(join(root, path)).size).toBeLessThan(1024 * 1024);
+    expect([...topCenter].every((channel) => channel <= 4)).toBe(true);
+  });
+
+  it("keeps the global star field dense, round and motion-safe", () => {
+    const backdrop = read("components/atmosphere-backdrop.tsx");
+    const css = read("app/webde-final-ui.css");
+
+    expect(backdrop).toContain("atmosphere-sparkles-dense");
+    expect(backdrop).toContain("atmosphere-sparkles-accent");
+    expect(css).toMatch(
+      /\.atmosphere-backdrop\s*\{[^}]*background:\s*var\(--webde-canvas\);[^}]*pointer-events:\s*none;/s,
     );
-
-    for (const [path, width, height] of expected) {
-      const metadata = await sharp(join(root, path)).metadata();
-      expect(metadata.format).toBe("png");
-      expect(metadata.width).toBe(width);
-      expect(metadata.height).toBe(height);
-      expect(statSync(join(root, path)).size).toBeLessThan(5 * 1024 * 1024);
-    }
+    expect(css).toMatch(
+      /\.atmosphere-sparkles i\s*\{[^}]*border-radius:\s*50%;[^}]*box-shadow:\s*0 0 3px/s,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;[^}]*will-change:\s*auto;/,
+    );
   });
 });
