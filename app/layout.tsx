@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 import "./programmable-experience.css";
 import "./interface.css";
+import "./webde-final-ui.css";
 
 const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
@@ -97,7 +98,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "dark",
   viewportFit: "cover",
-  themeColor: "#010103",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({

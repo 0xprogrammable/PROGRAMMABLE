@@ -96,7 +96,9 @@ export function SiteFooter() {
                     {link.label}
                   </a>
                 ) : (
-                  <Link href={link.href}>{link.label}</Link>
+                  <Link href={link.href} prefetch={false}>
+                    {link.label}
+                  </Link>
                 )}
               </li>
             ))}

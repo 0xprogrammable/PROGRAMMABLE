@@ -7,67 +7,50 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("topbar and Explore hero polish", () => {
   it("keeps the page plane continuous behind a frameless navigation", () => {
-    const interfaceCss = read("app/interface.css");
+    const css = read("app/webde-final-ui.css");
 
-    expect(interfaceCss).toMatch(
-      /\.site-header\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    expect(css).toMatch(
+      /\.site-header,[\s\S]*?\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
     );
-    expect(interfaceCss).toMatch(
-      /\.header-inner\s*\{[^}]*backdrop-filter:\s*none;[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;[^}]*max-width:\s*none;[^}]*width:\s*100%;/s,
-    );
-    expect(interfaceCss).not.toContain(
-      ".header-inner,\n  .liquid-glass-surface,\n  .mobile-nav",
+    expect(css).toMatch(
+      /\.header-inner\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;[^}]*height:\s*88px;[^}]*max-width:\s*1440px;/s,
     );
   });
 
-  it("uses text and a fine underline for active desktop navigation", () => {
-    const interfaceCss = read("app/interface.css");
+  it("uses large white navigation text without an active underline", () => {
+    const css = read("app/webde-final-ui.css");
 
-    expect(interfaceCss).toMatch(
+    expect(css).toMatch(
       /\.desktop-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;[^}]*padding:\s*0;/s,
     );
-    expect(interfaceCss).toMatch(
-      /\.desktop-nav a\.active\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;[^}]*color:\s*var\(--navigation-glass-ink\);/s,
+    expect(css).toMatch(
+      /\.desktop-nav a,[\s\S]*?\.desktop-nav a\.active\s*\{[^}]*color:\s*var\(--webde-ink\);[^}]*font-size:\s*18px;/s,
     );
-    expect(interfaceCss).toMatch(
-      /\.desktop-nav a\.active::after\s*\{[^}]*opacity:\s*1;[^}]*width:\s*18px;/s,
-    );
-    expect(interfaceCss).toMatch(
-      /\.wordmark:focus-visible,[\s\S]*?\.mobile-nav a:focus-visible\s*\{[^}]*box-shadow:\s*0 0 0 5px rgba\(3, 8, 24, 0\.86\);[^}]*outline:\s*2px solid var\(--brand-ivory\);/s,
+    expect(css).toMatch(
+      /\.desktop-nav a::after,[\s\S]*?\.desktop-nav a\.active::after\s*\{[^}]*display:\s*none;/s,
     );
   });
 
-  it("keeps app navigation compact and moves landing links below the hero actions", () => {
+  it("keeps one ordered navigation with social links and wallet access on every route", () => {
     const navigation = read("components/site-navigation.tsx");
     const landing = read("components/landing-page.tsx");
     const landingCss = read("components/landing-page.module.css");
-    const interfaceCss = read("app/interface.css");
+    const navigationCss = read("components/site-navigation.module.css");
 
-    expect(landing).toContain(
+    expect(navigation).toContain(
       "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
     );
-    expect(landing).toContain(
+    expect(navigation).toContain(
       'src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"',
     );
-    expect(landing).toContain('aria-label="Programmable on X"');
-    expect(landing).toContain('aria-label="Programmable on GitHub"');
-    expect(landing).toContain('aria-label="Programmable on Discord"');
-    expect(landing).toContain('aria-label="Programmable on Dexscreener"');
-    expect(landing).toContain('aria-label="Programmable analytics on Dune"');
-    expect(landing).toContain(
+    expect(navigation).toContain('aria-label="Programmable on X"');
+    expect(navigation).toContain('aria-label="Programmable on GitHub"');
+    expect(navigation).toContain('aria-label="Programmable on Discord"');
+    expect(navigation).toContain('aria-label="Programmable on Dexscreener"');
+    expect(navigation).toContain('aria-label="Programmable analytics on Dune"');
+    expect(navigation).toContain(
       "https://dune.com/0xprogrammable6098/programmable-analytics",
     );
-    expect(landing.indexOf('aria-label="Programmable on GitHub"')).toBeLessThan(
-      landing.indexOf('aria-label="Programmable on Dexscreener"'),
-    );
-    expect(landing.indexOf('aria-label="Programmable on Dexscreener"')).toBeLessThan(
-      landing.indexOf('aria-label="Programmable analytics on Dune"'),
-    );
-    expect(landing.indexOf('aria-label="Programmable analytics on Dune"')).toBeLessThan(
-      landing.indexOf('aria-label="Programmable on Discord"'),
-    );
-    expect(navigation).toContain('aria-label="Programmable on Discord"');
-    expect(navigation).toContain('aria-label="Programmable analytics on Dune"');
     expect(navigation.indexOf('aria-label="Programmable on Dexscreener"')).toBeLessThan(
       navigation.indexOf('aria-label="Programmable analytics on Dune"'),
     );
@@ -75,36 +58,19 @@ describe("topbar and Explore hero polish", () => {
       navigation.indexOf('aria-label="Programmable on Discord"'),
     );
     expect(landing).toContain('href="/docs"');
-    expect(landing).toMatch(/>\s*Docs\s*</);
+    expect(landing).toContain("Read more in our docs");
     expect(navigation).not.toContain("ThemeToggle");
-    expect(navigation).toContain('if (pathname === "/") return null;');
+    expect(navigation).not.toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<WalletButton compact />");
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
     expect(navigation).toContain('if (href === "/docs")');
-    expect(interfaceCss).toMatch(
-      /@media \(min-width: 801px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[^}]*justify-content:\s*stretch;/s,
-    );
-    expect(interfaceCss).toMatch(
-      /@media \(max-width: 800px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);[^}]*justify-content:\s*stretch;[^}]*max-width:\s*none;[^}]*width:\s*100%;/s,
-    );
-    expect(interfaceCss).toMatch(
-      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav\s*\{[^}]*backdrop-filter:\s*none;[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
-    );
-    expect(interfaceCss).toMatch(
-      /@media \(min-width: 801px\) and \(max-width: 960px\)[\s\S]*?\.desktop-nav\s*\{[^}]*display:\s*none;[^}]*\}[\s\S]*?\.mobile-nav\s*\{[^}]*display:\s*grid;/s,
-    );
+    for (const label of ["Explore", "Create", "Profile", "Docs"]) {
+      expect(navigation).toContain(`label: "${label}"`);
+    }
+    expect(navigationCss).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(landingCss).toMatch(
-      /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
-    );
-    expect(landingCss).toMatch(
-      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*28px;[^}]*width:\s*28px;/s,
-    );
-    expect(landingCss).toMatch(
-      /\.docsLink\s*\{[^}]*font-size:\s*17px;/s,
-    );
-    expect(landingCss).toMatch(
-      /@media \(max-width: 360px\)[\s\S]*?\.supportingLinks\s*\{[^}]*gap:\s*0;/s,
+      /\.docsLink\s*\{[^}]*font-size:\s*18px;/s,
     );
   });
 

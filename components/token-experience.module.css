@@ -1952,3 +1952,138 @@
     animation: none;
   }
 }
+
+/* Final token detail direction. */
+.page {
+  max-width: 1280px;
+  min-height: calc(100svh - 88px);
+  padding-block: 18px 56px;
+}
+
+.navigationRow,
+.layout {
+  max-width: 1160px;
+}
+
+.layout {
+  gap: 16px 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 350px);
+}
+
+.identity {
+  gap: 22px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  padding-block: 4px 8px;
+}
+
+.image {
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+}
+
+.name {
+  font-size: clamp(40px, 4.6vw, 58px);
+  font-weight: 570;
+  letter-spacing: -0.052em;
+}
+
+.address {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--webde-surface);
+  border-color: var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  box-shadow: none;
+}
+
+.description {
+  color: var(--webde-muted);
+  font-size: 14px;
+}
+
+.tradeShell {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
+  min-height: 390px;
+}
+
+.sideControl,
+.amountCard,
+.tradeFacts.tradeSettings > div,
+.reviewOutput {
+  background: #111;
+  border: 1px solid var(--webde-line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.sideControl {
+  border-radius: var(--webde-radius-control);
+}
+
+.sideButton,
+.sideIndicator {
+  border-radius: 6px;
+}
+
+.sideIndicator {
+  background: var(--webde-control);
+  box-shadow: none;
+}
+
+.amountCard {
+  min-height: 116px;
+}
+
+.primaryAction,
+.secondaryAction {
+  border-radius: var(--webde-radius-control);
+}
+
+.primaryAction {
+  background: #fff;
+  border: 1px solid #fff;
+  box-shadow: none;
+  color: #000;
+}
+
+.primaryAction:disabled {
+  background: var(--webde-control);
+  border-color: var(--webde-line);
+  color: var(--webde-muted);
+}
+
+.metrics {
+  gap: 16px;
+  padding-inline: 4px;
+}
+
+@media (max-width: 1020px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    min-height: calc(100svh - 72px);
+    padding-block: 10px 68px;
+  }
+
+  .identity {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+
+  .name {
+    font-size: 34px;
+  }
+
+  .tradeShell {
+    border-radius: 12px;
+  }
+}

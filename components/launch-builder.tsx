@@ -2031,7 +2031,7 @@ function LaunchBuilderFormView({
               : launchPhase === "confirming"
                 ? "Confirm in wallet"
                 : wallet
-                  ? "Create token"
+                  ? "Create Classic Token"
                   : "Connect wallet"}
     </button>
   );
@@ -2054,7 +2054,7 @@ function LaunchBuilderFormView({
           Back
         </button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
-          <h1>Create token</h1>
+          <h1>Create Classic Token</h1>
         </div>
       </header>
 
@@ -3024,9 +3024,9 @@ const initialBuyAccessOptions: readonly LaunchSelectOption<
   LaunchDraft["initialBuyCustodyMode"]
 >[] = [
   { value: "unlocked", label: "Available immediately" },
-  { value: "fixed-lock", label: "Fixed lock" },
-  { value: "linear", label: "Linear vesting" },
-  { value: "cliff-linear", label: "Cliff, then linear vesting" },
+  { value: "fixed-lock", label: "Locked" },
+  { value: "linear", label: "Vested" },
+  { value: "cliff-linear", label: "Cliff + vested" },
 ];
 
 const compactInitialBuyTokenFormatter = new Intl.NumberFormat("en-US", {
@@ -3329,12 +3329,12 @@ function EnhancedClassicFeeStep({
           className="classic-v3-custody"
           data-mode={draft.initialBuyCustodyMode}
         >
-          <legend className="sr-only">Initial buy access</legend>
+          <legend className="sr-only">Dev supply</legend>
           <label>
-            <span>Token access</span>
+            <span>Dev supply</span>
             <LaunchSelect
               id="classic-initial-buy-access"
-              label="Initial buy token access"
+              label="Dev supply access"
               value={draft.initialBuyCustodyMode}
               options={initialBuyAccessOptions}
               placement="top"

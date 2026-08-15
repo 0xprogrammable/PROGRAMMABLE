@@ -1,148 +1,126 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import {
-  DiscordBrandIcon,
-  DuneBrandIcon,
-  GitHubBrandIcon,
-  XBrandIcon,
-} from "@/components/brand-icons";
+import { ExploreView } from "@/components/explore-view";
 import styles from "@/components/landing-page.module.css";
+
+const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 
 export function LandingPage() {
   return (
     <article className={`${styles.page} landing-page-root`}>
-      <div className={styles.scene}>
-        <section className={styles.panel} aria-labelledby="landing-title">
+      <section className={styles.hero} aria-labelledby="landing-title">
+        <div className={styles.heroArtwork} aria-hidden="true">
           <Image
-            className={styles.flowerLeft}
-            src="/brand/atmosphere/programmable-botanical-left-v2.webp"
+            className={styles.heroGarden}
+            src="/brand/atmosphere/programmable-floral-foreground-v1.avif"
             alt=""
-            aria-hidden="true"
-            width={1024}
-            height={1536}
-            sizes="(max-width: 760px) 35vw, 24vw"
+            fill
+            priority
+            sizes="100vw"
           />
-          <Image
-            className={styles.flowerRight}
-            src="/brand/atmosphere/programmable-botanical-right-v2.webp"
-            alt=""
-            aria-hidden="true"
-            width={1024}
-            height={1536}
-            sizes="(max-width: 760px) 35vw, 24vw"
-          />
+        </div>
 
-          <header className={styles.panelHeader}>
-            <Link
-              className={styles.brandLink}
-              href="/"
-              aria-label="Programmable home"
+        <div className={styles.heroContent}>
+          <Image
+            className={styles.heroLogo}
+            src={loopMark}
+            alt=""
+            width={1168}
+            height={1536}
+            sizes="80px"
+            priority
+          />
+          <h1 id="landing-title">Programmable</h1>
+          <p>Shape what assets can do</p>
+        </div>
+
+        <a className={styles.scrollCue} href="#what-is-programmable">
+          <span>Scroll to discover Programmable</span>
+          <span aria-hidden="true">↓</span>
+        </a>
+      </section>
+
+      <section
+        className={styles.definition}
+        id="what-is-programmable"
+        aria-labelledby="programmable-definition-title"
+      >
+        <header className={styles.definitionHeader}>
+          <h2
+            id="programmable-definition-title"
+            aria-label="What is Programmable?"
+          >
+            <span>What is</span>
+            <Image
+              className={styles.definitionLogo}
+              src={loopMark}
+              alt=""
+              width={1168}
+              height={1536}
+              sizes="96px"
+              aria-hidden="true"
+            />
+            <span aria-hidden="true">?</span>
+          </h2>
+          <Link className={styles.docsLink} href="/docs">
+            Read more in our docs
+          </Link>
+        </header>
+
+        <div className={styles.definitionColumns}>
+          <p className={styles.definitionLead}>
+            Programmable brings products built with Uniswap v4 hooks into one
+            place, together with tools to create your own.
+          </p>
+          <p>
+            Explore what each project does, how its hook changes the way its
+            pool works, and the public information behind it. Our goal is
+            simple: if you can describe an idea, you should be able to turn it
+            into a Hook without writing Solidity.
+          </p>
+        </div>
+      </section>
+
+      <section
+        className={styles.definition}
+        id="what-is-a-hook"
+        aria-labelledby="hook-definition-title"
+      >
+        <header className={styles.definitionHeader}>
+          <h2 id="hook-definition-title">What is a Hook?</h2>
+        </header>
+
+        <div className={styles.definitionColumns}>
+          <p className={styles.definitionLead}>
+            A{" "}
+            <a
+              className={styles.inlineLink}
+              href="https://docs.uniswap.org/contracts/v4/overview"
+              target="_blank"
+              rel="noreferrer"
             >
-              <Image
-                className={styles.brandLogo}
-                src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
-                alt=""
-                width={1168}
-                height={1536}
-                sizes="36px"
-                priority
-              />
-            </Link>
-          </header>
-
-          <div className={`${styles.hero} ${styles.panelBody}`}>
-            <div className={`${styles.heroCopy} ${styles.content}`}>
-              <h1
-                id="landing-title"
-                aria-label="Tokens that behave how you imagine"
-              >
-                <span aria-hidden="true">Tokens that behave</span>
-                <span aria-hidden="true">how you imagine</span>
-              </h1>
-              <nav className={styles.actions} aria-label="Get started">
-                <Link className={styles.primaryAction} href="/launch">
-                  Create a token
-                </Link>
-                <Link className={styles.secondaryAction} href="/explore">
-                  Explore tokens
-                </Link>
-              </nav>
-            </div>
+              Uniswap v4
+            </a>{" "}
+            pool is a market where two assets can be traded. A Hook is a smart
+            contract connected to that pool. It adds rules for how that market
+            works.
+          </p>
+          <div className={styles.definitionDetail}>
+            <p>
+              Those rules can run at specific moments, such as before or after
+              a trade or when liquidity changes.
+            </p>
+            <p>
+              They can adjust a fee, reward an action, or shape what happens
+              when people use the pool.
+            </p>
           </div>
+        </div>
+      </section>
 
-          <footer className={styles.footer}>
-            <nav
-              className={`${styles.footerIcons} ${styles.supportingLinks}`}
-              aria-label="Programmable links"
-            >
-              <a
-                className={styles.socialLink}
-                href="https://x.com/0xProgrammable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on X"
-                aria-describedby="landing-external-link-note"
-              >
-                <XBrandIcon />
-              </a>
-              <a
-                className={styles.socialLink}
-                href="https://github.com/0xprogrammable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on GitHub"
-                aria-describedby="landing-external-link-note"
-              >
-                <GitHubBrandIcon />
-              </a>
-              <a
-                className={styles.socialLink}
-                href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on Dexscreener"
-                aria-describedby="landing-external-link-note"
-              >
-                <Image
-                  className={styles.socialLogo}
-                  src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"
-                  alt=""
-                  width={256}
-                  height={256}
-                  sizes="28px"
-                />
-              </a>
-              <a
-                className={styles.socialLink}
-                href="https://dune.com/0xprogrammable6098/programmable-analytics"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable analytics on Dune"
-                aria-describedby="landing-external-link-note"
-              >
-                <DuneBrandIcon />
-              </a>
-              <a
-                className={styles.socialLink}
-                href="https://discord.com/invite/programmable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on Discord"
-                aria-describedby="landing-external-link-note"
-              >
-                <DiscordBrandIcon />
-              </a>
-              {/* Keep the docs route contract without adding landing-page chrome. */}
-              <Link className={styles.docsLink} href="/docs" hidden>
-                Docs
-              </Link>
-              <span id="landing-external-link-note" className={styles.srOnly}>
-                Opens in a new tab.
-              </span>
-            </nav>
-          </footer>
-        </section>
+      <div className={styles.exploreChapter}>
+        <ExploreView />
       </div>
     </article>
   );

@@ -995,3 +995,392 @@
     border-color: CanvasText;
   }
 }
+
+/* Final black editorial direction. */
+.page {
+  --explore-ivory: var(--webde-ink);
+  --explore-ivory-soft: var(--webde-muted);
+  --explore-ivory-muted: var(--webde-dim);
+  min-height: calc(100svh - 88px);
+  padding-block: 34px 70px;
+}
+
+.pageHeading {
+  align-items: flex-start;
+  margin: 0;
+  max-width: none;
+  min-height: 102px;
+  padding: 0;
+  text-align: left;
+}
+
+.pageHeading h1 {
+  display: block;
+  font-size: clamp(58px, 6.5vw, 96px);
+  font-weight: 520;
+  letter-spacing: -0.062em;
+  line-height: 0.92;
+  text-shadow: none;
+}
+
+.runnersSection {
+  padding-bottom: 0;
+}
+
+.runnersIntro {
+  justify-content: flex-end;
+  margin: -62px 0 0 auto;
+  max-width: none;
+}
+
+.runnersIntro :global(.token-section-heading),
+.runnersIntro :global(.token-toolbar) {
+  align-items: center;
+  flex-direction: row;
+  justify-content: flex-end;
+  width: auto;
+}
+
+.runnersIntro :global(.token-toolbar) {
+  gap: 10px;
+}
+
+.runnersIntro :global(.token-search),
+.runnersIntro :global(.token-filter summary),
+.runnersIntro :global(.token-pagination) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  box-shadow: none;
+  min-height: 44px;
+}
+
+.runnersIntro :global(.token-search) {
+  flex: 0 0 230px;
+  height: 44px;
+  padding-inline: 13px 5px;
+  width: 230px;
+}
+
+.runnersIntro :global(.token-search:focus-within),
+.runnersIntro :global(.token-filter[open] summary) {
+  background: var(--webde-surface-raised);
+  border-color: #595959;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.08);
+}
+
+.runnersIntro :global(.token-search input) {
+  font-size: 14px;
+  height: 42px;
+}
+
+.runnersIntro :global(.token-filter summary) {
+  min-height: 44px;
+  padding-inline: 14px 12px;
+}
+
+.runnersIntro :global(.token-pagination) {
+  min-height: 44px;
+  padding: 0 3px;
+}
+
+.runnersIntro :global(.token-pagination > button) {
+  height: 40px;
+  width: 36px;
+}
+
+.runnersIntro :global(.token-pagination-pages) {
+  color: var(--webde-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: center;
+}
+
+.filterMenu {
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  background: rgb(24 24 24 / 0.98);
+  border: 1px solid var(--webde-line);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.58);
+  min-width: 230px;
+  padding: 8px;
+}
+
+.filterMenu button {
+  border-radius: 7px;
+  color: var(--webde-muted);
+}
+
+.filterMenu button:global(.active) {
+  background: var(--webde-control);
+  color: var(--webde-ink);
+}
+
+.filterLabel {
+  color: var(--webde-dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin: 8px 10px 5px;
+  text-transform: uppercase;
+}
+
+.activeFilterCount {
+  background: #363636;
+  border-radius: 50%;
+}
+
+.runnerGrid {
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 58px;
+  max-width: none;
+}
+
+.runnerCard {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
+  padding: 0;
+}
+
+.runnerArt {
+  aspect-ratio: 2.42 / 1;
+  border-bottom: 1px solid var(--webde-line);
+  border-radius: 0;
+}
+
+.runnerImage {
+  height: 100% !important;
+  inset: 0 !important;
+  object-position: center 58%;
+  width: 100% !important;
+}
+
+.runnerBody {
+  min-height: 118px;
+  padding: 18px 18px 14px;
+}
+
+.runnerHeading {
+  align-items: baseline;
+  gap: 8px;
+}
+
+.runnerHeading h3 {
+  font-size: 22px;
+  font-weight: 580;
+  letter-spacing: -0.03em;
+}
+
+.runnerHeading > span {
+  color: var(--webde-dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.runnerData {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 20px;
+}
+
+.runnerData > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.runnerData > span:last-child {
+  text-align: right;
+}
+
+.runnerData small {
+  color: var(--webde-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.runnerData strong {
+  color: var(--webde-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runnerMeta {
+  border-top: 1px solid var(--webde-line);
+  min-height: 48px;
+  padding: 1px 8px 1px 14px;
+}
+
+.runnerCategory,
+.runnerMarketStatus {
+  color: var(--webde-dim);
+  font-size: 11px;
+  padding-inline: 0 8px;
+}
+
+.runnerSocials {
+  gap: 0;
+  min-height: 44px;
+}
+
+.runnerSocialLink {
+  border-radius: 7px;
+  color: var(--webde-dim);
+  height: 40px;
+  width: 40px;
+}
+
+.messageState,
+.emptyState {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
+  margin-top: 58px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .runnerCard:has(a.runnerHitArea):hover {
+    background: var(--webde-surface-raised);
+    border-color: #505050;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 0.3);
+    transform: translate3d(0, -2px, 0);
+  }
+
+  .runnerSocialLink:hover {
+    background: var(--webde-control);
+  }
+}
+
+@media (max-width: 1100px) {
+  .runnersIntro {
+    justify-content: flex-start;
+    margin-top: 18px;
+  }
+
+  .runnersIntro :global(.token-section-heading),
+  .runnersIntro :global(.token-toolbar) {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .runnerGrid {
+    margin-top: 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  .runnerGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .page {
+    min-height: calc(100svh - 72px);
+    padding-block: 24px 56px;
+  }
+
+  .pageHeading {
+    min-height: 66px;
+    padding: 0;
+  }
+
+  .pageHeading h1 {
+    font-size: clamp(46px, 14vw, 62px);
+    max-width: none;
+  }
+
+  .runnersIntro {
+    margin-top: 22px;
+  }
+
+  .runnersIntro :global(.token-toolbar) {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .runnersIntro :global(.token-search) {
+    max-width: none;
+    width: 100%;
+  }
+
+  .runnersIntro :global(.token-pagination) {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .runnerGrid {
+    gap: 14px;
+    grid-template-columns: 1fr;
+    margin-top: 24px;
+  }
+
+  .runnerCard {
+    background: var(--webde-surface);
+    border-radius: var(--webde-radius-card);
+    padding: 0;
+  }
+
+  .runnerHitArea {
+    display: flex;
+  }
+
+  .runnerArt {
+    aspect-ratio: 2.2 / 1;
+    width: 100%;
+  }
+
+  .runnerBody {
+    min-height: 112px;
+    padding: 17px 16px 13px;
+  }
+
+  .runnerHeading h3 {
+    font-size: 22px;
+  }
+
+  .runnerMeta {
+    padding-inline-start: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .runnersIntro :global(.token-toolbar) {
+    grid-template-columns: 1fr;
+  }
+
+  .runnersIntro :global(.token-filter),
+  .runnersIntro :global(.token-filter summary) {
+    width: 100%;
+  }
+
+  .runnersIntro :global(.token-pagination) {
+    grid-column: auto;
+  }
+
+  /* Keep the filter affordance legible at the narrowest supported width.
+     The legacy token stylesheet hides every summary child below 360px;
+     this page still needs a visible, keyboard-discoverable Sort by label. */
+  .runnersIntro :global(.token-filter summary > span:first-child),
+  .runnersIntro :global(.token-filter .token-filter-chevron) {
+    display: inline-flex;
+  }
+}

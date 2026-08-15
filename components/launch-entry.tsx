@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   lazy,
@@ -13,7 +12,6 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
-import { CreateGuide } from "@/components/create-guide";
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
@@ -63,7 +61,7 @@ const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development
 
 function LaunchFormLoading({
   onBack,
-  title = "Create token",
+  title = "Create Classic Token",
 }: {
   onBack: () => void;
   title?: string;
@@ -210,7 +208,6 @@ function LaunchExperienceRuntime({
 }
 
 export function LaunchModelPicker({
-  customLaunchPublicEnabled = false,
   customLaunchButtonRef,
   onChoose,
 }: {
@@ -225,9 +222,6 @@ export function LaunchModelPicker({
   const preloadAvailableForm = () => {
     void loadLaunchForm();
   };
-  const preloadCustomLaunch = () => {
-    void loadCustomLaunch();
-  };
 
   const customCardContent = (
     <>
@@ -237,7 +231,7 @@ export function LaunchModelPicker({
       >
         <Image
           className={launchExperience.artImage}
-          src="/brand/create/custom-galaxy-v3.webp"
+          src="/brand/atmosphere/programmable-floral-hooks-v1.avif"
           alt=""
           fill
           loading="eager"
@@ -259,25 +253,14 @@ export function LaunchModelPicker({
         <span
           className={`launch-model-card-heading ${launchExperience.modelHeading}`}
         >
-          <strong id="launch-model-custom-title">Custom Hook</strong>
-          <small data-status={customLaunchPublicEnabled ? "available" : "review"}>
-            {customLaunchPublicEnabled ? "Available" : "Review required"}
-          </small>
+          <strong id="launch-model-custom-title">Custom</strong>
+          <small data-status="pending">Soon</small>
         </span>
         <span
           className={`launch-model-description ${launchExperience.modelDescription}`}
           id="launch-model-custom-description"
         >
-          Launch a project only after its exact GitHub revision has been
-          reviewed and approved by Programmable.
-        </span>
-        <span
-          className={`launch-model-action ${launchExperience.modelAction}`}
-        >
-          {customLaunchPublicEnabled
-            ? "Open approved Custom Hook launch"
-            : "View Custom Hook requirements"}
-          <ArrowRight aria-hidden="true" size={16} />
+          Custom launch models are coming soon.
         </span>
       </span>
     </>
@@ -290,40 +273,23 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Choose your launch model</h1>
-        <CreateGuide />
+        <h1>Choose a Launch Model</h1>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
-        {customLaunchPublicEnabled ? (
-          <button
-            ref={customLaunchButtonRef}
-            className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-            data-launch-model-option="custom"
-            data-launch-model-available="true"
-            data-launch-model-launchable="true"
-            type="button"
-            aria-labelledby="launch-model-custom-title"
-            aria-describedby="launch-model-custom-description"
-            onPointerEnter={preloadCustomLaunch}
-            onFocus={preloadCustomLaunch}
-            onClick={() => onChoose("custom")}
-          >
-            {customCardContent}
-          </button>
-        ) : (
-          <Link
-            className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-            data-launch-model-option="custom"
-            data-launch-model-available="false"
-            data-launch-model-launchable="false"
-            href="/docs/models/custom"
-            aria-labelledby="launch-model-custom-title"
-            aria-describedby="launch-model-custom-description"
-          >
-            {customCardContent}
-          </Link>
-        )}
+        <button
+          ref={customLaunchButtonRef}
+          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
+          data-launch-model-option="custom"
+          data-launch-model-available="false"
+          data-launch-model-launchable="false"
+          type="button"
+          disabled
+          aria-labelledby="launch-model-custom-title"
+          aria-describedby="launch-model-custom-description"
+        >
+          {customCardContent}
+        </button>
 
         <button
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
@@ -346,7 +312,7 @@ export function LaunchModelPicker({
           >
             <Image
               className={launchExperience.artImage}
-              src="/brand/create/classic-botanical-v4.webp"
+              src="/brand/atmosphere/programmable-floral-hooks-v1.avif"
               alt=""
               fill
               sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"

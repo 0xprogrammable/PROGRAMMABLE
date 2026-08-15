@@ -1024,7 +1024,7 @@ describe("profile reward grouping", () => {
     ]);
     expect(profileHasRewardSurface(profileRouterLaunchEntries(portfolio)))
       .toBe(false);
-    expect(profileViewSource).toContain("Tokens launched from this wallet.");
+    expect(profileViewSource).not.toContain("Tokens launched from this wallet.");
     expect(profileViewSource).not.toContain("Router record");
     expect(profileViewSource).toContain(
       'claimableEntries.length ? "" : styles.claimablePanelEmpty',
@@ -1039,7 +1039,7 @@ describe("profile reward grouping", () => {
       }),
     );
     expect(html).toContain("Launches");
-    expect(html).toContain("Tokens launched from this wallet.");
+    expect(html).not.toContain("Tokens launched from this wallet.");
     expect(html).toContain("Custom Graph");
     expect(html).toContain("$GRAPH");
     expect(html).toContain(`href="/token/${routerCustom.address}"`);

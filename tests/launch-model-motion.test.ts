@@ -15,10 +15,9 @@ describe("launch model artwork", () => {
 
   it("uses the owned botanical art and exact Programmable loop asset", () => {
     const source = read("components/launch-entry.tsx");
-    const css = read("components/launch-experience.module.css");
 
     expect(source).toContain(
-      'src="/brand/create/classic-botanical-v4.webp"',
+      'src="/brand/atmosphere/programmable-floral-hooks-v1.avif"',
     );
     expect(source).toContain(
       'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
@@ -54,7 +53,7 @@ describe("launch model artwork", () => {
     expect(source).toContain(
       'aria-describedby="launch-model-classic-description"',
     );
-    expect(source).toContain('onClick={() => onChoose("custom")}');
+    expect(source).not.toContain('onClick={() => onChoose("custom")}');
     expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',
     );
@@ -62,15 +61,17 @@ describe("launch model artwork", () => {
       'aria-describedby="launch-model-custom-description"',
     );
     expect(source).toContain('data-launch-model-option="custom"');
+    expect(source).toContain('data-launch-model-available="false"');
+    expect(source).toContain('data-launch-model-launchable="false"');
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }
-    expect(source).toMatch(
-      /\$\{launchExperience\.modelArt\}[\s\S]{0,250}aria-hidden="true"[\s\S]{0,300}src="\/brand\/create\/classic-botanical-v4\.webp"[\s\S]{0,120}alt=""/,
-    );
-    expect(source).toMatch(
-      /\$\{launchExperience\.modelArt\}[\s\S]{0,250}aria-hidden="true"[\s\S]{0,300}src="\/brand\/create\/custom-galaxy-v3\.webp"[\s\S]{0,120}alt=""/,
-    );
+    expect(
+      source.match(
+        /src="\/brand\/atmosphere\/programmable-floral-hooks-v1\.avif"/g,
+      ),
+    ).toHaveLength(2);
+    expect(source.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
   it("keeps decorative movement subtle and compositor-safe", () => {
