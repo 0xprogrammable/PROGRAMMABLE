@@ -57,13 +57,19 @@ describe("strict Bitquery market reads", () => {
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:00:01.000Z"),
       fetchImpl: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
-    })).rejects.toMatchObject({ category: "transport" });
+    })).rejects.toMatchObject({
+      category: "transport",
+      reason: "request-transport",
+    });
   });
 
   it("rejects missing credentials instead of returning unavailable data", async () => {
     await expect(readBitqueryTokenMarketDataStrictV1([PCAN], {
       token: null,
-    })).rejects.toMatchObject({ category: "configuration" });
+    })).rejects.toMatchObject({
+      category: "configuration",
+      reason: "missing-token",
+    });
   });
 });
 

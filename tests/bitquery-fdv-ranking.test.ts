@@ -6,6 +6,7 @@ import {
   BITQUERY_HTTP_ENDPOINT,
   BitqueryMarketDataError,
   readBitqueryTokenFdvRankingStrictV1,
+  safeBitqueryMarketDataError,
 } from "../lib/market-data/bitquery.server";
 import {
   isTokenMarketDataV1,
@@ -158,6 +159,7 @@ describe("strict lightweight Bitquery FDV ranking", () => {
     })).rejects.toMatchObject({
       category: "transport",
       phase: "market-liquidity",
+      reason: "request-transport",
     });
   });
 
@@ -205,7 +207,12 @@ describe("strict lightweight Bitquery FDV ranking", () => {
       await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
         fetchImpl,
         token: TOKEN,
-      })).rejects.toMatchObject({ category, phase: "market-liquidity" });
+      })).rejects.toMatchObject({
+        category,
+        phase: "market-liquidity",
+        reason: "http-status",
+        httpStatus: status,
+      });
     },
   );
 
@@ -229,6 +236,7 @@ describe("strict lightweight Bitquery FDV ranking", () => {
     })).rejects.toMatchObject({
       category: "response",
       phase: "market-liquidity",
+      reason: "graphql-errors",
     });
   });
 
@@ -309,6 +317,7 @@ describe("strict lightweight Bitquery FDV ranking", () => {
     })).rejects.toMatchObject({
       category: "transport",
       phase: "market-core",
+      reason: "request-transport",
     });
   });
 
@@ -331,9 +340,146 @@ describe("strict lightweight Bitquery FDV ranking", () => {
           status,
         })),
         token: TOKEN,
-      })).rejects.toMatchObject({ category, phase: "market-core" });
+      })).rejects.toMatchObject({
+        category,
+        phase: "market-core",
+        reason: "http-status",
+        httpStatus: status,
+      });
     },
   );
+
+  it.each([
+    [
+      "invalid-content-type",
+      () => new Response("not json", {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    ],
+    [
+      "body-too-large",
+      () => new Response("{}", {
+        status: 200,
+        headers: {
+          "Content-Length": "1500001",
+          "Content-Type": "application/json",
+        },
+      }),
+    ],
+    [
+      "body-too-large",
+      () => new Response("x".repeat(1_500_001), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ],
+    [
+      "invalid-json",
+      () => new Response("{", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ],
+    [
+      "missing-data",
+      () => json({ errors: [{ message: "provider detail must stay private" }] }),
+    ],
+  ] as const)(
+    "classifies a provider %s response without logging its body",
+    async (reason, response) => {
+      await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+        fetchImpl: vi.fn(async () => response()) as typeof fetch,
+        token: TOKEN,
+      })).rejects.toMatchObject({
+        category: "response",
+        phase: "market-core",
+        reason,
+      });
+    },
+  );
+
+  it("classifies a GraphQL error envelope without retaining its messages", async () => {
+    const providerDetail = `private provider detail ${TOKEN}`;
+    let failure: unknown;
+    try {
+      await readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+        fetchImpl: vi.fn(async () => json({
+          data: { Trading: { rankingTokens: [rankingToken()] } },
+          errors: [{ message: providerDetail }],
+        })) as typeof fetch,
+        token: TOKEN,
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({
+      category: "response",
+      phase: "market-core",
+      reason: "graphql-errors",
+    });
+    const safe = safeBitqueryMarketDataError(failure);
+    expect(safe).toEqual({
+      name: "BitqueryMarketDataError",
+      category: "response",
+      phase: "market-core",
+      reason: "graphql-errors",
+    });
+    expect(JSON.stringify(safe)).not.toContain(providerDetail);
+    expect(JSON.stringify(safe)).not.toContain(TOKEN);
+  });
+
+  it("publishes only the safe HTTP status and typed reason", () => {
+    const failure = new BitqueryMarketDataError(
+      "response",
+      "market-core",
+      "http-status",
+      400,
+    );
+    Object.defineProperty(failure, "cause", {
+      value: `private provider body ${TOKEN}`,
+    });
+
+    const safe = safeBitqueryMarketDataError(failure);
+    expect(safe).toEqual({
+      name: "BitqueryMarketDataError",
+      category: "response",
+      phase: "market-core",
+      reason: "http-status",
+      httpStatus: 400,
+    });
+    expect(JSON.stringify(safe)).not.toContain(TOKEN);
+  });
+
+  it("distinguishes missing Trading from missing liquidity EVM data", async () => {
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl: vi.fn(async () => json({ data: {} })) as typeof fetch,
+      token: TOKEN,
+    })).rejects.toMatchObject({
+      category: "response",
+      phase: "market-core",
+      reason: "missing-trading",
+    });
+
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      return request.query.includes("ProgrammableExploreFdvRanking")
+        ? json({ data: { Trading: { rankingTokens: [rankingToken()] } } })
+        : json({ data: {} });
+    }) as typeof fetch;
+    await expect(readBitqueryTokenFdvRankingStrictV1([IDENTITY], {
+      fetchImpl,
+      token: TOKEN,
+    })).rejects.toMatchObject({
+      category: "response",
+      phase: "market-liquidity",
+      reason: "missing-evm",
+    });
+  });
 
   it("does not relabel an unknown internal failure as transport", async () => {
     const programmingError = new TypeError("unexpected internal failure");
