@@ -142,6 +142,7 @@ describe("Programmable branding assets", () => {
 
   it("uses the black-sky floral link preview and exact product description", async () => {
     const layout = read("app/layout.tsx");
+    const homePage = read("app/page.tsx");
     const path = "public/og/programmable-loop-og-1200x630.png";
     const metadata = await sharp(join(root, path)).metadata();
     const topCenter = await sharp(join(root, path))
@@ -153,6 +154,8 @@ describe("Programmable branding assets", () => {
     expect(layout).toContain('const siteDescription = "Shape what assets can do"');
     expect(layout).not.toContain("Create tokens with a clear launch model");
     expect(layout).toContain('"/og/programmable-loop-og-1200x630.png"');
+    expect(homePage).toContain("programmable-loop-og-1200x630.png");
+    expect(homePage).toContain('card: "summary_large_image"');
     expect(metadata.format).toBe("png");
     expect(metadata.width).toBe(1200);
     expect(metadata.height).toBe(630);
