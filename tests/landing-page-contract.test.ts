@@ -82,6 +82,7 @@ describe("landing page contract", () => {
     expect(styles).toMatch(
       /\.hero\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);/s,
     );
+    expect(styles).toMatch(/\.hero\s*\{[^}]*z-index:\s*1;/s);
     expect(styles).toMatch(/\.definition\s*\{[^}]*min-height:\s*100svh;/s);
     expect(styles).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);
     expect(styles).toMatch(
@@ -89,6 +90,7 @@ describe("landing page contract", () => {
     );
     expect(styles).toContain("scroll-margin-top: 0;");
     expect(styles).toContain("object-position: center bottom;");
+    expect(styles).not.toContain("mask-image:");
     expect(styles).not.toContain("translateY(27vh)");
     expect(styles).not.toContain("translateY(31vh)");
     expect(styles).toContain("align-items: baseline;");

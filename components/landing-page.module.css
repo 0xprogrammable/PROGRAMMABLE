@@ -31,6 +31,7 @@
   overflow: hidden;
   position: relative;
   scroll-margin-top: 88px;
+  z-index: 1;
 }
 
 .heroArtwork {
@@ -51,8 +52,6 @@
 .heroGarden {
   object-fit: cover;
   object-position: center bottom;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 4%, #000 30%);
-  mask-image: linear-gradient(to bottom, transparent 0%, transparent 4%, #000 30%);
 }
 
 .heroContent {
