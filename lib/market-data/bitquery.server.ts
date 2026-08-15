@@ -64,6 +64,7 @@ type FetchImplementation = typeof fetch;
 type GraphqlResponse = Readonly<{
   data: Record<string, unknown>;
   partial: boolean;
+  partialReason?: "graphql-errors";
 }>;
 
 type BitqueryMarketDataPhase =
@@ -73,6 +74,19 @@ type BitqueryMarketDataPhase =
   | "market-price"
   | "market-stats"
   | "chart"
+  | "unspecified";
+
+export type BitqueryMarketDataFailureReason =
+  | "body-too-large"
+  | "graphql-errors"
+  | "http-status"
+  | "invalid-content-type"
+  | "invalid-json"
+  | "missing-data"
+  | "missing-evm"
+  | "missing-token"
+  | "missing-trading"
+  | "request-transport"
   | "unspecified";
 
 type BitqueryReaderOptions = Readonly<{
@@ -125,6 +139,8 @@ export class BitqueryMarketDataError extends Error {
       | "response"
       | "integrity",
     readonly phase: BitqueryMarketDataPhase = "unspecified",
+    readonly reason: BitqueryMarketDataFailureReason = "unspecified",
+    readonly httpStatus?: number,
   ) {
     super("Market data is temporarily unavailable");
   }
@@ -134,14 +150,28 @@ export function safeBitqueryMarketDataError(error: unknown): Readonly<{
   name: string;
   category: string;
   phase: string;
+  reason: BitqueryMarketDataFailureReason;
+  httpStatus?: number;
 }> {
-  return error instanceof BitqueryMarketDataError
-    ? { name: error.name, category: error.category, phase: error.phase }
-    : {
-        name: "MarketDataError",
-        category: "unexpected",
-        phase: "unspecified",
-      };
+  if (!(error instanceof BitqueryMarketDataError)) {
+    return {
+      name: "MarketDataError",
+      category: "unexpected",
+      phase: "unspecified",
+      reason: "unspecified",
+    };
+  }
+  const httpStatus = Number.isInteger(error.httpStatus) &&
+      (error.httpStatus ?? 0) >= 100 && (error.httpStatus ?? 0) <= 599
+    ? error.httpStatus
+    : undefined;
+  return {
+    name: error.name,
+    category: error.category,
+    phase: error.phase,
+    reason: error.reason,
+    ...(httpStatus === undefined ? {} : { httpStatus }),
+  };
 }
 
 function marketDataErrorAtPhase(
@@ -149,9 +179,25 @@ function marketDataErrorAtPhase(
   phase: BitqueryMarketDataPhase,
 ): BitqueryMarketDataError {
   if (error instanceof BitqueryMarketDataError) {
-    return new BitqueryMarketDataError(error.category, phase);
+    return new BitqueryMarketDataError(
+      error.category,
+      phase,
+      error.reason,
+      error.httpStatus,
+    );
   }
   throw error;
+}
+
+function partialGraphqlResponseError(
+  response: GraphqlResponse,
+  phase: BitqueryMarketDataPhase,
+): BitqueryMarketDataError {
+  return new BitqueryMarketDataError(
+    "response",
+    phase,
+    response.partialReason ?? "unspecified",
+  );
 }
 
 export function bitqueryMarketDataConfigured(
@@ -197,7 +243,11 @@ export async function readBitqueryTokenMarketDataStrictV1(
   if (unique.length === 0) return new Map();
   const token = resolveToken(options.token);
   if (token === null) {
-    throw new BitqueryMarketDataError("configuration", "configuration");
+    throw new BitqueryMarketDataError(
+      "configuration",
+      "configuration",
+      "missing-token",
+    );
   }
   const pools = new Map<string, MarketPoolDataV1>();
   const batches: MarketDataIdentityV1[][] = [];
@@ -249,7 +299,11 @@ export async function readBitqueryTokenFdvRankingStrictV1(
   }
   const token = resolveToken(options.token);
   if (token === null) {
-    throw new BitqueryMarketDataError("configuration", "configuration");
+    throw new BitqueryMarketDataError(
+      "configuration",
+      "configuration",
+      "missing-token",
+    );
   }
 
   const tokenRequest = marketFdvRankingQuery(unique);
@@ -270,11 +324,15 @@ export async function readBitqueryTokenFdvRankingStrictV1(
     throw marketDataErrorAtPhase(tokenResult.reason, "market-core");
   }
   if (tokenResult.value.partial) {
-    throw new BitqueryMarketDataError("response", "market-core");
+    throw partialGraphqlResponseError(tokenResult.value, "market-core");
   }
   const trading = record(tokenResult.value.data.Trading);
   if (trading === null) {
-    throw new BitqueryMarketDataError("response", "market-core");
+    throw new BitqueryMarketDataError(
+      "response",
+      "market-core",
+      "missing-trading",
+    );
   }
 
   const expectedTokenAddresses = new Set(
@@ -302,11 +360,18 @@ export async function readBitqueryTokenFdvRankingStrictV1(
     );
   }
   if (liquidityResult.value.partial) {
-    throw new BitqueryMarketDataError("response", "market-liquidity");
+    throw partialGraphqlResponseError(
+      liquidityResult.value,
+      "market-liquidity",
+    );
   }
   const evm = record(liquidityResult.value.data.EVM);
   if (evm === null) {
-    throw new BitqueryMarketDataError("response", "market-liquidity");
+    throw new BitqueryMarketDataError(
+      "response",
+      "market-liquidity",
+      "missing-evm",
+    );
   }
   let liquidityRows: ReadonlyMap<string, unknown>;
   try {
@@ -784,12 +849,16 @@ async function readMarketBatch(
   }
   const response = coreResult.value;
   if (options.strict && response.partial) {
-    throw new BitqueryMarketDataError("response", "market-core");
+    throw partialGraphqlResponseError(response, "market-core");
   }
   const evm = record(response.data.EVM);
   const trading = record(response.data.Trading);
   if (evm === null) {
-    throw new BitqueryMarketDataError("response", "market-core");
+    throw new BitqueryMarketDataError(
+      "response",
+      "market-core",
+      "missing-evm",
+    );
   }
   const tradesByPool = indexUniqueRows(array(evm.latestTrades), tradeRowPoolId);
   const parsedTrades = identities.map((identity) => {
@@ -822,7 +891,11 @@ async function readMarketBatch(
     options.strict && priceResult.status === "fulfilled" &&
     priceResult.value.partial
   ) {
-    throw new BitqueryMarketDataError("response", "market-price");
+    throw new BitqueryMarketDataError(
+      "response",
+      "market-price",
+      "unspecified",
+    );
   }
   const liquidityEvm = liquidityResult.status === "fulfilled" &&
       !liquidityResult.value.partial
@@ -839,7 +912,13 @@ async function readMarketBatch(
     options.strict && options.includeStats !== false &&
     (statsEvm === null || statsResult.status !== "fulfilled" ||
       statsResult.value === null || statsResult.value.partial)
-  ) throw new BitqueryMarketDataError("response", "market-stats");
+  ) {
+    const reason = statsResult.status === "fulfilled" &&
+        statsResult.value?.partialReason === "graphql-errors"
+      ? "graphql-errors" as const
+      : "missing-evm" as const;
+    throw new BitqueryMarketDataError("response", "market-stats", reason);
+  }
 
   let liquidityReadPartial = liquidityResult.status !== "fulfilled" ||
     liquidityResult.value.partial || liquidityEvm === null;
@@ -1141,7 +1220,11 @@ async function executeBitqueryGraphql(
         message === "load failed" ||
         message === "networkerror when attempting to fetch resource."
       ) {
-        throw new BitqueryMarketDataError("transport");
+        throw new BitqueryMarketDataError(
+          "transport",
+          "unspecified",
+          "request-transport",
+        );
       }
       throw error;
     }
@@ -1152,32 +1235,63 @@ async function executeBitqueryGraphql(
             response.status === 429 || response.status >= 500
           ? "transport" as const
           : "response" as const;
-      throw new BitqueryMarketDataError(category);
+      throw new BitqueryMarketDataError(
+        category,
+        "unspecified",
+        "http-status",
+        response.status,
+      );
     }
     const declared = Number(response.headers.get("content-length") ?? "0");
-    if (
-      (Number.isFinite(declared) && declared > MAXIMUM_RESPONSE_BYTES) ||
-      !response.headers.get("content-type")?.toLowerCase().includes(
-        "application/json",
-      )
-    ) {
-      throw new BitqueryMarketDataError("response");
+    if (Number.isFinite(declared) && declared > MAXIMUM_RESPONSE_BYTES) {
+      throw new BitqueryMarketDataError(
+        "response",
+        "unspecified",
+        "body-too-large",
+      );
+    }
+    if (!response.headers.get("content-type")?.toLowerCase().includes(
+      "application/json",
+    )) {
+      throw new BitqueryMarketDataError(
+        "response",
+        "unspecified",
+        "invalid-content-type",
+      );
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > MAXIMUM_RESPONSE_BYTES) {
-      throw new BitqueryMarketDataError("response");
+      throw new BitqueryMarketDataError(
+        "response",
+        "unspecified",
+        "body-too-large",
+      );
     }
     let payload: unknown;
     try {
       payload = JSON.parse(new TextDecoder().decode(bytes));
     } catch {
-      throw new BitqueryMarketDataError("response");
+      throw new BitqueryMarketDataError(
+        "response",
+        "unspecified",
+        "invalid-json",
+      );
     }
     const envelope = record(payload);
     const data = record(envelope?.data);
     const errors = array(envelope?.errors);
-    if (data === null) throw new BitqueryMarketDataError("response");
-    return { data, partial: errors.length > 0 };
+    if (data === null) {
+      throw new BitqueryMarketDataError(
+        "response",
+        "unspecified",
+        "missing-data",
+      );
+    }
+    return {
+      data,
+      partial: errors.length > 0,
+      ...(errors.length === 0 ? {} : { partialReason: "graphql-errors" }),
+    };
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abort);
