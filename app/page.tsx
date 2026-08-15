@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 
 import { LandingPage } from "@/components/landing-page";
 
+const pageDescription = "Shape what assets can do";
+
 export const metadata: Metadata = {
   title: "Programmable",
-  description:
-    "Create tokens with a clear launch model and programmable onchain behavior.",
+  description: pageDescription,
+  openGraph: {
+    description: pageDescription,
+  },
+  twitter: {
+    description: pageDescription,
+  },
 };
 
 export default function HomePage() {

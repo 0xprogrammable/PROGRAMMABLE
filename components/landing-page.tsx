@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -7,9 +10,56 @@ import styles from "@/components/landing-page.module.css";
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 
 export function LandingPage() {
+  const pageRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const page = pageRef.current;
+    if (!page) return;
+
+    const sections = Array.from(
+      page.querySelectorAll<HTMLElement>("[data-reveal-section]"),
+    );
+
+    page.dataset.revealReady = "true";
+
+    if (!("IntersectionObserver" in window)) {
+      sections.forEach((section) => {
+        section.dataset.visible = "true";
+      });
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+
+          const section = entry.target as HTMLElement;
+          section.dataset.visible = "true";
+          observer.unobserve(section);
+        });
+      },
+      {
+        rootMargin: "0px 0px -12% 0px",
+        threshold: 0.12,
+      },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <article className={`${styles.page} landing-page-root`}>
-      <section className={styles.hero} aria-labelledby="landing-title">
+    <article
+      ref={pageRef}
+      className={`${styles.page} landing-page-root`}
+    >
+      <section
+        className={styles.hero}
+        id="intro"
+        aria-labelledby="landing-title"
+      >
         <div className={styles.heroArtwork} aria-hidden="true">
           <Image
             className={styles.heroGarden}
@@ -42,9 +92,10 @@ export function LandingPage() {
       </section>
 
       <section
-        className={styles.definition}
+        className={`${styles.definition} ${styles.revealSection}`}
         id="what-is-programmable"
         aria-labelledby="programmable-definition-title"
+        data-reveal-section
       >
         <header className={styles.definitionHeader}>
           <h2
@@ -52,16 +103,19 @@ export function LandingPage() {
             aria-label="What is Programmable?"
           >
             <span>What is</span>
-            <Image
-              className={styles.definitionLogo}
-              src={loopMark}
-              alt=""
-              width={1168}
-              height={1536}
-              sizes="96px"
-              aria-hidden="true"
-            />
-            <span aria-hidden="true">?</span>
+            <span className={styles.definitionLogoFrame} aria-hidden="true">
+              <Image
+                className={styles.definitionLogo}
+                src={loopMark}
+                alt=""
+                width={1168}
+                height={1536}
+                sizes="96px"
+              />
+            </span>
+            <span className={styles.definitionQuestion} aria-hidden="true">
+              ?
+            </span>
           </h2>
           <Link className={styles.docsLink} href="/docs">
             Read more in our docs
@@ -83,9 +137,10 @@ export function LandingPage() {
       </section>
 
       <section
-        className={styles.definition}
+        className={`${styles.definition} ${styles.revealSection}`}
         id="what-is-a-hook"
         aria-labelledby="hook-definition-title"
+        data-reveal-section
       >
         <header className={styles.definitionHeader}>
           <h2 id="hook-definition-title">What is a Hook?</h2>
@@ -119,7 +174,10 @@ export function LandingPage() {
         </div>
       </section>
 
-      <div className={styles.exploreChapter}>
+      <div
+        className={`${styles.exploreChapter} ${styles.revealSection}`}
+        data-reveal-section
+      >
         <ExploreView />
       </div>
     </article>
