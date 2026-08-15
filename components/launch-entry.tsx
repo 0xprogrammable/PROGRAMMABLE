@@ -208,6 +208,7 @@ function LaunchExperienceRuntime({
 }
 
 export function LaunchModelPicker({
+  customLaunchPublicEnabled = false,
   customLaunchButtonRef,
   onChoose,
 }: {
@@ -221,6 +222,10 @@ export function LaunchModelPicker({
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
+  };
+  const preloadCustomLaunch = () => {
+    if (!customLaunchPublicEnabled) return;
+    void loadCustomLaunch();
   };
 
   const customCardContent = (
@@ -254,14 +259,26 @@ export function LaunchModelPicker({
           className={`launch-model-card-heading ${launchExperience.modelHeading}`}
         >
           <strong id="launch-model-custom-title">Custom</strong>
-          <small data-status="pending">Soon</small>
+          {!customLaunchPublicEnabled ? (
+            <small data-status="pending">Soon</small>
+          ) : null}
         </span>
         <span
           className={`launch-model-description ${launchExperience.modelDescription}`}
           id="launch-model-custom-description"
         >
-          Custom launch models are coming soon.
+          {customLaunchPublicEnabled
+            ? "Launch an approved GitHub revision through your browser wallet, then follow it to its public record."
+            : "Custom launch models are coming soon."}
         </span>
+        {customLaunchPublicEnabled ? (
+          <span
+            className={`launch-model-action ${launchExperience.modelAction}`}
+          >
+            Open approved Custom launch
+            <ArrowRight aria-hidden="true" size={16} />
+          </span>
+        ) : null}
       </span>
     </>
   );
@@ -281,12 +298,19 @@ export function LaunchModelPicker({
           ref={customLaunchButtonRef}
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="custom"
-          data-launch-model-available="false"
-          data-launch-model-launchable="false"
+          data-launch-model-available={customLaunchPublicEnabled}
+          data-launch-model-launchable={customLaunchPublicEnabled}
           type="button"
-          disabled
+          disabled={!customLaunchPublicEnabled}
           aria-labelledby="launch-model-custom-title"
           aria-describedby="launch-model-custom-description"
+          onPointerEnter={
+            customLaunchPublicEnabled ? preloadCustomLaunch : undefined
+          }
+          onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
+          onClick={
+            customLaunchPublicEnabled ? () => onChoose("custom") : undefined
+          }
         >
           {customCardContent}
         </button>

@@ -21,7 +21,9 @@ import {
   customLaunchErrorMessage,
   customLaunchFeeReviewV1,
   customLaunchFixedTokenIdentityCopyV1,
+  customLaunchPendingActionLabelV1,
   customLaunchRailInvalidationForRecoveryV1,
+  customLaunchWalletMatchesChainV1,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
@@ -576,6 +578,40 @@ function replacePermitArtifact(
 }
 
 describe("custom launch interface state line", () => {
+  it("names each pending wallet boundary without implying completion", () => {
+    expect(customLaunchPendingActionLabelV1("preparing")).toBe(
+      "Preparing launch",
+    );
+    expect(customLaunchPendingActionLabelV1("wallet-proof")).toBe(
+      "Confirm ownership in wallet",
+    );
+    expect(customLaunchPendingActionLabelV1("permit")).toBe(
+      "Verifying launch permit",
+    );
+    expect(customLaunchPendingActionLabelV1("wallet-transaction")).toBe(
+      "Submit launch in wallet",
+    );
+    expect(customLaunchPendingActionLabelV1("confirmation")).toBe(
+      "Waiting for confirmation",
+    );
+    expect(customLaunchPendingActionLabelV1("publishing")).toBe(
+      "Publishing public record",
+    );
+  });
+
+  it("requires the connected wallet to match the approved chain", () => {
+    expect(customLaunchWalletMatchesChainV1("0x1", "1")).toBe(true);
+    expect(customLaunchWalletMatchesChainV1("1", "1")).toBe(true);
+    expect(customLaunchWalletMatchesChainV1("eip155:1", "1")).toBe(true);
+    expect(customLaunchWalletMatchesChainV1("0xaa36a7", "11155111")).toBe(true);
+    expect(customLaunchWalletMatchesChainV1("0x2105", "1")).toBe(false);
+    expect(customLaunchWalletMatchesChainV1("ethereum", "1")).toBe(false);
+    expect(customLaunchWalletMatchesChainV1(" 1", "1")).toBe(false);
+    expect(customLaunchWalletMatchesChainV1("eip155:", "1")).toBe(false);
+    expect(customLaunchWalletMatchesChainV1(undefined, "1")).toBe(false);
+    expect(customLaunchWalletMatchesChainV1("0x1", undefined)).toBe(false);
+  });
+
   it("advances only when the exact preceding evidence is complete", () => {
     expect(resolveCustomLaunchStageV1({
       screen: "intro",

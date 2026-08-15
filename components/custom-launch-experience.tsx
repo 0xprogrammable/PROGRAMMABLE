@@ -179,6 +179,7 @@ export type LaunchProgress =
   | "idle"
   | "preparing"
   | "wallet-proof"
+  | "permit"
   | "wallet-transaction"
   | "reconciling"
   | "ambiguous"
@@ -369,6 +370,44 @@ export function customLaunchRecoveryDisplayV2(
       || "Checking the reserved launch before another wallet action can start.",
     submitted: false,
   };
+}
+
+export function customLaunchPendingActionLabelV1(
+  launchProgress: LaunchProgress,
+): string {
+  const labels: Readonly<Record<LaunchProgress, string>> = {
+    idle: "Confirm with wallet",
+    preparing: "Preparing launch",
+    "wallet-proof": "Confirm ownership in wallet",
+    permit: "Verifying launch permit",
+    "wallet-transaction": "Submit launch in wallet",
+    reconciling: "Checking reserved launch",
+    ambiguous: "Resolving submission status",
+    confirmation: "Waiting for confirmation",
+    publishing: "Publishing public record",
+    complete: "Launch complete",
+  };
+  return labels[launchProgress];
+}
+
+export function customLaunchWalletMatchesChainV1(
+  walletChainId: string | undefined,
+  approvedChainId: string | undefined,
+): boolean {
+  if (
+    !walletChainId
+    || !approvedChainId
+    || !/^[1-9][0-9]*$/u.test(approvedChainId)
+  ) return false;
+  const walletValue = walletChainId.startsWith("eip155:")
+    ? walletChainId.slice("eip155:".length)
+    : walletChainId;
+  if (!/^(?:0x[0-9a-f]+|[1-9][0-9]*)$/iu.test(walletValue)) return false;
+  try {
+    return BigInt(walletValue) === BigInt(approvedChainId);
+  } catch {
+    return false;
+  }
 }
 
 export function CustomLaunchRecoveryCopyV2({
@@ -1499,6 +1538,8 @@ function CustomLaunchRuntime({
     reauthorizeGithub,
     sendBrowserWalletAction,
     signLaunchMessage,
+    switchingNetwork,
+    switchNetwork,
     wallet,
   } = useWallet();
   const [screen, setScreen] = useState<CustomLaunchScreen>("intro");
@@ -2549,6 +2590,8 @@ function CustomLaunchRuntime({
           return authenticatedSession;
         },
         authorizeLaunch: async ({ challenge, preparation, authentication }) => {
+          setLaunchProgress("permit");
+          setStatusMessage("Verifying launch permit");
           const authorizeRequest: AuthorizeLaunchSessionRequestV2 = {
             schemaVersion: "programmable.launch-session-launch-authorize-request.v2",
             audience: "programmable.launch-session.v2",
@@ -2580,6 +2623,7 @@ function CustomLaunchRuntime({
           return { authorizeRequest, permit, verifiedPermitSigner };
         },
         createExecutionPreparation: async ({ preparation, authentication, authorization }) => {
+          setStatusMessage("Preparing exact wallet transaction");
           const execution = await client.createExecutionPreparation({
             schemaVersion: "programmable.browser-wallet-launch-preparation-request.v2",
             request: authorization.authorizeRequest,
@@ -2868,6 +2912,22 @@ function CustomLaunchRuntime({
     : null;
   const durableApproval = selected !== null
     && customApplicationHasDurableApprovalV2(selected, null);
+  const walletOnApprovedNetwork = wallet !== null
+    && customLaunchWalletMatchesChainV1(
+      wallet.chainId,
+      approvedRoute?.chainId,
+    );
+  const switchApprovedNetwork = async () => {
+    setError("");
+    setStatusMessage(`Switching to ${chainLabel(approvedRoute?.chainId)}`);
+    const switched = await switchNetwork(approvedRoute?.chainId);
+    if (switched) {
+      setStatusMessage(`${chainLabel(approvedRoute?.chainId)} connected`);
+      return;
+    }
+    setStatusMessage("");
+    setError(`Unable to switch to ${chainLabel(approvedRoute?.chainId)}. Try again`);
+  };
   const verifiedStages = resolveCustomLaunchVerifiedStagesV1({
     githubPrincipalVerified: githubPrincipalHash !== null,
     repositoriesLoaded: applicationsLoaded,
@@ -3140,7 +3200,10 @@ function CustomLaunchRuntime({
               <span>{statusMessage || (durableApproval ? "Approved — launch anytime" : "Launch details verified")}</span>
             </div>
             {launchProgress === "complete" ? (
-              <Link className="primary-button" href="/explore?model=custom">Open public record <ArrowRight aria-hidden="true" size={16} /></Link>
+              <div className={styles.completionActions}>
+                <Link className={styles.secondaryButton} href="/profile">View profile</Link>
+                <Link className="primary-button" href="/explore?model=custom">Open public record <ArrowRight aria-hidden="true" size={16} /></Link>
+              </div>
             ) : applicantRecovery !== "none" ? (
               <button className="primary-button" type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>
                 {applicantRecoveryAction}
@@ -3154,13 +3217,33 @@ function CustomLaunchRuntime({
               >
                 Refresh launch setup
               </button>
+            ) : launchProgress !== "idle" ? (
+              <button className="primary-button" type="button" disabled>
+                <LoaderCircle aria-hidden="true" className={styles.spin} size={17} />
+                {customLaunchPendingActionLabelV1(launchProgress)}
+              </button>
+            ) : !wallet ? (
+              <button className="primary-button" type="button" onClick={openWallet}>
+                <Wallet aria-hidden="true" size={17} />
+                Connect wallet
+              </button>
+            ) : !walletOnApprovedNetwork ? (
+              <button
+                className="primary-button"
+                type="button"
+                disabled={switchingNetwork}
+                onClick={() => void switchApprovedNetwork()}
+              >
+                {switchingNetwork ? (
+                  <LoaderCircle aria-hidden="true" className={styles.spin} size={17} />
+                ) : null}
+                {switchingNetwork
+                  ? `Switching to ${chainLabel(approvedRoute?.chainId)}`
+                  : `Switch to ${chainLabel(approvedRoute?.chainId)}`}
+              </button>
             ) : (
               <button className="primary-button" type="submit" disabled={launchProgress !== "idle"}>
-                {launchProgress !== "idle"
-                  ? "Preparing launch"
-                  : !wallet
-                    ? "Connect wallet"
-                    : "Confirm with wallet"}
+                Confirm with wallet
               </button>
             )}
           </div>

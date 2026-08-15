@@ -896,6 +896,14 @@
   min-width: 180px;
 }
 
+.completionActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .progressCopy {
   align-items: center;
   color: var(--text-soft);
@@ -1368,6 +1376,11 @@
   }
 
   .launchFooter :global(.primary-button) {
+    width: 100%;
+  }
+
+  .completionActions,
+  .completionActions > * {
     width: 100%;
   }
 
