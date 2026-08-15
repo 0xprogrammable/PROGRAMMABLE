@@ -43,6 +43,16 @@ export function AtmosphereBackdrop() {
           <i key={`lower-${index}`} style={sparkleStyle(index, 17)} />
         ))}
       </span>
+      <span className="atmosphere-sparkles atmosphere-sparkles-dense">
+        {Array.from({ length: TWINKLE_COUNT }, (_, index) => (
+          <i key={`dense-${index}`} style={sparkleStyle(index, 29)} />
+        ))}
+      </span>
+      <span className="atmosphere-sparkles atmosphere-sparkles-accent">
+        {Array.from({ length: LOWER_TWINKLE_COUNT }, (_, index) => (
+          <i key={`accent-${index}`} style={sparkleStyle(index, 47)} />
+        ))}
+      </span>
       <span className="atmosphere-botanicals">
         <Image
           className="atmosphere-plant atmosphere-plant-left"

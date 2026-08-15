@@ -1,16 +1,37 @@
+:global(body .app-frame):has(.page) {
+  height: auto;
+  min-height: 100svh;
+  overflow: visible;
+}
+
+:global(body .app-frame):has(.page) > :global(main) {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+:global(body .app-frame):has(.page) :global(.route-transition) {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
 .page {
   color: var(--webde-ink);
+  min-height: 100svh;
   min-width: 0;
   overflow-x: clip;
   position: relative;
 }
 
 .hero {
-  background: #000;
+  background: transparent;
   isolation: isolate;
   min-height: calc(100svh - 88px);
   overflow: hidden;
   position: relative;
+  scroll-margin-top: 88px;
+  z-index: 1;
 }
 
 .heroArtwork {
@@ -30,10 +51,7 @@
 
 .heroGarden {
   object-fit: cover;
-  object-position: center top;
-  transform: translateY(27vh);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 4%, #000 30%);
-  mask-image: linear-gradient(to bottom, transparent 0%, transparent 4%, #000 30%);
+  object-position: center bottom;
 }
 
 .heroContent {
@@ -118,21 +136,34 @@
 }
 
 .definition h2 {
-  align-items: center;
+  align-items: baseline;
   display: flex;
   font-size: clamp(64px, 7vw, 96px);
-  gap: 16px;
+  gap: 0.28em;
   justify-content: center;
   line-height: 1;
   white-space: nowrap;
 }
 
+.definitionLogoFrame {
+  align-items: flex-end;
+  align-self: baseline;
+  display: inline-flex;
+  height: 0.9em;
+  justify-content: center;
+  transform: translateY(0.065em);
+  width: 0.69em;
+}
+
 .definitionLogo {
   filter: grayscale(1) brightness(0) invert(1);
-  height: 0.96em;
+  height: 100%;
   object-fit: contain;
-  transform: translateY(0.015em);
-  width: 0.77em;
+  width: 100%;
+}
+
+.definitionQuestion {
+  display: inline-block;
 }
 
 .docsLink {
@@ -190,6 +221,40 @@
   padding-top: 52px;
 }
 
+@keyframes hero-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes cue-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, 18px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes hero-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes cue-pulse {
   0%,
   100% {
@@ -208,6 +273,43 @@
   .inlineLink:hover {
     color: #fff;
     text-decoration-color: #fff;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .heroLogo,
+  .hero h1,
+  .heroContent > p {
+    animation: hero-reveal 900ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .heroLogo {
+    animation-delay: 80ms;
+  }
+
+  .hero h1 {
+    animation-delay: 150ms;
+  }
+
+  .heroContent > p {
+    animation-delay: 220ms;
+  }
+
+  .scrollCue {
+    animation: cue-reveal 800ms cubic-bezier(0.23, 1, 0.32, 1) 300ms both;
+  }
+
+  .page[data-reveal-ready="true"] .revealSection {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+    transition:
+      opacity 850ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 850ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .page[data-reveal-ready="true"] .revealSection[data-visible="true"] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -240,8 +342,7 @@
 
 @media (max-width: 42.5rem) {
   .heroGarden {
-    object-position: 58% top;
-    transform: translateY(31vh) scale(1.2);
+    object-position: 62% bottom;
   }
 
   .heroContent {
@@ -298,6 +399,22 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .heroLogo,
+  .hero h1,
+  .heroContent > p,
+  .scrollCue {
+    animation: hero-fade 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .page[data-reveal-ready="true"] .revealSection {
+    opacity: 0;
+    transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .page[data-reveal-ready="true"] .revealSection[data-visible="true"] {
+    opacity: 1;
+  }
+
   .scrollCue span:last-child {
     animation: none;
   }

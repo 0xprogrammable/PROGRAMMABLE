@@ -273,7 +273,7 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Choose a Launch Model</h1>
+        <h1>Choose a launch model</h1>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>

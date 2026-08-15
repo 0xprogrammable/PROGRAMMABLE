@@ -75,7 +75,11 @@ export function SiteHeader() {
     >
       <div className={`header-inner ${styles.headerInner}`}>
         <div className="header-brand">
-          <Link className="wordmark" href="/" aria-label="Programmable home">
+          <Link
+            className="wordmark"
+            href="/#intro"
+            aria-label="Programmable home"
+          >
             <Image
               className="wordmark-logo"
               src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"

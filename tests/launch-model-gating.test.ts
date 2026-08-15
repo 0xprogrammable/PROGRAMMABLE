@@ -176,7 +176,7 @@ describe("unreleased launch model gating", () => {
     );
 
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
-    expect(html).toContain("<h1>Choose a Launch Model</h1>");
+    expect(html).toContain("<h1>Choose a launch model</h1>");
     expect(html).toContain('data-launch-model-option="classic"');
     const classicCard = html.match(
       /<button[^>]*data-launch-model-option="classic"[^>]*>/,

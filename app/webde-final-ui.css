@@ -43,6 +43,9 @@ select {
 
 .atmosphere-backdrop {
   background: var(--webde-canvas);
+  contain: strict;
+  isolation: isolate;
+  pointer-events: none;
 }
 
 .atmosphere-ground-glow,
@@ -51,15 +54,121 @@ select {
   display: none;
 }
 
-.atmosphere-stars-primary,
+.atmosphere-stars-primary {
+  background-image:
+    radial-gradient(circle, rgb(255 255 255 / 0.78) 0 0.65px, transparent 1px),
+    radial-gradient(circle, rgb(230 238 255 / 0.66) 0 0.55px, transparent 0.95px),
+    radial-gradient(circle, rgb(255 244 215 / 0.7) 0 0.6px, transparent 1px),
+    radial-gradient(circle, rgb(255 255 255 / 0.58) 0 0.5px, transparent 0.9px);
+  background-position: 17px 23px, 83px 41px, 139px 97px, 251px 61px;
+  background-repeat: repeat;
+  background-size: 131px 167px, 197px 229px, 263px 181px, 347px 283px;
+  opacity: 0.72;
+}
+
 .atmosphere-stars-secondary {
-  opacity: 0.48;
+  background-image:
+    radial-gradient(circle, rgb(255 255 255 / 0.64) 0 0.5px, transparent 0.9px),
+    radial-gradient(circle, rgb(224 235 255 / 0.56) 0 0.55px, transparent 0.95px),
+    radial-gradient(circle, rgb(255 241 202 / 0.6) 0 0.5px, transparent 0.9px),
+    radial-gradient(circle, rgb(255 255 255 / 0.5) 0 0.45px, transparent 0.85px);
+  background-position: 61px 89px, 151px 19px, 37px 173px, 293px 137px;
+  background-repeat: repeat;
+  background-size: 173px 239px, 229px 157px, 311px 271px, 389px 197px;
+  opacity: 0.62;
 }
 
 .atmosphere-sparkles i {
-  background: #fff;
+  background: currentColor;
+  border-radius: 50%;
   box-shadow: 0 0 3px rgb(255 255 255 / 0.58);
-  opacity: 0.08;
+  color: #fff;
+  opacity: 0.24;
+  transform: translateZ(0) scale(0.84);
+  transform-origin: center;
+}
+
+.atmosphere-sparkles i:nth-child(5n + 2) {
+  color: #e8f0ff;
+}
+
+.atmosphere-sparkles i:nth-child(7n + 3) {
+  color: #fff1c9;
+}
+
+.atmosphere-sparkles-dense {
+  opacity: 0.9;
+}
+
+.atmosphere-sparkles-accent {
+  opacity: 0.96;
+}
+
+@keyframes atmosphere-sparkle {
+  0%,
+  61%,
+  100% {
+    opacity: 0.2;
+    transform: translateZ(0) scale(0.84);
+  }
+
+  69% {
+    opacity: 1;
+    transform: translateZ(0) scale(1.42);
+  }
+
+  78% {
+    opacity: 0.34;
+    transform: translateZ(0) scale(0.96);
+  }
+}
+
+@keyframes atmosphere-sparkle-soft {
+  0%,
+  36%,
+  100% {
+    opacity: 0.18;
+    transform: translateZ(0) scale(0.82);
+  }
+
+  49% {
+    opacity: 0.82;
+    transform: translateZ(0) scale(1.26);
+  }
+
+  61% {
+    opacity: 0.28;
+    transform: translateZ(0) scale(0.92);
+  }
+}
+
+@keyframes atmosphere-sparkle-double {
+  0%,
+  19%,
+  47%,
+  100% {
+    opacity: 0.18;
+    transform: translateZ(0) scale(0.82);
+  }
+
+  27%,
+  76% {
+    opacity: 0.92;
+    transform: translateZ(0) scale(1.34);
+  }
+
+  35%,
+  86% {
+    opacity: 0.3;
+    transform: translateZ(0) scale(0.94);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .atmosphere-sparkles i {
+    animation: var(--sparkle-animation) var(--sparkle-duration)
+      cubic-bezier(0.37, 0, 0.63, 1) var(--sparkle-delay) infinite;
+  }
 }
 
 .site-header,
@@ -249,5 +358,12 @@ body:has([data-docs-shell]) .site-header::before {
 @media (prefers-reduced-motion: reduce) {
   .route-transition {
     animation-duration: 0.01ms;
+  }
+
+  .atmosphere-sparkles i {
+    animation: none;
+    opacity: 0.42;
+    transform: none;
+    will-change: auto;
   }
 }

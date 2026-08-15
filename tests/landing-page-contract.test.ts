@@ -18,6 +18,13 @@ describe("landing page contract", () => {
     expect(navigation).toContain(
       '{ href: "/explore", label: "Explore" }',
     );
+    expect(navigation).toContain('href="/#intro"');
+    expect(homePage).toContain(
+      'const pageDescription = "Shape what assets can do";',
+    );
+    expect(homePage).toContain("description: pageDescription");
+    expect(homePage).toContain("openGraph:");
+    expect(homePage).toContain("twitter:");
   });
 
   it("uses one black star field across routes and one exact floral landing foreground", () => {
@@ -47,6 +54,7 @@ describe("landing page contract", () => {
     );
     expect(landing).toContain("<h1 id=\"landing-title\">Programmable</h1>");
     expect(landing).toContain("Shape what assets can do");
+    expect(landing).toContain('id="intro"');
     expect(landing).toContain('href="#what-is-programmable"');
     expect(landing).toContain('id="what-is-programmable"');
     expect(landing).toContain('id="what-is-a-hook"');
@@ -68,20 +76,46 @@ describe("landing page contract", () => {
   });
 
   it("keeps each landing chapter full-screen, readable and motion safe", () => {
+    const landing = read("components/landing-page.tsx");
     const styles = read("components/landing-page.module.css");
 
     expect(styles).toMatch(
       /\.hero\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);/s,
     );
+    expect(styles).toMatch(/\.hero\s*\{[^}]*z-index:\s*1;/s);
     expect(styles).toMatch(/\.definition\s*\{[^}]*min-height:\s*100svh;/s);
     expect(styles).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);
     expect(styles).toMatch(
       /\.hero h1\s*\{[^}]*font-size:\s*clamp\(64px, 7\.2vw, 104px\);/s,
     );
     expect(styles).toContain("scroll-margin-top: 0;");
+    expect(styles).toContain("object-position: center bottom;");
+    expect(styles).not.toContain("mask-image:");
+    expect(styles).not.toContain("translateY(27vh)");
+    expect(styles).not.toContain("translateY(31vh)");
+    expect(styles).toContain("align-items: baseline;");
+    expect(styles).toContain(".definitionLogoFrame");
+    expect(landing).toContain("new IntersectionObserver(");
+    expect(landing).toContain('data-reveal-section');
+    expect(landing).not.toContain('addEventListener("wheel"');
+    expect(landing).not.toContain('addEventListener("scroll"');
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.scrollCue span:last-child\s*\{[^}]*animation:\s*none;/,
+    );
+  });
+
+  it("restores native document scrolling instead of trapping the landing route", () => {
+    const styles = read("components/landing-page.module.css");
+
+    expect(styles).toMatch(
+      /:global\(body \.app-frame\):has\(\.page\)\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
+    );
+    expect(styles).toMatch(
+      /:global\(body \.app-frame\):has\(\.page\) > :global\(main\)\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
+    );
+    expect(styles).toMatch(
+      /:global\(body \.app-frame\):has\(\.page\) :global\(\.route-transition\)\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
     );
   });
 
