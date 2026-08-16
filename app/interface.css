@@ -219,6 +219,10 @@ code,
   outline-offset: 6px;
 }
 
+.route-transition h1[data-route-announcement-focus="true"]:focus {
+  outline: 0;
+}
+
 .app-frame::before,
 html[data-theme="dark"] .app-frame::before {
   background: transparent;

@@ -1356,43 +1356,57 @@
 @media (max-width: 700px) {
   .page {
     min-height: calc(100svh - 72px);
-    padding-block: 24px 56px;
+    padding-block: 16px 48px;
   }
 
   .pageHeading {
-    min-height: 66px;
+    min-height: 0;
     padding: 0;
   }
 
   .pageHeading h1 {
-    font-size: clamp(46px, 14vw, 62px);
+    font-size: clamp(38px, 11vw, 48px);
     max-width: none;
   }
 
   .runnersIntro {
-    margin-top: 22px;
+    margin-top: 16px;
   }
 
   .runnersIntro :global(.token-toolbar) {
     align-items: stretch;
     display: grid;
+    gap: 8px;
+    grid-template-areas:
+      "search search"
+      "pages sort";
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .runnersIntro :global(.token-search) {
+    grid-area: search;
     max-width: none;
     width: 100%;
   }
 
+  .runnersIntro :global(.token-filter) {
+    grid-area: sort;
+    justify-self: end;
+  }
+
   .runnersIntro :global(.token-pagination) {
-    grid-column: 1 / -1;
+    grid-area: pages;
     justify-self: start;
   }
 
   .runnerGrid {
-    gap: 14px;
-    grid-template-columns: 1fr;
-    margin-top: 24px;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 16px;
+  }
+
+  .revealedGrid .runnerCard:nth-child(n + 5) {
+    display: none;
   }
 
   .runnerCard {
@@ -1403,24 +1417,59 @@
 
   .runnerHitArea {
     display: flex;
+    flex-direction: column;
   }
 
   .runnerArt {
-    aspect-ratio: 2.2 / 1;
+    aspect-ratio: 1.7 / 1;
     width: 100%;
   }
 
   .runnerBody {
-    min-height: 112px;
-    padding: 17px 16px 13px;
+    min-height: 72px;
+    padding: 12px 12px 10px;
   }
 
   .runnerHeading h3 {
-    font-size: 22px;
+    font-size: 17px;
+    letter-spacing: -0.025em;
+  }
+
+  .runnerHeading > span {
+    font-size: 10px;
+  }
+
+  .runnerData {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .runnerData small {
+    font-size: 10px;
+  }
+
+  .runnerData strong {
+    font-size: 12px;
   }
 
   .runnerMeta {
-    padding-inline-start: 12px;
+    min-height: 40px;
+    padding: 0 6px 0 10px;
+  }
+
+  .runnerCategory,
+  .runnerMarketStatus {
+    font-size: 10px;
+  }
+
+  .runnerContract {
+    display: none;
+  }
+
+  .runnerSocials {
+    flex-basis: auto;
+    justify-content: flex-end;
+    margin-inline-start: auto;
   }
 }
 
@@ -1464,16 +1513,15 @@
 
 @media (max-width: 360px) {
   .runnersIntro :global(.token-toolbar) {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .runnersIntro :global(.token-filter),
   .runnersIntro :global(.token-filter summary) {
-    width: 100%;
+    min-width: 108px;
   }
 
   .runnersIntro :global(.token-pagination) {
-    grid-column: auto;
+    grid-area: pages;
   }
 
   /* Keep the filter affordance legible at the narrowest supported width.

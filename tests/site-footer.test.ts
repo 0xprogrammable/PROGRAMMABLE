@@ -5,6 +5,10 @@ const footerSource = readFileSync(
   new URL("../components/site-footer.tsx", import.meta.url),
   "utf8",
 );
+const footerStyles = readFileSync(
+  new URL("../components/site-footer.module.css", import.meta.url),
+  "utf8",
+);
 
 describe("Site footer", () => {
   it("keeps the landing footer frameless and links Explore to the landing chapter", () => {
@@ -38,5 +42,17 @@ describe("Site footer", () => {
     expect(dune).toBeGreaterThan(dexscreener);
     expect(discord).toBeGreaterThan(dune);
     expect(footerSource).toContain('label: "Dune"');
+  });
+
+  it("stacks evenly aligned link groups on narrow screens", () => {
+    expect(footerStyles).toMatch(
+      /@media \(max-width: 680px\)[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/s,
+    );
+    expect(footerStyles).toMatch(
+      /@media \(max-width: 680px\)[\s\S]*?\.column ul\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
+    );
+    expect(footerStyles).toMatch(
+      /@media \(max-width: 680px\)[\s\S]*?\.brand\s*\{[^}]*justify-content:\s*space-between;/s,
+    );
   });
 });

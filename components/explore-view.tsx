@@ -11,7 +11,13 @@ import {
   Search,
   X as CloseIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
   formatMarketCapMetric,
@@ -255,7 +261,42 @@ export function preserveExplorePayloadOnRefreshFailure(
 type PaginationItem = number | "start-gap" | "end-gap";
 
 export const EXPLORE_TOKENS_PER_PAGE = 9;
+export const EXPLORE_MOBILE_TOKENS_PER_PAGE = 4;
+export const EXPLORE_MOBILE_BREAKPOINT_PX = 700;
 export const EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE = 100;
+
+const EXPLORE_MOBILE_MEDIA_QUERY = `(max-width: ${EXPLORE_MOBILE_BREAKPOINT_PX}px)`;
+
+export function exploreTokensPerPageForViewport(width: number) {
+  return width <= EXPLORE_MOBILE_BREAKPOINT_PX
+    ? EXPLORE_MOBILE_TOKENS_PER_PAGE
+    : EXPLORE_TOKENS_PER_PAGE;
+}
+
+function subscribeToExploreViewport(onChange: () => void) {
+  const query = window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function exploreMobileViewportSnapshot() {
+  return window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY).matches;
+}
+
+function exploreMobileViewportServerSnapshot() {
+  return false;
+}
+
+function useExploreTokensPerPage() {
+  const mobile = useSyncExternalStore(
+    subscribeToExploreViewport,
+    exploreMobileViewportSnapshot,
+    exploreMobileViewportServerSnapshot,
+  );
+  return mobile
+    ? EXPLORE_MOBILE_TOKENS_PER_PAGE
+    : EXPLORE_TOKENS_PER_PAGE;
+}
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
@@ -1534,12 +1575,14 @@ export function paginateExploreModelDataset(
   dataset: ExplorePayload,
   modelFilter: ExploreModelFilter,
   requestedPage: number,
+  pageSize = EXPLORE_TOKENS_PER_PAGE,
 ): ExplorePayload {
   const page = paginateTokensByExploreFilters(
     dataset.tokens,
     "all",
     modelFilter,
     requestedPage,
+    pageSize,
   );
   return {
     status: dataset.status,
@@ -1779,12 +1822,6 @@ export function exploreDataQualityMessage(
   quality: ExploreDataQuality | undefined,
 ) {
   if (!quality) return null;
-  if (quality.launchIdentity.status === "partial") {
-    return `Partial launch index · last indexed ${quality.generatedAt.slice(0, 10)}`;
-  }
-  if (quality.launchIdentity.status === "last-known-good") {
-    return `Launch index may be out of date · last indexed ${quality.generatedAt.slice(0, 10)}`;
-  }
   if (quality.valuation.status === "stale") {
     return "Prices may be out of date";
   }
@@ -1806,6 +1843,7 @@ export function ExploreView({
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
   const refreshKey = useLiveDataRefresh({
@@ -1820,7 +1858,7 @@ export function ExploreView({
     payload: ExplorePayload;
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}`;
+  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
   const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}\u0000${refreshKey}`;
   const activeRequestContentKey =
@@ -1888,6 +1926,10 @@ export function ExploreView({
   }, [debouncedQuery, normalizedQuery]);
 
   useEffect(() => {
+    return subscribeToExploreViewport(() => setCurrentPage(1));
+  }, []);
+
+  useEffect(() => {
     function closeFilter(event: PointerEvent | KeyboardEvent) {
       const filter = filterRef.current;
       if (!filter?.open) return;
@@ -1944,7 +1986,7 @@ export function ExploreView({
       q: debouncedQuery,
       sort,
       page: String(currentPage),
-      limit: String(EXPLORE_TOKENS_PER_PAGE),
+      limit: String(pageSize),
     });
     if (socialFilter !== "all") {
       search.set("socials", socialFilter);
@@ -1981,6 +2023,7 @@ export function ExploreView({
             dataset,
             modelFilter,
             currentPage,
+            pageSize,
           );
         }
         if (ignore) return;
@@ -2021,6 +2064,7 @@ export function ExploreView({
     activeRequestContentKey,
     modelDatasetKey,
     modelFilter,
+    pageSize,
     initialState,
     loadingOnly,
     preview,
@@ -2055,13 +2099,14 @@ export function ExploreView({
       socialFilter,
       modelFilter,
       currentPage,
+      pageSize,
     );
 
     return {
       status: "ready",
       ...paginated,
     };
-  }, [currentPage, debouncedQuery, modelFilter, socialFilter, sort]);
+  }, [currentPage, debouncedQuery, modelFilter, pageSize, socialFilter, sort]);
 
   const displayState: ExploreState = preview
     ? {
@@ -2226,9 +2271,9 @@ export function ExploreView({
                   src={imageSource}
                   alt={token.usesFallbackImage ? "" : `${token.name} artwork`}
                   fill
-                  loading={index < 3 ? "eager" : "lazy"}
-                  priority={index < 3}
-                  sizes="(max-width: 360px) 96px, (max-width: 700px) 104px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 299px"
+                  loading={index < Math.min(pageSize, 4) ? "eager" : "lazy"}
+                  priority={index < Math.min(pageSize, 4)}
+                  sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />

@@ -31,6 +31,35 @@ const desktopNavItems = [
 ];
 
 const mobileNavItems = desktopNavItems;
+const MOBILE_MENU_TRANSITION_MS = 300;
+
+function prepareLandingExploreNavigation(
+  event: MouseEvent<HTMLAnchorElement>,
+  pathname: string,
+  href: string,
+) {
+  if (
+    pathname !== "/" ||
+    href !== "/#explore" ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return false;
+  }
+
+  event.preventDefault();
+  if (window.location.hash !== "#explore") {
+    window.history.pushState(null, "", "/#explore");
+  }
+  return true;
+}
+
+function alignLandingExplore() {
+  window.dispatchEvent(new Event("hashchange"));
+}
 
 function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
   return (
@@ -113,6 +142,7 @@ export function SiteHeader() {
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const exploreAlignmentTimerRef = useRef<number | null>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
 
@@ -158,6 +188,27 @@ export function SiteHeader() {
     };
   }, [menuOpen]);
 
+  useEffect(
+    () => () => {
+      if (exploreAlignmentTimerRef.current !== null) {
+        window.clearTimeout(exploreAlignmentTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  function finishMobileNavigation(shouldAlignExplore: boolean) {
+    setMenuPath(null);
+    if (!shouldAlignExplore) return;
+    if (exploreAlignmentTimerRef.current !== null) {
+      window.clearTimeout(exploreAlignmentTimerRef.current);
+    }
+    exploreAlignmentTimerRef.current = window.setTimeout(() => {
+      exploreAlignmentTimerRef.current = null;
+      alignLandingExplore();
+    }, MOBILE_MENU_TRANSITION_MS + 20);
+  }
+
   return (
     <header ref={headerRef} className={`site-header ${styles.siteHeader}`}>
       <div className={`header-inner ${styles.headerInner}`}>
@@ -187,6 +238,17 @@ export function SiteHeader() {
               className={isCurrent(pathname, item) ? "active" : undefined}
               href={item.href}
               aria-current={isCurrent(pathname, item) ? "page" : undefined}
+              onClick={(event) => {
+                if (
+                  prepareLandingExploreNavigation(
+                    event,
+                    pathname,
+                    item.href,
+                  )
+                ) {
+                  alignLandingExplore();
+                }
+              }}
             >
               {item.label}
             </Link>
@@ -227,7 +289,7 @@ export function SiteHeader() {
           <MobileNavigation
             id={menuId}
             open={menuOpen}
-            onNavigate={() => setMenuPath(null)}
+            onNavigate={finishMobileNavigation}
           />
           <HeaderSocialLinks mobile />
         </div>
@@ -239,7 +301,7 @@ export function SiteHeader() {
 type MobileNavigationProps = {
   id?: string;
   open?: boolean;
-  onNavigate?: () => void;
+  onNavigate?: (shouldAlignExplore: boolean) => void;
 };
 
 export function MobileNavigation({
@@ -265,7 +327,17 @@ export function MobileNavigation({
             href={item.href}
             aria-current={current ? "page" : undefined}
             tabIndex={open ? undefined : -1}
-            onClick={onNavigate}
+            onClick={(event) => {
+              const shouldAlignExplore = prepareLandingExploreNavigation(
+                event,
+                pathname,
+                item.href,
+              );
+              onNavigate?.(shouldAlignExplore);
+              if (shouldAlignExplore && onNavigate === undefined) {
+                alignLandingExplore();
+              }
+            }}
           >
             <span>{item.label}</span>
           </Link>

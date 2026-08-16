@@ -64,6 +64,12 @@ export function RouteTransition({ children }: { children: ReactNode }) {
     const heading = contentRef.current?.querySelector<HTMLElement>("h1");
     if (heading) {
       heading.tabIndex = -1;
+      heading.dataset.routeAnnouncementFocus = "true";
+      heading.addEventListener(
+        "blur",
+        () => delete heading.dataset.routeAnnouncementFocus,
+        { once: true },
+      );
       heading.focus({ preventScroll: true });
       return;
     }
