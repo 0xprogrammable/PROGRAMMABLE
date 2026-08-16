@@ -20,6 +20,7 @@ import type { ExploreEntry } from "../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+const FAST_LANE_REQUEST_BUDGET_MS = 8_000;
 
 const SUCCESS_CACHE_CONTROL = "public, max-age=0, s-maxage=2";
 
@@ -70,6 +71,11 @@ function unavailableResponse(
 }
 
 export async function GET(request: NextRequest) {
+  const deadlineMs = Date.now() + FAST_LANE_REQUEST_BUDGET_MS;
+  const readSignal = AbortSignal.any([
+    request.signal,
+    AbortSignal.timeout(FAST_LANE_REQUEST_BUDGET_MS),
+  ]);
   const search = request.nextUrl.searchParams;
   if (
     [...search.keys()].some((key) => key !== "address") ||
@@ -93,7 +99,10 @@ export async function GET(request: NextRequest) {
   const address = requestedTokenAddress.toLowerCase();
   let catalog;
   try {
-    catalog = await readLastGoodLaunchCatalogV1();
+    catalog = await readLastGoodLaunchCatalogV1({
+      signal: readSignal,
+      deadlineMs,
+    });
   } catch (error) {
     console.error("Token detail identity read failed", {
       name: error instanceof Error ? error.name : "LaunchCatalogError",
@@ -113,7 +122,7 @@ export async function GET(request: NextRequest) {
   if (isCustomLaunchRegistryPublicReadEnabled()) {
     try {
       customEntries = await readProductionCustomExploreDirectoryV1(
-        request.signal,
+        readSignal,
       );
       customStatus = "current";
     } catch {
@@ -150,6 +159,7 @@ export async function GET(request: NextRequest) {
     : catalog.source;
   const catalogBoundary = {
     source: catalog.source,
+    launchSource,
     status: catalog.status,
     lastIndexedAt: catalog.generatedAt,
     asOfBlock: catalog.asOfBlock,
@@ -188,7 +198,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const market = await readDexscreenerExploreEntriesV1([entry]);
+    const market = await readDexscreenerExploreEntriesV1([entry], {
+      signal: readSignal,
+      deadlineMs,
+    });
     const valuedEntry = market.entries[0];
     if (!valuedEntry) throw new Error("Dexscreener identity mapping failed");
     const hasDexscreenerPrice = valuedEntry.valuation.status === "available";
@@ -231,7 +244,8 @@ export async function GET(request: NextRequest) {
       {
         status: "ready",
         token: publicEntry.exploreKind === "token" ? publicEntry : null,
-        customProject: null,
+        customProject:
+          publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
         catalog: catalogBoundary,
       },

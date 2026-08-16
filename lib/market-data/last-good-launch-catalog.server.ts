@@ -7,7 +7,14 @@ import { canonicalSha256 } from "../server/projection-target/hashing";
 import type { ExploreEntry } from "../tokens";
 
 const CATALOG_CACHE_TTL_MS = 60_000;
+const CATALOG_READ_TIMEOUT_MS = 5_000;
 type CatalogSource = "durable-blob";
+
+export type LastGoodLaunchCatalogReadOptionsV1 = Readonly<{
+  signal?: AbortSignal;
+  /** Absolute Unix epoch deadline, in milliseconds. */
+  deadlineMs?: number;
+}>;
 
 export type LastGoodLaunchCatalogV1 = Readonly<{
   source: CatalogSource;
@@ -29,29 +36,135 @@ export type LastGoodLaunchCatalogV1 = Readonly<{
 
 let cached: Readonly<{ expiresAt: number; catalog: LastGoodLaunchCatalogV1 }> |
   null = null;
-let inFlight: Promise<LastGoodLaunchCatalogV1> | null = null;
+type CatalogFlight = {
+  promise: Promise<LastGoodLaunchCatalogV1>;
+  controller: AbortController;
+  waiters: number;
+  settled: boolean;
+};
+let inFlight: CatalogFlight | null = null;
 
-export async function readLastGoodLaunchCatalogV1(): Promise<
+export async function readLastGoodLaunchCatalogV1(
+  options: LastGoodLaunchCatalogReadOptionsV1 = {},
+): Promise<
   LastGoodLaunchCatalogV1
 > {
+  assertCatalogCallerActive(options);
   const now = Date.now();
   if (cached && cached.expiresAt > now) return cached.catalog;
-  if (inFlight) return await inFlight;
-  inFlight = readUncached().then((catalog) => {
+  const flight = inFlight ?? createCatalogFlight();
+  return await waitForCatalogFlight(flight, options);
+}
+
+function createCatalogFlight() {
+  const controller = new AbortController();
+  const flight: CatalogFlight = {
+    promise: Promise.resolve(undefined as never),
+    controller,
+    waiters: 0,
+    settled: false,
+  };
+  flight.promise = readUncached({
+    signal: controller.signal,
+    deadlineMs: Date.now() + CATALOG_READ_TIMEOUT_MS,
+  }).then((catalog) => {
     cached = { expiresAt: Date.now() + CATALOG_CACHE_TTL_MS, catalog };
     return catalog;
   }).finally(() => {
-    inFlight = null;
+    flight.settled = true;
+    if (inFlight === flight) inFlight = null;
   });
-  return await inFlight;
+  inFlight = flight;
+  return flight;
 }
 
-async function readUncached(): Promise<LastGoodLaunchCatalogV1> {
+async function waitForCatalogFlight(
+  flight: CatalogFlight,
+  options: LastGoodLaunchCatalogReadOptionsV1,
+) {
+  flight.waiters += 1;
+  try {
+    return await waitForCatalogCaller(flight.promise, options);
+  } finally {
+    flight.waiters -= 1;
+    if (
+      flight.waiters === 0 &&
+      !flight.settled &&
+      inFlight === flight &&
+      !flight.controller.signal.aborted
+    ) {
+      flight.controller.abort(
+        new Error("Durable launch catalog has no active readers"),
+      );
+    }
+  }
+}
+
+function waitForCatalogCaller<T>(
+  operation: Promise<T>,
+  options: LastGoodLaunchCatalogReadOptionsV1,
+): Promise<T> {
+  assertCatalogCallerActive(options);
+  if (options.signal === undefined && options.deadlineMs === undefined) {
+    return operation;
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const complete = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abortFromCaller);
+      callback();
+    };
+    const abortFromCaller = () => complete(() => reject(
+      options.signal?.reason ?? new Error("Durable launch catalog read aborted"),
+    ));
+    options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    const remainingMs = options.deadlineMs === undefined
+      ? undefined
+      : options.deadlineMs - Date.now();
+    const timer = remainingMs === undefined
+      ? undefined
+      : setTimeout(
+          () => complete(() => reject(
+            new Error("Durable launch catalog deadline exceeded"),
+          )),
+          Math.max(0, remainingMs),
+        );
+    operation.then(
+      (value) => complete(() => resolve(value)),
+      (error) => complete(() => reject(error)),
+    );
+  });
+}
+
+function assertCatalogCallerActive(
+  options: LastGoodLaunchCatalogReadOptionsV1,
+) {
+  if (
+    options.deadlineMs !== undefined &&
+    !Number.isFinite(options.deadlineMs)
+  ) {
+    throw new Error("Durable launch catalog deadline is invalid");
+  }
+  if (options.signal?.aborted) {
+    throw options.signal.reason ??
+      new Error("Durable launch catalog read aborted");
+  }
+  if (options.deadlineMs !== undefined && options.deadlineMs <= Date.now()) {
+    throw new Error("Durable launch catalog deadline exceeded");
+  }
+}
+
+async function readUncached(
+  options: LastGoodLaunchCatalogReadOptionsV1,
+): Promise<LastGoodLaunchCatalogV1> {
   const deployment = getOnchainDeployment("production");
   if (deployment.status !== "ready") {
     throw new Error("Production launch deployment is unavailable");
   }
-  const durable = await readDurableExploreModel(deployment);
+  const durable = await readDurableExploreModel(deployment, options);
   if (durable.status !== "ready" && durable.reason !== "stale") {
     throw new Error(`Durable launch catalog is ${durable.reason}`);
   }

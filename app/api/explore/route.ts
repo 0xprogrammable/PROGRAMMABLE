@@ -24,6 +24,7 @@ import type { ExploreEntry } from "../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+const FAST_LANE_REQUEST_BUDGET_MS = 8_000;
 
 const EXPLORE_QUERY_PARAMETERS = new Set([
   "limit",
@@ -245,6 +246,11 @@ function generatedAgeMs(generatedAt: string): number | null {
 }
 
 export async function GET(request: NextRequest) {
+  const deadlineMs = Date.now() + FAST_LANE_REQUEST_BUDGET_MS;
+  const readSignal = AbortSignal.any([
+    request.signal,
+    AbortSignal.timeout(FAST_LANE_REQUEST_BUDGET_MS),
+  ]);
   const search = request.nextUrl.searchParams;
   if (!hasCanonicalQueryShape(search) || !hasCanonicalPaginationShape(search)) {
     return NextResponse.json(
@@ -269,13 +275,16 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
-    const catalog = await readLastGoodLaunchCatalogV1();
+    const catalog = await readLastGoodLaunchCatalogV1({
+      signal: readSignal,
+      deadlineMs,
+    });
     let customEntries: readonly ExploreEntry[] = [];
     let customStatus: "current" | "unavailable" = "unavailable";
     if (isCustomLaunchRegistryPublicReadEnabled()) {
       try {
         customEntries = await readProductionCustomExploreDirectoryV1(
-          request.signal,
+          readSignal,
         );
         customStatus = "current";
       } catch {
@@ -299,14 +308,21 @@ export async function GET(request: NextRequest) {
     let marketRead: Awaited<
       ReturnType<typeof readDexscreenerExploreEntriesV1>
     >["marketRead"];
+    let marketQualifiedEntryCount = 0;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
       const filtered = filterExploreEntries(
         identityEntries,
         options.query,
         options.socials,
       );
-      const valued = await readDexscreenerExploreEntriesV1(filtered);
+      const valued = await readDexscreenerExploreEntriesV1(filtered, {
+        signal: readSignal,
+        deadlineMs,
+      });
       marketRead = valued.marketRead;
+      marketQualifiedEntryCount = valued.entries.filter(
+        (entry) => valuationSortValue(entry) !== null,
+      ).length;
       paginated = paginateExploreEntriesV1(valued.entries, {
         ...options,
         query: "",
@@ -314,7 +330,10 @@ export async function GET(request: NextRequest) {
       });
     } else {
       const identityPage = paginateExploreEntriesV1(identityEntries, options);
-      const valued = await readDexscreenerExploreEntriesV1(identityPage.tokens);
+      const valued = await readDexscreenerExploreEntriesV1(
+        identityPage.tokens,
+        { signal: readSignal, deadlineMs },
+      );
       marketRead = valued.marketRead;
       paginated = { ...identityPage, tokens: [...valued.entries] };
     }
@@ -333,7 +352,7 @@ export async function GET(request: NextRequest) {
     const marketSort = options.sort === "market-cap" ||
       options.sort === "market-cap-asc";
     const qualifiedCount = marketSort
-      ? (paginated.total === 0 ? 0 : marketRead.qualifiedCount)
+      ? marketQualifiedEntryCount
       : pageEntries.filter((entry) => valuationSortValue(entry) !== null).length;
     const rankingStatus = qualifiedCount === 0
       ? "unavailable" as const
@@ -354,6 +373,7 @@ export async function GET(request: NextRequest) {
         marketRead,
         catalog: {
           source: catalog.source,
+          launchSource,
           status: catalog.status,
           lastIndexedAt: catalog.generatedAt,
           asOfBlock: catalog.asOfBlock,

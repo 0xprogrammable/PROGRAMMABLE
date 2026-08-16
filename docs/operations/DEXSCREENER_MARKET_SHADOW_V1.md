@@ -49,7 +49,11 @@ currency `USD`, and internal mode `shadow`. A snapshot separately records `assem
 and the oldest/newest provider-read timestamps in `sourceReadWindow`; cache
 assembly time is never presented as provider freshness. Dexscreener does not
 provide an observation block for this endpoint, so the contract deliberately
-has no `asOfBlock`, `current`, or onchain freshness claim.
+has no `asOfBlock`, `current`, or onchain freshness claim. A value fetched no
+more than five minutes ago is labeled `provider-recent`; it may participate in
+FDV ordering but is never relabeled as onchain-current. The age comparison is
+against the captured `fetchedAt`, including on cache hits. Older, future-dated,
+or invalid observations are stale and unqualified.
 
 ## Request controls
 
@@ -58,6 +62,11 @@ has no `asOfBlock`, `current`, or onchain freshness claim.
 - Default concurrency: 2 across all concurrent reads of one reader instance
 - Default per-reader start interval: 750 ms (at most 80 starts/minute)
 - Default request-and-body deadline: 3 seconds
+- Default whole-producer deadline: 7 seconds across every batch; unfinished
+  tokens become unavailable and no later batch starts
+- Explore and token detail pass one absolute 8-second route deadline plus the
+  request signal through the durable catalog and Dex waiter; a caller timeout
+  does not cancel a producer still serving another waiter
 - Default body cap: 2 MB, counted incrementally while streaming, and 1,000 rows
   per batch
 - Retry policy: none
@@ -70,6 +79,9 @@ has no `asOfBlock`, `current`, or onchain freshness claim.
 - Cache bound: 32 identity-set snapshots per reader with LRU eviction
 - Identity-set cache is order-independent; overlapping sets additionally cache
   and singleflight by token, so `[A,B]` and `[B,C]` fetch `B` once
+- Durable catalog reads use their own five-second producer ceiling, request
+  cancellation, a 4 MB streaming cap, and never leave shared singleflight
+  pinned after all callers leave
 
 The limiter and cache are process-local. The 80 starts/minute per reader cap is
 well below the documented provider ceiling, but horizontal serverless fan-out

@@ -35,6 +35,7 @@ import {
   exploreValuation,
   isExploreDataQuality,
   isExploreValuation,
+  isExploreValuationQualifiedV1,
   type ExploreDataQuality,
   type ExploreValuation,
   type ValuedExploreEntry,
@@ -70,6 +71,7 @@ type TokenCard = {
     | "No market"
     | "Waiting for first trade"
     | "Last verified"
+    | "Provider recent"
     | "Limited market data"
     | "Unavailable";
   usesFallbackImage: boolean;
@@ -83,6 +85,7 @@ export function exploreMarketStatusLabel(
   | "No market"
   | "Waiting for first trade"
   | "Last verified"
+  | "Provider recent"
   | "Limited market data"
   | "Unavailable"
   | undefined {
@@ -98,6 +101,7 @@ export function exploreMarketStatusLabel(
     ? explicit
     : exploreValuation(entry);
   if (valuation.status === "unavailable") return "Unavailable";
+  if (valuation.freshness === "provider-recent") return "Provider recent";
   if (valuation.freshness === "stale") return "Last verified";
   if (valuation.freshness === "unknown") return "Unavailable";
   return undefined;
@@ -140,6 +144,28 @@ type ExploreRanking = Readonly<{
   totalCount?: number;
 }>;
 
+type ExploreCatalogBoundary = Readonly<{
+  source: "durable-blob";
+  launchSource:
+    | "durable-blob"
+    | "durable-blob+registry.custom-launched";
+  status: "current" | "last-known-good";
+  lastIndexedAt: string;
+  asOfBlock: string;
+  asOfBlockHash: `0x${string}`;
+  identityCount: number;
+  identityCommitment: `sha256:${string}`;
+  completeness: Readonly<{
+    classic: "current" | "last-known-good";
+    stock: "current" | "last-known-good" | "unavailable";
+    custom: "current" | "unavailable";
+  }>;
+  evidence: Readonly<{
+    kind: "durable-envelope";
+    commitment: `0x${string}`;
+  }>;
+}>;
+
 type ExplorePayload = {
   status: "ready" | "not-deployed";
   tokens: ValuedExploreEntry[];
@@ -150,6 +176,7 @@ type ExplorePayload = {
   dataQuality?: ExploreDataQuality;
   marketRead?: ExploreMarketRead;
   ranking?: ExploreRanking;
+  catalog?: ExploreCatalogBoundary;
 };
 
 export function exploreAppliedSortLabel(
@@ -838,6 +865,51 @@ function parseExploreRanking(value: unknown, total: unknown): ExploreRanking | n
   return value as ExploreRanking;
 }
 
+function exactIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string" &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(Date.parse(value)).toISOString() === value;
+}
+
+function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
+  if (!isRecord(value) || !isRecord(value.completeness) ||
+    !isRecord(value.evidence)) return null;
+  const expectedLaunchSource = value.completeness.custom === "current"
+    ? "durable-blob+registry.custom-launched"
+    : "durable-blob";
+  if (
+    value.source !== "durable-blob" ||
+    value.launchSource !== expectedLaunchSource ||
+    !["current", "last-known-good"].includes(String(value.status)) ||
+    !exactIsoTimestamp(value.lastIndexedAt) ||
+    typeof value.asOfBlock !== "string" ||
+    !/^[1-9][0-9]*$/u.test(value.asOfBlock) ||
+    typeof value.asOfBlockHash !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(value.asOfBlockHash) ||
+    !Number.isSafeInteger(value.identityCount) ||
+    Number(value.identityCount) < 0 ||
+    typeof value.identityCommitment !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.identityCommitment) ||
+    !["current", "last-known-good"].includes(
+      String(value.completeness.classic),
+    ) ||
+    !["current", "last-known-good", "unavailable"].includes(
+      String(value.completeness.stock),
+    ) ||
+    !["current", "unavailable"].includes(
+      String(value.completeness.custom),
+    ) ||
+    value.evidence.kind !== "durable-envelope" ||
+    typeof value.evidence.commitment !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(value.evidence.commitment)
+  ) return null;
+  return value as ExploreCatalogBoundary;
+}
+
+function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
+  return JSON.stringify(value);
+}
+
 function parseExplorePayload(value: unknown): ExplorePayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -864,6 +936,10 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     (ranking === null || marketRead === null)
   ) {
     throw new Error("The token registry returned invalid ranking data");
+  }
+  const catalog = parseExploreCatalog(value.catalog);
+  if (catalog === null) {
+    throw new Error("The token registry returned invalid catalog data");
   }
 
   const tokens = value.tokens.map(parseExploreEntry);
@@ -896,6 +972,14 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     throw new Error("The token registry returned inconsistent market read data");
   }
   if (
+    value.dataQuality !== undefined &&
+    (value.dataQuality.generatedAt !== catalog.lastIndexedAt ||
+      value.dataQuality.launchIdentity.asOfBlock !== catalog.asOfBlock ||
+      value.dataQuality.launchIdentity.custom !== catalog.completeness.custom)
+  ) {
+    throw new Error("The token registry returned inconsistent catalog data");
+  }
+  if (
     marketRead?.status === "unavailable" && availableValuations !== 0
   ) {
     throw new Error("The token registry returned inconsistent market read data");
@@ -916,6 +1000,7 @@ function parseExplorePayload(value: unknown): ExplorePayload {
       : { dataQuality: value.dataQuality }),
     ...(marketRead === null ? {} : { marketRead }),
     ...(ranking === null ? {} : { ranking }),
+    catalog,
   };
 }
 
@@ -1273,6 +1358,10 @@ export async function loadExploreModelDataset(
     `${contentKey}\u0000model-page:1`,
     firstPageSearch,
   );
+  if (firstPage.catalog === undefined) {
+    throw new Error("Tokens changed while filters were loading");
+  }
+  const firstPageCatalog = firstPage.catalog;
   if (firstPage.totalPages <= 1) {
     return firstPage;
   }
@@ -1291,7 +1380,10 @@ export async function loadExploreModelDataset(
         payload.page !== page ||
         payload.pageSize !== firstPage.pageSize ||
         payload.total !== firstPage.total ||
-        payload.totalPages !== firstPage.totalPages
+        payload.totalPages !== firstPage.totalPages ||
+        payload.catalog === undefined ||
+        exploreCatalogBoundaryKey(payload.catalog) !==
+          exploreCatalogBoundaryKey(firstPageCatalog)
       ) {
         throw new Error("Tokens changed while filters were loading");
       }
@@ -1516,8 +1608,7 @@ export function getExploreValuationMetric(
   token: ExploreEntry | ValuedExploreEntry,
 ): MarketCapMetric | undefined {
   const valuation = valuationForEntry(token);
-  if (valuation.status !== "available" || valuation.freshness !== "current")
-    return undefined;
+  if (!isExploreValuationQualifiedV1(valuation)) return undefined;
   const value = Number(BigInt(valuation.valueWad)) / 1e18;
   if (!Number.isFinite(value) || value <= 0) return undefined;
   if (valuation.currency === "usd") return { kind: "usd", value };

@@ -7,6 +7,8 @@ import type {
 import type { ExploreEntry } from "../tokens";
 import { readDexscreenerMarketShadowV1 } from
   "./dexscreener-shadow.server";
+import type { DexscreenerShadowReadWaitV1 } from
+  "./dexscreener-shadow.server";
 import type {
   DexscreenerShadowResultV1,
   DexscreenerShadowSnapshotV1,
@@ -37,11 +39,12 @@ export type DexscreenerExploreResultV1 = Readonly<{
 
 export async function readDexscreenerExploreEntriesV1(
   entries: readonly ExploreEntry[],
+  wait: DexscreenerShadowReadWaitV1 = {},
 ): Promise<DexscreenerExploreResultV1> {
   const identities = exploreEntriesMarketIdentitiesV1(entries);
   let snapshot: DexscreenerShadowSnapshotV1;
   try {
-    snapshot = await readDexscreenerMarketShadowV1(identities);
+    snapshot = await readDexscreenerMarketShadowV1(identities, wait);
   } catch {
     return {
       entries: entries.map(unavailableEntry),
@@ -49,14 +52,20 @@ export async function readDexscreenerExploreEntriesV1(
     };
   }
 
+  const observedAtMs = Date.now();
   const byIdentity = new Map(
     snapshot.results.map((result) => [identityKey(result), result]),
   );
-  const valuedEntries = entries.map((entry) => valuedEntry(entry, byIdentity));
+  const valuedEntries = entries.map((entry) =>
+    valuedEntry(entry, byIdentity, observedAtMs)
+  );
   const qualifiedCount = snapshot.results.filter((result) =>
     result.status === "available" &&
     result.fdvQualification.status === "qualified" &&
-    dexscreenerObservationFreshnessV1(result.observation.fetchedAt) === "current"
+    dexscreenerObservationFreshnessV1(
+      result.observation.fetchedAt,
+      observedAtMs,
+    ) === "provider-recent"
   ).length;
   return {
     entries: valuedEntries,
@@ -91,6 +100,7 @@ function unavailableRead(requestedCount: number): DexscreenerExploreReadV1 {
 function valuedEntry(
   entry: ExploreEntry,
   results: ReadonlyMap<string, DexscreenerShadowResultV1>,
+  observedAtMs: number,
 ): ValuedExploreEntry {
   const matches = exploreEntryMarketIdentitiesV1(entry)
     .map((identity) => results.get(identityKey({ identity })))
@@ -103,7 +113,10 @@ function valuedEntry(
     return unavailableEntry(entry);
   }
   const observation = qualified[0].observation;
-  const freshness = dexscreenerObservationFreshnessV1(observation.fetchedAt);
+  const freshness = dexscreenerObservationFreshnessV1(
+    observation.fetchedAt,
+    observedAtMs,
+  );
   const valuation: ExploreValuation = {
     status: "available",
     metric: "fdv",
@@ -120,13 +133,13 @@ function valuedEntry(
 export function dexscreenerObservationFreshnessV1(
   fetchedAt: string,
   nowMs = Date.now(),
-): "current" | "stale" {
+): "provider-recent" | "stale" {
   const fetchedAtMs = Date.parse(fetchedAt);
   return Number.isFinite(fetchedAtMs) &&
       Number.isFinite(nowMs) &&
       nowMs >= fetchedAtMs &&
       nowMs - fetchedAtMs <= DEXSCREENER_CURRENT_MAXIMUM_AGE_MS
-    ? "current"
+    ? "provider-recent"
     : "stale";
 }
 

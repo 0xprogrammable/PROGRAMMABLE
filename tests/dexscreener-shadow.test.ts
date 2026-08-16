@@ -578,6 +578,81 @@ describe("Dexscreener server-only shadow reader", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("aborts one caller without cancelling a shared producer or its cache", async () => {
+    const item = identity(1);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl = vi.fn(async () => {
+      await gate;
+      return jsonResponse([pair(item)]);
+    });
+    const shadowReader = reader(fetchImpl);
+    const controller = new AbortController();
+    const owner = shadowReader.read([item], { signal: controller.signal });
+    const sibling = shadowReader.read([item]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+
+    controller.abort(new DOMException("stale", "AbortError"));
+    await expect(owner).rejects.toMatchObject({ name: "AbortError" });
+    release();
+    await expect(sibling).resolves.toMatchObject({ observedCount: 1 });
+    await expect(shadowReader.read([item])).resolves.toMatchObject({
+      observedCount: 1,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds a caller wait while the shared producer settles independently", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(FETCHED_AT));
+    const pending = new Promise<Response>(() => undefined);
+    const shadowReader = reader(vi.fn(() => pending), {
+      timeoutMs: 10_000,
+      maximumReadDurationMs: 150,
+    });
+    const caller = shadowReader.read([identity(1)], {
+      deadlineMs: Date.now() + 100,
+    });
+    const callerAssertion = expect(caller).rejects.toThrow(/deadline/u);
+    const producerWaiter = shadowReader.read([identity(1)]);
+    await vi.advanceTimersByTimeAsync(101);
+    await callerAssertion;
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(producerWaiter).resolves.toMatchObject({
+      readStatus: "unavailable",
+      requestedCount: 1,
+      unavailableCount: 1,
+    });
+  });
+
+  it("stops a 351-token producer at one global deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(FETCHED_AT));
+    const identities = Array.from({ length: 351 }, (_, index) =>
+      identity(index + 1)
+    );
+    const fetchImpl = vi.fn(() => new Promise<Response>(() => undefined));
+    const shadowReader = reader(fetchImpl, {
+      timeoutMs: 10_000,
+      minimumRequestIntervalMs: 100,
+      maximumConcurrentBatches: 2,
+      maximumReadDurationMs: 250,
+    });
+    const read = shadowReader.read(identities);
+    await vi.advanceTimersByTimeAsync(251);
+    const snapshot = await read;
+    expect(snapshot.results).toHaveLength(351);
+    expect(snapshot.results.every((result) => result.status === "unavailable"))
+      .toBe(true);
+    expect(snapshot.readStatus).toBe("unavailable");
+    expect(fetchImpl.mock.calls.length).toBeLessThan(12);
+    const started = fetchImpl.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(started);
+  });
+
   it("shares cache and singleflight across different launch-order permutations", async () => {
     const first = identity(1);
     const second = identity(2);

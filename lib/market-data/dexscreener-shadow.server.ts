@@ -28,6 +28,7 @@ const DEFAULT_MAXIMUM_RESPONSE_BYTES = 2_000_000;
 const DEFAULT_MAXIMUM_ROWS_PER_BATCH = 1_000;
 const DEFAULT_MAXIMUM_CONCURRENT_BATCHES = 2;
 const DEFAULT_MAXIMUM_CACHE_ENTRIES = 32;
+const DEFAULT_MAXIMUM_READ_DURATION_MS = 7_000;
 
 // One reader instance begins no more than 80 calls/minute, far below the
 // documented 300 calls/minute provider ceiling. Cache and singleflight reduce
@@ -50,11 +51,19 @@ export type DexscreenerShadowReaderOptionsV1 = Readonly<{
   maximumConcurrentBatches?: number;
   minimumRequestIntervalMs?: number;
   maximumCacheEntries?: number;
+  maximumReadDurationMs?: number;
+}>;
+
+export type DexscreenerShadowReadWaitV1 = Readonly<{
+  signal?: AbortSignal;
+  /** Absolute Unix epoch deadline. It is never restarted between layers. */
+  deadlineMs?: number;
 }>;
 
 export type DexscreenerShadowReaderV1 = Readonly<{
   read(
     identities: readonly MarketChartIdentityV1[],
+    wait?: DexscreenerShadowReadWaitV1,
   ): Promise<DexscreenerShadowSnapshotV1>;
 }>;
 
@@ -98,6 +107,13 @@ class DexscreenerShadowTimeoutError extends Error {
   constructor() {
     super("Dexscreener shadow request timed out");
     this.name = "DexscreenerShadowTimeoutError";
+  }
+}
+
+class DexscreenerShadowWaitTimeoutError extends Error {
+  constructor() {
+    super("Dexscreener shadow caller deadline elapsed");
+    this.name = "DexscreenerShadowWaitTimeoutError";
   }
 }
 
@@ -170,6 +186,13 @@ export function createDexscreenerShadowReaderV1(
     256,
     "maximumCacheEntries",
   );
+  const maximumReadDurationMs = boundedInteger(
+    options.maximumReadDurationMs,
+    DEFAULT_MAXIMUM_READ_DURATION_MS,
+    1,
+    30_000,
+    "maximumReadDurationMs",
+  );
 
   const cache = new Map<string, CachedSnapshot>();
   const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>();
@@ -185,15 +208,26 @@ export function createDexscreenerShadowReaderV1(
   let activeBatchCount = 0;
   const batchSlotWaiters: Array<() => void> = [];
 
-  async function acquireBatchSlot() {
-    await new Promise<void>((resolve) => {
-      if (activeBatchCount < maximumConcurrentBatches) {
-        activeBatchCount += 1;
-        resolve();
-        return;
-      }
-      batchSlotWaiters.push(resolve);
-    });
+  async function acquireBatchSlot(signal: AbortSignal) {
+    if (signal.aborted) return null;
+    if (activeBatchCount < maximumConcurrentBatches) {
+      activeBatchCount += 1;
+    } else {
+      const acquired = await new Promise<boolean>((resolve) => {
+        const grant = () => {
+          signal.removeEventListener("abort", cancel);
+          resolve(true);
+        };
+        const cancel = () => {
+          const index = batchSlotWaiters.indexOf(grant);
+          if (index >= 0) batchSlotWaiters.splice(index, 1);
+          resolve(false);
+        };
+        batchSlotWaiters.push(grant);
+        signal.addEventListener("abort", cancel, { once: true });
+      });
+      if (!acquired) return null;
+    }
 
     let released = false;
     return () => {
@@ -209,20 +243,25 @@ export function createDexscreenerShadowReaderV1(
     };
   }
 
-  async function waitForRateSlot() {
+  async function waitForRateSlot(signal: AbortSignal) {
     let release!: () => void;
     const preceding = rateSchedule;
     rateSchedule = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await preceding;
+    if (!await waitForSignal(preceding, signal)) {
+      release();
+      return false;
+    }
     try {
       const waitMs = Math.max(0, nextRequestStartMs - Date.now());
       if (waitMs > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+        if (!await abortableDelay(waitMs, signal)) return false;
       }
+      if (signal.aborted) return false;
       nextRequestStartMs = Math.max(nextRequestStartMs, Date.now()) +
         minimumRequestIntervalMs;
+      return true;
     } finally {
       release();
     }
@@ -231,11 +270,30 @@ export function createDexscreenerShadowReaderV1(
   async function requestBatch(
     requestedTokens: readonly `0x${string}`[],
     index: number,
+    producerSignal: AbortSignal,
+    producerDeadlineMs: number,
   ): Promise<BatchResult> {
-    const releaseBatchSlot = await acquireBatchSlot();
-    await waitForRateSlot();
+    if (producerSignal.aborted || Date.now() >= producerDeadlineMs) {
+      return failedBatch(index, requestedTokens, "timeout");
+    }
+    const releaseBatchSlot = await acquireBatchSlot(producerSignal);
+    if (releaseBatchSlot === null) {
+      return failedBatch(index, requestedTokens, "timeout");
+    }
+    if (!await waitForRateSlot(producerSignal)) {
+      releaseBatchSlot();
+      return failedBatch(index, requestedTokens, "timeout");
+    }
+    if (producerSignal.aborted || Date.now() >= producerDeadlineMs) {
+      releaseBatchSlot();
+      return failedBatch(index, requestedTokens, "timeout");
+    }
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const abortProducerRequest = () => controller.abort(producerSignal.reason);
+    producerSignal.addEventListener("abort", abortProducerRequest, {
+      once: true,
+    });
     try {
       const request = fetchImpl(
         `${DEXSCREENER_TOKENS_ENDPOINT}/${requestedTokens.join(",")}`,
@@ -248,10 +306,11 @@ export function createDexscreenerShadowReaderV1(
         },
       );
       const timeout = new Promise<never>((_resolve, reject) => {
+        const remainingReadMs = Math.max(1, producerDeadlineMs - Date.now());
         timer = setTimeout(() => {
           controller.abort();
           reject(new DexscreenerShadowTimeoutError());
-        }, timeoutMs);
+        }, Math.min(timeoutMs, remainingReadMs));
       });
       const response = await Promise.race([request, timeout]);
 
@@ -307,7 +366,11 @@ export function createDexscreenerShadowReaderV1(
         requestedTokens,
       };
     } catch (error) {
-      if (error instanceof DexscreenerShadowTimeoutError) {
+      if (
+        error instanceof DexscreenerShadowTimeoutError ||
+        producerSignal.aborted ||
+        Date.now() >= producerDeadlineMs
+      ) {
         return failedBatch(index, requestedTokens, "timeout");
       }
       if (error instanceof DexscreenerShadowResponseTooLargeError) {
@@ -319,6 +382,7 @@ export function createDexscreenerShadowReaderV1(
       return failedBatch(index, requestedTokens, "transport-error");
     } finally {
       if (timer !== undefined) clearTimeout(timer);
+      producerSignal.removeEventListener("abort", abortProducerRequest);
       releaseBatchSlot();
     }
   }
@@ -411,6 +475,12 @@ export function createDexscreenerShadowReaderV1(
         (index + 1) * DEXSCREENER_SHADOW_MAX_TOKENS_PER_REQUEST,
       ),
     );
+    const producerController = new AbortController();
+    const producerDeadlineMs = Date.now() + maximumReadDurationMs;
+    const producerTimer = setTimeout(
+      () => producerController.abort(new DexscreenerShadowTimeoutError()),
+      maximumReadDurationMs,
+    );
     const batchResults: BatchResult[] = [];
     try {
       for (
@@ -423,6 +493,8 @@ export function createDexscreenerShadowReaderV1(
             .map((batch, relativeIndex) => requestBatch(
               batch,
               offset + relativeIndex,
+              producerController.signal,
+              producerDeadlineMs,
             )),
         );
         batchResults.push(...completed);
@@ -453,6 +525,8 @@ export function createDexscreenerShadowReaderV1(
           fetchedAt,
         });
       }
+    } finally {
+      clearTimeout(producerTimer);
     }
 
     const tokenResults = new Map<`0x${string}`, TokenProviderResult>();
@@ -521,8 +595,11 @@ export function createDexscreenerShadowReaderV1(
 
   async function read(
     identities: readonly MarketChartIdentityV1[],
+    wait: DexscreenerShadowReadWaitV1 = {},
   ): Promise<DexscreenerShadowSnapshotV1> {
     assertCanonicalIdentities(identities);
+    assertCallerWait(wait);
+    wait.signal?.throwIfAborted();
     const canonicalIdentities = [...identities].sort((left, right) =>
       identityKey(left).localeCompare(identityKey(right)));
     const key = canonicalIdentities.map(identityKey).join("|");
@@ -537,10 +614,18 @@ export function createDexscreenerShadowReaderV1(
     if (cached && cached.expiresAtMs > currentMs) {
       cache.delete(key);
       cache.set(key, cached);
-      return reorderSnapshot(cached.value, identities);
+      return waitForCaller(
+        Promise.resolve(reorderSnapshot(cached.value, identities)),
+        wait,
+      );
     }
     const active = inFlight.get(key);
-    if (active) return active.then((value) => reorderSnapshot(value, identities));
+    if (active) {
+      return waitForCaller(
+        active.then((value) => reorderSnapshot(value, identities)),
+        wait,
+      );
+    }
 
     const pending = readUncached(canonicalIdentities).then((value) => {
       const ttl = value.readStatus === "complete"
@@ -564,7 +649,10 @@ export function createDexscreenerShadowReaderV1(
       if (inFlight.get(key) === pending) inFlight.delete(key);
     });
     inFlight.set(key, pending);
-    return pending.then((value) => reorderSnapshot(value, identities));
+    return waitForCaller(
+      pending.then((value) => reorderSnapshot(value, identities)),
+      wait,
+    );
   }
 
   return { read };
@@ -578,9 +666,89 @@ let sharedReader: DexscreenerShadowReaderV1 | undefined;
  */
 export function readDexscreenerMarketShadowV1(
   identities: readonly MarketChartIdentityV1[],
+  wait: DexscreenerShadowReadWaitV1 = {},
 ): Promise<DexscreenerShadowSnapshotV1> {
   sharedReader ??= createDexscreenerShadowReaderV1();
-  return sharedReader.read(identities);
+  return sharedReader.read(identities, wait);
+}
+
+function assertCallerWait(wait: DexscreenerShadowReadWaitV1) {
+  if (
+    wait.deadlineMs !== undefined &&
+    (!Number.isSafeInteger(wait.deadlineMs) || wait.deadlineMs <= Date.now())
+  ) {
+    throw new DexscreenerShadowWaitTimeoutError();
+  }
+}
+
+function waitForCaller<T>(
+  producer: Promise<T>,
+  wait: DexscreenerShadowReadWaitV1,
+): Promise<T> {
+  if (wait.signal === undefined && wait.deadlineMs === undefined) {
+    return producer;
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      wait.signal?.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = () => finish(() => reject(
+      wait.signal?.reason ?? new DOMException("Aborted", "AbortError"),
+    ));
+    wait.signal?.addEventListener("abort", abort, { once: true });
+    if (wait.deadlineMs !== undefined) {
+      timer = setTimeout(
+        () => finish(() => reject(new DexscreenerShadowWaitTimeoutError())),
+        Math.max(0, wait.deadlineMs - Date.now()),
+      );
+    }
+    producer.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
+
+function waitForSignal(operation: Promise<void>, signal: AbortSignal) {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", aborted);
+      resolve(value);
+    };
+    const aborted = () => finish(false);
+    signal.addEventListener("abort", aborted, { once: true });
+    operation.then(
+      () => finish(true),
+      () => finish(false),
+    );
+  });
+}
+
+function abortableDelay(durationMs: number, signal: AbortSignal) {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", aborted);
+      resolve(value);
+    };
+    const aborted = () => finish(false);
+    const timer = setTimeout(() => finish(true), durationMs);
+    signal.addEventListener("abort", aborted, { once: true });
+  });
 }
 
 async function readBoundedResponseBody(

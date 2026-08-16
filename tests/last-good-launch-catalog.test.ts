@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -59,6 +59,7 @@ async function reader() {
 
 describe("last-good launch catalog", () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.useRealTimers());
 
   it("uses a content-validated fresh durable envelope", async () => {
     mocks.readDurable.mockResolvedValue({
@@ -116,5 +117,73 @@ describe("last-good launch catalog", () => {
     await expect(readLastGoodLaunchCatalogV1()).rejects.toThrow(
       "blob transport unavailable",
     );
+  });
+
+  it("cancels and unpins the shared read after its last caller deadline", async () => {
+    vi.useFakeTimers();
+    let durableSignal: AbortSignal | undefined;
+    mocks.readDurable.mockImplementation((_deployment, options) => {
+      durableSignal = options.signal;
+      return new Promise((resolve) => {
+        durableSignal?.addEventListener("abort", () => resolve({
+          status: "unavailable",
+          reason: "invalid",
+          detail: "aborted",
+        }), { once: true });
+      });
+    });
+    const { readLastGoodLaunchCatalogV1 } = await reader();
+
+    const first = readLastGoodLaunchCatalogV1({
+      deadlineMs: Date.now() + 100,
+    });
+    const rejected = expect(first).rejects.toThrow(
+      "Durable launch catalog deadline exceeded",
+    );
+    await vi.advanceTimersByTimeAsync(101);
+    await rejected;
+    expect(durableSignal?.aborted).toBe(true);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    mocks.readDurable.mockResolvedValue({
+      status: "ready",
+      envelope: envelope(),
+      ageMs: 1_000,
+    });
+    await expect(readLastGoodLaunchCatalogV1()).resolves.toMatchObject({
+      source: "durable-blob",
+      status: "current",
+    });
+    expect(mocks.readDurable).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a shared read alive while another request is still waiting", async () => {
+    const firstRequest = new AbortController();
+    let durableSignal: AbortSignal | undefined;
+    let resolveDurable!: (value: unknown) => void;
+    mocks.readDurable.mockImplementation((_deployment, options) => {
+      durableSignal = options.signal;
+      return new Promise((resolve) => {
+        resolveDurable = resolve;
+      });
+    });
+    const { readLastGoodLaunchCatalogV1 } = await reader();
+
+    const first = readLastGoodLaunchCatalogV1({
+      signal: firstRequest.signal,
+    });
+    const second = readLastGoodLaunchCatalogV1();
+    firstRequest.abort(new Error("first request disconnected"));
+    await expect(first).rejects.toThrow("first request disconnected");
+    expect(durableSignal?.aborted).toBe(false);
+
+    resolveDurable({
+      status: "ready",
+      envelope: envelope(),
+      ageMs: 1_000,
+    });
+    await expect(second).resolves.toMatchObject({ status: "current" });
+    expect(mocks.readDurable).toHaveBeenCalledTimes(1);
   });
 });

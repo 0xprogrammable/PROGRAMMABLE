@@ -2,7 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { keccak256, toBytes } from "viem";
 
+const blobMocks = vi.hoisted(() => ({ get: vi.fn() }));
+
+vi.mock("@vercel/blob", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@vercel/blob")>()),
+  get: blobMocks.get,
+}));
+
 import {
+  readDurableExploreModel,
   resolveDurableExploreBlobToken,
   selectFreshDurableExploreModel,
   shouldReplaceDurableSnapshot,
@@ -68,6 +76,8 @@ const model: Extract<ExploreReadModel, { status: "ready" }> = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
+  blobMocks.get.mockReset();
   vi.unstubAllEnvs();
 });
 
@@ -77,6 +87,138 @@ describe("durable Explore storage configuration", () => {
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", " shared-token ");
 
     expect(resolveDurableExploreBlobToken()).toBe("shared-token");
+  });
+});
+
+describe("bounded durable Explore reads", () => {
+  it("aborts a hanging Blob get at the absolute deadline", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "test-token");
+    let observedSignal: AbortSignal | undefined;
+    blobMocks.get.mockImplementation((_pathname, options) => {
+      observedSignal = options.abortSignal;
+      return new Promise(() => undefined);
+    });
+
+    const pending = readDurableExploreModel(deployment, {
+      deadlineMs: Date.now() + 100,
+    });
+    await vi.advanceTimersByTimeAsync(101);
+
+    await expect(pending).resolves.toMatchObject({
+      status: "unavailable",
+      reason: "invalid",
+      detail: "Durable index read deadline exceeded",
+    });
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it("forwards a request abort into the hanging Blob get", async () => {
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "test-token");
+    const request = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    blobMocks.get.mockImplementation((_pathname, options) => {
+      observedSignal = options.abortSignal;
+      return new Promise((_resolve, reject) => {
+        observedSignal?.addEventListener(
+          "abort",
+          () => reject(observedSignal?.reason),
+          { once: true },
+        );
+      });
+    });
+
+    const pending = readDurableExploreModel(deployment, {
+      signal: request.signal,
+      deadlineMs: Date.now() + 1_000,
+    });
+    request.abort(new Error("request disconnected"));
+
+    await expect(pending).resolves.toMatchObject({
+      status: "unavailable",
+      reason: "invalid",
+      detail: "request disconnected",
+    });
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it("cancels a hanging Blob body stream at the same deadline", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "test-token");
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({ cancel });
+    blobMocks.get.mockResolvedValue({
+      statusCode: 200,
+      headers: new Headers({ "content-length": "2" }),
+      blob: { size: 2 },
+      stream,
+    });
+
+    const pending = readDurableExploreModel(deployment, {
+      deadlineMs: Date.now() + 100,
+    });
+    await vi.advanceTimersByTimeAsync(101);
+
+    await expect(pending).resolves.toMatchObject({
+      status: "unavailable",
+      reason: "invalid",
+      detail: "Durable index read deadline exceeded",
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels an oversized streaming body at the hard byte limit", async () => {
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "test-token");
+    const cancel = vi.fn();
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(60));
+      },
+      cancel,
+    }, { highWaterMark: 0 });
+    blobMocks.get.mockResolvedValue({
+      statusCode: 200,
+      headers: new Headers(),
+      blob: { size: 2 },
+      stream,
+    });
+
+    await expect(
+      readDurableExploreModel(deployment, { maximumBytes: 100 }),
+    ).resolves.toMatchObject({
+      status: "unavailable",
+      reason: "invalid",
+      detail: "Durable index stream exceeds its byte limit",
+    });
+    expect(pulls).toBe(2);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("parses a valid bounded stream and supplies the SDK abort signal", async () => {
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "test-token");
+    const value = envelope("programmable-durable-index-v1");
+    const body = JSON.stringify(value);
+    const bytes = new TextEncoder().encode(body);
+    blobMocks.get.mockResolvedValue({
+      statusCode: 200,
+      headers: new Headers({ "content-length": String(bytes.byteLength) }),
+      blob: { size: bytes.byteLength },
+      stream: new Response(bytes).body,
+    });
+
+    await expect(readDurableExploreModel(deployment)).resolves.toMatchObject({
+      status: "ready",
+      envelope: value,
+    });
+    expect(blobMocks.get).toHaveBeenCalledWith(
+      "indexes/mainnet-classic-v2/explore-model.json",
+      expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+        useCache: false,
+      }),
+    );
   });
 });
 

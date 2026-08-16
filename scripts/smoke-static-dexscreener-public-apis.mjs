@@ -80,13 +80,97 @@ function exactExplorePage(response, tokens) {
 }
 
 function exactIdentity(token) {
+  if (typeof token?.id !== "string" || token.id.trim() === "") return null;
+  if (token.exploreKind === "token") {
+    if (
+      !ADDRESS.test(String(token.tokenAddress ?? "").toLowerCase()) ||
+      !/^0x[0-9a-f]{64}$/u.test(String(token.poolId ?? "").toLowerCase())
+    ) return null;
+    return JSON.stringify([
+      "token",
+      token.id,
+      token.tokenAddress.toLowerCase(),
+      token.poolId.toLowerCase(),
+    ]);
+  }
   if (
-    token?.exploreKind !== "token" ||
-    typeof token.id !== "string" ||
-    !ADDRESS.test(String(token.tokenAddress ?? "").toLowerCase()) ||
-    !/^0x[0-9a-f]{64}$/u.test(String(token.poolId ?? "").toLowerCase())
+    token.exploreKind !== "custom-project" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? "")) ||
+    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customLaunchId ?? "")) ||
+    (token.tokenAddress !== undefined &&
+      !ADDRESS.test(String(token.tokenAddress).toLowerCase())) ||
+    !Array.isArray(token.markets)
   ) return null;
-  return `${token.id}:${token.tokenAddress.toLowerCase()}:${token.poolId.toLowerCase()}`;
+  const markets = token.markets.map((market) => {
+    const poolId = market?.poolId === undefined
+      ? null
+      : String(market.poolId).toLowerCase();
+    if (
+      typeof market?.marketId !== "string" || market.marketId.trim() === "" ||
+      typeof market.kind !== "string" || market.kind.trim() === "" ||
+      !["active", "paused", "closed", "verification_pending"].includes(
+        market.status,
+      ) ||
+      (poolId !== null && !/^0x[0-9a-f]{64}$/u.test(poolId)) ||
+      typeof market.baseAsset?.assetId !== "string" ||
+      typeof market.baseAsset?.identity?.namespace !== "string" ||
+      typeof market.baseAsset?.identity?.value !== "string" ||
+      typeof market.quoteAsset?.assetId !== "string" ||
+      typeof market.quoteAsset?.identity?.namespace !== "string" ||
+      typeof market.quoteAsset?.identity?.value !== "string"
+    ) return null;
+    return [
+      market.marketId,
+      market.kind,
+      market.status,
+      poolId,
+      market.baseAsset.assetId,
+      market.baseAsset.identity.namespace,
+      market.baseAsset.identity.value,
+      market.quoteAsset.assetId,
+      market.quoteAsset.identity.namespace,
+      market.quoteAsset.identity.value,
+    ];
+  });
+  if (markets.some((market) => market === null)) return null;
+  const deterministicMarkets = markets
+    .map((market) => JSON.stringify(market))
+    .sort();
+  if (new Set(deterministicMarkets).size !== deterministicMarkets.length) {
+    return null;
+  }
+  return JSON.stringify([
+    "custom-project",
+    token.id,
+    token.customProjectId,
+    token.customLaunchId,
+    token.tokenAddress?.toLowerCase() ?? null,
+    deterministicMarkets,
+  ]);
+}
+
+function healthHasSensitiveData(value, depth = 0) {
+  if (depth > 8 || value === null || typeof value !== "object") return false;
+  if (Array.isArray(value)) {
+    return value.some((entry) => healthHasSensitiveData(entry, depth + 1));
+  }
+  return Object.entries(value).some(([key, entry]) =>
+    /(?:url|endpoint|secret|token|credential)/iu.test(key) ||
+    (typeof entry === "string" && /:\/\//u.test(entry)) ||
+    healthHasSensitiveData(entry, depth + 1)
+  );
+}
+
+function exactInformationalHealth(response) {
+  const checkedAt = response.body?.checkedAt;
+  return response.status === 200 &&
+    ["ready", "degraded"].includes(response.body?.status) &&
+    typeof response.body?.provider?.name === "string" &&
+    response.body.provider.name.trim() !== "" &&
+    typeof response.body.provider.configured === "boolean" &&
+    ISO_TIMESTAMP.test(String(checkedAt ?? "")) &&
+    new Date(Date.parse(checkedAt)).toISOString() === checkedAt &&
+    !healthHasSensitiveData(response.body);
 }
 
 function qualifiedDexscreenerFdv(token) {
@@ -95,7 +179,7 @@ function qualifiedDexscreenerFdv(token) {
     valuation.metric === "fdv" &&
     valuation.supplyBasis === "total" &&
     valuation.currency === "usd" &&
-    valuation.freshness === "current" &&
+    valuation.freshness === "provider-recent" &&
     valuation.source === "dexscreener" &&
     POSITIVE_INTEGER.test(String(valuation.valueWad ?? ""));
 }
@@ -124,6 +208,7 @@ function exactCatalogSnapshot(response) {
     ISO_TIMESTAMP.test(String(generatedAt ?? "")) &&
     new Date(Date.parse(generatedAt)).toISOString() === generatedAt &&
     catalog.identityCount === response.body?.total &&
+    catalog.launchSource === launchSource &&
     ["current", "unavailable"].includes(customStatus) &&
     /^sha256:[0-9a-f]{64}$/u.test(String(catalog.identityCommitment ?? "")) &&
     catalog.evidence?.kind === "durable-envelope" &&
@@ -261,12 +346,9 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const request = (path) => requestJson(target, headers, path, fetchImpl);
 
   const health = await request("/api/ops/health");
-  if (
-    health.status !== 200 ||
-    health.body?.status !== "ready" ||
-    health.body?.provider?.name !== "bitquery" ||
-    health.body?.provider?.configured !== true
-  ) throw new Error("Configured provider health response is not ready");
+  if (!exactInformationalHealth(health)) {
+    throw new Error("Informational health response is malformed");
+  }
 
   const highest = await request(
     "/api/explore?limit=20&page=1&sort=market-cap",
@@ -330,7 +412,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const detail = await request(
     "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
   );
-  const detailToken = detail.body?.token;
+  const detailToken = detail.body?.token ?? detail.body?.customProject;
+  const catalogBoundary = JSON.parse(highestCatalog);
   if (
     detail.status !== 200 ||
     detail.body?.status !== "ready" ||
@@ -341,9 +424,10 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       dataQuality: highest.body?.dataQuality,
     } }) !== highestCatalog ||
     detail.headers.get("x-programmable-market-provider") !== "dexscreener" ||
-    !CATALOG_SOURCES.has(
-      detail.headers.get("x-programmable-launch-source"),
-    ) ||
+    detail.headers.get("x-programmable-launch-source") !==
+      catalogBoundary.launchSource ||
+    detail.headers.get("x-programmable-read-source") !==
+      `${catalogBoundary.launchSource}+dexscreener` ||
     ![qualifiedDexscreenerFdv(detailToken), exactUnavailableValuation(detailToken)]
       .includes(true)
   ) throw new Error("Token detail identity or market contract is invalid");
@@ -420,6 +504,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     catalogSource: highest.body.catalog.source,
     catalogStatus: highest.body.catalog.status,
     lastIndexedAt: highest.body.catalog.lastIndexedAt,
+    healthStatus: health.body.status,
+    healthAuthority: "informational-only",
     marketProvider: "dexscreener",
     marketReadStatus,
     tokenAddress,

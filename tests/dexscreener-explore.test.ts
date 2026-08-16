@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
+import {
+  publicExploreEntryV1,
+  valuationSortValue,
+} from "../lib/explore-financial-data";
 
 const mocks = vi.hoisted(() => ({ readDex: vi.fn() }));
 vi.mock("../lib/market-data/dexscreener-shadow.server", () => ({
@@ -130,7 +134,7 @@ describe("Dexscreener Explore adapter", () => {
       supplyBasis: "total",
       currency: "usd",
       valueWad: "30000000000000000000000",
-      freshness: "current",
+      freshness: "provider-recent",
       source: "dexscreener",
       asOfTime: NOW,
     });
@@ -153,6 +157,50 @@ describe("Dexscreener Explore adapter", () => {
     });
     expect(result.marketRead.qualifiedCount).toBe(0);
     expect(result.marketRead.unavailableCount).toBe(1);
+    expect(valuationSortValue(result.entries[0]!)).toBeNull();
+    expect(publicExploreEntryV1(result.entries[0]!)).not.toHaveProperty(
+      "fdvUsdWad",
+    );
+  });
+
+  it("qualifies fetchedAt through exactly five minutes but never future data", async () => {
+    const token = entry(1);
+    mocks.readDex.mockResolvedValue(snapshot([available(token)]));
+    vi.setSystemTime(Date.parse(NOW) + 5 * 60 * 1_000);
+    await expect(readDexscreenerExploreEntriesV1([token])).resolves.toMatchObject({
+      entries: [{ valuation: { freshness: "provider-recent" } }],
+      marketRead: { qualifiedCount: 1 },
+    });
+
+    vi.setSystemTime(Date.parse(NOW) - 1);
+    await expect(readDexscreenerExploreEntriesV1([token])).resolves.toMatchObject({
+      entries: [{ valuation: { freshness: "stale" } }],
+      marketRead: { qualifiedCount: 0 },
+    });
+  });
+
+  it("forwards one absolute caller boundary and fails soft for every identity", async () => {
+    const tokens = Array.from({ length: 351 }, (_, index) => entry(index + 1));
+    const controller = new AbortController();
+    const deadlineMs = Date.now() + 7_000;
+    mocks.readDex.mockRejectedValue(new Error("caller deadline elapsed"));
+    const result = await readDexscreenerExploreEntriesV1(tokens, {
+      signal: controller.signal,
+      deadlineMs,
+    });
+    expect(mocks.readDex).toHaveBeenCalledWith(
+      expect.any(Array),
+      { signal: controller.signal, deadlineMs },
+    );
+    expect(result.entries).toHaveLength(351);
+    expect(result.entries.every((item) => item.valuation.status === "unavailable"))
+      .toBe(true);
+    expect(result.marketRead).toMatchObject({
+      status: "unavailable",
+      requestedCount: 351,
+      qualifiedCount: 0,
+      unavailableCount: 351,
+    });
   });
 
   it("keeps every identity when coverage is missing or unqualified", async () => {

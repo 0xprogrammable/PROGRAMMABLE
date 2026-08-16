@@ -858,8 +858,14 @@ export function getValuationMetricLabel(
     valuation.supplyBasis === "circulating";
   const currentLabel = isMarketCap ? "Market cap" : "FDV";
 
-  if (valuation?.status !== "available" || valuation.freshness === "current") {
+  if (
+    valuation?.status !== "available" ||
+    valuation.freshness === "current"
+  ) {
     return currentLabel;
+  }
+  if (valuation.freshness === "provider-recent") {
+    return isMarketCap ? "Provider-recent market cap" : "Provider-recent FDV";
   }
   if (valuation.freshness === "stale") {
     return isMarketCap ? "Last verified market cap" : "Last verified FDV";

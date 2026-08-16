@@ -30,6 +30,8 @@ import type {
 const DURABLE_INDEX_PATH =
   "indexes/mainnet-classic-v2/explore-model.json";
 const DEFAULT_MAX_AGE_MS = 15 * 60 * 1_000;
+const DEFAULT_READ_TIMEOUT_MS = 5_000;
+const MAXIMUM_DURABLE_INDEX_BYTES = 4_000_000;
 
 type DurableExplorePayload = {
   generatedAt: string;
@@ -165,6 +167,15 @@ export type DurableExploreRead =
       reason: "not-configured" | "missing" | "invalid";
       detail: string;
     };
+
+export type DurableExploreReadOptions = Readonly<{
+  maxAgeMs?: number;
+  signal?: AbortSignal;
+  /** Absolute Unix epoch deadline, in milliseconds. */
+  deadlineMs?: number;
+  /** Testable lower ceiling; callers cannot raise the production cap. */
+  maximumBytes?: number;
+}>;
 
 export function selectFreshDurableExploreModel(
   read: DurableExploreRead,
@@ -808,9 +819,170 @@ export function shouldReplaceDurableSnapshot(
   );
 }
 
+function durableReadOptions(
+  value: number | DurableExploreReadOptions | undefined,
+) {
+  if (typeof value === "number") {
+    return {
+      maxAgeMs: value,
+      maximumBytes: MAXIMUM_DURABLE_INDEX_BYTES,
+    } as const;
+  }
+  const maximumBytes = value?.maximumBytes ?? MAXIMUM_DURABLE_INDEX_BYTES;
+  if (
+    !Number.isSafeInteger(maximumBytes) ||
+    maximumBytes <= 0 ||
+    maximumBytes > MAXIMUM_DURABLE_INDEX_BYTES
+  ) {
+    throw new Error("Durable index byte limit is invalid");
+  }
+  return {
+    maxAgeMs: value?.maxAgeMs ?? DEFAULT_MAX_AGE_MS,
+    maximumBytes,
+    signal: value?.signal,
+    deadlineMs: value?.deadlineMs,
+  } as const;
+}
+
+function createDurableReadAbortScope(options: Readonly<{
+  signal?: AbortSignal;
+  deadlineMs?: number;
+}>) {
+  const now = Date.now();
+  const requestedDeadline = options.deadlineMs ??
+    now + DEFAULT_READ_TIMEOUT_MS;
+  if (!Number.isFinite(requestedDeadline)) {
+    throw new Error("Durable index deadline is invalid");
+  }
+  const deadlineMs = Math.min(
+    requestedDeadline,
+    now + DEFAULT_READ_TIMEOUT_MS,
+  );
+  const controller = new AbortController();
+  const abortFromCaller = () => {
+    if (!controller.signal.aborted) {
+      controller.abort(
+        options.signal?.reason ?? new Error("Durable index read aborted"),
+      );
+    }
+  };
+  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  if (options.signal?.aborted) abortFromCaller();
+
+  const abortAtDeadline = () => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("Durable index read deadline exceeded"));
+    }
+  };
+  const remainingMs = deadlineMs - Date.now();
+  const timer = remainingMs <= 0
+    ? undefined
+    : setTimeout(abortAtDeadline, remainingMs);
+  if (remainingMs <= 0) abortAtDeadline();
+
+  return {
+    signal: controller.signal,
+    dispose() {
+      if (timer !== undefined) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abortFromCaller);
+    },
+  } as const;
+}
+
+function rejectWhenAborted<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    signal.addEventListener("abort", aborted, { once: true });
+    operation.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", aborted);
+    }).catch(() => undefined);
+  });
+}
+
+function parseDeclaredLength(value: string | null) {
+  if (value === null) return null;
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    throw new Error("Durable index Content-Length is invalid");
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error("Durable index Content-Length is unsafe");
+  }
+  return parsed;
+}
+
+function cancelDurableStream(
+  stream: ReadableStream<Uint8Array>,
+  reason: unknown,
+) {
+  void stream.cancel(reason).catch(() => undefined);
+}
+
+async function readBoundedDurableStream(
+  stream: ReadableStream<Uint8Array>,
+  input: Readonly<{
+    declaredSize: number;
+    declaredContentLength: number | null;
+    maximumBytes: number;
+    signal: AbortSignal;
+  }>,
+) {
+  if (
+    !Number.isSafeInteger(input.declaredSize) ||
+    input.declaredSize < 0 ||
+    input.declaredSize > input.maximumBytes ||
+    (input.declaredContentLength !== null &&
+      input.declaredContentLength > input.maximumBytes)
+  ) {
+    cancelDurableStream(stream, "Durable index declaration exceeds limit");
+    throw new Error("Durable index declaration exceeds its byte limit");
+  }
+
+  const reader = stream.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const chunks: string[] = [];
+  let totalBytes = 0;
+  const abortReader = () => {
+    void reader.cancel(input.signal.reason).catch(() => undefined);
+  };
+  input.signal.addEventListener("abort", abortReader, { once: true });
+  try {
+    while (true) {
+      const next = await rejectWhenAborted(reader.read(), input.signal);
+      if (next.done) break;
+      if (!(next.value instanceof Uint8Array)) {
+        void reader.cancel("Durable index chunk is invalid").catch(() => undefined);
+        throw new Error("Durable index stream contains an invalid chunk");
+      }
+      totalBytes += next.value.byteLength;
+      if (totalBytes > input.maximumBytes) {
+        void reader.cancel("Durable index stream exceeds limit").catch(() => undefined);
+        throw new Error("Durable index stream exceeds its byte limit");
+      }
+      chunks.push(decoder.decode(next.value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } catch (error) {
+    void reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    input.signal.removeEventListener("abort", abortReader);
+    try {
+      reader.releaseLock();
+    } catch {
+      // An aborted pending read is already owned by reader.cancel above.
+    }
+  }
+}
+
 export async function readDurableExploreModel(
   deployment: ReadyOnchainDeployment,
-  maxAgeMs = DEFAULT_MAX_AGE_MS,
+  maxAgeOrOptions: number | DurableExploreReadOptions = DEFAULT_MAX_AGE_MS,
 ): Promise<DurableExploreRead> {
   const blobToken = resolveDurableExploreBlobToken();
   if (!blobToken) {
@@ -821,13 +993,20 @@ export async function readDurableExploreModel(
     };
   }
 
+  let abortScope: ReturnType<typeof createDurableReadAbortScope> | undefined;
   try {
+    const options = durableReadOptions(maxAgeOrOptions);
+    abortScope = createDurableReadAbortScope(options);
     const { get } = await import("@vercel/blob");
-    const result = await get(DURABLE_INDEX_PATH, {
-      access: "private",
-      token: blobToken,
-      useCache: false,
-    });
+    const result = await rejectWhenAborted(
+      get(DURABLE_INDEX_PATH, {
+        access: "private",
+        token: blobToken,
+        useCache: false,
+        abortSignal: abortScope.signal,
+      }),
+      abortScope.signal,
+    );
     if (!result || result.statusCode !== 200 || !result.stream) {
       return {
         status: "unavailable",
@@ -835,11 +1014,18 @@ export async function readDurableExploreModel(
         detail: "No durable index snapshot exists",
       };
     }
-    const text = await new Response(result.stream).text();
+    const text = await readBoundedDurableStream(result.stream, {
+      declaredSize: result.blob.size,
+      declaredContentLength: parseDeclaredLength(
+        result.headers.get("content-length"),
+      ),
+      maximumBytes: options.maximumBytes,
+      signal: abortScope.signal,
+    });
     return validateDurableExploreEnvelope(
       JSON.parse(text),
       deployment,
-      maxAgeMs,
+      options.maxAgeMs,
     );
   } catch (error) {
     return {
@@ -850,6 +1036,8 @@ export async function readDurableExploreModel(
           ? error.message
           : "The durable index could not be read",
     };
+  } finally {
+    abortScope?.dispose();
   }
 }
 

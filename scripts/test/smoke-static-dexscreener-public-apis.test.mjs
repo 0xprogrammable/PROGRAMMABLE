@@ -11,6 +11,7 @@ const NOW = "2026-08-16T08:00:00.000Z";
 const TOKEN = "0x1111111111111111111111111111111111111111";
 const CREATOR = "0x2222222222222222222222222222222222222222";
 const POOL = `0x${"33".repeat(32)}`;
+const CUSTOM_TOKEN = "0x9999999999999999999999999999999999999999";
 
 function entry(index) {
   const tokenAddress = index === 0
@@ -27,9 +28,70 @@ function entry(index) {
   };
 }
 
+function customProject() {
+  return {
+    exploreKind: "custom-project",
+    id: `custom:sha256:${"66".repeat(32)}`,
+    name: "Custom Current",
+    symbol: "CUSTOM",
+    links: [],
+    launchedAt: NOW,
+    finalizedAt: NOW,
+    chainId: "1",
+    modelId: "custom-contract-graph-v2",
+    customProjectId: `sha256:${"66".repeat(32)}`,
+    customLaunchId: `sha256:${"77".repeat(32)}`,
+    tokenAddress: CUSTOM_TOKEN,
+    launchingWallet: {
+      namespace: "eip155:1",
+      value: CREATOR,
+    },
+    postLaunchAuthorityInventory: {},
+    postLaunchAuthorityInventoryHash: `sha256:${"88".repeat(32)}`,
+    markets: [
+      {
+        marketId: "market-b",
+        kind: "uniswap-v4",
+        status: "active",
+        poolId: `0x${"99".repeat(32)}`,
+        baseAsset: {
+          assetId: "custom-token",
+          identity: { namespace: "eip155:1/erc20", value: CUSTOM_TOKEN },
+        },
+        quoteAsset: {
+          assetId: "native-eth",
+          identity: {
+            namespace: "eip155:1/slip44",
+            value: "60",
+          },
+        },
+      },
+      {
+        marketId: "market-a",
+        kind: "auction",
+        status: "verification_pending",
+        baseAsset: {
+          assetId: "custom-token",
+          identity: { namespace: "eip155:1/erc20", value: CUSTOM_TOKEN },
+        },
+        quoteAsset: {
+          assetId: "native-eth",
+          identity: {
+            namespace: "eip155:1/slip44",
+            value: "60",
+          },
+        },
+      },
+    ],
+    launchCategoryProvenance: {},
+    valuation: { status: "unavailable", reason: "source-unavailable" },
+  };
+}
+
 function catalog() {
   return {
     source: "durable-blob",
+    launchSource: "durable-blob",
     status: "last-known-good",
     lastIndexedAt: NOW,
     asOfBlock: "25740000",
@@ -121,6 +183,7 @@ function stagedFetch(
       body = {
         status: "ready",
         provider: { name: "bitquery", configured: true },
+        checkedAt: NOW,
       };
     } else if (url.pathname === "/api/explore") {
       body = explore(url.searchParams.get("sort"));
@@ -137,7 +200,7 @@ function stagedFetch(
         source: null,
         status: "unavailable",
         reason: "history-provider-unavailable",
-        address: TOKEN,
+        address: url.searchParams.get("address"),
         range: "1d",
       };
     } else if (url.pathname === "/api/explore/profile") {
@@ -304,7 +367,28 @@ test("staged smoke rejects a partial ranking with no qualified first-page row", 
   );
 });
 
-test("staged smoke rejects configured provider health drift", async () => {
+test("staged smoke treats configured provider health as informational", async () => {
+  const result = await runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(({ body, url }) =>
+        url.pathname === "/api/ops/health"
+          ? {
+              ...body,
+              status: "degraded",
+              provider: { ...body.provider, configured: false },
+            }
+          : body),
+      appendOutput: () => undefined,
+    });
+  assert.equal(result.healthStatus, "degraded");
+  assert.equal(result.healthAuthority, "informational-only");
+});
+
+test("staged smoke rejects health output containing provider secrets", async () => {
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({
       environment: {
@@ -314,12 +398,79 @@ test("staged smoke rejects configured provider health drift", async () => {
       },
       fetchImpl: stagedFetch(({ body, url }) =>
         url.pathname === "/api/ops/health"
-          ? { ...body, provider: { ...body.provider, configured: false } }
+          ? { ...body, endpoint: "https://provider.invalid/secret" }
           : body),
       appendOutput: () => undefined,
     }),
-    /health response is not ready/u,
+    /health response is malformed/u,
   );
+});
+
+test("staged smoke accepts one custom-current composite catalog", async () => {
+  const project = customProject();
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(
+      ({ body, url }) => {
+        if (url.pathname === "/api/explore") {
+          return {
+            ...body,
+            tokens: [project, entry(1)],
+            catalog: {
+              ...body.catalog,
+              launchSource: "durable-blob+registry.custom-launched",
+              completeness: { ...body.catalog.completeness, custom: "current" },
+              identityCommitment: `sha256:${"de".repeat(32)}`,
+            },
+            dataQuality: {
+              ...body.dataQuality,
+              launchIdentity: {
+                ...body.dataQuality.launchIdentity,
+                status: "current",
+                custom: "current",
+              },
+            },
+          };
+        }
+        if (url.pathname === "/api/explore/token") {
+          return {
+            ...body,
+            token: null,
+            customProject: project,
+            catalog: {
+              ...body.catalog,
+              launchSource: "durable-blob+registry.custom-launched",
+              completeness: { ...body.catalog.completeness, custom: "current" },
+              identityCommitment: `sha256:${"de".repeat(32)}`,
+            },
+          };
+        }
+        return body;
+      },
+      ({ extraHeaders, omittedHeaders, url }) => ({
+        extraHeaders: ["/api/explore", "/api/explore/token"].includes(
+            url.pathname,
+          )
+          ? {
+              ...extraHeaders,
+              "x-programmable-launch-source":
+                "durable-blob+registry.custom-launched",
+              "x-programmable-read-source":
+                "durable-blob+registry.custom-launched+dexscreener",
+            }
+          : extraHeaders,
+        omittedHeaders,
+      }),
+    ),
+    appendOutput: () => undefined,
+  });
+  assert.equal(result.catalogSource, "durable-blob");
+  assert.equal(result.tokenAddress, CUSTOM_TOKEN);
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
 });
 
 test("staged smoke rejects creator profile provider-header drift", async () => {

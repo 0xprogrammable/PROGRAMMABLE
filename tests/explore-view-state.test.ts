@@ -7,6 +7,7 @@ import {
   createExploreInitialState,
   exploreDataQualityMessage,
   exploreAppliedSortLabel,
+  exploreMarketStatusLabel,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
@@ -102,6 +103,26 @@ function customEntry(index: number): ExploreEntry {
   };
 }
 
+const catalogBoundary = {
+  source: "durable-blob" as const,
+  launchSource: "durable-blob+registry.custom-launched" as const,
+  status: "current" as const,
+  lastIndexedAt: "2026-08-14T00:00:00.000Z",
+  asOfBlock: "25740000",
+  asOfBlockHash: `0x${"ab".repeat(32)}` as `0x${string}`,
+  identityCount: 351,
+  identityCommitment: `sha256:${"cd".repeat(32)}` as `sha256:${string}`,
+  completeness: {
+    classic: "current" as const,
+    stock: "unavailable" as const,
+    custom: "current" as const,
+  },
+  evidence: {
+    kind: "durable-envelope" as const,
+    commitment: `0x${"ef".repeat(32)}` as `0x${string}`,
+  },
+};
+
 const payload = {
   status: "ready" as const,
   tokens: [],
@@ -109,6 +130,7 @@ const payload = {
   pageSize: 9,
   total: 18,
   totalPages: 2,
+  catalog: catalogBoundary,
 };
 
 const bitqueryMarketEntry = classicEntry({
@@ -581,6 +603,7 @@ describe("Explore refresh state", () => {
             pageSize,
             total: tokens.length,
             totalPages,
+            catalog: { ...catalogBoundary, identityCount: tokens.length },
           }),
           {
             status: 200,
@@ -620,6 +643,38 @@ describe("Explore refresh state", () => {
         .slice(99, 108)
         .map((token) => expect.objectContaining({ id: token.id })),
     });
+  });
+
+  it("rejects same-sized model pages from a different identity commitment", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "unavailable"),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "https://example.test");
+      const page = Number(url.searchParams.get("page"));
+      const pageSize = Number(url.searchParams.get("limit"));
+      return new Response(JSON.stringify({
+        status: "ready",
+        tokens: tokens.slice((page - 1) * pageSize, page * pageSize),
+        page,
+        pageSize,
+        total: tokens.length,
+        totalPages: 2,
+        catalog: {
+          ...catalogBoundary,
+          identityCount: tokens.length,
+          identityCommitment: page === 1
+            ? catalogBoundary.identityCommitment
+            : `sha256:${"11".repeat(32)}`,
+        },
+      }), { status: 200 });
+    });
+
+    await expect(loadExploreModelDataset(
+      "commitment-drift-model-dataset",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).rejects.toThrow("Tokens changed while filters were loading");
   });
 
   it("preserves an all-page transport marker and does not cache the degraded model dataset", async () => {
@@ -667,6 +722,7 @@ describe("Explore refresh state", () => {
         pageSize,
         total: tokens.length,
         totalPages,
+        catalog: { ...catalogBoundary, identityCount: tokens.length },
         dataQuality: modelPageDataQuality(0, pageTokens.length),
         marketRead: {
           provider: "bitquery",
@@ -780,6 +836,7 @@ describe("Explore refresh state", () => {
           pageSize,
           total: tokens.length,
           totalPages: 2,
+          catalog: { ...catalogBoundary, identityCount: tokens.length },
           dataQuality: modelPageDataQuality(
             degraded ? 0 : visibleTokens.length,
             degraded ? visibleTokens.length : 0,
@@ -909,6 +966,24 @@ describe("Explore refresh state", () => {
       kind: "usd",
       value: 125,
     });
+  });
+
+  it("labels bounded offchain FDV as provider recent, never onchain current", () => {
+    const entry = {
+      ...bitqueryMarketEntry,
+      valuation: {
+        status: "available" as const,
+        metric: "fdv" as const,
+        supplyBasis: "total" as const,
+        currency: "usd" as const,
+        valueWad: "125000000000000000000",
+        freshness: "provider-recent" as const,
+        source: "dexscreener" as const,
+        asOfTime: "2026-08-16T08:00:00.000Z",
+      },
+    };
+    expect(getExploreValuationMetric(entry)).toEqual({ kind: "usd", value: 125 });
+    expect(exploreMarketStatusLabel(entry)).toBe("Provider recent");
   });
 
   it("keeps the last valid page when a background refresh fails", () => {
@@ -1524,6 +1599,7 @@ describe("Explore refresh state", () => {
         valuation: {
           ...token.valuation,
           source: "dexscreener" as const,
+          freshness: "provider-recent" as const,
           asOfTime: "2026-08-16T08:00:00.000Z",
         },
       })),
@@ -1531,7 +1607,7 @@ describe("Explore refresh state", () => {
         ...unavailableMarketDataQuality,
         valuation: {
           ...unavailableMarketDataQuality.valuation,
-          status: "current" as const,
+          status: "provider-recent" as const,
           available: 1,
           unavailable: 0,
           asOfTime: "2026-08-16T08:00:00.000Z",
@@ -1605,7 +1681,7 @@ describe("Explore refresh state", () => {
               supplyBasis: "total" as const,
               currency: "usd" as const,
               valueWad: ((351n - BigInt(offset)) * 10n ** 18n).toString(),
-              freshness: "current" as const,
+              freshness: "provider-recent" as const,
               source: "dexscreener" as const,
               asOfTime: "2026-08-16T08:00:00.000Z",
             }
@@ -1628,6 +1704,10 @@ describe("Explore refresh state", () => {
           pageSize,
           total: 351,
           totalPages: Math.ceil(351 / pageSize),
+          catalog: {
+            ...catalogBoundary,
+            identityCount: 351,
+          },
           dataQuality: {
             ...unavailableMarketDataQuality,
             valuation: {

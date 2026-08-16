@@ -74,6 +74,28 @@ function token(index: number): ExploreEntry {
 
 const entries = Array.from({ length: TOKEN_COUNT }, (_, index) => token(index + 1));
 
+const multiMarketCustom = {
+  exploreKind: "custom-project",
+  id: `custom:sha256:${"11".repeat(32)}`,
+  name: "Multi-market Custom",
+  symbol: "MULTI",
+  links: [],
+  launchedAt: NOW,
+  finalizedAt: NOW,
+  chainId: "1",
+  modelId: "custom-model",
+  customProjectId: `sha256:${"11".repeat(32)}`,
+  customLaunchId: `sha256:${"22".repeat(32)}`,
+  launchingWallet: {
+    namespace: "eip155:1",
+    value: "0x3333333333333333333333333333333333333333",
+  },
+  postLaunchAuthorityInventory: {},
+  postLaunchAuthorityInventoryHash: `sha256:${"44".repeat(32)}`,
+  markets: [{ marketId: "market-a" }, { marketId: "market-b" }],
+  launchCategoryProvenance: {},
+} as unknown as ExploreEntry;
+
 function catalog(overrides: Record<string, unknown> = {}) {
   return {
     source: "durable-blob",
@@ -132,7 +154,7 @@ function valued(
           supplyBasis: "total" as const,
           currency: "usd" as const,
           valueWad: (BigInt(entry.tokenAddress ?? "0x0") * 10n ** 18n).toString(),
-          freshness: "current" as const,
+          freshness: "provider-recent" as const,
           source: "dexscreener" as const,
           asOfTime: NOW,
         },
@@ -198,6 +220,41 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(body.dataQuality.launchIdentity.custom).toBe("unavailable");
   });
 
+  it("derives ranking counts from entries when one Custom has two markets", async () => {
+    mocks.readCatalog.mockResolvedValue(catalog({ entries: [] }));
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([multiMarketCustom]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...multiMarketCustom,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: marketRead({
+        requested: 2,
+        observed: 2,
+        qualified: 2,
+        status: "complete",
+      }),
+    });
+
+    const response = await GET(request("sort=market-cap&page=1&limit=9"));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.marketRead).toMatchObject({
+      requestedCount: 2,
+      qualifiedCount: 2,
+    });
+    expect(body.ranking).toEqual({
+      status: "unavailable",
+      requested: "fdv",
+      applied: "launch-order",
+      qualifiedCount: 0,
+      totalCount: 1,
+    });
+    expect(body.tokens[0].valuation.status).toBe("unavailable");
+  });
+
   it("serves last-good identities with exact-source Dexscreener FDV", async () => {
     const response = await GET(request("sort=market-cap&page=1&limit=5"));
     const body = await json(response);
@@ -226,6 +283,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     });
     expect(body.tokens).toHaveLength(5);
     expect(body.tokens[0].valuation.source).toBe("dexscreener");
+    expect(body.tokens[0].valuation.freshness).toBe("provider-recent");
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "durable-blob",
     );
@@ -272,6 +330,43 @@ describe("Explore static identity and Dexscreener market contract", () => {
       expect(response.headers.get("x-programmable-market-source")).toBeNull();
     },
   );
+
+  it("keeps 351 identities when the bounded Dex producer returns unavailable", async () => {
+    const largeCatalog = Array.from({ length: 351 }, (_, index) => token(index + 1));
+    mocks.readCatalog.mockResolvedValue(catalog({ entries: largeCatalog }));
+    mocks.readDex.mockImplementationOnce(async (
+      input: readonly ExploreEntry[],
+      wait: Readonly<{ signal: AbortSignal; deadlineMs: number }>,
+    ) => {
+      expect(wait.signal).toBeInstanceOf(AbortSignal);
+      expect(wait.deadlineMs).toBeGreaterThan(Date.now());
+      expect(wait.deadlineMs - Date.now()).toBeLessThanOrEqual(8_000);
+      return {
+        entries: valued(input, new Set()),
+        marketRead: marketRead({
+          requested: input.length,
+          qualified: 0,
+          observed: 0,
+          status: "unavailable",
+        }),
+      };
+    });
+
+    const response = await GET(request("sort=market-cap&page=1&limit=351"));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(351);
+    expect(body.tokens).toHaveLength(100);
+    expect(body.catalog.identityCount).toBe(351);
+    expect(body.ranking).toMatchObject({
+      status: "unavailable",
+      qualifiedCount: 0,
+      totalCount: 351,
+    });
+    expect(body.tokens.every((item: ValuedExploreEntry) =>
+      item.valuation.status === "unavailable"
+    )).toBe(true);
+  });
 
   it("sorts qualified FDV first and keeps unavailable launch order stable", async () => {
     mocks.readDex.mockImplementationOnce(async (input: readonly ExploreEntry[]) => ({

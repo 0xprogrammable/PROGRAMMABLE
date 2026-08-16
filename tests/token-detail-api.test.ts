@@ -150,7 +150,7 @@ describe("Token detail static identity and Dexscreener market contract", () => {
           supplyBasis: "total",
           currency: "usd",
           valueWad: "9000000000000000000000",
-          freshness: "current",
+          freshness: "provider-recent",
           source: "dexscreener",
           asOfTime: NOW,
         },
@@ -188,6 +188,26 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "durable-blob+registry.custom-launched",
     );
+  });
+
+  it("preserves a verified Custom identity when the market adapter throws", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([customEntry]);
+    mocks.readDex.mockRejectedValueOnce(new Error("Dex transport failed"));
+
+    const response = await GET(request(customAddress));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.token).toBeNull();
+    expect(body.customProject).toMatchObject({
+      id: customEntry.id,
+      tokenAddress: customAddress,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    expect(body.catalog).toMatchObject({
+      launchSource: "durable-blob+registry.custom-launched",
+      completeness: { custom: "current" },
+    });
   });
 
   it("keeps a canonical identity visible when the Custom Registry is unavailable", async () => {
