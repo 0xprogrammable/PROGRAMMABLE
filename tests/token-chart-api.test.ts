@@ -1,17 +1,11 @@
+import { readFileSync } from "node:fs";
+
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
 const address = "0x1111111111111111111111111111111111111111";
-const poolId = `0x${"33".repeat(32)}`;
-const identity = {
-  chainId: "1",
-  tokenAddress: address,
-  quoteAddress: "0x0000000000000000000000000000000000000000",
-  poolId,
-  protocol: "uniswap_v4",
-} as const;
 const token = {
   exploreKind: "token",
   id: `1:${address}`,
@@ -19,10 +13,8 @@ const token = {
   symbol: "TEST",
   tokenAddress: address,
   hookAddress: "0x2222222222222222222222222222222222222222",
-  poolId,
+  poolId: `0x${"33".repeat(32)}`,
   launchedAt: "2026-08-11T00:00:00.000Z",
-  totalSupplyRaw: "1000000000000000000000000",
-  tokenDecimals: 18,
   totalSwapFeeBps: 100,
   launchModel: "classic",
   liquidityPath: "meme",
@@ -38,24 +30,19 @@ const token = {
 
 const mocks = vi.hoisted(() => ({
   catalog: vi.fn(),
-  chart: vi.fn(),
-  market: vi.fn(),
+  mergeEntries: vi.fn(),
+  customEnabled: vi.fn(),
+  customDirectory: vi.fn(),
 }));
-
-vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
-  readPrimaryRpcExploreEntriesV1: mocks.catalog,
-  safePrimaryRpcLaunchCatalogError: vi.fn(() => ({
-    name: "PrimaryRpcLaunchCatalogError",
-    category: "unexpected",
-  })),
+vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
+  readLastGoodLaunchCatalogV1: mocks.catalog,
+  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
 }));
-vi.mock("../lib/market-data/bitquery.server", () => ({
-  readBitqueryMarketChartStrictV1: mocks.chart,
-  readBitqueryTokenMarketDataStrictV1: mocks.market,
-  safeBitqueryMarketDataError: vi.fn(() => ({
-    name: "MarketDataError",
-    category: "unexpected",
-  })),
+vi.mock("../lib/server/custom-launch/public-readiness", () => ({
+  isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
+}));
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1: mocks.customDirectory,
 }));
 
 import { GET } from "../app/api/explore/token/chart/route";
@@ -64,99 +51,103 @@ function request(query = `address=${address}&range=1d`) {
   return new NextRequest(`http://localhost/api/explore/token/chart?${query}`);
 }
 
-function readyChart() {
-  return {
-    schemaVersion: "programmable.market-chart.v1",
-    source: "bitquery",
-    readStatus: "live",
-    status: "ready",
-    generatedAt: "2026-08-14T00:00:00.000Z",
-    identity,
-    range: "1d",
-    points: [{
-      blockNumber: "25740002",
-      time: "2026-08-14T00:00:00.000Z",
-      bucketStart: "2026-08-13T23:59:00.000Z",
-      bucketEnd: "2026-08-14T00:00:00.000Z",
-      observedAt: "2026-08-14T00:00:00.000Z",
-      valueSemantics: "period-median",
-      priceUsd: "2",
-      tradeCount: 1,
-    }],
-    swapCount: 1,
-    valuation: { status: "unavailable", reason: "source-unavailable" },
-    asOfTime: "2026-08-14T00:00:00.000Z",
-    truncated: false,
-  } as const;
-}
-
-describe("dRPC identity and strict Bitquery token chart API", () => {
+describe("provider-free interim token chart API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.catalog.mockResolvedValue({
-      source: "drpc",
+      source: "durable-blob",
+      status: "last-known-good",
       generatedAt: "2026-08-14T00:00:00.000Z",
-      asOfBlock: "25740002",
-      asOfBlockHash: `0x${"44".repeat(32)}`,
       entries: [token],
     });
-    mocks.chart.mockResolvedValue(readyChart());
+    mocks.customEnabled.mockReturnValue(false);
+    mocks.customDirectory.mockResolvedValue([]);
+    mocks.mergeEntries.mockImplementation((canonical, custom) => [
+      ...canonical,
+      ...custom,
+    ]);
   });
 
-  it("reads identity from dRPC and history directly from Bitquery", async () => {
+  it("returns an explicit neutral unavailable contract for a known identity", async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
-    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
-    expect(response.headers.get("x-programmable-read-source")).toBe("drpc+bitquery");
-    expect(mocks.catalog).toHaveBeenCalledWith({
-      requestedTokenAddress: address,
-      signal: expect.any(AbortSignal),
-    });
-    expect(mocks.chart).toHaveBeenCalledWith(expect.objectContaining({
-      identity,
-      range: "1d",
-      historyStart: token.launchedAt,
-    }));
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob",
+    );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "durable-blob",
+    );
+    expect(response.headers.get("x-programmable-data-quality")).toBe(
+      "unavailable",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
+    expect(response.headers.get("x-programmable-valuation-block")).toBeNull();
     await expect(response.json()).resolves.toMatchObject({
-      source: "bitquery",
-      status: "ready",
-      address,
-    });
-  });
-
-  it("returns 404 when the dRPC catalog has no token", async () => {
-    mocks.catalog.mockResolvedValue({
-      source: "drpc",
-      generatedAt: "2026-08-14T00:00:00.000Z",
-      asOfBlock: null,
-      asOfBlockHash: null,
-      entries: [],
-    });
-    const response = await GET(request());
-    expect(response.status).toBe(404);
-    expect(mocks.chart).not.toHaveBeenCalled();
-  });
-
-  it("returns 503 instead of cached history when Bitquery fails", async () => {
-    mocks.chart.mockRejectedValue(new Error("provider unavailable"));
-    const response = await GET(request());
-    expect(response.status).toBe(503);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    await expect(response.json()).resolves.toMatchObject({
-      source: "bitquery",
+      schemaVersion: "programmable.market-chart-unavailable.v1",
+      source: null,
       status: "unavailable",
+      reason: "history-provider-unavailable",
+      address,
+      range: "1d",
     });
   });
 
-  it("returns 503 when the primary dRPC identity read fails", async () => {
-    mocks.catalog.mockRejectedValue(new Error("drpc unavailable"));
+  it("returns 404 for an address outside the committed identity catalog", async () => {
+    mocks.catalog.mockResolvedValue({ source: "durable-blob", entries: [] });
+    expect((await GET(request())).status).toBe(404);
+  });
+
+  it("labels a successful Custom Registry boundary explicitly", async () => {
+    const customAddress = "0x9999999999999999999999999999999999999999";
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.customDirectory.mockResolvedValue([{
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"99".repeat(32)}`,
+      tokenAddress: customAddress,
+      markets: [],
+    }]);
+
+    const response = await GET(request(`address=${customAddress}&range=1d`));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
+  });
+
+  it("fails closed when Custom identities collide with the catalog", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.customDirectory.mockResolvedValue([{
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"99".repeat(32)}`,
+      tokenAddress: address,
+      markets: [],
+    }]);
+    mocks.mergeEntries.mockImplementationOnce(() => {
+      throw new Error("Launch catalog contains duplicate identities");
+    });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "last-good",
+    );
+  });
+
+  it("returns 503 only when the identity catalog cannot be read", async () => {
+    mocks.catalog.mockRejectedValue(new Error("blob unavailable"));
     const response = await GET(request());
     expect(response.status).toBe(503);
-    expect(response.headers.get("x-programmable-launch-source")).toBe("drpc");
-    expect(response.headers.get("x-programmable-market-source")).toBe("bitquery");
-    expect(mocks.chart).not.toHaveBeenCalled();
+    expect(response.headers.get("retry-after")).toBe("5");
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
   });
 
   it.each([
@@ -166,5 +157,28 @@ describe("dRPC identity and strict Bitquery token chart API", () => {
   ])("rejects unsupported input %s", async (query) => {
     expect((await GET(request(query))).status).toBe(400);
     expect(mocks.catalog).not.toHaveBeenCalled();
+  });
+
+  it("contains no dRPC, Bitquery or historical reader dependency", () => {
+    const source = readFileSync(
+      new URL("../app/api/explore/token/chart/route.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).not.toMatch(/bitquery|readPrimaryRpc|readTokenChartSeries/iu);
+    expect(source).toContain("readLastGoodLaunchCatalogV1");
+  });
+
+  it("keeps the browser chart request disabled outside preview fixtures", () => {
+    const chart = readFileSync(
+      new URL("../components/token-price-chart.tsx", import.meta.url),
+      "utf8",
+    );
+    const detail = readFileSync(
+      new URL("../components/token-detail-view.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(chart).toContain("const historyEnabled = preview;");
+    expect(chart).not.toContain("historyAvailable");
+    expect(detail).not.toContain("preloadTokenChart");
   });
 });
