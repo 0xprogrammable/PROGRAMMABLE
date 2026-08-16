@@ -10,7 +10,7 @@ import {
 import type { OnchainDeployment } from "./types";
 
 const CAPACITY_MESSAGE =
-  /(?:monthly[_\s-]*capacity[_\s-]*(?:exceeded|reached)|capacity[_\s-]*(?:exceeded|reached)|rate[_\s-]*limit(?:ed)?|too many requests)/iu;
+  /(?:monthly[_\s-]*capacity[_\s-]*(?:exceeded|reached)|capacity[_\s-]*(?:exceeded|reached)|rate[_\s-]*limit(?:ed)?|too many requests|request timeout on the free plan,? please upgrade to (?:a )?paid plan)/iu;
 const ARCHIVE_LIMITATION_MESSAGE =
   /archive requests require a personal token/iu;
 const PROVIDER_ROUTING_UNAVAILABLE_MESSAGE =

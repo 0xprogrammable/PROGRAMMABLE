@@ -107,6 +107,27 @@ describe("operational RPC failover", () => {
     ).toBe(true);
   });
 
+  it("uses the fixed secondary after the bound dRPC free-plan timeout", async () => {
+    const calls: string[] = [];
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      calls.push(candidate.rpcUrl);
+      if (candidate.rpcUrl === deployment.rpcUrl) {
+        throw rpcFailure(
+          "Request timeout on the free plan, please upgrade to paid plan",
+        );
+      }
+      return "secondary-ready";
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toBe("secondary-ready");
+    expect(calls).toEqual([
+      deployment.rpcUrl,
+      deployment.rpcUrlSecondary,
+    ]);
+  });
+
   it("uses the fixed secondary after an exact archive-read limitation", async () => {
     const calls: string[] = [];
     const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
