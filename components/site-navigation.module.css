@@ -1,12 +1,19 @@
 .menuButton,
-.mobileSheet {
+.mobileSheet,
+.mobileSocials {
   display: none;
 }
 
-@media (max-width: 60rem) {
+/*
+ * The touch navigation is capability-gated on purpose. A narrow desktop
+ * window still has a fine pointer and keeps the desktop information
+ * architecture instead of turning into a phone UI.
+ */
+@media (max-width: 60rem) and (hover: none) and (pointer: coarse) {
   .siteHeader.siteHeader {
-    height: auto;
-    min-height: var(--header-height);
+    height: calc(72px + env(safe-area-inset-top));
+    min-height: calc(72px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
   }
 
   .headerInner.headerInner {
@@ -18,6 +25,24 @@
   }
 
   .headerSocials.headerSocials {
+    display: none;
+  }
+
+  .headerActions.headerActions :global(.wallet-button-compact) {
+    max-width: min(124px, 38vw);
+    min-width: 44px;
+    padding-inline: 9px;
+  }
+
+  .headerActions.headerActions :global(.wallet-button-compact > span) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .headerActions.headerActions
+    :global(.wallet-button-compact .wallet-button-chevron) {
     display: none;
   }
 
@@ -110,7 +135,7 @@
 
   .mobileSheetOpen {
     margin-bottom: 12px;
-    max-height: 128px;
+    max-height: 164px;
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
@@ -194,39 +219,112 @@
     outline: 2px solid var(--brand-ivory);
     outline-offset: -2px;
   }
-}
 
-@media (max-width: 36rem) {
-  .mobileSheetOpen {
-    max-height: 184px;
+  .mobileSocials {
+    align-items: center;
+    border-top: 1px solid var(--liquid-glass-border);
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 4px;
+    padding-top: 4px;
   }
 
-  .mobileSheet.mobileSheet :global(.mobile-nav) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 23.125rem) {
-  .menuButton {
-    min-width: 44px;
-    padding: 0;
+  .mobileSocials :global(.header-social-link) {
+    color: var(--navigation-glass-ink-muted);
+    height: 44px;
     width: 44px;
   }
 
-  .menuButton > span:last-child {
+  .mobileSocials :global(.header-social-link svg),
+  .mobileSocials :global(.header-social-link img) {
+    height: 20px;
+    width: 20px;
+  }
+
+  .mobileSocials :global(.header-social-logo) {
+    filter: grayscale(1) contrast(12) brightness(1.25);
+  }
+}
+
+@media (max-width: 60rem) and (hover: hover) and (pointer: fine) {
+  .siteHeader.siteHeader {
+    height: 72px;
+    min-height: 72px;
+  }
+
+  .headerInner.headerInner {
+    column-gap: clamp(6px, 1.5vw, 14px);
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    padding-inline: clamp(8px, 2vw, 18px);
+  }
+
+  .headerInner.headerInner :global(.wordmark) {
+    height: 44px;
+    width: 36px;
+  }
+
+  .headerInner.headerInner :global(.wordmark-logo) {
+    height: 29px;
+    width: 23px;
+  }
+
+  .siteHeader.siteHeader :global(.desktop-nav) {
+    display: flex;
+    gap: clamp(6px, 1.6vw, 16px);
+    justify-content: center;
+    justify-self: stretch;
+    min-width: 0;
+  }
+
+  .siteHeader.siteHeader :global(.desktop-nav a) {
+    font-size: clamp(12px, 1.8vw, 15px);
+    min-height: 44px;
+    padding-inline: 0;
+    white-space: nowrap;
+  }
+
+  .headerSocials.headerSocials,
+  .menuButton,
+  .mobileSheet {
+    display: none;
+  }
+
+  .headerActions.headerActions {
+    gap: 0;
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .headerActions.headerActions :global(.wallet-button-compact) {
+    font-size: clamp(12px, 1.7vw, 15px);
+    max-width: clamp(80px, 18vw, 112px);
+    min-width: 0;
+    padding-inline: 4px 0;
+  }
+
+  .headerActions.headerActions :global(.wallet-button-compact > span) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .headerActions.headerActions
+    :global(.wallet-button-compact .wallet-button-chevron) {
     display: none;
   }
 }
 
-@media (hover: hover) and (pointer: fine) and (max-width: 60rem) {
-  .menuButton:hover {
-    background: var(--control-glass-background-hover);
-    border-color: var(--liquid-glass-border-strong);
+@media (max-width: 24rem) and (hover: hover) and (pointer: fine) {
+  .siteHeader.siteHeader :global(.desktop-nav) {
+    gap: 4px;
   }
 
-  .mobileSheet.mobileSheet :global(.mobile-nav a:hover) {
-    background: var(--control-glass-background-hover);
-    color: var(--navigation-glass-ink);
+  .headerActions.headerActions
+    :global(.wallet-button-compact > svg:first-child) {
+    display: none;
   }
 }
 

@@ -163,4 +163,21 @@ describe("Explore UI contract", () => {
     expect(source).not.toContain("Updating tokens");
     expect(source).not.toContain("Page {activePage} of {pageCount}");
   });
+
+  it("keeps phone controls readable while narrow mouse windows retain desktop popovers", () => {
+    const styles = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
+
+    expect(styles).toMatch(
+      /\.runnersIntro :global\(\.token-search input\)\s*\{[^}]*font-size:\s*16px;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\) and \(hover: none\) and \(pointer: coarse\)[\s\S]*?\.filterMenu,[\s\S]*?position:\s*absolute;[^}]*width:\s*min\(calc\(100vw - 28px\), 390px\);/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\) and \(hover: hover\) and \(pointer: fine\)[\s\S]*?\.filterMenu,[\s\S]*?min-width:\s*230px;[^}]*position:\s*absolute;/s,
+    );
+  });
 });

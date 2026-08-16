@@ -2064,12 +2064,12 @@ body:has([data-docs-shell]) .site-header::before {
   }
 
   .wallet-button-compact {
+    max-width: 112px;
     min-width: 44px;
-    padding: 0;
-    width: 44px;
+    padding-inline: 8px;
+    width: auto;
   }
 
-  .wallet-button-compact > span,
   .wallet-button-compact .wallet-button-chevron {
     display: none;
   }

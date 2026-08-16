@@ -1094,7 +1094,7 @@
 }
 
 .runnersIntro :global(.token-search input) {
-  font-size: 14px;
+  font-size: 16px;
   height: 42px;
 }
 
@@ -1421,6 +1421,44 @@
 
   .runnerMeta {
     padding-inline-start: 12px;
+  }
+}
+
+/*
+ * A transformed landing chapter becomes the containing block for `fixed`
+ * descendants. Anchor the phone filter to its trigger so it always opens in
+ * the visible viewport and moves naturally with the Explore controls.
+ */
+@media (max-width: 700px) and (hover: none) and (pointer: coarse) {
+  .filterMenu,
+  .runnersIntro .filterMenu {
+    bottom: auto;
+    inset-inline: auto 0;
+    left: auto;
+    max-height: min(39svh, 560px);
+    min-width: 0;
+    overflow-y: auto;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    width: min(calc(100vw - 28px), 390px);
+  }
+}
+
+/* Keep a compact desktop popover when a mouse-driven window is merely narrow. */
+@media (max-width: 700px) and (hover: hover) and (pointer: fine) {
+  .filterMenu,
+  .runnersIntro .filterMenu {
+    bottom: auto;
+    inset-inline: auto 0;
+    left: auto;
+    max-height: min(70vh, 560px);
+    min-width: 230px;
+    overflow-y: auto;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    width: auto;
   }
 }
 

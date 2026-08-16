@@ -268,7 +268,10 @@ describe("interaction accessibility", () => {
       ),
     ).toHaveLength(2);
     expect(interfaceCss).toMatch(
-      /@media \(max-width: 370px\)[\s\S]*?\.wallet-button-compact\s*\{[^}]*min-width:\s*44px;[^}]*width:\s*44px;[^}]*\}[\s\S]*?\.wallet-button-compact > span,[\s\S]*?display:\s*none;/s,
+      /@media \(max-width: 370px\)[\s\S]*?\.wallet-button-compact\s*\{[^}]*max-width:\s*112px;[^}]*min-width:\s*44px;[^}]*width:\s*auto;/s,
+    );
+    expect(interfaceCss).not.toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.wallet-button-compact > span,[\s\S]*?display:\s*none;/s,
     );
     expect(interfaceCss).toMatch(
       /@media \(max-width: 370px\)[\s\S]*?\.mobile-nav a\s*\{[^}]*font-size:\s*11px;[^}]*letter-spacing:\s*-0\.025em;/s,
