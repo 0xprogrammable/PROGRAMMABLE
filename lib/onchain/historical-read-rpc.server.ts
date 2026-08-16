@@ -3,7 +3,7 @@ import "server-only";
 import { createActionRpcQuorum } from
   "../server/action-rpc-quorum.server";
 import type { ReadyOnchainDeployment } from "./types";
-import { productionMainnetRpcPair } from
+import { productionRecoveryMainnetRpcPair } from
   "./website-rpc-providers.server";
 
 export class HistoricalReadRpcBindingError extends Error {
@@ -16,10 +16,10 @@ export class HistoricalReadRpcBindingError extends Error {
 
 /**
  * Historical registry reconstruction requires two archive-capable readers.
- * It reuses the exact commitment-bound production dRPC + QuickNode pair: this
- * creates a deliberate correlation with current-market reads, but preserves
- * independent vendors, exact endpoint commitments and operational capacity.
- * No public or anonymous fallback may substitute either provider.
+ * It uses the exact commitment-bound Alchemy + QuickNode recovery pair so a
+ * depleted role-bound Website primary cannot block a durable index rebuild.
+ * Both endpoints retain independent vendors and exact endpoint commitments;
+ * no public, anonymous or generic-alias fallback may substitute either one.
  */
 export function historicalReadOnchainDeployment(
   baseDeployment: ReadyOnchainDeployment,
@@ -30,7 +30,7 @@ export function historicalReadOnchainDeployment(
   }
 
   try {
-    const binding = productionMainnetRpcPair(environment);
+    const binding = productionRecoveryMainnetRpcPair(environment);
     const providers = createActionRpcQuorum({
       chainId: 1,
       primary: binding.primary.url,
@@ -40,7 +40,7 @@ export function historicalReadOnchainDeployment(
     const [primary, secondary] = providers;
     if (
       providers.length !== 2 ||
-      primary?.vendorGroup !== "drpc" ||
+      primary?.vendorGroup !== "alchemy" ||
       secondary?.vendorGroup !== "quicknode" ||
       primary.endpointCommitment !== binding.primary.endpointCommitment ||
       secondary.endpointCommitment !== binding.secondary.endpointCommitment
@@ -53,7 +53,7 @@ export function historicalReadOnchainDeployment(
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
       rpcProviderIds: {
-        primary: "drpc",
+        primary: "alchemy",
         secondary: "quicknode",
       },
     };

@@ -13,7 +13,7 @@ import {
   type CustomRegistryV2FinalityBinding,
   type CustomRegistryV2ReleaseEvidence,
 } from "@/lib/custom-launch/registry-public-manifest-v2";
-import { productionMainnetRpcPair } from
+import { productionRecoveryMainnetRpcPair } from
   "@/lib/onchain/website-rpc-providers.server";
 import { parseStrictJson } from "../projection-target/canonical-json";
 
@@ -509,7 +509,7 @@ export function handleProductionCustomRegistryReadinessV2(
   return createCustomRegistryReadinessHandlerV2({
     deploymentSource,
     rpcUrls: () => {
-      const pair = productionMainnetRpcPair();
+      const pair = productionRecoveryMainnetRpcPair();
       return [new URL(pair.primary.url), new URL(pair.secondary.url)] as const;
     },
     rpcFetch: globalThis.fetch.bind(globalThis),

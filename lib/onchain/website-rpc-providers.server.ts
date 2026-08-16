@@ -216,6 +216,24 @@ function legacyPair(environment: RuntimeEnvironment) {
   );
 }
 
+function committedLegacyProviderPair(environment: RuntimeEnvironment) {
+  return pair(
+    "legacy-alchemy-quicknode",
+    binding(
+      "alchemy",
+      environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
+      environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT,
+      "primary",
+    ),
+    binding(
+      "quicknode",
+      environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+      environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT,
+      "secondary",
+    ),
+  );
+}
+
 /**
  * Resolves the fixed Website read quorum. Once any role-bound v1 field is
  * configured, all six fields become mandatory and legacy values are ignored.
@@ -233,9 +251,10 @@ export function websiteMainnetRpcPair(
 }
 
 /**
- * Resolves the exact private provider pair used by every production read
- * surface. The legacy Alchemy compatibility path is intentionally excluded:
- * a release may use only the complete role-bound dRPC + QuickNode binding.
+ * Resolves the exact private provider pair used by public production reads and
+ * action surfaces. The legacy Alchemy compatibility path is intentionally
+ * excluded: a release may use only the complete role-bound dRPC + QuickNode
+ * binding.
  */
 export function productionMainnetRpcPair(
   environment: RuntimeEnvironment = process.env,
@@ -246,6 +265,27 @@ export function productionMainnetRpcPair(
     resolved.secondary.provider !== "quicknode"
   ) {
     throw new Error("Production RPC provider roles are invalid");
+  }
+  return resolved;
+}
+
+/**
+ * Resolves the commitment-bound Alchemy + QuickNode recovery quorum used only
+ * for Custom Registry deployment verification and historical index rebuilds.
+ * It deliberately ignores role-bound Website and generic RPC aliases so a
+ * depleted public-read primary cannot block recovery or silently change the
+ * reviewed recovery endpoints. Public Profile, Claim and Trade reads must
+ * continue to use the role-bound production resolvers above.
+ */
+export function productionRecoveryMainnetRpcPair(
+  environment: RuntimeEnvironment = process.env,
+): WebsiteMainnetRpcPair {
+  const resolved = committedLegacyProviderPair(environment);
+  if (
+    resolved.primary.provider !== "alchemy" ||
+    resolved.secondary.provider !== "quicknode"
+  ) {
+    throw new Error("Production recovery RPC provider roles are invalid");
   }
   return resolved;
 }
