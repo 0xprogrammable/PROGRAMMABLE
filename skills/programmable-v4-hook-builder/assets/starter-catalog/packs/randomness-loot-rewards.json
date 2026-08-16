@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "randomness-loot-rewards",
+  "label": "Randomness, loot and rewards",
+  "summary": "Add loot allocation and reward claims to the separately selected verifiable-randomness capability with explicit odds, replay and solvency guarantees.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "verifiable-randomness"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "loot-rewards"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "service"
+  ],
+  "requiredFacts": [
+    "Loot table, probabilities, supply, scarcity, duplicate policy and public odds disclosure",
+    "Reward funding, reservation, claim authorization, replay boundary and unclaimed-value treatment",
+    "Jurisdiction, age, purchase and promotional constraints requiring owner legal review"
+  ],
+  "requiredFiles": [
+    "Loot table and probability commitment",
+    "Reward reservation and claim source",
+    "Loot and reward adversarial test evidence"
+  ],
+  "requiredTests": [
+    "Loot supply, probability, reservation and reward-solvency conservation",
+    "Duplicate outcome, replay, unclaimed reward and exhausted-supply scenarios",
+    "Public odds commitment and allocation parity across deterministic fixtures"
+  ],
+  "risks": [
+    "Unreserved rewards or duplicate fulfillment can make claims insolvent",
+    "Loot mechanics can create legal or platform-policy obligations beyond contract correctness"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "external-liquidity-aggregator",
+  "label": "external liquidity aggregator",
+  "summary": "Plan a hook that sources or settles liquidity through exact external protocol adapters without hiding routing, reserves, or failure dependencies.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior",
+    "v4-swap-client"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "external-liquidity-aggregation",
+    "external-protocol-adapters"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "service"
+  ],
+  "requiredFacts": [
+    "Exact supported external protocols, adapter source and runtime identities, pool or market ids, currencies, fees and authorization",
+    "Deterministic adapter selection that never treats an address prefix, byte pattern, metadata label or caller assertion as authority",
+    "Quote, route, callback, hookData, sender, slippage, deadline, partial fill, settlement and refund parity across both systems",
+    "Reserve and liability model before, during and after external calls, including reentrancy and callback-capable tokens",
+    "Failure isolation, adapter disablement, upgrade, monitoring, user exit and public dependency disclosures"
+  ],
+  "requiredFiles": [
+    "Pinned hook, adapter and external protocol interface closure",
+    "Adapter registry and authorization specification",
+    "Cross-protocol value-flow and solvency model",
+    "Executable quote and routing client",
+    "Per-adapter integration, fork and failure tests"
+  ],
+  "requiredTests": [
+    "Address-prefix collisions, wrong adapter, wrong pool, wrong currency, unauthorized registry change and malicious metadata",
+    "All swap quadrants, partial fills, price limits, hookData, sender changes and final cross-protocol balances",
+    "External revert, reentrancy, pause, upgrade, fee change, stale state, insufficient liquidity and malformed return data",
+    "Adapter disablement, refund, rescue, retirement and user exit without trapped or cross-pool funds",
+    "Quoter, router, onchain trace and indexed event parity for every supported adapter"
+  ],
+  "risks": [
+    "Every adapter imports the external protocol's upgrade, liquidity, fee, callback and governance risks",
+    "Heuristic adapter identities can collide and route value into an unintended implementation",
+    "Cross-protocol partial failure can leave misleading quotes, trapped inventory or insolvent liabilities"
+  ]
+}

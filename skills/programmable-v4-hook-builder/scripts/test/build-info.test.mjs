@@ -17,6 +17,14 @@ test("accepts a complete Foundry build info bound to the reviewed Solidity sourc
   assert.deepEqual(validateFoundryBuildInfo(input), []);
 });
 
+test("treats omitted appendCBOR as the Solidity default true", () => {
+  const input = validInput();
+  input.declaredCompiler.cborMetadata = true;
+  delete input.buildInfo.input.settings.metadata.appendCBOR;
+
+  assert.deepEqual(validateFoundryBuildInfo(input), []);
+});
+
 test("rejects a remapping-resolved source whose content differs from the review target", () => {
   const input = validInput();
   input.buildInfo.input.sources["lib/v4-core/src/interfaces/IPoolManager.sol"].content =

@@ -1,0 +1,367 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:registry-acceptance-v3:3.0.0",
+  "title": "Programmable Registry maintainer acceptance v3",
+  "description": "A bounded Registry record for one exact Application V3 revision and a distinct already-merged Application PR, including trusted source replay, immutable GitHub OWNER approval, exact added change set, and central Registry raw-Git package inventory at the reviewed head. Stored bytes are evidence only and never authenticate themselves; selective promotion or launch requires an independently trusted fresh projection that matches reviewEvidence exactly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contract",
+    "decision",
+    "application",
+    "trustedSourceVerification",
+    "verificationBindings",
+    "reviewEvidence",
+    "reviewEvidenceSha256",
+    "decidedAt",
+    "limitations"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:registry-acceptance-v3:3.0.0" },
+    "schemaVersion": { "const": "3.0.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "registry-acceptance-v3" },
+        "version": { "const": "3.0.0" }
+      }
+    },
+    "decision": { "const": "accepted" },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "applicationRevision",
+        "applicationPath",
+        "applicationSha256",
+        "packageSha256",
+        "submissionPath",
+        "submissionSha256",
+        "feeApplicability",
+        "feePolicyInstancePath",
+        "feePolicyInstanceSha256",
+        "feePolicyHash",
+        "securityAssessmentPath",
+        "securityAssessmentSha256",
+        "executionSurfaceCoveragePath",
+        "executionSurfaceCoverageSha256"
+      ],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/slug" },
+        "applicationRevision": { "$ref": "#/$defs/positiveDecimal" },
+        "applicationPath": { "$ref": "#/$defs/repositoryPath" },
+        "applicationSha256": { "$ref": "#/$defs/sha256" },
+        "packageSha256": { "$ref": "#/$defs/sha256" },
+        "submissionPath": { "$ref": "#/$defs/repositoryPath" },
+        "submissionSha256": { "$ref": "#/$defs/sha256" },
+        "feeApplicability": { "type": "string", "enum": ["applicable", "not-applicable"] },
+        "feePolicyInstancePath": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "feePolicyInstanceSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "feePolicyHash": { "$ref": "#/$defs/bytes32" },
+        "securityAssessmentPath": { "$ref": "#/$defs/repositoryPath" },
+        "securityAssessmentSha256": { "$ref": "#/$defs/sha256" },
+        "executionSurfaceCoveragePath": { "$ref": "#/$defs/repositoryPath" },
+        "executionSurfaceCoverageSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "feeApplicability": { "const": "applicable" } },
+            "required": ["feeApplicability"]
+          },
+          "then": {
+            "properties": {
+              "feePolicyInstancePath": { "$ref": "#/$defs/repositoryPath" },
+              "feePolicyInstanceSha256": { "$ref": "#/$defs/sha256" }
+            }
+          },
+          "else": {
+            "properties": {
+              "feePolicyInstancePath": { "type": "null" },
+              "feePolicyInstanceSha256": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "verificationBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregateSha256", "repositories"],
+      "properties": {
+        "aggregateSha256": { "$ref": "#/$defs/sha256" },
+        "repositories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryVerificationDigest" }
+        }
+      }
+    },
+    "trustedSourceVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregateSha256", "repositories", "schemaVersion", "verifier"],
+      "properties": {
+        "aggregateSha256": { "$ref": "#/$defs/sha256" },
+        "repositories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/trustedRepositoryVerification" }
+        },
+        "schemaVersion": { "const": "1.0.0" },
+        "verifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["builderNumericRepositoryId", "builderRepository", "reportVersion"],
+          "properties": {
+            "builderNumericRepositoryId": { "const": "1320085947" },
+            "builderRepository": { "const": "0xprogrammable/hookbuilder" },
+            "reportVersion": { "const": "1.0.0" }
+          }
+        }
+      }
+    },
+    "reviewEvidence": { "$ref": "#/$defs/reviewEvidence" },
+    "reviewEvidenceSha256": { "$ref": "#/$defs/sha256" },
+    "decidedAt": { "$ref": "#/$defs/timestamp" },
+    "limitations": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "sha1": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "bytes32": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+    "opaqueId": { "type": "string", "pattern": "^[1-9][0-9]{0,63}$" },
+    "positiveDecimal": {
+      "type": "string",
+      "maxLength": 78,
+      "pattern": "^[1-9][0-9]*$",
+      "description": "Canonical positive decimal identifier. It is never parsed through a JavaScript Number."
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"
+    },
+    "repositoryIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fullName", "numericRepositoryId", "repositoryUri"],
+      "properties": {
+        "fullName": { "type": "string", "minLength": 3, "maxLength": 202 },
+        "numericRepositoryId": { "$ref": "#/$defs/opaqueId" },
+        "repositoryUri": { "type": "string", "minLength": 22, "maxLength": 222 }
+      }
+    },
+    "gitEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "repository", "sha"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "repository": { "$ref": "#/$defs/repositoryIdentity" },
+        "sha": { "$ref": "#/$defs/sha1" }
+      }
+    },
+    "gitHeadEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pullRef", "sha"],
+      "properties": {
+        "pullRef": { "type": "string", "pattern": "^refs/pull/[1-9][0-9]{0,9}/head$" },
+        "sha": { "$ref": "#/$defs/sha1" }
+      }
+    },
+    "githubUser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["githubLogin", "githubUserId"],
+      "properties": {
+        "githubLogin": { "type": "string", "minLength": 1, "maxLength": 39 },
+        "githubUserId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "reviewEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application", "packageAtHead", "pullRequest", "repository", "review", "schemaVersion"],
+      "properties": {
+        "schemaVersion": { "const": "1.0.0" },
+        "repository": {
+          "allOf": [
+            { "$ref": "#/$defs/repositoryIdentity" },
+            {
+              "properties": {
+                "numericRepositoryId": { "const": "1320171831" }
+              }
+            }
+          ]
+        },
+        "application": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["applicationId", "applicationPath", "applicationRevision", "applicationSha256", "packageSha256"],
+          "properties": {
+            "applicationId": { "$ref": "#/$defs/slug" },
+            "applicationPath": { "$ref": "#/$defs/repositoryPath" },
+            "applicationRevision": { "$ref": "#/$defs/positiveDecimal" },
+            "applicationSha256": { "$ref": "#/$defs/sha256" },
+            "packageSha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "packageAtHead": { "$ref": "#/$defs/packageAtHead" },
+        "pullRequest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["author", "base", "changeSet", "head", "merge", "number", "state", "url"],
+          "properties": {
+            "author": { "$ref": "#/$defs/githubUser" },
+            "base": { "$ref": "#/$defs/gitEndpoint" },
+            "changeSet": { "$ref": "#/$defs/applicationPullChangeSet" },
+            "head": { "$ref": "#/$defs/gitHeadEndpoint" },
+            "merge": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["commitId", "mergedAt"],
+              "properties": {
+                "commitId": { "$ref": "#/$defs/sha1" },
+                "mergedAt": { "$ref": "#/$defs/timestamp" }
+              }
+            },
+            "number": { "type": "string", "pattern": "^[1-9][0-9]{0,9}$" },
+            "state": { "const": "MERGED" },
+            "url": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}/pull/[1-9][0-9]{0,9}$" }
+          }
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["authorAssociation", "bodyByteLength", "bodyCanonicalization", "bodySha256", "commitId", "id", "reviewer", "selectionRule", "state", "submittedAt", "url"],
+          "properties": {
+            "authorAssociation": { "const": "OWNER" },
+            "bodyByteLength": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "bodyCanonicalization": { "const": "github-review-body-utf8-v1" },
+            "bodySha256": { "$ref": "#/$defs/sha256" },
+            "commitId": { "$ref": "#/$defs/sha1" },
+            "id": { "$ref": "#/$defs/opaqueId" },
+            "reviewer": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["githubLogin", "githubUserId"],
+              "properties": {
+                "githubLogin": { "type": "string", "minLength": 1, "maxLength": 39 },
+                "githubUserId": { "const": "309941960" }
+              }
+            },
+            "selectionRule": { "const": "latest-pinned-reviewer-owner-review-for-current-head-v1" },
+            "state": { "const": "APPROVED" },
+            "submittedAt": { "$ref": "#/$defs/timestamp" },
+            "url": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}/pull/[1-9][0-9]{0,9}#pullrequestreview-[1-9][0-9]{0,63}$" }
+          }
+        }
+      }
+    },
+    "packageAtHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commitObjectId",
+        "fileCount",
+        "inventoryRule",
+        "inventorySha256",
+        "packageRoot",
+        "packageSha256",
+        "packageTreeObjectId",
+        "repository",
+        "repositoryTreeObjectId",
+        "totalBytes"
+      ],
+      "properties": {
+        "commitObjectId": { "$ref": "#/$defs/sha1" },
+        "fileCount": { "type": "integer", "minimum": 1, "maximum": 512 },
+        "inventoryRule": { "const": "exact-recursive-regular-files-at-reviewed-head-v1" },
+        "inventorySha256": { "$ref": "#/$defs/sha256" },
+        "packageRoot": { "$ref": "#/$defs/repositoryPath" },
+        "packageSha256": { "$ref": "#/$defs/sha256" },
+        "packageTreeObjectId": { "$ref": "#/$defs/sha1" },
+        "repository": {
+          "allOf": [
+            { "$ref": "#/$defs/repositoryIdentity" },
+            {
+              "properties": {
+                "numericRepositoryId": { "const": "1320171831" }
+              }
+            }
+          ]
+        },
+        "repositoryTreeObjectId": { "$ref": "#/$defs/sha1" },
+        "totalBytes": { "type": "integer", "minimum": 1, "maximum": 16777216 }
+      }
+    },
+    "applicationPullChangeSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeSetSha256", "fileCount", "rule"],
+      "properties": {
+        "changeSetSha256": { "$ref": "#/$defs/sha256" },
+        "fileCount": { "type": "integer", "minimum": 1, "maximum": 512 },
+        "rule": { "const": "exact-added-package-files-base-to-head-v1" }
+      }
+    },
+    "repositoryVerificationDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryRef", "bindingSha256"],
+      "properties": {
+        "repositoryRef": { "$ref": "#/$defs/slug" },
+        "bindingSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "trustedRepositoryVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authoritySha256", "bindingSha256", "closureSha256", "reportSha256", "repositoryRef"],
+      "properties": {
+        "authoritySha256": { "$ref": "#/$defs/sha256" },
+        "bindingSha256": { "$ref": "#/$defs/sha256" },
+        "closureSha256": { "$ref": "#/$defs/sha256" },
+        "reportSha256": { "$ref": "#/$defs/sha256" },
+        "repositoryRef": { "$ref": "#/$defs/slug" }
+      }
+    }
+  }
+}

@@ -1,8 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { validateAgainstSchema } from "./submission-core.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
+import {
+  composeTemplate,
+  loadTemplateCatalog,
+  renderTemplateFiles
+} from "./template-catalog-core.mjs";
 
 const exampleIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_EXAMPLE_JSON_BYTES = 1_048_576;
 
 export function listExampleIds(skillRoot) {
   const examplesDirectory = path.join(skillRoot, "assets", "examples");
@@ -55,6 +62,35 @@ export function serializeSubmission(submission) {
   return `${JSON.stringify(submission, null, 2)}\n`;
 }
 
+export function materializeImplementationLegoExample({
+  skillRoot,
+  starterId,
+  packIds = [],
+  capabilityIds = [],
+  customCapabilities = [],
+  localTags = []
+}) {
+  const catalog = loadTemplateCatalog({ skillRoot });
+  const plan = composeTemplate({
+    catalog,
+    starterId,
+    packIds,
+    capabilityIds,
+    customCapabilities,
+    localTags
+  });
+  const files = renderTemplateFiles(plan, { catalog }).map(([filePath, contents]) => ({
+    path: filePath,
+    contents
+  }));
+  return {
+    schemaVersion: "1.0.0",
+    kind: "programmable-implementation-lego-example",
+    plan,
+    files
+  };
+}
+
 export function buildExampleBaseline(template) {
   const submission = structuredClone(template);
   submission.assets[1].initialSupply = "1000000000000000000000000000";
@@ -73,6 +109,7 @@ export function buildExampleBaseline(template) {
     currency1: "launched-token",
     orderingRule: "Sort currencies by canonical Uniswap address ordering; native ETH is the zero address.",
     tickSpacing: 60,
+    minimumInitialLiquidity: "1000000",
     lpFee: {
       classification: "lp-fee",
       mode: "static",
@@ -101,6 +138,25 @@ export function buildExampleBaseline(template) {
     },
     canonical: true,
     alternativePools: "Only the recorded PoolKey is canonical; other pools do not receive or imply this behavior."
+  };
+  submission.launchPlan = {
+    executorVersion: "launch-authorization-executor-v1",
+    targetStrategy: "atomic-token-and-pool-launch",
+    targetComponent: "launch-target",
+    callDataFunction: "Call the immutable launch target entrypoint that creates or binds the token, initializes the exact PoolKey and adds the reviewed initial liquidity atomically.",
+    callDataSourcePaths: ["src/LaunchTarget.sol"],
+    hookConfigurationRule: "Encode only the immutable, review-approved hook configuration needed by the exact launched hook; use 0x when no separate configuration payload exists.",
+    hookConfigurationSourcePaths: ["src/LaunchTarget.sol"],
+    initialLiquidityRule: "Initialize the absent canonical pool and leave at least the declared minimumInitialLiquidity active before the executor performs its final checks.",
+    liquiditySourcePaths: ["src/LaunchTarget.sol"],
+    testPaths: ["test/LaunchTarget.t.sol"],
+    nativeValueRule: "The creator chooses the seed amount inside the reviewed inclusive range; the accepted launch bundle binds the exact final msg.value.",
+    minimumNativeValue: "0",
+    maximumNativeValue: "1000000000000000000",
+    nativeValueSource: "The launch UI and target tests derive msg.value from the user-confirmed quote-side seed amount without changing the reviewed bounds.",
+    refundRecipientPolicy: "Refund any unused native value only to the exact creator-controlled recipient bound in the final launch call.",
+    poolMustBeUninitialized: true,
+    postAcceptanceBundleRequired: true
   };
   submission.hook.base = "Pinned OpenZeppelin BaseHook from the Programmable-tested baseline.";
   submission.hook.upgradeable = false;
@@ -134,6 +190,7 @@ export function buildExampleBaseline(template) {
   submission.hook.feeMechanism = {
     used: false,
     classification: "none",
+    allocationMode: null,
     chargedCurrency: null,
     swapQuadrants: {
       zeroForOneExactInput: null,
@@ -198,6 +255,16 @@ export function buildExampleBaseline(template) {
       settlementMode: null,
       permit2Mode: null,
       finalSwapDeltaValidated: null
+    },
+    sdkSafetyProfile: {
+      packageRootImportsOnly: null,
+      hookedQuoteSource: null,
+      localHookedPoolMathDisabled: null,
+      hookDataParity: null,
+      multiHopHookDataMode: null,
+      perHopPriceBounds: null,
+      slippageSemantics: null,
+      deprecatedLiquidityActionsDisabled: null
     },
     appSourcePaths: [],
     integrationTestPaths: [],
@@ -384,6 +451,7 @@ function completePublicMetadata() {
       metadataMutable: false,
       metadataOwner: null
     },
+    localDiscoveryTags: [],
     claimedAffiliations: [{
       organization: "Uniswap",
       relationship: "technology-use",
@@ -415,5 +483,11 @@ function formatSchemaError(error) {
 }
 
 function readJson(target) {
-  return JSON.parse(fs.readFileSync(target, "utf8"));
+  const stat = fs.lstatSync(target);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 2 || stat.size > MAX_EXAMPLE_JSON_BYTES) {
+    throw new Error(`JSON resource is not one bounded regular file: ${target}`);
+  }
+  return parseBoundedStrictJsonBytes(fs.readFileSync(target), {
+    maxSourceBytes: MAX_EXAMPLE_JSON_BYTES
+  });
 }

@@ -53,52 +53,55 @@ they are not silently promoted to Programmable-tested deployments.
 
 ## Install the Builder
 
+The canonical package is synchronized with the immutable public Hookbuilder `v0.5.1` Node 24 release. Annotated tag
+object `7f0beec2afe00facd25ba65cecbb18f285f15b91` resolves to commit
+`547482adf6ed0ed19e9cd4d0e884abd70e143229`. The older `programmable-v4-builder-v0.2.1` package remains a historical
+beta contract and must not be selected for new model work.
+See [HOOKBUILDER_SYNC.md](HOOKBUILDER_SYNC.md) for the exact source tree and generated-mirror digest.
+
 The canonical package is
 [`skills/programmable-v4-hook-builder`](../../skills/programmable-v4-hook-builder/SKILL.md). It uses the common Agent
 Skills layout and keeps portable frontmatter to `name`, `description` and the SPDX license identifier. The complete
 license text remains in `LICENSE.txt`. Host-specific UI metadata is optional and does not control the skill's security
 policy.
 
-For an interactive install, use the repository-only command:
+Install the immutable public release for Codex:
 
 ```bash
-gh skill install 0xprogrammable/programmable
-```
-
-To preselect the Builder while keeping the agent setup interactive:
-
-```bash
-gh skill install 0xprogrammable/programmable programmable-v4-hook-builder
-```
-
-Without a version argument, `gh skill` selects the latest tagged release. For reproducible review work, preview and
-install the exact protected revision below.
-
-First preview the protected Builder release tag:
-
-```bash
-gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.2.1
-```
-
-Then install that same release for your agent. User scope is the beginner default because it keeps the project
-repository clean while the installed package remains pinned:
-
-```bash
-gh skill install 0xprogrammable/programmable \
+gh skill install 0xprogrammable/hookbuilder \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.2.1
+  --pin v0.5.1
+```
+
+Without a version argument, `gh skill` selects the latest tagged release. Keep `--pin v0.5.1` when exact, repeatable
+installation matters; older tags are historical releases only.
+
+Preview the newest Builder model:
+
+```bash
+gh skill preview 0xprogrammable/hookbuilder \
+  programmable-v4-hook-builder@v0.5.1
+```
+
+Then install that same immutable release for your agent. User scope is the beginner default because it keeps the
+project repository clean:
+
+```bash
+gh skill install 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder \
+  --agent codex \
+  --scope user \
+  --pin v0.5.1
 ```
 
 Replace `codex` with `claude-code` or `github-copilot` when appropriate. Use `--scope project` only when the project
 intentionally tracks the installed `.agents/` package or excludes that complete generated directory from Git. An
 untracked project-scoped installation makes the worktree dirty and correctly blocks `prepare-pr`.
 
-Builder `v0.1.1` remains available only to reproduce pre-fee legacy records, and `v0.2.0` preserves the first
-fee-policy release. New launch applications use `v0.2.1`, which keeps the same mandatory fee contract and includes the
-end-to-end trusted-intake correction for declared Solidity contract paths.
+Builder `v0.2.1` and earlier remain historical beta contracts. New work uses the immutable Hookbuilder `v0.5.1` release;
+the legacy public-v2 intake remains readable for migration, but it is not the newest model path.
 
 From the installed skill directory, run `node scripts/verify-skill.mjs --installed`; it accepts the bounded source
 tracking fields added by `gh skill` while keeping the rest of the portable package checks unchanged. Those fields are

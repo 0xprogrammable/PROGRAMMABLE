@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:normative-property-manifest-v1:1.0.0",
+  "title": "Programmable normative property manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "kind", "entries"],
+  "properties": {
+    "$schema": { "const": "urn:programmable:normative-property-manifest-v1:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "kind": { "const": "programmable-normative-property-manifest" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "recursive"],
+      "properties": {
+        "path": { "$ref": "#/$defs/safePath" },
+        "role": {
+          "enum": [
+            "agent-contract",
+            "authoring-template",
+            "blind-evaluation-fixture",
+            "builder-catalog",
+            "enforcement-implementation",
+            "enforcement-test",
+            "legal-or-provenance",
+            "normative-reference",
+            "reference-kernel",
+            "test-vector"
+          ]
+        },
+        "recursive": { "type": "boolean" },
+        "excludePrefixes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safePath" }
+        }
+      }
+    }
+  }
+}

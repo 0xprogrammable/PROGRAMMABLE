@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego-manifest",
+  "policy": {
+    "selectionSemantics": "exact-trigger-match-accelerator-only",
+    "missingLegoOutcome": "preserve-project-capability",
+    "automaticAdverseDecision": false,
+    "maturityIsAssurance": false
+  },
+  "entries": [
+    {
+      "id": "async-batch-fee-adapter",
+      "path": "definitions/async-batch-fee-adapter.json",
+      "sha256": "c07f1750562f1b7c1f354e1089b54c268ff241f912612820015b38b6159c6e4d"
+    },
+    {
+      "id": "contract-custom-curve",
+      "path": "definitions/contract-custom-curve.json",
+      "sha256": "3520964c824d8ebab55f47d7ec63f9191221d1ac45b0ac91fc5227ed46305d1b"
+    },
+    {
+      "id": "game-settlement",
+      "path": "definitions/game-settlement.json",
+      "sha256": "aac2e2211c768aa2bb7e60ffa7defafc450dd87be9cf951e90e6aa0e81e89b89"
+    },
+    {
+      "id": "oracle-keeper",
+      "path": "definitions/oracle-keeper.json",
+      "sha256": "a00d238ca0a793f9d386daa43f8eeb4e52479fa2462a1a8aa50954e387395a58"
+    },
+    {
+      "id": "reorg-safe-indexer",
+      "path": "definitions/reorg-safe-indexer.json",
+      "sha256": "736f1dc338221c83cd359238665e8a07edb8f6d13b1dbe4177f3cd5a9f2708fd"
+    },
+    {
+      "id": "reward-vault-signed-claims",
+      "path": "definitions/reward-vault-signed-claims.json",
+      "sha256": "854be82e1a6199cfcb3f588a2539c3b21e23ac232757a4c5ede050e7d674db65"
+    },
+    {
+      "id": "token-supply-modes",
+      "path": "definitions/token-supply-modes.json",
+      "sha256": "22254cabb022eab2dbc76ad3247a7c81cf5a4ab73b52934fc18aa693dbd4eae3"
+    },
+    {
+      "id": "v4-claim-frontend-adapter",
+      "path": "definitions/v4-claim-frontend-adapter.json",
+      "sha256": "6d34687ca260d22a87ff95f8ff74d3ca0116866448b3249cfdab524816e99bc4"
+    },
+    {
+      "id": "v4-position-frontend-adapter",
+      "path": "definitions/v4-position-frontend-adapter.json",
+      "sha256": "e9975d9282efa7e41b6eabb74fa0fcb75034da807e09dbb472593ee9db1ee267"
+    },
+    {
+      "id": "v4-swap-frontend-adapter",
+      "path": "definitions/v4-swap-frontend-adapter.json",
+      "sha256": "4626d522b2c5a362830bd5d6a347f0507fca14971062c4d6293220f51ef6c3c4"
+    },
+    {
+      "id": "zero-amm-fee-adapter",
+      "path": "definitions/zero-amm-fee-adapter.json",
+      "sha256": "625d6d10b33c234744a2bc01981ff82bf1163bb4d1d467dcb50e8803e8b2e8f4"
+    }
+  ]
+}

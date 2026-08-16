@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "attestation": "builder-declared-untrusted",
-  "standardVersion": "1.3.0",
+  "standardVersion": "1.6.0",
   "submissionHash": "sha256:replace-after-preflight",
   "validatorSha256": "sha256:replace-after-preflight",
   "schemaSha256": "sha256:replace-after-preflight",

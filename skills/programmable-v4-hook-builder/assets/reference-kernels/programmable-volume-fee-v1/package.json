@@ -1,0 +1,17 @@
+{
+  "name": "programmable-volume-fee-v1-reference-candidate",
+  "version": "0.0.0-reference",
+  "private": true,
+  "description": "Reference candidate only; not independently audited or deployed.",
+  "license": "MIT",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vvv"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.6.1",
+    "@openzeppelin/uniswap-hooks": "1.1.1",
+    "@uniswap/v4-core": "1.0.2",
+    "@uniswap/v4-periphery": "1.0.3"
+  }
+}

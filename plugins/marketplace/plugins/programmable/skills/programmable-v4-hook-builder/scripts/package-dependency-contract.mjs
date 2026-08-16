@@ -54,6 +54,7 @@ export function isOfficialUniswapSdkPackage(packageName) {
 export function isExactDeclaredPackageSpecifier(specifier, packageName) {
   if (typeof specifier !== "string" || !isCanonicalNpmPackageName(packageName)) return false;
   if (specifier === packageName) return true;
+  if (packageName === "@uniswap/v4-sdk") return false;
   if (!specifier.startsWith(`${packageName}/`)) return false;
   const subpath = specifier.slice(packageName.length + 1);
   if (

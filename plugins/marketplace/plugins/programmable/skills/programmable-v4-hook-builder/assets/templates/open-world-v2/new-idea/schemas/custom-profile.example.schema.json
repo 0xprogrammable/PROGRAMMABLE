@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:replace-with-project:custom-profile:1.0.0",
+  "title": "Replace with one project-owned extension contract",
+  "description": "Copy, rename, and bind the exact bytes when a new kind is not in the bundled catalog. This example is not an allowlist entry and is not referenced by the blank draft.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["description"],
+  "properties": {
+    "description": { "type": "string", "minLength": 1 },
+    "parameters": { "type": "object", "additionalProperties": true }
+  }
+}

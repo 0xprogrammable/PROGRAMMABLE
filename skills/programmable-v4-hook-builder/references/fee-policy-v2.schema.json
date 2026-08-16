@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:fee-policy-v2:1.0.0",
+  "title": "Programmable volume fee policy v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "policyId",
+    "policyVersion",
+    "policyHashPreimage",
+    "policyHash",
+    "platform",
+    "basis",
+    "economics",
+    "accounting",
+    "collectionProfiles",
+    "feeScopes"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:fee-policy-v2:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "policyId": { "const": "programmable-volume-fee-v2" },
+    "policyVersion": { "const": "2.0.0" },
+    "policyHashPreimage": { "const": "programmable-volume-fee-v2@2.0.0" },
+    "policyHash": { "const": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e" },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "immutable", "rateUnit", "rate", "claimAuthority", "claimAvailability"],
+      "properties": {
+        "owner": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+        "immutable": { "const": true },
+        "rateUnit": { "const": "hundredths-of-bip" },
+        "rate": { "const": 1000 },
+        "claimAuthority": { "const": "owner-only" },
+        "claimAvailability": { "const": "anytime-from-funded-liability" }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "excludedEvents", "partialFillRule"],
+      "properties": {
+        "metric": { "const": "executed-gross-quote-volume" },
+        "excludedEvents": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "order-deposit" },
+            { "const": "unfilled" },
+            { "const": "canceled" },
+            { "const": "refunded" }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "partialFillRule": { "const": "each-executed-fill-counted-once" }
+      }
+    },
+    "economics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formula",
+        "maximumUserFundedTotalRateExclusive",
+        "externallyFundedRateRule",
+        "exactOutputRule"
+      ],
+      "properties": {
+        "formula": { "const": "effective=max(selectedTotalAtExecution,1000);platform=1000;project=effective-1000" },
+        "maximumUserFundedTotalRateExclusive": { "const": 1000000 },
+        "externallyFundedRateRule": {
+          "const": "uint256-rate-custom-reviewed-segregated-funding-only"
+        },
+        "exactOutputRule": { "const": "verified-gross-witness" }
+      }
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rounding",
+        "remainderScope",
+        "fragmentationResistantPlatformFee",
+        "claimResetsRemainders",
+        "claimableOnlyWhenFullyFunded",
+        "crossScopeNetting"
+      ],
+      "properties": {
+        "rounding": { "const": "cumulative-independent-platform-project-remainders" },
+        "remainderScope": { "const": "chain-pool-quote-currency-lifetime" },
+        "fragmentationResistantPlatformFee": { "const": true },
+        "claimResetsRemainders": { "const": false },
+        "claimableOnlyWhenFullyFunded": { "const": true },
+        "crossScopeNetting": { "const": false }
+      }
+    },
+    "collectionProfiles": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "standard-amm" },
+        { "const": "sync-custom-zero-amm" },
+        { "const": "async-fill-batch" },
+        { "const": "custom-reviewed" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "feeScopes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/feeScope" }
+    }
+  },
+  "$defs": {
+    "feeScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "chainId", "poolId", "quoteCurrency", "collectionProfile"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 100 },
+        "chainId": { "$ref": "#/$defs/canonicalPositiveUint256Decimal" },
+        "poolId": { "$ref": "#/$defs/bytes32" },
+        "quoteCurrency": { "$ref": "#/$defs/address" },
+        "collectionProfile": {
+          "enum": ["standard-amm", "sync-custom-zero-amm", "async-fill-batch", "custom-reviewed"]
+        }
+      }
+    },
+    "canonicalPositiveUint256Decimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$",
+      "description": "Canonical base-10 EVM uint256 in the inclusive range 1..2^256-1; semantic validation enforces the upper bound."
+    },
+    "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+    "bytes32": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" }
+  }
+}

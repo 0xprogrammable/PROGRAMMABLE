@@ -1,0 +1,959 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:capability-contract:1.0.0",
+  "title": "Programmable capability composition contract v1",
+  "description": "A closed, data-only semantic contract for one project component or composable implementation Lego. Unknown capabilities remain eligible through explicit owner-defined or unresolved recognition and require architecture review. Structural validity is not evidence that the component is safe, integrated, tested, approved, deployed, or live.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contractId",
+    "component",
+    "license",
+    "provides",
+    "requires",
+    "hook",
+    "storage",
+    "deltas",
+    "fees",
+    "authorities",
+    "lifecycle",
+    "routerAssumptions",
+    "settlementAssumptions",
+    "externalDependencies",
+    "deployments",
+    "tests",
+    "extensions"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:programmable:capability-contract:1.0.0"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "contractId": {
+      "$ref": "#/$defs/id"
+    },
+    "component": {
+      "$ref": "#/$defs/component"
+    },
+    "license": {
+      "$ref": "#/$defs/licenseAssumption"
+    },
+    "provides": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/providedCapability"
+      }
+    },
+    "requires": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/requiredCapability"
+      }
+    },
+    "hook": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/hook"
+        }
+      ]
+    },
+    "storage": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/storage"
+      }
+    },
+    "deltas": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/delta"
+      }
+    },
+    "fees": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/fee"
+      }
+    },
+    "authorities": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/authority"
+      }
+    },
+    "lifecycle": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/lifecycleAssertion"
+      }
+    },
+    "routerAssumptions": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/routerAssumption"
+      }
+    },
+    "settlementAssumptions": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/settlementAssumption"
+      }
+    },
+    "externalDependencies": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/externalDependency"
+      }
+    },
+    "deployments": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/deployment"
+      }
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/testBinding"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Open project-specific data. The checker preserves but cannot prove extension semantics and therefore routes non-empty extensions to architecture review.",
+      "maxProperties": 128
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "nullableId": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/id"
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/sha256"
+        }
+      ]
+    },
+    "visibleText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "nullableVisibleText": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/visibleText"
+        }
+      ]
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "hook",
+            "hook-module",
+            "contract",
+            "router",
+            "service",
+            "library",
+            "frontend",
+            "custom"
+          ]
+        }
+      }
+    },
+    "licenseAssumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "projectLicenseAssumption",
+        "compatibility"
+      ],
+      "properties": {
+        "spdx": {
+          "$ref": "#/$defs/visibleText"
+        },
+        "projectLicenseAssumption": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "compatibility": {
+          "enum": [
+            "compatible",
+            "incompatible",
+            "architecture-review-required"
+          ]
+        }
+      }
+    },
+    "providedCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "recognition"
+      ],
+      "properties": {
+        "capabilityId": {
+          "$ref": "#/$defs/id"
+        },
+        "recognition": {
+          "$ref": "#/$defs/recognition"
+        }
+      }
+    },
+    "requiredCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "recognition",
+        "optional",
+        "providerComponentRef"
+      ],
+      "properties": {
+        "capabilityId": {
+          "$ref": "#/$defs/id"
+        },
+        "recognition": {
+          "$ref": "#/$defs/recognition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "providerComponentRef": {
+          "$ref": "#/$defs/nullableId"
+        }
+      }
+    },
+    "recognition": {
+      "enum": [
+        "known",
+        "owner-defined",
+        "unresolved"
+      ]
+    },
+    "hook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implementationRef",
+        "poolManagerRef",
+        "poolKeyRefs",
+        "permissions"
+      ],
+      "properties": {
+        "implementationRef": {
+          "$ref": "#/$defs/id"
+        },
+        "poolManagerRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "poolKeyRefs": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "permissions": {
+          "type": "array",
+          "maxItems": 14,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "beforeInitialize",
+              "afterInitialize",
+              "beforeAddLiquidity",
+              "afterAddLiquidity",
+              "beforeRemoveLiquidity",
+              "afterRemoveLiquidity",
+              "beforeSwap",
+              "afterSwap",
+              "beforeDonate",
+              "afterDonate",
+              "beforeSwapReturnDelta",
+              "afterSwapReturnDelta",
+              "afterAddLiquidityReturnDelta",
+              "afterRemoveLiquidityReturnDelta"
+            ]
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storageId",
+        "containerRef",
+        "namespace",
+        "location",
+      "scope",
+      "sharing",
+      "valueClass",
+      "poolIsolation",
+      "layoutHash"
+      ],
+      "properties": {
+        "storageId": {
+          "$ref": "#/$defs/id"
+        },
+        "containerRef": {
+          "$ref": "#/$defs/id"
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]+(?:[._:-][a-z0-9]+)*$"
+        },
+        "location": {
+          "enum": [
+            "persistent",
+            "transient"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "global",
+            "pool",
+            "component",
+            "transaction",
+            "custom"
+          ]
+        },
+      "sharing": {
+          "enum": [
+            "exclusive",
+          "shared"
+        ]
+      },
+      "valueClass": {
+        "enum": [
+          "configuration",
+          "liability",
+          "asset-balance",
+          "claim",
+          "fee-accrual",
+          "position",
+          "replay-state",
+          "observation",
+          "other"
+        ]
+      },
+      "poolIsolation": {
+        "enum": [
+          "pool-id-namespaced",
+          "single-pool-only",
+          "global-read-only",
+          "unresolved",
+          "custom"
+        ]
+      },
+      "layoutHash": {
+          "$ref": "#/$defs/nullableSha256"
+        }
+      }
+    },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deltaId",
+        "effectRef",
+        "slotRef",
+        "currencyRef",
+      "sign",
+      "ownerRef",
+      "permissionRef",
+      "backing",
+      "settlementScopeRef",
+      "conservationGroupRef",
+      "boundRef",
+      "aggregation"
+      ],
+      "properties": {
+        "deltaId": {
+          "$ref": "#/$defs/id"
+        },
+        "effectRef": {
+          "$ref": "#/$defs/id"
+        },
+        "slotRef": {
+          "$ref": "#/$defs/id"
+        },
+        "currencyRef": {
+          "$ref": "#/$defs/id"
+        },
+        "sign": {
+          "enum": [
+            "owner-pays",
+            "owner-receives",
+            "bidirectional"
+          ]
+        },
+      "ownerRef": {
+        "$ref": "#/$defs/id"
+      },
+      "permissionRef": {
+        "oneOf": [
+          { "type": "null" },
+          {
+            "enum": [
+              "beforeSwapReturnDelta",
+              "afterSwapReturnDelta",
+              "afterAddLiquidityReturnDelta",
+              "afterRemoveLiquidityReturnDelta"
+            ]
+          }
+        ]
+      },
+        "backing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "resourceRef"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "pool-manager-delta",
+                "controlled-assets",
+                "redeemable-claims",
+                "external-proof",
+                "none",
+                "unresolved",
+                "custom"
+              ]
+            },
+            "resourceRef": {
+              "$ref": "#/$defs/nullableId"
+            }
+          }
+        },
+      "settlementScopeRef": {
+        "$ref": "#/$defs/nullableId"
+      },
+      "conservationGroupRef": {
+        "$ref": "#/$defs/nullableId"
+      },
+      "boundRef": {
+        "$ref": "#/$defs/nullableId"
+      },
+        "aggregation": {
+          "enum": [
+            "exclusive",
+            "additive"
+          ]
+        }
+      }
+    },
+    "fee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feeId",
+        "scopeRef",
+      "basisRef",
+      "recipientRef",
+      "enforcementRef",
+      "stacking",
+        "stackGroupRef",
+        "totalFeeRef"
+      ],
+      "properties": {
+        "feeId": {
+          "$ref": "#/$defs/id"
+        },
+        "scopeRef": {
+          "$ref": "#/$defs/id"
+        },
+        "basisRef": {
+          "$ref": "#/$defs/id"
+        },
+      "recipientRef": {
+        "$ref": "#/$defs/id"
+      },
+      "enforcementRef": {
+        "$ref": "#/$defs/id"
+      },
+        "stacking": {
+          "enum": [
+            "forbidden",
+            "explicit-additive",
+            "included-in-total"
+          ]
+        },
+        "stackGroupRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "totalFeeRef": {
+          "$ref": "#/$defs/nullableId"
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityId",
+        "scopeRef",
+      "capabilityRef",
+      "authorityState",
+      "authorityRef",
+        "mode",
+        "mutability",
+        "coordinationRef"
+      ],
+      "properties": {
+        "authorityId": {
+          "$ref": "#/$defs/id"
+        },
+        "scopeRef": {
+          "$ref": "#/$defs/id"
+        },
+      "capabilityRef": {
+        "$ref": "#/$defs/id"
+      },
+      "authorityState": {
+        "enum": [
+          "bound",
+          "none",
+          "unresolved",
+          "custom"
+        ]
+      },
+      "authorityRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "mode": {
+          "enum": [
+            "exclusive",
+            "shared",
+            "advisory"
+          ]
+        },
+        "mutability": {
+          "enum": [
+            "immutable",
+            "mutable",
+            "one-way",
+            "timelocked"
+          ]
+        },
+        "coordinationRef": {
+          "$ref": "#/$defs/nullableId"
+        }
+      }
+    },
+    "lifecycleAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assertionId",
+        "boundaryRef",
+        "position",
+        "conditionRef",
+        "operator",
+        "value",
+        "handoffRef"
+      ],
+      "properties": {
+        "assertionId": {
+          "$ref": "#/$defs/id"
+        },
+        "boundaryRef": {
+          "$ref": "#/$defs/id"
+        },
+        "position": {
+          "enum": [
+            "precondition",
+            "postcondition"
+          ]
+        },
+        "conditionRef": {
+          "$ref": "#/$defs/id"
+        },
+        "operator": {
+          "enum": [
+            "equals",
+            "not-equals",
+            "present",
+            "absent"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "handoffRef": {
+          "$ref": "#/$defs/nullableId"
+        }
+      }
+    },
+    "routerAssumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "flowRef",
+        "context",
+        "poolManagerRef",
+        "routerRef",
+        "msgSenderRole",
+        "senderParameterRole",
+        "hookData"
+      ],
+      "properties": {
+        "flowRef": {
+          "$ref": "#/$defs/id"
+        },
+        "context": {
+          "enum": [
+            "v4-hook-callback",
+            "router-call",
+            "offchain",
+            "custom"
+          ]
+        },
+        "poolManagerRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "routerRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "msgSenderRole": {
+          "enum": [
+            "pool-manager",
+            "router",
+            "end-user",
+            "service",
+            "custom",
+            "not-applicable"
+          ]
+        },
+        "senderParameterRole": {
+          "enum": [
+            "router",
+            "end-user",
+            "service",
+            "custom",
+            "not-applicable"
+          ]
+        },
+        "hookData": {
+          "$ref": "#/$defs/hookData"
+        }
+      }
+    },
+    "hookData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "schemaRef",
+        "version",
+        "identityBinding",
+        "authenticatorRef",
+        "domainRef",
+        "replayProtectionRef"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "none",
+            "versioned-typed",
+            "opaque",
+            "custom"
+          ]
+        },
+        "schemaRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "version": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "identityBinding": {
+          "enum": [
+            "none",
+            "user",
+            "payer",
+            "beneficiary",
+            "custom"
+          ]
+        },
+        "authenticatorRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "domainRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "replayProtectionRef": {
+          "$ref": "#/$defs/nullableId"
+        }
+      }
+    },
+    "settlementAssumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopeRef",
+        "actorRef",
+        "mode",
+        "currencyKind",
+        "payerRef",
+        "recipientRef",
+        "exclusive"
+      ],
+      "properties": {
+        "scopeRef": {
+          "$ref": "#/$defs/id"
+        },
+        "actorRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "mode": {
+          "enum": [
+            "erc20-sync-transfer-settle",
+            "native-settle",
+            "take",
+            "settle-for",
+            "mint-burn",
+            "return-delta",
+            "external",
+            "none",
+            "custom"
+          ]
+        },
+        "currencyKind": {
+          "enum": [
+            "erc20",
+            "native",
+            "either",
+            "claim",
+            "custom"
+          ]
+        },
+        "payerRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "recipientRef": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "exclusive": {
+          "type": "boolean"
+        }
+      }
+    },
+    "externalDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependencyId",
+        "resolutionScopeRef",
+        "ecosystem",
+        "packageRef",
+        "sourceRef",
+        "pin",
+        "integrity",
+        "licenseSpdx",
+        "licenseCompatibility"
+      ],
+      "properties": {
+        "dependencyId": {
+          "$ref": "#/$defs/id"
+        },
+        "resolutionScopeRef": {
+          "$ref": "#/$defs/id"
+        },
+        "ecosystem": {
+          "enum": [
+            "npm",
+            "foundry",
+            "git",
+            "system",
+            "custom"
+          ]
+        },
+        "packageRef": {
+          "$ref": "#/$defs/visibleText"
+        },
+        "sourceRef": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "pin": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "integrity": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "licenseSpdx": {
+          "$ref": "#/$defs/nullableVisibleText"
+        },
+        "licenseCompatibility": {
+          "enum": [
+            "compatible",
+            "incompatible",
+            "architecture-review-required"
+          ]
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deploymentId",
+        "chainId",
+        "artifactRef",
+        "state",
+        "address",
+        "creationCodeHash",
+        "constructorArgsHash",
+        "initcodeHash",
+        "runtimeCodeHash",
+        "permissionMask",
+        "hookMinerSaltHash",
+        "poolManagerRef"
+      ],
+      "properties": {
+        "deploymentId": {
+          "$ref": "#/$defs/id"
+        },
+        "chainId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        },
+        "artifactRef": {
+          "$ref": "#/$defs/id"
+        },
+        "state": {
+          "enum": [
+            "unresolved",
+            "preimage-bound",
+            "predicted",
+            "observed"
+          ]
+        },
+        "address": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" }
+          ]
+        },
+        "creationCodeHash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "constructorArgsHash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "initcodeHash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "permissionMask": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^0x[0-3][0-9a-fA-F]{3}$" }
+          ]
+        },
+        "hookMinerSaltHash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "poolManagerRef": {
+          "$ref": "#/$defs/nullableId"
+        }
+      }
+    },
+    "testBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "testId",
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "testId": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "unit",
+            "negative",
+            "fuzz",
+            "invariant",
+            "integration",
+            "fork",
+            "other"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        }
+      }
+    }
+  }
+}

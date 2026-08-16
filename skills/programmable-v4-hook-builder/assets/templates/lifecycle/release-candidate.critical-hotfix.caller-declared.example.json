@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1.0.0",
+  "candidateId": "programmable-v4-builder-v0.2.2-critical-hotfix-draft",
+  "privateCandidate": true,
+  "publicState": "not-published",
+  "releaseVersion": "0.2.2",
+  "channel": "stable",
+  "releaseKind": "security-hotfix",
+  "plannedRelease": {
+    "builder": {
+      "fromVersion": "0.2.1",
+      "toVersion": "0.2.2",
+      "semanticClassification": "patch"
+    },
+    "submissionStandard": {
+      "fromVersion": "1.3.0",
+      "toVersion": "1.3.0"
+    },
+    "feePolicy": {
+      "fromVersion": "1.0.0",
+      "toVersion": "1.0.0"
+    },
+    "source": {
+      "commitSha": null,
+      "treeSha": null,
+      "tagName": null
+    },
+    "artifact": {
+      "path": null,
+      "sha256": null
+    },
+    "releaseManifest": {
+      "path": null,
+      "sha256": null
+    }
+  },
+  "preparedAt": "2026-08-04T00:00:00Z",
+  "requestedReleaseAt": "2026-08-04T01:00:00Z",
+  "changeSetComplete": false,
+  "changes": [
+    {
+      "id": "replace-with-security-fix-id",
+      "kind": "security-fix",
+      "summary": "Replace with the exact security fix included in this candidate."
+    },
+    {
+      "id": "replace-with-security-advisory-id",
+      "kind": "security-advisory",
+      "summary": "Replace with the exact advisory for the affected versions."
+    }
+  ],
+  "unbundledChangeIds": [
+    "pending-private-security-review"
+  ],
+  "evidence": {
+    "checksums": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "sbom": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "evals": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "canary": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    }
+  },
+  "communications": {
+    "dailyReleaseNotes": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "publicPostSummary": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    }
+  },
+  "ownerReleaseGo": {
+    "status": "missing",
+    "path": null,
+    "evidenceSha256": null,
+    "releaseIntentSha256": null,
+    "grantedAt": null
+  },
+  "securityHotfix": {
+    "severity": "critical",
+    "affectedVersions": [
+      "0.2.0",
+      "0.2.1"
+    ],
+    "reasonCode": "replace-with-critical-incident-code",
+    "incidentRecordSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "ownerOverride": {
+      "status": "missing",
+      "path": null,
+      "evidenceSha256": null,
+      "releaseIntentSha256": null,
+      "grantedAt": null
+    }
+  }
+}

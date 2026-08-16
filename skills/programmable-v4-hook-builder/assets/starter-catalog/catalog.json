@@ -1,0 +1,266 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-starter-catalog",
+  "implementationLegos": {
+    "path": "implementation-legos/manifest.json",
+    "sha256": "5e046fcabe3d91408fe4a7f562a0a599d5ad352798aa8249cf357fd49f4fbea7"
+  },
+  "policy": {
+    "selectionSemantics": "accelerator-only",
+    "unknownCapabilityOutcome": "architecture-review-required",
+    "missingCatalogLabelOutcome": "preserve-custom-capability",
+    "automaticAdverseDecision": false
+  },
+  "mandatoryPacks": [
+    "metadata-disclosures",
+    "test-evidence-threat-model"
+  ],
+  "entries": [
+    {
+      "id": "active-liquidity-market",
+      "kind": "pack",
+      "path": "packs/active-liquidity-market.json",
+      "sha256": "8bd5004f91771e416aef34017af055c4e61aad2e72c3c9ba07736cd5ce6f606e"
+    },
+    {
+      "id": "async-swap",
+      "kind": "pack",
+      "path": "packs/async-swap.json",
+      "sha256": "4a09e2a3a6e1559b32b7cd468f8bdf32a691cc6cc1f8e0eda498672634ce34bb"
+    },
+    {
+      "id": "automatic-liquidity",
+      "kind": "pack",
+      "path": "packs/automatic-liquidity.json",
+      "sha256": "57c6ee554018da487230355c6eda15ae53cdebce37cd529756ea7e54b0601571"
+    },
+    {
+      "id": "blank-custom",
+      "kind": "starter",
+      "path": "starters/blank-custom.json",
+      "sha256": "b5b76a64787f5335e9a5c1cf3b415a90d97c53fb033119eaf8b77b70d8f24a16"
+    },
+    {
+      "id": "continuous-clearing-auction",
+      "kind": "pack",
+      "path": "packs/continuous-clearing-auction.json",
+      "sha256": "c0eef3103dbb6a21f68b94b5a13ee2b9c2fb3cf6a2e90a07afa774eb5f8541cb"
+    },
+    {
+      "id": "contract-priced-sell-and-burn",
+      "kind": "pack",
+      "path": "packs/contract-priced-sell-and-burn.json",
+      "sha256": "e84278a01670814751419afc1f175753ae783577e7deb631411bdf1da3df686f"
+    },
+    {
+      "id": "contract-priced-sell-and-burn-v4-custom-accounting",
+      "kind": "pack",
+      "path": "packs/contract-priced-sell-and-burn-v4-custom-accounting.json",
+      "sha256": "db2d6176631056cc7146e51551e9bfc5d808dda09d1cd2825be79fb08b9b7790"
+    },
+    {
+      "id": "custom-curve",
+      "kind": "pack",
+      "path": "packs/custom-curve.json",
+      "sha256": "759286f5808cf4f01215cac4beae5012e6791bf1183591bab164b0174a85b094"
+    },
+    {
+      "id": "custom-hook",
+      "kind": "starter",
+      "path": "starters/custom-hook.json",
+      "sha256": "755f095582c6b9c2f8c8c8c2cef0913b07c589a96e94fe2267b2173e488701ca"
+    },
+    {
+      "id": "custom-hook-behavior",
+      "kind": "pack",
+      "path": "packs/custom-hook-behavior.json",
+      "sha256": "b66c400ad143f3ba59c215d4c23b130c0213b8cd29d760a13dbbac191a75dee7"
+    },
+    {
+      "id": "custom-token-standard-fee-hook",
+      "kind": "starter",
+      "path": "starters/custom-token-standard-fee-hook.json",
+      "sha256": "c1c21cf0ee826529a6a6a277b3ba5aeafab2ec469fbe1fe387bf482b56c4ab1b"
+    },
+    {
+      "id": "dynamic-lp-fee",
+      "kind": "pack",
+      "path": "packs/dynamic-lp-fee.json",
+      "sha256": "425bc1273b3e7a25ba76a63978ad70298210590e8f3964768807a9e45cb5e0ea"
+    },
+    {
+      "id": "external-liquidity-aggregator",
+      "kind": "pack",
+      "path": "packs/external-liquidity-aggregator.json",
+      "sha256": "a33bd9fe2c62b4e00547861d9b1feb2c48db32b3a0bc93b638bb85f0f1ec1f86"
+    },
+    {
+      "id": "hook-owned-idle-yield",
+      "kind": "pack",
+      "path": "packs/hook-owned-idle-yield.json",
+      "sha256": "5be5dc1edfbe2d3d7f41a63341adeeedbb1380e0d4f57be39bdbb906c61954f7"
+    },
+    {
+      "id": "hook-owned-project-fee",
+      "kind": "pack",
+      "path": "packs/hook-owned-project-fee.json",
+      "sha256": "2efb2f23e06ba24b45d05742966ca1910c43a78bddee20477bbde4cd4522e10d"
+    },
+    {
+      "id": "launch-distribution-vesting-lp-custody",
+      "kind": "pack",
+      "path": "packs/launch-distribution-vesting-lp-custody.json",
+      "sha256": "30a6acff120a9d8680f5d226e656bf3ab9072f39fd21973d2d43f184101779dc"
+    },
+    {
+      "id": "limit-orders-twamm",
+      "kind": "pack",
+      "path": "packs/limit-orders-twamm.json",
+      "sha256": "eeb8f3e5c792fe752084d3175acf46394ae5a1a2f0e01d1a0ce5efd2f8e5d0cc"
+    },
+    {
+      "id": "maps-location-quest",
+      "kind": "pack",
+      "path": "packs/maps-location-quest.json",
+      "sha256": "8cf2b9789f38d5c8681decf37f5590c8e893ca13756999f5eeb05e7fee486d1e"
+    },
+    {
+      "id": "metadata-disclosures",
+      "kind": "pack",
+      "path": "packs/metadata-disclosures.json",
+      "sha256": "a3e5fdb9cd89acda473906b534c799e51ebfd9540135e4ece1af6130147830cc"
+    },
+    {
+      "id": "mev-protection",
+      "kind": "pack",
+      "path": "packs/mev-protection.json",
+      "sha256": "013580f722e0e2db4f815b3bbfcaf173f4530ed9e3a156c7422400b45ca2e666"
+    },
+    {
+      "id": "multi-pool-hooks",
+      "kind": "pack",
+      "path": "packs/multi-pool-hooks.json",
+      "sha256": "c3bc0c358b0292df75eac21d2ea83576281ac32ffd5287dca3437ad61fde95fc"
+    },
+    {
+      "id": "multi-repo-app-service-indexer",
+      "kind": "pack",
+      "path": "packs/multi-repo-app-service-indexer.json",
+      "sha256": "2bd588ddad701c575a2ef4b099857a20e2f3c35dd8aece92c5f02a8d4a03f74a"
+    },
+    {
+      "id": "oracle-keeper",
+      "kind": "pack",
+      "path": "packs/oracle-keeper.json",
+      "sha256": "c7e41df6e6527314db805ea0ac2159a92f460dd455fe9e1dcce07367a37d59b9"
+    },
+    {
+      "id": "ordinary-launch",
+      "kind": "starter",
+      "path": "starters/ordinary-launch.json",
+      "sha256": "5c11272da7cb634bffbf10a9a0812804b03289a83082b4ac6bc59c30088bbdc9"
+    },
+    {
+      "id": "permissioned-external-asset",
+      "kind": "pack",
+      "path": "packs/permissioned-external-asset.json",
+      "sha256": "6c23e44b288c11b32e6bd7778cf34c666a0e070b47142044d7df6e3ad290d8f2"
+    },
+    {
+      "id": "position-subscriber-automation",
+      "kind": "pack",
+      "path": "packs/position-subscriber-automation.json",
+      "sha256": "742735fec2593b663ecccad9bc83865e2bf735bfd953f35114ef2650a015b9f8"
+    },
+    {
+      "id": "programmable-volume-fee",
+      "kind": "pack",
+      "path": "packs/programmable-volume-fee.json",
+      "sha256": "0be20e1c1f43b24ce7ff9dabe80f790b5b0f44d839340ee006feccd97e9c4bd1"
+    },
+    {
+      "id": "randomness-loot-rewards",
+      "kind": "pack",
+      "path": "packs/randomness-loot-rewards.json",
+      "sha256": "322f6ef600f8ae1168a2df633040c45041cb030c5b82845cfe1db7e764e7bc90"
+    },
+    {
+      "id": "signed-outcome-service",
+      "kind": "pack",
+      "path": "packs/signed-outcome-service.json",
+      "sha256": "71eb5db90f3ec88ec891f2635fb0d0ae9ed1e4a493cad8ddaf322e1d5462de67"
+    },
+    {
+      "id": "staking-liquidity-incentives",
+      "kind": "pack",
+      "path": "packs/staking-liquidity-incentives.json",
+      "sha256": "12f46ac1af705ddd0da3cf5a8828547d4b94452f65edb1358e569bbaa9acaf80"
+    },
+    {
+      "id": "tax-financed-auto-liquidity",
+      "kind": "pack",
+      "path": "packs/tax-financed-auto-liquidity.json",
+      "sha256": "cb0a8929e496ee8587371cca5bd5faf2efc1df7bdf46a7757b2d555046f80339"
+    },
+    {
+      "id": "test-evidence-threat-model",
+      "kind": "pack",
+      "path": "packs/test-evidence-threat-model.json",
+      "sha256": "9adfe6dc1bb0694febc2867eb85f722cbe495100efb9fece847f7ea9371c3f44"
+    },
+    {
+      "id": "threejs-pvp-rewards",
+      "kind": "pack",
+      "path": "packs/threejs-pvp-rewards.json",
+      "sha256": "0f856b397e5bbee6d91f74160830f782222fce855c9da1f33bd0acdd6968201c"
+    },
+    {
+      "id": "token-managed-automatic-liquidity",
+      "kind": "pack",
+      "path": "packs/token-managed-automatic-liquidity.json",
+      "sha256": "1846e71247012f8dc015b527705ec8e9053d39bdb10db89395fb722369ab2d24"
+    },
+    {
+      "id": "token-transfer-tax",
+      "kind": "pack",
+      "path": "packs/token-transfer-tax.json",
+      "sha256": "4ebe082179ab57e67a619ce3becb5c3445c94158c99672e1cc142a6ac33321bc"
+    },
+    {
+      "id": "v4-claim-client",
+      "kind": "pack",
+      "path": "packs/v4-claim-client.json",
+      "sha256": "d60e425b6f52517720f352051be7cfe19b39157ac3e6abb05a4feef7a7663d37"
+    },
+    {
+      "id": "v4-liquidity-position-client",
+      "kind": "pack",
+      "path": "packs/v4-liquidity-position-client.json",
+      "sha256": "556f3bdcc7a6bf60bd20fc972d41d2bcb5d900f108fc35ee7d742fb6696a5e4b"
+    },
+    {
+      "id": "v4-swap-client",
+      "kind": "pack",
+      "path": "packs/v4-swap-client.json",
+      "sha256": "c79afa46bea035bf3af170e01c34e47e8c8acec08b6e7b79bc55b42efa3dc665"
+    },
+    {
+      "id": "verifiable-randomness",
+      "kind": "pack",
+      "path": "packs/verifiable-randomness.json",
+      "sha256": "404d5a8b98e4bbaf970301af6d62b862b223478b31927c124e6a8735e54b88b9"
+    },
+    {
+      "id": "wallet-transaction-quest",
+      "kind": "pack",
+      "path": "packs/wallet-transaction-quest.json",
+      "sha256": "a57e328850e39683c99d89f5f07a182a9553a1836a1ddd40f6e82173e07b5b72"
+    },
+    {
+      "id": "wrapped-asset-conversion",
+      "kind": "pack",
+      "path": "packs/wrapped-asset-conversion.json",
+      "sha256": "36c7d459d60efaa55c80383a0890134970ac945b75ef4928466eb9d3b2dbe10f"
+    }
+  ]
+}

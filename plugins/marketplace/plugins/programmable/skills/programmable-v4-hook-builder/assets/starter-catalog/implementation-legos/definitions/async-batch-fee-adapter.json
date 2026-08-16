@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "async-batch-fee-adapter",
+  "label": "Async and batch fee adapter",
+  "summary": "Scope-cumulative fee-liability accounting with fill replay protection across asynchronous batches whose settlement is designed separately.",
+  "maturity": "experimental",
+  "maturityMeaning": "Hash-bound reference scaffold only; project-specific implementation and evidence are required before prototype readiness.",
+  "feeApplicability": "canonical-scope-conformance-unresolved",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "architecture-review-required",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "async-swap",
+      "continuous-clearing-auction"
+    ],
+    "capabilityIds": [
+      "async-swap",
+      "continuous-clearing-auction"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "dependencyRequirements": [
+    "Solidity 0.8.26",
+    "Project-specific fill, cancellation and settlement adapter"
+  ],
+  "requiredFacts": [
+    "Bind one immutable canonical scope id, every batch id, every fill id, the gross-volume basis and final settlement event",
+    "Preserve cumulative rounding remainder when batches rotate inside one canonical scope; a new batch must never reset the scope total",
+    "Bind duplicate fill, cancellation, expiry, partial fill and replay behavior",
+    "Keep platform liability, project liability and user principal separately attributable"
+  ],
+  "hardConflictPredicates": [
+    "The same scope-bound fill id can accrue or settle more than once",
+    "Changing or rotating a batch id inside one canonical scope resets cumulative gross volume, platform liability or rounding remainder",
+    "A caller can rotate the canonical scope id for one economic execution surface to avoid cumulative fee accounting",
+    "A batch can be marked settled before all declared liabilities are backed",
+    "Cancellation or expiry can erase an already accrued platform liability"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/async-batch-fee-adapter/AsyncBatchFeeAdapter.sol",
+      "targetPath": "implementation/async-batch-fee-adapter/src/AsyncBatchFeeAdapter.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "4072041acfdc6980c93ffcf988d2b9d8f980c1bf01e8675d4278b4e789ebdce4"
+    },
+    {
+      "sourcePath": "templates/async-batch-fee-adapter/AsyncBatchFeeAdapter.t.sol",
+      "targetPath": "implementation/async-batch-fee-adapter/test/AsyncBatchFeeAdapter.t.sol",
+      "role": "test",
+      "language": "solidity",
+      "sha256": "563853edd3462ec17787be36351bfcdeacff843a08c3fcd0df74f6a605bd301e"
+    }
+  ]
+}

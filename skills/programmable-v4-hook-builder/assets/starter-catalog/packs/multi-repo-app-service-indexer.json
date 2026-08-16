@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "multi-repo-app-service-indexer",
+  "label": "Multi-repository app, service and indexer",
+  "summary": "Bind a primary project plus pinned companion repositories and declared external services without flattening them.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "companion-repositories",
+    "external-services",
+    "multi-surface-product"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "service"
+  ],
+  "requiredFacts": [
+    "One primary GitHub lineage and every companion repository role",
+    "Exact companion repository, commit, tree, build and runtime boundary",
+    "Every external service interface, authority, data origin and outage behavior",
+    "Which surfaces are source-bound, integration-tested, externally trusted or outside review"
+  ],
+  "requiredFiles": [
+    "Primary project manifest",
+    "Companion repository manifests",
+    "Service and API contracts",
+    "Indexer reconstruction specification",
+    "Cross-surface integration tests"
+  ],
+  "requiredTests": [
+    "Exact-revision and dependency closure",
+    "Service outage, stale data and incompatible version behavior",
+    "Indexer replay, reorg and reconstruction",
+    "Cross-repository integration and disclosure parity"
+  ],
+  "risks": [
+    "A moving companion revision can invalidate reviewed behavior",
+    "Closed external services can remain trusted dependencies",
+    "Approval scope can be misrepresented across product surfaces"
+  ]
+}

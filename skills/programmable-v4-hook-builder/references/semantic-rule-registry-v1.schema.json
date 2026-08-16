@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:semantic-rule-registry-v1:1.0.0",
+  "title": "Programmable semantic rule registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "kind", "scope", "ruleCategories", "rules"],
+  "properties": {
+    "$schema": { "const": "urn:programmable:semantic-rule-registry-v1:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "kind": { "const": "programmable-semantic-rule-registry" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "completeRuleInventoryClaimed", "completeCanonicalRuleCategoryCoverageClaimed", "managedFindingNamespaces"],
+      "properties": {
+        "profile": { "const": "managed-finding-namespaces-and-canonical-rule-categories" },
+        "completeRuleInventoryClaimed": { "const": false },
+        "completeCanonicalRuleCategoryCoverageClaimed": { "const": true },
+        "managedFindingNamespaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/managedFindingNamespace" }
+        }
+      }
+    },
+    "ruleCategories": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/ruleCategory" }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "testReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "testCase"],
+      "properties": {
+        "path": { "$ref": "#/$defs/safePath" },
+        "testCase": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "literal", "expectedOccurrences"],
+      "properties": {
+        "path": { "$ref": "#/$defs/safePath" },
+        "literal": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "expectedOccurrences": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "managedFindingNamespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownerFile", "prefix", "completeInventoryClaimed"],
+      "properties": {
+        "ownerFile": { "$ref": "#/$defs/safePath" },
+        "prefix": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$",
+          "maxLength": 80
+        },
+        "completeInventoryClaimed": { "const": true }
+      }
+    },
+    "ruleCategory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "id",
+        "canonicalOwnerFile",
+        "trigger",
+        "tests",
+        "invalidationSet",
+        "projections"
+      ],
+      "properties": {
+        "category": { "enum": ["chain", "fee", "schema", "status", "version"] },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
+          "maxLength": 128
+        },
+        "canonicalOwnerFile": { "$ref": "#/$defs/safePath" },
+        "trigger": { "type": "string", "minLength": 12, "maxLength": 500 },
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["positive", "negative"],
+          "properties": {
+            "positive": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/testReference" }
+            },
+            "negative": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/testReference" }
+            }
+          }
+        },
+        "invalidationSet": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safePath" }
+        },
+        "projections": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/projection" }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "canonicalOwnerFile",
+        "findingCodes",
+        "trigger",
+        "severity",
+        "tests",
+        "invalidationSet",
+        "projections"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
+          "maxLength": 128
+        },
+        "canonicalOwnerFile": { "$ref": "#/$defs/safePath" },
+        "findingCodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$",
+            "maxLength": 160
+          }
+        },
+        "trigger": { "type": "string", "minLength": 12, "maxLength": 500 },
+        "severity": { "enum": ["warning", "blocker", "hard"] },
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["positive", "negative"],
+          "properties": {
+            "positive": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/testReference" }
+            },
+            "negative": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/testReference" }
+            }
+          }
+        },
+        "invalidationSet": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safePath" }
+        },
+        "projections": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/projection" }
+        }
+      }
+    }
+  }
+}

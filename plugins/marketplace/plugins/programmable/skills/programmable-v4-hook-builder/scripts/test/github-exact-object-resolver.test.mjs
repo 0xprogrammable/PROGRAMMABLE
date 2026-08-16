@@ -619,7 +619,9 @@ test("bounded runner enforces the inherited CPU limit", async (t) => {
   ].join("\n"));
   const result = await runBoundedExactGitProcessV1(boundedRunnerOptions(fixtureRoot, executable, {
     maximumCpuSeconds: 1,
-    timeoutMs: 5_000
+    // CPU time advances only while the process is scheduled. Leave enough
+    // wall time for a contended local runner to reach the inherited limit.
+    timeoutMs: 30_000
   }));
   assert.notEqual(result.status, 0);
   assert.equal(result.cpuExceeded, true);

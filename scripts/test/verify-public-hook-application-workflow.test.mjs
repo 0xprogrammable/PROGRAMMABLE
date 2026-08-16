@@ -7,6 +7,12 @@ const workflowPath = path.resolve(".github/workflows/verify-hook-builder.yml");
 const workflow = fs.readFileSync(workflowPath, "utf8");
 const normalWorkflow = fs.readFileSync(path.resolve(".github/workflows/verify.yml"), "utf8");
 const validatorCore = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
+const skillVerifier = fs.readFileSync(path.resolve(
+  "skills/programmable-v4-hook-builder/scripts/verify-skill.mjs"
+), "utf8");
+const skillVerifierExecution = fs.readFileSync(path.resolve(
+  "skills/programmable-v4-hook-builder/scripts/verify-skill-execution-core.mjs"
+), "utf8");
 const permissionBlock = workflow.slice(
   workflow.indexOf("permissions:"),
   workflow.indexOf("concurrency:")
@@ -94,6 +100,28 @@ test("every third-party action is pinned to an immutable full commit", () => {
     assert.ok(uses.length >= 2);
     for (const action of uses) assert.match(action, /^[^@\s]+@[a-f0-9]{40}$/u);
   }
+});
+
+test("Hookbuilder maintenance and trusted intake run on the current Node 24 LTS line", () => {
+  const setupNodePin = "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020";
+  assert.equal((normalMaintenanceJob.match(new RegExp(setupNodePin, "gu")) ?? []).length, 1);
+  assert.equal((publicJob.match(new RegExp(setupNodePin, "gu")) ?? []).length, 1);
+  assert.equal((postMergeJob.match(new RegExp(setupNodePin, "gu")) ?? []).length, 1);
+  for (const source of [normalMaintenanceJob, publicJob, postMergeJob]) {
+    assert.match(source, /node-version: 24/u);
+    assert.doesNotMatch(source, /node-version: 20/u);
+  }
+});
+
+test("trusted post-merge installs pinned Foundry before executing maintained skill tests", () => {
+  const foundryPin = "foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09";
+  const installIndex = postMergeJob.indexOf("- name: Install Foundry for maintained skill tests");
+  const preloadIndex = postMergeJob.indexOf("- name: Preload the portable-test Solidity compiler");
+  const executeIndex = postMergeJob.indexOf("- name: Execute maintained skill tests");
+  assert.ok(installIndex > 0 && installIndex < preloadIndex && preloadIndex < executeIndex);
+  assert.match(postMergeJob, new RegExp(foundryPin, "u"));
+  assert.match(postMergeJob, /version: v1\.7\.1/u);
+  assert.match(postMergeJob, /forge build --use 0\.8\.26/u);
 });
 
 test("candidate data is an exact base-repository PR merge in a bare blobless object store", () => {
@@ -220,10 +248,30 @@ test("builder maintenance runs only in normal read-only CI with closed offline c
   assert.doesNotMatch(normalMaintenanceJob, /ANTHROPIC_API_KEY|--require-provider|github\.token/u);
 });
 
+test("maintained skill tests run once through the bounded canonical verifier", () => {
+  for (const job of [normalMaintenanceJob, postMergeJob]) {
+    assert.equal(
+      (job.match(/^\s*node skills\/programmable-v4-hook-builder\/scripts\/verify-skill\.mjs$/gmu) ?? []).length,
+      1
+    );
+    assert.equal(
+      (job.match(/^\s*node skills\/programmable-v4-hook-builder\/scripts\/verify-skill\.mjs --installed$/gmu) ?? []).length,
+      1
+    );
+    assert.doesNotMatch(job, /node --test skills\/programmable-v4-hook-builder\/scripts\/test\/\*\.test\.mjs/u);
+  }
+  assert.match(skillVerifier, /validateScriptsAndTests/u);
+  assert.match(skillVerifierExecution, /const TEST_BATCH_COUNT = 2;/u);
+  assert.match(skillVerifierExecution, /const TEST_TIMEOUT_MS = 15 \* 60 \* 1000;/u);
+  assert.match(skillVerifierExecution, /const deadline = now\(\) \+ timeoutMs;/u);
+  assert.match(skillVerifierExecution, /args: \["--test", "--test-concurrency=2", \.\.\.batch\]/u);
+  assert.match(skillVerifierExecution, /shared 15-minute aggregate bound/u);
+});
+
 test("workflow bounds job lifetime and cancels superseded pull-request work", () => {
   assert.match(workflow, /concurrency:[\s\S]*?cancel-in-progress: true/u);
   assert.match(publicJob, /timeout-minutes: 10/u);
-  assert.match(postMergeJob, /timeout-minutes: 15/u);
+  assert.match(postMergeJob, /timeout-minutes: 20/u);
 });
 
 test("post-merge validation does not impose a repository-global application cap", () => {

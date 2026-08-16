@@ -1,4 +1,7 @@
-# Output specification
+# V1 output specification
+
+This is the released six-file `prepare-pr` output contract. New public review drafts use
+`0xprogrammable/submit-launch:main`; Application V3 remains a separate candidate contract.
 
 Produce only the artifacts required at the current stage. Use explicit unknowns instead of placeholder claims.
 
@@ -44,16 +47,26 @@ builder repository.
 
 The deterministic report must contain:
 
+- `reportVersion: 3`
 - Standard version and submission content hash
 - Validator source hash, schema hash, bundled deployment-snapshot hash, and semantic policy-bundle hash
-- Decision: `PROTOTYPE_READY`, `REDESIGN_REQUIRED`, or `UNSUPPORTED`
+- Authoritative `readiness.design` and `readiness.implementation` states
+- Legacy `decision`: `PROTOTYPE_READY`, `REDESIGN_REQUIRED`, or `UNSUPPORTED`, plus
+  `decisionCompatibility: LEGACY_COMPATIBILITY_ONLY` for its one-release migration window
+- Intake assurance `static-structure-and-builder-declared-evidence-only` and explicit
+  `sandboxVerification.state: NOT_RUN`
 - Inherent risk tier and underlying risk dimensions
 - Derived hook permission mask when `hook.used` is true, otherwise an explicit not-applicable result
 - Errors, blockers, warnings, and required actions with stable codes
 - Required test, review, operational, integration, and disclosure gates
 - Structured public project/token metadata, mutable owners, affiliation claims, and provider-facing presentation review
+- Explicit manual/null or catalog-derived builder-template provenance, including the exact bundled catalog selection,
+  catalog-derived capability ids, owner-defined capabilities, internal provenance tags and separately owner-selected
+  public local discovery tags
 - Root `programmableFee` policy record, exact computed split, canonical-pool hook binding, immutable owner and claim
-  authority, liability keys, events, source paths, test paths, and pending-versus-implemented status
+  authority, liability keys, events, source paths, test paths, and pending-versus-implemented status; policy `1.1.0`
+  additionally binds lifetime cumulative platform/project remainders, claim-stable remainder state, a 1,000-unit gross
+  quote minimum, and fragmentation resistance
 
 Required gates are surface-derived. A contract-only, external-client, or ordinary no-hook proposal does not receive
 included-client or indexer gates unless it actually declares those surfaces. Hook and value-safety gates remain based
@@ -61,10 +74,10 @@ on behavior, and every launch-ready prototype requires the mandatory canonical-p
 itself as maintainer reviewed.
 
 The report must say that it is not an audit, acceptance, deployment, routing approval, or availability proof.
-Its `PROTOTYPE_READY` decision is local builder evidence, not the Public GitHub PR Beta's trusted status or a substitute
-for maintainer review.
+Its readiness axes are authoritative. The legacy `decision` is a lossy compatibility projection and cannot override
+them. In particular, `PROTOTYPE_READY` never asserts that source exists or that builds and tests passed.
 
-Before a human handoff says `PROTOTYPE_READY`, the proposal also contains:
+Before a human handoff says `readiness.design: DESIGN_READY`, the proposal also contains:
 
 - A semantic consistency statement separate from the deterministic report
 - A worked numerical example for every fee or accounting rule the design introduces
@@ -96,6 +109,39 @@ submissions/<model-id>/evidence/
 └── <capability-triggered analysis and runtime evidence>
 ```
 
+Routing is a first-class typed output, not an inferred property of every market-shaped component. `ProjectSpec` contains
+exactly one `facets.routing` entry of kind `trade-capability`; its applicability maps to RepositoryPlan
+`tradable`, `no-market`, or `unresolved`. Product-graph market nodes are tradable only when their `facetEntryRefs`
+contain that exact entry id.
+
+For every selected tradable market, the source revision must contain one closed
+`trade-capability-manifest-v1` artifact. It binds the complete PoolKey and PoolId, chain and reference block, route kind,
+router, executable quoter, Permit2 or native-funding requirements, hookData contract, supported direction/exactness
+matrix, slippage and deadline limits, fee behavior, exact quote/execution command ids, and source-test hashes. The route
+is either `standard-uniswap-v4` or `canonical-programmable-adapter`; the latter must conform to the separately
+hash-bound `programmable-trade-execution-v1` interface. Every manifest says `NOT_APPROVED` and remains a declaration,
+not an execution receipt.
+
+Each supported mode requires a real executable quote test and execution test. Unsupported modes require an explicit
+pre-effects rejection test. The bounded executor parses one closed typed result from each trade command and writes the
+result plus its generic command receipt only in the evidence-only descendant. Completion reopens those artifacts and
+checks their source, command, manifest, market, mode, PoolKey, hookData, route, limits, funding and fee bindings. A
+manifest command copies exact RepositoryPlan argv/cwd and the sanitized executor-profile digest returned by
+`projectCommandEnvironmentSha256(command)`; a hand-authored environment identity fails completion. A
+`no-market` project must contain zero route manifests, trade commands and trade evidence. `unresolved` cannot become
+`COMPLETE`. None of these local results is routing approval, deployment, broadcast, audit or public availability.
+
+`analyzeSubmission` can report a clean prototype only as `IN_PROGRESS`. Repository closure and portable package checks
+may advance it to `STRUCTURALLY_COMPLETE`, which means static closure against builder-declared evidence only. They do
+not execute the recorded commands, reproduce a build, or run a sandbox. This builder never emits
+`PROTOTYPE_VALIDATED` or `SANDBOX_REBUILD_VERIFIED`.
+
+Document-only analysis reports `intake.state: NOT_CHECKED`. Repository closure replaces it with
+`STRUCTURE_CHECKED` or `BLOCKED`; only `verify-package` emits package `intake.state: READY|BLOCKED`. The retained
+`intakeValidated`, `accepted`, `releaseEligible`, and `available` booleans are explicitly listed under
+`deprecatedBooleanProjections`; inspect `intake.state` and the `externalAuthority` states instead. Acceptance, release
+eligibility, and availability remain `NOT_CHECKED` by this builder.
+
 Use the project's existing repository conventions. Add only a project-specific implementation of the standard fee-hook
 profile or the one custom hook that integrates the policy; require exact source, tests, and maintainer review, and do not add unrelated Solidity, a browser app, or a service merely to match an example
 layout. Do not duplicate shared protocol contracts.
@@ -114,7 +160,8 @@ JavaScript and TypeScript use static or literal local module closure. Another la
 tooling or stays in an explicit architecture/tooling review state. The review target does not prove modules acquired
 through arbitrary runtime reflection. The canonical review-target hash binds the closed `closure.status` and diagnostic
 records as well as the captured files and resolved imports. Unsupported closure mechanics remain proposal-eligible as
-`incomplete`; prototype readiness stays fail-closed. Missing literal relative source, unsafe paths, symlinks, Gitlinks,
+`incomplete`; `readiness.implementation: STRUCTURALLY_COMPLETE` stays fail-closed. Missing literal relative source,
+unsafe paths, symlinks, Gitlinks,
 unmaterialized LFS source, and exceeded bounds remain hard source-binding errors.
 `gate-status.json` copies the exact `reviewTargetHash`; every completed gate-evidence metadata record copies that same
 hash. Build the target once with the final evidence paths, write its hash into gate status, then rebuild and require an
@@ -135,8 +182,9 @@ Capability-triggered evidence is additive:
   and lifecycle evidence for the callbacks it actually enables.
 - Every launch-ready prototype requires exact source and tests for a project-specific standard-profile hook or its single integrated custom
   hook. A no-hook, router-only, LP-fee-only, or transfer-tax-only package remains proposal-eligible but changes-required.
-- A model-specific no-hook token requires its own exact source and dependency closure plus the declared transfer-tax,
-  actual-received, authority, automatic-liquidity, custody, exit and provider-limit scenarios. It cannot reuse official
+- A token-mechanics profile requires its own exact token source and dependency closure plus the declared transfer-tax,
+  actual-received, authority, automatic-liquidity, custody, exit and provider-limit scenarios whether the canonical
+  pool uses the standard fee hook or remains a no-hook proposal. A model-specific no-hook route cannot reuse official
   Launchpad evidence or turn local provider canaries into routing, indexing, scanner or listing approval.
 - An app or game requires the relevant build, interaction, state, wallet/signing, accessibility, responsive, browser,
   and failure tests for its declared behavior; unused categories are not fabricated.
@@ -152,9 +200,11 @@ Contributor-controlled `submission.json`, `gate-status.json`, and evidence files
 maintainer-review, deployment, verification, provider, or availability gates.
 
 Public metadata is part of the exact reviewed revision. Bind project and token names, symbol, URIs, logo content hashes,
-mutability and owners. Provider-facing tags and labels remain proposals until the named provider confirms them. Unknown
-provider support produces an external review gate, not a rejection. Scan visible copy in declared app and UI source;
-comments and declared test fixtures are not public claims.
+mutability and owners. Keep `localDiscoveryTags` provider-neutral, owner-selected, sorted and unique; never infer them
+from template packs, machine capabilities, security requirements or provider names. Provider-facing tags and labels remain proposals until the named provider confirms the exact
+surface with complete time-bounded evidence. Unknown, stale, expired or missing evidence produces an external review or
+repair gate, never an unsafe verdict. Scan visible copy in declared app and UI source; comments and declared test
+fixtures are not public claims.
 
 The machine-readable plan lives at `submission.json.integration.platformHandoff`. When `intended` is true, fill
 `handoffNotes`. Repository and test paths are optional contributor proposals until maintainers accept the exact
@@ -171,7 +221,7 @@ and separately asserted source match. Builder evidence remains untrusted until a
 `prepare-pr` returns one machine-readable object with:
 
 - `sourceHead`: the builder-controlled primary repository, branch, exact commit, and root tree;
-- `centralPullRequestTarget`: fixed `0xprogrammable/programmable:main` identity, observed base commit and tree, central
+- `centralPullRequestTarget`: fixed `0xprogrammable/submit-launch:main` identity, observed base commit and tree, central
   application path, prior revision, and next revision;
 - `github.sourceRequest`: the immutable primary authority and zero to eight sorted companion authorities;
 - `github.companionClosure`: one verified exact-closure receipt per v2 companion; v1 has no receipt and retains its
@@ -353,11 +403,40 @@ availability. Each is evidence only for its exact request, response, or transact
 The handoff can recommend changes on the product release branch. It does not edit product files, create a product PR,
 merge, deploy, submit provider forms, change a registry, or activate the model.
 
+### Launch-authorization candidate
+
+Only an exact accepted prototype may enter this output. The Builder reads a clean accepted source checkout, a clean
+canonical Registry checkout, and an explicit evidence root. It binds committed submission, review-target and acceptance
+bytes; exact build, source, artifact and evidence file SHA-256 values; and artifact JSON creation/runtime bytecode.
+The complete machine shape is closed by `launch-bundle-output-v1.schema.json` and is validated before emission.
+
+Configuration evidence must carry a bounded reviewer-owned live-state plan. Use exact ABI calldata plus expected return
+bytes and/or exact raw storage slots plus expected values; target only immutable runtime-verified deployment artifacts,
+and cover the hook and every required launch target. This plan is still a candidate input. The production Admin issuer
+independently replays every read through two RPC providers at one finalized canonical block and fails closed on missing
+coverage, provider disagreement, or a byte mismatch.
+
+The deterministic result contains:
+
+- one exact-shape current-private Admin `DeploymentSpecV1` candidate, including build, configuration and
+  fee-conformance evidence digests plus their derived evidence-bundle hash;
+- one exact-shape `LaunchExecutorCallV1` and decoded 192-byte `PoolConfigurationV1`;
+- the Uniswap v4 PoolId, pool-configuration payload/hash, calldata payload/hash and hook-configuration payload/hash;
+- target and hook expected runtime-code hashes derived from artifact bytes, not free declarations;
+- exact source-binding, artifact-set and deployment-spec hashes; and
+- a sorted local provenance ledger with root, path, bytes, SHA-256 and committed-at-bound-revision state.
+
+The result must also say `authorizationState: NOT_AUTHORIZED`, `runtimeEvidence.state: NOT_RUN`,
+`deploymentEvidence.state: NOT_PROVIDED`, `networkAccessed: false`, `signingPerformed: false`,
+`deploymentPerformed: false`, and `externalActionsPerformed: []`. Expected addresses and artifact-derived code hashes are
+authorization-candidate inputs, not observations that contracts exist at those addresses. No signature, permit, RPC
+observation, transaction, receipt, source verification, runtime match or public launch may be invented or inferred.
+
 ## Handoff response
 
 The agent's final response leads with:
 
-1. Current compatibility decision
+1. Current authoritative design and implementation readiness, followed by the legacy compatibility decision only when useful
 2. What was actually created or changed
 3. Tests and checks actually run
 4. Remaining blockers by review, platform, deployment, verification, routing, and availability layer

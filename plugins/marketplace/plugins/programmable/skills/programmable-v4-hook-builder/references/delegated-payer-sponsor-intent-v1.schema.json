@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:delegated-payer-sponsor-intent:1.0.0",
+  "title": "Programmable delegated payer or sponsor intent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "intentId",
+    "fundingRole",
+    "payer",
+    "authorizedCaller",
+    "beneficiary",
+    "refundRecipient",
+    "chainId",
+    "verifyingContract",
+    "spender",
+    "action",
+    "token",
+    "amountMode",
+    "amount",
+    "launchConfigurationSha256",
+    "poolKeySha256",
+    "hook",
+    "router",
+    "nonce",
+    "validAfter",
+    "deadline",
+    "residualAllowanceDisposition",
+    "sponsorPolicySha256",
+    "authorization"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "intentId": { "$ref": "#/$defs/bytes32" },
+    "fundingRole": { "enum": ["delegated-payer", "sponsor"] },
+    "payer": { "$ref": "#/$defs/address" },
+    "authorizedCaller": { "$ref": "#/$defs/address" },
+    "beneficiary": { "$ref": "#/$defs/address" },
+    "refundRecipient": { "$ref": "#/$defs/address" },
+    "chainId": { "$ref": "#/$defs/uint" },
+    "verifyingContract": { "$ref": "#/$defs/address" },
+    "spender": { "$ref": "#/$defs/address" },
+    "action": {
+      "enum": ["launch", "configure-launch", "initialize-pool", "provide-liquidity", "fund-launch"]
+    },
+    "token": { "$ref": "#/$defs/address" },
+    "amountMode": { "enum": ["exact", "maximum"] },
+    "amount": { "$ref": "#/$defs/uint" },
+    "launchConfigurationSha256": { "$ref": "#/$defs/sha256" },
+    "poolKeySha256": { "$ref": "#/$defs/sha256" },
+    "hook": { "$ref": "#/$defs/address" },
+    "router": { "$ref": "#/$defs/address" },
+    "nonce": { "$ref": "#/$defs/uint" },
+    "validAfter": { "$ref": "#/$defs/uint" },
+    "deadline": { "$ref": "#/$defs/uint" },
+    "residualAllowanceDisposition": { "enum": ["unchanged", "revoke", "decrement-only"] },
+    "sponsorPolicySha256": {
+      "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+    },
+    "authorization": { "$ref": "#/$defs/authorization" }
+  },
+  "$defs": {
+    "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+    "bytes32": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "uint": { "type": "string", "minLength": 1, "maxLength": 78, "pattern": "^(?:0|[1-9][0-9]*)$" },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "signer", "domainSeparator", "structHash", "digest", "signature"],
+      "properties": {
+        "scheme": { "enum": ["eip712-eoa", "erc1271"] },
+        "signer": { "$ref": "#/$defs/address" },
+        "domainSeparator": { "$ref": "#/$defs/bytes32" },
+        "structHash": { "$ref": "#/$defs/bytes32" },
+        "digest": { "$ref": "#/$defs/bytes32" },
+        "signature": { "type": "string", "minLength": 4, "maxLength": 4098, "pattern": "^0x(?:[0-9a-fA-F]{2})*$" }
+      }
+    }
+  }
+}

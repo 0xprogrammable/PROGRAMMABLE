@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:idea-source:1.0.0",
+  "title": "Programmable verbatim idea source",
+  "description": "Append-only public builder input. Public-safe UTF-8 text is preserved exactly; sensitive source is never stored or hashed in the public package and is represented only by a public redaction placeholder.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "captureStatus",
+    "originalEntryId",
+    "entries",
+    "legacySourceRefs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "captureStatus": {
+      "enum": ["captured-verbatim-public-safe", "redacted-sensitive", "unavailable-legacy"]
+    },
+    "originalEntryId": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ideaEntry" }
+    },
+    "legacySourceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "mediaType", "uri", "sha256", "byteLength"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug" },
+        "mediaType": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "uri": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ideaEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "kind",
+        "authorRole",
+        "publicationStatus",
+        "publicTextUtf8",
+        "sha256",
+        "byteLength",
+        "redactionReason",
+        "publicIdentifierAttestations",
+        "language",
+        "sourceMessageId",
+        "capturedAt",
+        "supersedes",
+        "artifacts"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120,
+          "description": "Open input kind such as initial-idea, clarification, correction, or delegated-defaults."
+        },
+        "authorRole": { "enum": ["builder"] },
+        "publicationStatus": { "enum": ["public-safe", "withheld-sensitive", "redacted"] },
+        "publicTextUtf8": {
+          "type": "string",
+          "description": "Exact public representation. For public-safe entries this is the verbatim source; otherwise it is only a public placeholder or sanitized text and MUST NOT contain the secret, private PII, or a hash of the private original."
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 0 },
+        "redactionReason": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120,
+          "description": "Open privacy-reason slug. Examples include credential, health-data, precise-location, unpublished-ip, legal-sensitive, and builder-requested."
+        },
+        "publicIdentifierAttestations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/publicIdentifierAttestation" },
+          "description": "Exact human-reviewed spans that classify a 32-byte public chain identifier. This cannot suppress contextual key, credential, seed, or PII findings."
+        },
+        "language": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sourceMessageId": { "type": ["string", "null"], "maxLength": 500 },
+        "capturedAt": { "type": ["string", "null"], "format": "date-time" },
+        "supersedes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifact" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "publicationStatus": { "const": "public-safe" } } },
+          "then": { "properties": { "redactionReason": { "type": "null" } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "publicationStatus": { "enum": ["withheld-sensitive", "redacted"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "publicTextUtf8": { "minLength": 1 },
+              "redactionReason": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
+    "publicIdentifierAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "startByte",
+        "endByte",
+        "sha256",
+        "byteLength",
+        "reviewerRole",
+        "reviewRecordRef"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "const": "public-chain-identifier" },
+        "startByte": { "type": "integer", "minimum": 0 },
+        "endByte": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "reviewerRole": { "const": "human-privacy-reviewer" },
+        "reviewRecordRef": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    }
+  }
+}

@@ -90,12 +90,17 @@ export function isClosedReviewTargetClosure(value) {
 export function declaredSourceAndTestPaths(submission) {
   const implementation = submission?.implementation ?? {};
   const integration = submission?.integration ?? {};
+  const launchPlan = submission?.launchPlan ?? {};
   const routing = integration.routingAndDiscoverability ?? {};
   const reconstruction = integration.dataReconstruction ?? {};
   const handoff = integration.platformHandoff ?? {};
   const paths = [
     ...arrayValues(implementation.sourcePaths),
     ...arrayValues(implementation.testPaths),
+    ...(submission?.stage === "prototype" ? arrayValues(launchPlan.callDataSourcePaths) : []),
+    ...(submission?.stage === "prototype" ? arrayValues(launchPlan.hookConfigurationSourcePaths) : []),
+    ...(submission?.stage === "prototype" ? arrayValues(launchPlan.liquiditySourcePaths) : []),
+    ...(submission?.stage === "prototype" ? arrayValues(launchPlan.testPaths) : []),
     ...arrayValues(integration.appSourcePaths),
     ...arrayValues(integration.integrationTestPaths),
     ...arrayValues(routing.sourcePaths),
@@ -132,6 +137,10 @@ export function declaredSoliditySourceAndTestPaths(submission) {
 export function isSourceOrTestReviewKind(kind) {
   return kind === "source-entry"
     || kind === "test-entry"
+    || kind === "launch-calldata-source"
+    || kind === "launch-hook-configuration-source"
+    || kind === "launch-liquidity-source"
+    || kind === "launch-executor-test"
     || kind === "app-integration-source"
     || kind === "app-integration-test"
     || kind === "routing-integration-source"

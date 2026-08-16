@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:scientific-data-evidence-profile:1.0.0",
+  "title": "Programmable scientific data evidence profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "profileId", "subjectSha256", "dataRole", "source", "measurement", "quality", "freshness", "valueInfluence", "failurePolicy", "evidenceRefs"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "profileId": { "$ref": "#/$defs/slug" },
+    "subjectSha256": { "$ref": "#/$defs/sha256" },
+    "dataRole": { "enum": ["display-only", "value-influencing"] },
+    "source": { "$ref": "#/$defs/source" },
+    "measurement": { "$ref": "#/$defs/measurement" },
+    "quality": { "$ref": "#/$defs/quality" },
+    "freshness": { "$ref": "#/$defs/freshness" },
+    "valueInfluence": { "oneOf": [{ "$ref": "#/$defs/valueInfluence" }, { "type": "null" }] },
+    "failurePolicy": { "$ref": "#/$defs/failurePolicy" },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/ref" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "slug": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "duration": { "type": "string", "minLength": 2, "maxLength": 64 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer", "operator", "schemaId", "schemaSha256", "transport", "authentication", "signature", "provenanceChainSha256"],
+      "properties": {
+        "producer": { "$ref": "#/$defs/text" },
+        "operator": { "$ref": "#/$defs/text" },
+        "schemaId": { "$ref": "#/$defs/ref" },
+        "schemaSha256": { "$ref": "#/$defs/sha256" },
+        "transport": { "enum": ["onchain", "signed-api", "content-addressed-file", "authenticated-api", "manual-publication"] },
+        "authentication": { "enum": ["contract-identity", "eip712", "erc1271", "x509", "content-digest", "operator-attestation"] },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "scheme", "signerIdentity"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "scheme": { "type": ["string", "null"], "minLength": 1, "maxLength": 120 },
+            "signerIdentity": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 }
+          }
+        },
+        "provenanceChainSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quantity", "unit", "method", "methodRevision", "calibration", "sampling", "uncertaintyModel", "correctionPolicy"],
+      "properties": {
+        "quantity": { "$ref": "#/$defs/text" },
+        "unit": { "$ref": "#/$defs/text" },
+        "method": { "$ref": "#/$defs/text" },
+        "methodRevision": { "$ref": "#/$defs/ref" },
+        "calibration": { "$ref": "#/$defs/text" },
+        "sampling": { "$ref": "#/$defs/text" },
+        "uncertaintyModel": { "$ref": "#/$defs/text" },
+        "correctionPolicy": { "$ref": "#/$defs/text" }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validationRulesSha256", "outlierPolicy", "missingDataPolicy", "disputeAuthority", "reproductionRefs"],
+      "properties": {
+        "validationRulesSha256": { "$ref": "#/$defs/sha256" },
+        "outlierPolicy": { "$ref": "#/$defs/text" },
+        "missingDataPolicy": { "$ref": "#/$defs/text" },
+        "disputeAuthority": { "$ref": "#/$defs/text" },
+        "reproductionRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observedAtRequired", "maximumAge", "updateCadence", "staleBehavior", "clockSource"],
+      "properties": {
+        "observedAtRequired": { "const": true },
+        "maximumAge": { "$ref": "#/$defs/duration" },
+        "updateCadence": { "$ref": "#/$defs/duration" },
+        "staleBehavior": { "enum": ["reject", "freeze-value-effect", "display-stale-with-warning"] },
+        "clockSource": { "$ref": "#/$defs/text" }
+      }
+    },
+    "valueInfluence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect", "formulaSha256", "inputBounds", "outputBounds", "staleInputEffect", "fallback", "manipulationTests", "authorityRefs"],
+      "properties": {
+        "effect": { "enum": ["price", "fee", "payout", "collateral", "eligibility", "supply", "liquidity", "other"] },
+        "formulaSha256": { "$ref": "#/$defs/sha256" },
+        "inputBounds": { "$ref": "#/$defs/text" },
+        "outputBounds": { "$ref": "#/$defs/text" },
+        "staleInputEffect": { "enum": ["reject", "freeze-last-valid", "bounded-fallback"] },
+        "fallback": { "$ref": "#/$defs/text" },
+        "manipulationTests": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        },
+        "authorityRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "failurePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unavailable", "invalidSignature", "schemaMismatch", "conflictingSources", "recovery"],
+      "properties": {
+        "unavailable": { "$ref": "#/$defs/text" },
+        "invalidSignature": { "$ref": "#/$defs/text" },
+        "schemaMismatch": { "$ref": "#/$defs/text" },
+        "conflictingSources": { "$ref": "#/$defs/text" },
+        "recovery": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

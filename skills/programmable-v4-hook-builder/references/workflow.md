@@ -1,5 +1,9 @@
 # Builder workflow
 
+> For a current public Applicant, build and verify the exact public source, then follow
+> [agent-entry-and-application.md](agent-entry-and-application.md) and use the generated, draft-only application client
+> for `0xprogrammable/submit-launch:main`. Never open a new Applicant PR in Hookbuilder.
+
 This workflow moves one open-ended v4 launch project from private exploration to a local review package and then a
 bounded public GitHub application. After maintainers accept an exact prototype, it can also produce a scoped
 platform-integration handoff. It does not accept, deploy, publish, list, or activate the project.
@@ -68,7 +72,8 @@ MODEL_ID="example-hook"
 node "$SKILL_ROOT/scripts/scaffold-submission.mjs" \
   "$MODEL_ID" \
   --repository-root "$REPOSITORY_ROOT" \
-  --name "<Model name>"
+  --name "<Model name>" \
+  --template-plan "$REPOSITORY_ROOT/path/to/programmable-template.json"
 
 node "$SKILL_ROOT/scripts/cli.mjs" check \
   "$REPOSITORY_ROOT/submissions/$MODEL_ID/submission.json" \
@@ -79,14 +84,34 @@ node "$SKILL_ROOT/scripts/cli.mjs" check \
 Use this repository-aware command for the complete preflight. Running `validate-submission.mjs` without a repository
 root checks only the structured document and cannot prove source, import, package, companion, or build closure.
 
+Omit `--template-plan` for explicit `manual`/`null` template provenance. When supplied, it must be the unchanged
+materialized `programmable-template.json`; the scaffold reconstructs it against the bundled catalog, preserves exact
+selected capability ids, and copies only owner-selected tags into public local discovery metadata.
+Before any catalog-changing release, retain the prior hash-verified catalog definitions in an append-only snapshot
+registry so existing applications can be reconstructed automatically. Without that snapshot, a non-current digest is
+preserved as historical/unverified and routed to review rather than rejected or presented as current.
+
 Use stable lower-case kebab-case for `model-id`. Fill unknown facts with `null` or an explicit unresolved decision.
 Never invent an address, fee, authority, dependency, deployment, issuer, oracle, or asset behavior.
 
-Interpret the result:
+Interpret the authoritative readiness axes first:
 
-- `PROTOTYPE_READY`: structurally ready for semantic review
-- `REDESIGN_REQUIRED`: resolve the highest-priority material finding
-- `UNSUPPORTED`: change the design materially; do not code around the boundary
+- `readiness.design` says whether more information, design changes, architecture review, isolated implementation, or a
+  material change away from an objective hard conflict is next.
+- `readiness.implementation` says whether implementation has not started, is in progress, needs review or changes, or
+  reached `STRUCTURALLY_COMPLETE` through closed repository structure and portable static checks against
+  builder-declared evidence.
+
+The top-level `decision` is retained for one report-v3 migration release and marked
+`decisionCompatibility: LEGACY_COMPATIBILITY_ONLY`. `PROTOTYPE_READY` means
+at most that no known structural design blocker was projected; it never means implementation exists or passed builds
+and tests. `REDESIGN_REQUIRED` can project a design or implementation finding, so inspect both axes. `UNSUPPORTED`
+may project only an objective `DESIGN_HARD_CONFLICT`, never novelty, missing tooling, parser limits, or unavailable
+evidence. A legacy decision cannot override the authoritative axes.
+
+This builder never emits `PROTOTYPE_VALIDATED` or `SANDBOX_REBUILD_VERIFIED`. `STRUCTURALLY_COMPLETE` does not execute
+declared evidence commands or rebuild in a sandbox. Package intake reports `READY` or `BLOCKED` with assurance
+`static-structure-and-builder-declared-evidence-only`, while `sandboxVerification.state` remains `NOT_RUN`.
 
 Then complete the semantic review in [intake-playbook.md](intake-playbook.md). A structurally valid submission remains
 blocked when its material claims are circular, contradictory or unsupported.
@@ -99,8 +124,10 @@ Freeze:
 - all 14 permissions, callback authentication, return shapes, hookData, and nested-action policy
 - LP fee and hook-owned fee classification
 - root `programmableFee` policy: non-additive 10 bps platform allocation, executed gross quote-side basis, canonical
-  PoolKey, all four quadrant-dependent before/after paths, same-pool self-call policy, immutable owner-only claims,
-  per-claim destination, liability keys, events, and evidence
+  PoolKey, all supported quadrant-dependent before/after paths plus pre-movement rejection of unsupported quadrants,
+  same-pool self-call policy, immutable owner-only claims,
+  per-claim destination, liability keys, events, evidence, and v1.1 lifetime cumulative platform/project remainder
+  accounting that claims cannot reset and split swaps cannot evade
 - dynamic-fee initialization, application mode, override rule, persistent actor and call sites, rate limit, bounds,
   metric, update path, manipulation resistance, and failure behavior
 - hook-fee collection path, value-flow id, liability keys, event, and recipient share, address source, launch binding,

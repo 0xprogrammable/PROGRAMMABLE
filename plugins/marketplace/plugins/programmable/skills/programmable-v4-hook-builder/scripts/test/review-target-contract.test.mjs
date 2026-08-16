@@ -71,6 +71,30 @@ test("Solidity closure discovery includes implementation and every declared inte
   ]);
 });
 
+test("prototype closure includes all four launch-plan path groups without constraining the launch idea", () => {
+  const submission = {
+    stage: "prototype",
+    implementation: { sourcePaths: [], testPaths: [] },
+    launchPlan: {
+      targetStrategy: "threejs-location-quest-with-wallet-rewards",
+      callDataSourcePaths: ["launch/CallEncoder.sol"],
+      hookConfigurationSourcePaths: ["launch/HookConfiguration.sol"],
+      liquiditySourcePaths: ["launch/InitialLiquidity.sol"],
+      testPaths: ["test/LaunchExecutor.t.sol"]
+    }
+  };
+
+  assert.deepEqual(declaredSoliditySourceAndTestPaths(submission), [
+    "launch/CallEncoder.sol",
+    "launch/HookConfiguration.sol",
+    "launch/InitialLiquidity.sol",
+    "test/LaunchExecutor.t.sol"
+  ]);
+
+  submission.stage = "proposal";
+  assert.deepEqual(declaredSoliditySourceAndTestPaths(submission), []);
+});
+
 test("Git LFS pointers are recognized as pointers rather than source bytes", () => {
   const pointer = Buffer.from([
     "version https://git-lfs.github.com/spec/v1",

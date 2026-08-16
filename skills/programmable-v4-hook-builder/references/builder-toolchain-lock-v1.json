@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "capturedAt": "2026-08-07T08:39:02Z",
+  "classification": "LOCAL_VERIFICATION_ENVIRONMENT",
+  "platform": {
+    "os": "darwin",
+    "architecture": "arm64"
+  },
+  "policy": {
+    "candidateBuildMustRecordResolvedExecutableSha256": true,
+    "versionTextAloneIsInsufficient": true,
+    "differentPlatformRequiresNewContentAddressedLock": true,
+    "silentToolchainSubstitutionForbidden": true
+  },
+  "tools": [
+    {
+      "id": "node",
+      "version": "24.14.0",
+      "resolvedExecutableSha256": "sha256:20a18709f0154d668f1bd6f6ea8c2a7ae001447b4b2c339732f22e57a8767a55",
+      "executableFormat": "Mach-O arm64"
+    },
+    {
+      "id": "npm-entrypoint",
+      "version": "11.16.0",
+      "resolvedExecutableSha256": "sha256:d331b6c353f92e21a452f9b6d873b63f8cf96f08c57bebc7e802fdeb71c51f5e",
+      "executableFormat": "script entrypoint"
+    },
+    {
+      "id": "forge",
+      "version": "1.7.1",
+      "sourceCommit": "4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+      "resolvedExecutableSha256": "sha256:e729589084ca2f1479354353d1ec3d4789451b577f4cdee4e7dc57cae64a38fa",
+      "executableFormat": "Mach-O arm64"
+    },
+    {
+      "id": "solc",
+      "version": "0.8.26+commit.8a97fa7a",
+      "sourceCommit": "8a97fa7a1db1ec509221ead6fea6802c684ee887",
+      "resolvedCompilerBinarySha256": "sha256:0ff016aef2396b12d1fc65429d8ea6cf53c2ee4b041bb8925644615ee1c30ab9",
+      "executableFormat": "Mach-O universal x86_64 and arm64",
+      "selectionWrapperExcludedFromCompilerHash": true
+    },
+    {
+      "id": "slither-entrypoint",
+      "version": "0.11.5",
+      "resolvedExecutableSha256": "sha256:a143bb3c3430e467681344f4295511321135b5c9690da3ebf05ca528bf37cfa2",
+      "executableFormat": "Python entrypoint",
+      "environmentClosureRequiredForReleaseEvidence": true
+    }
+  ],
+  "referenceKernelProfile": {
+    "solc": "0.8.26",
+    "evmTarget": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "viaIr": true,
+    "bytecodeHash": "none",
+    "cborMetadata": false
+  }
+}

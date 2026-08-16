@@ -1,0 +1,186 @@
+{
+  "$schema": "urn:programmable:submission-schema-catalog:1.0.0",
+  "schemaVersion": "1.0.0",
+  "standardVersion": "2.0.0",
+  "description": "Versioned schema registry for the open-world v2 machine contract. Builtins are explicit protocol or workflow contracts, never a product allowlist; any new product shape remains valid through an exact repository schema binding.",
+  "artifactSchemas": [
+    {
+      "artifactType": "idea-source",
+      "schemaId": "urn:programmable:idea-source:1.0.0",
+      "path": "references/idea-source-v1.schema.json"
+    },
+    {
+      "artifactType": "intent-contract",
+      "schemaId": "urn:programmable:intent-contract:1.0.0",
+      "path": "references/intent-contract-v1.schema.json"
+    },
+    {
+      "artifactType": "architecture-decisions",
+      "schemaId": "urn:programmable:architecture-decisions:1.0.0",
+      "path": "references/architecture-decisions-v1.schema.json"
+    },
+    {
+      "artifactType": "intent-fidelity",
+      "schemaId": "urn:programmable:intent-fidelity:1.0.0",
+      "path": "references/intent-fidelity-v1.schema.json"
+    },
+    {
+      "artifactType": "submission",
+      "schemaId": "urn:programmable:v4-hook-submission:2.0.0",
+      "path": "references/submission-v2.schema.json"
+    }
+  ],
+  "supportingArtifactSchemas": [
+    {
+      "artifactType": "fee-policy-schema",
+      "schemaId": "urn:programmable:fee-policy-v2:1.0.0",
+      "path": "references/fee-policy-v2.schema.json",
+      "packagePath": "fee-policy-v2.schema.json"
+    },
+    {
+      "artifactType": "security-assessment-schema",
+      "schemaId": "urn:programmable:open-world-security:1.0.0",
+      "path": "references/open-world-security-v1.schema.json",
+      "packagePath": "security-assessment-v1.schema.json"
+    },
+    {
+      "artifactType": "security-assessment",
+      "schemaId": "urn:programmable:open-world-security:1.0.0",
+      "path": "references/open-world-security-v1.schema.json",
+      "packagePath": "security-assessment.v1.json"
+    },
+    {
+      "artifactType": "fee-conformance-receipt",
+      "schemaId": "urn:programmable:fee-conformance-receipt-v1:1.0.0",
+      "path": "references/fee-conformance-receipt-v1.schema.json"
+    },
+    {
+      "artifactType": "fee-conformance-vector-set",
+      "schemaId": "urn:programmable:fee-conformance-vector-set-v1:1.0.0",
+      "path": "references/fee-conformance-vector-set-v1.schema.json"
+    },
+    {
+      "artifactType": "trade-capability-manifest",
+      "schemaId": "urn:programmable:trade-capability-manifest:1.0.0",
+      "path": "references/trade-capability-manifest-v1.schema.json"
+    }
+  ],
+  "builtinSchemas": [
+    {
+      "schemaId": "urn:programmable:fee-policy-v2:1.0.0",
+      "appliesTo": ["fee-policy"],
+      "validation": "fee-v2-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:target:ethereum-mainnet:1.0.0",
+      "appliesTo": ["target"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:intent:burn-settlement:1.0.0",
+      "appliesTo": ["intent-fact"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:intent:platform-fee-v2:1.0.0",
+      "appliesTo": ["intent-fact"],
+      "validation": "fee-v2-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:intent:native-amm-mode:1.0.0",
+      "appliesTo": ["intent-fact"],
+      "validation": "native-amm-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:intent:optional-reward-asset:1.0.0",
+      "appliesTo": ["intent-fact"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:decision:burn-settlement:1.0.0",
+      "appliesTo": ["architecture-decision"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:decision:fee-v2:1.0.0",
+      "appliesTo": ["architecture-decision"],
+      "validation": "fee-v2-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:decision:optional-reward:1.0.0",
+      "appliesTo": ["architecture-decision"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:asset:erc20:1.0.0",
+      "appliesTo": ["asset"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:asset:erc721:1.0.0",
+      "appliesTo": ["asset"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:market:uniswap-v4-canonical-pool:1.0.0",
+      "appliesTo": ["market"],
+      "validation": "uniswap-v4-market-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:hook:uniswap-v4:1.0.0",
+      "appliesTo": ["hook"],
+      "validation": "uniswap-v4-hook-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:lifecycle:declarative:1.0.0",
+      "appliesTo": ["lifecycle-phase"],
+      "validation": "lifecycle-dag-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:component:declarative:1.0.0",
+      "appliesTo": ["component"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:value-flow:declarative:1.0.0",
+      "appliesTo": ["value-flow"],
+      "validation": "value-flow-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:authority:immutable-wallet:1.0.0",
+      "appliesTo": ["authority"],
+      "validation": "authority-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:capability:declarative:1.0.0",
+      "appliesTo": ["capability-profile"],
+      "validation": "declarative-profile"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:fee-collection:sync-custom-zero-amm:2.0.0",
+      "appliesTo": ["fee-collection"],
+      "validation": "fee-v2-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:fee-collection:standard-amm:2.0.0",
+      "appliesTo": ["fee-collection"],
+      "validation": "fee-v2-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:fee-collection:not-applicable:2.0.0",
+      "appliesTo": ["fee-collection"],
+      "validation": "fee-v2-not-applicable-core"
+    },
+    {
+      "schemaId": "urn:programmable:builtin:draft:unconfirmed:1.0.0",
+      "appliesTo": ["target", "asset", "market", "authority", "fee-collection", "intent-fact"],
+      "validation": "draft-only"
+    }
+  ],
+  "extensionContract": {
+    "kind": "repository",
+    "requiredBindingFields": ["schemaId", "path", "sha256", "byteLength"],
+    "exactBytesRequired": true,
+    "unknownKindsEligible": true
+  }
+}

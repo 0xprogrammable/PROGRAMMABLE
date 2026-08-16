@@ -1,0 +1,17 @@
+{
+  "$schema": "urn:programmable:approval-policy-blind-fixtures-v1:1.0.0",
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-approval-policy-blind-fixtures",
+  "cases": [
+    { "id": "exact-input-only-market", "trigger": "market.swapQuadrants", "expected": "allow-supported-rejected-matrix" },
+    { "id": "zero-core-amm-custom-accounting", "trigger": "market.executionClass", "expected": "allow-with-backed-value-closure" },
+    { "id": "victim-standing-allowance", "trigger": "fundingAuthorization", "expected": "block-unbounded-or-unwitnessed-delegation" },
+    { "id": "permissioned-rwa", "trigger": "capabilityProfile.rwa", "expected": "require-reserve-redemption-corporate-action-insolvency-evidence" },
+    { "id": "scientific-score-display-only", "trigger": "capabilityProfile.scientific.influence", "expected": "allow-with-provenance-and-correction-policy" },
+    { "id": "scientific-score-price-influencing", "trigger": "capabilityProfile.scientific.influence", "expected": "escalate-economic-evidence" },
+    { "id": "prediction-market", "trigger": "capabilityProfile.prediction", "expected": "require-resolution-and-dispute-boundaries" },
+    { "id": "future-inflow-redistribution", "trigger": "valueFlow.futureInflow", "expected": "require-terminal-and-shortfall-accounting" },
+    { "id": "cross-chain-asset", "trigger": "component.bridge", "expected": "require-domain-and-replay-boundaries" },
+    { "id": "tool-alternative", "trigger": "testEvidence.outcome", "expected": "preserve-tooling-blocked-and-alternative-evidence" }
+  ]
+}

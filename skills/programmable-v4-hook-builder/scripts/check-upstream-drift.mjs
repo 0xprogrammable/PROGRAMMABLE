@@ -6,11 +6,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseCliOrExit } from "./cli-args.mjs";
+import { fetchBoundedBytes, githubAuthorizationHeaders } from "./bounded-network-response-core.mjs";
 import {
   compareOfficialDeploymentRecords,
   OfficialLaunchpadReferenceError,
   validateOfficialLaunchpadReference
 } from "./official-launchpad-core.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptDirectory = path.dirname(scriptPath);
@@ -124,6 +126,10 @@ export async function collectLiveObservations(snapshot, fetchImplementation = gl
     throw new DriftInputError("live observation options must be an object");
   }
   const validatedReference = validateLaunchpadReference(snapshot, options.launchpadReference ?? null);
+  const githubHeaders = githubAuthorizationHeaders(
+    options.githubToken ?? process.env.GITHUB_TOKEN ?? null,
+    DriftInputError
+  );
   const timeoutMs = options.timeoutMs
     ?? validatedReference?.reference.authorityPolicy.networkTimeoutMs
     ?? defaultNetworkTimeoutMs;
@@ -138,7 +144,7 @@ export async function collectLiveObservations(snapshot, fetchImplementation = gl
     url.searchParams.set("type", "public");
     url.searchParams.set("per_page", "100");
     url.searchParams.set("page", String(page));
-    const batch = await fetchJson(url, fetchImplementation, maximumNetworkBytes, timeoutMs);
+    const batch = await fetchJson(url, fetchImplementation, maximumNetworkBytes, timeoutMs, githubHeaders);
     if (!Array.isArray(batch)) throw new DriftInputError(`${url}: expected a JSON array`);
     for (const repository of batch) {
       const metadata = normalizeGitHubMetadata(repository, url);
@@ -156,7 +162,7 @@ export async function collectLiveObservations(snapshot, fetchImplementation = gl
     const identity = parseGitHubRepository(source.repository);
     const url = `https://api.github.com/repos/${encodeURIComponent(identity.owner)}/${encodeURIComponent(identity.name)}`;
     const metadata = normalizeGitHubMetadata(
-      await fetchJson(url, fetchImplementation, maximumNetworkBytes, timeoutMs),
+      await fetchJson(url, fetchImplementation, maximumNetworkBytes, timeoutMs, githubHeaders),
       url
     );
     repositoryMetadata.set(metadata.key, metadata);
@@ -167,7 +173,7 @@ export async function collectLiveObservations(snapshot, fetchImplementation = gl
     const identity = parseGitHubRepository(source.repository);
     const refName = source.trackedRef.replace(/^refs\/heads\//, "");
     const url = `https://api.github.com/repos/${encodeURIComponent(identity.owner)}/${encodeURIComponent(identity.name)}/commits/${encodeURIComponent(refName)}`;
-    const commit = await fetchJson(url, fetchImplementation, maximumNetworkBytes, timeoutMs);
+    const commit = await fetchJson(url, fetchImplementation, maximumNetworkBytes, timeoutMs, githubHeaders);
     if (!commit || typeof commit.sha !== "string" || !gitObjectPattern.test(commit.sha)) {
       throw new DriftInputError(`${url}: expected an exact 40-character commit id`);
     }
@@ -299,7 +305,7 @@ function readLaunchpadReference(snapshot, snapshotPath, explicitPath) {
     }
   }
   try {
-    return JSON.parse(bytes.toString("utf8"));
+    return parseBoundedStrictJsonBytes(bytes, { maxSourceBytes: maximumInputBytes });
   } catch (error) {
     throw new DriftInputError(`deployment reference file is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -361,7 +367,7 @@ function compareOfficialSourceArtifacts(reference, observedArtifacts) {
 function parseDeploymentFeed(bytes, url) {
   let feed;
   try {
-    feed = JSON.parse(bytes.toString("utf8"));
+    feed = parseBoundedStrictJsonBytes(bytes, { maxSourceBytes: maximumNetworkBytes });
   } catch {
     throw new DriftInputError(`${url}: deployment feed is not valid JSON`);
   }
@@ -586,70 +592,28 @@ function normalizeGitHubMetadata(repository, location) {
   };
 }
 
-async function fetchJson(url, fetchImplementation, limit, timeoutMs) {
+async function fetchJson(url, fetchImplementation, limit, timeoutMs, additionalHeaders = {}) {
   const bytes = await fetchBytes(url, fetchImplementation, limit, timeoutMs, {
     Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28"
+    "X-GitHub-Api-Version": "2022-11-28",
+    ...additionalHeaders
   });
   try {
-    return JSON.parse(bytes.toString("utf8"));
+    return parseBoundedStrictJsonBytes(bytes, { maxSourceBytes: limit });
   } catch {
     throw new DriftInputError(`${url}: response is not valid JSON`);
   }
 }
 
 async function fetchBytes(url, fetchImplementation, limit, timeoutMs, additionalHeaders = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetchImplementation(url, {
-      headers: {
-        Accept: "application/json",
-        "Accept-Encoding": "identity",
-        "User-Agent": "programmable-v4-hook-builder-drift-check",
-        ...additionalHeaders
-      },
-      redirect: "error",
-      signal: controller.signal
-    });
-    if (!response?.ok) {
-      const rateLimit = response?.headers?.get?.("x-ratelimit-remaining");
-      const suffix = rateLimit === "0" ? " (GitHub public API rate limit exhausted)" : "";
-      throw new DriftInputError(`${url}: HTTP ${response?.status ?? "unknown"}${suffix}`);
-    }
-    const contentLength = Number(response.headers?.get?.("content-length"));
-    if (Number.isFinite(contentLength) && contentLength > limit) {
-      throw new DriftInputError(`${url}: response exceeds the ${limit} byte limit`);
-    }
-    if (!response.body || typeof response.body.getReader !== "function") {
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (bytes.length > limit) throw new DriftInputError(`${url}: response exceeds the ${limit} byte limit`);
-      return bytes;
-    }
-
-    const reader = response.body.getReader();
-    const chunks = [];
-    let size = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > limit) {
-        await reader.cancel();
-        throw new DriftInputError(`${url}: response exceeds the ${limit} byte limit`);
-      }
-      chunks.push(Buffer.from(value));
-    }
-    return Buffer.concat(chunks, size);
-  } catch (error) {
-    if (error instanceof DriftInputError) throw error;
-    const detail = controller.signal.aborted
-      ? `request timed out after ${timeoutMs}ms`
-      : error instanceof Error ? error.message : String(error);
-    throw new DriftInputError(`${url}: ${detail}`);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetchBoundedBytes({
+    url,
+    fetchImplementation,
+    limit,
+    timeoutMs,
+    ErrorClass: DriftInputError,
+    additionalHeaders
+  });
 }
 
 function compareField(findings, repository, field, expected, actual) {
@@ -690,7 +654,7 @@ function readJsonFile(inputPath, label) {
   const absolutePath = path.resolve(inputPath);
   const bytes = readFileBytes(absolutePath, label);
   try {
-    return JSON.parse(bytes.toString("utf8"));
+    return parseBoundedStrictJsonBytes(bytes, { maxSourceBytes: maximumInputBytes });
   } catch (error) {
     throw new DriftInputError(`${label} file is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }

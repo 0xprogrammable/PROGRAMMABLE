@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:project-command-receipt:1.0.0",
+  "title": "Programmable project command receipt",
+  "description": "A deterministic bounded local execution-record format emitted by the portable executor. Without re-execution or an authenticated signer, later static validation proves only content consistency, not issuer provenance, functional completion, approval, audit, deployment, production, or an external service.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "kind", "executor", "executionPolicy", "source", "commandId", "commandKind",
+    "argv", "argvSha256", "cwd", "timeoutMs", "tool", "status", "exitCode", "signal", "timedOut",
+    "outputExceeded", "stdoutSha256", "stdoutByteLength", "stderrSha256", "stderrByteLength",
+    "domainEvidence", "networkAccessed", "externalActionsPerformed", "receiptSha256"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "kind": { "const": "programmable-project-command-receipt" },
+    "executor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "modulePath", "moduleSha256", "runnerModulePath", "runnerModuleSha256"],
+      "properties": {
+        "id": { "const": "programmable-project-command-executor" },
+        "version": { "const": "1.0.0" },
+        "modulePath": { "const": "scripts/project-command-executor-core.mjs" },
+        "moduleSha256": { "$ref": "#/$defs/sha256" },
+        "runnerModulePath": { "const": "scripts/bounded-child-process-core.mjs" },
+        "runnerModuleSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "executionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shell", "environmentProfile", "credentialsInherited", "externalWrites", "networkAccess", "maximumOutputBytes"],
+      "properties": {
+        "shell": { "const": false },
+        "environmentProfile": { "const": "sanitized-local-v1" },
+        "credentialsInherited": { "const": false },
+        "externalWrites": { "const": false },
+        "networkAccess": { "enum": ["forbidden", "read-only"] },
+        "maximumOutputBytes": { "enum": [8388608, 134217728] }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headCommit", "tree", "branch", "gitStatusSha256", "executionPlanSha256", "commandsSha256", "commandSha256"],
+      "properties": {
+        "headCommit": { "$ref": "#/$defs/gitObject" },
+        "tree": { "$ref": "#/$defs/gitObject" },
+        "branch": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 300 },
+            { "type": "null" }
+          ]
+        },
+        "gitStatusSha256": { "$ref": "#/$defs/sha256" },
+        "executionPlanSha256": { "$ref": "#/$defs/sha256" },
+        "commandsSha256": { "$ref": "#/$defs/sha256" },
+        "commandSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "commandId": { "$ref": "#/$defs/slug" },
+    "commandKind": {
+      "enum": [
+        "install", "build", "test", "quote-test", "execution-test", "typecheck", "lint", "simulation", "fuzz", "invariant",
+        "fork", "gas", "code-size", "deployment-test", "evidence", "other"
+      ]
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    },
+    "argvSha256": { "$ref": "#/$defs/sha256" },
+    "cwd": { "$ref": "#/$defs/workingDirectory" },
+    "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 3600000 },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "resolvedPath", "byteLength", "sha256"],
+      "properties": {
+        "requested": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "resolvedPath": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 536870912 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "status": { "const": "passed" },
+    "exitCode": { "const": 0 },
+    "signal": { "type": "null" },
+    "timedOut": { "const": false },
+    "outputExceeded": { "const": false },
+    "stdoutSha256": { "$ref": "#/$defs/sha256" },
+    "stdoutByteLength": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+    "stderrSha256": { "$ref": "#/$defs/sha256" },
+    "stderrByteLength": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+    "domainEvidence": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/tradeDomainEvidence" }
+      ]
+    },
+    "networkAccessed": { "type": "null" },
+    "externalActionsPerformed": { "type": "array", "maxItems": 0 },
+    "receiptSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "commandKind": { "const": "quote-test" } }, "required": ["commandKind"] },
+      "then": {
+        "properties": {
+          "executionPolicy": {
+            "properties": { "maximumOutputBytes": { "const": 134217728 } }
+          },
+          "domainEvidence": {
+            "allOf": [
+              { "$ref": "#/$defs/tradeDomainEvidence" },
+              { "properties": { "resultContract": { "const": "trade-quote-test-result-v1" } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "commandKind": { "const": "execution-test" } }, "required": ["commandKind"] },
+      "then": {
+        "properties": {
+          "executionPolicy": {
+            "properties": { "maximumOutputBytes": { "const": 134217728 } }
+          },
+          "domainEvidence": {
+            "allOf": [
+              { "$ref": "#/$defs/tradeDomainEvidence" },
+              { "properties": { "resultContract": { "const": "trade-execution-test-result-v1" } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "commandKind": { "not": { "enum": ["quote-test", "execution-test"] } } }, "required": ["commandKind"] },
+      "then": {
+        "properties": {
+          "executionPolicy": { "properties": { "maximumOutputBytes": { "const": 8388608 } } },
+          "domainEvidence": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "address": { "type": "string", "pattern": "^0x[0-9a-f]{40}$" },
+    "gitObject": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "workingDirectory": {
+      "oneOf": [
+        { "const": "." },
+        { "$ref": "#/$defs/repositoryPath" }
+      ]
+    },
+    "tradeDomainEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract", "manifestArtifactId", "manifestSha256", "marketRef", "testId", "modeRef",
+        "semanticAdequacy", "runnerEvidence", "resultContract", "resultArtifactId", "resultArtifactPath",
+        "resultArtifactSha256", "resultArtifactByteLength"
+      ],
+      "properties": {
+        "contract": { "const": "trade-command-domain-evidence-v1" },
+        "manifestArtifactId": { "$ref": "#/$defs/slug" },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "testId": { "$ref": "#/$defs/slug" },
+        "modeRef": { "$ref": "#/$defs/slug" },
+        "semanticAdequacy": { "const": "PARTIAL_EVIDENCE" },
+        "runnerEvidence": { "$ref": "#/$defs/tradeRunnerEvidence" },
+        "resultContract": { "enum": ["trade-quote-test-result-v1", "trade-execution-test-result-v1"] },
+        "resultArtifactId": { "$ref": "#/$defs/slug" },
+        "resultArtifactPath": { "$ref": "#/$defs/repositoryPath" },
+        "resultArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "resultArtifactByteLength": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+      }
+    },
+    "tradeRunnerEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract", "matchPath", "testSignature", "sourcePath", "sourceArtifactSha256",
+        "sourceArtifactByteLength", "suitesObserved", "testsObserved", "passedTests", "failedTests",
+        "resultLogsObserved", "unitGas", "callEvidence", "runnerOutputSha256", "runnerOutputByteLength"
+      ],
+      "properties": {
+        "contract": { "const": "forge-test-json-v1" },
+        "matchPath": { "$ref": "#/$defs/repositoryPath" },
+        "testSignature": { "type": "string", "minLength": 7, "maxLength": 300 },
+        "sourcePath": { "$ref": "#/$defs/repositoryPath" },
+        "sourceArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "sourceArtifactByteLength": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+        "suitesObserved": { "const": 1 },
+        "testsObserved": { "const": 1 },
+        "passedTests": { "const": 1 },
+        "failedTests": { "const": 0 },
+        "resultLogsObserved": { "const": 1 },
+        "unitGas": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "callEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/tradeRunnerCallEvidence" }
+        },
+        "runnerOutputSha256": { "$ref": "#/$defs/sha256" },
+        "runnerOutputByteLength": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+      }
+    },
+    "tradeRunnerCallEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "target", "callKind", "calldataSha256", "outcome", "outputSha256", "occurrences"],
+      "properties": {
+        "role": { "enum": ["quote-target", "adapter-build-target", "execution-target"] },
+        "target": { "$ref": "#/$defs/address" },
+        "callKind": { "enum": ["CALL", "STATICCALL"] },
+        "calldataSha256": { "$ref": "#/$defs/sha256" },
+        "outcome": { "enum": ["succeeded", "reverted"] },
+        "outputSha256": { "$ref": "#/$defs/sha256" },
+        "occurrences": { "type": "integer", "minimum": 1, "maximum": 1000 }
+      }
+    }
+  }
+}

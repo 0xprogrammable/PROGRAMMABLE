@@ -1,0 +1,469 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-build-profile-catalog",
+  "policy": {
+    "automaticAdverseDecision": false,
+    "commands": "inert-only",
+    "unknownOutcome": "needs-review"
+  },
+  "profiles": [
+    {
+      "id": "bun",
+      "label": "Bun JavaScript or TypeScript",
+      "detection": {
+        "lockFilesAny": [
+          "bun.lock",
+          "bun.lockb"
+        ],
+        "packageManager": "bun",
+        "requiredFilesAll": [
+          "package.json"
+        ],
+        "rootMarkersAny": [
+          "package.json"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-install",
+          "when": "always",
+          "argv": [
+            "bun",
+            "install",
+            "--frozen-lockfile",
+            "--ignore-scripts"
+          ]
+        },
+        {
+          "id": "02-test",
+          "when": "always",
+          "argv": [
+            "bun",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dotnet",
+      "label": ".NET or C#",
+      "detection": {
+        "lockFilesAny": [
+          "packages.lock.json"
+        ],
+        "packageManager": null,
+        "requiredFilesAll": [],
+        "rootMarkersAny": [
+          "*.csproj",
+          "*.fsproj",
+          "*.sln",
+          "*.slnx"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-restore",
+          "when": "always",
+          "argv": [
+            "dotnet",
+            "restore",
+            "--locked-mode"
+          ]
+        },
+        {
+          "id": "02-build",
+          "when": "always",
+          "argv": [
+            "dotnet",
+            "build",
+            "--no-restore"
+          ]
+        },
+        {
+          "id": "03-test",
+          "when": "always",
+          "argv": [
+            "dotnet",
+            "test",
+            "--no-build"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "foundry",
+      "label": "Foundry Solidity",
+      "detection": {
+        "lockFilesAny": [
+          "foundry.lock"
+        ],
+        "packageManager": null,
+        "requiredFilesAll": [
+          "foundry.toml"
+        ],
+        "rootMarkersAny": [
+          "foundry.toml"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-format",
+          "when": "always",
+          "argv": [
+            "forge",
+            "fmt",
+            "--check"
+          ]
+        },
+        {
+          "id": "02-build",
+          "when": "always",
+          "argv": [
+            "forge",
+            "build"
+          ]
+        },
+        {
+          "id": "03-test",
+          "when": "always",
+          "argv": [
+            "forge",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "go",
+      "label": "Go",
+      "detection": {
+        "lockFilesAny": [
+          "go.sum"
+        ],
+        "packageManager": null,
+        "requiredFilesAll": [
+          "go.mod"
+        ],
+        "rootMarkersAny": [
+          "go.mod"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-test",
+          "when": "always",
+          "argv": [
+            "go",
+            "test",
+            "./..."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hardhat",
+      "label": "Hardhat Solidity",
+      "detection": {
+        "lockFilesAny": [],
+        "packageManager": "any-js",
+        "requiredFilesAll": [
+          "package.json"
+        ],
+        "rootMarkersAny": [
+          "hardhat.config.cjs",
+          "hardhat.config.js",
+          "hardhat.config.mjs",
+          "hardhat.config.ts"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-compile",
+          "when": "manager-resolved",
+          "argv": [
+            "<package-manager>",
+            "run",
+            "compile"
+          ]
+        },
+        {
+          "id": "02-test",
+          "when": "manager-resolved",
+          "argv": [
+            "<package-manager>",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "javascript-monorepo",
+      "label": "JavaScript or TypeScript monorepo",
+      "detection": {
+        "lockFilesAny": [],
+        "packageManager": "any-js",
+        "requiredFilesAll": [
+          "package.json"
+        ],
+        "rootMarkersAny": [
+          "lerna.json",
+          "nx.json",
+          "package.json#workspaces",
+          "pnpm-workspace.yaml",
+          "turbo.json"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-build",
+          "when": "manager-resolved",
+          "argv": [
+            "<package-manager>",
+            "run",
+            "build"
+          ]
+        },
+        {
+          "id": "02-test",
+          "when": "manager-resolved",
+          "argv": [
+            "<package-manager>",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "npm",
+      "label": "npm JavaScript or TypeScript",
+      "detection": {
+        "lockFilesAny": [
+          "npm-shrinkwrap.json",
+          "package-lock.json"
+        ],
+        "packageManager": "npm",
+        "requiredFilesAll": [
+          "package.json"
+        ],
+        "rootMarkersAny": [
+          "package.json"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-install",
+          "when": "always",
+          "argv": [
+            "npm",
+            "ci",
+            "--ignore-scripts"
+          ]
+        },
+        {
+          "id": "02-test",
+          "when": "always",
+          "argv": [
+            "npm",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pnpm",
+      "label": "pnpm JavaScript or TypeScript",
+      "detection": {
+        "lockFilesAny": [
+          "pnpm-lock.yaml"
+        ],
+        "packageManager": "pnpm",
+        "requiredFilesAll": [
+          "package.json"
+        ],
+        "rootMarkersAny": [
+          "package.json"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-install",
+          "when": "always",
+          "argv": [
+            "pnpm",
+            "install",
+            "--frozen-lockfile",
+            "--ignore-scripts"
+          ]
+        },
+        {
+          "id": "02-test",
+          "when": "always",
+          "argv": [
+            "pnpm",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python",
+      "label": "Python",
+      "detection": {
+        "lockFilesAny": [
+          "Pipfile.lock",
+          "poetry.lock",
+          "uv.lock"
+        ],
+        "packageManager": null,
+        "requiredFilesAll": [],
+        "rootMarkersAny": [
+          "Pipfile",
+          "pyproject.toml",
+          "requirements.txt"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-test",
+          "when": "always",
+          "argv": [
+            "<python-environment>",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rust",
+      "label": "Rust",
+      "detection": {
+        "lockFilesAny": [
+          "Cargo.lock"
+        ],
+        "packageManager": null,
+        "requiredFilesAll": [
+          "Cargo.toml"
+        ],
+        "rootMarkersAny": [
+          "Cargo.toml"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-format",
+          "when": "always",
+          "argv": [
+            "cargo",
+            "fmt",
+            "--check"
+          ]
+        },
+        {
+          "id": "02-lint",
+          "when": "always",
+          "argv": [
+            "cargo",
+            "clippy",
+            "--locked"
+          ]
+        },
+        {
+          "id": "03-test",
+          "when": "always",
+          "argv": [
+            "cargo",
+            "test",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unity",
+      "label": "Unity game",
+      "detection": {
+        "lockFilesAny": [
+          "Packages/packages-lock.json"
+        ],
+        "packageManager": null,
+        "requiredFilesAll": [
+          "Packages/manifest.json",
+          "ProjectSettings/ProjectVersion.txt"
+        ],
+        "rootMarkersAny": [
+          "Packages/manifest.json",
+          "ProjectSettings/ProjectVersion.txt"
+        ],
+        "unityEditorVersionRequired": true
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-test",
+          "when": "always",
+          "argv": [
+            "<pinned-unity-editor>",
+            "-batchmode",
+            "-runTests"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "yarn",
+      "label": "Yarn JavaScript or TypeScript",
+      "detection": {
+        "lockFilesAny": [
+          "yarn.lock"
+        ],
+        "packageManager": "yarn",
+        "requiredFilesAll": [
+          "package.json"
+        ],
+        "rootMarkersAny": [
+          "package.json"
+        ],
+        "unityEditorVersionRequired": false
+      },
+      "suggestedChecks": [
+        {
+          "id": "01-install-classic",
+          "when": "yarn-classic",
+          "argv": [
+            "yarn",
+            "install",
+            "--frozen-lockfile",
+            "--ignore-scripts"
+          ]
+        },
+        {
+          "id": "02-install-modern",
+          "when": "yarn-modern",
+          "argv": [
+            "yarn",
+            "install",
+            "--immutable",
+            "--mode=skip-build"
+          ]
+        },
+        {
+          "id": "03-test",
+          "when": "always",
+          "argv": [
+            "yarn",
+            "test"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ databases, indexers, signed data sources, optional onchain oracle verifiers, kee
 ## Contents
 
 - [Open inventory](#open-inventory)
+- [Capability dependencies and handoffs](#capability-dependencies-and-handoffs)
 - [Security profiles](#security-profiles)
 - [Common surface kinds](#common-surface-kinds)
 - [Signed data and oracle verification](#signed-data-and-oracle-verification)
@@ -35,6 +36,27 @@ The surface inventory describes boundaries, not deployment units. One repository
 surface can live in a separately pinned companion repository. Keep the exact source contract in the public-source and
 review-target records.
 
+## Capability dependencies and handoffs
+
+The current agent's toolset is not a product-category boundary. A Three.js game, maps client, mobile app, backend,
+database, data pipeline, specialized cryptography or unfamiliar language remains eligible when its actual mechanism can
+be reviewed. Distinguish three facts:
+
+1. **Design eligibility:** the idea is preserved unless a concrete mechanism conflicts with an exact safety invariant.
+2. **Current implementation capability:** name the host, tool, skill or expertise that is present, absent or unverified.
+3. **Completion evidence:** only source, tests and receipts for the exact component establish that it was built.
+
+When a required capability is absent, use `INTEGRATION_PENDING`. Complete independent layers that can be soundly built,
+but never mark the whole project complete and never reject it by category. The handoff must bind the missing surface,
+expected inputs and outputs, API or schema, authority and source of truth, security profiles, failure behavior, test
+vectors, owner, tool/expertise dependency, acceptance criteria and exact condition for resuming review. A later agent or
+specialist may satisfy the handoff; its work still enters the ordinary source, test and evidence closure.
+
+Do not silently substitute a simpler game, map, backend, chain, token model or settlement route because a tool is
+missing. Any product-changing fallback returns to the owner as a material choice. A compatible installed domain skill
+may be used only within the user's authority; the skill name or successful invocation is not evidence that its generated
+component works.
+
 ## Security profiles
 
 Every surface contains all profiles. Use `applicable` with concrete controls when linked capabilities require the
@@ -47,7 +69,7 @@ profile. Use `not-applicable` with a specific reason when the surface has no suc
 | `source-of-truth` | Always | Which exact chain state, signed payload, database record or derived state is authoritative? |
 | `signatures-replay` | A surface consumes a signature or signed data | What is signed, by whom, for which domain, with what expiry and replay key? |
 | `external-calls` | A surface calls another contract, API, provider or service | How are targets authenticated, return values checked, retries bounded and partial failure prevented? |
-| `custody` | A surface holds funds, positions, claims, keys or withdrawal authority | What is held, by whom, under which solvency and unconditional exit rule? |
+| `custody` | A surface holds funds, positions, claims, keys or withdrawal authority | What is held, by whom, under which solvency and enforceable terminal-state rule: exit, timed/conditional claim, refund, maturity, disclosed forfeiture/burn, legal freeze, or knowingly permanent contribution? |
 | `pii-geolocation` | A surface collects personal data or location | Which data, precision, purpose, consent, retention, deletion and disclosure boundary apply? |
 | `secret-boundary` | A surface needs API keys, signing keys or private configuration | Which server-only boundary stores, rotates, revokes and audits each secret? |
 | `source-test-schema` | Always | Which source, tests, payload/storage schemas and evidence bytes enter the review target? |
@@ -79,6 +101,11 @@ Known kinds accelerate routing; they do not limit what can be proposed.
 Games and maps are not special safety exceptions. A game result that awards tokens declares value flow, authority,
 signatures/replay and failure profiles. A map that uses precise user location declares PII/geolocation. A browser-only
 renderer that handles no identity, secret or value may mark those profiles not applicable with exact reasons.
+
+Scientific work, prediction/wagering, transparent participant-funded redistribution, reserve-backed/RWA systems,
+privacy flows, AI agents, cross-chain systems, and unknown future concepts use the same open inventory. Their label never
+passes or fails review. Triggered value, authority, solvency, truth/freshness, privacy, custody, failure, disclosure,
+provider, legal, and platform properties determine the work instead.
 
 ## Signed data and oracle verification
 

@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:architecture-candidates:1.0.0",
+  "title": "Programmable architecture candidate comparison",
+  "description": "Requires the minimum-correct, v4-native, and hybrid roles. A role may be inapplicable only with an explicit reason; selection is bound to non-compensable gates and comparable dimensions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "revision",
+    "projectSpecSha256",
+    "productGraphSha256",
+    "candidates",
+    "selection"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+    "projectSpecSha256": { "$ref": "#/$defs/sha256" },
+    "productGraphSha256": { "$ref": "#/$defs/sha256" },
+    "candidates": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/candidate" }
+    },
+    "selection": { "$ref": "#/$defs/selection" }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "refs": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/slug" }
+    },
+    "v4FeatureUse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disposition", "systemNodeRefs", "rationale"],
+      "properties": {
+        "disposition": { "enum": ["required", "not-required", "undetermined"] },
+        "systemNodeRefs": { "$ref": "#/$defs/refs" },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "v4Usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pool", "customHook"],
+      "properties": {
+        "pool": { "$ref": "#/$defs/v4FeatureUse" },
+        "customHook": { "$ref": "#/$defs/v4FeatureUse" }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rating", "rationale"],
+      "properties": {
+        "rating": { "enum": ["lower", "moderate", "higher", "not-applicable", "unknown"] },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trust", "capital", "liquidity", "latency", "gas", "operations", "review"],
+      "properties": {
+        "trust": { "$ref": "#/$defs/dimension" },
+        "capital": { "$ref": "#/$defs/dimension" },
+        "liquidity": { "$ref": "#/$defs/dimension" },
+        "latency": { "$ref": "#/$defs/dimension" },
+        "gas": { "$ref": "#/$defs/dimension" },
+        "operations": { "$ref": "#/$defs/dimension" },
+        "review": { "$ref": "#/$defs/dimension" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "criterion", "nonCompensable", "result", "rationale", "evidenceRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "criterion": { "$ref": "#/$defs/text" },
+        "nonCompensable": { "const": true },
+        "result": { "enum": ["pass", "fail", "inapplicable", "unresolved"] },
+        "rationale": { "$ref": "#/$defs/text" },
+        "evidenceRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "disposition",
+        "summary",
+        "justification",
+        "graphNodeRefs",
+        "facetEntryRefs",
+        "v4Usage",
+        "dimensions",
+        "gates"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "role": { "enum": ["minimum-correct", "v4-native", "hybrid"] },
+        "disposition": { "enum": ["modeled", "inapplicable"] },
+        "summary": { "$ref": "#/$defs/text" },
+        "justification": { "$ref": "#/$defs/text" },
+        "graphNodeRefs": { "$ref": "#/$defs/refs" },
+        "facetEntryRefs": { "$ref": "#/$defs/refs" },
+        "v4Usage": { "$ref": "#/$defs/v4Usage" },
+        "dimensions": { "$ref": "#/$defs/dimensions" },
+        "gates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/gate" }
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateId", "rationale", "decisiveGateRefs"],
+      "properties": {
+        "candidateId": { "$ref": "#/$defs/slug" },
+        "rationale": { "$ref": "#/$defs/text" },
+        "decisiveGateRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    }
+  }
+}

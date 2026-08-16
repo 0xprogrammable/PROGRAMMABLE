@@ -68,11 +68,13 @@ for the permissionless path.
 
 ### Mandatory Programmable fee
 
-Every new launch application uses Builder `v0.2.1` and declares the root `programmableFee` policy:
+The legacy beta application path uses Builder `v0.2.1` records. New model work uses the immutable Hookbuilder `v0.5.1`
+release and its per-side Fee V1.1 contract; legacy v2 applications remain readable only for migration and historical
+review.
 
-- `effective total = max(builder-selected total, 10 bps)`;
+- `effective side rate = max(builder-selected side rate, 10 bps)`;
 - exactly `10 bps` (`0.10%`) belongs to Programmable and the project receives the remainder;
-- the split is inclusive, so selected `3%` means `0.1% + 2.9%`, never `3.1%`;
+- the split is inclusive on each side, so selected `3%` means `0.1% + 2.9%`, never `3.1%`;
 - the basis is actually executed gross quote-side volume for every successful swap of the canonical PoolKey, in both
   directions and exact-input/exact-output modes;
 - LP fees, transfer taxes, router charges, app payments, and alternative pools are not substitutes; and

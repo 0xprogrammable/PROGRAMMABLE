@@ -26,7 +26,7 @@ test("resolves a first revision from the fixed central ref and immutable tree wi
     sleepImplementation: async () => {}
   });
 
-  assert.equal(observed.repositorySlug, "0xprogrammable/programmable");
+  assert.equal(observed.repositorySlug, "0xprogrammable/submit-launch");
   assert.equal(observed.baseCommit, baseCommit);
   assert.equal(observed.baseTree, baseTree);
   assert.equal(observed.existingApplication, false);
@@ -59,6 +59,7 @@ test("loads one exact canonical prior package and derives the next revision", as
 
   assert.equal(observed.existingApplication, true);
   assert.equal(observed.priorApplicationRevision, 7);
+  assert.equal(observed.priorCentralPackage.compatibilityResult, "architecture-review-required");
   assert.deepEqual(observed.priorCentralPackage.fileOrder, CENTRAL_APPLICATION_FILES);
   assert.deepEqual(
     observed.priorCentralPackage.files.map(({ content }) => content),
@@ -102,6 +103,63 @@ test("rejects stale or malicious prior bytes even when Git blob identities are s
     }),
     "CENTRAL_BASE_INVALID"
   );
+
+  const mismatchedCompatibility = makePriorPackage();
+  const compatibility = JSON.parse(
+    mismatchedCompatibility.files.get("compatibility-report.json").toString("utf8")
+  );
+  compatibility.source.revisionObjectId = "9".repeat(40);
+  mismatchedCompatibility.files.set(
+    "compatibility-report.json",
+    Buffer.from(`${canonicalJson(compatibility)}\n`)
+  );
+  await rejectsCode(
+    () => resolveCentralApplicationBase({
+      baseBranch: "main",
+      applicationId: "example-app",
+      fetchImplementation: createCentralFetch({ files: mismatchedCompatibility.files }).fetch,
+      sleepImplementation: async () => {}
+    }),
+    "CENTRAL_BASE_INVALID"
+  );
+});
+
+test("rejects same-value, conflicting and escaped duplicate keys in central GitHub JSON before projection", async () => {
+  const secret = "central-private-key-must-not-echo";
+  const applicationDuplicates = [
+    `"applicationRevision":1,"privateKey":"${secret}"`,
+    `"applicationRevision":2,"privateKey":"${secret}"`,
+    `"applicationRevisi\\u006fn":2,"privateKey":"${secret}"`
+  ];
+  const compatibilityDuplicates = [
+    `"result":"architecture-review-required","privateKey":"${secret}"`,
+    `"result":"prototype-ready","privateKey":"${secret}"`,
+    `"res\\u0075lt":"prototype-ready","privateKey":"${secret}"`
+  ];
+
+  for (const [name, variants] of [
+    ["application.json", applicationDuplicates],
+    ["compatibility-report.json", compatibilityDuplicates]
+  ]) {
+    for (const duplicate of variants) {
+      const prior = makePriorPackage();
+      const source = prior.files.get(name).toString("utf8").trimEnd();
+      prior.files.set(name, Buffer.from(`${source.slice(0, -1)},${duplicate}}\n`));
+      await assert.rejects(
+        resolveCentralApplicationBase({
+          baseBranch: "main",
+          applicationId: "example-app",
+          fetchImplementation: createCentralFetch({ files: prior.files }).fetch,
+          sleepImplementation: async () => {}
+        }),
+        (error) => {
+          assert.equal(error?.code, "CENTRAL_BASE_INVALID");
+          assert.equal(String(error?.message).includes(secret), false);
+          return true;
+        }
+      );
+    }
+  }
 });
 
 test("accepts a companion-only authority revision but blocks unchanged, locator-only and incoherent sources", () => {
@@ -216,7 +274,18 @@ function makePriorPackage({ applicationRevision = 1, source = makeSource() } = {
     ["PROPOSAL.md", Buffer.from("# Proposal\nA substantive canonical proposal body for central revision testing.\n")],
     ["TEST_PLAN.md", Buffer.from("# Test plan\nA substantive canonical test plan body for central revision testing.\n")],
     ["THREAT_MODEL.md", Buffer.from("# Threat model\nA substantive canonical threat model body for central revision testing.\n")],
-    ["compatibility-report.json", Buffer.from("{\"result\":\"test\"}\n")],
+    ["compatibility-report.json", Buffer.from(`${canonicalJson({
+      schemaVersion: 1,
+      applicationId: "example-app",
+      source: {
+        numericRepositoryId: source.primary.numericRepositoryId,
+        revisionObjectId: source.primary.revisionObjectId,
+        treeObjectId: source.primary.treeObjectId
+      },
+      result: "architecture-review-required",
+      findings: [],
+      disclaimer: "Builder-declared compatibility evidence; not an audit, approval, deployment, Uniswap endorsement, or launch."
+    })}\n`)],
     ["evidence-index.json", Buffer.from("{\"evidence\":[]}\n")]
   ]);
   const application = {
@@ -230,6 +299,11 @@ function makePriorPackage({ applicationRevision = 1, source = makeSource() } = {
       githubUserId: builderIdentity.githubUserId,
       githubLogin: "example",
       contact: "https://github.com/example"
+    },
+    builderTemplate: {
+      schemaVersion: "1.0.0",
+      source: "manual",
+      templateSelection: null
     },
     source,
     programmableFee: {},
@@ -287,7 +361,7 @@ function createCentralFetch({ files = null, refCommits = [baseCommit] } = {}) {
     : new Map([...files].map(([name, bytes]) => [name, { bytes, sha: gitBlobDigest(bytes) }]));
   const fetch = async (url, options) => {
     calls.push({ url, options });
-    const prefix = "https://api.github.com/repos/0xprogrammable/programmable";
+    const prefix = "https://api.github.com/repos/0xprogrammable/submit-launch";
     if (url === `${prefix}/git/ref/heads/main`) {
       const commit = refCommits[Math.min(refReads, refCommits.length - 1)];
       refReads += 1;

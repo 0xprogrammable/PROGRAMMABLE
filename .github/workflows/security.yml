@@ -26,15 +26,55 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
-          version: stable
+          version: v1.7.1
 
       - name: Bootstrap pinned dependencies
         run: ./scripts/bootstrap-deps.sh
 
+      - name: Verify Router vNext universal artifact
+        run: bash scripts/verify-router-vnext-universal-v1.sh
+
+      - name: Verify Router V4 deployment candidate
+        env:
+          ETHEREUM_RPC_URLS: >-
+            https://rpc.flashbots.net
+            https://eth.drpc.org
+            https://mainnet.gateway.tenderly.co
+        run: bash scripts/verify-router-v4-deployment-v1.sh
+
       - name: Install Slither
         run: |
           python3 -m venv .venv
-          .venv/bin/pip install --disable-pip-version-check slither-analyzer==0.11.5
+          .venv/bin/pip install --disable-pip-version-check \
+            slither-analyzer==0.11.5 \
+            eth-abi==5.2.0 \
+            eth-utils==5.3.1
+
+      - name: Verify Router V4 owner payloads
+        run: >-
+          .venv/bin/python scripts/generate-router-v4-owner-payloads.py
+          --deployment-source-commit "$(git rev-parse HEAD)"
+          --deployment-source-tree "$(git rev-parse 'HEAD^{tree}')"
+          --output "$RUNNER_TEMP/router-v4-owner-payloads.json"
+
+      - name: Verify Router V4 cold outer transaction sequence
+        env:
+          ETHEREUM_RPC_URLS: >-
+            https://mainnet.gateway.tenderly.co
+            https://eth.drpc.org
+            https://rpc.flashbots.net
+        run: |
+          set -euo pipefail
+          for rpc_url in $ETHEREUM_RPC_URLS; do
+            for attempt in 1 2 3; do
+              echo "Cold outer attempt ${attempt} with ${rpc_url}"
+              if ETHEREUM_RPC_URL="${rpc_url}" bash scripts/verify-router-v4-cold-outer-transactions.sh "$RUNNER_TEMP/router-v4-owner-payloads.json"; then
+                exit 0
+              fi
+              sleep $((attempt * 3))
+            done
+          done
+          exit 1
 
       - name: Run Slither
         run: .venv/bin/slither . --config-file slither.config.json --sarif slither.sarif --fail-none
@@ -45,16 +85,23 @@ jobs:
         with:
           sarif_file: slither.sarif
 
+      - name: Verify hash-bound via-IR coverage inputs
+        run: node scripts/check-coverage.mjs /dev/null scripts/coverage-via-ir-exceptions.json --inputs-only
+
       - name: Measure source coverage
+        env:
+          FOUNDRY_OPTIMIZER_RUNS: 100
         run: >-
           forge coverage
+          --ir-minimum
           --no-match-contract ClassicV3MainnetForkTest
+          --no-match-path test/router_vnext/ProgrammableUniversalLaunchKernelV1.t.sol
           --exclude-tests
           --report lcov
           --report-file lcov.info
 
       - name: Check coverage floors
-        run: node scripts/check-coverage.mjs lcov.info
+        run: node scripts/check-coverage.mjs lcov.info scripts/coverage-via-ir-exceptions.json
 
       - name: Install actionlint
         env:

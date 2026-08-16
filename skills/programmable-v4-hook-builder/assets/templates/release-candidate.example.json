@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "1.0.0",
+  "candidateId": "programmable-v4-builder-v0.5.1-private-20260807",
+  "privateCandidate": true,
+  "publicState": "not-published",
+  "releaseVersion": "0.5.1",
+  "channel": "stable",
+  "releaseKind": "normal",
+  "plannedRelease": {
+    "builder": {
+      "fromVersion": "0.4.0",
+      "toVersion": "0.5.1",
+      "semanticClassification": "minor"
+    },
+    "submissionStandard": {
+      "fromVersion": "1.5.0",
+      "toVersion": "1.6.0"
+    },
+    "feePolicy": {
+      "fromVersion": "1.1.0",
+      "toVersion": "1.1.0"
+    },
+    "source": {
+      "commitSha": null,
+      "treeSha": null,
+      "tagName": null
+    },
+    "artifact": {
+      "path": null,
+      "sha256": null
+    },
+    "releaseManifest": {
+      "path": null,
+      "sha256": null
+    }
+  },
+  "preparedAt": "2026-08-02T12:45:00Z",
+  "requestedReleaseAt": "2026-08-03T11:15:00Z",
+  "changeSetComplete": false,
+  "changes": [
+    {
+      "id": "canonical-project-registry",
+      "kind": "feature",
+      "summary": "Add hash-bound live project discovery with an explicit content-addressed offline snapshot and non-adverse similarity boundary."
+    },
+    {
+      "id": "dedicated-application-ledger",
+      "kind": "feature",
+      "summary": "Move future six-file GitHub applications to the separate public Registry while preserving legacy review threads."
+    },
+    {
+      "id": "intake-contract-sync",
+      "kind": "security-fix",
+      "summary": "Advance the Builder submission contract from 1.5.0 to 1.6.0 with a fail-closed post-acceptance launch handoff while retaining fee policy 1.1.0."
+    },
+    {
+      "id": "portable-release-archive",
+      "kind": "bug-fix",
+      "summary": "Keep the exact skill package directory name and subtree receipt inside versioned release archives."
+    },
+    {
+      "id": "template-release-history",
+      "kind": "maintenance",
+      "summary": "Preserve prior release, catalog, manifest, skill-tree, and definition digests for future migrations."
+    }
+  ],
+  "unbundledChangeIds": [
+    "pending-private-review"
+  ],
+  "evidence": {
+    "checksums": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "sbom": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "evals": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "canary": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    }
+  },
+  "communications": {
+    "dailyReleaseNotes": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    },
+    "publicPostSummary": {
+      "status": "pending",
+      "path": null,
+      "evidenceSha256": null
+    }
+  },
+  "ownerReleaseGo": {
+    "status": "missing",
+    "path": null,
+    "evidenceSha256": null,
+    "releaseIntentSha256": null,
+    "grantedAt": null
+  },
+  "securityHotfix": {
+    "severity": null,
+    "affectedVersions": [],
+    "reasonCode": null,
+    "incidentRecordSha256": null,
+    "ownerOverride": {
+      "status": "not-applicable",
+      "path": null,
+      "evidenceSha256": null,
+      "releaseIntentSha256": null,
+      "grantedAt": null
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "permissioned-external-asset",
+  "label": "Permissioned or external asset",
+  "summary": "Use a controlled, wrapped or externally referenced asset with explicit issuer and legal trust.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "external-asset",
+    "permissioned-asset"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Asset role in the PoolKey: launched, quote or both",
+    "Asset issuer, ownership claim, redemption right and exact source of truth",
+    "Pause, blacklist, confiscation, mint, upgrade and transfer restrictions",
+    "Permission adapter, user eligibility and failure or depeg behavior",
+    "Public non-affiliation, backing and legal disclosures"
+  ],
+  "requiredFiles": [
+    "Asset integration source",
+    "Issuer and authority evidence",
+    "Restriction and redemption disclosure",
+    "Adversarial token tests"
+  ],
+  "requiredTests": [
+    "Role-specific launched-asset, quote-asset and both-asset integration behavior",
+    "Pause, blacklist, confiscation, fee-on-transfer and callback behavior",
+    "Mint, burn, upgrade and redemption changes",
+    "Permission loss and user-exit behavior",
+    "Depeg, insolvency and provider incompatibility scenarios"
+  ],
+  "risks": [
+    "Token controls can block exits or confiscate balances",
+    "A paired external asset does not by itself provide legal backing",
+    "Provider or jurisdiction support can be narrower than protocol support"
+  ]
+}

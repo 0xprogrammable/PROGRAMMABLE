@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0.0",
+  "fromStandard": "1.3.0",
+  "toStandard": "1.4.0",
+  "expectedCurrentSha256": "sha256:edc1459db9d08b36fda949d773f59bebb1117851b5e6afa81ae926386d6b1bca",
+  "proposedDocument": {
+    "standardVersion": "1.4.0",
+    "economics": {
+      "platformRateBps": 10
+    },
+    "wallets": {
+      "platformOwner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+    },
+    "evidence": {
+      "localReport": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "changeReasons": [
+    {
+      "path": "/standardVersion",
+      "reason": "Preview adoption of the authenticated submission standard without changing economics, wallets, authority, risk, or evidence."
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1.0.0",
+  "compatibilityProfile": {
+    "universalRouter": {
+      "package": "@uniswap/universal-router",
+      "version": "2.1.0",
+      "npmGitHead": "67553d8b067249dd7841d9d1b0eb2997b19d4bf9",
+      "integrity": "sha512-rt18RUsZd9xDfyVfIONJo+TEQ8w+olOYxu9+A1g4Thil1R7IMa+8mnyVQjdLPK2REhejScDwjYbOGpeaAce0hg==",
+      "creationCodeKeccak256": "0x6b797c56c9355176d9d15f9c70b159621bbd0db485822d2d02167b5aa1061173",
+      "unlinkedRuntimeKeccak256": "0x0b17237db8741209a2a73c92a765e79b5489abdcefd71aada0c364a734338406"
+    },
+    "universalRouterSdk": {
+      "package": "@uniswap/universal-router-sdk",
+      "version": "5.11.2",
+      "npmGitHead": "fcfaace6e56b2339c61bb080d73b7308d5329a94",
+      "integrity": "sha512-MeBjI8SBWj7fJLHpOl/cU2n2cGJEZW56u2/Vzc59Mzik1LHw4Nq5BHJ7989DEDreEgLlGToIoXKCXzts9fXmBg=="
+    },
+    "permit2": {
+      "package": "@uniswap/permit2",
+      "sourceCommit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+      "integrity": "sha512-DIvD71MXDb8dLA7gJBAMjV5KTHO4ckZBUcgeXCRaYT+l/7CJRF0HBmTI1VOi/Fg1Hd4WuSLlCcC+Z23i+BLa1w=="
+    },
+    "permit2Solmate": {
+      "package": "solmate-permit2",
+      "sourceCommit": "8d910d876f51c3b2585c9109409d601f600e68e1",
+      "integrity": "sha512-4qey0Jb3nbW6NTDQrpm4SBMwQ571KEuD72skoXMF85ox7CzNCMr3WfzrAwlPYSS2pZxahNvOvySBObJLaP6PfQ=="
+    },
+    "v4Core": {
+      "package": "@uniswap/v4-core",
+      "version": "1.0.2",
+      "npmGitHead": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
+      "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg=="
+    },
+    "v4Periphery": {
+      "package": "@uniswap/v4-periphery",
+      "version": "1.0.3",
+      "npmGitHead": "60cd93803ac2b7fa65fd6cd351fd5fd4cc8c9db5",
+      "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg=="
+    },
+    "v4Sdk": {
+      "package": "@uniswap/v4-sdk",
+      "version": "2.3.1",
+      "npmGitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2",
+      "integrity": "sha512-RByok7qIy7B4A3z2lIru5gTxQVZcmP2wqOsmbV+bTrUkFr8ABjzan0DD/pW64x3akiUe4WnxeX/yMvnq04uBJA=="
+    }
+  },
+  "vectors": [
+    {
+      "id": "single-exact-input",
+      "actions": "0x060b0e",
+      "v4PlannerFinalizedKeccak256": "0x2497858feab6b1953eca7cc2eb16dbac35e4f9e7c36cdff8bad5c7749d38d125",
+      "routePlannerCommands": "0x10",
+      "routePlannerInputKeccak256": "0x2497858feab6b1953eca7cc2eb16dbac35e4f9e7c36cdff8bad5c7749d38d125",
+      "routePlannerInputCount": 1,
+      "routePlannerInputKeccak256es": [
+        "0x2497858feab6b1953eca7cc2eb16dbac35e4f9e7c36cdff8bad5c7749d38d125"
+      ]
+    },
+    {
+      "id": "single-exact-output",
+      "actions": "0x080b0e",
+      "v4PlannerFinalizedKeccak256": "0xeef3e535f86f417ffa7bc7cab9c967e2a0a581f8a7b89ba65b84dfd9e52bab31",
+      "routePlannerCommands": "0x10",
+      "routePlannerInputKeccak256": "0xeef3e535f86f417ffa7bc7cab9c967e2a0a581f8a7b89ba65b84dfd9e52bab31",
+      "routePlannerInputCount": 1,
+      "routePlannerInputKeccak256es": [
+        "0xeef3e535f86f417ffa7bc7cab9c967e2a0a581f8a7b89ba65b84dfd9e52bab31"
+      ]
+    },
+    {
+      "id": "multihop-exact-input",
+      "actions": "0x070b0e",
+      "v4PlannerFinalizedKeccak256": "0x8bdb439a21c51eac8fa6a77851ad448db02f6624cd11a9bd3dd1d246c403a2fa",
+      "routePlannerCommands": "0x10",
+      "routePlannerInputKeccak256": "0x8bdb439a21c51eac8fa6a77851ad448db02f6624cd11a9bd3dd1d246c403a2fa",
+      "routePlannerInputCount": 1,
+      "routePlannerInputKeccak256es": [
+        "0x8bdb439a21c51eac8fa6a77851ad448db02f6624cd11a9bd3dd1d246c403a2fa"
+      ]
+    },
+    {
+      "id": "multihop-exact-output",
+      "actions": "0x090b0e",
+      "v4PlannerFinalizedKeccak256": "0x53c2b50e1b25811a2d06abb671b5531095127f63a9112f634acc087559ce5614",
+      "routePlannerCommands": "0x10",
+      "routePlannerInputKeccak256": "0x53c2b50e1b25811a2d06abb671b5531095127f63a9112f634acc087559ce5614",
+      "routePlannerInputCount": 1,
+      "routePlannerInputKeccak256es": [
+        "0x53c2b50e1b25811a2d06abb671b5531095127f63a9112f634acc087559ce5614"
+      ]
+    },
+    {
+      "id": "single-exact-output-native-input-refund",
+      "actions": "0x080b0e",
+      "v4PlannerFinalizedKeccak256": "0x82ced95883688e743f863048e1955f691d4569d582cc5cfd38d0af7c2d6cc704",
+      "routePlannerCommands": "0x1004",
+      "routePlannerInputKeccak256": "0x82ced95883688e743f863048e1955f691d4569d582cc5cfd38d0af7c2d6cc704",
+      "routePlannerInputCount": 2,
+      "routePlannerInputKeccak256es": [
+        "0x82ced95883688e743f863048e1955f691d4569d582cc5cfd38d0af7c2d6cc704",
+        "0x4a11e8d2ed8da733fcaa4e17f4412f9b9d61f5c42218367f3a293b19bfcdbd57"
+      ]
+    }
+  ]
+}

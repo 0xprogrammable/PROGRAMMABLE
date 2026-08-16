@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "hook-owned-idle-yield",
+  "label": "hook-owned idle liquidity yield",
+  "summary": "Plan a hook that places otherwise idle pool inventory into a pinned yield vault while preserving solvency, recall, losses, and user exits.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "erc4626-yield",
+    "hook-owned-idle-yield",
+    "liquidity-recall"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "keeper"
+  ],
+  "requiredFacts": [
+    "Exact vault standard, asset, share math, source, revision, deployment, runtime, fees, limits, pause, upgrade, governance and loss behavior",
+    "Which pool-owned inventory may leave PoolManager accounting, who authorizes it, and how every asset and share liability is namespaced by PoolId",
+    "Liquidity buffer, withdrawal queue, recall trigger, maximum delay, failed recall, partial recall, vault loss and insolvency allocation",
+    "Yield beneficiary, Programmable and project fee separation, compounding, rounding, dust, donation and emergency exit policy",
+    "Router, quote and partial-fill behavior while inventory is deployed or recall is unavailable"
+  ],
+  "requiredFiles": [
+    "Pinned vault and hook dependency closure",
+    "Asset, share and PoolId liability model",
+    "Recall, loss, pause, retirement and user-exit state machine",
+    "Keeper and monitoring contract when automation is required",
+    "Executable fork or exact local vault integration tests"
+  ],
+  "requiredTests": [
+    "Deposit, withdrawal, preview mismatch, share-price donation, rounding, fee, cap, pause, upgrade and malicious vault behavior",
+    "Swap and liquidity demand before, during and after full, partial, delayed and failed recall",
+    "Vault loss, zero shares, insolvent inventory, emergency exit, retirement and no cross-pool liability leakage",
+    "All four swap quadrants, partial fills, quote-to-execution parity and final zero PoolManager deltas",
+    "Keeper outage, duplicate trigger, reorg, gas spike, unauthorized caller and monitoring alert"
+  ],
+  "risks": [
+    "Vault shares are not guaranteed to redeem one-for-one and may be paused, capped, upgraded or impaired",
+    "Deployed inventory can make swaps or withdrawals unavailable exactly when liquidity is most valuable",
+    "Combining PoolManager deltas, underlying assets and vault shares can hide insolvency or cross-pool leakage"
+  ]
+}

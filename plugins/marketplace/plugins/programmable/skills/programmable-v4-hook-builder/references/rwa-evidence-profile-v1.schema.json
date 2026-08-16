@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:rwa-evidence-profile:1.0.0",
+  "title": "Programmable real-world-asset evidence profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "profileId", "subjectSha256", "assetIdentity", "nav", "reserve", "calendar", "corporateActions", "redemption", "insolvency", "evidenceRefs"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "profileId": { "$ref": "#/$defs/slug" },
+    "subjectSha256": { "$ref": "#/$defs/sha256" },
+    "assetIdentity": { "$ref": "#/$defs/assetIdentity" },
+    "nav": { "$ref": "#/$defs/nav" },
+    "reserve": { "$ref": "#/$defs/reserve" },
+    "calendar": { "$ref": "#/$defs/calendar" },
+    "corporateActions": { "$ref": "#/$defs/corporateActions" },
+    "redemption": { "$ref": "#/$defs/redemption" },
+    "insolvency": { "$ref": "#/$defs/insolvency" },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/ref" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "slug": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "uint": { "type": "string", "minLength": 1, "maxLength": 78, "pattern": "^(?:0|[1-9][0-9]*)$" },
+    "duration": { "type": "string", "minLength": 2, "maxLength": 64 },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operator", "authorityRef", "scope", "continuity", "conflicts"],
+      "properties": {
+        "operator": { "$ref": "#/$defs/text" },
+        "authorityRef": { "$ref": "#/$defs/ref" },
+        "scope": { "$ref": "#/$defs/text" },
+        "continuity": { "$ref": "#/$defs/text" },
+        "conflicts": { "$ref": "#/$defs/text" }
+      }
+    },
+    "assetIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instrument", "issuer", "custodian", "legalOwner", "beneficialEntitlement", "jurisdiction", "identifier", "termsSha256"],
+      "properties": {
+        "instrument": { "$ref": "#/$defs/text" },
+        "issuer": { "$ref": "#/$defs/authority" },
+        "custodian": { "$ref": "#/$defs/authority" },
+        "legalOwner": { "$ref": "#/$defs/text" },
+        "beneficialEntitlement": { "$ref": "#/$defs/text" },
+        "jurisdiction": { "$ref": "#/$defs/text" },
+        "identifier": { "$ref": "#/$defs/text" },
+        "termsSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "nav": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "schemaSha256", "currency", "valuationMethod", "asOfRequired", "publicationCadence", "maximumAge", "staleBehavior", "correctionPolicy", "independentCheckRefs"],
+      "properties": {
+        "source": { "$ref": "#/$defs/authority" },
+        "schemaSha256": { "$ref": "#/$defs/sha256" },
+        "currency": { "type": "string", "pattern": "^[A-Z0-9]{1,12}$" },
+        "valuationMethod": { "$ref": "#/$defs/text" },
+        "asOfRequired": { "const": true },
+        "publicationCadence": { "$ref": "#/$defs/duration" },
+        "maximumAge": { "$ref": "#/$defs/duration" },
+        "staleBehavior": { "enum": ["reject-new-risk", "freeze-valuation", "managed-suspension"] },
+        "correctionPolicy": { "$ref": "#/$defs/text" },
+        "independentCheckRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "reserve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backingModel", "assetScope", "liabilityScope", "segregation", "reconciliation", "attestation", "shortfallPolicy", "withdrawalAuthority", "evidenceRefs"],
+      "properties": {
+        "backingModel": { "enum": ["fully-reserved", "overcollateralized", "fractional", "contingent", "unbacked-disclosed"] },
+        "assetScope": { "$ref": "#/$defs/text" },
+        "liabilityScope": { "$ref": "#/$defs/text" },
+        "segregation": { "$ref": "#/$defs/text" },
+        "reconciliation": { "$ref": "#/$defs/text" },
+        "attestation": { "$ref": "#/$defs/text" },
+        "shortfallPolicy": { "$ref": "#/$defs/text" },
+        "withdrawalAuthority": { "$ref": "#/$defs/authority" },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "calendar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timezone", "calendarSource", "tradingWindows", "holidays", "valuationCutoff", "subscriptionCutoff", "redemptionCutoff", "settlementConvention", "changeNotice"],
+      "properties": {
+        "timezone": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "calendarSource": { "$ref": "#/$defs/ref" },
+        "tradingWindows": { "$ref": "#/$defs/text" },
+        "holidays": { "$ref": "#/$defs/text" },
+        "valuationCutoff": { "$ref": "#/$defs/text" },
+        "subscriptionCutoff": { "$ref": "#/$defs/text" },
+        "redemptionCutoff": { "$ref": "#/$defs/text" },
+        "settlementConvention": { "$ref": "#/$defs/text" },
+        "changeNotice": { "$ref": "#/$defs/text" }
+      }
+    },
+    "corporateActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supportedActions", "source", "entitlementRule", "recordDateRule", "paymentDateRule", "fractionalTreatment", "withholdingTreatment", "mutationPolicy", "reconciliationRefs"],
+      "properties": {
+        "supportedActions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["dividend", "interest", "split", "reverse-split", "merger", "spinoff", "rights", "conversion", "maturity", "default", "other"] }
+        },
+        "source": { "$ref": "#/$defs/authority" },
+        "entitlementRule": { "$ref": "#/$defs/text" },
+        "recordDateRule": { "$ref": "#/$defs/text" },
+        "paymentDateRule": { "$ref": "#/$defs/text" },
+        "fractionalTreatment": { "$ref": "#/$defs/text" },
+        "withholdingTreatment": { "$ref": "#/$defs/text" },
+        "mutationPolicy": { "$ref": "#/$defs/text" },
+        "reconciliationRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "redemption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "authority", "eligibility", "beneficiaryBinding", "pricing", "fees", "minimumAmount", "maximumAmount", "window", "queue", "denialStates", "outage", "recourse", "maximumCompletionTime", "evidenceRefs"],
+      "properties": {
+        "mode": { "enum": ["autonomous", "managed", "maturity-only", "none-disclosed"] },
+        "authority": { "$ref": "#/$defs/authority" },
+        "eligibility": { "$ref": "#/$defs/text" },
+        "beneficiaryBinding": { "$ref": "#/$defs/text" },
+        "pricing": { "$ref": "#/$defs/text" },
+        "fees": { "$ref": "#/$defs/text" },
+        "minimumAmount": { "$ref": "#/$defs/uint" },
+        "maximumAmount": { "oneOf": [{ "$ref": "#/$defs/uint" }, { "type": "null" }] },
+        "window": { "$ref": "#/$defs/text" },
+        "queue": { "$ref": "#/$defs/text" },
+        "denialStates": { "$ref": "#/$defs/text" },
+        "outage": { "$ref": "#/$defs/text" },
+        "recourse": { "$ref": "#/$defs/text" },
+        "maximumCompletionTime": { "oneOf": [{ "$ref": "#/$defs/duration" }, { "type": "null" }] },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "insolvency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events", "lossAllocation", "priority", "poolIsolation", "freezeEffect", "issuerDefault", "custodianDefault", "reserveShortfall", "recoveryAuthority", "holderRecourse", "publicDisclosure", "evidenceRefs"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["issuer-default", "custodian-default", "reserve-shortfall", "market-closure", "legal-freeze", "administrator-outage", "other"] }
+        },
+        "lossAllocation": { "$ref": "#/$defs/text" },
+        "priority": { "$ref": "#/$defs/text" },
+        "poolIsolation": { "$ref": "#/$defs/text" },
+        "freezeEffect": { "$ref": "#/$defs/text" },
+        "issuerDefault": { "$ref": "#/$defs/text" },
+        "custodianDefault": { "$ref": "#/$defs/text" },
+        "reserveShortfall": { "$ref": "#/$defs/text" },
+        "recoveryAuthority": { "$ref": "#/$defs/authority" },
+        "holderRecourse": { "$ref": "#/$defs/text" },
+        "publicDisclosure": { "$ref": "#/$defs/text" },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    }
+  }
+}
