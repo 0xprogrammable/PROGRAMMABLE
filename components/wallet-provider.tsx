@@ -100,7 +100,9 @@ type WalletContextValue = {
   hasSession: boolean;
   connecting: boolean;
   disconnecting: boolean;
+  switchingNetwork: boolean;
   openWallet: () => void;
+  switchNetwork: (expectedChainId?: string) => Promise<boolean>;
   disconnect: (options?: {
     showDialogOnFailure?: boolean;
   }) => Promise<boolean>;
@@ -1103,16 +1105,31 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     }
   }, [wallet]);
 
-  const switchToEthereum = useCallback(async () => {
-    if (!connectedWallet) return;
+  const switchToEthereum = useCallback(async (expectedChainId?: string) => {
+    if (!connectedWallet) return false;
+    if (expectedChainId && expectedChainId !== String(appChain.id)) {
+      setError("The approved launch network is not available in this environment.");
+      return false;
+    }
 
     setSwitchingNetwork(true);
     setError("");
 
     try {
       await connectedWallet.switchChain(appChain.id);
+      const provider = await connectedWallet.getEthereumProvider();
+      const connectedChainId = await provider.request({ method: "eth_chainId" });
+      if (
+        typeof connectedChainId !== "string"
+        || normalizeChainId(connectedChainId) !== appChainHex
+      ) {
+        setError(`Unable to verify ${appNetworkName}. Try again.`);
+        return false;
+      }
+      return true;
     } catch {
       setError(`Unable to switch to ${appNetworkName}. Try again.`);
+      return false;
     } finally {
       setSwitchingNetwork(false);
     }
@@ -1468,7 +1485,9 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       hasSession,
       connecting: !providerSettled && !providerTimedOut,
       disconnecting,
+      switchingNetwork,
       openWallet,
+      switchNetwork: switchToEthereum,
       disconnect,
       getAccessToken,
       getIdentityToken: getCurrentIdentityToken,
@@ -1507,6 +1526,8 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       sendBrowserWalletAction,
       sendTransaction,
       signLaunchMessage,
+      switchingNetwork,
+      switchToEthereum,
       providerSettled,
       setUsername,
       username,
@@ -1557,7 +1578,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       hasSession: false,
       connecting: false,
       disconnecting: false,
+      switchingNetwork: false,
       openWallet: () => setDialogOpen(true),
+      switchNetwork: async () => false,
       disconnect: async () => false,
       getAccessToken: async () => null,
       getIdentityToken: async () => null,

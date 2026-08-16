@@ -167,7 +167,7 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("keeps Custom visibly deferred even when the public readiness gate is true", () => {
+  it("opens Custom only when the server readiness gate is true", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         customLaunchPublicEnabled: true,
@@ -189,16 +189,18 @@ describe("unreleased launch model gating", () => {
     const customCard = html.match(
       /<button[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
-    expect(customCard).toContain('data-launch-model-available="false"');
-    expect(customCard).toContain('data-launch-model-launchable="false"');
-    expect(customCard).toContain("disabled");
+    expect(customCard).toContain('data-launch-model-available="true"');
+    expect(customCard).toContain('data-launch-model-launchable="true"');
+    expect(customCard).not.toContain("disabled");
     expect(html).toContain(
       'id="launch-model-custom-title">Custom</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain('data-status="pending">Soon</small>');
-    expect(html).toContain("Custom launch models are coming soon.");
-    expect(html).not.toContain("Open approved Custom Hook launch");
+    expect(html).not.toContain('data-status="pending">Soon</small>');
+    expect(html).toContain(
+      "Launch an approved GitHub revision through your browser wallet, then follow it to its public record.",
+    );
+    expect(html).toContain("Open approved Custom launch");
     for (const marker of removedPartnerMarkers) {
       expect(html).not.toContain(marker);
     }
@@ -230,7 +232,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-launchable="false"');
     expect(html).toContain('data-status="pending">Soon</small>');
     expect(html).toContain("Custom launch models are coming soon.");
-    expect(html).not.toContain("Open approved Custom Hook launch");
+    expect(html).not.toContain("Open approved Custom launch");
     expect(html).not.toContain("Build or resume");
   });
 
