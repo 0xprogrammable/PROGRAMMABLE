@@ -1,31 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
-import {
-  readBitqueryMarketChartStrictV1,
-  readBitqueryTokenMarketDataStrictV1,
-  safeBitqueryMarketDataError,
-} from "../../../../../lib/market-data/bitquery.server";
-import { exploreEntryMarketIdentitiesV1 } from
-  "../../../../../lib/market-data/explore-market-identities";
-import {
-  readPrimaryRpcExploreEntriesV1,
-  safePrimaryRpcLaunchCatalogError,
-} from "../../../../../lib/market-data/primary-rpc-launches.server";
-import {
-  PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION,
-  type MarketChartV1,
-  type MarketValuationV1,
-} from "../../../../../lib/market-data/market-data-v1";
+import { readLastGoodLaunchCatalogV1 } from
+  "../../../../../lib/market-data/last-good-launch-catalog.server";
 import { isTokenChartRange } from "../../../../../lib/onchain/chart";
+import { readProductionCustomExploreDirectoryV1 } from
+  "../../../../../lib/server/custom-launch/explore-directory-v1";
+import { isCustomLaunchRegistryPublicReadEnabled } from
+  "../../../../../lib/server/custom-launch/public-readiness";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const UNAVAILABLE_VALUATION = Object.freeze({
-  status: "unavailable",
-  reason: "source-unavailable",
-} as const satisfies MarketValuationV1);
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
@@ -47,68 +32,33 @@ export async function GET(request: NextRequest) {
   const address = getAddress(rawAddress);
 
   try {
-    const catalog = await readPrimaryRpcExploreEntriesV1({
-      requestedTokenAddress: address,
-      signal: request.signal,
-    });
-    const entry = catalog.entries.find((candidate) =>
-      candidate.exploreKind === "token" &&
-      candidate.tokenAddress.toLowerCase() === address.toLowerCase()
-    );
-    if (!entry || entry.exploreKind !== "token") {
+    const catalog = await readLastGoodLaunchCatalogV1();
+    let entries = catalog.entries;
+    if (isCustomLaunchRegistryPublicReadEnabled()) {
+      try {
+        entries = [
+          ...entries,
+          ...await readProductionCustomExploreDirectoryV1(request.signal),
+        ];
+      } catch {
+        // A Custom Registry outage cannot invalidate an already committed
+        // canonical identity, but an unknown address remains indeterminate.
+        if (!entries.some((entry) =>
+          entry.tokenAddress?.toLowerCase() === address.toLowerCase()
+        )) return unavailable(address, range, catalog.source, 503);
+      }
+    }
+    if (!entries.some((entry) =>
+      entry.tokenAddress?.toLowerCase() === address.toLowerCase()
+    )) {
       return json({ error: "Token not found" }, 404);
     }
-    const identities = exploreEntryMarketIdentitiesV1(entry);
-    if (identities.length === 0) {
-      return unavailable(address, range, "Price history is unavailable for this market");
-    }
-
-    let identity = identities[0]!;
-    if (identities.length > 1) {
-      const market = await readBitqueryTokenMarketDataStrictV1(identities, {
-        signal: request.signal,
-      });
-      const primary = market.get(address.toLowerCase());
-      identity = identities.find((candidate) =>
-        candidate.poolId === primary?.primaryPoolId
-      ) ?? identity;
-    }
-    const chart = await readBitqueryMarketChartStrictV1({
-      identity,
-      range,
-      historyStart: entry.launchedAt,
-      signal: request.signal,
-    });
-    if (chart.status === "unavailable") {
-      return unavailable(address, range, "Price history is temporarily unavailable");
-    }
-    const response = {
-      ...chart,
-      valuation: UNAVAILABLE_VALUATION,
-      address,
-    };
-    const hasPrice = chart.points.some(
-      (point) => point.priceUsd !== undefined || point.priceQuote !== undefined,
-    );
-    return NextResponse.json(response, {
-      headers: {
-        "Cache-Control": "no-store",
-        "X-Programmable-Data-Quality": chart.status,
-        "X-Programmable-Launch-Source": "drpc",
-        "X-Programmable-Read-Source": "drpc+bitquery",
-        "X-Programmable-Market-Source": "bitquery",
-        ...(hasPrice ? { "X-Programmable-Price-Source": "bitquery" } : {}),
-        ...(chart.asOfTime
-          ? { "X-Programmable-Market-As-Of": chart.asOfTime }
-          : {}),
-      },
-    });
+    return unavailable(address, range, catalog.source, 200);
   } catch (error) {
-    console.error("Bitquery token chart read failed", {
-      catalog: safePrimaryRpcLaunchCatalogError(error),
-      market: safeBitqueryMarketDataError(error),
+    console.error("Token chart identity read failed", {
+      name: error instanceof Error ? error.name : "LaunchCatalogError",
     });
-    return unavailable(address, range, "Price history is temporarily unavailable");
+    return unavailable(address, range, "last-good", 503);
   }
 }
 
@@ -121,29 +71,28 @@ function json(body: unknown, status: number) {
 
 function unavailable(
   address: `0x${string}`,
-  range: MarketChartV1["range"],
-  error: string,
+  range: string,
+  launchSource: string,
+  status: 200 | 503,
 ) {
   return NextResponse.json(
     {
-      schemaVersion: PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION,
-      source: "bitquery",
+      schemaVersion: "programmable.market-chart-unavailable.v1",
+      source: null,
       status: "unavailable",
       generatedAt: new Date().toISOString(),
       address,
       range,
-      reason: "market-data-unavailable",
-      error,
+      reason: "history-provider-unavailable",
     },
     {
-      status: 503,
+      status,
       headers: {
         "Cache-Control": "no-store",
-        "Retry-After": "5",
         "X-Programmable-Data-Quality": "unavailable",
-        "X-Programmable-Launch-Source": "drpc",
-        "X-Programmable-Read-Source": "drpc+bitquery",
-        "X-Programmable-Market-Source": "bitquery",
+        "X-Programmable-Launch-Source": launchSource,
+        "X-Programmable-Read-Source": launchSource,
+        ...(status === 503 ? { "Retry-After": "5" } : {}),
       },
     },
   );

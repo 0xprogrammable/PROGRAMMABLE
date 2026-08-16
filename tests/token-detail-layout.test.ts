@@ -24,15 +24,13 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain(': "Onchain"');
   });
 
-  it("preloads the initial chart once per token instead of on every detail refresh", () => {
+  it("does not preload unavailable historical chart data", () => {
     const viewSource = detailSource.slice(
       detailSource.indexOf("export function TokenDetailView"),
     );
 
-    expect(viewSource.match(/preloadTokenChart/g)).toHaveLength(1);
-    expect(viewSource).toMatch(
-      /void preloadTokenChart\(normalizedAddress, "1d"\);\s*\}, \[normalizedAddress, preview\]\);/,
-    );
+    expect(viewSource).not.toContain("preloadTokenChart");
+    expect(chartSource).toContain("const historyEnabled = preview;");
   });
 
   it("announces the inspected chart value without duplicating the visual tooltip", () => {

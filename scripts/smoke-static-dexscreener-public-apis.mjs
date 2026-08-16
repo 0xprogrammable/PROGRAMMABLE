@@ -5,14 +5,10 @@ import { readBoundedResponseText } from "./read-bounded-response.mjs";
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
-const CATALOG_SOURCES = new Set([
-  "durable-blob",
-  "committed-envio-baseline",
-]);
+const CATALOG_SOURCES = new Set(["durable-blob"]);
 const CATALOG_STATUSES = new Set([
   "current",
   "last-known-good",
-  "partial",
 ]);
 const MARKET_READ_STATUSES = new Set([
   "complete",
@@ -20,7 +16,7 @@ const MARKET_READ_STATUSES = new Set([
   "unavailable",
 ]);
 
-function exactOrigin(value) {
+function exactOrigin(value, targetKind) {
   const target = new URL(value);
   if (
     target.protocol !== "https:" ||
@@ -29,7 +25,9 @@ function exactOrigin(value) {
     target.pathname !== "/" ||
     target.search !== "" ||
     target.hash !== "" ||
-    !target.hostname.endsWith(".vercel.app")
+    (targetKind === "staged"
+      ? !target.hostname.endsWith(".vercel.app")
+      : target.origin !== "https://programmable.market")
   ) {
     throw new Error("Public API smoke target is not an exact Vercel origin");
   }
@@ -111,27 +109,50 @@ function exactUnavailableValuation(token) {
     token.marketData === undefined;
 }
 
-function exactCatalog(response) {
+function exactCatalogSnapshot(response) {
   const catalog = response.body?.catalog;
   const source = catalog?.source;
   const generatedAt = catalog?.lastIndexedAt;
   const launchIdentity = response.body?.dataQuality?.launchIdentity;
-  return CATALOG_SOURCES.has(source) &&
+  const customStatus = catalog?.completeness?.custom;
+  const launchSource = customStatus === "current"
+    ? `${source}+registry.custom-launched`
+    : source;
+  if (!(
+    CATALOG_SOURCES.has(source) &&
     CATALOG_STATUSES.has(catalog?.status) &&
     ISO_TIMESTAMP.test(String(generatedAt ?? "")) &&
     new Date(Date.parse(generatedAt)).toISOString() === generatedAt &&
     catalog.identityCount === response.body?.total &&
-    catalog.completeness?.custom === "unavailable" &&
-    response.headers.get("x-programmable-launch-source") === source &&
+    ["current", "unavailable"].includes(customStatus) &&
+    /^sha256:[0-9a-f]{64}$/u.test(String(catalog.identityCommitment ?? "")) &&
+    catalog.evidence?.kind === "durable-envelope" &&
+    /^0x[0-9a-f]{64}$/u.test(String(catalog.evidence.commitment ?? "")) &&
+    POSITIVE_INTEGER.test(String(catalog.asOfBlock ?? "")) &&
+    /^0x[0-9a-f]{64}$/u.test(String(catalog.asOfBlockHash ?? "")) &&
+    response.headers.get("x-programmable-launch-source") === launchSource &&
     response.headers.get("x-programmable-read-source") ===
-      `${source}+dexscreener` &&
+      `${launchSource}+dexscreener` &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
       generatedAt &&
-    launchIdentity?.custom === "unavailable" &&
+    launchIdentity?.custom === customStatus &&
     ["current", "last-known-good"].includes(launchIdentity?.canonical) &&
-    launchIdentity?.status === "partial" &&
+    ["current", "partial"].includes(launchIdentity?.status) &&
     Number.isSafeInteger(launchIdentity.ageMs) &&
-    launchIdentity.ageMs >= 0;
+    launchIdentity.ageMs >= 0
+  )) return null;
+  return JSON.stringify({
+    source,
+    status: catalog.status,
+    lastIndexedAt: generatedAt,
+    asOfBlock: catalog.asOfBlock,
+    asOfBlockHash: catalog.asOfBlockHash,
+    identityCount: catalog.identityCount,
+    identityCommitment: catalog.identityCommitment,
+    completeness: catalog.completeness,
+    evidence: catalog.evidence,
+    launchSource,
+  });
 }
 
 function exactMarketRead(response, expectedRequestedCount) {
@@ -195,7 +216,8 @@ function exactFdvRanking(response, tokens) {
   if (ranking.status === "partial") {
     return ranking.applied === "qualified-fdv-then-launch-order" &&
       ranking.qualifiedCount > 0 &&
-      ranking.qualifiedCount < ranking.totalCount;
+      ranking.qualifiedCount < ranking.totalCount &&
+      qualified.length === Math.min(tokens.length, ranking.qualifiedCount);
   }
   return ranking.applied === "launch-order" &&
     ranking.qualifiedCount === 0 &&
@@ -221,16 +243,30 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const environment = input.environment ?? process.env;
   const fetchImpl = input.fetchImpl ?? fetch;
   const appendOutput = input.appendOutput ?? appendFileSync;
-  const target = exactOrigin(environment.STAGED_TARGET_URL);
+  const targetKind = input.targetKind ?? "staged";
+  if (targetKind !== "staged" && targetKind !== "production") {
+    throw new Error("Public API smoke target kind is invalid");
+  }
+  const target = exactOrigin(environment.STAGED_TARGET_URL, targetKind);
   const bypass = (environment.VERCEL_AUTOMATION_BYPASS_SECRET ?? "").trim();
-  if (bypass.length < 16) {
+  if (targetKind === "staged" && bypass.length < 16) {
     throw new Error("Public API smoke automation bypass is unavailable");
   }
-  const headers = {
-    "x-vercel-protection-bypass": bypass,
-    "x-vercel-set-bypass-cookie": "false",
-  };
+  const headers = targetKind === "staged"
+    ? {
+        "x-vercel-protection-bypass": bypass,
+        "x-vercel-set-bypass-cookie": "false",
+      }
+    : {};
   const request = (path) => requestJson(target, headers, path, fetchImpl);
+
+  const health = await request("/api/ops/health");
+  if (
+    health.status !== 200 ||
+    health.body?.status !== "ready" ||
+    health.body?.provider?.name !== "bitquery" ||
+    health.body?.provider?.configured !== true
+  ) throw new Error("Configured provider health response is not ready");
 
   const highest = await request(
     "/api/explore?limit=20&page=1&sort=market-cap",
@@ -249,7 +285,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     highest.body?.sortMetric !== "fdv" ||
     highestTokens.length < 1 ||
     !exactExplorePage(highest, highestTokens) ||
-    !exactCatalog(highest) ||
+    exactCatalogSnapshot(highest) === null ||
     !exactMarketRead(highest, highest.body.total) ||
     !exactFdvRanking(highest, highestTokens)
   ) throw new Error("Highest FDV response contract is invalid");
@@ -260,9 +296,14 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     newest.body?.ranking !== undefined ||
     newestTokens.length < 1 ||
     !exactExplorePage(newest, newestTokens) ||
-    !exactCatalog(newest) ||
+    exactCatalogSnapshot(newest) === null ||
     !exactMarketRead(newest, newestTokens.length)
   ) throw new Error("Newest launches response contract is invalid");
+  const highestCatalog = exactCatalogSnapshot(highest);
+  const newestCatalog = exactCatalogSnapshot(newest);
+  if (highestCatalog === null || highestCatalog !== newestCatalog) {
+    throw new Error("Explore catalog changed between ranking reads");
+  }
   const identities = newestTokens.map(exactIdentity);
   if (
     identities.some((identity) => identity === null) ||
@@ -279,10 +320,13 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     !exactSamePageOrder(highest, newest)
   ) throw new Error("Unavailable FDV did not preserve launch order");
 
-  const tokenAddress = highestTokens.find((token) =>
+  const selectedToken = highestTokens.find((token) =>
     ADDRESS.test(String(token?.tokenAddress ?? "").toLowerCase())
-  )?.tokenAddress;
-  if (!tokenAddress) throw new Error("Explore returned no token identity");
+  );
+  const tokenAddress = selectedToken?.tokenAddress;
+  if (!tokenAddress || !selectedToken) {
+    throw new Error("Explore returned no token identity");
+  }
   const detail = await request(
     "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
   );
@@ -290,7 +334,12 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   if (
     detail.status !== 200 ||
     detail.body?.status !== "ready" ||
-    detailToken?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase() ||
+    exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
+    exactCatalogSnapshot({ ...detail, body: {
+      ...detail.body,
+      total: detail.body?.catalog?.identityCount,
+      dataQuality: highest.body?.dataQuality,
+    } }) !== highestCatalog ||
     detail.headers.get("x-programmable-market-provider") !== "dexscreener" ||
     !CATALOG_SOURCES.has(
       detail.headers.get("x-programmable-launch-source"),
@@ -311,6 +360,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     "/api/explore/profile?account=" + encodeURIComponent(profileAccount),
   );
   if (
+    profile.status !== 200 ||
     profile.body?.status !== "ready" ||
     profile.body?.account?.toLowerCase() !== profileAccount.toLowerCase() ||
     !Array.isArray(profile.body?.tokens) ||
@@ -318,22 +368,53 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     !Array.isArray(profile.body?.claims) ||
     !/^(?:0|[1-9][0-9]*)$/u.test(
       String(profile.body?.totals?.claimableWei ?? ""),
-    )
+    ) ||
+    profile.headers.get("x-programmable-launch-source") !== "drpc" ||
+    profile.headers.get("x-programmable-read-source") !== "drpc" ||
+    profile.headers.get("x-programmable-rpc-provider") !== "drpc-primary"
   ) throw new Error("Creator profile and claims response is not ready");
 
   const githubOutput = environment.GITHUB_OUTPUT;
-  if (!githubOutput) throw new Error("GitHub output path is unavailable");
+  if (targetKind === "staged" && !githubOutput) {
+    throw new Error("GitHub output path is unavailable");
+  }
   const marketReadStatus = highest.body.marketRead.status;
-  const chartStatus = "not-probed-independent";
-  appendOutput(
-    githubOutput,
-    [
-      `market_read_status=${marketReadStatus}`,
-      `detail_status=${detailStatus}`,
-      `chart_status=${chartStatus}`,
-    ].join("\n") + "\n",
-    "utf8",
+  const chart = await request(
+    "/api/explore/token/chart?address=" + encodeURIComponent(tokenAddress) +
+      "&range=1d",
   );
+  if (
+    chart.status !== 200 ||
+    chart.body?.schemaVersion !== "programmable.market-chart-unavailable.v1" ||
+    chart.body?.source !== null ||
+    chart.body?.status !== "unavailable" ||
+    chart.body?.reason !== "history-provider-unavailable" ||
+    chart.body?.address?.toLowerCase() !== tokenAddress.toLowerCase() ||
+    chart.body?.range !== "1d" ||
+    chart.headers.get("cache-control") !== "no-store" ||
+    chart.headers.get("x-programmable-data-quality") !== "unavailable" ||
+    chart.headers.get("x-programmable-launch-source") !==
+      highest.body.catalog.source ||
+    chart.headers.get("x-programmable-read-source") !==
+      highest.body.catalog.source ||
+    chart.headers.get("x-programmable-market-provider") !== null ||
+    chart.headers.get("x-programmable-market-source") !== null ||
+    chart.headers.get("x-programmable-price-source") !== null ||
+    chart.headers.get("x-programmable-market-as-of") !== null ||
+    chart.headers.get("x-programmable-valuation-block") !== null
+  ) throw new Error("Token chart interim unavailable contract is invalid");
+  const chartStatus = "unavailable";
+  if (githubOutput) {
+    appendOutput(
+      githubOutput,
+      [
+        `market_read_status=${marketReadStatus}`,
+        `detail_status=${detailStatus}`,
+        `chart_status=${chartStatus}`,
+      ].join("\n") + "\n",
+      "utf8",
+    );
+  }
   const result = {
     status: "verified-staged-static-identity-dexscreener-public-apis",
     catalogSource: highest.body.catalog.source,
@@ -350,6 +431,17 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   };
   process.stdout.write(JSON.stringify(result) + "\n");
   return result;
+}
+
+export function runProductionStaticDexscreenerSmokeV1(input = {}) {
+  return runStagedStaticDexscreenerSmokeV1({
+    ...input,
+    targetKind: "production",
+    environment: {
+      ...(input.environment ?? process.env),
+      STAGED_TARGET_URL: "https://programmable.market/",
+    },
+  });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

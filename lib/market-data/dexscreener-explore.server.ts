@@ -16,6 +16,8 @@ import {
   exploreEntryMarketIdentitiesV1,
 } from "./explore-market-identities";
 
+export const DEXSCREENER_CURRENT_MAXIMUM_AGE_MS = 5 * 60 * 1_000;
+
 export type DexscreenerExploreReadV1 = Readonly<{
   provider: "dexscreener";
   status: "complete" | "partial" | "unavailable";
@@ -50,16 +52,22 @@ export async function readDexscreenerExploreEntriesV1(
   const byIdentity = new Map(
     snapshot.results.map((result) => [identityKey(result), result]),
   );
+  const valuedEntries = entries.map((entry) => valuedEntry(entry, byIdentity));
+  const qualifiedCount = snapshot.results.filter((result) =>
+    result.status === "available" &&
+    result.fdvQualification.status === "qualified" &&
+    dexscreenerObservationFreshnessV1(result.observation.fetchedAt) === "current"
+  ).length;
   return {
-    entries: entries.map((entry) => valuedEntry(entry, byIdentity)),
+    entries: valuedEntries,
     marketRead: {
       provider: "dexscreener",
       status: snapshot.readStatus,
       currency: snapshot.currency,
       requestedCount: snapshot.requestedCount,
       observedCount: snapshot.observedCount,
-      qualifiedCount: snapshot.qualifiedCount,
-      unavailableCount: snapshot.unavailableCount,
+      qualifiedCount,
+      unavailableCount: snapshot.requestedCount - qualifiedCount,
       oldestFetchedAt: snapshot.sourceReadWindow?.oldestFetchedAt ?? null,
       newestFetchedAt: snapshot.sourceReadWindow?.newestFetchedAt ?? null,
     },
@@ -95,17 +103,31 @@ function valuedEntry(
     return unavailableEntry(entry);
   }
   const observation = qualified[0].observation;
+  const freshness = dexscreenerObservationFreshnessV1(observation.fetchedAt);
   const valuation: ExploreValuation = {
     status: "available",
     metric: "fdv",
     supplyBasis: "total",
     currency: "usd",
     valueWad: observation.fdvUsdWad,
-    freshness: "current",
+    freshness,
     source: "dexscreener",
     asOfTime: observation.fetchedAt,
   };
   return { ...entry, valuation };
+}
+
+export function dexscreenerObservationFreshnessV1(
+  fetchedAt: string,
+  nowMs = Date.now(),
+): "current" | "stale" {
+  const fetchedAtMs = Date.parse(fetchedAt);
+  return Number.isFinite(fetchedAtMs) &&
+      Number.isFinite(nowMs) &&
+      nowMs >= fetchedAtMs &&
+      nowMs - fetchedAtMs <= DEXSCREENER_CURRENT_MAXIMUM_AGE_MS
+    ? "current"
+    : "stale";
 }
 
 function unavailableEntry(entry: ExploreEntry): ValuedExploreEntry {

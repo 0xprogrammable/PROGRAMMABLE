@@ -24,7 +24,6 @@ import {
 } from "@/components/token-trade";
 import {
   TokenPriceChart,
-  preloadTokenChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
@@ -2047,11 +2046,6 @@ export function TokenDetailView({ address }: { address: string }) {
     phase: "loading",
     requestKey,
   });
-
-  useEffect(() => {
-    if (!normalizedAddress || preview) return;
-    void preloadTokenChart(normalizedAddress, "1d");
-  }, [normalizedAddress, preview]);
 
   useEffect(() => {
     if (!normalizedAddress || preview) return;

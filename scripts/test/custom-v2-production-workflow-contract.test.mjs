@@ -312,6 +312,10 @@ test("the staged public smoke is a separate bounded script", () => {
   assert.match(source, /response.status === 503 && attempt === 0/u);
   assert.match(source, /exactSamePageOrder\(highest, newest\)/u);
   assert.match(source, /marketProvider: "dexscreener"/u);
-  assert.doesNotMatch(source, /bitquery|drpc|PROGRAMMABLE_WEBSITE_MAINNET_RPC/iu);
+  assert.doesNotMatch(
+    source,
+    /PROGRAMMABLE_WEBSITE_MAINNET_RPC|BITQUERY_API_KEY|runtimeProductionProviderEndpoints|readPrimaryRpc|readBitquery|fetchBitquery/iu,
+  );
+  assert.doesNotMatch(source, /https?:\/\/[^"'`]*(?:drpc|bitquery)/iu);
   assert.doesNotMatch(source, /\/api\/explore\/profile\/claim|\/api\/trade\/prepare/u);
 });

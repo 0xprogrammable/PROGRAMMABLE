@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -113,7 +113,12 @@ function snapshot(results: readonly unknown[], status = "complete") {
 }
 
 describe("Dexscreener Explore adapter", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.clearAllMocks();
+  });
+  afterEach(() => vi.useRealTimers());
 
   it("promotes only one qualified exact-bound observation", async () => {
     const token = entry(1);
@@ -134,6 +139,20 @@ describe("Dexscreener Explore adapter", () => {
       status: "complete",
       qualifiedCount: 1,
     });
+  });
+
+  it("derives freshness from fetchedAt and removes stale FDV qualification", async () => {
+    vi.setSystemTime(Date.parse(NOW) + 5 * 60 * 1_000 + 1);
+    const token = entry(1);
+    mocks.readDex.mockResolvedValue(snapshot([available(token)]));
+    const result = await readDexscreenerExploreEntriesV1([token]);
+    expect(result.entries[0]?.valuation).toMatchObject({
+      status: "available",
+      freshness: "stale",
+      asOfTime: NOW,
+    });
+    expect(result.marketRead.qualifiedCount).toBe(0);
+    expect(result.marketRead.unavailableCount).toBe(1);
   });
 
   it("keeps every identity when coverage is missing or unqualified", async () => {

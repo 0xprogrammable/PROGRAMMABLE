@@ -1580,6 +1580,160 @@ describe("Explore refresh state", () => {
     );
   });
 
+  it("retains all 351 identities for a complete sparse 20-pair Dexscreener read", async () => {
+    const allTokens = Array.from({ length: 351 }, (_, offset) => {
+      const index = offset + 1;
+      const tokenAddress = `0x${index.toString(16).padStart(40, "0")}` as const;
+      const entry = classicEntry({
+        id: `1:${tokenAddress}`,
+        name: `Sparse ${index}`,
+        symbol: `S${index}`,
+        tokenAddress,
+        hookAddress: "0x2222222222222222222222222222222222222222",
+        poolId: `0x${index.toString(16).padStart(64, "0")}` as const,
+        launchedAt: new Date(Date.parse("2026-08-01T00:00:00.000Z") + index)
+          .toISOString(),
+        totalSwapFeeBps: 100,
+        liquidityPath: "meme",
+      });
+      return {
+        ...entry,
+        valuation: offset < 18
+          ? {
+              status: "available" as const,
+              metric: "fdv" as const,
+              supplyBasis: "total" as const,
+              currency: "usd" as const,
+              valueWad: ((351n - BigInt(offset)) * 10n ** 18n).toString(),
+              freshness: "current" as const,
+              source: "dexscreener" as const,
+              asOfTime: "2026-08-16T08:00:00.000Z",
+            }
+          : { status: "unavailable" as const, reason: "source-unavailable" as const },
+      };
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = new URL(String(input), "http://localhost");
+        const page = Number(url.searchParams.get("page") ?? "1");
+        const pageSize = Number(url.searchParams.get("limit") ?? "100");
+        const tokens = allTokens.slice((page - 1) * pageSize, page * pageSize);
+        const available = tokens.filter((token) =>
+          token.valuation.status === "available"
+        ).length;
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens,
+          page,
+          pageSize,
+          total: 351,
+          totalPages: Math.ceil(351 / pageSize),
+          dataQuality: {
+            ...unavailableMarketDataQuality,
+            valuation: {
+              ...unavailableMarketDataQuality.valuation,
+              status: available > 0 ? "partial" : "unavailable",
+              available,
+              unavailable: tokens.length - available,
+            },
+          },
+          marketRead: {
+            provider: "dexscreener",
+            status: "complete",
+            currency: "USD",
+            requestedCount: 351,
+            observedCount: 20,
+            qualifiedCount: 18,
+            unavailableCount: 333,
+            oldestFetchedAt: "2026-08-16T08:00:00.000Z",
+            newestFetchedAt: "2026-08-16T08:00:00.000Z",
+          },
+          ranking: {
+            status: "partial",
+            requested: "fdv",
+            applied: "qualified-fdv-then-launch-order",
+            qualifiedCount: 18,
+            totalCount: 351,
+          },
+        }), {
+          status: 200,
+          headers: { "X-Programmable-Market-Read-Status": "complete" },
+        });
+      },
+    );
+
+    const result = await loadExploreModelDataset(
+      "dexscreener-sparse-351",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+
+    expect(result.tokens).toHaveLength(351);
+    expect(new Set(result.tokens.map((token) => token.id)).size).toBe(351);
+    expect(result.tokens.filter((token) => token.valuation.status === "available"))
+      .toHaveLength(18);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(["complete", "partial"] as const)(
+    "accepts a %s Dexscreener transport read with zero observed pairs",
+    async (status) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({
+          ...unvaluedMarketPayload,
+          dataQuality: unavailableMarketDataQuality,
+          marketRead: {
+            provider: "dexscreener",
+            status,
+            currency: "USD",
+            requestedCount: 1,
+            observedCount: 0,
+            qualifiedCount: 0,
+            unavailableCount: 1,
+            oldestFetchedAt: null,
+            newestFetchedAt: null,
+          },
+        }), {
+          status: 200,
+          headers: { "X-Programmable-Market-Read-Status": status },
+        }),
+      );
+      await expect(loadExplorePayload(
+        `dexscreener-zero-observed-${status}`,
+        new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+      )).resolves.toMatchObject({
+        tokens: [expect.objectContaining({ id: bitqueryMarketEntry.id })],
+        marketRead: { provider: "dexscreener", status, observedCount: 0 },
+      });
+    },
+  );
+
+  it("rejects an unavailable Dexscreener marker that still claims an observed pair", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        ...unvaluedMarketPayload,
+        dataQuality: unavailableMarketDataQuality,
+        marketRead: {
+          provider: "dexscreener",
+          status: "unavailable",
+          currency: "USD",
+          requestedCount: 1,
+          observedCount: 1,
+          qualifiedCount: 0,
+          unavailableCount: 1,
+          oldestFetchedAt: "2026-08-16T08:00:00.000Z",
+          newestFetchedAt: "2026-08-16T08:00:00.000Z",
+        },
+      }), {
+        status: 200,
+        headers: { "X-Programmable-Market-Read-Status": "unavailable" },
+      }),
+    );
+    await expect(loadExplorePayload(
+      "dexscreener-unavailable-observed",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid market read data");
+  });
+
   it("shows launch order when Dexscreener has zero qualified values", async () => {
     const dexPayload = {
       ...unvaluedMarketPayload,

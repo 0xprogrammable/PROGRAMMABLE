@@ -793,13 +793,11 @@ function parseExploreMarketRead(value: unknown): ExploreMarketRead | null {
       (typeof value.newestFetchedAt !== "string" ||
         !Number.isFinite(Date.parse(value.newestFetchedAt))))
   ) return null;
-  const requested = Number(value.requestedCount);
   const observed = Number(value.observedCount);
-  if (
-    (value.status === "complete" && requested > 0 && observed !== requested) ||
-    (value.status === "unavailable" && requested > 0 && observed !== 0) ||
-    (value.status === "partial" && (observed === 0 || observed === requested))
-  ) return null;
+  // Transport completion and pair coverage are independent. A complete
+  // Dexscreener read can honestly observe only a small subset of the known
+  // tokens when the remaining token requests returned no exact pair.
+  if (value.status === "unavailable" && observed !== 0) return null;
   return value as ExploreMarketRead;
 }
 

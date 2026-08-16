@@ -5,13 +5,31 @@ vi.mock("server-only", () => ({}));
 
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
-const mocks = vi.hoisted(() => ({ readCatalog: vi.fn(), readDex: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  readCatalog: vi.fn(),
+  readDex: vi.fn(),
+  identityCommitment: vi.fn(() => `sha256:${"ef".repeat(32)}`),
+  mergeEntries: vi.fn((canonical: readonly unknown[], custom: readonly unknown[]) => [
+    ...canonical,
+    ...custom,
+  ]),
+  customEnabled: vi.fn(() => false),
+  readCustom: vi.fn(),
+}));
 
 vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
   readLastGoodLaunchCatalogV1: mocks.readCatalog,
+  lastGoodLaunchIdentityCommitmentV1: mocks.identityCommitment,
+  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
 }));
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   readDexscreenerExploreEntriesV1: mocks.readDex,
+}));
+vi.mock("../lib/server/custom-launch/public-readiness", () => ({
+  isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
+}));
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1: mocks.readCustom,
 }));
 
 import { GET } from "../app/api/explore/token/route";
@@ -47,6 +65,30 @@ function token(): ExploreEntry {
 }
 
 const entry = token();
+const customAddress = "0x9999999999999999999999999999999999999999" as const;
+const customEntry = {
+  exploreKind: "custom-project",
+  id: `custom:sha256:${"55".repeat(32)}`,
+  name: "Custom Project",
+  symbol: "CUSTOM",
+  links: [],
+  launchedAt: NOW,
+  finalizedAt: NOW,
+  chainId: "1",
+  modelId: "custom-model",
+  customProjectId: `sha256:${"55".repeat(32)}`,
+  customLaunchId: `sha256:${"66".repeat(32)}`,
+  launchingWallet: {
+    namespace: "eip155:1",
+    value: "0x3333333333333333333333333333333333333333",
+  },
+  postLaunchAuthorityInventory: {},
+  postLaunchAuthorityInventoryHash: `sha256:${"77".repeat(32)}`,
+  tokenAddress: customAddress,
+  tokenDecimals: 18,
+  markets: [],
+  launchCategoryProvenance: {},
+} as unknown as ExploreEntry;
 
 function catalog() {
   return {
@@ -97,6 +139,8 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.readCatalog.mockResolvedValue(catalog());
+    mocks.customEnabled.mockReturnValue(false);
+    mocks.readCustom.mockResolvedValue([]);
     mocks.readDex.mockResolvedValue({
       entries: [{
         ...entry,
@@ -113,6 +157,45 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       }],
       marketRead: marketRead("complete"),
     });
+  });
+
+  it("serves an independently verified Custom Registry identity fail-soft", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([customEntry]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...customEntry,
+        valuation: { status: "unavailable", reason: "no-market" },
+      }],
+      marketRead: {
+        ...marketRead("complete"),
+        requestedCount: 0,
+        observedCount: 0,
+        qualifiedCount: 0,
+        unavailableCount: 0,
+      },
+    });
+
+    const response = await GET(request(customAddress));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.customProject).toMatchObject({
+      id: customEntry.id,
+      tokenAddress: customAddress,
+      valuation: { status: "unavailable", reason: "no-market" },
+    });
+    expect(body.token).toBeNull();
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
+  });
+
+  it("keeps a canonical identity visible when the Custom Registry is unavailable", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockRejectedValue(new Error("custom unavailable"));
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect((await json(response)).token.id).toBe(entry.id);
   });
 
   it("serves a known identity with Dexscreener FDV", async () => {

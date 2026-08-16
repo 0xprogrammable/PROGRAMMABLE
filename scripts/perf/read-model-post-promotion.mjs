@@ -25,6 +25,8 @@ import {
 } from "./bitquery-historical-release-gate.mjs";
 import { runtimeProductionProviderEndpoints } from
   "./read-model-provider-binding.mjs";
+import { runProductionStaticDexscreenerSmokeV1 } from
+  "../smoke-static-dexscreener-public-apis.mjs";
 
 const HEALTH_PATH = "/api/ops/health";
 const PRODUCTION_ORIGIN = "https://programmable.market";
@@ -1234,7 +1236,12 @@ export async function verifyProductionDeploymentBinding(input) {
   }));
 }
 
-export async function verifyPostPromotion(input) {
+/**
+ * @deprecated Historical Bitquery/read-model verifier retained only for its
+ * isolated regression tests. The CLI and release runbook call
+ * verifyPostPromotion below, which owns the current Durable + Dex contract.
+ */
+export async function verifyLegacyReadModelPostPromotion(input) {
   const target = new URL(input.targetUrl);
   if (
     target.protocol !== "https:" ||
@@ -1441,13 +1448,68 @@ export async function verifyPostPromotion(input) {
   };
 }
 
+export async function verifyPostPromotion(input) {
+  const target = new URL(input.targetUrl);
+  if (target.toString() !== `${PRODUCTION_ORIGIN}/`) {
+    throw new Error(
+      "post-promotion target must be the programmable.market production origin",
+    );
+  }
+  if (
+    !/^dpl_[A-Za-z0-9]{20,80}$/u.test(input.expectedDeploymentId ?? "") ||
+    !/^[0-9a-f]{40}$/u.test(input.expectedGitHead ?? "") ||
+    !input.token ||
+    !input.teamId ||
+    !input.projectId
+  ) {
+    throw new Error("exact production deployment binding is required");
+  }
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const checks = await verifyProductionDeploymentBinding({
+    targetUrl: target.toString(),
+    expectedDeploymentId: input.expectedDeploymentId,
+    expectedGitHead: input.expectedGitHead,
+    token: input.token,
+    teamId: input.teamId,
+    projectId: input.projectId,
+    fetchImpl,
+  });
+  let publicSurface = false;
+  try {
+    await runProductionStaticDexscreenerSmokeV1({ fetchImpl });
+    publicSurface = true;
+  } catch {
+    // The public result is a closed pass/fail check. Provider bodies and
+    // deployment credentials never enter the release output.
+  }
+  checks.push({
+    id: "production-static-identity-dexscreener-public-apis",
+    status: publicSurface ? "pass" : "fail",
+    detail:
+      "production serves one committed identity boundary with optional exact-pool Dexscreener enrichment and an explicit unavailable chart",
+  });
+  const normalizedChecks = checks.map(({ id, condition, status, detail }) => ({
+    id,
+    status: status ?? (condition ? "pass" : "fail"),
+    detail,
+  }));
+  const failures = normalizedChecks
+    .filter(({ status }) => status !== "pass")
+    .map(({ id, detail }) => ({ id, detail }));
+  return {
+    ok: failures.length === 0,
+    targetUrl: target.toString(),
+    checks: normalizedChecks,
+    failures,
+  };
+}
+
 async function main() {
   const args = argumentsFrom(process.argv.slice(2));
   const result = await retry(() =>
     verifyPostPromotion({
       rootDirectory: process.cwd(),
       targetUrl: args["target-url"],
-      evidencePath: args.evidence,
       expectedDeploymentId: args["deployment-id"],
       expectedGitHead: args["git-head"],
       token: process.env.VERCEL_TOKEN,

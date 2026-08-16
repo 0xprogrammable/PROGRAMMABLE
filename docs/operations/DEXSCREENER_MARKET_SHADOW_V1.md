@@ -5,8 +5,8 @@
 This adapter is server-only market enrichment. It has no authority over launch
 or coin identity and is never called by browser cards. The interim Explore list
 and token-detail routes supply identities from the validated durable launch
-envelope, or from the explicitly partial committed baseline when that envelope
-is unavailable.
+envelope. A missing, invalid or unavailable envelope fails closed; this interim
+does not substitute a smaller static catalog.
 
 The v1 provider priority is intentionally non-composite:
 
@@ -92,6 +92,8 @@ order and reports `unavailable`; it never claims Highest FDV.
 
 This is an interim route adapter, not the durable atomic read-model cutover.
 Launch identity can be stale or partial and is disclosed with `lastIndexedAt`,
-source, block/hash and evidence commitment. Custom identity is unavailable in
-this fast path. Rollback is the previous production commit; there is no DB,
-environment, wallet, or provider-account mutation in this change.
+source, block/hash and evidence commitment. The independent Custom Registry is
+merged only when its public-read lane succeeds; its failure never removes a
+durable identity and is reported as unavailable. Rollback is the previous
+production commit; there is no DB, environment, wallet, or provider-account
+mutation in this change.

@@ -8,9 +8,17 @@ import {
 } from "../../../lib/explore-financial-data";
 import { readDexscreenerExploreEntriesV1 } from
   "../../../lib/market-data/dexscreener-explore.server";
-import { readLastGoodLaunchCatalogV1 } from
+import {
+  lastGoodLaunchIdentityCommitmentV1,
+  mergeLastGoodLaunchCatalogEntriesV1,
+  readLastGoodLaunchCatalogV1,
+} from
   "../../../lib/market-data/last-good-launch-catalog.server";
 import { parseExploreSort } from "../../../lib/onchain/query";
+import { readProductionCustomExploreDirectoryV1 } from
+  "../../../lib/server/custom-launch/explore-directory-v1";
+import { isCustomLaunchRegistryPublicReadEnabled } from
+  "../../../lib/server/custom-launch/public-readiness";
 import type { ExploreSort } from "../../../lib/onchain/types";
 import type { ExploreEntry } from "../../../lib/tokens";
 
@@ -262,7 +270,31 @@ export async function GET(request: NextRequest) {
       socials,
     } as const;
     const catalog = await readLastGoodLaunchCatalogV1();
-    const identityEntries = dedupeExploreEntriesV1(catalog.entries);
+    let customEntries: readonly ExploreEntry[] = [];
+    let customStatus: "current" | "unavailable" = "unavailable";
+    if (isCustomLaunchRegistryPublicReadEnabled()) {
+      try {
+        customEntries = await readProductionCustomExploreDirectoryV1(
+          request.signal,
+        );
+        customStatus = "current";
+      } catch {
+        console.error("Explore Custom Registry read unavailable", {
+          name: "CustomRegistryReadError",
+        });
+      }
+    }
+    const identityEntries = mergeLastGoodLaunchCatalogEntriesV1(
+      catalog.entries,
+      customEntries,
+    );
+    const identityCommitment = lastGoodLaunchIdentityCommitmentV1(
+      catalog,
+      identityEntries,
+    );
+    const launchSource = customStatus === "current"
+      ? `${catalog.source}+registry.custom-launched` as const
+      : catalog.source;
     let paginated: ReturnType<typeof paginateExploreEntriesV1>;
     let marketRead: Awaited<
       ReturnType<typeof readDexscreenerExploreEntriesV1>
@@ -293,7 +325,7 @@ export async function GET(request: NextRequest) {
       canonicalStatus: catalog.status === "current"
         ? "current"
         : "last-known-good",
-      customStatus: "unavailable",
+      customStatus,
       identityAsOfBlock: catalog.asOfBlock,
       referenceBlock: catalog.asOfBlock,
       identityAgeMs: generatedAgeMs(catalog.generatedAt),
@@ -327,7 +359,11 @@ export async function GET(request: NextRequest) {
           asOfBlock: catalog.asOfBlock,
           asOfBlockHash: catalog.asOfBlockHash,
           identityCount: identityEntries.length,
-          completeness: catalog.completeness,
+          identityCommitment,
+          completeness: {
+            ...catalog.completeness,
+            custom: customStatus,
+          },
           evidence: catalog.evidence,
         },
         ...(marketSort
@@ -350,8 +386,8 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control": "public, max-age=0, s-maxage=15",
           "X-Programmable-Data-Quality": dataQuality.status,
-          "X-Programmable-Launch-Source": catalog.source,
-          "X-Programmable-Read-Source": `${catalog.source}+dexscreener`,
+          "X-Programmable-Launch-Source": launchSource,
+          "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
           "X-Programmable-Market-Read-Status": marketRead.status,
           "X-Programmable-Market-Provider": "dexscreener",
           ...(marketRead.observedCount > 0

@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { evaluateReadModelOperationsSourceContracts } from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
-import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
+import { exactCurrentPublicFdvLiquidity, exactExploreValuationSnapshot, exploreContinuationPath, verifyCurrentPublicOnchainEvidenceV1, verifyLegacyReadModelPostPromotion as verifyPostPromotion } from "../../scripts/perf/read-model-post-promotion.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { resolveProductionBinding } from "../../scripts/perf/read-model-production-binding.mjs";
 
@@ -806,13 +806,17 @@ describe("read-model operations source contract", () => {
     },
   );
 
-  it("binds public identity to one dRPC primary and public market reads to Bitquery", () => {
+  it("binds the public fast lane while preserving profile and action RPC boundaries", () => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT);
     expect(result.failures).toEqual([]);
     expect(result.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "ops-public-provider-split-source-contract",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "ops-profile-claim-trade-provider-boundary",
           status: "pass",
         }),
         expect.objectContaining({
@@ -898,8 +902,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a falsely current Custom lane",
-      'customStatus: "unavailable"',
-      'customStatus: "current"',
+      'let customStatus: "current" | "unavailable" = "unavailable"',
+      'let customStatus: "current" | "unavailable" = "current"',
     ],
     [
       "a different market provider",
@@ -992,8 +996,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "token detail that restores Custom Registry as a hidden fallback",
-      "const entry: ExploreEntry | null = canonicalEntry;",
-      "const entry: ExploreEntry | null = canonicalEntry ?? readProductionCustomExploreDirectoryV1();",
+      "const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(",
+      "const entry: ExploreEntry | null = canonicalEntry ?? [/* hidden */].find(",
     ],
   ])("rejects %s", (_label, needle, replacement) => {
     const path = "app/api/explore/token/route.ts";
@@ -1020,7 +1024,7 @@ describe("read-model operations source contract", () => {
       },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-public-provider-split-source-contract",
+      "ops-profile-claim-trade-provider-boundary",
     );
   });
 

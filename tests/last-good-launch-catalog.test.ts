@@ -98,48 +98,23 @@ describe("last-good launch catalog", () => {
     expect(catalog.entries).toHaveLength(1);
   });
 
-  it("falls back to only the 213 provenance-valid committed identities", async () => {
+  it("fails closed when the validated durable catalog is missing", async () => {
     mocks.readDurable.mockResolvedValue({
       status: "unavailable",
       reason: "missing",
       detail: "missing",
     });
-    const catalogModule = await reader();
-    const catalog = await catalogModule.readLastGoodLaunchCatalogV1();
-    expect(catalog).toMatchObject({
-      source: "committed-envio-baseline",
-      status: "partial",
-      generatedAt: "2026-08-01T04:20:58.618Z",
-      completeness: {
-        classic: "last-known-good",
-        stock: "unavailable",
-        custom: "unavailable",
-      },
-      evidence: {
-        kind: "committed-file",
-        commitment:
-          "sha256:2305e0782d4ad34132afbb753e3abb0f22add937f04e3de12d35188e49eb6b36",
-      },
-    });
-    expect(catalog.entries).toHaveLength(213);
-    expect(new Set(catalog.entries.map((entry) => entry.id)).size).toBe(213);
-    expect(new Set(catalog.entries.map((entry) => entry.tokenAddress)).size)
-      .toBe(213);
-    expect(catalog.entries.every((entry) =>
-      entry.exploreKind === "token" && entry.launchModel === "classic"
-    )).toBe(true);
-    expect(catalogModule.LAST_GOOD_LAUNCH_BASELINE_EVIDENCE_V1).toMatchObject({
-      verifiedFallbackCount: 213,
-      advertisedArchiveCount: 265,
-    });
+    const { readLastGoodLaunchCatalogV1 } = await reader();
+    await expect(readLastGoodLaunchCatalogV1()).rejects.toThrow(
+      "Durable launch catalog is missing",
+    );
   });
 
-  it("keeps the committed identities when the Blob read throws", async () => {
+  it("does not invent an identity fallback when the Blob read throws", async () => {
     mocks.readDurable.mockRejectedValue(new Error("blob transport unavailable"));
     const { readLastGoodLaunchCatalogV1 } = await reader();
-    const catalog = await readLastGoodLaunchCatalogV1();
-    expect(catalog.source).toBe("committed-envio-baseline");
-    expect(catalog.status).toBe("partial");
-    expect(catalog.entries).toHaveLength(213);
+    await expect(readLastGoodLaunchCatalogV1()).rejects.toThrow(
+      "blob transport unavailable",
+    );
   });
 });

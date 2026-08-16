@@ -8,13 +8,31 @@ vi.mock("server-only", () => ({}));
 import type { ValuedExploreEntry } from "../lib/explore-financial-data";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
-const mocks = vi.hoisted(() => ({ readCatalog: vi.fn(), readDex: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  readCatalog: vi.fn(),
+  readDex: vi.fn(),
+  identityCommitment: vi.fn(() => `sha256:${"ef".repeat(32)}`),
+  mergeEntries: vi.fn((canonical: readonly unknown[], custom: readonly unknown[]) => [
+    ...canonical,
+    ...custom,
+  ]),
+  customEnabled: vi.fn(() => false),
+  readCustom: vi.fn(),
+}));
 
 vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
   readLastGoodLaunchCatalogV1: mocks.readCatalog,
+  lastGoodLaunchIdentityCommitmentV1: mocks.identityCommitment,
+  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
 }));
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   readDexscreenerExploreEntriesV1: mocks.readDex,
+}));
+vi.mock("../lib/server/custom-launch/public-readiness", () => ({
+  isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
+}));
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1: mocks.readCustom,
 }));
 
 import { GET } from "../app/api/explore/route";
@@ -143,10 +161,41 @@ describe("Explore static identity and Dexscreener market contract", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.readCatalog.mockResolvedValue(catalog());
+    mocks.customEnabled.mockReturnValue(false);
+    mocks.readCustom.mockResolvedValue([]);
     mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
       entries: valued(input),
       marketRead: marketRead({ requested: input.length, qualified: input.length }),
     }));
+  });
+
+  it("merges the independently verified Custom Registry lane when ready", async () => {
+    const custom = token(99);
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([custom]);
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT + 1);
+    expect(body.catalog).toMatchObject({
+      identityCount: TOKEN_COUNT + 1,
+      completeness: { custom: "current" },
+    });
+    expect(body.dataQuality.launchIdentity.custom).toBe("current");
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
+  });
+
+  it("keeps every canonical identity when the Custom Registry lane fails", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockRejectedValue(new Error("custom unavailable"));
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT);
+    expect(body.catalog.completeness.custom).toBe("unavailable");
+    expect(body.dataQuality.launchIdentity.custom).toBe("unavailable");
   });
 
   it("serves last-good identities with exact-source Dexscreener FDV", async () => {
@@ -267,22 +316,17 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(9);
   });
 
-  it("discloses the partial committed fallback and its exact timestamp", async () => {
+  it("discloses a stale validated durable catalog and its exact timestamp", async () => {
     mocks.readCatalog.mockResolvedValueOnce(catalog({
-      source: "committed-envio-baseline",
-      status: "partial",
+      source: "durable-blob",
+      status: "last-known-good",
       generatedAt: "2026-08-01T04:20:58.618Z",
       entries: entries.slice(0, 12),
-      evidence: {
-        kind: "committed-file",
-        commitment:
-          "sha256:2305e0782d4ad34132afbb753e3abb0f22add937f04e3de12d35188e49eb6b36",
-      },
     }));
     const body = await json(await GET(request("sort=newest&limit=9")));
     expect(body.catalog).toMatchObject({
-      source: "committed-envio-baseline",
-      status: "partial",
+      source: "durable-blob",
+      status: "last-known-good",
       lastIndexedAt: "2026-08-01T04:20:58.618Z",
       identityCount: 12,
     });
@@ -303,7 +347,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     },
   );
 
-  it("contains no runtime dRPC, Bitquery or Custom Registry dependency", () => {
+  it("contains no runtime dRPC or Bitquery dependency", () => {
     for (const relative of [
       "../app/api/explore/route.ts",
       "../app/api/explore/token/route.ts",
@@ -311,7 +355,6 @@ describe("Explore static identity and Dexscreener market contract", () => {
       const source = readFileSync(new URL(relative, import.meta.url), "utf8");
       expect(source).not.toMatch(/bitquery/iu);
       expect(source).not.toContain("readPrimaryRpcExploreEntriesV1");
-      expect(source).not.toContain("readProductionCustomExploreDirectoryV1");
       expect(source).toContain("readLastGoodLaunchCatalogV1");
       expect(source).toContain("readDexscreenerExploreEntriesV1");
     }

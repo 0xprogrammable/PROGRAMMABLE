@@ -6,8 +6,16 @@ import {
 } from "../../../../lib/explore-financial-data";
 import { readDexscreenerExploreEntriesV1 } from
   "../../../../lib/market-data/dexscreener-explore.server";
-import { readLastGoodLaunchCatalogV1 } from
+import {
+  lastGoodLaunchIdentityCommitmentV1,
+  mergeLastGoodLaunchCatalogEntriesV1,
+  readLastGoodLaunchCatalogV1,
+} from
   "../../../../lib/market-data/last-good-launch-catalog.server";
+import { readProductionCustomExploreDirectoryV1 } from
+  "../../../../lib/server/custom-launch/explore-directory-v1";
+import { isCustomLaunchRegistryPublicReadEnabled } from
+  "../../../../lib/server/custom-launch/public-readiness";
 import type { ExploreEntry } from "../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +31,8 @@ function canonicalResponseHeaders(input: Readonly<{
   marketAsOf?: string;
   hasDexscreenerPrice: boolean;
   marketStatus: "complete" | "partial" | "unavailable";
-  launchSource: "durable-blob" | "committed-envio-baseline";
+  launchSource: string;
+  lastIndexedAt: string;
 }>) {
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
@@ -31,6 +40,7 @@ function canonicalResponseHeaders(input: Readonly<{
     "X-Programmable-Read-Source": `${input.launchSource}+dexscreener`,
     "X-Programmable-Market-Provider": "dexscreener",
     "X-Programmable-Market-Read-Status": input.marketStatus,
+    "X-Programmable-Identity-Last-Indexed-At": input.lastIndexedAt,
     ...(input.hasDexscreenerPrice
       ? { "X-Programmable-Market-Source": "dexscreener" }
       : {}),
@@ -98,7 +108,63 @@ export async function GET(request: NextRequest) {
     (candidate) => candidate.exploreKind === "token" &&
       tokenAddress(candidate) === address,
   ) ?? null;
-  const entry: ExploreEntry | null = canonicalEntry;
+  let customEntries: readonly ExploreEntry[] = [];
+  let customStatus: "current" | "unavailable" = "unavailable";
+  if (isCustomLaunchRegistryPublicReadEnabled()) {
+    try {
+      customEntries = await readProductionCustomExploreDirectoryV1(
+        request.signal,
+      );
+      customStatus = "current";
+    } catch {
+      console.error("Token detail Custom Registry read unavailable", {
+        name: "CustomRegistryReadError",
+      });
+      if (canonicalEntry === null) {
+        return unavailableResponse({
+          "X-Programmable-Launch-Source": catalog.source,
+          "X-Programmable-Read-Source": `${catalog.source}+registry.custom-launched`,
+          "X-Programmable-Market-Provider": "dexscreener",
+        });
+      }
+    }
+  }
+  let identityEntries: readonly ExploreEntry[];
+  try {
+    identityEntries = mergeLastGoodLaunchCatalogEntriesV1(
+      catalog.entries,
+      customEntries,
+    );
+  } catch {
+    return unavailableResponse({
+      "X-Programmable-Launch-Source": catalog.source,
+      "X-Programmable-Read-Source": `${catalog.source}+registry.custom-launched`,
+      "X-Programmable-Market-Provider": "dexscreener",
+    });
+  }
+  const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(
+    (candidate) => tokenAddress(candidate) === address,
+  ) ?? null;
+  const launchSource = customStatus === "current"
+    ? `${catalog.source}+registry.custom-launched`
+    : catalog.source;
+  const catalogBoundary = {
+    source: catalog.source,
+    status: catalog.status,
+    lastIndexedAt: catalog.generatedAt,
+    asOfBlock: catalog.asOfBlock,
+    asOfBlockHash: catalog.asOfBlockHash,
+    identityCount: identityEntries.length,
+    identityCommitment: lastGoodLaunchIdentityCommitmentV1(
+      catalog,
+      identityEntries,
+    ),
+    completeness: {
+      ...catalog.completeness,
+      custom: customStatus,
+    },
+    evidence: catalog.evidence,
+  };
 
   if (!entry) {
     return NextResponse.json(
@@ -107,13 +173,15 @@ export async function GET(request: NextRequest) {
         token: null,
         customProject: null,
         snapshot: null,
+        catalog: catalogBoundary,
       },
       {
         status: 404,
         headers: canonicalResponseHeaders({
           hasDexscreenerPrice: false,
           marketStatus: "complete",
-          launchSource: catalog.source,
+          launchSource,
+          lastIndexedAt: catalog.generatedAt,
         }),
       },
     );
@@ -137,12 +205,14 @@ export async function GET(request: NextRequest) {
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         snapshot:
           publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
+        catalog: catalogBoundary,
       },
       {
         headers: canonicalResponseHeaders({
           hasDexscreenerPrice,
           marketStatus: market.marketRead.status,
-          launchSource: catalog.source,
+          launchSource,
+          lastIndexedAt: catalog.generatedAt,
           ...(marketAsOf ? { marketAsOf } : {}),
         }),
       },
@@ -163,12 +233,14 @@ export async function GET(request: NextRequest) {
         token: publicEntry.exploreKind === "token" ? publicEntry : null,
         customProject: null,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
+        catalog: catalogBoundary,
       },
       {
         headers: canonicalResponseHeaders({
           hasDexscreenerPrice: false,
           marketStatus: "unavailable",
-          launchSource: catalog.source,
+          launchSource,
+          lastIndexedAt: catalog.generatedAt,
         }),
       },
     );
