@@ -2229,6 +2229,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "Explore catalog pagination contract is invalid",
         "exactMarketRead(highest, completeCatalogTokens)",
         "Initial Newest page is outside the paged catalog",
+        "new Set(highestIdentities).size !== highestIdentities.length",
         "Highest FDV page is outside the paged catalog",
         "exactFdvRanking(highest, highestTokens)",
         "ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount",

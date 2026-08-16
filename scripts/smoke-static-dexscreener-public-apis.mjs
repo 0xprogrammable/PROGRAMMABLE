@@ -517,6 +517,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const highestIdentities = highestTokens.map(exactIdentity);
   if (
     highestIdentities.some((identity) => identity === null) ||
+    new Set(highestIdentities).size !== highestIdentities.length ||
     highestIdentities.some((identity) => !completeIdentitySet.has(identity))
   ) throw new Error("Highest FDV page is outside the paged catalog");
   for (let index = 1; index < completeCatalogTokens.length; index += 1) {

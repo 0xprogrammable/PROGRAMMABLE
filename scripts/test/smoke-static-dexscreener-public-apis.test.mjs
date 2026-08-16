@@ -302,9 +302,28 @@ function pagedCatalogTransform(allEntries, options = {}) {
           },
         };
       }
-      const qualifiedCount = options.phantomHighest && sort === "market-cap"
-        ? 1
-        : 0;
+      if (options.duplicateHighest && sort === "market-cap") {
+        for (let index = 0; index < tokens.length; index += 1) {
+          tokens[index] = {
+            ...tokens[index],
+            valuation: {
+              status: "available",
+              metric: "fdv",
+              supplyBasis: "total",
+              currency: "usd",
+              freshness: "provider-recent",
+              source: "dexscreener",
+              valueWad: String(1_000 - index),
+            },
+          };
+        }
+        tokens[1] = tokens[0];
+      }
+      const qualifiedCount = options.duplicateHighest && sort === "market-cap"
+        ? allEntries.length
+        : options.phantomHighest && sort === "market-cap"
+          ? 1
+          : 0;
       const requestedCount = sort === "market-cap"
         ? allEntries.length
         : tokens.length;
@@ -332,7 +351,15 @@ function pagedCatalogTransform(allEntries, options = {}) {
         },
         ...(sort === "market-cap"
           ? {
-              ranking: qualifiedCount === 0
+              ranking: options.duplicateHighest
+                ? {
+                    status: "complete",
+                    requested: "fdv",
+                    applied: "fdv",
+                    qualifiedCount,
+                    totalCount: allEntries.length,
+                  }
+                : qualifiedCount === 0
                 ? { ...body.ranking, totalCount: allEntries.length }
                 : {
                     status: "partial",
@@ -577,6 +604,24 @@ test("staged smoke rejects a phantom on the Highest FDV page", async () => {
       },
       fetchImpl: stagedFetch(pagedCatalogTransform(allEntries, {
         phantomHighest: true,
+      })),
+      appendOutput: () => undefined,
+    }),
+    /Highest FDV page is outside the paged catalog/u,
+  );
+});
+
+test("staged smoke rejects duplicate identities on the Highest FDV page", async () => {
+  const allEntries = Array.from({ length: 21 }, (_, index) => entry(index));
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(pagedCatalogTransform(allEntries, {
+        duplicateHighest: true,
       })),
       appendOutput: () => undefined,
     }),
