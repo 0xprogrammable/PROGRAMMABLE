@@ -104,8 +104,8 @@ function customEntry(index: number): ExploreEntry {
 }
 
 const catalogBoundary = {
-  source: "durable-blob" as const,
-  launchSource: "durable-blob+registry.custom-launched" as const,
+  source: "envio-classic-v3" as const,
+  launchSource: "envio-classic-v3+registry.custom-launched" as const,
   status: "current" as const,
   lastIndexedAt: "2026-08-14T00:00:00.000Z",
   asOfBlock: "25740000",
@@ -114,12 +114,27 @@ const catalogBoundary = {
   identityCommitment: `sha256:${"cd".repeat(32)}` as `sha256:${string}`,
   completeness: {
     classic: "current" as const,
-    stock: "unavailable" as const,
+    stock: "excluded" as const,
     custom: "current" as const,
   },
+  scope: {
+    included: ["classic-v3", "registry.custom-launched"] as const,
+    excluded: [
+      "classic-v1",
+      "classic-v2",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ] as const,
+    publicCategories: ["classic", "custom"] as const,
+  },
   evidence: {
-    kind: "durable-envelope" as const,
-    commitment: `0x${"ef".repeat(32)}` as `0x${string}`,
+    kind: "envio-indexer-state" as const,
+    deployment: "production-92f6373",
+    sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+    progressBlock: "25740000",
+    progressOccurrenceId: `1:0x${"11".repeat(32)}:0x${"22".repeat(32)}:0`,
+    commitment: `sha256:${"ef".repeat(32)}` as `sha256:${string}`,
   },
 };
 

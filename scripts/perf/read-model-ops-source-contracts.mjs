@@ -701,8 +701,6 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   'value.body.portfolioHistory.status !== "empty"',
   "portfolioHistoryPath: refresh.body.portfolioHistory.path",
 ]);
-const STAGED_DURABLE_REFRESH_SOURCE_SHA256 =
-  "b92a68025e9d3e2d58de47ae71a5e4d1da9a460621191f04eba6e76954afbe29";
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
 }
@@ -1142,10 +1140,6 @@ export function evaluateReadModelOperationsSourceContracts(
     : [];
   const approvedCrons = new Map([
     [
-      APPROVED_OPERATIONS.legacyIndexer.path,
-      APPROVED_OPERATIONS.legacyIndexer.schedule,
-    ],
-    [
       APPROVED_OPERATIONS.customLaunchReconciler.path,
       APPROVED_OPERATIONS.customLaunchReconciler.schedule,
     ],
@@ -1308,16 +1302,15 @@ export function evaluateReadModelOperationsSourceContracts(
     );
   }
   check(
-    "ops-legacy-cron-preserved",
-    crons?.get(APPROVED_OPERATIONS.legacyIndexer.path) ===
-      APPROVED_OPERATIONS.legacyIndexer.schedule &&
+    "ops-legacy-cron-disabled",
+    !crons?.has(APPROVED_OPERATIONS.legacyIndexer.path) &&
       sha256(source(APPROVED_OPERATIONS.legacyIndexer.route)) ===
         expectedDigest(
           APPROVED_OPERATIONS.legacyIndexer.route,
           APPROVED_OPERATIONS.legacyIndexer.sha256,
           expectedSha256Overrides,
         ),
-    "the five-minute legacy route remains byte-bound until indexed-read cutover",
+    "the legacy durable route remains byte-bound but has no production schedule",
   );
   const boundedRefresh = operations?.legacyIndexer?.boundedRefresh;
   const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
@@ -1841,16 +1834,14 @@ export function evaluateReadModelOperationsSourceContracts(
   const publicExplore = source("app/api/explore/route.ts") ?? "";
   const publicToken = source("app/api/explore/token/route.ts") ?? "";
   const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
-  const lastGoodLaunchCatalog =
-    source("lib/market-data/last-good-launch-catalog.server.ts") ?? "";
+  const envioClassicV3Catalog =
+    source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
   const dexscreenerExplore =
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
     source("lib/market-data/dexscreener-shadow.server.ts") ?? "";
   const stagedPublicSmokeScript =
     source("scripts/smoke-static-dexscreener-public-apis.mjs") ?? "";
-  const stagedDurableRefresh =
-    source("scripts/perf/read-model-staged-refresh.mjs") ?? "";
   const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
   const publicClassicProfile =
     source("app/api/profile/classic-v3/route.ts") ?? "";
@@ -1969,16 +1960,16 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedBitquerySmoke = deployWorkflow.indexOf(
     "Smoke staged static identity and Dex public APIs",
   );
-  const stagedCatalogSeed = deployWorkflow.indexOf(
-    "Seed exact staged durable launch catalog",
+  const stagedCatalogProbe = deployWorkflow.indexOf(
+    "Probe exact staged Envio Classic V3 catalog",
   );
-  const stagedCatalogSeedEnd = deployWorkflow.indexOf(
+  const stagedCatalogProbeEnd = deployWorkflow.indexOf(
     "Prove clean candidate carries no Generic signer probe authority",
-    stagedCatalogSeed,
+    stagedCatalogProbe,
   );
-  const stagedCatalogSeedBlock =
-    stagedCatalogSeed >= 0 && stagedCatalogSeedEnd > stagedCatalogSeed
-      ? deployWorkflow.slice(stagedCatalogSeed, stagedCatalogSeedEnd)
+  const stagedCatalogProbeBlock =
+    stagedCatalogProbe >= 0 && stagedCatalogProbeEnd > stagedCatalogProbe
+      ? deployWorkflow.slice(stagedCatalogProbe, stagedCatalogProbeEnd)
       : "";
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
     "Reverify staged candidate binding",
@@ -2050,21 +2041,25 @@ export function evaluateReadModelOperationsSourceContracts(
     "the dRPC launch catalog cache is commitment-bound, singleflight, fresh for less than 60 seconds, and never serves stale data",
   );
   const fastLanePublicProviderContract =
-    includesEverySourceFragment(lastGoodLaunchCatalog, [
-      'getOnchainDeployment("production")',
-      "readDurableExploreModel(deployment, options)",
-      'durable.reason !== "stale"',
-      "throw new Error(`Durable launch catalog is ${durable.reason}`)",
-      'source: "durable-blob"',
-      'kind: "durable-envelope"',
-      "mergeLastGoodLaunchCatalogEntriesV1",
+    includesEverySourceFragment(envioClassicV3Catalog, [
+      "getDataPipelineReleaseBinding()",
+      "createEnvioClient({",
+      '{ model: { _eq: "classic" } }',
+      '{ releaseVersion: { _eq: "classic-v3" } }',
+      '{ isComplete: { _eq: true } }',
+      '{ provenanceValid: { _eq: true } }',
+      "assertLaunchEventBinding(launch, event, release)",
+      'source: "envio-classic-v3" as const',
+      'stock: "excluded" as const',
+      'kind: "envio-indexer-state" as const',
+      "mergeEnvioClassicV3CatalogEntriesV1",
       'entry.exploreKind === "custom-project"',
       "entry.tokenAddress !== undefined || entry.markets.length > 0",
-      "lastGoodLaunchIdentityCommitmentV1",
-      'canonicalSha256("programmable.fast-lane-identity.v1"',
+      "envioClassicV3IdentityCommitmentV1",
+      'canonicalSha256("programmable.envio-classic-v3-identity.v1"',
     ]) &&
-    !/committedBaseline|committed-envio-baseline|productionMainnetRpcPrimary|readPrimaryRpcExploreEntriesV1|readBitquery/iu.test(
-      lastGoodLaunchCatalog,
+    !/readDurableExploreModel|productionMainnetRpcPrimary|readPrimaryRpcExploreEntriesV1|readBitquery/iu.test(
+      envioClassicV3Catalog,
     ) &&
     includesEverySourceFragment(dexscreenerExplore, [
       "exploreEntriesMarketIdentitiesV1(entries)",
@@ -2086,10 +2081,10 @@ export function evaluateReadModelOperationsSourceContracts(
       "const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>()",
     ]) &&
     includesEverySourceFragment(publicExplore, [
-      "readLastGoodLaunchCatalogV1({",
+      "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
-      "mergeLastGoodLaunchCatalogEntriesV1(",
-      "lastGoodLaunchIdentityCommitmentV1(",
+      "mergeEnvioClassicV3CatalogEntriesV1(",
+      "envioClassicV3IdentityCommitmentV1(",
       "readDexscreenerExploreEntriesV1(filtered, {",
       "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
       'let customStatus: "current" | "unavailable" = "unavailable"',
@@ -2106,10 +2101,10 @@ export function evaluateReadModelOperationsSourceContracts(
       publicExplore,
     ) &&
     includesEverySourceFragment(publicToken, [
-      "readLastGoodLaunchCatalogV1({",
+      "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
-      "mergeLastGoodLaunchCatalogEntriesV1(",
-      "lastGoodLaunchIdentityCommitmentV1(",
+      "mergeEnvioClassicV3CatalogEntriesV1(",
+      "envioClassicV3IdentityCommitmentV1(",
       "const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(",
       "readDexscreenerExploreEntriesV1([entry], {",
       '"X-Programmable-Launch-Source": input.launchSource',
@@ -2121,8 +2116,8 @@ export function evaluateReadModelOperationsSourceContracts(
       publicToken,
     ) &&
     includesEverySourceFragment(publicChart, [
-      "readLastGoodLaunchCatalogV1()",
-      "mergeLastGoodLaunchCatalogEntriesV1(",
+      "readEnvioClassicV3CatalogV1({",
+      "mergeEnvioClassicV3CatalogEntriesV1(",
       "readProductionCustomExploreDirectoryV1(request.signal)",
       'let customStatus: "current" | "unavailable" = "unavailable"',
       '`${catalog.source}+registry.custom-launched`',
@@ -2137,7 +2132,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list and token detail use a validated last-good identity catalog plus bounded exact-identity Dexscreener enrichment while profile and action routes retain their committed dRPC semantics",
+    "Explore list and token detail use the validated Envio Classic V3 catalog plus bounded exact-identity Dexscreener enrichment while profile and action routes retain their committed dRPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2209,27 +2204,24 @@ export function evaluateReadModelOperationsSourceContracts(
     "Profile, Claim and Trade retain singular commitment-bound dRPC reads, non-enumerable endpoints, no write authority and no hidden fallback",
   );
   check(
-    "ops-staged-durable-refresh-gate",
-    stagedCatalogSeed >
+    "ops-staged-envio-catalog-gate",
+    stagedCatalogProbe >
       deployWorkflow.indexOf("Resolve exact staged deployment") &&
-      stagedCatalogSeed < stagedBitquerySmoke &&
-      sha256(stagedDurableRefresh) ===
-        STAGED_DURABLE_REFRESH_SOURCE_SHA256 &&
-      STAGED_DURABLE_REFRESH_SOURCE_GUARDS.every((fragment) =>
-        stagedDurableRefresh.includes(fragment)
-      ) &&
-      includesEverySourceFragment(stagedCatalogSeedBlock, [
-        "CRON_SECRET: $\{{ secrets.CRON_SECRET }}",
-        "VERCEL_TOKEN: $\{{ secrets.VERCEL_TOKEN }}",
+      stagedCatalogProbe < stagedBitquerySmoke &&
+      includesEverySourceFragment(stagedCatalogProbeBlock, [
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-        "node scripts/perf/read-model-staged-refresh.mjs",
-        '--target-url "$STAGED_TARGET_URL"',
-        '--deployment-id "$STAGED_DEPLOYMENT_ID"',
-        '--git-head "$GITHUB_SHA"',
-        "result.tokenCount < 1",
+        '"/api/explore?limit=1&page=1&sort=newest"',
+        "response.status !== 200",
+        'body?.catalog?.source !== "envio-classic-v3"',
+        'body.catalog.completeness?.stock !== "excluded"',
+        'body.catalog.evidence?.kind !== "envio-indexer-state"',
+        'body.tokens[0]?.launchModelVersion !== "classic-v3"',
+        "body.total < 1",
       ]) &&
-      !stagedCatalogSeedBlock.includes("        if:"),
-    "every exact staged candidate seeds a non-empty durable catalog through bounded dual-provider prewarm before public Fast-Lane smoke",
+      !stagedCatalogProbeBlock.includes("CRON_SECRET") &&
+      !stagedCatalogProbeBlock.includes("/api/ops/index-v2") &&
+      !stagedCatalogProbeBlock.includes("        if:"),
+    "every exact staged candidate proves a non-empty verified Envio Classic V3 catalog before public Fast-Lane smoke",
   );
   check(
     "ops-protected-public-provider-stage-smoke",

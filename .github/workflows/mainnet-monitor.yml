@@ -1,8 +1,6 @@
-name: Mainnet Monitor
+name: Legacy V2 and Stock mainnet monitor (manual)
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:

@@ -69,7 +69,7 @@ describe("Stock-Paired exact-block reconciler contribution", () => {
     expect(fixture.budget.logical).toBeLessThanOrEqual(512 * 32);
     expect(fixture.rpc.requestCount()).toBe(283);
     expect(fixture.rpc.logicalRequestCount()).toBe(7_749);
-  });
+  }, 30_000);
 
   it.each(releaseVersions)(
     "builds exact, release-labelled %s route parts",

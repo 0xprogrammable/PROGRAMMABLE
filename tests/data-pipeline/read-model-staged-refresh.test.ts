@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from "vitest";
 import * as operationsSourceContracts from "../../scripts/perf/read-model-ops-source-contracts.mjs";
 const {
   evaluateReadModelOperationsSourceContracts,
-  STAGED_DURABLE_REFRESH_SOURCE_GUARDS,
 } = operationsSourceContracts;
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { refreshExactStagedReadModel } from "../../scripts/perf/read-model-staged-refresh.mjs";
@@ -328,7 +327,7 @@ describe("exact staged durable refresh runtime", () => {
   });
 
   it("paces successful prewarm phases without overlapping providers", async () => {
-    const sleepImpl = vi.fn(async (_delayMs: number) => undefined);
+    const sleepImpl = vi.fn(async (delayMs: number) => void delayMs);
     await expect(
       refreshExactStagedReadModel(stagedRefreshInput(stagedFetch(), {
         prewarmPhaseDelayMs: 1_000,
@@ -396,60 +395,28 @@ describe("exact staged durable refresh runtime", () => {
   });
 });
 
-describe("staged durable catalog seed source contract", () => {
-  it("rejects any unreviewed staged refresh verifier bytes", () => {
-    const path = "scripts/perf/read-model-staged-refresh.mjs";
-    const source = readFileSync(resolve(ROOT, path), "utf8");
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: `${source}\n// unreviewed drift\n` },
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-staged-durable-refresh-gate",
-    );
-  });
-
-  it.each(
-    (STAGED_DURABLE_REFRESH_SOURCE_GUARDS as readonly string[]).map(
-      (needle, index) => [index, needle] as const,
-    ),
-  )(
-    "mutation %i removes required staged refresh guard %s",
-    (_index, needle) => {
-      const path = "scripts/perf/read-model-staged-refresh.mjs";
-      const source = readFileSync(resolve(ROOT, path), "utf8");
-      expect(source).toContain(needle);
-      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-        sourceOverrides: {
-          [path]: source.split(needle).join("MUTATED_STAGED_REFRESH_GUARD"),
-        },
-      });
-      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-        "ops-staged-durable-refresh-gate",
-      );
-    },
-  );
-
+describe("staged Envio catalog probe source contract", () => {
   it.each([
     [
-      "drops the cron secret",
+      "drops the exact Envio source",
       (step: string) =>
-        step.replace("          CRON_SECRET: ${{ secrets.CRON_SECRET }}\n", ""),
+        step.replace('            body?.catalog?.source !== "envio-classic-v3" ||\n', ""),
     ],
     [
-      "drops exact Git binding",
+      "allows stock families",
       (step: string) =>
-        step.replace('            --git-head "$GITHUB_SHA" > "$result_path"\n', ""),
+        step.replace('            body.catalog.completeness?.stock !== "excluded" ||\n', ""),
     ],
     [
       "accepts an empty catalog",
       (step: string) =>
-        step.replace("            result.tokenCount < 1\n", ""),
+        step.replace("            !Number.isSafeInteger(body.total) || body.total < 1 ||\n", ""),
     ],
   ])("fails when the workflow %s", (_label, mutate) => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
     const stepStart = workflow.indexOf(
-      "      - name: Seed exact staged durable launch catalog",
+      "      - name: Probe exact staged Envio Classic V3 catalog",
     );
     const stepEnd = workflow.indexOf(
       "      - name: Prove clean candidate carries no Generic signer probe authority",
@@ -464,7 +431,7 @@ describe("staged durable catalog seed source contract", () => {
       },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-staged-durable-refresh-gate",
+      "ops-staged-envio-catalog-gate",
     );
   });
 });

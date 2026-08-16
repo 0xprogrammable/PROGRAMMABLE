@@ -145,10 +145,10 @@ type ExploreRanking = Readonly<{
 }>;
 
 type ExploreCatalogBoundary = Readonly<{
-  source: "durable-blob";
+  source: "envio-classic-v3";
   launchSource:
-    | "durable-blob"
-    | "durable-blob+registry.custom-launched";
+    | "envio-classic-v3"
+    | "envio-classic-v3+registry.custom-launched";
   status: "current" | "last-known-good";
   lastIndexedAt: string;
   asOfBlock: string;
@@ -157,12 +157,27 @@ type ExploreCatalogBoundary = Readonly<{
   identityCommitment: `sha256:${string}`;
   completeness: Readonly<{
     classic: "current" | "last-known-good";
-    stock: "current" | "last-known-good" | "unavailable";
+    stock: "excluded";
     custom: "current" | "unavailable";
   }>;
+  scope: Readonly<{
+    included: readonly ["classic-v3", "registry.custom-launched"];
+    excluded: readonly [
+      "classic-v1",
+      "classic-v2",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ];
+    publicCategories: readonly ["classic", "custom"];
+  }>;
   evidence: Readonly<{
-    kind: "durable-envelope";
-    commitment: `0x${string}`;
+    kind: "envio-indexer-state";
+    deployment: string;
+    sourceCommit: string;
+    progressBlock: string;
+    progressOccurrenceId: string;
+    commitment: `sha256:${string}`;
   }>;
 }>;
 
@@ -871,14 +886,19 @@ function exactIsoTimestamp(value: unknown): value is string {
     new Date(Date.parse(value)).toISOString() === value;
 }
 
+function exactStringArray(value: unknown, expected: readonly string[]) {
+  return Array.isArray(value) && value.length === expected.length &&
+    value.every((item, index) => item === expected[index]);
+}
+
 function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
   if (!isRecord(value) || !isRecord(value.completeness) ||
-    !isRecord(value.evidence)) return null;
+    !isRecord(value.scope) || !isRecord(value.evidence)) return null;
   const expectedLaunchSource = value.completeness.custom === "current"
-    ? "durable-blob+registry.custom-launched"
-    : "durable-blob";
+    ? "envio-classic-v3+registry.custom-launched"
+    : "envio-classic-v3";
   if (
-    value.source !== "durable-blob" ||
+    value.source !== "envio-classic-v3" ||
     value.launchSource !== expectedLaunchSource ||
     !["current", "last-known-good"].includes(String(value.status)) ||
     !exactIsoTimestamp(value.lastIndexedAt) ||
@@ -893,15 +913,34 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     !["current", "last-known-good"].includes(
       String(value.completeness.classic),
     ) ||
-    !["current", "last-known-good", "unavailable"].includes(
-      String(value.completeness.stock),
-    ) ||
+    value.completeness.stock !== "excluded" ||
     !["current", "unavailable"].includes(
       String(value.completeness.custom),
     ) ||
-    value.evidence.kind !== "durable-envelope" ||
+    !exactStringArray(value.scope.included, [
+      "classic-v3",
+      "registry.custom-launched",
+    ]) ||
+    !exactStringArray(value.scope.excluded, [
+      "classic-v1",
+      "classic-v2",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ]) ||
+    !exactStringArray(value.scope.publicCategories, ["classic", "custom"]) ||
+    value.evidence.kind !== "envio-indexer-state" ||
+    typeof value.evidence.deployment !== "string" ||
+    !/^[a-z0-9][a-z0-9-]{0,127}$/u.test(value.evidence.deployment) ||
+    typeof value.evidence.sourceCommit !== "string" ||
+    !/^[0-9a-f]{40}$/u.test(value.evidence.sourceCommit) ||
+    value.evidence.progressBlock !== value.asOfBlock ||
+    typeof value.evidence.progressOccurrenceId !== "string" ||
+    !/^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:[0-9]+$/u.test(
+      value.evidence.progressOccurrenceId,
+    ) ||
     typeof value.evidence.commitment !== "string" ||
-    !/^0x[0-9a-f]{64}$/u.test(value.evidence.commitment)
+    !/^sha256:[0-9a-f]{64}$/u.test(value.evidence.commitment)
   ) return null;
   return value as ExploreCatalogBoundary;
 }

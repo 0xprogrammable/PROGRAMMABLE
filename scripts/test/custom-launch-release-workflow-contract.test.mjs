@@ -90,7 +90,10 @@ function workflowFailures(source) {
   if (!deployJobBlock.includes("actions: read")) {
     failures.push("proof-revalidation-actions-read");
   }
-  if (!deployJobBlock.includes("attestations: read")) {
+  if (
+    !deployJobBlock.includes("attestations: read") &&
+    !deployJobBlock.includes("attestations: write")
+  ) {
     failures.push("proof-revalidation-attestations-read");
   }
   for (const forbidden of [
@@ -129,12 +132,8 @@ function workflowFailures(source) {
     '--target-url "https://programmable.market"',
   );
   requireText(
-    "canonical-attestation-origin",
-    '--production-origin "https://programmable.market"',
-  );
-  requireText(
     "canonical-summary-target",
-    "Production target: https://programmable.market",
+    'echo "- Target: $STAGED_TARGET_URL"',
   );
   if (source.includes("programmable.family")) {
     failures.push("former-production-domain");
@@ -597,7 +596,7 @@ test("workflow contract detects weakened record and stage-only gates", async () 
       "CUSTOM_LAUNCH_PRODUCTION_MODE: enabled",
     ),
     source.replace('--production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"', ""),
-    source.replace('--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"', ""),
+    source.replaceAll('--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"', ""),
     source.replace("--authenticated-canary", ""),
     source.replace("--require-disabled", ""),
     source.replace("--dark-release-evidence-output=$evidence_path", ""),
@@ -611,13 +610,13 @@ test("workflow contract detects weakened record and stage-only gates", async () 
       "custom-launch-dark-release-${{ github.run_id }}-${{ github.run_attempt }}",
       "missing-dark-release-artifact",
     ),
-    source.replace("--skip-domain", ""),
+    source.replaceAll("--skip-domain", ""),
     source.replace('--source-digest "$GITHUB_SHA"', ""),
     source.replace('--signer-digest "$GITHUB_SHA"', ""),
     source.replace("--deny-self-hosted-runners", ""),
     source.replace("      attestations: read\n", ""),
     source.replace(
-      "      attestations: read\n      contents: read\n      deployments: write",
+      "      attestations: write\n      contents: read\n      deployments: write",
       "      contents: read\n      deployments: write",
     ),
     source.replace("run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}", ""),

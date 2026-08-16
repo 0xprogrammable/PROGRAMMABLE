@@ -5,7 +5,7 @@ import { readBoundedResponseText } from "./read-bounded-response.mjs";
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
-const CATALOG_SOURCES = new Set(["durable-blob"]);
+const CATALOG_SOURCES = new Set(["envio-classic-v3"]);
 const CATALOG_STATUSES = new Set([
   "current",
   "last-known-good",
@@ -100,7 +100,10 @@ function exactIdentity(token) {
   if (token.exploreKind === "token") {
     if (
       !ADDRESS.test(String(token.tokenAddress ?? "").toLowerCase()) ||
-      !/^0x[0-9a-f]{64}$/u.test(String(token.poolId ?? "").toLowerCase())
+      !/^0x[0-9a-f]{64}$/u.test(String(token.poolId ?? "").toLowerCase()) ||
+      token.launchModel !== "classic" ||
+      token.launchModelVersion !== "classic-v3" ||
+      token.launchStampProvenance !== undefined
     ) return null;
     return JSON.stringify([
       "token",
@@ -302,10 +305,35 @@ function exactCatalogSnapshot(response) {
     new Date(Date.parse(generatedAt)).toISOString() === generatedAt &&
     catalog.identityCount === response.body?.total &&
     catalog.launchSource === launchSource &&
+    ["current", "last-known-good"].includes(catalog.completeness?.classic) &&
+    catalog.completeness?.stock === "excluded" &&
     ["current", "unavailable"].includes(customStatus) &&
+    JSON.stringify(catalog.scope?.included) === JSON.stringify([
+      "classic-v3",
+      "registry.custom-launched",
+    ]) &&
+    JSON.stringify(catalog.scope?.excluded) === JSON.stringify([
+      "classic-v1",
+      "classic-v2",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ]) &&
+    JSON.stringify(catalog.scope?.publicCategories) ===
+      JSON.stringify(["classic", "custom"]) &&
     /^sha256:[0-9a-f]{64}$/u.test(String(catalog.identityCommitment ?? "")) &&
-    catalog.evidence?.kind === "durable-envelope" &&
-    /^0x[0-9a-f]{64}$/u.test(String(catalog.evidence.commitment ?? "")) &&
+    catalog.evidence?.kind === "envio-indexer-state" &&
+    /^[a-z0-9][a-z0-9-]{0,127}$/u.test(
+      String(catalog.evidence.deployment ?? ""),
+    ) &&
+    /^[0-9a-f]{40}$/u.test(String(catalog.evidence.sourceCommit ?? "")) &&
+    catalog.evidence.progressBlock === catalog.asOfBlock &&
+    /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:[0-9]+$/u.test(
+      String(catalog.evidence.progressOccurrenceId ?? ""),
+    ) &&
+    /^sha256:[0-9a-f]{64}$/u.test(
+      String(catalog.evidence.commitment ?? ""),
+    ) &&
     POSITIVE_INTEGER.test(String(catalog.asOfBlock ?? "")) &&
     /^0x[0-9a-f]{64}$/u.test(String(catalog.asOfBlockHash ?? "")) &&
     response.headers.get("x-programmable-launch-source") === launchSource &&
@@ -328,6 +356,7 @@ function exactCatalogSnapshot(response) {
     identityCount: catalog.identityCount,
     identityCommitment: catalog.identityCommitment,
     completeness: catalog.completeness,
+    scope: catalog.scope,
     evidence: catalog.evidence,
     launchSource,
   });
