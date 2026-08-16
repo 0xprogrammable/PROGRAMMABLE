@@ -26,7 +26,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "lib/onchain/historical-read-rpc.server.ts",
           sha256:
-            "543447b498ef2cfbe7e5fb75eb7457b596a34b9ccc75092a442292991fc262f9",
+            "98ffdd09e07f7fd38ef412d27ece0aed69df6120d1ca910002d882aca1782ca6",
         }),
         Object.freeze({
           path: "lib/onchain/persistent-rpc-cache.server.ts",
@@ -51,6 +51,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
       ]),
       eventFiltersPerRange: 2,
+      historicalRecoveryMaximumLogBlockRange: 500,
       providerPasses: 2,
       requestDeadlineMs: 270_000,
       classicPrewarmStepCount: 32,
@@ -1386,6 +1387,12 @@ export function evaluateReadModelOperationsSourceContracts(
       historicalRpcSource?.includes("secondary: binding.secondary.url") &&
       historicalRpcSource?.includes('primary?.vendorGroup !== "tenderly"') &&
       historicalRpcSource?.includes('secondary?.vendorGroup !== "quicknode"') &&
+      historicalRpcSource?.includes(
+        "const RECOVERY_MAX_LOG_BLOCK_RANGE = 500n;",
+      ) &&
+      historicalRpcSource?.includes(
+        "baseDeployment.logBlockRange < RECOVERY_MAX_LOG_BLOCK_RANGE",
+      ) &&
       historicalRpcSource?.includes(
         "primary.endpointCommitment !== binding.primary.endpointCommitment",
       ) &&

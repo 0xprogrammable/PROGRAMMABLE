@@ -6,6 +6,8 @@ import type { ReadyOnchainDeployment } from "./types";
 import { productionRecoveryMainnetRpcPair } from
   "./website-rpc-providers.server";
 
+const RECOVERY_MAX_LOG_BLOCK_RANGE = 500n;
+
 export class HistoricalReadRpcBindingError extends Error {
   override name = "HistoricalReadRpcBindingError";
 
@@ -52,6 +54,10 @@ export function historicalReadOnchainDeployment(
       ...baseDeployment,
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
+      logBlockRange:
+        baseDeployment.logBlockRange < RECOVERY_MAX_LOG_BLOCK_RANGE
+          ? baseDeployment.logBlockRange
+          : RECOVERY_MAX_LOG_BLOCK_RANGE,
       rpcProviderIds: {
         primary: "tenderly",
         secondary: "quicknode",

@@ -43,8 +43,17 @@ describe("historical read RPC deployment", () => {
     expect(historicalReadOnchainDeployment(deployment, environment)).toMatchObject({
       rpcUrl: TENDERLY_RPC_URL,
       rpcUrlSecondary: QUICKNODE_RPC_URL,
+      logBlockRange: 500n,
       rpcProviderIds: { primary: "tenderly", secondary: "quicknode" },
     });
+  });
+
+  it("caps only recovery log windows and preserves a stricter deployment cap", () => {
+    expect(historicalReadOnchainDeployment({
+      ...deployment,
+      logBlockRange: 499n,
+    }, environment).logBlockRange).toBe(499n);
+    expect(deployment.logBlockRange).toBe(5_000n);
   });
 
   it("rejects the base deployment as authority and restores the bound pair", () => {

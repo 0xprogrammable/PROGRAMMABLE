@@ -18,7 +18,7 @@
         },
         {
           "path": "lib/onchain/historical-read-rpc.server.ts",
-          "sha256": "543447b498ef2cfbe7e5fb75eb7457b596a34b9ccc75092a442292991fc262f9"
+          "sha256": "98ffdd09e07f7fd38ef412d27ece0aed69df6120d1ca910002d882aca1782ca6"
         },
         {
           "path": "lib/onchain/persistent-rpc-cache.server.ts",
@@ -40,6 +40,7 @@
         }
       ],
       "eventFiltersPerRange": 2,
+      "historicalRecoveryMaximumLogBlockRange": 500,
       "providerPasses": 2,
       "requestDeadlineMs": 270000,
       "classicPrewarmStepCount": 32,
