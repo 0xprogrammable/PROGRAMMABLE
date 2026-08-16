@@ -8,7 +8,7 @@
     "tree": "de6b67b73d211515cb844d1543866fbeb2901b0d"
   },
   "genericV2Source": {
-    "repository": "0xprogrammable/programmable-internal",
+    "repository": "0xprogrammable/programmable-open-hook-v2-internal",
     "branch": "main",
     "commit": "0ab53dcc50e3245eb653eacadd10545a6df8d49c",
     "tree": "64503ba709d7f60498588a00d928e5fa2a8f858e",

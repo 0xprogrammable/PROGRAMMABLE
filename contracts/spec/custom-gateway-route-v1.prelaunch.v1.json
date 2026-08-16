@@ -12,7 +12,7 @@
       "tree": "de6b67b73d211515cb844d1543866fbeb2901b0d"
     },
     "genericV2Source": {
-      "repository": "0xprogrammable/programmable-internal",
+      "repository": "0xprogrammable/programmable-open-hook-v2-internal",
       "branch": "main",
       "commit": "0ab53dcc50e3245eb653eacadd10545a6df8d49c",
       "tree": "64503ba709d7f60498588a00d928e5fa2a8f858e",
@@ -66,7 +66,7 @@
     },
     {
       "path": "spec/custom-gateway-route-v1.prelaunch.input.json",
-      "sha256": "sha256:a4a9d29165005e10f8ac76763ba9dc5fd0d7a48a6e1c47f5c7ab074e804e7d5c"
+      "sha256": "sha256:66703cfc1f64d25ea19be6698668bc47e20e57db4b842b82f935bd41c048eaed"
     },
     {
       "path": "src/ProgrammableCreate2GraphDeployerV1.sol",
