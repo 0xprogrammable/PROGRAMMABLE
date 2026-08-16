@@ -75,7 +75,7 @@ select {
     197px 229px,
     263px 181px,
     347px 283px;
-  opacity: 0.78;
+  opacity: 0.54;
 }
 
 .atmosphere-stars-secondary {
@@ -99,7 +99,7 @@ select {
     229px 157px,
     311px 271px,
     389px 197px;
-  opacity: 0.68;
+  opacity: 0.44;
 }
 
 .atmosphere-sparkles i {
@@ -107,8 +107,8 @@ select {
   border-radius: 50%;
   box-shadow: 0 0 2px rgb(255 255 255 / 0.62);
   color: #fff;
-  opacity: 0.3;
-  transform: translateZ(0) scale(0.9);
+  opacity: 0.1;
+  transform: translateZ(0) scale(0.8);
   transform-origin: center;
 }
 
@@ -130,61 +130,64 @@ select {
 
 @keyframes atmosphere-sparkle {
   0%,
-  39%,
+  22%,
+  52%,
   100% {
-    opacity: 0.18;
-    transform: translateZ(0) scale(0.88);
+    opacity: 0.06;
+    transform: translateZ(0) scale(0.76);
   }
 
-  51% {
+  33%,
+  72% {
     opacity: 1;
-    transform: translateZ(0) scale(1.18);
+    transform: translateZ(0) scale(1.24);
   }
 
-  64% {
-    opacity: 0.3;
-    transform: translateZ(0) scale(0.94);
+  43%,
+  83% {
+    opacity: 0.16;
+    transform: translateZ(0) scale(0.88);
   }
 }
 
 @keyframes atmosphere-sparkle-soft {
   0%,
-  31%,
+  36%,
   100% {
-    opacity: 0.18;
-    transform: translateZ(0) scale(0.82);
+    opacity: 0.07;
+    transform: translateZ(0) scale(0.74);
   }
 
-  45% {
-    opacity: 0.9;
-    transform: translateZ(0) scale(1.14);
+  52% {
+    opacity: 0.96;
+    transform: translateZ(0) scale(1.2);
   }
 
-  60% {
-    opacity: 0.28;
-    transform: translateZ(0) scale(0.92);
+  69% {
+    opacity: 0.13;
+    transform: translateZ(0) scale(0.86);
   }
 }
 
 @keyframes atmosphere-sparkle-double {
   0%,
-  14%,
-  43%,
+  18%,
+  48%,
   100% {
-    opacity: 0.18;
-    transform: translateZ(0) scale(0.82);
+    opacity: 0.06;
+    transform: translateZ(0) scale(0.74);
   }
 
-  24%,
-  72% {
-    opacity: 0.96;
-    transform: translateZ(0) scale(1.16);
+  27%,
+  68% {
+    opacity: 1;
+    transform: translateZ(0) scale(1.24);
   }
 
-  34%,
-  84% {
-    opacity: 0.3;
-    transform: translateZ(0) scale(0.94);
+  37%,
+  81% {
+    opacity: 0.14;
+    transform: translateZ(0) scale(0.86);
   }
 }
 
@@ -233,9 +236,13 @@ body:has([data-docs-shell]) .site-header::before {
 
 .wordmark-logo {
   filter: grayscale(1) brightness(0) invert(1);
-  height: 40px;
+  height: 34px;
   object-fit: contain;
-  width: 32px;
+  opacity: 0.9;
+  transition:
+    filter 240ms ease,
+    opacity 220ms ease;
+  width: 27px;
 }
 
 .desktop-nav {
@@ -252,11 +259,16 @@ body:has([data-docs-shell]) .site-header::before {
   border-radius: 0;
   box-shadow: none;
   color: var(--webde-ink);
-  font-size: 18px;
+  filter: none;
+  font-size: 17px;
   font-weight: 500;
   min-height: 48px;
-  opacity: 0.78;
+  opacity: 0.9;
   padding: 0;
+  transition:
+    color 220ms ease,
+    opacity 220ms ease,
+    text-shadow 240ms ease;
 }
 
 .desktop-nav a.active {
@@ -279,9 +291,13 @@ body:has([data-docs-shell]) .site-header::before {
 .header-social-link svg,
 .header-social-link img {
   color: var(--webde-ink);
-  height: 22px;
+  height: 24px;
   opacity: 0.9;
-  width: 22px;
+  transition:
+    color 220ms ease,
+    filter 240ms ease,
+    opacity 220ms ease;
+  width: 24px;
 }
 
 .header-social-logo {
@@ -298,12 +314,16 @@ body:has([data-docs-shell]) .site-header::before {
   border-radius: 0;
   box-shadow: none;
   color: var(--webde-ink);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   height: 48px;
   min-height: 48px;
-  opacity: 1;
+  opacity: 0.9;
   padding: 0 0 0 8px;
+  transition:
+    color 220ms ease,
+    opacity 220ms ease,
+    text-shadow 240ms ease;
 }
 
 .wallet-menu {
@@ -314,6 +334,33 @@ body:has([data-docs-shell]) .site-header::before {
   border-radius: var(--webde-radius-card);
   box-shadow: 0 22px 60px rgb(0 0 0 / 0.55);
   color: var(--webde-ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, -8px, 0) scale(0.98);
+  transform-origin: top right;
+  transition:
+    opacity 320ms ease,
+    transform 420ms var(--webde-ease),
+    visibility 0s linear 420ms;
+  visibility: hidden;
+  will-change: opacity, transform;
+}
+
+.wallet-menu.wallet-menu-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 360ms ease,
+    transform 460ms var(--webde-ease),
+    visibility 0s linear 0s;
+  visibility: visible;
+}
+
+.wallet-menu.wallet-menu-closed {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .wallet-menu-account span,
@@ -332,6 +379,10 @@ body:has([data-docs-shell]) .site-header::before {
   overflow: visible;
 }
 
+.app-frame:has(.landing-page-root) [data-site-footer] {
+  margin-top: clamp(144px, 16vw, 232px);
+}
+
 @keyframes webde-page-enter {
   from {
     opacity: 0;
@@ -342,14 +393,47 @@ body:has([data-docs-shell]) .site-header::before {
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .site-header .desktop-nav a,
+  .site-header .desktop-nav a.active,
+  .site-header .desktop-nav a:hover,
+  .site-header .desktop-nav a.active:hover {
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    color: var(--webde-ink);
+    filter: none;
+  }
+
   .wordmark:hover,
   .desktop-nav a:hover,
   .header-social-link:hover,
   .header-actions .wallet-button:hover {
     background: transparent;
     color: var(--webde-ink);
-    filter: drop-shadow(0 0 7px rgb(255 255 255 / 0.38));
     opacity: 1;
+  }
+
+  .desktop-nav a:hover,
+  .header-actions .wallet-button:hover {
+    text-shadow: 0 0 8px rgb(255 255 255 / 0.48);
+  }
+
+  .wordmark:hover .wordmark-logo {
+    filter: grayscale(1) brightness(0) invert(1)
+      drop-shadow(0 0 5px rgb(255 255 255 / 0.56));
+    opacity: 1;
+  }
+
+  .header-social-link:hover svg,
+  .header-social-link:hover img {
+    color: #fff;
+    filter: drop-shadow(0 0 5px rgb(255 255 255 / 0.62));
+    opacity: 1;
+  }
+
+  .header-social-link:hover .header-social-logo {
+    filter: grayscale(1) contrast(12) brightness(1.35)
+      drop-shadow(0 0 5px rgb(255 255 255 / 0.62));
   }
 
   .wallet-menu > a:hover,
@@ -371,8 +455,8 @@ body:has([data-docs-shell]) .site-header::before {
   }
 
   .wordmark-logo {
-    height: 34px;
-    width: 28px;
+    height: 32px;
+    width: 25px;
   }
 
   .page-width {
@@ -394,5 +478,11 @@ body:has([data-docs-shell]) .site-header::before {
     opacity: 0.42;
     transform: none;
     will-change: auto;
+  }
+
+  .wallet-menu,
+  .wallet-menu.wallet-menu-open,
+  .wallet-menu.wallet-menu-closed {
+    transition-duration: 0.01ms;
   }
 }

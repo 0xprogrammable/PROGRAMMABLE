@@ -7,6 +7,12 @@ const footerSource = readFileSync(
 );
 
 describe("Site footer", () => {
+  it("keeps the landing footer frameless and links Explore to the landing chapter", () => {
+    expect(footerSource).toContain('href: "/#explore"');
+    expect(footerSource).toContain("data-site-footer");
+    expect(footerSource).not.toContain("liquid-glass-surface");
+  });
+
   it("links the public analytics shortcut from Resources", () => {
     expect(footerSource).toContain('href: "/analytics"');
     expect(footerSource).toContain('label: "Analytics"');

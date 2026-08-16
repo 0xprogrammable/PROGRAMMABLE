@@ -81,7 +81,7 @@ describe("Programmable branding assets", () => {
       'src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"',
     );
     expect(css).toMatch(
-      /\.wordmark-logo\s*{[^}]*height: 40px;[^}]*width: 32px;/s,
+      /\.wordmark-logo\s*{[^}]*height: 34px;[^}]*width: 27px;/s,
     );
     expect(css).toMatch(
       /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 48px;[^}]*width: 48px;/s,

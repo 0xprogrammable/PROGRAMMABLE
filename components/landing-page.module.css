@@ -76,7 +76,7 @@
   box-shadow: 0 0 2px rgb(255 255 255 / 0.52);
   color: #fff;
   height: var(--hero-star-size);
-  opacity: 0.2;
+  opacity: 0.12;
   position: absolute;
   transform: scale(0.88);
   transform-origin: center;
@@ -260,6 +260,7 @@
 .exploreChapter {
   min-height: calc(100svh + 16rem);
   padding-top: 52px;
+  scroll-margin-top: 88px;
 }
 
 @keyframes hero-reveal {
@@ -310,20 +311,23 @@
 
 @keyframes hero-star-twinkle {
   0%,
-  34%,
+  23%,
+  52%,
   100% {
-    opacity: 0.14;
-    transform: scale(0.86);
+    opacity: 0.08;
+    transform: scale(0.78);
   }
 
-  47% {
+  34%,
+  73% {
     opacity: 1;
-    transform: scale(1.16);
+    transform: scale(1.22);
   }
 
-  61% {
-    opacity: 0.26;
-    transform: scale(0.94);
+  43%,
+  84% {
+    opacity: 0.2;
+    transform: scale(0.9);
   }
 }
 
@@ -450,6 +454,7 @@
 
   .exploreChapter {
     padding-top: 24px;
+    scroll-margin-top: 72px;
   }
 }
 
