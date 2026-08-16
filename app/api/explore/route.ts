@@ -15,6 +15,8 @@ import {
 } from
   "../../../lib/market-data/envio-classic-v3-catalog.server";
 import { parseExploreSort } from "../../../lib/onchain/query";
+import { safeOperationalRpcError } from
+  "../../../lib/onchain/operational-rpc-failover.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../lib/server/custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
@@ -425,9 +427,7 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    console.error("Explore read failed", {
-      name: error instanceof Error ? error.name : "ExploreReadError",
-    });
+    console.error("Explore read failed", safeOperationalRpcError(error));
     return NextResponse.json(
       { error: "Token data is temporarily unavailable" },
       {

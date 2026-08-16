@@ -7,7 +7,7 @@ import {
   TimeoutError,
 } from "viem";
 
-import type { OnchainDeployment } from "./types";
+import type { MainnetRpcProviderId, OnchainDeployment } from "./types";
 
 const CAPACITY_MESSAGE =
   /(?:monthly[_\s-]*capacity[_\s-]*(?:exceeded|reached)|capacity[_\s-]*(?:exceeded|reached)|rate[_\s-]*limit(?:ed)?|too many requests|request timeout on the free plan,? please upgrade to (?:a )?paid plan)/iu;
@@ -43,6 +43,7 @@ function containsRpcEndpointError(error: unknown) {
 
 function rpcCapacityMessage(error: RpcRequestError) {
   const details = [
+    error.message,
     error.details,
     typeof error.data === "string" ? error.data : undefined,
     error.cause instanceof Error ? error.cause.message : undefined,
@@ -77,7 +78,10 @@ function rpcProviderRoutingUnavailable(error: RpcRequestError) {
  * provider-independent integrity errors remain intact while endpoint-bearing
  * viem errors are redacted before they reach framework logging.
  */
-export function isOperationalRpcFailoverEligible(error: unknown) {
+export function isOperationalRpcFailoverEligible(
+  error: unknown,
+  provider?: MainnetRpcProviderId,
+) {
   return errorChain(error).some((candidate) => {
     if (candidate instanceof OperationalRpcUnavailableError) return true;
     if (
@@ -96,6 +100,7 @@ export function isOperationalRpcFailoverEligible(error: unknown) {
     }
     if (candidate instanceof RpcRequestError) {
       return (
+        (provider === "drpc" && candidate.code === 10) ||
         candidate.code === 429 ||
         candidate.code === -32_005 ||
         rpcCapacityMessage(candidate) ||
@@ -128,15 +133,41 @@ export class OperationalRpcUnavailableError extends Error {
 
 export class OperationalRpcReadError extends Error {
   override name = "OperationalRpcReadError";
+  readonly role: "primary" | "secondary";
+  readonly reason: string;
 
-  constructor() {
+  constructor(
+    role: "primary" | "secondary",
+    reason: string,
+  ) {
     super("Operational RPC read failed");
+    this.role = role;
+    this.reason = reason;
   }
 }
 
-function redactRpcEndpointError(error: unknown) {
+function safeRpcFailureReason(error: unknown) {
+  for (const candidate of errorChain(error)) {
+    if (candidate instanceof HttpRequestError) {
+      return candidate.status === undefined
+        ? "http-network"
+        : `http-${candidate.status}`;
+    }
+    if (candidate instanceof RpcRequestError) {
+      return `rpc-${candidate.code}`;
+    }
+    if (candidate instanceof TimeoutError) return "transport-timeout";
+    if (candidate instanceof SocketClosedError) return "socket-closed";
+  }
+  return "endpoint-error";
+}
+
+function redactRpcEndpointError(
+  error: unknown,
+  role: "primary" | "secondary",
+) {
   return containsRpcEndpointError(error)
-    ? new OperationalRpcReadError()
+    ? new OperationalRpcReadError(role, safeRpcFailureReason(error))
     : error;
 }
 
@@ -153,6 +184,8 @@ export async function withOperationalRpcFailover<
   read: (deployment: Deployment) => Promise<Output>,
 ) {
   const primary = singleRpcDeployment(deployment, deployment.rpcUrl);
+  const primaryProvider = deployment.rpcProviderIds?.primary;
+  const secondaryProvider = deployment.rpcProviderIds?.secondary;
   try {
     return await read(primary);
   } catch (primaryError) {
@@ -160,20 +193,23 @@ export async function withOperationalRpcFailover<
     if (
       !secondaryUrl ||
       secondaryUrl === deployment.rpcUrl ||
-      !isOperationalRpcFailoverEligible(primaryError)
+      !isOperationalRpcFailoverEligible(primaryError, primaryProvider)
     ) {
-      throw redactRpcEndpointError(primaryError);
+      throw redactRpcEndpointError(primaryError, "primary");
     }
 
     try {
       return await read(singleRpcDeployment(deployment, secondaryUrl));
     } catch (secondaryError) {
-      if (isOperationalRpcFailoverEligible(secondaryError)) {
+      if (isOperationalRpcFailoverEligible(
+        secondaryError,
+        secondaryProvider,
+      )) {
         // Do not retain transport errors: framework cache logging serializes
         // nested causes and can otherwise expose authenticated RPC URLs.
         throw new OperationalRpcUnavailableError();
       }
-      throw redactRpcEndpointError(secondaryError);
+      throw redactRpcEndpointError(secondaryError, "secondary");
     }
   }
 }
@@ -181,6 +217,14 @@ export async function withOperationalRpcFailover<
 /** Provider-neutral telemetry fields; endpoint URLs and request bodies stay out. */
 export function safeOperationalRpcError(error: unknown) {
   if (!(error instanceof Error)) return { name: "UnknownError" };
+  if (error instanceof OperationalRpcReadError) {
+    return {
+      name: error.name,
+      category: "read-failed" as const,
+      role: error.role,
+      reason: error.reason,
+    };
+  }
   return {
     name: error.name,
     category: isOperationalRpcFailoverEligible(error)

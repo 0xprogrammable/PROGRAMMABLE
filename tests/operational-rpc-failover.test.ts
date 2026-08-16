@@ -30,6 +30,7 @@ const deployment = {
   stateViewRuntimeCodeHash: `0x${"33".repeat(32)}`,
   rpcUrl: "https://primary.example/rpc-key",
   rpcUrlSecondary: "https://secondary.example/rpc-key",
+  rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
   confirmations: 12n,
   logBlockRange: 5_000n,
 } satisfies ReadyOnchainDeployment;
@@ -128,6 +129,28 @@ describe("operational RPC failover", () => {
     ]);
   });
 
+  it("uses the fixed secondary after dRPC returns its code 10 timeout", async () => {
+    const calls: string[] = [];
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      calls.push(candidate.rpcUrl);
+      if (candidate.rpcUrl === deployment.rpcUrl) {
+        throw rpcFailure("provider timeout", 10);
+      }
+      return "secondary-ready";
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toBe("secondary-ready");
+    expect(calls).toEqual([
+      deployment.rpcUrl,
+      deployment.rpcUrlSecondary,
+    ]);
+    expect(
+      isOperationalRpcFailoverEligible(rpcFailure("provider timeout", 10)),
+    ).toBe(false);
+  });
+
   it("uses the fixed secondary after an exact archive-read limitation", async () => {
     const calls: string[] = [];
     const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
@@ -173,10 +196,13 @@ describe("operational RPC failover", () => {
   });
 
   it.each([
-    httpFailure(400),
-    rpcFailure("execution reverted"),
-    rpcFailure("Invalid parameters were provided", -32602),
-  ])("redacts a non-failover RPC error without rotating providers", async (error) => {
+    [httpFailure(400), "http-400"],
+    [rpcFailure("execution reverted"), "rpc--32000"],
+    [rpcFailure("Invalid parameters were provided", -32602), "rpc--32602"],
+  ])("redacts a non-failover RPC error without rotating providers", async (
+    error,
+    reason,
+  ) => {
     const read = vi.fn(async () => {
       throw error;
     });
@@ -185,6 +211,12 @@ describe("operational RPC failover", () => {
       (candidate) => candidate,
     );
     expect(received).toBeInstanceOf(OperationalRpcReadError);
+    expect(safeOperationalRpcError(received)).toEqual({
+      name: "OperationalRpcReadError",
+      category: "read-failed",
+      role: "primary",
+      reason,
+    });
     expect(JSON.stringify(received)).not.toContain("primary.example");
     expect(JSON.stringify(received)).not.toContain("eth_blockNumber");
     expect(read).toHaveBeenCalledTimes(1);
@@ -200,6 +232,30 @@ describe("operational RPC failover", () => {
       withOperationalRpcFailover(deployment, read),
     ).rejects.toBe(error);
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits only a provider-neutral role and RPC code after secondary failure", async () => {
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      if (candidate.rpcUrl === deployment.rpcUrl) {
+        throw rpcFailure(
+          "Request timeout on the free plan, please upgrade to paid plan",
+        );
+      }
+      throw rpcFailure("provider-specific failure", -32_001, candidate.rpcUrl);
+    });
+
+    const error = await withOperationalRpcFailover(deployment, read).catch(
+      (candidate) => candidate,
+    );
+    expect(safeOperationalRpcError(error)).toEqual({
+      name: "OperationalRpcReadError",
+      category: "read-failed",
+      role: "secondary",
+      reason: "rpc--32001",
+    });
+    expect(JSON.stringify(error)).not.toContain("primary.example");
+    expect(JSON.stringify(error)).not.toContain("secondary.example");
+    expect(JSON.stringify(error)).not.toContain("provider-specific");
   });
 
   it("returns one safe unavailable error when both configured RPCs fail", async () => {
