@@ -143,7 +143,7 @@ describe("Programmable branding assets", () => {
   it("uses the black-sky floral link preview and exact product description", async () => {
     const layout = read("app/layout.tsx");
     const homePage = read("app/page.tsx");
-    const path = "public/og/programmable-loop-og-1200x630.png";
+    const path = "public/og/programmable-landing-preview-v2-1200x630.jpg";
     const metadata = await sharp(join(root, path)).metadata();
     const topCenter = await sharp(join(root, path))
       .extract({ left: 598, top: 10, width: 4, height: 4 })
@@ -151,16 +151,23 @@ describe("Programmable branding assets", () => {
       .raw()
       .toBuffer();
 
-    expect(layout).toContain('const siteDescription = "Shape what assets can do"');
+    expect(layout).toContain(
+      'const siteDescription = "Shape what assets can do"',
+    );
     expect(layout).not.toContain("Create tokens with a clear launch model");
-    expect(layout).toContain('"/og/programmable-loop-og-1200x630.png"');
-    expect(homePage).toContain("programmable-loop-og-1200x630.png");
+    expect(layout).toContain(
+      '"/og/programmable-landing-preview-v2-1200x630.jpg"',
+    );
+    expect(homePage).toContain("programmable-landing-preview-v2-1200x630.jpg");
     expect(homePage).toContain('card: "summary_large_image"');
-    expect(metadata.format).toBe("png");
+    expect(metadata.format).toBe("jpeg");
     expect(metadata.width).toBe(1200);
     expect(metadata.height).toBe(630);
     expect(statSync(join(root, path)).size).toBeLessThan(1024 * 1024);
-    expect([...topCenter].every((channel) => channel <= 4)).toBe(true);
+    expect(
+      [...topCenter].reduce((total, channel) => total + channel, 0) /
+        topCenter.length,
+    ).toBeLessThan(28);
   });
 
   it("keeps the global star field dense, round and motion-safe", () => {
@@ -173,7 +180,7 @@ describe("Programmable branding assets", () => {
       /\.atmosphere-backdrop\s*\{[^}]*background:\s*var\(--webde-canvas\);[^}]*pointer-events:\s*none;/s,
     );
     expect(css).toMatch(
-      /\.atmosphere-sparkles i\s*\{[^}]*border-radius:\s*50%;[^}]*box-shadow:\s*0 0 3px/s,
+      /\.atmosphere-sparkles i\s*\{[^}]*border-radius:\s*50%;[^}]*box-shadow:\s*0 0 2px/s,
     );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,

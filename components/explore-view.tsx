@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Search,
   X as CloseIcon,
 } from "lucide-react";
@@ -22,7 +23,6 @@ import {
   isInterfacePreviewHost,
   useInterfacePreview,
 } from "@/components/interface-preview";
-import { SiteFooter } from "@/components/site-footer";
 import {
   LIVE_DATA_REFRESH_INTERVAL_MS,
   shouldRefreshLiveData,
@@ -1592,12 +1592,14 @@ export function ExploreView({
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
+  const [copyFeedback, setCopyFeedback] = useState("");
   const refreshKey = useLiveDataRefresh({
     enabled: !preview && !loadingOnly,
   });
   const activeExploreContentKey = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultStatusRef = useRef<HTMLParagraphElement>(null);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
   const modelDatasetCache = useRef<{
     key: string;
     payload: ExplorePayload;
@@ -1634,9 +1636,30 @@ export function ExploreView({
       if (activeExploreContentKey.current) {
         abortExplorePayload(activeExploreContentKey.current);
       }
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+      }
     },
     [],
   );
+
+  async function copyContractAddress(token: TokenCard) {
+    if (!token.tokenAddress) return;
+
+    try {
+      await navigator.clipboard.writeText(token.tokenAddress);
+      setCopyFeedback(`${token.name} contract address copied`);
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+      }
+      copyFeedbackTimerRef.current = window.setTimeout(() => {
+        setCopyFeedback("");
+        copyFeedbackTimerRef.current = null;
+      }, 1800);
+    } catch {
+      setCopyFeedback("Contract address could not be copied");
+    }
+  }
 
   useEffect(() => {
     if (normalizedQuery === debouncedQuery) return;
@@ -2001,20 +2024,14 @@ export function ExploreView({
                   <h3 title={token.name}>{token.name}</h3>
                   {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-                <div className={styles.runnerData}>
-                  <span>
-                    <small>{token.valuationMetric ?? "Market cap"}</small>
-                    <strong>{valuationLabel ?? "Unavailable"}</strong>
-                  </span>
-                  {token.tokenAddress ? (
+                {valuationLabel ? (
+                  <div className={styles.runnerData}>
                     <span>
-                      <small>CA</small>
-                      <strong title={token.tokenAddress}>
-                        {`${token.tokenAddress.slice(0, 6)}…${token.tokenAddress.slice(-4)}`}
-                      </strong>
+                      <small>{token.valuationMetric ?? "Market cap"}</small>
+                      <strong>{valuationLabel}</strong>
                     </span>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
               </div>
             </>
           );
@@ -2038,7 +2055,23 @@ export function ExploreView({
                   <span className="sr-only">Launch type: </span>
                   {token.launchCategory}
                 </span>
-                {token.marketStatus ? (
+                {token.tokenAddress ? (
+                  <div className={styles.runnerContract}>
+                    <code title={token.tokenAddress}>
+                      {`${token.tokenAddress.slice(0, 6)}…${token.tokenAddress.slice(-4)}`}
+                    </code>
+                    <button
+                      className={styles.runnerCopyButton}
+                      type="button"
+                      aria-label={`Copy ${token.name} contract address`}
+                      title="Copy contract address"
+                      onClick={() => void copyContractAddress(token)}
+                    >
+                      <Copy aria-hidden="true" size={14} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                ) : null}
+                {token.marketStatus && token.marketStatus !== "Unavailable" ? (
                   <span
                     className={styles.runnerMarketStatus}
                     aria-label={`Market status ${token.marketStatus}`}
@@ -2079,8 +2112,7 @@ export function ExploreView({
   }
 
   return (
-    <>
-      <div className={`${styles.page} explore-page page-width`}>
+    <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
           <h1>Explore Hooks</h1>
         </header>
@@ -2352,6 +2384,10 @@ export function ExploreView({
             {resultLabel}
           </p>
 
+          <p className="sr-only" role="status" aria-live="polite">
+            {copyFeedback}
+          </p>
+
           {displayState.phase === "ready" &&
           (displayState.refreshError || dataQualityMessage) ? (
             <div className="token-refresh-warning" role="status">
@@ -2368,8 +2404,6 @@ export function ExploreView({
 
           {renderTokenState()}
         </section>
-      </div>
-      <SiteFooter />
-    </>
+    </div>
   );
 }

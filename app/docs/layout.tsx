@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
 
-import { SiteFooter } from "@/components/site-footer";
-
 export const metadata: Metadata = {
   title: "Documentation · Programmable",
   description:
@@ -10,10 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function DocsLayout({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <div data-docs-font>{children}</div>
-      <SiteFooter />
-    </>
-  );
+  return <div data-docs-font>{children}</div>;
 }

@@ -11,13 +11,11 @@ describe("landing page contract", () => {
     const explorePage = read("app/explore/page.tsx");
     const navigation = read("components/site-navigation.tsx");
 
-    expect(homePage).toContain('import { LandingPage }');
+    expect(homePage).toContain("import { LandingPage }");
     expect(homePage).toContain("return <LandingPage />");
-    expect(explorePage).toContain('import { ExploreView }');
+    expect(explorePage).toContain("import { ExploreView }");
     expect(explorePage).toContain('canonical: "/explore"');
-    expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore" }',
-    );
+    expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
     expect(navigation).toContain('href="/#intro"');
     expect(homePage).toContain(
       'const pageDescription = "Shape what assets can do";',
@@ -52,7 +50,7 @@ describe("landing page contract", () => {
     expect(landing).toContain(
       'src="/brand/atmosphere/programmable-floral-foreground-v1.avif"',
     );
-    expect(landing).toContain("<h1 id=\"landing-title\">Programmable</h1>");
+    expect(landing).toContain('<h1 id="landing-title">Programmable</h1>');
     expect(landing).toContain("Shape what assets can do");
     expect(landing).toContain('id="intro"');
     expect(landing).toContain('href="#what-is-programmable"');
@@ -96,7 +94,7 @@ describe("landing page contract", () => {
     expect(styles).toContain("align-items: baseline;");
     expect(styles).toContain(".definitionLogoFrame");
     expect(landing).toContain("new IntersectionObserver(");
-    expect(landing).toContain('data-reveal-section');
+    expect(landing).toContain("data-reveal-section");
     expect(landing).not.toContain('addEventListener("wheel"');
     expect(landing).not.toContain('addEventListener("scroll"');
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
@@ -119,7 +117,7 @@ describe("landing page contract", () => {
     );
   });
 
-  it("keeps the star shimmer small and slow while reduced motion disables it", () => {
+  it("keeps the star shimmer small and active while reduced motion disables it", () => {
     const backdrop = read("components/atmosphere-backdrop.tsx");
     const interfaceStyles = read("app/interface.css");
     const finalStyles = read("app/webde-final-ui.css");
@@ -128,7 +126,7 @@ describe("landing page contract", () => {
     expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 24");
     expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(backdrop).toContain("Array.from({ length: LOWER_TWINKLE_COUNT }");
-    expect(backdrop).toContain("const duration = 10.8");
+    expect(backdrop).toContain("const duration = 6.8");
     expect(backdrop).toContain("const size = 0.62");
     expect(interfaceStyles).toMatch(
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
@@ -137,7 +135,7 @@ describe("landing page contract", () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
     );
     expect(finalStyles).toMatch(
-      /\.atmosphere-sparkles i\s*\{[^}]*box-shadow:\s*0 0 3px/s,
+      /\.atmosphere-sparkles i\s*\{[^}]*box-shadow:\s*0 0 2px/s,
     );
     expect(finalStyles).not.toContain("cross");
   });

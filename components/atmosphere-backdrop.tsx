@@ -14,8 +14,8 @@ type SparkleStyle = CSSProperties & {
 function sparkleStyle(index: number, seed: number): SparkleStyle {
   const horizontal = (index * 37.37 + seed * 19.19) % 98;
   const vertical = (index * 61.61 + seed * 11.73) % 96;
-  const duration = 10.8 + ((index * 29 + seed * 7) % 79) / 10;
-  const delay = -((index * 17 + seed * 13) % 121) / 10;
+  const duration = 6.8 + ((index * 29 + seed * 7) % 37) / 10;
+  const delay = -((index * 17 + seed * 13) % 89) / 10;
   const size = 0.62 + ((index * 11 + seed * 3) % 7) / 20;
 
   return {

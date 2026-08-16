@@ -85,7 +85,10 @@ describe("interaction state regressions", () => {
 
     expect(detailSource).toContain('setCopyError("Could not copy address")');
     expect(detailSource).toContain('<p className="toast" role="alert">');
-    expect(exploreSource).not.toContain("Copy contract address");
+    expect(exploreSource).toContain("Copy ${token.name} contract address");
+    expect(exploreSource).toContain(
+      'setCopyFeedback("Contract address could not be copied")',
+    );
   });
 
   it("keeps Explore project-first with compact market metadata", () => {

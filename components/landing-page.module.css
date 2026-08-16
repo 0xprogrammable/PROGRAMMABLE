@@ -43,15 +43,52 @@
 }
 
 .heroArtwork::after {
-  background: linear-gradient(180deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.02) 56%, rgb(0 0 0 / 0.2));
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0.04),
+    rgb(0 0 0 / 0.02) 56%,
+    rgb(0 0 0 / 0.2)
+  );
   content: "";
   inset: 0;
   position: absolute;
+  z-index: 3;
 }
 
 .heroGarden {
   object-fit: cover;
   object-position: center bottom;
+}
+
+.heroTwinkles {
+  height: 72%;
+  inset: 0 0 auto;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  z-index: 2;
+}
+
+.heroTwinkles i {
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 2px rgb(255 255 255 / 0.52);
+  color: #fff;
+  height: var(--hero-star-size);
+  opacity: 0.2;
+  position: absolute;
+  transform: scale(0.88);
+  transform-origin: center;
+  width: var(--hero-star-size);
+}
+
+.heroTwinkles i:nth-child(5n + 2) {
+  color: #e8f0ff;
+}
+
+.heroTwinkles i:nth-child(7n + 3) {
+  color: #fff1c9;
 }
 
 .heroContent {
@@ -111,7 +148,9 @@
   min-height: 52px;
   padding: 6px 12px;
   position: absolute;
-  text-shadow: 0 1px 2px #000, 0 0 20px #000;
+  text-shadow:
+    0 1px 2px #000,
+    0 0 20px #000;
   transform: translateX(-50%);
   white-space: nowrap;
   z-index: 3;
@@ -175,7 +214,9 @@
   text-decoration-color: var(--webde-dim);
   text-decoration-thickness: 1px;
   text-underline-offset: 6px;
-  transition: color 180ms var(--webde-ease), text-decoration-color 180ms var(--webde-ease);
+  transition:
+    color 180ms var(--webde-ease),
+    text-decoration-color 180ms var(--webde-ease);
 }
 
 .definitionColumns {
@@ -267,6 +308,25 @@
   }
 }
 
+@keyframes hero-star-twinkle {
+  0%,
+  34%,
+  100% {
+    opacity: 0.14;
+    transform: scale(0.86);
+  }
+
+  47% {
+    opacity: 1;
+    transform: scale(1.16);
+  }
+
+  61% {
+    opacity: 0.26;
+    transform: scale(0.94);
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .scrollCue:hover,
   .docsLink:hover,
@@ -280,31 +340,36 @@
   .heroLogo,
   .hero h1,
   .heroContent > p {
-    animation: hero-reveal 900ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation: hero-reveal 1700ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 
   .heroLogo {
-    animation-delay: 80ms;
+    animation-delay: 160ms;
   }
 
   .hero h1 {
-    animation-delay: 150ms;
+    animation-delay: 340ms;
   }
 
   .heroContent > p {
-    animation-delay: 220ms;
+    animation-delay: 520ms;
   }
 
   .scrollCue {
-    animation: cue-reveal 800ms cubic-bezier(0.23, 1, 0.32, 1) 300ms both;
+    animation: cue-reveal 1400ms cubic-bezier(0.23, 1, 0.32, 1) 900ms both;
+  }
+
+  .heroTwinkles i {
+    animation: hero-star-twinkle var(--hero-star-duration)
+      cubic-bezier(0.37, 0, 0.63, 1) var(--hero-star-delay) infinite;
   }
 
   .page[data-reveal-ready="true"] .revealSection {
     opacity: 0;
     transform: translate3d(0, 28px, 0);
     transition:
-      opacity 850ms cubic-bezier(0.23, 1, 0.32, 1),
-      transform 850ms cubic-bezier(0.23, 1, 0.32, 1);
+      opacity 1450ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 1450ms cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   .page[data-reveal-ready="true"] .revealSection[data-visible="true"] {
@@ -417,5 +482,11 @@
 
   .scrollCue span:last-child {
     animation: none;
+  }
+
+  .heroTwinkles i {
+    animation: none;
+    opacity: 0.44;
+    transform: none;
   }
 }

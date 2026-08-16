@@ -22,7 +22,7 @@ const plexMono = IBM_Plex_Mono({
 const siteUrl = new URL("https://programmable.market");
 const siteDescription = "Shape what assets can do";
 const socialImageUrl = new URL(
-  "/og/programmable-loop-og-1200x630.png",
+  "/og/programmable-landing-preview-v2-1200x630.jpg",
   siteUrl,
 );
 
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
       {
         url: "/favicon-warm-ivory-v1-16x16.png",
         sizes: "16x16",
-        type: "image/png",
+        type: "image/jpeg",
       },
       {
         url: "/favicon-warm-ivory-v1-32x32.png",
