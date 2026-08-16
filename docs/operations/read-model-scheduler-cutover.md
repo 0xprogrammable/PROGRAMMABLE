@@ -101,9 +101,21 @@ Before this workflow is enabled, turn off **Auto-assign Custom Production
 Domains** for the Vercel project. Git-connected production pushes must create
 deployments without moving `programmable.market`. The reviewed workflow is
 stage-only and must never call `vercel promote`; only the reviewed manual
-operator sequence below may promote after the real-block SLA gate. The workflow
-records the current deployment before staging and fails if Vercel has already
-moved production to the candidate commit.
+operator sequence below may promote after exactly one reviewed promotion-
+eligibility branch succeeds. The workflow records the current deployment before
+staging and fails if Vercel has already moved production to the candidate
+commit.
+
+The real-block SLA remains mandatory before any Projector, database, Custom V2,
+Registry V2 or indexed-public cutover. The only exception is the separately
+reviewed legacy Durable-Blob plus Dexscreener recovery branch below. That branch
+cannot activate any of those systems.
+
+### Full Projector and indexed-read cutover order
+
+The following sequence is the full-cutover branch. It is not required for a
+strictly legacy recovery release whose exact attested handoff passes the narrow
+exception gate below.
 
 1. Produce and review the deterministic hosted database plan, then apply and
    verify every ordered `supabase/migrations/*.sql` file at the exact reviewed
@@ -158,7 +170,7 @@ it never emits the secret, signatures, nonces or payload. A mismatch between
 the protected GitHub secret and the Vercel runtime secret therefore fails the
 stage without disclosing either value.
 
-### Real-block SLA promotion gate
+### Full-cutover real-block SLA promotion gate
 
 The HMAC canary above proves only route authentication. Its synthetic auth-only
 payload cannot satisfy the latency gate and must never be reported as live-data
@@ -233,10 +245,62 @@ npm run perf:read-model:real-block-sla -- \
   --target-url "$STAGED_TARGET_URL"
 ```
 
+### Promotion eligibility branches
+
+Run exactly one promotion-eligibility branch and review its exact immutable
+evidence before continuing to the shared pre-promotion binding below:
+
+1. **Full Projector/indexed-public cutover:** run the real-block capture operator
+   and real-block SLA gate above. This branch is mandatory whenever a Projector,
+   database, Custom V2, Registry V2 or indexed-public activation is in scope.
+2. **Legacy Durable-Blob plus Dexscreener recovery only:** dispatch the exact
+   production commit with `legacy_recovery_promotion_review=true`. All four
+   launch inputs (`custom_launch_public_enablement`,
+   `custom_launch_dark_release`, `custom_v2_registry_live` and
+   `custom_v2_generic_public_read_enabled`) must be `false`; every optional
+   Custom V2 input must be empty. The pulled Vercel runtime must also show every
+   Projector, indexed-read, Custom Launch and Custom Registry flag disabled.
+   The workflow must attest a nonempty Durable-Blob seed, the static-identity
+   Dexscreener public smoke, Custom V2 in `prelaunch`/`disabled` mode and the
+   final exact staged-deployment binding.
+
+Download the handoff artifact and its Sigstore bundle from the exact Stage run.
+Verify provenance against the production workflow and then verify every frozen
+identity in the handoff. The handoff expires after two hours:
+
+```sh
+gh attestation verify "$LEGACY_RECOVERY_HANDOFF" \
+  --bundle "$LEGACY_RECOVERY_BUNDLE" \
+  --repo 0xprogrammable/programmable \
+  --signer-workflow 0xprogrammable/programmable/.github/workflows/deploy-production.yml \
+  --source-ref refs/heads/production \
+  --source-digest "$GITHUB_SHA" \
+  --signer-digest "$GITHUB_SHA" \
+  --deny-self-hosted-runners
+
+npm run perf:read-model:legacy-recovery-promotion -- \
+  --handoff "$LEGACY_RECOVERY_HANDOFF" \
+  --expected-commit "$GITHUB_SHA" \
+  --expected-tree "$GITHUB_TREE" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --target-url "$STAGED_TARGET_URL" \
+  --project-id "$VERCEL_PROJECT_ID" \
+  --rollback-deployment-id "$PREVIOUS_DEPLOYMENT_ID" \
+  --rollback-git-head "$PREVIOUS_GIT_HEAD" \
+  --run-id "$STAGE_RUN_ID" \
+  --run-attempt "$STAGE_RUN_ATTEMPT"
+```
+
+This exception authorizes review of the exact staged legacy recovery deployment
+only. It does not authorize Projector, database, Custom V2, Registry V2, or
+indexed-public cutover. If any corresponding launch or runtime flag is active,
+ambiguous or newly requested, stop and use the full real-block SLA branch.
+
 The staging workflow stops here and records the exact deployment ID, URL and
-previous production binding. Only after the command above succeeds, reverify
-the same immutable deployment immediately before the manual promotion, then
-verify the production binding and public routes immediately afterward:
+previous production binding. Only after exactly one eligibility branch above
+succeeds, reverify the same immutable deployment immediately before the manual
+promotion, then verify the production binding and public routes immediately
+afterward:
 
 ```sh
 test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"

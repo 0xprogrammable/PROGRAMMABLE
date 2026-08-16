@@ -711,6 +711,10 @@ describe("read-model operations source contract", () => {
           id: "ops-obsolete-public-read-gates-absent",
           status: "pass",
         }),
+        expect.objectContaining({
+          id: "ops-legacy-recovery-promotion-exception-binding",
+          status: "pass",
+        }),
       ]),
     );
   });
@@ -1140,6 +1144,94 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("rejects a legacy recovery review selector that defaults on", () => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const drifted = workflow.replace(
+      /(legacy_recovery_promotion_review:[\s\S]{0,280}?default:) false/u,
+      "$1 true",
+    );
+    expect(drifted).not.toBe(workflow);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-recovery-promotion-exception-binding",
+    );
+  });
+
+  it("rejects a legacy recovery handoff that accepts an empty durable seed", () => {
+    const path =
+      "scripts/perf/read-model-legacy-recovery-promotion-gate.mjs";
+    const gate = readFileSync(resolve(ROOT, path), "utf8");
+    const drifted = gate.replace("seed.tokenCount < 1", "seed.tokenCount < 0");
+    expect(drifted).not.toBe(gate);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+      expectedSha256Overrides: {
+        [path]: createHash("sha256").update(drifted).digest("hex"),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-recovery-promotion-exception-binding",
+    );
+  });
+
+  it("rejects a legacy exception that weakens the Projector and indexed-public SLA boundary", () => {
+    const path = "config/read-model-operations.v1.json";
+    const manifest = JSON.parse(
+      readFileSync(resolve(ROOT, path), "utf8"),
+    ) as Record<string, unknown>;
+    const releaseGates = manifest.releaseGates as Record<string, unknown>;
+    const realBlockSla = releaseGates.realBlockSla as Record<string, unknown>;
+    const legacyException = releaseGates.legacyRecoveryPromotionException as Record<
+      string,
+      unknown
+    >;
+    const drifted = JSON.stringify({
+      ...manifest,
+      releaseGates: {
+        ...releaseGates,
+        realBlockSla: {
+          ...realBlockSla,
+          requiredBeforeProjectorDatabaseOrIndexedPublicCutover: false,
+        },
+        legacyRecoveryPromotionException: {
+          ...legacyException,
+          realBlockSlaRequiredForProjectorDatabaseOrIndexedPublicCutover: false,
+        },
+      },
+    });
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-config-schema",
+        "ops-real-block-sla-gate-binding",
+        "ops-legacy-recovery-promotion-exception-binding",
+      ]),
+    );
+  });
+
+  it("rejects a legacy promotion runbook without exact attestation and handoff verification", () => {
+    const path = "docs/operations/read-model-scheduler-cutover.md";
+    const runbook = readFileSync(resolve(ROOT, path), "utf8");
+    const drifted = runbook
+      .replace("gh attestation verify", "gh attestation inspect")
+      .replace(
+        "npm run perf:read-model:legacy-recovery-promotion --",
+        "npm run perf:read-model:legacy-recovery-promotion-skipped --",
+      );
+    expect(drifted).not.toBe(runbook);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-recovery-promotion-exception-binding",
+    );
+  });
+
   it("binds the bounded exclusive real-block SLA operator before promotion", () => {
     const operatorPath = "scripts/perf/read-model-real-block-sla-operator.mjs";
     const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
@@ -1195,9 +1287,12 @@ describe("read-model operations source contract", () => {
       },
       expectedSha256Overrides: fixtureDigests(),
     });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual([
-      "ops-post-promotion-binding",
-    ]);
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-legacy-recovery-promotion-exception-binding",
+        "ops-post-promotion-binding",
+      ]),
+    );
   });
 
   it("fails when only the scheduler runbook real-block SLA command is missing", () => {

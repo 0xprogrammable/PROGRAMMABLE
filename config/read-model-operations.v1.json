@@ -306,6 +306,7 @@
     },
     "realBlockSla": {
       "requiredBeforeProductionPromotion": true,
+      "requiredBeforeProjectorDatabaseOrIndexedPublicCutover": true,
       "activity": "organic-stream-block-no-signing-or-spending",
       "maximumDeliveryToFirstVisibleMs": 10000,
       "script": {
@@ -315,6 +316,48 @@
       "schema": {
         "path": "config/read-model-real-block-sla-db-attestation.schema.json",
         "sha256": "73d78c27c6b8dc311dd50911bd4f1b4c2c44e967fd53aa5b415f566e264b69da"
+      }
+    },
+    "legacyRecoveryPromotionException": {
+      "releaseLane": "legacy-durable-blob-dex-recovery",
+      "realBlockSlaRequiredForProjectorDatabaseOrIndexedPublicCutover": true,
+      "projectorDatabaseOrIndexedPublicCutoverAuthorized": false,
+      "launchControlInputs": [
+        "custom_launch_public_enablement",
+        "custom_launch_dark_release",
+        "custom_v2_registry_live",
+        "custom_v2_generic_public_read_enabled"
+      ],
+      "requiredLaunchControlValue": false,
+      "requiredRuntimeDisabledFlags": [
+        "INDEXED_EXPLORE_LIST_READS_ENABLED",
+        "INDEXED_EXPLORE_TOKEN_READS_ENABLED",
+        "INDEXED_EXPLORE_CHART_READS_ENABLED",
+        "INDEXED_CREATOR_PROFILE_READS_ENABLED",
+        "INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED",
+        "INDEXED_LAUNCH_LOOKUP_ENABLED",
+        "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
+        "INDEXED_READ_SHADOW_COMPARE_ENABLED",
+        "PROGRAMMABLE_PROJECTOR_ACTIVE",
+        "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
+        "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED",
+        "PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED"
+      ],
+      "requiredStageEvidence": [
+        "nonempty-durable-blob-seed",
+        "static-identity-dexscreener-public-smoke",
+        "custom-v2-prelaunch-disabled",
+        "final-staged-deployment-binding"
+      ],
+      "handoff": {
+        "schemaVersion": "programmable.legacy-recovery-stage-handoff.v1",
+        "maximumAgeMs": 7200000,
+        "script": {
+          "path": "scripts/perf/read-model-legacy-recovery-promotion-gate.mjs",
+          "sha256": "f042999792efceaa55f4752bb63309726a09908f214c002fb1af6f349780c589"
+        },
+        "workflow": ".github/workflows/deploy-production.yml",
+        "attested": true
       }
     }
   },

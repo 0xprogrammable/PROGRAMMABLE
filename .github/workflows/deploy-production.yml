@@ -53,6 +53,11 @@ on:
         required: false
         default: ""
         type: string
+      legacy_recovery_promotion_review:
+        description: Emit an attested legacy Blob plus Dex recovery promotion handoff; this never promotes
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -75,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      PRODUCTION_VERIFY_MODE: ${{ (inputs.custom_v2_registry_live || inputs.custom_v2_generic_public_read_enabled || inputs.custom_v2_detail_record_hash != '' || inputs.custom_v2_authenticated_ingress_evidence_sha256 != '' || inputs.custom_v2_generic_signer_probe_expected_json != '' || inputs.custom_v2_generic_signer_probe_expected_sha256 != '') && 'custom-v2-release' || 'change' }}
+      PRODUCTION_VERIFY_MODE: ${{ (inputs.legacy_recovery_promotion_review || inputs.custom_v2_registry_live || inputs.custom_v2_generic_public_read_enabled || inputs.custom_v2_detail_record_hash != '' || inputs.custom_v2_authenticated_ingress_evidence_sha256 != '' || inputs.custom_v2_generic_signer_probe_expected_json != '' || inputs.custom_v2_generic_signer_probe_expected_sha256 != '') && 'custom-v2-release' || 'change' }}
     outputs:
       verified_sha: ${{ steps.verify-proof.outputs.verified_sha }}
       verified_tree: ${{ steps.verify-proof.outputs.verified_tree }}
@@ -286,6 +291,38 @@ jobs:
           --dark-release-requested "$CUSTOM_LAUNCH_DARK_RELEASE_REQUESTED"
           --production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Gate explicit legacy recovery promotion-review lane
+        id: legacy-recovery-policy
+        if: inputs.legacy_recovery_promotion_review
+        env:
+          CUSTOM_LAUNCH_PUBLIC_ENABLEMENT: ${{ inputs.custom_launch_public_enablement }}
+          CUSTOM_LAUNCH_DARK_RELEASE: ${{ inputs.custom_launch_dark_release }}
+          CUSTOM_V2_REGISTRY_LIVE: ${{ inputs.custom_v2_registry_live }}
+          CUSTOM_V2_GENERIC_PUBLIC_READ_ENABLED: ${{ inputs.custom_v2_generic_public_read_enabled }}
+          CUSTOM_V2_DETAIL_RECORD_HASH: ${{ inputs.custom_v2_detail_record_hash }}
+          CUSTOM_V2_AUTHENTICATED_INGRESS_EVIDENCE_SHA256: ${{ inputs.custom_v2_authenticated_ingress_evidence_sha256 }}
+          CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_JSON: ${{ inputs.custom_v2_generic_signer_probe_expected_json }}
+          CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_SHA256: ${{ inputs.custom_v2_generic_signer_probe_expected_sha256 }}
+          CUSTOM_LAUNCH_CONFIGURED_ENABLEMENT: ${{ steps.custom-launch-policy.outputs.configured_enablement }}
+          CUSTOM_LAUNCH_STAGING_MODE: ${{ steps.custom-launch-policy.outputs.staging_mode }}
+          VERIFIED_CUSTOM_V2: ${{ needs.release-gate.outputs.verified_custom_v2 }}
+          VERIFICATION_MODE: ${{ needs.release-gate.outputs.verification_mode }}
+        run: |
+          set -euo pipefail
+          test "$CUSTOM_LAUNCH_PUBLIC_ENABLEMENT" = false
+          test "$CUSTOM_LAUNCH_DARK_RELEASE" = false
+          test "$CUSTOM_V2_REGISTRY_LIVE" = false
+          test "$CUSTOM_V2_GENERIC_PUBLIC_READ_ENABLED" = false
+          test -z "$CUSTOM_V2_DETAIL_RECORD_HASH"
+          test -z "$CUSTOM_V2_AUTHENTICATED_INGRESS_EVIDENCE_SHA256"
+          test -z "$CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_JSON"
+          test -z "$CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_SHA256"
+          test "$CUSTOM_LAUNCH_CONFIGURED_ENABLEMENT" = false
+          test "$CUSTOM_LAUNCH_STAGING_MODE" = generic-disabled
+          test "$VERIFIED_CUSTOM_V2" = true
+          test "$VERIFICATION_MODE" = custom-v2-release
+          echo "review_lane=verified" >> "$GITHUB_OUTPUT"
 
       - name: Capture current production rollback target
         id: production-before
@@ -695,7 +732,7 @@ jobs:
           }
           appendFileSync(
             process.env.GITHUB_OUTPUT,
-            `block_number=${result.refreshBlockNumber}\ntoken_count=${result.tokenCount}\n`,
+            `block_number=${result.refreshBlockNumber}\ntoken_count=${result.tokenCount}\nresult_path=${process.env.RESULT_PATH}\n`,
           );
           NODE
 
@@ -1096,7 +1133,11 @@ jobs:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          node scripts/smoke-static-dexscreener-public-apis.mjs
+          set -euo pipefail
+          result_path="$RUNNER_TEMP/staged-static-dexscreener-public-smoke.json"
+          test ! -e "$result_path"
+          node scripts/smoke-static-dexscreener-public-apis.mjs > "$result_path"
+          echo "result_path=$result_path" >> "$GITHUB_OUTPUT"
 
       - name: Reverify staged candidate binding
         env:
@@ -1111,6 +1152,100 @@ jobs:
             --github-output "$binding_output"
           grep -Fx "deployment_id=$EXPECTED_DEPLOYMENT_ID" "$binding_output"
           grep -Fx "target_url=$STAGED_TARGET_URL" "$binding_output"
+
+      - name: Create exact legacy recovery promotion handoff
+        id: legacy-recovery-handoff
+        if: >-
+          inputs.legacy_recovery_promotion_review &&
+          steps.legacy-recovery-policy.outcome == 'success' &&
+          steps.durable-catalog-seed.outcome == 'success' &&
+          steps.custom-v2-stage.outcome == 'success' &&
+          steps.public-provider-smoke.outcome == 'success'
+        env:
+          CUSTOM_LAUNCH_PUBLIC_ENABLEMENT: ${{ inputs.custom_launch_public_enablement }}
+          CUSTOM_LAUNCH_DARK_RELEASE: ${{ inputs.custom_launch_dark_release }}
+          CUSTOM_V2_REGISTRY_LIVE: ${{ inputs.custom_v2_registry_live }}
+          CUSTOM_V2_GENERIC_PUBLIC_READ_ENABLED: ${{ inputs.custom_v2_generic_public_read_enabled }}
+          CUSTOM_V2_DETAIL_RECORD_HASH: ${{ inputs.custom_v2_detail_record_hash }}
+          CUSTOM_V2_AUTHENTICATED_INGRESS_EVIDENCE_SHA256: ${{ inputs.custom_v2_authenticated_ingress_evidence_sha256 }}
+          CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_JSON: ${{ inputs.custom_v2_generic_signer_probe_expected_json }}
+          CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_SHA256: ${{ inputs.custom_v2_generic_signer_probe_expected_sha256 }}
+        run: |
+          set -euo pipefail
+          handoff_path="$RUNNER_TEMP/legacy-recovery-stage-handoff.json"
+          result_path="$RUNNER_TEMP/legacy-recovery-stage-handoff-result.json"
+          test ! -e "$handoff_path"
+          test ! -e "$result_path"
+          node scripts/perf/read-model-legacy-recovery-promotion-gate.mjs create \
+            --commit "$GITHUB_SHA" \
+            --tree "${{ needs.release-gate.outputs.verified_tree }}" \
+            --deployment-id "${{ steps.staged-deployment.outputs.deployment_id }}" \
+            --target-url "${{ steps.staged-deployment.outputs.target_url }}" \
+            --project-id "$VERCEL_PROJECT_ID" \
+            --rollback-deployment-id "${{ steps.production-before.outputs.deployment_id }}" \
+            --rollback-deployment-url "${{ steps.production-before.outputs.deployment_url }}" \
+            --rollback-git-head "${{ steps.production-before.outputs.git_head }}" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --verification-mode "${{ needs.release-gate.outputs.verification_mode }}" \
+            --verified-custom-v2 "${{ needs.release-gate.outputs.verified_custom_v2 }}" \
+            --verify-run-id "${{ needs.release-gate.outputs.verify_run_id }}" \
+            --verify-run-attempt "${{ needs.release-gate.outputs.verify_run_attempt }}" \
+            --verify-artifact-id "${{ needs.release-gate.outputs.artifact_id }}" \
+            --verify-artifact-digest "${{ needs.release-gate.outputs.artifact_digest }}" \
+            --verify-proof-sha256 "${{ needs.release-gate.outputs.proof_sha256 }}" \
+            --custom-launch-configured-enablement "${{ steps.custom-launch-policy.outputs.configured_enablement }}" \
+            --custom-launch-staging-mode "${{ steps.custom-launch-policy.outputs.staging_mode }}" \
+            --custom-launch-public-enablement "$CUSTOM_LAUNCH_PUBLIC_ENABLEMENT" \
+            --custom-launch-dark-release "$CUSTOM_LAUNCH_DARK_RELEASE" \
+            --custom-v2-registry-live "$CUSTOM_V2_REGISTRY_LIVE" \
+            --custom-v2-generic-public-read-enabled "$CUSTOM_V2_GENERIC_PUBLIC_READ_ENABLED" \
+            --custom-v2-detail-record-hash "$CUSTOM_V2_DETAIL_RECORD_HASH" \
+            --custom-v2-authenticated-ingress-evidence-sha256 "$CUSTOM_V2_AUTHENTICATED_INGRESS_EVIDENCE_SHA256" \
+            --custom-v2-generic-signer-probe-expected-json "$CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_JSON" \
+            --custom-v2-generic-signer-probe-expected-sha256 "$CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_SHA256" \
+            --runtime-env-file .vercel/.env.production.local \
+            --seed-evidence "${{ steps.durable-catalog-seed.outputs.result_path }}" \
+            --public-smoke-evidence "${{ steps.public-provider-smoke.outputs.result_path }}" \
+            --custom-v2-evidence "${{ steps.custom-v2-stage.outputs.evidence_path }}" \
+            --output "$handoff_path" > "$result_path"
+          HANDOFF_PATH="$handoff_path" RESULT_PATH="$result_path" \
+            node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.env.RESULT_PATH, "utf8"));
+          if (result?.status !== "promotion-review-ready"
+            || result.releaseLane !== "legacy-durable-blob-dex-recovery"
+            || !/^sha256:[0-9a-f]{64}$/u.test(result.handoffSha256 ?? "")) {
+            throw new Error("legacy recovery promotion handoff result is invalid");
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, [
+            `handoff_path=${process.env.HANDOFF_PATH}`,
+            `handoff_sha256=${result.handoffSha256}`,
+            "",
+          ].join("\n"));
+          NODE
+
+      - name: Attest exact legacy recovery promotion handoff
+        id: attest-legacy-recovery-handoff
+        if: steps.legacy-recovery-handoff.outcome == 'success'
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.legacy-recovery-handoff.outputs.handoff_path }}
+          create-storage-record: false
+
+      - name: Preserve exact legacy recovery promotion handoff
+        if: steps.attest-legacy-recovery-handoff.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: legacy-recovery-stage-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.legacy-recovery-handoff.outputs.handoff_path }}
+            ${{ steps.attest-legacy-recovery-handoff.outputs.bundle-path }}
+            ${{ steps.durable-catalog-seed.outputs.result_path }}
+            ${{ steps.public-provider-smoke.outputs.result_path }}
+            ${{ steps.custom-v2-stage.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Record staged candidate handoff
         env:
@@ -1143,6 +1278,10 @@ jobs:
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then
               echo "- Custom V2 evidence: \`${{ steps.custom-v2-stage.outputs.evidence_sha256 }}\`"
+            fi
+            if [ "${{ inputs.legacy_recovery_promotion_review }}" = true ]; then
+              echo "- Legacy recovery promotion handoff: \`${{ steps.legacy-recovery-handoff.outputs.handoff_sha256 }}\`"
+              echo "- Exception scope: exact legacy Blob + Dex candidate only; no Projector, database, Generic V2, Registry V2, or indexed-public cutover"
             fi
             echo
             echo "Stage-only: no production promotion was attempted."
