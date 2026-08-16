@@ -3,22 +3,11 @@ import { getAddress, isAddress } from "viem";
 
 import {
   publicExploreEntryV1,
-  withBitqueryMarketData,
-  type ValuedExploreEntry,
 } from "../../../../lib/explore-financial-data";
-import {
-  BitqueryMarketDataError,
-  readBitqueryTokenMarketDataStrictV1,
-  safeBitqueryMarketDataError,
-} from "../../../../lib/market-data/bitquery.server";
-import { exploreEntryMarketIdentitiesV1 } from
-  "../../../../lib/market-data/explore-market-identities";
-import {
-  readPrimaryRpcExploreEntriesV1,
-  safePrimaryRpcLaunchCatalogError,
-} from "../../../../lib/market-data/primary-rpc-launches.server";
-import { readProductionCustomExploreDirectoryV1 } from
-  "../../../../lib/server/custom-launch/explore-directory-v1";
+import { readDexscreenerExploreEntriesV1 } from
+  "../../../../lib/market-data/dexscreener-explore.server";
+import { readLastGoodLaunchCatalogV1 } from
+  "../../../../lib/market-data/last-good-launch-catalog.server";
 import type { ExploreEntry } from "../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
@@ -30,62 +19,26 @@ function tokenAddress(entry: ExploreEntry): string | null {
   return entry.tokenAddress?.toLowerCase() ?? null;
 }
 
-function unavailableValuation(
-  entry: ExploreEntry,
-  hadMarketIdentity: boolean,
-): ValuedExploreEntry {
-  return {
-    ...entry,
-    valuation: {
-      status: "unavailable",
-      reason: hadMarketIdentity || entry.exploreKind === "token" ||
-          entry.markets.length > 0
-        ? "source-unavailable"
-        : "no-market",
-    },
-  };
-}
-
 function canonicalResponseHeaders(input: Readonly<{
   marketAsOf?: string;
-  hasBitqueryPrice: boolean;
-  marketRead: boolean;
+  hasDexscreenerPrice: boolean;
+  marketStatus: "complete" | "partial" | "unavailable";
+  launchSource: "durable-blob" | "committed-envio-baseline";
 }>) {
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
-    "X-Programmable-Launch-Source": "drpc",
-    "X-Programmable-Read-Source": input.marketRead ? "drpc+bitquery" : "drpc",
-    ...(input.marketRead
-      ? { "X-Programmable-Market-Source": "bitquery" }
+    "X-Programmable-Launch-Source": input.launchSource,
+    "X-Programmable-Read-Source": `${input.launchSource}+dexscreener`,
+    "X-Programmable-Market-Provider": "dexscreener",
+    "X-Programmable-Market-Read-Status": input.marketStatus,
+    ...(input.hasDexscreenerPrice
+      ? { "X-Programmable-Market-Source": "dexscreener" }
       : {}),
     ...(input.marketAsOf
       ? { "X-Programmable-Market-As-Of": input.marketAsOf }
       : {}),
-    ...(input.hasBitqueryPrice
-      ? { "X-Programmable-Price-Source": "bitquery" }
-      : {}),
-  };
-}
-
-function customResponseHeaders(input: Readonly<{
-  marketAsOf?: string;
-  hasBitqueryPrice: boolean;
-  marketRead: boolean;
-}>) {
-  return {
-    "Cache-Control": SUCCESS_CACHE_CONTROL,
-    "X-Programmable-Launch-Source": "registry.custom-launched",
-    "X-Programmable-Read-Source": input.marketRead
-      ? "drpc+registry.custom-launched+bitquery"
-      : "drpc+registry.custom-launched",
-    ...(input.marketRead
-      ? { "X-Programmable-Market-Source": "bitquery" }
-      : {}),
-    ...(input.marketAsOf
-      ? { "X-Programmable-Market-As-Of": input.marketAsOf }
-      : {}),
-    ...(input.hasBitqueryPrice
-      ? { "X-Programmable-Price-Source": "bitquery" }
+    ...(input.hasDexscreenerPrice
+      ? { "X-Programmable-Price-Source": "dexscreener" }
       : {}),
   };
 }
@@ -130,50 +83,22 @@ export async function GET(request: NextRequest) {
   const address = requestedTokenAddress.toLowerCase();
   let catalog;
   try {
-    catalog = await readPrimaryRpcExploreEntriesV1({
-      requestedTokenAddress,
-      signal: request.signal,
-    });
+    catalog = await readLastGoodLaunchCatalogV1();
   } catch (error) {
     console.error("Token detail identity read failed", {
-      launch: safePrimaryRpcLaunchCatalogError(error),
+      name: error instanceof Error ? error.name : "LaunchCatalogError",
     });
-    return unavailableResponse(canonicalResponseHeaders({
-      hasBitqueryPrice: false,
-      marketRead: false,
-    }));
+    return unavailableResponse({
+      "X-Programmable-Market-Provider": "dexscreener",
+      "X-Programmable-Read-Source": "last-good+dexscreener",
+    });
   }
 
   const canonicalEntry = catalog.entries.find(
     (candidate) => candidate.exploreKind === "token" &&
       tokenAddress(candidate) === address,
   ) ?? null;
-  let entry: ExploreEntry | null = canonicalEntry;
-  let isCustom = false;
-
-  if (entry === null) {
-    let customProjects;
-    try {
-      customProjects = await readProductionCustomExploreDirectoryV1(
-        request.signal,
-      );
-    } catch {
-      console.error("Token detail Custom Registry read failed", {
-        launch: {
-          name: "CustomRegistryReadError",
-          category: "unexpected",
-        },
-      });
-      return unavailableResponse(customResponseHeaders({
-        hasBitqueryPrice: false,
-        marketRead: false,
-      }));
-    }
-    entry = customProjects.find(
-      (candidate) => tokenAddress(candidate) === address,
-    ) ?? null;
-    isCustom = entry !== null;
-  }
+  const entry: ExploreEntry | null = canonicalEntry;
 
   if (!entry) {
     return NextResponse.json(
@@ -185,41 +110,23 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 404,
-        headers: customResponseHeaders({
-          hasBitqueryPrice: false,
-          marketRead: false,
+        headers: canonicalResponseHeaders({
+          hasDexscreenerPrice: false,
+          marketStatus: "complete",
+          launchSource: catalog.source,
         }),
       },
     );
   }
 
-  const identities = exploreEntryMarketIdentitiesV1(entry);
-  let marketByToken: Awaited<
-    ReturnType<typeof readBitqueryTokenMarketDataStrictV1>
-  > = new Map();
   try {
-    if (identities.length > 0) {
-      marketByToken = await readBitqueryTokenMarketDataStrictV1(identities, {
-        signal: request.signal,
-      });
-    }
-    const marketData = entry.tokenAddress
-      ? marketByToken.get(entry.tokenAddress.toLowerCase())
-      : undefined;
-    if (identities.length > 0 && marketData === undefined) {
-      throw new BitqueryMarketDataError("integrity");
-    }
-    const valuedEntry = marketData
-      ? withBitqueryMarketData(entry, marketData)
-      : unavailableValuation(entry, identities.length > 0);
-    const primaryMarket = valuedEntry.marketData?.pools.find(
-      (pool) => pool.identity.poolId === valuedEntry.marketData?.primaryPoolId,
-    );
-    const hasBitqueryPrice = primaryMarket?.latestTrade?.priceUsdWad !==
-        undefined || primaryMarket?.latestTrade?.priceQuoteWad !== undefined;
+    const market = await readDexscreenerExploreEntriesV1([entry]);
+    const valuedEntry = market.entries[0];
+    if (!valuedEntry) throw new Error("Dexscreener identity mapping failed");
+    const hasDexscreenerPrice = valuedEntry.valuation.status === "available";
     const marketAsOf = valuedEntry.valuation.status === "available"
       ? valuedEntry.valuation.asOfTime
-      : primaryMarket?.asOfTime;
+      : undefined;
     const publicEntry = publicExploreEntryV1(valuedEntry);
 
     return NextResponse.json(
@@ -232,24 +139,38 @@ export async function GET(request: NextRequest) {
           publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
       },
       {
-        headers: (isCustom
-          ? customResponseHeaders
-          : canonicalResponseHeaders)({
-          hasBitqueryPrice,
-          marketRead: identities.length > 0,
+        headers: canonicalResponseHeaders({
+          hasDexscreenerPrice,
+          marketStatus: market.marketRead.status,
+          launchSource: catalog.source,
           ...(marketAsOf ? { marketAsOf } : {}),
         }),
       },
     );
   } catch (error) {
     console.error("Token detail market read failed", {
-      market: safeBitqueryMarketDataError(error),
+      name: error instanceof Error ? error.name : "DexscreenerReadError",
     });
-    return unavailableResponse((isCustom
-      ? customResponseHeaders
-      : canonicalResponseHeaders)({
-      hasBitqueryPrice: false,
-      marketRead: true,
-    }));
+    // Unexpected adapter failures remain fail-soft: the already verified
+    // identity is returned without valuation rather than hidden behind a 503.
+    const publicEntry = publicExploreEntryV1({
+      ...entry,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    return NextResponse.json(
+      {
+        status: "ready",
+        token: publicEntry.exploreKind === "token" ? publicEntry : null,
+        customProject: null,
+        snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
+      },
+      {
+        headers: canonicalResponseHeaders({
+          hasDexscreenerPrice: false,
+          marketStatus: "unavailable",
+          launchSource: catalog.source,
+        }),
+      },
+    );
   }
 }

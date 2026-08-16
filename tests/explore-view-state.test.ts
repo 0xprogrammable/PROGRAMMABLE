@@ -6,6 +6,7 @@ import {
   EXPLORE_REFRESH_INTERVAL_MS,
   createExploreInitialState,
   exploreDataQualityMessage,
+  exploreAppliedSortLabel,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
@@ -1513,6 +1514,148 @@ describe("Explore refresh state", () => {
       "forged-custom-project-router-source",
       new URLSearchParams(),
     )).rejects.toThrow("invalid token record");
+  });
+
+  it("parses a qualified Dexscreener market response without a browser retry", async () => {
+    const dexPayload = {
+      ...valuedMarketPayload,
+      tokens: valuedMarketPayload.tokens.map((token) => ({
+        ...token,
+        valuation: {
+          ...token.valuation,
+          source: "dexscreener" as const,
+          asOfTime: "2026-08-16T08:00:00.000Z",
+        },
+      })),
+      dataQuality: {
+        ...unavailableMarketDataQuality,
+        valuation: {
+          ...unavailableMarketDataQuality.valuation,
+          status: "current" as const,
+          available: 1,
+          unavailable: 0,
+          asOfTime: "2026-08-16T08:00:00.000Z",
+        },
+      },
+      marketRead: {
+        provider: "dexscreener",
+        status: "complete",
+        currency: "USD",
+        requestedCount: 1,
+        observedCount: 1,
+        qualifiedCount: 1,
+        unavailableCount: 0,
+        oldestFetchedAt: "2026-08-16T08:00:00.000Z",
+        newestFetchedAt: "2026-08-16T08:00:00.000Z",
+      },
+      ranking: {
+        status: "complete",
+        requested: "fdv",
+        applied: "fdv",
+        qualifiedCount: 1,
+        totalCount: 1,
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(dexPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "complete",
+        },
+      }),
+    );
+    const result = await loadExplorePayload(
+      "dexscreener-qualified",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    expect(result.tokens).toHaveLength(1);
+    expect(result.tokens[0]?.valuation).toMatchObject({
+      status: "available",
+      source: "dexscreener",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(exploreAppliedSortLabel("market-cap", result.ranking)).toBe(
+      "Highest FDV",
+    );
+  });
+
+  it("shows launch order when Dexscreener has zero qualified values", async () => {
+    const dexPayload = {
+      ...unvaluedMarketPayload,
+      dataQuality: unavailableMarketDataQuality,
+      marketRead: {
+        provider: "dexscreener",
+        status: "unavailable",
+        currency: "USD",
+        requestedCount: 1,
+        observedCount: 0,
+        qualifiedCount: 0,
+        unavailableCount: 1,
+        oldestFetchedAt: null,
+        newestFetchedAt: null,
+      },
+      ranking: {
+        status: "unavailable",
+        requested: "fdv",
+        applied: "launch-order",
+        qualifiedCount: 0,
+        totalCount: 1,
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(dexPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "unavailable",
+        },
+      }),
+    );
+    const result = await loadExplorePayload(
+      "dexscreener-unavailable",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    );
+    expect(result.tokens.map((token) => token.id)).toEqual([
+      bitqueryMarketEntry.id,
+    ]);
+    expect(exploreAppliedSortLabel("market-cap", result.ranking)).toBe(
+      "Launch order",
+    );
+  });
+
+  it("labels partial FDV ordering without claiming the whole list", () => {
+    expect(exploreAppliedSortLabel("market-cap-asc", {
+      status: "partial",
+      requested: "fdv",
+      applied: "qualified-fdv-then-launch-order",
+      qualifiedCount: 1,
+      totalCount: 2,
+    })).toBe("Available FDV");
+  });
+
+  it("rejects malformed Dexscreener counts fail closed", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        ...unvaluedMarketPayload,
+        dataQuality: unavailableMarketDataQuality,
+        marketRead: {
+          provider: "dexscreener",
+          status: "complete",
+          currency: "USD",
+          requestedCount: 1,
+          observedCount: 2,
+          qualifiedCount: 2,
+          unavailableCount: -1,
+          oldestFetchedAt: "2026-08-16T08:00:00.000Z",
+          newestFetchedAt: "2026-08-16T08:00:00.000Z",
+        },
+      }), { status: 200 }),
+    );
+    await expect(loadExplorePayload(
+      "dexscreener-malformed-counts",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).rejects.toThrow("invalid market read data");
   });
 
   it("stops a stalled Explore request after twelve seconds", async () => {

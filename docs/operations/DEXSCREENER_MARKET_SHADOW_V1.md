@@ -2,18 +2,18 @@
 
 ## Status and authority
 
-This adapter is server-only shadow evidence. It has no authority over launch or
-coin identity, does not mutate `TokenMarketDataV1`, and is not called by a
-public route or browser component. Public market responses therefore remain on
-their existing Bitquery contract until a separate, reviewed cutover explicitly
-changes that contract.
+This adapter is server-only market enrichment. It has no authority over launch
+or coin identity and is never called by browser cards. The interim Explore list
+and token-detail routes supply identities from the validated durable launch
+envelope, or from the explicitly partial committed baseline when that envelope
+is unavailable.
 
 The v1 provider priority is intentionally non-composite:
 
-1. canonical onchain identities are supplied to the adapter;
-2. Bitquery remains the public market provider;
-3. Dexscreener observations are retained only as a separate shadow result;
-4. no field from the two providers is silently merged or used as a fallback.
+1. validated last-good identities are supplied to the adapter;
+2. Dexscreener is the sole Explore market provider;
+3. no second market provider is mixed into the same response;
+4. a Dexscreener failure returns the same identities with valuation unavailable.
 
 Dexscreener cannot prove catalog completeness. The 351-token and 20/19/18
 coverage figures are a reconciliation baseline from the 2026-08-15 owner
@@ -45,7 +45,7 @@ that boundary remain inspectable shadow observations while their FDV
 qualification is explicitly unavailable for `insufficient-liquidity`.
 
 Each observation records its provider-read `fetchedAt`, source `dexscreener`,
-currency `USD`, and mode `shadow`. A snapshot separately records `assembledAt`
+currency `USD`, and internal mode `shadow`. A snapshot separately records `assembledAt`
 and the oldest/newest provider-read timestamps in `sourceReadWindow`; cache
 assembly time is never presented as provider freshness. Dexscreener does not
 provide an observation block for this endpoint, so the contract deliberately
@@ -65,15 +65,16 @@ has no `asOfBlock`, `current`, or onchain freshness claim.
   Dexscreener observations
 - Non-2xx and invalid-header bodies are aborted and cancelled unread
 - Successful cache TTL: 5 minutes
-- Partial/unqualified/failure cache TTL: at most 15 seconds from read completion
+- Successful provider reads, including an empty pair result: 5 minutes
+- Transport/rate-limit/invalid-response failure cache TTL: at most 15 seconds
 - Cache bound: 32 identity-set snapshots per reader with LRU eviction
 - Identity-set cache is order-independent; overlapping sets additionally cache
   and singleflight by token, so `[A,B]` and `[B,C]` fetch `B` once
 
-The limiter and cache are process-local. A public serverless fan-out could
-multiply that rate, which is another reason this entrypoint is restricted to a
-controlled server worker until the persistent read model owns scheduling and
-storage.
+The limiter and cache are process-local. The 80 starts/minute per reader cap is
+well below the documented provider ceiling, but horizontal serverless fan-out
+still multiplies it. Production telemetry must therefore watch 429s and keep the
+identity-only response path healthy.
 
 Provider documentation and terms must be rechecked before any public cutover:
 [API reference](https://docs.dexscreener.com/api/reference) and
@@ -87,15 +88,10 @@ their original launch order. The ranking reports `partial` when this is a
 partial ordering. With zero qualified values the complete list stays in launch
 order and reports `unavailable`; it never claims Highest FDV.
 
-## Promotion gates
+## Interim limits and rollback
 
-Before this source can affect public bytes, a later change must provide all of:
-
-- a versioned public provider-priority and conflict contract;
-- a persistent, globally rate-limited worker/cache rather than per-route calls;
-- staged shadow evidence with exact identity-preservation and coverage counts;
-- explicit UI handling for partial/unavailable ranking and valuation source;
-- real identity and market health probes;
-- legal/terms revalidation and an owner-approved cutover.
-
-This commit supplies none of those promotion claims and performs no deployment.
+This is an interim route adapter, not the durable atomic read-model cutover.
+Launch identity can be stale or partial and is disclosed with `lastIndexedAt`,
+source, block/hash and evidence commitment. Custom identity is unavailable in
+this fast path. Rollback is the previous production commit; there is no DB,
+environment, wallet, or provider-account mutation in this change.

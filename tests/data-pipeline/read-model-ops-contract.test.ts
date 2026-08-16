@@ -878,13 +878,8 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("accepts the exact Explore transport and HTTP 402 provider taxonomy", () => {
-    const path = "app/api/explore/route.ts";
-    const route = readFileSync(resolve(ROOT, path), "utf8");
-    expect(route).toContain('error.phase === "market-liquidity"');
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: route },
-    });
+  it("accepts the exact last-good identity and Dexscreener split", () => {
+    const result = evaluateReadModelOperationsSourceContracts(ROOT);
     expect(result.failures.map(({ id }: { id: string }) => id)).not.toContain(
       "ops-public-provider-split-source-contract",
     );
@@ -892,56 +887,36 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
-      "a schema failure category",
-      'error.category === "transport"',
-      'error.category === "schema"',
+      "an RPC identity read",
+      "readLastGoodLaunchCatalogV1()",
+      "readPrimaryRpcExploreEntriesV1()",
     ],
     [
-      "an unbounded response status",
-      "error.httpStatus === 402",
-      "error.httpStatus >= 400",
+      "Bitquery market enrichment",
+      "readDexscreenerExploreEntriesV1(filtered)",
+      "readBitqueryTokenMarketDataStrictV1(filtered)",
     ],
     [
-      "an unbounded failure phase",
-      '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
-      "Boolean(error.phase)",
-    ],
-    [
-      "a bounded failure phase set without exact-pool liquidity",
-      '(error.phase === "market-core" ||\n      error.phase === "market-liquidity" ||\n      error.phase === "market-price")',
-      '(error.phase === "market-core" || error.phase === "market-price")',
-    ],
-    [
-      "a combined degraded read source",
-      '"X-Programmable-Read-Source": marketReadFailure === null\n            ? "drpc+bitquery"\n            : "drpc",',
-      '"X-Programmable-Read-Source": marketReadFailure === null\n            ? "drpc+bitquery"\n            : "drpc+bitquery",',
-    ],
-    [
-      "an unknown degraded market marker",
-      ': unavailableMarketReadStatus(marketReadFailure),',
-      ': "unknown",',
+      "a falsely current Custom lane",
+      'customStatus: "unavailable"',
+      'customStatus: "current"',
     ],
     [
       "a different market provider",
-      '"X-Programmable-Market-Provider": "bitquery"',
+      '"X-Programmable-Market-Provider": "dexscreener"',
       '"X-Programmable-Market-Provider": "unknown"',
     ],
     [
-      "a healthy degraded cache policy",
-      '"Cache-Control": marketReadFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "no-store",',
-      '"Cache-Control": marketReadFailure === null\n            ? "public, max-age=0, s-maxage=2"\n            : "public, max-age=0, s-maxage=2",',
+      "FDV ordering for unavailable values",
+      '"launch-order" as const',
+      '"fdv" as const',
     ],
-    [
-      "FDV ordering during provider degradation",
-      'applied: "launch-order" as const',
-      'applied: "fdv" as const',
-    ],
-  ])("rejects the Explore source contract with %s", (_label, needle, replacement) => {
+  ])("rejects the Explore fast-lane contract with %s", (_label, needle, replacement) => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
     expect(route).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: route.replace(needle, replacement) },
+      sourceOverrides: { [path]: route.replaceAll(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",
@@ -990,11 +965,11 @@ describe("read-model operations source contract", () => {
   it("rejects a public launch route that restores Bitquery identity discovery", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
-    expect(route).toContain("readPrimaryRpcExploreEntriesV1");
+    expect(route).toContain("readLastGoodLaunchCatalogV1");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         [path]: route.replaceAll(
-          "readPrimaryRpcExploreEntriesV1",
+          "readLastGoodLaunchCatalogV1",
           "readBitqueryExploreEntriesV1",
         ),
       },
@@ -1006,26 +981,26 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
-      "canonical token detail headers that claim Custom Registry identity",
-      '"X-Programmable-Launch-Source": "drpc"',
+      "token detail headers that claim Custom Registry identity",
+      '"X-Programmable-Launch-Source": input.launchSource',
       '"X-Programmable-Launch-Source": "registry.custom-launched"',
     ],
     [
-      "Custom Registry token detail headers that claim canonical identity",
-      '"X-Programmable-Launch-Source": "registry.custom-launched"',
-      '"X-Programmable-Launch-Source": "drpc"',
+      "token detail that restores a runtime RPC catalog",
+      "readLastGoodLaunchCatalogV1()",
+      "readPrimaryRpcExploreEntriesV1()",
     ],
     [
-      "a canonical dRPC failure that does not return before the Custom Registry path",
-      "return unavailableResponse(canonicalResponseHeaders({",
-      "unavailableResponse(canonicalResponseHeaders({",
+      "token detail that restores Custom Registry as a hidden fallback",
+      "const entry: ExploreEntry | null = canonicalEntry;",
+      "const entry: ExploreEntry | null = canonicalEntry ?? readProductionCustomExploreDirectoryV1();",
     ],
   ])("rejects %s", (_label, needle, replacement) => {
     const path = "app/api/explore/token/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
     expect(route).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: route.replace(needle, replacement) },
+      sourceOverrides: { [path]: route.replaceAll(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",
@@ -1049,299 +1024,34 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("rejects a staged public smoke that exposes an RPC provider URL", () => {
-    const path = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+  it.each([
+    ["an RPC endpoint variable", "const ADDRESS =", "const PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL = 'secret';\\nconst ADDRESS ="],
+    ["more than one 503 retry", "attempt < 2", "attempt < 3"],
+    ["an unbounded retry status", "response.status === 503 && attempt === 0", "response.status >= 500 && attempt === 0"],
+    ["an unbounded response reader", "readBoundedResponseText(response", "response.text("],
+    ["a different market provider", 'marketProvider: "dexscreener"', 'marketProvider: "unknown"'],
+    ["no unavailable launch-order proof", "!exactSamePageOrder(highest, newest)", "false"],
+    ["no token detail probe", '"/api/explore/token?address="', '"/api/explore/other?address="'],
+    ["no profile response probe", '"/api/explore/profile?account="', '"/api/explore/other?account="'],
+  ])("rejects a staged static/Dex smoke with %s", (_label, needle, replacement) => {
+    const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
+    const smoke = readFileSync(resolve(ROOT, path), "utf8");
+    expect(smoke).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: {
-        [path]: workflow.replace(
-          "Smoke staged Bitquery public APIs",
-          "Smoke staged Bitquery public APIs\n# PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
-        ),
-      },
+      sourceOverrides: { [path]: smoke.replace(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-protected-public-provider-stage-smoke",
     );
   });
 
-  it.each([
-    ["more than one retry", "attempt < 2", "attempt < 3"],
-    [
-      "a response other than HTTP 503",
-      "response.status === 503 && attempt === 0",
-      "response.status >= 500 && attempt === 0",
-    ],
-    ["a rebuilt URL", "fetch(requestUrl, {", "fetch(new URL(path, target), {"],
-  ])("rejects staged Bitquery smoke retrying %s", (_label, needle, replacement) => {
+  it("rejects a deployment workflow that does not invoke the exact smoke", () => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const needle = "node scripts/smoke-static-dexscreener-public-apis.mjs";
     expect(workflow).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-public-provider-stage-smoke",
-    );
-  });
-
-  it.each([
-    [
-      "an FDV response other than HTTP 200",
-      "response.status === 200",
-      "response.ok",
-    ],
-    [
-      "a non-current valuation",
-      'token.valuation.freshness === "current"',
-      'token.valuation.freshness !== "unknown"',
-    ],
-    [
-      "the Newest route on empty FDV data",
-      '["market-cap", "market-cap-asc"].includes(expectedSort)',
-      '["market-cap", "market-cap-asc", "newest"].includes(expectedSort)',
-    ],
-    [
-      "a response sort different from the requested FDV sort",
-      "response.body?.sort === expectedSort",
-      '["market-cap", "market-cap-asc"].includes(response.body?.sort)',
-    ],
-    [
-      "without the exact Highest callback",
-      '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
-      "              false,",
-    ],
-    [
-      "without the exact current market marker",
-      "exactCurrentExploreSources(response) &&",
-      "true &&",
-    ],
-  ])("rejects staged Bitquery data retrying %s", (_label, needle, replacement) => {
-    const path = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, path), "utf8");
-    expect(workflow).toContain(needle);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
-    });
-    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-public-provider-stage-smoke",
-    );
-  });
-
-  it.each([
-    [
-      "an unknown market-read marker",
-      '"current",\n              "transport-unavailable",\n              "response-unavailable",',
-      '"current",\n              "transport-unavailable",\n              "response-unavailable",\n              "unknown",',
-    ],
-    [
-      "mixed Highest and Newest market-read states",
-      "newestMarketReadStatus !== highestMarketReadStatus",
-      "false",
-    ],
-    ["a non-200 Highest response", "highest.status !== 200", "false"],
-    ["a non-200 Newest response", "newest.status !== 200", "false"],
-    [
-      "a widened response page size",
-      "response.body?.pageSize === 20",
-      "response.body?.pageSize <= 200",
-    ],
-    [
-      "an incomplete first page",
-      "tokens.length === Math.min(20, total)",
-      "tokens.length <= Math.min(20, total)",
-    ],
-    [
-      "an inconsistent total page count",
-      "totalPages === Math.ceil(total / 20)",
-      "totalPages >= Math.ceil(total / 20)",
-    ],
-    [
-      "a combined degraded read source",
-      'response.headers.get("x-programmable-read-source") === "drpc"',
-      'response.headers.get("x-programmable-read-source") === "drpc+bitquery"',
-    ],
-    [
-      "a degraded market-source claim",
-      '!response.headers.has("x-programmable-market-source")',
-      'response.headers.get("x-programmable-market-source") === "bitquery"',
-    ],
-    [
-      "a degraded price-source claim",
-      '!response.headers.has("x-programmable-price-source")',
-      'response.headers.get("x-programmable-price-source") === "bitquery"',
-    ],
-    [
-      "a degraded market as-of claim",
-      '!response.headers.has("x-programmable-market-as-of")',
-      'response.headers.has("x-programmable-market-as-of")',
-    ],
-    [
-      "cacheable degraded data",
-      'response.headers.get("cache-control") === "no-store"',
-      'response.headers.get("cache-control") !== ""',
-    ],
-    [
-      "non-partial degraded data quality",
-      'response.headers.get("x-programmable-data-quality") === "partial"',
-      'response.headers.get("x-programmable-data-quality") !== ""',
-    ],
-    [
-      "a non-current launch identity",
-      'launchIdentity?.status === "current"',
-      'launchIdentity?.status !== "unavailable"',
-    ],
-    [
-      "a ten-minute launch identity age",
-      "launchIdentity.ageMs < 60_000",
-      "launchIdentity.ageMs < 600_000",
-    ],
-    [
-      "a non-integer launch identity age",
-      "Number.isSafeInteger(launchIdentity.ageMs)",
-      "Number.isFinite(launchIdentity.ageMs)",
-    ],
-    [
-      "a nullable launch identity block",
-      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
-      "launchIdentity.asOfBlock !== undefined",
-    ],
-    [
-      "a nullable launch identity reference block",
-      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
-      "launchIdentity.referenceBlock !== undefined",
-    ],
-    [
-      "an available degraded market read",
-      'marketRead.status === "unavailable"',
-      'marketRead.status === "current"',
-    ],
-    [
-      "an unknown degraded failure category",
-      'marketRead.category === "transport"',
-      'marketRead.category !== "schema"',
-    ],
-    [
-      "an arbitrary degraded response reason",
-      'marketRead.reason === "http-status"',
-      'marketRead.reason !== "schema"',
-    ],
-    [
-      "an arbitrary degraded response status",
-      "marketRead.httpStatus === 402",
-      "marketRead.httpStatus >= 400",
-    ],
-    [
-      "an unbounded degraded failure phase",
-      '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
-      "Boolean(marketRead.phase)",
-    ],
-    [
-      "a degraded phase set without exact-pool liquidity",
-      '["market-core", "market-liquidity", "market-price"].includes(\n                marketRead.phase,\n              )',
-      '["market-core", "market-price"].includes(marketRead.phase)',
-    ],
-    [
-      "mixed available degraded valuations",
-      "tokens.every(exactUnavailableValuation)",
-      "tokens.some(exactUnavailableValuation)",
-    ],
-    [
-      "a nonzero degraded available count",
-      "valuation.available === 0",
-      "valuation.available >= 0",
-    ],
-    [
-      "a mismatched degraded unavailable count",
-      "valuation.unavailable === tokens.length",
-      "valuation.unavailable >= 0",
-    ],
-    [
-      "empty degraded launches",
-      "valuation.asOfTime === null &&\n              tokens.length > 0 &&",
-      "valuation.asOfTime === null &&\n              tokens.length >= 0 &&",
-    ],
-    [
-      "fabricated top-level degraded FDV",
-      "token?.fdvUsdWad === undefined",
-      "true",
-    ],
-    [
-      "fabricated degraded market data",
-      "token?.marketData === undefined",
-      "true",
-    ],
-    [
-      "fabricated degraded liquidity evidence",
-      "token?.liquidityEvidence === undefined",
-      "true",
-    ],
-    [
-      "fabricated degraded price",
-      "token?.priceUsdWad === undefined",
-      "true",
-    ],
-    [
-      "an arbitrary no-market exception",
-      'token?.exploreKind === "custom-project"',
-      "true",
-    ],
-    [
-      "a healthy ranking claim in degradation",
-      'ranking?.status === "unavailable"',
-      'ranking?.status === "current"',
-    ],
-    [
-      "FDV ranking instead of launch-order degradation",
-      'ranking.applied === "launch-order"',
-      'ranking.applied === "fdv"',
-    ],
-    [
-      "a Newest degraded ranking",
-      ": ranking === undefined",
-      ": true",
-    ],
-    [
-      "different degraded page totals",
-      "highest.body?.total !== newest.body?.total",
-      "false",
-    ],
-    [
-      "different degraded page token counts",
-      "highestTokens.length !== newestTokens.length",
-      "false",
-    ],
-    [
-      "duplicate degraded Highest identities",
-      "new Set(highestIdentities).size === highestIdentities.length",
-      "true",
-    ],
-    [
-      "reordered degraded Highest identities",
-      "(identity, index) => identity === newestIdentities[index]",
-      "() => true",
-    ],
-    [
-      "no degraded Highest-to-Newest order gate",
-      "!exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
-      "false &&\n              exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
-    ],
-    [
-      "a claimed degraded detail verification",
-      'detailStatus = "skipped-provider-unavailable"',
-      'detailStatus = "verified-current"',
-    ],
-    [
-      "a claimed degraded chart verification",
-      'chartStatus = "skipped-provider-unavailable"',
-      'chartStatus = "verified-ready"',
-    ],
-  ])("rejects a staged degraded market contract with %s", (_label, needle, replacement) => {
-    const path = ".github/workflows/deploy-production.yml";
-    const workflow = readFileSync(resolve(ROOT, path), "utf8");
-    expect(workflow).toContain(needle);
-    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+      sourceOverrides: { [path]: workflow.replace(needle, "true") },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-protected-public-provider-stage-smoke",

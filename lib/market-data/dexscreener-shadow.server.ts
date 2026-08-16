@@ -370,7 +370,11 @@ export function createDexscreenerShadowReaderV1(
         if (!Number.isFinite(completedMs)) {
           throw new Error("Dexscreener shadow clock returned an invalid Date");
         }
-        const ttl = Math.min(cacheTtlMs, failureCacheTtlMs);
+        // An honest empty provider response is still a successful read. Cache
+        // it normally so provider-missing tokens do not cause a request storm.
+        const ttl = value.status === "ok"
+          ? cacheTtlMs
+          : Math.min(cacheTtlMs, failureCacheTtlMs);
         if (ttl > 0) {
           tokenCache.delete(tokenAddress);
           while (tokenCache.size >= maximumTokenCacheEntries) {
@@ -539,8 +543,7 @@ export function createDexscreenerShadowReaderV1(
     if (active) return active.then((value) => reorderSnapshot(value, identities));
 
     const pending = readUncached(canonicalIdentities).then((value) => {
-      const ttl = value.readStatus === "complete" &&
-          value.unavailableCount === 0
+      const ttl = value.readStatus === "complete"
         ? cacheTtlMs
         : Math.min(cacheTtlMs, failureCacheTtlMs);
       const completedMs = now().valueOf();
@@ -570,8 +573,8 @@ export function createDexscreenerShadowReaderV1(
 let sharedReader: DexscreenerShadowReaderV1 | undefined;
 
 /**
- * Server-worker entrypoint. It is intentionally not wired into any public API
- * response; callers must opt into a separate shadow comparison.
+ * Server-worker entrypoint. Public callers must supply already verified
+ * Programmable identities; Dexscreener is enrichment, never discovery.
  */
 export function readDexscreenerMarketShadowV1(
   identities: readonly MarketChartIdentityV1[],

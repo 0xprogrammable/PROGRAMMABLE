@@ -744,7 +744,7 @@ describe("Dexscreener server-only shadow reader", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(32);
   });
 
-  it("starts a negative cache TTL only after the provider read completes", async () => {
+  it("caches a successful empty provider result from completion time", async () => {
     let nowMs = Date.parse(FETCHED_AT);
     const fetchImpl = vi.fn(async () => {
       nowMs += 20_000;
@@ -759,7 +759,7 @@ describe("Dexscreener server-only shadow reader", () => {
     await shadowReader.read([identity(1)]);
     await shadowReader.read([identity(1)]);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    nowMs += 15_001;
+    nowMs += 300_001;
     await shadowReader.read([identity(1)]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });

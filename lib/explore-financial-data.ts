@@ -60,7 +60,7 @@ export type ExploreValuation =
       valueWad: string;
       quoteSymbol?: string;
       freshness: "current" | "stale" | "unknown";
-      source?: "bitquery" | "stateview-chainlink";
+      source?: "bitquery" | "dexscreener" | "stateview-chainlink";
       asOfTime?: string;
       asOfBlock?: string;
       asOfBlockHash?: `0x${string}`;
@@ -954,6 +954,7 @@ export function isExploreValuation(value: unknown): value is ExploreValuation {
         candidate.quoteSymbol.trim().length > 0)) &&
     (candidate.source === undefined ||
       candidate.source === "bitquery" ||
+      candidate.source === "dexscreener" ||
       candidate.source === "stateview-chainlink") &&
     (candidate.asOfTime === undefined ||
       (typeof candidate.asOfTime === "string" &&
