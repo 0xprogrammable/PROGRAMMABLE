@@ -129,6 +129,71 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   );
 });
 
+test("legacy recovery promotion review is an attested exact-stage fail-closed lane", () => {
+  assert.match(
+    deploy,
+    /legacy_recovery_promotion_review:[\s\S]{0,280}default: false[\s\S]{0,80}type: boolean/u,
+  );
+  assert.match(
+    deploy,
+    /PRODUCTION_VERIFY_MODE:.*inputs\.legacy_recovery_promotion_review.*custom-v2-release/u,
+  );
+  const policy = stepBlock(
+    deploy,
+    "Gate explicit legacy recovery promotion-review lane",
+  );
+  for (const flag of [
+    "CUSTOM_LAUNCH_PUBLIC_ENABLEMENT",
+    "CUSTOM_LAUNCH_DARK_RELEASE",
+    "CUSTOM_V2_REGISTRY_LIVE",
+    "CUSTOM_V2_GENERIC_PUBLIC_READ_ENABLED",
+  ]) assert.match(policy, new RegExp(`test "\\$${flag}" = false`, "u"));
+  for (const optional of [
+    "CUSTOM_V2_DETAIL_RECORD_HASH",
+    "CUSTOM_V2_AUTHENTICATED_INGRESS_EVIDENCE_SHA256",
+    "CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_JSON",
+    "CUSTOM_V2_GENERIC_SIGNER_PROBE_EXPECTED_SHA256",
+  ]) assert.match(policy, new RegExp(`test -z "\\$${optional}"`, "u"));
+  assert.match(policy, /test "\$CUSTOM_LAUNCH_CONFIGURED_ENABLEMENT" = false/u);
+  assert.match(policy, /test "\$CUSTOM_LAUNCH_STAGING_MODE" = generic-disabled/u);
+  assert.match(policy, /test "\$VERIFIED_CUSTOM_V2" = true/u);
+  assert.match(policy, /test "\$VERIFICATION_MODE" = custom-v2-release/u);
+
+  const handoff = stepBlock(
+    deploy,
+    "Create exact legacy recovery promotion handoff",
+  );
+  assert.match(handoff, /steps\.legacy-recovery-policy\.outcome == 'success'/u);
+  assert.match(handoff, /steps\.durable-catalog-seed\.outcome == 'success'/u);
+  assert.match(handoff, /steps\.custom-v2-stage\.outcome == 'success'/u);
+  assert.match(handoff, /steps\.public-provider-smoke\.outcome == 'success'/u);
+  assert.match(handoff, /--runtime-env-file \.vercel\/\.env\.production\.local/u);
+  assert.match(handoff, /--seed-evidence/u);
+  assert.match(handoff, /--public-smoke-evidence/u);
+  assert.match(handoff, /--custom-v2-evidence/u);
+  const attest = stepBlock(
+    deploy,
+    "Attest exact legacy recovery promotion handoff",
+  );
+  assert.match(
+    attest,
+    /uses: actions\/attest@59d89421af93a897026c735860bf21b6eb4f7b26/u,
+  );
+  const artifact = stepBlock(
+    deploy,
+    "Preserve exact legacy recovery promotion handoff",
+  );
+  assert.match(artifact, /steps\.attest-legacy-recovery-handoff\.outputs\.bundle-path/u);
+  assert.match(artifact, /steps\.durable-catalog-seed\.outputs\.result_path/u);
+  assert.match(artifact, /steps\.public-provider-smoke\.outputs\.result_path/u);
+  assert.match(artifact, /steps\.custom-v2-stage\.outputs\.evidence_path/u);
+  assert.ok(
+    deploy.indexOf("Reverify staged candidate binding")
+      < deploy.indexOf("Create exact legacy recovery promotion handoff"),
+  );
+  assert.doesNotMatch(deploy, /vercel (?:promote|rollback|alias)/u);
+});
+
 test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", () => {
   for (const input of [
     "custom_v2_generic_signer_probe_expected_json",

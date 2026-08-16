@@ -393,6 +393,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     }),
     realBlockSla: Object.freeze({
       requiredBeforeProductionPromotion: true,
+      requiredBeforeProjectorDatabaseOrIndexedPublicCutover: true,
       activity: "organic-stream-block-no-signing-or-spending",
       maximumDeliveryToFirstVisibleMs: 10_000,
       script: Object.freeze({
@@ -404,6 +405,49 @@ const APPROVED_OPERATIONS = Object.freeze({
         path: "config/read-model-real-block-sla-db-attestation.schema.json",
         sha256:
           "73d78c27c6b8dc311dd50911bd4f1b4c2c44e967fd53aa5b415f566e264b69da",
+      }),
+    }),
+    legacyRecoveryPromotionException: Object.freeze({
+      releaseLane: "legacy-durable-blob-dex-recovery",
+      realBlockSlaRequiredForProjectorDatabaseOrIndexedPublicCutover: true,
+      projectorDatabaseOrIndexedPublicCutoverAuthorized: false,
+      launchControlInputs: Object.freeze([
+        "custom_launch_public_enablement",
+        "custom_launch_dark_release",
+        "custom_v2_registry_live",
+        "custom_v2_generic_public_read_enabled",
+      ]),
+      requiredLaunchControlValue: false,
+      requiredRuntimeDisabledFlags: Object.freeze([
+        "INDEXED_EXPLORE_LIST_READS_ENABLED",
+        "INDEXED_EXPLORE_TOKEN_READS_ENABLED",
+        "INDEXED_EXPLORE_CHART_READS_ENABLED",
+        "INDEXED_CREATOR_PROFILE_READS_ENABLED",
+        "INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED",
+        "INDEXED_LAUNCH_LOOKUP_ENABLED",
+        "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
+        "INDEXED_READ_SHADOW_COMPARE_ENABLED",
+        "PROGRAMMABLE_PROJECTOR_ACTIVE",
+        "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
+        "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED",
+        "PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED",
+      ]),
+      requiredStageEvidence: Object.freeze([
+        "nonempty-durable-blob-seed",
+        "static-identity-dexscreener-public-smoke",
+        "custom-v2-prelaunch-disabled",
+        "final-staged-deployment-binding",
+      ]),
+      handoff: Object.freeze({
+        schemaVersion: "programmable.legacy-recovery-stage-handoff.v1",
+        maximumAgeMs: 7_200_000,
+        script: Object.freeze({
+          path: "scripts/perf/read-model-legacy-recovery-promotion-gate.mjs",
+          sha256:
+            "f042999792efceaa55f4752bb63309726a09908f214c002fb1af6f349780c589",
+        }),
+        workflow: ".github/workflows/deploy-production.yml",
+        attested: true,
       }),
     }),
   }),
@@ -838,6 +882,7 @@ function realBlockSlaGateIsFailClosed(source, schema, gate) {
   return (
     typeof source === "string" &&
     gate?.requiredBeforeProductionPromotion === true &&
+    gate?.requiredBeforeProjectorDatabaseOrIndexedPublicCutover === true &&
     gate?.activity === "organic-stream-block-no-signing-or-spending" &&
     gate?.maximumDeliveryToFirstVisibleMs === 10_000 &&
     source.includes("REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 10_000") &&
@@ -872,6 +917,131 @@ function realBlockSlaGateIsFailClosed(source, schema, gate) {
     schemaValue?.properties?.apiObservations?.minItems === 2 &&
     schemaValue?.properties?.apiObservations?.maxItems === 2 &&
     schemaValue?.properties?.attestationHmacSha256?.$ref === "#/$defs/bytes32"
+  );
+}
+
+const LEGACY_RECOVERY_PROMOTION_PACKAGE_COMMAND =
+  "node scripts/perf/read-model-legacy-recovery-promotion-gate.mjs verify";
+const LEGACY_RECOVERY_PROMOTION_RUNBOOK_COMMAND =
+  "npm run perf:read-model:legacy-recovery-promotion --";
+
+function legacyRecoveryPromotionExceptionIsFailClosed(input) {
+  const gate = input.gate;
+  const source = input.gateSource;
+  const workflow = input.workflow;
+  const runbook = input.runbook;
+  const packageCommand =
+    input.packageJson?.scripts?.["perf:read-model:legacy-recovery-promotion"];
+  const gateStep = workflow.indexOf(
+    "Gate explicit legacy recovery promotion-review lane",
+  );
+  const finalBinding = workflow.indexOf("Reverify staged candidate binding");
+  const handoffStep = workflow.indexOf(
+    "Create exact legacy recovery promotion handoff",
+  );
+  const attestationStep = workflow.indexOf(
+    "Attest exact legacy recovery promotion handoff",
+  );
+  const artifactStep = workflow.indexOf(
+    "Preserve exact legacy recovery promotion handoff",
+  );
+  const runbookGate = runbook.indexOf(
+    LEGACY_RECOVERY_PROMOTION_RUNBOOK_COMMAND,
+  );
+  const runbookBinding = runbook.indexOf(
+    "npm run perf:read-model:staged-deployment --",
+  );
+  return (
+    typeof source === "string" &&
+    typeof workflow === "string" &&
+    typeof runbook === "string" &&
+    gate?.releaseLane === "legacy-durable-blob-dex-recovery" &&
+    gate?.realBlockSlaRequiredForProjectorDatabaseOrIndexedPublicCutover ===
+      true &&
+    gate?.projectorDatabaseOrIndexedPublicCutoverAuthorized === false &&
+    gate?.requiredLaunchControlValue === false &&
+    gate?.handoff?.schemaVersion ===
+      "programmable.legacy-recovery-stage-handoff.v1" &&
+    gate?.handoff?.maximumAgeMs === 7_200_000 &&
+    gate?.handoff?.workflow === ".github/workflows/deploy-production.yml" &&
+    gate?.handoff?.attested === true &&
+    packageCommand === LEGACY_RECOVERY_PROMOTION_PACKAGE_COMMAND &&
+    source.includes(
+      '"programmable.legacy-recovery-stage-handoff.v1"',
+    ) &&
+    source.includes(
+      "LEGACY_RECOVERY_HANDOFF_MAXIMUM_AGE_MS = 2 * 60 * 60 * 1_000",
+    ) &&
+    source.includes('const RELEASE_LANE = "legacy-durable-blob-dex-recovery"') &&
+    source.includes("const RUNTIME_DISABLED_FLAG_NAMES") &&
+    gate.requiredRuntimeDisabledFlags.every((name) =>
+      source.includes(`"${name}"`),
+    ) &&
+    (source.match(/seed\.tokenCount < 1/gu) ?? []).length === 2 &&
+    source.includes('smoke.catalogSource !== "durable-blob"') &&
+    source.includes('smoke.marketProvider !== "dexscreener"') &&
+    source.includes('matrix.registryMode !== "prelaunch"') &&
+    source.includes('matrix.genericMode !== "disabled"') &&
+    source.includes("stage.finalDeploymentBindingReverified") &&
+    source.includes(
+      "realBlockSlaRequiredForProjectorDatabaseOrIndexedPublicCutover",
+    ) &&
+    source.includes("projectorDatabaseOrIndexedPublicCutoverAuthorized") &&
+    source.includes("const exactExpectations = [") &&
+    /^      legacy_recovery_promotion_review:\n[\s\S]{0,280}?        default: false\n        type: boolean$/mu.test(
+      workflow,
+    ) &&
+    workflow.includes(
+      "inputs.legacy_recovery_promotion_review || inputs.custom_v2_registry_live",
+    ) &&
+    gate.launchControlInputs.every((name) =>
+      workflow.includes(`test \"$${name.toUpperCase()}\" = false`),
+    ) &&
+    workflow.includes('test -z "$CUSTOM_V2_DETAIL_RECORD_HASH"') &&
+    workflow.includes(
+      'test -z "$CUSTOM_V2_AUTHENTICATED_INGRESS_EVIDENCE_SHA256"',
+    ) &&
+    workflow.includes(
+      'test "$CUSTOM_LAUNCH_CONFIGURED_ENABLEMENT" = false',
+    ) &&
+    workflow.includes('test "$CUSTOM_LAUNCH_STAGING_MODE" = generic-disabled') &&
+    workflow.includes('test "$VERIFIED_CUSTOM_V2" = true') &&
+    workflow.includes('test "$VERIFICATION_MODE" = custom-v2-release') &&
+    workflow.includes(
+      '--runtime-env-file .vercel/.env.production.local',
+    ) &&
+    workflow.includes(
+      '--seed-evidence "${{ steps.durable-catalog-seed.outputs.result_path }}"',
+    ) &&
+    workflow.includes(
+      '--public-smoke-evidence "${{ steps.public-provider-smoke.outputs.result_path }}"',
+    ) &&
+    workflow.includes(
+      '--custom-v2-evidence "${{ steps.custom-v2-stage.outputs.evidence_path }}"',
+    ) &&
+    workflow.includes(
+      "uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26",
+    ) &&
+    workflow.includes(
+      "name: legacy-recovery-stage-handoff-${{ github.run_id }}-${{ github.run_attempt }}",
+    ) &&
+    gateStep >= 0 &&
+    finalBinding > gateStep &&
+    handoffStep > finalBinding &&
+    attestationStep > handoffStep &&
+    artifactStep > attestationStep &&
+    !workflow.includes("vercel promote") &&
+    runbook.includes(
+      "Run exactly one promotion-eligibility branch",
+    ) &&
+    runbook.includes(
+      "does not authorize Projector, database, Custom V2, Registry V2, or",
+    ) &&
+    runbook.includes("indexed-public cutover.") &&
+    runbook.includes("gh attestation verify") &&
+    runbook.includes('--bundle "$LEGACY_RECOVERY_BUNDLE"') &&
+    runbookGate >= 0 &&
+    runbookBinding > runbookGate
   );
 }
 
@@ -1706,6 +1876,29 @@ export function evaluateReadModelOperationsSourceContracts(
         realBlockSla,
       ),
     "auth-only probes stay separate and production promotion requires exact real-block SLA evidence",
+  );
+
+  const approvedLegacyRecoveryException =
+    APPROVED_OPERATIONS.releaseGates.legacyRecoveryPromotionException;
+  const legacyRecoveryException =
+    releaseGates?.legacyRecoveryPromotionException;
+  check(
+    "ops-legacy-recovery-promotion-exception-binding",
+    realBlockSla?.requiredBeforeProjectorDatabaseOrIndexedPublicCutover ===
+      true &&
+      sourceBindingMatches(
+        source,
+        legacyRecoveryException?.handoff?.script,
+        expectedSha256Overrides,
+      ) &&
+      legacyRecoveryPromotionExceptionIsFailClosed({
+        gate: legacyRecoveryException,
+        gateSource: source(approvedLegacyRecoveryException.handoff.script.path),
+        workflow: source(approvedLegacyRecoveryException.handoff.workflow),
+        runbook: source("docs/operations/read-model-scheduler-cutover.md"),
+        packageJson: parseJson(source("package.json")),
+      }),
+    "the only real-block SLA promotion exception is an attested, fresh, exact-stage legacy Blob plus Dex handoff with every Projector, indexed-read and launch control disabled",
   );
 
   check(
