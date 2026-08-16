@@ -57,8 +57,9 @@ describe("interaction accessibility", () => {
       '<section\n      className={styles.tradeForm}',
     );
     expect(tokenSource).toContain(
-      '<nav className={styles.links} aria-label={`${token.name} links`}>',
+      'className={`${styles.links} ${styles.addressLinks}`}',
     );
+    expect(tokenSource).toContain('aria-label={`${token.name} links`}');
     expect(tokenSource).toContain(
       '<nav className={styles.links} aria-label={`${project.name} links`}>',
     );

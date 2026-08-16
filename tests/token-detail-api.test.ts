@@ -104,7 +104,11 @@ function catalog() {
       custom: "unavailable",
     },
     scope: {
-      included: ["classic-v3", "registry.custom-launched"],
+      included: [
+        "classic-v3",
+        "official-main-token",
+        "registry.custom-launched",
+      ],
       excluded: [
         "classic-v1",
         "classic-v2",

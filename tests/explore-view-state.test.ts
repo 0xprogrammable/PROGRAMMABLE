@@ -120,7 +120,11 @@ const catalogBoundary = {
     custom: "current" as const,
   },
   scope: {
-    included: ["classic-v3", "registry.custom-launched"] as const,
+    included: [
+      "classic-v3",
+      "official-main-token",
+      "registry.custom-launched",
+    ] as const,
     excluded: [
       "classic-v1",
       "classic-v2",

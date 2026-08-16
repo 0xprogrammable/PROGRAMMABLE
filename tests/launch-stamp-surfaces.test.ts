@@ -208,7 +208,11 @@ describe("canonical Router stamp surfaces", () => {
             custom: "current",
           },
           scope: {
-            included: ["classic-v3", "registry.custom-launched"],
+            included: [
+              "classic-v3",
+              "official-main-token",
+              "registry.custom-launched",
+            ],
             excluded: [
               "classic-v1",
               "classic-v2",
