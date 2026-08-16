@@ -111,6 +111,7 @@ describe("landing page contract", () => {
 
   it("restores native document scrolling instead of trapping the landing route", () => {
     const styles = read("components/landing-page.module.css");
+    const interfaceStyles = read("app/interface.css");
 
     expect(styles).toMatch(
       /:global\(body \.app-frame\):has\(\.page\)\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
@@ -120,6 +121,15 @@ describe("landing page contract", () => {
     );
     expect(styles).toMatch(
       /:global\(body \.app-frame\):has\(\.page\) :global\(\.route-transition\)\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
+    );
+    expect(interfaceStyles).not.toMatch(
+      /\.app-frame:has\(\.landing-page-root\)[^{]*\{[^}]*overflow:\s*hidden;/s,
+    );
+    expect(interfaceStyles).not.toMatch(
+      /\.app-frame:has\(\.landing-page-root\) > main\s*\{[^}]*overflow:\s*hidden;/s,
+    );
+    expect(interfaceStyles).not.toMatch(
+      /\.app-frame:has\(\.landing-page-root\) \.route-transition\s*\{[^}]*overflow:\s*hidden;/s,
     );
   });
 
