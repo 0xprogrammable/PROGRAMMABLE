@@ -51,7 +51,7 @@ export const CUSTOM_LAUNCH_DEPLOYMENT_PROBE_DEFAULTS = Object.freeze({
   maximumResponseBytes: 1_048_576,
   maximumTimeSkewMs: 300_000,
   retryDelayMs: 5_000,
-  timeoutMs: 10_000,
+  timeoutMs: 20_000,
 });
 
 export async function probeCustomLaunchDeployment(input) {
