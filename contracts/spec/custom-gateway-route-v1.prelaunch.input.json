@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "programmable.custom-gateway-route-prelaunch-input.v1",
+  "chainId": "1",
+  "publicBase": {
+    "repository": "0xprogrammable/programmable",
+    "branch": "production",
+    "commit": "29ef4d7c2cb9ec6e45f5d4f61d8c2f91e910bee4",
+    "tree": "b0afd9dad72a4ada2d5adc0270734a654155b443"
+  },
+  "genericV2Source": {
+    "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+    "branch": "main",
+    "commit": "0ab53dcc50e3245eb653eacadd10545a6df8d49c",
+    "tree": "64503ba709d7f60498588a00d928e5fa2a8f858e",
+    "graphDeployerSourceSha256": "sha256:06a3acaf9beeb68647af231f5524c5a34dc013d99611a1b2d0a6c80895f595e9",
+    "graphRouteSourceSha256": "sha256:2acdc676bdca99074fd82eecf5c235cf8dd839f74404d8e61c9c0f8b2760765a",
+    "foundationArtifactSha256": "sha256:eb18bd3e1d3426cf9b5bf8aaf44665e04f8c468b0482bac280636936728637e6",
+    "descriptorSchemaSha256": "sha256:1a3449647184822eedb8a291911918880fb048355fda3877654cfc502cd78ca5",
+    "descriptorAdapterSourceSha256": "sha256:8e74d43c9cb940eeddd5edc9974cca08961318a9512493b989e4ce51c9f854e2"
+  },
+  "registryV2": {
+    "address": "0x845506084a1afb969fa4def444a2bdeee794aaad",
+    "runtimeCodeKeccak256": "0x74d8196e2d40d030c66b147e835cbdf6dd0ab61c964fb3ef3890d86ed7daf074",
+    "deploymentBlock": "25749665",
+    "deploymentBlockHash": "0x84eeb4d264b75c2b89fb56ce5b941dfd8ef6de18181b6d2bff34fbb7c9692127",
+    "policyCommitment": "0xa51733b58306cf89580bd3c4f39935583db3196c3ab62ecd73644fff2e13b892",
+    "minimumFinalityBlocks": "12",
+    "observedCounts": {
+      "approval": "0",
+      "registration": "0",
+      "transition": "0"
+    }
+  },
+  "poolManager": {
+    "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+    "runtimeCodeKeccak256": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+  },
+  "mainnetForkEvidence": {
+    "block": "25767247",
+    "blockHash": "0x4f5631c21b5b4ef7c08931546621bbf028213138377f3d591de1874e8336d48d",
+    "parentBlockHash": "0x0cc77a00518a8e871f7d077a9c482b020da044bb0eec12563d0498003ab52f33",
+    "purpose": "Pinned pre-state for the local RegistryV2 role lifecycle and dependency identity tests"
+  },
+  "routeAdapterRelease": {
+    "bindingHash": null,
+    "state": "INTEGRATION_PENDING_AUTHENTICATED_INTERNAL_RELEASE_BINDING",
+    "requiredFormat": "raw bytes32 obtained by stripping the sha256: prefix from routeAdapterRelease.adapterBindingHash"
+  }
+}
