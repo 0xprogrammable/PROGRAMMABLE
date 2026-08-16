@@ -6,19 +6,19 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("landing page contract", () => {
-  it("keeps the landing page at home and preserves Explore as its own route", () => {
+  it("keeps the landing page at home and sends the header Explore link to its landing chapter", () => {
     const homePage = read("app/page.tsx");
     const explorePage = read("app/explore/page.tsx");
     const navigation = read("components/site-navigation.tsx");
 
-    expect(homePage).toContain('import { LandingPage }');
+    expect(homePage).toContain("import { LandingPage }");
     expect(homePage).toContain("return <LandingPage />");
-    expect(explorePage).toContain('import { ExploreView }');
+    expect(explorePage).toContain("import { ExploreView }");
     expect(explorePage).toContain('canonical: "/explore"');
     expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore" }',
+      '{ href: "/#explore", label: "Explore", activePath: "/explore" }',
     );
-    expect(navigation).toContain('href="/#intro"');
+    expect(navigation).toContain('href="/"');
     expect(homePage).toContain(
       'const pageDescription = "Shape what assets can do";',
     );
@@ -36,8 +36,8 @@ describe("landing page contract", () => {
 
     expect(backdrop).not.toContain('"use client"');
     expect(backdrop).not.toContain("<video");
-    expect(backdrop).toContain("const TWINKLE_COUNT = 72");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 24");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 96");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 40");
     expect(backdrop).toContain('aria-hidden="true"');
     expect(finalStyles).toMatch(
       /\.atmosphere-backdrop\s*\{[^}]*background:\s*var\(--webde-canvas\);/s,
@@ -52,12 +52,13 @@ describe("landing page contract", () => {
     expect(landing).toContain(
       'src="/brand/atmosphere/programmable-floral-foreground-v1.avif"',
     );
-    expect(landing).toContain("<h1 id=\"landing-title\">Programmable</h1>");
+    expect(landing).toContain('<h1 id="landing-title">Programmable</h1>');
     expect(landing).toContain("Shape what assets can do");
     expect(landing).toContain('id="intro"');
     expect(landing).toContain('href="#what-is-programmable"');
     expect(landing).toContain('id="what-is-programmable"');
     expect(landing).toContain('id="what-is-a-hook"');
+    expect(landing).toContain('id="explore"');
     expect(landing).toContain("<ExploreView />");
     expect(landing).toContain('href="/docs"');
     expect(landing).toContain(
@@ -96,7 +97,10 @@ describe("landing page contract", () => {
     expect(styles).toContain("align-items: baseline;");
     expect(styles).toContain(".definitionLogoFrame");
     expect(landing).toContain("new IntersectionObserver(");
-    expect(landing).toContain('data-reveal-section');
+    expect(landing).toContain("useLayoutEffect(() =>");
+    expect(landing).toContain('window.location.hash !== "#explore"');
+    expect(landing).toContain('window.scrollTo({ behavior: "auto"');
+    expect(landing).toContain("data-reveal-section");
     expect(landing).not.toContain('addEventListener("wheel"');
     expect(landing).not.toContain('addEventListener("scroll"');
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
@@ -119,17 +123,17 @@ describe("landing page contract", () => {
     );
   });
 
-  it("keeps the star shimmer small and slow while reduced motion disables it", () => {
+  it("keeps the star shimmer small and active while reduced motion disables it", () => {
     const backdrop = read("components/atmosphere-backdrop.tsx");
     const interfaceStyles = read("app/interface.css");
     const finalStyles = read("app/webde-final-ui.css");
 
-    expect(backdrop).toContain("const TWINKLE_COUNT = 72");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 24");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 96");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 40");
     expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(backdrop).toContain("Array.from({ length: LOWER_TWINKLE_COUNT }");
-    expect(backdrop).toContain("const duration = 10.8");
-    expect(backdrop).toContain("const size = 0.62");
+    expect(backdrop).toContain("const duration = 4.6");
+    expect(backdrop).toContain("const size = 0.58");
     expect(interfaceStyles).toMatch(
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
     );
@@ -137,7 +141,7 @@ describe("landing page contract", () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
     );
     expect(finalStyles).toMatch(
-      /\.atmosphere-sparkles i\s*\{[^}]*box-shadow:\s*0 0 3px/s,
+      /\.atmosphere-sparkles i\s*\{[^}]*box-shadow:\s*0 0 2px/s,
     );
     expect(finalStyles).not.toContain("cross");
   });

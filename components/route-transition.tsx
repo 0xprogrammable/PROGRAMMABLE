@@ -1,12 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  type ReactNode,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 export function RouteTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -36,11 +31,11 @@ export function RouteTransition({ children }: { children: ReactNode }) {
     const enteringDocs = pathname.startsWith("/docs");
     const animation = content.animate(
       enteringDocs
-        ? [{ opacity: 0.96 }, { opacity: 1 }]
+        ? [{ opacity: 0 }, { opacity: 1 }]
         : [
             {
-              opacity: 0.94,
-              transform: "translate3d(0, 3px, 0)",
+              opacity: 0,
+              transform: "translate3d(0, 12px, 0)",
             },
             {
               opacity: 1,
@@ -48,7 +43,7 @@ export function RouteTransition({ children }: { children: ReactNode }) {
             },
           ],
       {
-        duration: enteringDocs ? 120 : 160,
+        duration: enteringDocs ? 420 : 720,
         easing: "cubic-bezier(0.23, 1, 0.32, 1)",
       },
     );

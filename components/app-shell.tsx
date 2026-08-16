@@ -1,11 +1,9 @@
 import type { ReactNode } from "react";
 import { AtmosphereBackdrop } from "@/components/atmosphere-backdrop";
 import { LiquidGlassFilter } from "@/components/liquid-glass-filter";
-import {
-  MobileNavigation,
-  SiteHeader,
-} from "@/components/site-navigation";
+import { MobileNavigation, SiteHeader } from "@/components/site-navigation";
 import { RouteTransition } from "@/components/route-transition";
+import { SiteFooter } from "@/components/site-footer";
 import { WalletProvider } from "@/components/wallet-provider";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -20,6 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SiteHeader />
         <main id="main-content" tabIndex={-1}>
           <RouteTransition>{children}</RouteTransition>
+          <SiteFooter />
         </main>
         <MobileNavigation />
       </div>

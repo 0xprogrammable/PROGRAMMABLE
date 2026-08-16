@@ -28,14 +28,32 @@ describe("public shell polish", () => {
     expect(source).not.toContain("GitHubBrandIcon");
   });
 
-  it("keeps route motion short, interruptible and compositor-friendly", () => {
+  it("keeps route motion measured, interruptible and compositor-friendly", () => {
     const source = read("components/route-transition.tsx");
 
     expect(source).toContain('"(prefers-reduced-motion: reduce)"');
     expect(source).toContain("routeAnimationRef.current?.cancel()");
-    expect(source).toContain("translate3d(0, 3px, 0)");
-    expect(source).toContain("duration: enteringDocs ? 120 : 160");
+    expect(source).toContain("translate3d(0, 12px, 0)");
+    expect(source).toContain("duration: enteringDocs ? 420 : 720");
     expect(source).not.toContain("key={pathname}");
+  });
+
+  it("renders one shared footer after every route and keeps it below the fold", () => {
+    const shell = read("components/app-shell.tsx");
+    const explore = read("components/explore-view.tsx");
+    const docsLayout = read("app/docs/layout.tsx");
+    const finalStyles = read("app/webde-final-ui.css");
+
+    expect(shell).toContain("<RouteTransition>{children}</RouteTransition>");
+    expect(shell).toContain("<SiteFooter />");
+    expect(shell.indexOf("<SiteFooter />")).toBeGreaterThan(
+      shell.indexOf("<RouteTransition>{children}</RouteTransition>"),
+    );
+    expect(explore).not.toContain("<SiteFooter />");
+    expect(docsLayout).not.toContain("<SiteFooter />");
+    expect(finalStyles).toMatch(
+      /\.route-transition\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);/s,
+    );
   });
 
   it("locks the public shell to the night atmosphere without a theme control", () => {

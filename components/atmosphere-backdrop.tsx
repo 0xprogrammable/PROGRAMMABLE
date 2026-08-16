@@ -1,8 +1,8 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 
-const TWINKLE_COUNT = 72;
-const LOWER_TWINKLE_COUNT = 24;
+const TWINKLE_COUNT = 96;
+const LOWER_TWINKLE_COUNT = 40;
 const PLANT_SIZES = "(max-width: 520px) 46vw, (max-width: 1500px) 22vw, 330px";
 
 type SparkleStyle = CSSProperties & {
@@ -14,9 +14,9 @@ type SparkleStyle = CSSProperties & {
 function sparkleStyle(index: number, seed: number): SparkleStyle {
   const horizontal = (index * 37.37 + seed * 19.19) % 98;
   const vertical = (index * 61.61 + seed * 11.73) % 96;
-  const duration = 10.8 + ((index * 29 + seed * 7) % 79) / 10;
-  const delay = -((index * 17 + seed * 13) % 121) / 10;
-  const size = 0.62 + ((index * 11 + seed * 3) % 7) / 20;
+  const duration = 4.6 + ((index * 29 + seed * 7) % 43) / 10;
+  const delay = -((index * 17 + seed * 13) % 101) / 10;
+  const size = 0.58 + ((index * 11 + seed * 3) % 9) / 20;
 
   return {
     left: `${horizontal + 1}%`,

@@ -4,7 +4,7 @@ import Link from "next/link";
 import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
-  { href: "/explore", label: "Explore" },
+  { href: "/#explore", label: "Explore" },
   { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
@@ -49,8 +49,12 @@ const resourceLinks = [
 
 export function SiteFooter() {
   return (
-    <footer className={`${styles.footer} page-width`} aria-label="Site footer">
-      <div className={`${styles.surface} liquid-glass-surface`}>
+    <footer
+      className={`${styles.footer} page-width`}
+      data-site-footer
+      aria-label="Site footer"
+    >
+      <div className={styles.surface}>
         <section className={styles.brand}>
           <Link
             className={styles.brandLink}

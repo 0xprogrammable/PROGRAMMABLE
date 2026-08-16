@@ -18,7 +18,7 @@ import { WalletButton } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
-  { href: "/explore", label: "Explore" },
+  { href: "/#explore", label: "Explore", activePath: "/explore" },
   { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
@@ -26,11 +26,13 @@ const desktopNavItems = [
 
 const mobileNavItems = desktopNavItems;
 
-function isCurrent(pathname: string, href: string) {
-  if (href === "/docs") {
+function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
+  const activePath = "activePath" in item ? item.activePath : item.href;
+
+  if (activePath === "/docs") {
     return pathname === "/docs" || pathname.startsWith("/docs/");
   }
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === activePath || pathname.startsWith(`${activePath}/`);
 }
 
 export function SiteHeader() {
@@ -69,17 +71,10 @@ export function SiteHeader() {
   }, [menuOpen]);
 
   return (
-    <header
-      ref={headerRef}
-      className={`site-header ${styles.siteHeader}`}
-    >
+    <header ref={headerRef} className={`site-header ${styles.siteHeader}`}>
       <div className={`header-inner ${styles.headerInner}`}>
         <div className="header-brand">
-          <Link
-            className="wordmark"
-            href="/#intro"
-            aria-label="Programmable home"
-          >
+          <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
               className="wordmark-logo"
               src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"
@@ -96,9 +91,9 @@ export function SiteHeader() {
           {desktopNavItems.map((item) => (
             <Link
               key={item.href}
-              className={isCurrent(pathname, item.href) ? "active" : undefined}
+              className={isCurrent(pathname, item) ? "active" : undefined}
               href={item.href}
-              aria-current={isCurrent(pathname, item.href) ? "page" : undefined}
+              aria-current={isCurrent(pathname, item) ? "page" : undefined}
             >
               {item.label}
             </Link>
@@ -221,7 +216,7 @@ export function MobileNavigation({
   return (
     <nav className="mobile-nav" aria-label="Primary navigation">
       {mobileNavItems.map((item) => {
-        const current = isCurrent(pathname, item.href);
+        const current = isCurrent(pathname, item);
         return (
           <Link
             key={item.href}

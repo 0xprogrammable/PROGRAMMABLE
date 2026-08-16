@@ -24,7 +24,7 @@ describe("topbar and Explore hero polish", () => {
       /\.desktop-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;[^}]*padding:\s*0;/s,
     );
     expect(css).toMatch(
-      /\.desktop-nav a,[\s\S]*?\.desktop-nav a\.active\s*\{[^}]*color:\s*var\(--webde-ink\);[^}]*font-size:\s*18px;/s,
+      /\.desktop-nav a,[\s\S]*?\.desktop-nav a\.active\s*\{[^}]*color:\s*var\(--webde-ink\);[^}]*font-size:\s*17px;/s,
     );
     expect(css).toMatch(
       /\.desktop-nav a::after,[\s\S]*?\.desktop-nav a\.active::after\s*\{[^}]*display:\s*none;/s,
@@ -64,13 +64,25 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain("<WalletButton compact />");
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
-    expect(navigation).toContain('if (href === "/docs")');
+    expect(navigation).toContain('if (activePath === "/docs")');
     for (const label of ["Explore", "Create", "Profile", "Docs"]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
     expect(navigationCss).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(landingCss).toMatch(
       /\.docsLink\s*\{[^}]*font-size:\s*18px;/s,
+    );
+  });
+
+  it("keeps the wallet menu mounted for a smooth accessible exit", () => {
+    const wallet = read("components/wallet-provider.tsx");
+    const css = read("app/webde-final-ui.css");
+
+    expect(wallet).toContain('menuOpen ? "wallet-menu-open" : "wallet-menu-closed"');
+    expect(wallet).toContain("aria-hidden={!menuOpen}");
+    expect(wallet).toContain("tabIndex={menuOpen ? undefined : -1}");
+    expect(css).toMatch(
+      /\.wallet-menu\.wallet-menu-open\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*translate3d\(0, 0, 0\) scale\(1\);/s,
     );
   });
 

@@ -1,5 +1,4 @@
 .footer {
-  border-top: 1px solid var(--webde-line);
   margin-bottom: 28px;
   margin-top: clamp(52px, 7vw, 86px);
   min-width: 0;
@@ -144,8 +143,6 @@
 
   .risk {
     grid-column: 1 / -1;
-    border-top: 1px solid var(--liquid-glass-border);
-    padding-top: 10px;
   }
 
   .risk p {

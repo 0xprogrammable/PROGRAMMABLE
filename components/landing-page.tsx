@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -8,9 +8,56 @@ import { ExploreView } from "@/components/explore-view";
 import styles from "@/components/landing-page.module.css";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
+const HERO_TWINKLE_COUNT = 132;
+
+type HeroStarStyle = CSSProperties & {
+  "--hero-star-delay": string;
+  "--hero-star-duration": string;
+  "--hero-star-size": string;
+};
+
+function heroStarStyle(index: number): HeroStarStyle {
+  const horizontal = (index * 47.13 + 19.7) % 96;
+  const vertical = (index * 29.71 + 7.3) % 62;
+  const duration = 4.4 + ((index * 17) % 41) / 10;
+  const delay = -((index * 23) % 97) / 10;
+  const size = 0.58 + ((index * 7) % 9) / 20;
+
+  return {
+    left: `${horizontal + 2}%`,
+    top: `${vertical + 1}%`,
+    "--hero-star-delay": `${delay}s`,
+    "--hero-star-duration": `${duration}s`,
+    "--hero-star-size": `${size}px`,
+  };
+}
 
 export function LandingPage() {
   const pageRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const alignExploreHash = () => {
+      if (window.location.hash !== "#explore") return;
+
+      const target = document.getElementById("explore");
+      const header = document.querySelector<HTMLElement>(".site-header");
+      if (!target) return;
+
+      const headerHeight = header?.getBoundingClientRect().height ?? 0;
+      const breathingRoom = window.innerWidth <= 960 ? 16 : 24;
+      const top =
+        window.scrollY +
+        target.getBoundingClientRect().top -
+        headerHeight -
+        breathingRoom;
+
+      window.scrollTo({ behavior: "auto", left: 0, top });
+    };
+
+    alignExploreHash();
+    window.addEventListener("hashchange", alignExploreHash);
+    return () => window.removeEventListener("hashchange", alignExploreHash);
+  }, []);
 
   useEffect(() => {
     const page = pageRef.current;
@@ -51,10 +98,7 @@ export function LandingPage() {
   }, []);
 
   return (
-    <article
-      ref={pageRef}
-      className={`${styles.page} landing-page-root`}
-    >
+    <article ref={pageRef} className={`${styles.page} landing-page-root`}>
       <section
         className={styles.hero}
         id="intro"
@@ -69,6 +113,11 @@ export function LandingPage() {
             priority
             sizes="100vw"
           />
+          <span className={styles.heroTwinkles}>
+            {Array.from({ length: HERO_TWINKLE_COUNT }, (_, index) => (
+              <i key={index} style={heroStarStyle(index)} />
+            ))}
+          </span>
         </div>
 
         <div className={styles.heroContent}>
@@ -163,8 +212,8 @@ export function LandingPage() {
           </p>
           <div className={styles.definitionDetail}>
             <p>
-              Those rules can run at specific moments, such as before or after
-              a trade or when liquidity changes.
+              Those rules can run at specific moments, such as before or after a
+              trade or when liquidity changes.
             </p>
             <p>
               They can adjust a fee, reward an action, or shape what happens
@@ -176,6 +225,7 @@ export function LandingPage() {
 
       <div
         className={`${styles.exploreChapter} ${styles.revealSection}`}
+        id="explore"
         data-reveal-section
       >
         <ExploreView />

@@ -2058,68 +2058,72 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       }}
     >
       {button}
-      {menuOpen ? (
-        <div
-          className="wallet-menu"
-          id={menuId}
-          role="group"
-          aria-label="Wallet actions"
-        >
-          <div className="wallet-menu-account">
-            <strong>{username || shortenAddress(wallet.account)}</strong>
-            <span>{shortenAddress(wallet.account)}</span>
-          </div>
-          <Link
-            href="/profile"
-            onClick={() => setMenuOpen(false)}
-          >
-            Profile
-          </Link>
-          <button
-            type="button"
-            onClick={async () => {
-              setMenuError("");
-              try {
-                await navigator.clipboard.writeText(wallet.account);
-                setMenuCopied(true);
-                window.setTimeout(() => setMenuCopied(false), 1500);
-              } catch {
-                setMenuError("Could not copy address");
-              }
-            }}
-          >
-            {menuCopied ? "Address copied" : "Copy address"}
-          </button>
-          <button
-            className="wallet-menu-disconnect"
-            type="button"
-            disabled={disconnecting}
-            onClick={() => {
-              setMenuError("");
-              void disconnect({ showDialogOnFailure: false }).then(
-                (succeeded) => {
-                  if (succeeded) {
-                    setMenuOpen(false);
-                    return;
-                  }
-                  setMenuError("Unable to disconnect wallet. Try again.");
-                  setMenuOpen(true);
-                },
-              );
-            }}
-          >
-            {disconnecting ? "Disconnecting" : "Disconnect"}
-          </button>
-          <p
-            className={menuError ? undefined : "sr-only"}
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            {menuCopied ? "Address copied" : menuError}
-          </p>
+      <div
+        className={`wallet-menu ${
+          menuOpen ? "wallet-menu-open" : "wallet-menu-closed"
+        }`}
+        id={menuId}
+        role="group"
+        aria-label="Wallet actions"
+        aria-hidden={!menuOpen}
+      >
+        <div className="wallet-menu-account">
+          <strong>{username || shortenAddress(wallet.account)}</strong>
+          <span>{shortenAddress(wallet.account)}</span>
         </div>
-      ) : null}
+        <Link
+          href="/profile"
+          tabIndex={menuOpen ? undefined : -1}
+          onClick={() => setMenuOpen(false)}
+        >
+          Profile
+        </Link>
+        <button
+          type="button"
+          tabIndex={menuOpen ? undefined : -1}
+          onClick={async () => {
+            setMenuError("");
+            try {
+              await navigator.clipboard.writeText(wallet.account);
+              setMenuCopied(true);
+              window.setTimeout(() => setMenuCopied(false), 1500);
+            } catch {
+              setMenuError("Could not copy address");
+            }
+          }}
+        >
+          {menuCopied ? "Address copied" : "Copy address"}
+        </button>
+        <button
+          className="wallet-menu-disconnect"
+          type="button"
+          disabled={disconnecting}
+          tabIndex={menuOpen ? undefined : -1}
+          onClick={() => {
+            setMenuError("");
+            void disconnect({ showDialogOnFailure: false }).then(
+              (succeeded) => {
+                if (succeeded) {
+                  setMenuOpen(false);
+                  return;
+                }
+                setMenuError("Unable to disconnect wallet. Try again.");
+                setMenuOpen(true);
+              },
+            );
+          }}
+        >
+          {disconnecting ? "Disconnecting" : "Disconnect"}
+        </button>
+        <p
+          className={menuError ? undefined : "sr-only"}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {menuCopied ? "Address copied" : menuError}
+        </p>
+      </div>
     </div>
   );
 }

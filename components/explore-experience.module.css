@@ -929,18 +929,40 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .revealedGrid .runnerCard {
-    animation: explore-card-reveal 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation: explore-card-reveal 900ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 
   .revealedGrid .runnerCard:nth-child(2) {
-    animation-delay: 45ms;
+    animation-delay: 80ms;
   }
 
-  .revealedGrid .runnerCard:nth-child(3),
-  .revealedGrid .runnerCard:nth-child(n + 4) {
-    animation-delay: 90ms;
+  .revealedGrid .runnerCard:nth-child(3) {
+    animation-delay: 160ms;
   }
 
+  .revealedGrid .runnerCard:nth-child(4) {
+    animation-delay: 120ms;
+  }
+
+  .revealedGrid .runnerCard:nth-child(5) {
+    animation-delay: 200ms;
+  }
+
+  .revealedGrid .runnerCard:nth-child(6) {
+    animation-delay: 280ms;
+  }
+
+  .revealedGrid .runnerCard:nth-child(7) {
+    animation-delay: 240ms;
+  }
+
+  .revealedGrid .runnerCard:nth-child(8) {
+    animation-delay: 320ms;
+  }
+
+  .revealedGrid .runnerCard:nth-child(9) {
+    animation-delay: 400ms;
+  }
 }
 
 @keyframes explore-card-reveal {
@@ -1188,7 +1210,7 @@
 .runnerData {
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 20px;
 }
 
@@ -1196,10 +1218,6 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-}
-
-.runnerData > span:last-child {
-  text-align: right;
 }
 
 .runnerData small {
@@ -1220,6 +1238,7 @@
 
 .runnerMeta {
   border-top: 1px solid var(--webde-line);
+  gap: 4px;
   min-height: 48px;
   padding: 1px 8px 1px 14px;
 }
@@ -1234,6 +1253,39 @@
 .runnerSocials {
   gap: 0;
   min-height: 44px;
+}
+
+.runnerContract {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.runnerContract code {
+  color: var(--webde-muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.runnerCopyButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--webde-dim);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  height: 40px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background-color 160ms var(--webde-ease),
+    color 160ms var(--webde-ease);
+  width: 32px;
 }
 
 .runnerSocialLink {
@@ -1265,6 +1317,16 @@
   .runnerSocialLink:hover {
     background: var(--webde-control);
   }
+
+  .runnerCopyButton:hover {
+    background: var(--webde-control);
+    color: var(--webde-ink);
+  }
+}
+
+.runnerCopyButton:focus-visible {
+  outline: 2px solid var(--webde-ink);
+  outline-offset: 2px;
 }
 
 @media (max-width: 1100px) {

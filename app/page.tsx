@@ -4,7 +4,7 @@ import { LandingPage } from "@/components/landing-page";
 
 const pageDescription = "Shape what assets can do";
 const pageSocialImage =
-  "https://programmable.market/og/programmable-loop-og-1200x630.png";
+  "https://programmable.market/og/programmable-landing-preview-v2-1200x630.jpg";
 
 export const metadata: Metadata = {
   title: "Programmable",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
         secureUrl: pageSocialImage,
         width: 1200,
         height: 630,
-        type: "image/png",
+        type: "image/jpeg",
         alt: "The white Programmable mark in a vivid floral night garden",
       },
     ],

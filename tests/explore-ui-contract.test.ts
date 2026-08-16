@@ -17,25 +17,25 @@ describe("Explore UI contract", () => {
       'import { GET as readExploreResponse } from "@/app/api/explore/route"',
     );
     expect(page).toContain("await readExploreResponse(new NextRequest(");
-    expect(page).toContain("return await Promise.race([guardedRead, deadline])");
+    expect(page).toContain(
+      "return await Promise.race([guardedRead, deadline])",
+    );
     expect(page).toContain("controller.abort()");
     expect(page).not.toContain("AbortSignal.timeout(");
     expect(page).not.toContain('fetch("https://programmable.market');
     expect(page).toContain("<ExploreView initialResponse={initialResponse} />");
-    expect(source).toContain(
-      "if (handledRequestKey.current === requestKey)",
-    );
+    expect(source).toContain("if (handledRequestKey.current === requestKey)");
     expect(source).toContain(
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
     expect(source).toContain("enabled: !preview && !loadingOnly");
-    expect(source).toContain(
-      "useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)",
-    );
+    expect(source).toContain("useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)");
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain("<h1>Explore Hooks</h1>");
     expect(source).not.toContain("ExploreGridSkeleton");
-    expect(source).toContain('className={styles.loadingState} aria-busy="true"');
+    expect(source).toContain(
+      'className={styles.loadingState} aria-busy="true"',
+    );
   });
 
   it("keeps sort, socials and model choices in one persistent disclosure", () => {
@@ -49,9 +49,7 @@ describe("Explore UI contract", () => {
     expect(source).toContain('id="explore-age-label"');
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
-    expect(source).toContain(
-      '{ id: "custom-hook", label: "Custom" }',
-    );
+    expect(source).toContain('{ id: "custom-hook", label: "Custom" }');
     expect(source).toContain(
       'Number(socialFilter !== "all") + Number(modelFilter !== "all")',
     );
@@ -65,9 +63,7 @@ describe("Explore UI contract", () => {
     expect(source.indexOf('id="explore-age-label"')).toBeLessThan(
       source.indexOf('id="explore-socials-label"'),
     );
-    expect(source).toContain(
-      'useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)',
-    );
+    expect(source).toContain("useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)");
     expect(source).not.toMatch(
       /onClick=\{\(\) => \{[\s\S]{0,300}filterRef\.current/s,
     );
@@ -106,6 +102,10 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       'sizes="(max-width: 360px) 96px, (max-width: 700px) 104px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 299px"',
     );
+    expect(source).not.toContain("<small>CA</small>");
+    expect(source).not.toContain('valuationLabel ?? "Unavailable"');
+    expect(source).toContain("Copy ${token.name} contract address");
+    expect(source).toContain('token.marketStatus !== "Unavailable"');
     expect(styles).toMatch(
       /\.runnerMarketStatus\s*\{[^}]*color:\s*var\(--explore-ivory-muted\);/s,
     );

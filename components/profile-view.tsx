@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Globe2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { formatUnits, parseUnits, type Hex } from "viem";
 import {
   useCallback,
@@ -26,6 +26,7 @@ import {
   prepareProfileBannerImage,
 } from "@/lib/profile/avatar";
 import { GitHubBrandIcon, XBrandIcon } from "@/components/brand-icons";
+import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   ClassicV3ProfileReadError,
   EMPTY_CLASSIC_V3_PROFILE,
@@ -2709,7 +2710,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     {
       kind: "website" as const,
       value: savedProfile.websiteUrl ?? "",
-      icon: <Globe2 aria-hidden="true" />,
+      icon: <WebsiteLinkIcon />,
     },
     {
       kind: "github" as const,
