@@ -349,15 +349,12 @@ function exactCatalogSnapshot(response) {
   )) return null;
   return JSON.stringify({
     source,
-    status: catalog.status,
-    lastIndexedAt: generatedAt,
-    asOfBlock: catalog.asOfBlock,
-    asOfBlockHash: catalog.asOfBlockHash,
     identityCount: catalog.identityCount,
     identityCommitment: catalog.identityCommitment,
     completeness: catalog.completeness,
     scope: catalog.scope,
-    evidence: catalog.evidence,
+    evidenceDeployment: catalog.evidence.deployment,
+    evidenceSourceCommit: catalog.evidence.sourceCommit,
     launchSource,
   });
 }

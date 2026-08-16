@@ -1243,10 +1243,6 @@ export function envioClassicV3IdentityCommitmentV1(
 ) {
   return canonicalSha256("programmable.envio-classic-v3-identity.v1", {
     source: catalog.source,
-    generatedAt: catalog.generatedAt,
-    asOfBlock: catalog.asOfBlock,
-    asOfBlockHash: catalog.asOfBlockHash,
-    evidenceCommitment: catalog.evidence.commitment,
     entries: [...entries]
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((entry) => entry.exploreKind === "token"
