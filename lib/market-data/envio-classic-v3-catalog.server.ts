@@ -45,8 +45,8 @@ const GRAPHQL_TIMEOUT_MS = 3_000;
 const GRAPHQL_MAXIMUM_BODY_BYTES = 4 * 1024 * 1024;
 const LAUNCH_PAGE_SIZE = 64;
 const MAXIMUM_LAUNCH_COUNT = 5_000;
-const TOKEN_METADATA_BATCH_SIZE = 64;
-const TOKEN_METADATA_CONCURRENCY = 3;
+export const ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE = 32;
+export const ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY = 2;
 const MAXIMUM_RPC_HEAD_SKEW_BLOCKS = 8n;
 const NATIVE_CURRENCY_ADDRESS =
   "0x0000000000000000000000000000000000000000" as const;
@@ -847,15 +847,19 @@ async function defaultReadRpcSnapshot(input: Readonly<{
       throw new Error("RPC metadata anchor is unavailable");
     }
     const batches = Array.from(
-      { length: Math.ceil(input.tokens.length / TOKEN_METADATA_BATCH_SIZE) },
+      {
+        length: Math.ceil(
+          input.tokens.length / ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE,
+        ),
+      },
       (_value, index) => input.tokens.slice(
-        index * TOKEN_METADATA_BATCH_SIZE,
-        (index + 1) * TOKEN_METADATA_BATCH_SIZE,
+        index * ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE,
+        (index + 1) * ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE,
       ),
     );
     const hydrated = await mapWithConcurrency(
       batches,
-      TOKEN_METADATA_CONCURRENCY,
+      ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY,
       async (tokens) => {
         if (input.signal.aborted || Date.now() >= input.deadlineMs) {
           throw input.signal.reason ?? new Error("RPC metadata deadline exceeded");

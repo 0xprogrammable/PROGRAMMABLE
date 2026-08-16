@@ -4,8 +4,11 @@ vi.mock("server-only", () => ({}));
 
 import { getDataPipelineReleaseBinding } from
   "../lib/data-pipeline/release-binding.server";
-import { createEnvioClassicV3CatalogReaderV1 } from
-  "../lib/market-data/envio-classic-v3-catalog.server";
+import {
+  createEnvioClassicV3CatalogReaderV1,
+  ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE,
+  ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY,
+} from "../lib/market-data/envio-classic-v3-catalog.server";
 
 const release = getDataPipelineReleaseBinding();
 const ANCHOR_BLOCK = 25_770_000;
@@ -213,6 +216,11 @@ function harness(input: {
 }
 
 describe("Envio Classic V3 public catalog", () => {
+  it("bounds RPC metadata work to 96 calls and two concurrent batches", () => {
+    expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE).toBe(32);
+    expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY).toBe(2);
+  });
+
   it("paginates, exactly binds occurrences, and exposes only Classic V3 scope", async () => {
     const test = harness({
       launches: Array.from({ length: 65 }, (_, index) => launchFixture(index + 1)),
