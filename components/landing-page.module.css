@@ -73,7 +73,7 @@
 .heroTwinkles i {
   background: currentColor;
   border-radius: 50%;
-  box-shadow: 0 0 2px rgb(255 255 255 / 0.52);
+  box-shadow: 0 0 2.5px rgb(255 255 255 / 0.62);
   color: #fff;
   height: var(--hero-star-size);
   opacity: 0.12;
@@ -97,7 +97,7 @@
   flex-direction: column;
   justify-content: center;
   min-height: calc(100svh - 88px);
-  padding: 48px 40px 132px;
+  padding: 48px clamp(20px, 4vw, 40px) 132px;
   position: relative;
   text-align: center;
   transform: translateY(-7vh);
@@ -163,7 +163,8 @@
 
 .definition {
   min-height: 100svh;
-  padding: clamp(88px, 13vh, 136px) max(40px, calc((100% - 1280px) / 2)) 96px;
+  padding: clamp(88px, 13vh, 136px)
+    max(clamp(24px, 4vw, 40px), calc((100% - 1280px) / 2)) 96px;
   scroll-margin-top: 0;
 }
 
@@ -389,12 +390,12 @@
   }
 
   .heroContent {
-    padding-inline: 20px;
+    padding-inline: clamp(20px, 4vw, 40px);
   }
 
   .definition {
     min-height: 100svh;
-    padding: 88px 24px 104px;
+    padding-block: 88px 104px;
     scroll-margin-top: 0;
   }
 

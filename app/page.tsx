@@ -22,7 +22,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/jpeg",
-        alt: "The white Programmable mark in a vivid floral night garden",
+        alt: "Programmable and Shape what assets can do over a vivid floral night garden",
       },
     ],
   },
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: pageSocialImage,
-        alt: "The white Programmable mark in a vivid floral night garden",
+        alt: "Programmable and Shape what assets can do over a vivid floral night garden",
       },
     ],
   },

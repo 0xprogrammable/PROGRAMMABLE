@@ -158,7 +158,14 @@ describe("Programmable branding assets", () => {
     expect(layout).toContain(
       '"/og/programmable-landing-preview-v2-1200x630.jpg"',
     );
+    expect(layout).toContain('type: "image/jpeg"');
+    expect(layout).toContain(
+      'alt: "Programmable and Shape what assets can do over a vivid floral night garden"',
+    );
     expect(homePage).toContain("programmable-landing-preview-v2-1200x630.jpg");
+    expect(homePage).toContain(
+      'alt: "Programmable and Shape what assets can do over a vivid floral night garden"',
+    );
     expect(homePage).toContain('card: "summary_large_image"');
     expect(metadata.format).toBe("jpeg");
     expect(metadata.width).toBe(1200);
@@ -167,7 +174,7 @@ describe("Programmable branding assets", () => {
     expect(
       [...topCenter].reduce((total, channel) => total + channel, 0) /
         topCenter.length,
-    ).toBeLessThan(28);
+    ).toBeLessThan(80);
   });
 
   it("keeps the global star field dense, round and motion-safe", () => {
@@ -180,7 +187,7 @@ describe("Programmable branding assets", () => {
       /\.atmosphere-backdrop\s*\{[^}]*background:\s*var\(--webde-canvas\);[^}]*pointer-events:\s*none;/s,
     );
     expect(css).toMatch(
-      /\.atmosphere-sparkles i\s*\{[^}]*border-radius:\s*50%;[^}]*box-shadow:\s*0 0 2px/s,
+      /\.atmosphere-sparkles i\s*\{[^}]*border-radius:\s*50%;[^}]*box-shadow:\s*0 0 2\.5px/s,
     );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,

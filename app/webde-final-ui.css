@@ -38,7 +38,10 @@ select {
 
 .page-width {
   max-width: var(--webde-page);
-  width: min(calc(100% - 5rem), var(--webde-page));
+  width: min(
+    calc(100% - clamp(2rem, 5vw, 5rem)),
+    var(--webde-page)
+  );
 }
 
 .atmosphere-backdrop {
@@ -105,7 +108,7 @@ select {
 .atmosphere-sparkles i {
   background: currentColor;
   border-radius: 50%;
-  box-shadow: 0 0 2px rgb(255 255 255 / 0.62);
+  box-shadow: 0 0 2.5px rgb(255 255 255 / 0.68);
   color: #fff;
   opacity: 0.1;
   transform: translateZ(0) scale(0.8);
@@ -451,16 +454,12 @@ body:has([data-docs-shell]) .site-header::before {
   }
 
   .header-inner {
-    padding-inline: 16px;
+    padding-inline: clamp(16px, 3vw, 32px);
   }
 
   .wordmark-logo {
     height: 32px;
     width: 25px;
-  }
-
-  .page-width {
-    width: min(calc(100% - 2rem), var(--webde-page));
   }
 
   .route-transition {

@@ -120,8 +120,8 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(source).toContain("const TWINKLE_COUNT = 96");
-    expect(source).toContain("const LOWER_TWINKLE_COUNT = 40");
+    expect(source).toContain("const TWINKLE_COUNT = 112");
+    expect(source).toContain("const LOWER_TWINKLE_COUNT = 48");
     expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toMatch(
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
@@ -281,7 +281,9 @@ describe("interaction accessibility", () => {
       "utf8",
     );
 
-    expect(source).toContain("disabled={!classicV3LaunchAvailable}");
+    expect(source).toContain(
+      "disabled={!classicV3LaunchAvailable || preparingModel !== null}",
+    );
     expect(source).toContain(
       'model === "classic-v3" && !classicV3LaunchAvailable',
     );

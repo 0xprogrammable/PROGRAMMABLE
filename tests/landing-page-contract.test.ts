@@ -36,8 +36,8 @@ describe("landing page contract", () => {
 
     expect(backdrop).not.toContain('"use client"');
     expect(backdrop).not.toContain("<video");
-    expect(backdrop).toContain("const TWINKLE_COUNT = 96");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 40");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 112");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 48");
     expect(backdrop).toContain('aria-hidden="true"');
     expect(finalStyles).toMatch(
       /\.atmosphere-backdrop\s*\{[^}]*background:\s*var\(--webde-canvas\);/s,
@@ -128,12 +128,12 @@ describe("landing page contract", () => {
     const interfaceStyles = read("app/interface.css");
     const finalStyles = read("app/webde-final-ui.css");
 
-    expect(backdrop).toContain("const TWINKLE_COUNT = 96");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 40");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 112");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 48");
     expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(backdrop).toContain("Array.from({ length: LOWER_TWINKLE_COUNT }");
     expect(backdrop).toContain("const duration = 4.6");
-    expect(backdrop).toContain("const size = 0.58");
+    expect(backdrop).toContain("const size = 0.64 + sizeStep + emphasis");
     expect(interfaceStyles).toMatch(
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
     );
@@ -141,8 +141,30 @@ describe("landing page contract", () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
     );
     expect(finalStyles).toMatch(
-      /\.atmosphere-sparkles i\s*\{[^}]*box-shadow:\s*0 0 2px/s,
+      /\.atmosphere-sparkles i\s*\{[^}]*box-shadow:\s*0 0 2\.5px/s,
     );
     expect(finalStyles).not.toContain("cross");
+  });
+
+  it("restarts the home hero on an unmodified logo activation", () => {
+    const navigation = read("components/site-navigation.tsx");
+
+    expect(navigation).toContain("function restartHome(");
+    expect(navigation).toContain('window.location.assign("/")');
+    expect(navigation).toContain("onClick={restartHome}");
+    expect(navigation).toContain("event.metaKey");
+    expect(navigation).toContain("event.ctrlKey");
+  });
+
+  it("uses fluid shared gutters instead of a desktop to mobile width jump", () => {
+    const finalStyles = read("app/webde-final-ui.css");
+    const landingStyles = read("components/landing-page.module.css");
+
+    expect(finalStyles).toContain(
+      "calc(100% - clamp(2rem, 5vw, 5rem))",
+    );
+    expect(landingStyles).toContain(
+      "max(clamp(24px, 4vw, 40px), calc((100% - 1280px) / 2))",
+    );
   });
 });

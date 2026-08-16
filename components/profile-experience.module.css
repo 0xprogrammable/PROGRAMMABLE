@@ -1768,9 +1768,10 @@
   align-items: center;
   bottom: 14px;
   display: flex;
+  flex-direction: row-reverse;
   gap: 12px;
-  left: 14px;
   position: absolute;
+  right: 14px;
   z-index: 3;
 }
 
@@ -2159,15 +2160,16 @@
   }
 
   .bannerActions {
-    align-items: flex-start;
+    align-items: flex-end;
     bottom: 10px;
     flex-direction: column;
     gap: 5px;
-    left: 10px;
+    right: 10px;
   }
 
   .bannerActions span {
-    max-width: calc(100vw - 72px);
+    max-width: calc(100vw - 116px);
+    text-align: end;
   }
 
   .editForm {
