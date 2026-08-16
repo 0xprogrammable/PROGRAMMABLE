@@ -128,15 +128,41 @@ export class OperationalRpcUnavailableError extends Error {
 
 export class OperationalRpcReadError extends Error {
   override name = "OperationalRpcReadError";
+  readonly role: "primary" | "secondary";
+  readonly reason: string;
 
-  constructor() {
+  constructor(
+    role: "primary" | "secondary",
+    reason: string,
+  ) {
     super("Operational RPC read failed");
+    this.role = role;
+    this.reason = reason;
   }
 }
 
-function redactRpcEndpointError(error: unknown) {
+function safeRpcFailureReason(error: unknown) {
+  for (const candidate of errorChain(error)) {
+    if (candidate instanceof HttpRequestError) {
+      return candidate.status === undefined
+        ? "http-network"
+        : `http-${candidate.status}`;
+    }
+    if (candidate instanceof RpcRequestError) {
+      return `rpc-${candidate.code}`;
+    }
+    if (candidate instanceof TimeoutError) return "transport-timeout";
+    if (candidate instanceof SocketClosedError) return "socket-closed";
+  }
+  return "endpoint-error";
+}
+
+function redactRpcEndpointError(
+  error: unknown,
+  role: "primary" | "secondary",
+) {
   return containsRpcEndpointError(error)
-    ? new OperationalRpcReadError()
+    ? new OperationalRpcReadError(role, safeRpcFailureReason(error))
     : error;
 }
 
@@ -162,7 +188,7 @@ export async function withOperationalRpcFailover<
       secondaryUrl === deployment.rpcUrl ||
       !isOperationalRpcFailoverEligible(primaryError)
     ) {
-      throw redactRpcEndpointError(primaryError);
+      throw redactRpcEndpointError(primaryError, "primary");
     }
 
     try {
@@ -173,7 +199,7 @@ export async function withOperationalRpcFailover<
         // nested causes and can otherwise expose authenticated RPC URLs.
         throw new OperationalRpcUnavailableError();
       }
-      throw redactRpcEndpointError(secondaryError);
+      throw redactRpcEndpointError(secondaryError, "secondary");
     }
   }
 }
@@ -181,6 +207,14 @@ export async function withOperationalRpcFailover<
 /** Provider-neutral telemetry fields; endpoint URLs and request bodies stay out. */
 export function safeOperationalRpcError(error: unknown) {
   if (!(error instanceof Error)) return { name: "UnknownError" };
+  if (error instanceof OperationalRpcReadError) {
+    return {
+      name: error.name,
+      category: "read-failed" as const,
+      role: error.role,
+      reason: error.reason,
+    };
+  }
   return {
     name: error.name,
     category: isOperationalRpcFailoverEligible(error)
