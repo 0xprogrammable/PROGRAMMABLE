@@ -30,6 +30,8 @@ function entry(index) {
         : `0x${(index + 1).toString(16).padStart(64, "0")}`,
     creatorAddress: CREATOR,
     launchedAt: new Date(Date.parse(NOW) - index * 1_000).toISOString(),
+    launchModel: "classic",
+    launchModelVersion: "classic-v3",
     valuation: { status: "unavailable", reason: "source-unavailable" },
   };
 }
@@ -97,18 +99,37 @@ function customProject() {
 
 function catalog() {
   return {
-    source: "durable-blob",
-    launchSource: "durable-blob",
+    source: "envio-classic-v3",
+    launchSource: "envio-classic-v3",
     status: "last-known-good",
     lastIndexedAt: NOW,
     asOfBlock: "25740000",
     asOfBlockHash: `0x${"aa".repeat(32)}`,
     identityCount: 2,
     identityCommitment: `sha256:${"bb".repeat(32)}`,
-    completeness: { custom: "unavailable" },
+    completeness: {
+      classic: "last-known-good",
+      stock: "excluded",
+      custom: "unavailable",
+    },
+    scope: {
+      included: ["classic-v3", "registry.custom-launched"],
+      excluded: [
+        "classic-v1",
+        "classic-v2",
+        "stock-paired-v1",
+        "stock-paired-v2",
+        "stock-paired-v3",
+      ],
+      publicCategories: ["classic", "custom"],
+    },
     evidence: {
-      kind: "durable-envelope",
-      commitment: `0x${"cc".repeat(32)}`,
+      kind: "envio-indexer-state",
+      deployment: "production-92f6373",
+      sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+      progressBlock: "25740000",
+      progressOccurrenceId: `1:0x${"11".repeat(32)}:0x${"22".repeat(32)}:0`,
+      commitment: `sha256:${"cc".repeat(32)}`,
     },
   };
 }
@@ -163,8 +184,8 @@ function explore(sort) {
 function response(body, extraHeaders = {}, omittedHeaders = []) {
   const headers = new Headers({
     "content-type": "application/json",
-    "x-programmable-launch-source": "durable-blob",
-    "x-programmable-read-source": "durable-blob+dexscreener",
+    "x-programmable-launch-source": "envio-classic-v3",
+    "x-programmable-read-source": "envio-classic-v3+dexscreener",
     "x-programmable-market-provider": "dexscreener",
     "x-programmable-market-read-status": "unavailable",
     "x-programmable-identity-last-indexed-at": NOW,
@@ -235,7 +256,7 @@ function stagedFetch(
         ? {
             "cache-control": "no-store",
             "x-programmable-data-quality": "unavailable",
-            "x-programmable-read-source": "durable-blob",
+            "x-programmable-read-source": "envio-classic-v3",
           }
         : {}),
       ...(url.pathname === "/api/explore/profile"
@@ -692,7 +713,7 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
             },
             catalog: {
               ...body.catalog,
-              launchSource: "durable-blob+registry.custom-launched",
+              launchSource: "envio-classic-v3+registry.custom-launched",
               completeness: { ...body.catalog.completeness, custom: "current" },
               identityCommitment: `sha256:${"de".repeat(32)}`,
             },
@@ -713,7 +734,7 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
             customProject: project,
             catalog: {
               ...body.catalog,
-              launchSource: "durable-blob+registry.custom-launched",
+              launchSource: "envio-classic-v3+registry.custom-launched",
               completeness: { ...body.catalog.completeness, custom: "current" },
               identityCommitment: `sha256:${"de".repeat(32)}`,
             },
@@ -732,10 +753,10 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
           ? {
               ...extraHeaders,
               "x-programmable-launch-source":
-                "durable-blob+registry.custom-launched",
+                "envio-classic-v3+registry.custom-launched",
               "x-programmable-read-source": url.pathname.endsWith("/chart")
-                ? "durable-blob+registry.custom-launched"
-                : "durable-blob+registry.custom-launched+dexscreener",
+                ? "envio-classic-v3+registry.custom-launched"
+                : "envio-classic-v3+registry.custom-launched+dexscreener",
             }
           : extraHeaders,
         omittedHeaders,
@@ -743,7 +764,7 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
     ),
     appendOutput: () => undefined,
   });
-  assert.equal(result.catalogSource, "durable-blob");
+  assert.equal(result.catalogSource, "envio-classic-v3");
   assert.equal(result.tokenAddress, CUSTOM_TOKEN);
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
 });

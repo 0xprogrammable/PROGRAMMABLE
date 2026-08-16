@@ -7,11 +7,11 @@ import {
 import { readDexscreenerExploreEntriesV1 } from
   "../../../../lib/market-data/dexscreener-explore.server";
 import {
-  lastGoodLaunchIdentityCommitmentV1,
-  mergeLastGoodLaunchCatalogEntriesV1,
-  readLastGoodLaunchCatalogV1,
+  envioClassicV3IdentityCommitmentV1,
+  mergeEnvioClassicV3CatalogEntriesV1,
+  readEnvioClassicV3CatalogV1,
 } from
-  "../../../../lib/market-data/last-good-launch-catalog.server";
+  "../../../../lib/market-data/envio-classic-v3-catalog.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
   const address = requestedTokenAddress.toLowerCase();
   let catalog;
   try {
-    catalog = await readLastGoodLaunchCatalogV1({
+    catalog = await readEnvioClassicV3CatalogV1({
       signal: readSignal,
       deadlineMs,
     });
@@ -108,8 +108,9 @@ export async function GET(request: NextRequest) {
       name: error instanceof Error ? error.name : "LaunchCatalogError",
     });
     return unavailableResponse({
+      "X-Programmable-Launch-Source": "envio-classic-v3",
       "X-Programmable-Market-Provider": "dexscreener",
-      "X-Programmable-Read-Source": "last-good+dexscreener",
+      "X-Programmable-Read-Source": "envio-classic-v3+dexscreener",
     });
   }
 
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
   }
   let identityEntries: readonly ExploreEntry[];
   try {
-    identityEntries = mergeLastGoodLaunchCatalogEntriesV1(
+    identityEntries = mergeEnvioClassicV3CatalogEntriesV1(
       catalog.entries,
       customEntries,
     );
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
     asOfBlock: catalog.asOfBlock,
     asOfBlockHash: catalog.asOfBlockHash,
     identityCount: identityEntries.length,
-    identityCommitment: lastGoodLaunchIdentityCommitmentV1(
+    identityCommitment: envioClassicV3IdentityCommitmentV1(
       catalog,
       identityEntries,
     ),
@@ -173,6 +174,7 @@ export async function GET(request: NextRequest) {
       ...catalog.completeness,
       custom: customStatus,
     },
+    scope: catalog.scope,
     evidence: catalog.evidence,
   };
 

@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  mergeLastGoodLaunchCatalogEntriesV1,
-  readLastGoodLaunchCatalogV1,
+  mergeEnvioClassicV3CatalogEntriesV1,
+  readEnvioClassicV3CatalogV1,
 } from
-  "../../../../../lib/market-data/last-good-launch-catalog.server";
+  "../../../../../lib/market-data/envio-classic-v3-catalog.server";
 import { isTokenChartRange } from "../../../../../lib/onchain/chart";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../../lib/server/custom-launch/explore-directory-v1";
@@ -35,7 +35,10 @@ export async function GET(request: NextRequest) {
   const address = getAddress(rawAddress);
 
   try {
-    const catalog = await readLastGoodLaunchCatalogV1();
+    const catalog = await readEnvioClassicV3CatalogV1({
+      signal: request.signal,
+      deadlineMs: Date.now() + 8_000,
+    });
     let entries = catalog.entries;
     let customStatus: "current" | "unavailable" = "unavailable";
     if (isCustomLaunchRegistryPublicReadEnabled()) {
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
         )) return unavailable(address, range, catalog.source, 503);
       }
       if (customEntries !== undefined) {
-        entries = mergeLastGoodLaunchCatalogEntriesV1(entries, customEntries);
+        entries = mergeEnvioClassicV3CatalogEntriesV1(entries, customEntries);
         customStatus = "current";
       }
     }
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest) {
     console.error("Token chart identity read failed", {
       name: error instanceof Error ? error.name : "LaunchCatalogError",
     });
-    return unavailable(address, range, "last-good", 503);
+    return unavailable(address, range, "envio-classic-v3", 503);
   }
 }
 

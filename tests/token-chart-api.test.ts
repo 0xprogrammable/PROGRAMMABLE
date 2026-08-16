@@ -34,9 +34,9 @@ const mocks = vi.hoisted(() => ({
   customEnabled: vi.fn(),
   customDirectory: vi.fn(),
 }));
-vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
-  readLastGoodLaunchCatalogV1: mocks.catalog,
-  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
+vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
+  readEnvioClassicV3CatalogV1: mocks.catalog,
+  mergeEnvioClassicV3CatalogEntriesV1: mocks.mergeEntries,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -55,7 +55,7 @@ describe("provider-free interim token chart API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.catalog.mockResolvedValue({
-      source: "durable-blob",
+      source: "envio-classic-v3",
       status: "last-known-good",
       generatedAt: "2026-08-14T00:00:00.000Z",
       entries: [token],
@@ -73,10 +73,10 @@ describe("provider-free interim token chart API", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "durable-blob",
+      "envio-classic-v3",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "durable-blob",
+      "envio-classic-v3",
     );
     expect(response.headers.get("x-programmable-data-quality")).toBe(
       "unavailable",
@@ -97,7 +97,7 @@ describe("provider-free interim token chart API", () => {
   });
 
   it("returns 404 for an address outside the committed identity catalog", async () => {
-    mocks.catalog.mockResolvedValue({ source: "durable-blob", entries: [] });
+    mocks.catalog.mockResolvedValue({ source: "envio-classic-v3", entries: [] });
     expect((await GET(request())).status).toBe(404);
   });
 
@@ -115,10 +115,10 @@ describe("provider-free interim token chart API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "durable-blob+registry.custom-launched",
+      "envio-classic-v3+registry.custom-launched",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "durable-blob+registry.custom-launched",
+      "envio-classic-v3+registry.custom-launched",
     );
   });
 
@@ -138,7 +138,7 @@ describe("provider-free interim token chart API", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "last-good",
+      "envio-classic-v3",
     );
   });
 
@@ -165,7 +165,7 @@ describe("provider-free interim token chart API", () => {
       "utf8",
     );
     expect(source).not.toMatch(/bitquery|readPrimaryRpc|readTokenChartSeries/iu);
-    expect(source).toContain("readLastGoodLaunchCatalogV1");
+    expect(source).toContain("readEnvioClassicV3CatalogV1");
   });
 
   it("keeps the browser chart request disabled outside preview fixtures", () => {

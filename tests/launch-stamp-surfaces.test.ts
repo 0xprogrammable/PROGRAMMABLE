@@ -194,8 +194,8 @@ describe("canonical Router stamp surfaces", () => {
         total: 2,
         totalPages: 1,
         catalog: {
-          source: "durable-blob",
-          launchSource: "durable-blob+registry.custom-launched",
+          source: "envio-classic-v3",
+          launchSource: "envio-classic-v3+registry.custom-launched",
           status: "current",
           lastIndexedAt: "2026-08-16T08:00:00.000Z",
           asOfBlock: "25740000",
@@ -204,12 +204,27 @@ describe("canonical Router stamp surfaces", () => {
           identityCommitment: `sha256:${"bb".repeat(32)}`,
           completeness: {
             classic: "current",
-            stock: "unavailable",
+            stock: "excluded",
             custom: "current",
           },
+          scope: {
+            included: ["classic-v3", "registry.custom-launched"],
+            excluded: [
+              "classic-v1",
+              "classic-v2",
+              "stock-paired-v1",
+              "stock-paired-v2",
+              "stock-paired-v3",
+            ],
+            publicCategories: ["classic", "custom"],
+          },
           evidence: {
-            kind: "durable-envelope",
-            commitment: `0x${"cc".repeat(32)}`,
+            kind: "envio-indexer-state",
+            deployment: "production-92f6373",
+            sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+            progressBlock: "25740000",
+            progressOccurrenceId: `1:0x${"11".repeat(32)}:0x${"22".repeat(32)}:0`,
+            commitment: `sha256:${"cc".repeat(32)}`,
           },
         },
       }), {

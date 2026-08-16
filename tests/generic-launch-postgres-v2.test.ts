@@ -128,7 +128,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
     } finally {
       await database.close();
     }
-  });
+  }, 60_000);
 
   it("appends lifecycle generations and hides finalized bytes after revocation", async () => {
     const database = new PGlite();

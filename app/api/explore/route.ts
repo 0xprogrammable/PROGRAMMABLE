@@ -9,11 +9,11 @@ import {
 import { readDexscreenerExploreEntriesV1 } from
   "../../../lib/market-data/dexscreener-explore.server";
 import {
-  lastGoodLaunchIdentityCommitmentV1,
-  mergeLastGoodLaunchCatalogEntriesV1,
-  readLastGoodLaunchCatalogV1,
+  envioClassicV3IdentityCommitmentV1,
+  mergeEnvioClassicV3CatalogEntriesV1,
+  readEnvioClassicV3CatalogV1,
 } from
-  "../../../lib/market-data/last-good-launch-catalog.server";
+  "../../../lib/market-data/envio-classic-v3-catalog.server";
 import { parseExploreSort } from "../../../lib/onchain/query";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../lib/server/custom-launch/explore-directory-v1";
@@ -275,7 +275,7 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
-    const catalog = await readLastGoodLaunchCatalogV1({
+    const catalog = await readEnvioClassicV3CatalogV1({
       signal: readSignal,
       deadlineMs,
     });
@@ -293,11 +293,11 @@ export async function GET(request: NextRequest) {
         });
       }
     }
-    const identityEntries = mergeLastGoodLaunchCatalogEntriesV1(
+    const identityEntries = mergeEnvioClassicV3CatalogEntriesV1(
       catalog.entries,
       customEntries,
     );
-    const identityCommitment = lastGoodLaunchIdentityCommitmentV1(
+    const identityCommitment = envioClassicV3IdentityCommitmentV1(
       catalog,
       identityEntries,
     );
@@ -384,6 +384,7 @@ export async function GET(request: NextRequest) {
             ...catalog.completeness,
             custom: customStatus,
           },
+          scope: catalog.scope,
           evidence: catalog.evidence,
         },
         ...(marketSort
@@ -434,7 +435,8 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control": "no-store",
           "Retry-After": "5",
-          "X-Programmable-Read-Source": "last-good+dexscreener",
+          "X-Programmable-Launch-Source": "envio-classic-v3",
+          "X-Programmable-Read-Source": "envio-classic-v3+dexscreener",
           "X-Programmable-Market-Provider": "dexscreener",
         },
       },

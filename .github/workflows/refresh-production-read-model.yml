@@ -1,8 +1,6 @@
-name: Refresh production read model
+name: Legacy durable read-model refresh (manual)
 
 on:
-  schedule:
-    - cron: "2-57/5 * * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -13,7 +11,7 @@ concurrency:
 
 jobs:
   refresh:
-    name: Refresh durable production read model
+    name: Refresh legacy durable production read model
     if: >-
       github.repository == '0xprogrammable/programmable' &&
       github.ref == 'refs/heads/production'

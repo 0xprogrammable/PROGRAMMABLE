@@ -20,10 +20,10 @@ const mocks = vi.hoisted(() => ({
   readCustom: vi.fn(),
 }));
 
-vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
-  readLastGoodLaunchCatalogV1: mocks.readCatalog,
-  lastGoodLaunchIdentityCommitmentV1: mocks.identityCommitment,
-  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
+vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
+  readEnvioClassicV3CatalogV1: mocks.readCatalog,
+  envioClassicV3IdentityCommitmentV1: mocks.identityCommitment,
+  mergeEnvioClassicV3CatalogEntriesV1: mocks.mergeEntries,
 }));
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   readDexscreenerExploreEntriesV1: mocks.readDex,
@@ -98,7 +98,7 @@ const multiMarketCustom = {
 
 function catalog(overrides: Record<string, unknown> = {}) {
   return {
-    source: "durable-blob",
+    source: "envio-classic-v3",
     status: "last-known-good",
     generatedAt: NOW,
     asOfBlock: "25740000",
@@ -106,12 +106,27 @@ function catalog(overrides: Record<string, unknown> = {}) {
     entries,
     completeness: {
       classic: "last-known-good",
-      stock: "unavailable",
+      stock: "excluded",
       custom: "unavailable",
     },
+    scope: {
+      included: ["classic-v3", "registry.custom-launched"],
+      excluded: [
+        "classic-v1",
+        "classic-v2",
+        "stock-paired-v1",
+        "stock-paired-v2",
+        "stock-paired-v3",
+      ],
+      publicCategories: ["classic", "custom"],
+    },
     evidence: {
-      kind: "durable-envelope",
-      commitment: `0x${"cd".repeat(32)}`,
+      kind: "envio-indexer-state",
+      deployment: "production-92f6373",
+      sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+      progressBlock: "25740000",
+      progressOccurrenceId: `1:0x${"11".repeat(32)}:0x${"22".repeat(32)}:0`,
+      commitment: `sha256:${"cd".repeat(32)}`,
     },
     ...overrides,
   };
@@ -205,7 +220,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     });
     expect(body.dataQuality.launchIdentity.custom).toBe("current");
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "durable-blob+registry.custom-launched",
+      "envio-classic-v3+registry.custom-launched",
     );
   });
 
@@ -275,7 +290,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
         totalCount: TOKEN_COUNT,
       },
       catalog: {
-        source: "durable-blob",
+        source: "envio-classic-v3",
         status: "last-known-good",
         lastIndexedAt: NOW,
         identityCount: TOKEN_COUNT,
@@ -285,10 +300,10 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(body.tokens[0].valuation.source).toBe("dexscreener");
     expect(body.tokens[0].valuation.freshness).toBe("provider-recent");
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "durable-blob",
+      "envio-classic-v3",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "durable-blob+dexscreener",
+      "envio-classic-v3+dexscreener",
     );
     expect(response.headers.get("x-programmable-market-provider")).toBe(
       "dexscreener",
@@ -411,16 +426,16 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(9);
   });
 
-  it("discloses a stale validated durable catalog and its exact timestamp", async () => {
+  it("discloses a stale validated Envio catalog and its exact timestamp", async () => {
     mocks.readCatalog.mockResolvedValueOnce(catalog({
-      source: "durable-blob",
+      source: "envio-classic-v3",
       status: "last-known-good",
       generatedAt: "2026-08-01T04:20:58.618Z",
       entries: entries.slice(0, 12),
     }));
     const body = await json(await GET(request("sort=newest&limit=9")));
     expect(body.catalog).toMatchObject({
-      source: "durable-blob",
+      source: "envio-classic-v3",
       status: "last-known-good",
       lastIndexedAt: "2026-08-01T04:20:58.618Z",
       identityCount: 12,
@@ -450,7 +465,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       const source = readFileSync(new URL(relative, import.meta.url), "utf8");
       expect(source).not.toMatch(/bitquery/iu);
       expect(source).not.toContain("readPrimaryRpcExploreEntriesV1");
-      expect(source).toContain("readLastGoodLaunchCatalogV1");
+      expect(source).toContain("readEnvioClassicV3CatalogV1");
       expect(source).toContain("readDexscreenerExploreEntriesV1");
     }
   });

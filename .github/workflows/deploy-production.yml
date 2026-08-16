@@ -664,38 +664,61 @@ jobs:
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
 
-      - name: Seed exact staged durable launch catalog
-        id: durable-catalog-seed
+      - name: Probe exact staged Envio Classic V3 catalog
+        id: envio-catalog-probe
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
         run: |
           set -euo pipefail
-          result_path="$RUNNER_TEMP/staged-durable-catalog-seed.json"
-          test ! -e "$result_path"
-          node scripts/perf/read-model-staged-refresh.mjs \
-            --target-url "$STAGED_TARGET_URL" \
-            --deployment-id "$STAGED_DEPLOYMENT_ID" \
-            --git-head "$GITHUB_SHA" > "$result_path"
-          RESULT_PATH="$result_path" node --input-type=module <<'NODE'
-          import { appendFileSync, readFileSync } from "node:fs";
-          const result = JSON.parse(readFileSync(process.env.RESULT_PATH, "utf8"));
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+          import { readBoundedResponseText } from "./scripts/read-bounded-response.mjs";
+          const target = new URL(
+            "/api/explore?limit=1&page=1&sort=newest",
+            process.env.STAGED_TARGET_URL,
+          );
+          let response;
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            response = await fetch(target, {
+              redirect: "error",
+              headers: {
+                "x-vercel-protection-bypass":
+                  process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+                "x-vercel-set-bypass-cookie": "false",
+              },
+              signal: AbortSignal.timeout(30_000),
+            });
+            if (response.status !== 503 || attempt === 4) break;
+            await response.body?.cancel().catch(() => {});
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
+          }
+          const body = JSON.parse(await readBoundedResponseText(response, {
+            maximumBytes: 4 * 1024 * 1024,
+            label: "staged Envio catalog probe",
+          }));
           if (
-            result?.ok !== true ||
-            result.deploymentId !== process.env.STAGED_DEPLOYMENT_ID ||
-            result.gitHead !== process.env.GITHUB_SHA ||
-            !/^(?:0|[1-9][0-9]{0,77})$/u.test(result.refreshBlockNumber) ||
-            !Number.isSafeInteger(result.tokenCount) ||
-            result.tokenCount < 1
+            response.status !== 200 ||
+            body?.status !== "ready" ||
+            body?.catalog?.source !== "envio-classic-v3" ||
+            body.catalog.completeness?.stock !== "excluded" ||
+            body.catalog.evidence?.kind !== "envio-indexer-state" ||
+            body.catalog.evidence?.progressBlock !== body.catalog.asOfBlock ||
+            !/^sha256:[0-9a-f]{64}$/u.test(body.catalog.evidence?.commitment ?? "") ||
+            JSON.stringify(body.catalog.scope?.publicCategories) !==
+              JSON.stringify(["classic", "custom"]) ||
+            !Number.isSafeInteger(body.total) || body.total < 1 ||
+            !Array.isArray(body.tokens) || body.tokens.length !== 1 ||
+            body.tokens[0]?.launchModel !== "classic" ||
+            body.tokens[0]?.launchModelVersion !== "classic-v3" ||
+            response.headers.get("x-programmable-launch-source") !==
+              "envio-classic-v3"
           ) {
-            throw new Error("staged durable catalog seed result is invalid");
+            throw new Error("staged Envio Classic V3 catalog probe is invalid");
           }
           appendFileSync(
             process.env.GITHUB_OUTPUT,
-            `block_number=${result.refreshBlockNumber}\ntoken_count=${result.tokenCount}\n`,
+            `block_number=${body.catalog.asOfBlock}\ntoken_count=${body.total}\n`,
           );
           NODE
 
@@ -1122,8 +1145,8 @@ jobs:
           MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
-          CATALOG_BLOCK_NUMBER: ${{ steps.durable-catalog-seed.outputs.block_number }}
-          CATALOG_TOKEN_COUNT: ${{ steps.durable-catalog-seed.outputs.token_count }}
+          CATALOG_BLOCK_NUMBER: ${{ steps.envio-catalog-probe.outputs.block_number }}
+          CATALOG_TOKEN_COUNT: ${{ steps.envio-catalog-probe.outputs.token_count }}
         run: |
           {
             echo "## Staged production candidate"
@@ -1133,9 +1156,9 @@ jobs:
             echo "- Target: $STAGED_TARGET_URL"
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
-            echo "- Launch identities: validated last-good catalog"
-            echo "- Durable catalog seed block: \`$CATALOG_BLOCK_NUMBER\`"
-            echo "- Durable catalog seed token count: \`$CATALOG_TOKEN_COUNT\`"
+            echo "- Launch identities: validated Envio Classic V3 catalog"
+            echo "- Envio catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"
+            echo "- Envio catalog identity count: \`$CATALOG_TOKEN_COUNT\`"
             echo "- Market data provider: Dexscreener (optional enrichment)"
             echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"

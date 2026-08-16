@@ -766,7 +766,7 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("accepts the exact last-good identity and Dexscreener split", () => {
+  it("accepts the exact Envio identity and Dexscreener split", () => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT);
     expect(result.failures.map(({ id }: { id: string }) => id)).not.toContain(
       "ops-public-provider-split-source-contract",
@@ -776,7 +776,7 @@ describe("read-model operations source contract", () => {
   it.each([
     [
       "an RPC identity read",
-      "readLastGoodLaunchCatalogV1({",
+      "readEnvioClassicV3CatalogV1({",
       "readPrimaryRpcExploreEntriesV1({",
     ],
     [
@@ -853,11 +853,11 @@ describe("read-model operations source contract", () => {
   it("rejects a public launch route that restores Bitquery identity discovery", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
-    expect(route).toContain("readLastGoodLaunchCatalogV1");
+    expect(route).toContain("readEnvioClassicV3CatalogV1");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         [path]: route.replaceAll(
-          "readLastGoodLaunchCatalogV1",
+          "readEnvioClassicV3CatalogV1",
           "readBitqueryExploreEntriesV1",
         ),
       },
@@ -875,7 +875,7 @@ describe("read-model operations source contract", () => {
     ],
     [
       "token detail that restores a runtime RPC catalog",
-      "readLastGoodLaunchCatalogV1({",
+      "readEnvioClassicV3CatalogV1({",
       "readPrimaryRpcExploreEntriesV1({",
     ],
     [

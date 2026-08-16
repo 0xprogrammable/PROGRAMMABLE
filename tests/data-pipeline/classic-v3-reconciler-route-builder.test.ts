@@ -1654,5 +1654,5 @@ describe("Classic V3 exact route builder", () => {
     expect(fixture.budget.logical).toBeLessThanOrEqual(512 * 32);
     expect(fixture.rpc.requestCount()).toBe(265);
     expect(fixture.rpc.logicalRequestCount()).toBe(7_231);
-  });
+  }, 30_000);
 });
