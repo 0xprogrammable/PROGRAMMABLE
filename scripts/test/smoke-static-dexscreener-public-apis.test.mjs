@@ -16,12 +16,18 @@ const CUSTOM_TOKEN = "0x9999999999999999999999999999999999999999";
 function entry(index) {
   const tokenAddress = index === 0
     ? TOKEN
-    : "0x4444444444444444444444444444444444444444";
+    : index === 1
+      ? "0x4444444444444444444444444444444444444444"
+      : `0x${(index + 1).toString(16).padStart(40, "0")}`;
   return {
     exploreKind: "token",
     id: `1:${tokenAddress}`,
     tokenAddress,
-    poolId: index === 0 ? POOL : `0x${"55".repeat(32)}`,
+    poolId: index === 0
+      ? POOL
+      : index === 1
+        ? `0x${"55".repeat(32)}`
+        : `0x${(index + 1).toString(16).padStart(64, "0")}`,
     creatorAddress: CREATOR,
     launchedAt: new Date(Date.parse(NOW) - index * 1_000).toISOString(),
     valuation: { status: "unavailable", reason: "source-unavailable" },
@@ -61,8 +67,8 @@ function customProject() {
         quoteAsset: {
           assetId: "native-eth",
           identity: {
-            namespace: "eip155:1/slip44",
-            value: "60",
+            namespace: "eip155:1/erc20",
+            value: "0x0000000000000000000000000000000000000000",
           },
         },
       },
@@ -78,8 +84,8 @@ function customProject() {
         quoteAsset: {
           assetId: "native-eth",
           identity: {
-            namespace: "eip155:1/slip44",
-            value: "60",
+            namespace: "eip155:1/erc20",
+            value: "0x0000000000000000000000000000000000000000",
           },
         },
       },
@@ -368,6 +374,91 @@ test("staged smoke rejects a partial ranking with no qualified first-page row", 
   );
 });
 
+test("staged smoke rejects a zero or undercounted Dex request set", async () => {
+  for (const requestedCount of [0, 1]) {
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: stagedFetch(({ body, url }) =>
+          url.pathname === "/api/explore"
+            ? {
+                ...body,
+                marketRead: {
+                  ...body.marketRead,
+                  requestedCount,
+                  unavailableCount: requestedCount,
+                },
+              }
+            : body),
+        appendOutput: () => undefined,
+      }),
+      /response contract is invalid/u,
+    );
+  }
+});
+
+test("staged smoke binds Highest FDV to the complete paged identity set", async () => {
+  const allEntries = Array.from({ length: 21 }, (_, index) => entry(index));
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(({ body, url }) => {
+      if (url.pathname === "/api/explore") {
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        const sort = url.searchParams.get("sort");
+        const tokens = allEntries.slice(
+          (page - 1) * pageSize,
+          page * pageSize,
+        );
+        return {
+          ...body,
+          tokens,
+          page,
+          pageSize,
+          total: allEntries.length,
+          totalPages: Math.ceil(allEntries.length / pageSize),
+          marketRead: marketRead(
+            sort === "market-cap" ? allEntries.length : tokens.length,
+          ),
+          catalog: {
+            ...body.catalog,
+            identityCount: allEntries.length,
+          },
+          ...(sort === "market-cap"
+            ? {
+                ranking: {
+                  ...body.ranking,
+                  totalCount: allEntries.length,
+                },
+              }
+            : { ranking: undefined }),
+        };
+      }
+      if (url.pathname === "/api/explore/token") {
+        return {
+          ...body,
+          catalog: {
+            ...body.catalog,
+            identityCount: allEntries.length,
+          },
+        };
+      }
+      return body;
+    }),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.marketReadStatus, "unavailable");
+});
+
 test("staged smoke treats configured provider health as informational", async () => {
   const result = await runStagedStaticDexscreenerSmokeV1({
       environment: {
@@ -461,15 +552,20 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
         return body;
       },
       ({ extraHeaders, omittedHeaders, url }) => ({
-        extraHeaders: ["/api/explore", "/api/explore/token"].includes(
+        extraHeaders: [
+          "/api/explore",
+          "/api/explore/token",
+          "/api/explore/token/chart",
+        ].includes(
             url.pathname,
           )
           ? {
               ...extraHeaders,
               "x-programmable-launch-source":
                 "durable-blob+registry.custom-launched",
-              "x-programmable-read-source":
-                "durable-blob+registry.custom-launched+dexscreener",
+              "x-programmable-read-source": url.pathname.endsWith("/chart")
+                ? "durable-blob+registry.custom-launched"
+                : "durable-blob+registry.custom-launched+dexscreener",
             }
           : extraHeaders,
         omittedHeaders,

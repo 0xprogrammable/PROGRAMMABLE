@@ -34,12 +34,14 @@ export async function GET(request: NextRequest) {
   try {
     const catalog = await readLastGoodLaunchCatalogV1();
     let entries = catalog.entries;
+    let customStatus: "current" | "unavailable" = "unavailable";
     if (isCustomLaunchRegistryPublicReadEnabled()) {
       try {
         entries = [
           ...entries,
           ...await readProductionCustomExploreDirectoryV1(request.signal),
         ];
+        customStatus = "current";
       } catch {
         // A Custom Registry outage cannot invalidate an already committed
         // canonical identity, but an unknown address remains indeterminate.
@@ -53,7 +55,10 @@ export async function GET(request: NextRequest) {
     )) {
       return json({ error: "Token not found" }, 404);
     }
-    return unavailable(address, range, catalog.source, 200);
+    const launchSource = customStatus === "current"
+      ? `${catalog.source}+registry.custom-launched`
+      : catalog.source;
+    return unavailable(address, range, launchSource, 200);
   } catch (error) {
     console.error("Token chart identity read failed", {
       name: error instanceof Error ? error.name : "LaunchCatalogError",

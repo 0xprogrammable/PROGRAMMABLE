@@ -30,12 +30,12 @@ const DEFAULT_MAXIMUM_CONCURRENT_BATCHES = 2;
 const DEFAULT_MAXIMUM_CACHE_ENTRIES = 32;
 const DEFAULT_MAXIMUM_READ_DURATION_MS = 7_000;
 
-// One reader instance begins no more than 240 calls/minute, below the
-// documented 300 calls/minute provider ceiling while still allowing the
-// audited 351-token / 12-batch cold read to complete inside the global
-// producer budget. Cache and singleflight reduce repeated work further; this
-// is never invoked by browser cards.
-const DEFAULT_MINIMUM_REQUEST_INTERVAL_MS = 250;
+// One reader instance begins no more than 60 calls/minute, generously below
+// the documented 300 calls/minute provider ceiling. A cold 351-token read is
+// intentionally bounded by the global producer deadline and may therefore be
+// partial; every identity remains in the result. Cache and singleflight reduce
+// repeated work further; this is never invoked by browser cards.
+const DEFAULT_MINIMUM_REQUEST_INTERVAL_MS = 1_000;
 
 const ADDRESS = /^0x[0-9a-f]{40}$/iu;
 const BYTES32 = /^0x[0-9a-f]{64}$/iu;

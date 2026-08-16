@@ -970,8 +970,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "no custom-project identity parser",
-      'token.exploreKind !== "custom-project"',
-      'token.exploreKind !== "unsupported"',
+      'token.exploreKind !== "custom-project" ||\n    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? ""))',
+      'token.exploreKind !== "unsupported" ||\n    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? ""))',
     ],
     [
       "a different market provider",

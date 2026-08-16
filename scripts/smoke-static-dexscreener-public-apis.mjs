@@ -67,16 +67,17 @@ async function requestJson(target, headers, path, fetchImpl) {
   throw new Error("Public API retry contract is unreachable");
 }
 
-function exactExplorePage(response, tokens) {
+function exactExplorePage(response, tokens, expected = { page: 1, pageSize: 20 }) {
   const total = response.body?.total;
   const totalPages = response.body?.totalPages;
-  return response.body?.page === 1 &&
-    response.body?.pageSize === 20 &&
+  const offset = (expected.page - 1) * expected.pageSize;
+  return response.body?.page === expected.page &&
+    response.body?.pageSize === expected.pageSize &&
     Number.isSafeInteger(total) &&
     total >= tokens.length &&
-    tokens.length === Math.min(20, total) &&
+    tokens.length === Math.min(expected.pageSize, Math.max(0, total - offset)) &&
     Number.isSafeInteger(totalPages) &&
-    totalPages === Math.ceil(total / 20);
+    totalPages === Math.ceil(total / expected.pageSize);
 }
 
 function exactIdentity(token) {
@@ -147,6 +148,83 @@ function exactIdentity(token) {
     token.tokenAddress?.toLowerCase() ?? null,
     deterministicMarkets,
   ]);
+}
+
+function canonicalMarketAddress(value) {
+  const normalized = String(value ?? "").toLowerCase();
+  return ADDRESS.test(normalized) ? normalized : null;
+}
+
+function canonicalMarketPool(value) {
+  const normalized = String(value ?? "").toLowerCase();
+  return /^0x[0-9a-f]{64}$/u.test(normalized) ? normalized : null;
+}
+
+function entryMarketIdentities(token) {
+  const tokenAddress = canonicalMarketAddress(token?.tokenAddress);
+  if (tokenAddress === null) return [];
+  if (token.exploreKind === "token") {
+    const poolId = canonicalMarketPool(token.poolId);
+    const chainId = token.launchStampProvenance?.chainId ??
+      Number(String(token.id).split(":", 1)[0]);
+    if (chainId !== 1 || poolId === null) return [];
+    let quoteAddress = canonicalMarketAddress(token.quoteAssetAddress);
+    const stampPoolKey = token.launchStampProvenance?.poolKey;
+    if (stampPoolKey) {
+      const currency0 = canonicalMarketAddress(stampPoolKey.currency0);
+      const currency1 = canonicalMarketAddress(stampPoolKey.currency1);
+      quoteAddress = currency0 === tokenAddress && currency1 !== tokenAddress
+        ? currency1
+        : currency1 === tokenAddress && currency0 !== tokenAddress
+          ? currency0
+          : null;
+    } else if (quoteAddress === null) {
+      quoteAddress = token.launchModel === "stock-paired" ||
+          token.launchModel === "custom-graph"
+        ? null
+        : "0x0000000000000000000000000000000000000000";
+    }
+    return quoteAddress === null || quoteAddress === tokenAddress
+      ? []
+      : [{ tokenAddress, poolId, quoteAddress }];
+  }
+  if (token.exploreKind !== "custom-project" || token.chainId !== "1") {
+    return [];
+  }
+  const byPool = new Map();
+  for (const market of token.markets) {
+    const poolId = canonicalMarketPool(market?.poolId);
+    if (poolId === null || market.status === "verification_pending") continue;
+    const base = canonicalMarketAddress(market.baseAsset?.identity?.value);
+    const quote = canonicalMarketAddress(market.quoteAsset?.identity?.value);
+    if (base !== tokenAddress && quote !== tokenAddress) continue;
+    const opposite = base === tokenAddress ? quote : base;
+    if (opposite === null || opposite === tokenAddress) continue;
+    byPool.set(poolId, { tokenAddress, poolId, quoteAddress: opposite });
+  }
+  return [...byPool.values()];
+}
+
+function exactMarketIdentityCount(tokens) {
+  const byPool = new Map();
+  const conflicted = new Set();
+  for (const token of tokens) {
+    for (const identity of entryMarketIdentities(token)) {
+      if (conflicted.has(identity.poolId)) continue;
+      const existing = byPool.get(identity.poolId);
+      if (
+        existing &&
+        (existing.tokenAddress !== identity.tokenAddress ||
+          existing.quoteAddress !== identity.quoteAddress)
+      ) {
+        byPool.delete(identity.poolId);
+        conflicted.add(identity.poolId);
+        continue;
+      }
+      byPool.set(identity.poolId, identity);
+    }
+  }
+  return byPool.size;
 }
 
 function healthHasSensitiveData(value, depth = 0) {
@@ -240,13 +318,15 @@ function exactCatalogSnapshot(response) {
   });
 }
 
-function exactMarketRead(response) {
+function exactMarketRead(response, tokens) {
   const read = response.body?.marketRead;
+  const expectedRequestedCount = exactMarketIdentityCount(tokens);
   if (
     read?.provider !== "dexscreener" ||
     !MARKET_READ_STATUSES.has(read.status) ||
     read.currency !== "USD" ||
     !Number.isSafeInteger(read.requestedCount) ||
+    read.requestedCount !== expectedRequestedCount ||
     !Number.isSafeInteger(read.observedCount) ||
     !Number.isSafeInteger(read.qualifiedCount) ||
     !Number.isSafeInteger(read.unavailableCount) ||
@@ -369,7 +449,6 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     highestTokens.length < 1 ||
     !exactExplorePage(highest, highestTokens) ||
     exactCatalogSnapshot(highest) === null ||
-    !exactMarketRead(highest) ||
     !exactFdvRanking(highest, highestTokens)
   ) throw new Error("Highest FDV response contract is invalid");
   if (
@@ -380,22 +459,56 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     newestTokens.length < 1 ||
     !exactExplorePage(newest, newestTokens) ||
     exactCatalogSnapshot(newest) === null ||
-    !exactMarketRead(newest)
+    !exactMarketRead(newest, newestTokens)
   ) throw new Error("Newest launches response contract is invalid");
   const highestCatalog = exactCatalogSnapshot(highest);
   const newestCatalog = exactCatalogSnapshot(newest);
   if (highestCatalog === null || highestCatalog !== newestCatalog) {
     throw new Error("Explore catalog changed between ranking reads");
   }
-  const identities = newestTokens.map(exactIdentity);
+  const completeCatalogTokens = [...newestTokens];
+  if (newest.body.total > newestTokens.length) {
+    const catalogPageSize = 100;
+    const catalogTotalPages = Math.ceil(newest.body.total / catalogPageSize);
+    if (catalogTotalPages > 100) {
+      throw new Error("Explore catalog exceeds bounded smoke pagination");
+    }
+    completeCatalogTokens.length = 0;
+    for (let page = 1; page <= catalogTotalPages; page += 1) {
+      const catalogPage = await request(
+        `/api/explore?limit=${catalogPageSize}&page=${page}&sort=newest`,
+      );
+      const pageTokens = Array.isArray(catalogPage.body?.tokens)
+        ? catalogPage.body.tokens
+        : [];
+      if (
+        catalogPage.status !== 200 ||
+        catalogPage.body?.status !== "ready" ||
+        catalogPage.body?.sort !== "newest" ||
+        catalogPage.body?.ranking !== undefined ||
+        !exactExplorePage(catalogPage, pageTokens, {
+          page,
+          pageSize: catalogPageSize,
+        }) ||
+        exactCatalogSnapshot(catalogPage) !== newestCatalog ||
+        !exactMarketRead(catalogPage, pageTokens)
+      ) throw new Error("Explore catalog pagination contract is invalid");
+      completeCatalogTokens.push(...pageTokens);
+    }
+  }
+  if (
+    completeCatalogTokens.length !== newest.body.total ||
+    !exactMarketRead(highest, completeCatalogTokens)
+  ) throw new Error("Highest FDV market request set is invalid");
+  const identities = completeCatalogTokens.map(exactIdentity);
   if (
     identities.some((identity) => identity === null) ||
     new Set(identities).size !== identities.length
   ) throw new Error("Explore identity set is malformed or duplicated");
-  for (let index = 1; index < newestTokens.length; index += 1) {
+  for (let index = 1; index < completeCatalogTokens.length; index += 1) {
     if (
-      Date.parse(newestTokens[index - 1].launchedAt) <
-        Date.parse(newestTokens[index].launchedAt)
+      Date.parse(completeCatalogTokens[index - 1].launchedAt) <
+        Date.parse(completeCatalogTokens[index].launchedAt)
     ) throw new Error("Newest launches are not ordered descending");
   }
   if (
@@ -479,9 +592,9 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     chart.headers.get("cache-control") !== "no-store" ||
     chart.headers.get("x-programmable-data-quality") !== "unavailable" ||
     chart.headers.get("x-programmable-launch-source") !==
-      highest.body.catalog.source ||
+      catalogBoundary.launchSource ||
     chart.headers.get("x-programmable-read-source") !==
-      highest.body.catalog.source ||
+      catalogBoundary.launchSource ||
     chart.headers.get("x-programmable-market-provider") !== null ||
     chart.headers.get("x-programmable-market-source") !== null ||
     chart.headers.get("x-programmable-price-source") !== null ||

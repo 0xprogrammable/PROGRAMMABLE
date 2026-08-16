@@ -168,7 +168,7 @@ describe("Dexscreener server-only shadow reader", () => {
     expect(snapshot).not.toHaveProperty("freshness");
   });
 
-  it("completes all 12 cold batches inside the production default budget", async () => {
+  it("bounds a cold 351-token read while retaining every identity", async () => {
     vi.useFakeTimers({ now: Date.parse(FETCHED_AT) });
     const identities = Array.from({ length: 351 }, (_, index) =>
       identity(index + 1));
@@ -185,18 +185,48 @@ describe("Dexscreener server-only shadow reader", () => {
       now: () => new Date(Date.now()),
     }).read(identities);
 
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(7_001);
     const snapshot = await pending;
 
-    expect(fetchImpl).toHaveBeenCalledTimes(12);
+    expect(fetchImpl.mock.calls.length).toBeLessThan(12);
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(7);
     expect(snapshot).toMatchObject({
-      readStatus: "complete",
+      readStatus: "partial",
       requestedCount: 351,
-      observedCount: 351,
-      qualifiedCount: 351,
-      unavailableCount: 0,
     });
     expect(snapshot.results).toHaveLength(351);
+    expect(snapshot.unavailableCount).toBeGreaterThan(0);
+  });
+
+  it("shares the default start limiter across two cold producers", async () => {
+    vi.useFakeTimers({ now: Date.parse(FETCHED_AT) });
+    const firstIdentities = Array.from({ length: 351 }, (_, index) =>
+      identity(index + 1));
+    const secondIdentities = Array.from({ length: 351 }, (_, index) =>
+      identity(index + 1_000));
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const requested = new Set(
+        urlTokens(input).map((value) => value.toLowerCase()),
+      );
+      return jsonResponse([...firstIdentities, ...secondIdentities]
+        .filter((item) => requested.has(item.tokenAddress))
+        .map((item) => pair(item)));
+    });
+    const productionReader = createDexscreenerShadowReaderV1({
+      fetchImpl,
+      now: () => new Date(Date.now()),
+    });
+    const first = productionReader.read(firstIdentities);
+    const second = productionReader.read(secondIdentities);
+
+    await vi.advanceTimersByTimeAsync(7_001);
+    const [firstSnapshot, secondSnapshot] = await Promise.all([first, second]);
+
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(7);
+    expect(firstSnapshot.results).toHaveLength(351);
+    expect(secondSnapshot.results).toHaveLength(351);
+    expect(firstSnapshot.unavailableCount + secondSnapshot.unavailableCount)
+      .toBeGreaterThan(0);
   });
 
   it("binds only one exact ethereum Uniswap-v4 canonical pair", async () => {

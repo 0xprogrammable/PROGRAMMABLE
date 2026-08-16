@@ -28,9 +28,19 @@ const token = {
   },
 } as const;
 
-const mocks = vi.hoisted(() => ({ catalog: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  catalog: vi.fn(),
+  customEnabled: vi.fn(),
+  customDirectory: vi.fn(),
+}));
 vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
   readLastGoodLaunchCatalogV1: mocks.catalog,
+}));
+vi.mock("../lib/server/custom-launch/public-readiness", () => ({
+  isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
+}));
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1: mocks.customDirectory,
 }));
 
 import { GET } from "../app/api/explore/token/chart/route";
@@ -48,6 +58,8 @@ describe("provider-free interim token chart API", () => {
       generatedAt: "2026-08-14T00:00:00.000Z",
       entries: [token],
     });
+    mocks.customEnabled.mockReturnValue(false);
+    mocks.customDirectory.mockResolvedValue([]);
   });
 
   it("returns an explicit neutral unavailable contract for a known identity", async () => {
@@ -81,6 +93,27 @@ describe("provider-free interim token chart API", () => {
   it("returns 404 for an address outside the committed identity catalog", async () => {
     mocks.catalog.mockResolvedValue({ source: "durable-blob", entries: [] });
     expect((await GET(request())).status).toBe(404);
+  });
+
+  it("labels a successful Custom Registry boundary explicitly", async () => {
+    const customAddress = "0x9999999999999999999999999999999999999999";
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.customDirectory.mockResolvedValue([{
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"99".repeat(32)}`,
+      tokenAddress: customAddress,
+      markets: [],
+    }]);
+
+    const response = await GET(request(`address=${customAddress}&range=1d`));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
   });
 
   it("returns 503 only when the identity catalog cannot be read", async () => {
