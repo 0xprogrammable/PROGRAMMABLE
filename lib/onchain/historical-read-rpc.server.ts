@@ -16,10 +16,10 @@ export class HistoricalReadRpcBindingError extends Error {
 
 /**
  * Historical registry reconstruction requires two archive-capable readers.
- * It uses the exact commitment-bound Alchemy + QuickNode recovery pair so a
+ * It uses the fixed Tenderly + commitment-bound QuickNode recovery pair so a
  * depleted role-bound Website primary cannot block a durable index rebuild.
  * Both endpoints retain independent vendors and exact endpoint commitments;
- * no public, anonymous or generic-alias fallback may substitute either one.
+ * no runtime, environment or generic alias may substitute either one.
  */
 export function historicalReadOnchainDeployment(
   baseDeployment: ReadyOnchainDeployment,
@@ -40,7 +40,7 @@ export function historicalReadOnchainDeployment(
     const [primary, secondary] = providers;
     if (
       providers.length !== 2 ||
-      primary?.vendorGroup !== "alchemy" ||
+      primary?.vendorGroup !== "tenderly" ||
       secondary?.vendorGroup !== "quicknode" ||
       primary.endpointCommitment !== binding.primary.endpointCommitment ||
       secondary.endpointCommitment !== binding.secondary.endpointCommitment
@@ -53,7 +53,7 @@ export function historicalReadOnchainDeployment(
       rpcUrl: primary.endpoint,
       rpcUrlSecondary: secondary.endpoint,
       rpcProviderIds: {
-        primary: "alchemy",
+        primary: "tenderly",
         secondary: "quicknode",
       },
     };

@@ -15,6 +15,7 @@ const ALCHEMY_URL =
 const DRPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_URL =
   "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
+const TENDERLY_RECOVERY_URL = "https://mainnet.gateway.tenderly.co/";
 
 function environment(input?: Readonly<{
   primaryProvider?: string;
@@ -76,7 +77,7 @@ describe("Website Mainnet RPC provider bindings", () => {
     }))).toThrow("Production RPC provider roles are invalid");
   });
 
-  it("binds recovery reads to the committed legacy Alchemy and QuickNode pair", () => {
+  it("binds recovery reads to the fixed Tenderly and committed QuickNode pair", () => {
     const recovery = productionRecoveryMainnetRpcPair({
       ...environment({ primaryUrl: "https://eth.drpc.org" }),
       ETHEREUM_RPC_URL: DRPC_URL,
@@ -90,11 +91,12 @@ describe("Website Mainnet RPC provider bindings", () => {
     });
 
     expect(recovery).toEqual({
-      source: "legacy-alchemy-quicknode",
+      source: "fixed-tenderly-quicknode-v1",
       primary: {
-        provider: "alchemy",
-        url: ALCHEMY_URL,
-        endpointCommitment: rpcProviderCommitment("endpoint", ALCHEMY_URL),
+        provider: "tenderly",
+        url: TENDERLY_RECOVERY_URL,
+        endpointCommitment:
+          rpcProviderCommitment("endpoint", TENDERLY_RECOVERY_URL),
       },
       secondary: {
         provider: "quicknode",
@@ -104,32 +106,36 @@ describe("Website Mainnet RPC provider bindings", () => {
     });
   });
 
-  it("keeps recovery closed on aliases, host drift and commitment drift", () => {
+  it("ignores recovery aliases and fails closed on QuickNode drift", () => {
     const committed = {
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-        rpcProviderCommitment("endpoint", ALCHEMY_URL),
       PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
       PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
         rpcProviderCommitment("endpoint", QUICKNODE_URL),
     };
-    expect(() => productionRecoveryMainnetRpcPair({
+    expect(productionRecoveryMainnetRpcPair({
+      ...committed,
       ETHEREUM_RPC_URL: ALCHEMY_URL,
-      ETHEREUM_RPC_URL_B: QUICKNODE_URL,
+      ETHEREUM_RPC_URL_B: DRPC_URL,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: DRPC_URL,
       PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-        rpcProviderCommitment("endpoint", ALCHEMY_URL),
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
-        rpcProviderCommitment("endpoint", QUICKNODE_URL),
-    })).toThrow("Website primary RPC binding is unavailable");
+        rpcProviderCommitment("endpoint", DRPC_URL),
+      PROGRAMMABLE_TENDERLY_MAINNET_RPC_URL: "https://attacker.invalid/",
+    })).toMatchObject({
+      primary: { provider: "tenderly", url: TENDERLY_RECOVERY_URL },
+      secondary: { provider: "quicknode", url: QUICKNODE_URL },
+    });
     expect(() => productionRecoveryMainnetRpcPair({
       ...committed,
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: DRPC_URL,
-    })).toThrow("Website primary RPC binding is invalid");
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: DRPC_URL,
+    })).toThrow("Website secondary RPC binding is invalid");
     expect(() => productionRecoveryMainnetRpcPair({
       ...committed,
       PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
         `0x${"ab".repeat(32)}`,
     })).toThrow("Website secondary RPC endpoint commitment mismatch");
+    expect(() => productionRecoveryMainnetRpcPair({})).toThrow(
+      "Website secondary RPC binding is unavailable",
+    );
   });
 
   it("binds only the committed dRPC primary without secondary configuration", () => {
@@ -205,6 +211,10 @@ describe("Website Mainnet RPC provider bindings", () => {
   it("rejects unknown providers, provider-host drift and public fallbacks", () => {
     expect(() => websiteMainnetRpcPair(environment({
       primaryProvider: "generic",
+    }))).toThrow("Website primary RPC provider binding is invalid");
+    expect(() => websiteMainnetRpcPair(environment({
+      primaryProvider: "tenderly",
+      primaryUrl: TENDERLY_RECOVERY_URL,
     }))).toThrow("Website primary RPC provider binding is invalid");
     expect(() => websiteMainnetRpcPair(environment({
       primaryProvider: "drpc",
