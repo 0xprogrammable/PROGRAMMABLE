@@ -9,9 +9,11 @@ const REFRESH_PATH = "/api/ops/index-v2";
 const MAXIMUM_JSON_BYTES = 64 * 1024;
 const CANONICAL_UINT = /^(?:0|[1-9][0-9]{0,77})$/u;
 const HEX32 = /^0x[0-9a-f]{64}$/u;
-const REQUEST_ATTEMPTS = 2;
-const REQUEST_RETRY_DELAY_MS = 2_000;
+const REQUEST_ATTEMPTS = 3;
+const REQUEST_RETRY_DELAY_MS = 5_000;
+const MAXIMUM_REQUEST_RETRY_DELAY_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 330_000;
+const PREWARM_PHASE_DELAY_MS = 1_000;
 const PREWARM_STEP_COUNT = 32;
 const PREWARM_STEPS = Object.freeze([
   "01", "02", "03", "04", "05", "06", "07", "08",
@@ -159,7 +161,10 @@ async function requestJsonWithRetry(
       lastError = error;
       if (attempt === attempts) throw error;
     }
-    await sleepImpl(retryDelayMs);
+    await sleepImpl(Math.min(
+      retryDelayMs * (2 ** (attempt - 1)),
+      MAXIMUM_REQUEST_RETRY_DELAY_MS,
+    ));
   }
   throw lastError ?? new Error("staged refresh request failed");
 }
@@ -290,13 +295,18 @@ export async function refreshExactStagedReadModel(input) {
   const requestAttempts = input.requestAttempts ?? REQUEST_ATTEMPTS;
   const requestRetryDelayMs =
     input.requestRetryDelayMs ?? REQUEST_RETRY_DELAY_MS;
+  const prewarmPhaseDelayMs =
+    input.prewarmPhaseDelayMs ?? PREWARM_PHASE_DELAY_MS;
   if (
     !Number.isSafeInteger(requestAttempts) ||
     requestAttempts < 1 ||
     requestAttempts > 3 ||
     !Number.isSafeInteger(requestRetryDelayMs) ||
     requestRetryDelayMs < 0 ||
-    requestRetryDelayMs > 10_000
+    requestRetryDelayMs > 15_000 ||
+    !Number.isSafeInteger(prewarmPhaseDelayMs) ||
+    prewarmPhaseDelayMs < 0 ||
+    prewarmPhaseDelayMs > 10_000
   ) {
     throw new Error("staged refresh retry policy is invalid");
   }
@@ -304,12 +314,13 @@ export async function refreshExactStagedReadModel(input) {
     input.sleepImpl ??
     ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
   const previousPrewarmBlocks = new Map();
-  for (let index = 0; index < PREWARM_PHASES.length; index += 2) {
-    const phasePair = PREWARM_PHASES.slice(index, index + 2);
-    const results = await Promise.allSettled(phasePair.map(async (phase) => {
+  for (let index = 0; index < PREWARM_PHASES.length; index += 1) {
+    const phase = PREWARM_PHASES[index];
+    let prewarm;
+    try {
       const prewarmUrl = new URL(REFRESH_PATH, target);
       prewarmUrl.searchParams.set("phase", phase);
-      return requestJsonWithRetry(
+      prewarm = await requestJsonWithRetry(
         fetchImpl,
         prewarmUrl,
         protectedHeaders,
@@ -320,26 +331,23 @@ export async function refreshExactStagedReadModel(input) {
           timeoutMs: REQUEST_TIMEOUT_MS,
         },
       );
-    }));
-    for (let pairIndex = 0; pairIndex < phasePair.length; pairIndex += 1) {
-      const phase = phasePair[pairIndex];
-      const result = results[pairIndex];
-      if (result.status !== "fulfilled") {
-        throw new Error(`exact staged ${phase} prewarm request failed`);
-      }
-      const prewarm = result.value;
-      if (!exactPrewarmResponse(prewarm, phase)) {
-        throw new Error(
-          `exact staged ${phase} prewarm failed (${prewarm.response.status})`,
-        );
-      }
-      const provider = prewarm.body.provider;
-      const blockNumber = BigInt(prewarm.body.blockNumber);
-      const previousBlock = previousPrewarmBlocks.get(provider);
-      if (previousBlock !== undefined && blockNumber < previousBlock) {
-        throw new Error(`exact staged ${phase} prewarm moved backwards`);
-      }
-      previousPrewarmBlocks.set(provider, blockNumber);
+    } catch {
+      throw new Error(`exact staged ${phase} prewarm request failed`);
+    }
+    if (!exactPrewarmResponse(prewarm, phase)) {
+      throw new Error(
+        `exact staged ${phase} prewarm failed (${prewarm.response.status})`,
+      );
+    }
+    const provider = prewarm.body.provider;
+    const blockNumber = BigInt(prewarm.body.blockNumber);
+    const previousBlock = previousPrewarmBlocks.get(provider);
+    if (previousBlock !== undefined && blockNumber < previousBlock) {
+      throw new Error(`exact staged ${phase} prewarm moved backwards`);
+    }
+    previousPrewarmBlocks.set(provider, blockNumber);
+    if (index < PREWARM_PHASES.length - 1 && prewarmPhaseDelayMs > 0) {
+      await sleepImpl(prewarmPhaseDelayMs);
     }
   }
 

@@ -54,7 +54,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       providerPasses: 2,
       requestDeadlineMs: 270_000,
       classicPrewarmStepCount: 32,
-      prewarmProviderConcurrency: 2,
+      prewarmProviderConcurrency: 1,
       prewarmRequestDeadlineMs: 250_000,
     }),
     schedulerWatchdog: Object.freeze({
@@ -670,12 +670,16 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "Authorization: `Bearer ${input.cronSecret}`",
   '"x-vercel-protection-bypass": input.automationBypassSecret',
   'redirect: "error"',
-  "const REQUEST_ATTEMPTS = 2;",
-  "const REQUEST_RETRY_DELAY_MS = 2_000;",
+  "const REQUEST_ATTEMPTS = 3;",
+  "const REQUEST_RETRY_DELAY_MS = 5_000;",
+  "const MAXIMUM_REQUEST_RETRY_DELAY_MS = 30_000;",
+  "const PREWARM_PHASE_DELAY_MS = 1_000;",
   "requestAttempts > 3",
-  "requestRetryDelayMs > 10_000",
+  "requestRetryDelayMs > 15_000",
+  "prewarmPhaseDelayMs > 10_000",
   "requestJsonWithRetry(",
   "return status === 429 || status >= 500;",
+  "retryDelayMs * (2 ** (attempt - 1))",
   "const PREWARM_STEP_COUNT = 32;",
   "const PREWARM_STEPS = Object.freeze([",
   '"01", "02", "03", "04", "05", "06", "07", "08"',
@@ -683,8 +687,9 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "const PREWARM_PHASES = Object.freeze(PREWARM_STEPS.flatMap((step) => [",
   "`classic-primary-${step}`",
   "`classic-secondary-${step}`",
-  "const results = await Promise.allSettled(phasePair.map(async (phase) => {",
-  'if (result.status !== "fulfilled") {',
+  "for (let index = 0; index < PREWARM_PHASES.length; index += 1) {",
+  "prewarm = await requestJsonWithRetry(",
+  "await sleepImpl(prewarmPhaseDelayMs);",
   "value.body.stepCount === PREWARM_STEP_COUNT",
   "blockNumber === expectedBlock",
   "blockNumber === confirmedBlock",
@@ -696,7 +701,7 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "portfolioHistoryPath: refresh.body.portfolioHistory.path",
 ]);
 const STAGED_DURABLE_REFRESH_SOURCE_SHA256 =
-  "bf7273c8dff2197e2bbb663419c5de3302bdccbe259418da5e916089890cea4c";
+  "b92a68025e9d3e2d58de47ae71a5e4d1da9a460621191f04eba6e76954afbe29";
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
 }
@@ -1439,7 +1444,7 @@ export function evaluateReadModelOperationsSourceContracts(
       boundedRefresh?.eventFiltersPerRange === 2 &&
       boundedRefresh?.providerPasses === 2 &&
       boundedRefresh?.classicPrewarmStepCount === 32 &&
-      boundedRefresh?.prewarmProviderConcurrency === 2 &&
+      boundedRefresh?.prewarmProviderConcurrency === 1 &&
       boundedRefresh?.prewarmRequestDeadlineMs === 250_000 &&
       legacyRouteSource?.includes(
         "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
