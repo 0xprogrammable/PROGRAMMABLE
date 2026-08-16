@@ -764,8 +764,102 @@ test("staged smoke rejects creator profile provider-header drift", async () => {
       })),
       appendOutput: () => undefined,
     }),
-    /profile and claims response is not ready/u,
+    /profile response is neither ready nor fail-closed/u,
   );
+});
+
+test("staged smoke accepts the unchanged fail-closed creator profile boundary", async () => {
+  const baseFetch = stagedFetch();
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: async (url) => {
+      if (url.pathname !== "/api/explore/profile") return baseFetch(url);
+      return new Response(JSON.stringify({
+        status: "error",
+        error: {
+          kind: "temporary",
+          code: "creator_profile_temporarily_unavailable",
+          message: "Onchain creator data is temporarily unavailable",
+        },
+      }), {
+        status: 503,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+        },
+      });
+    },
+    appendOutput: () => undefined,
+  });
+  assert.equal(result.profileStatus, "fail-closed-unavailable");
+});
+
+test("staged smoke rejects drift or disclosure in a fail-closed profile response", async () => {
+  const scenarios = [
+    {
+      body: {
+        status: "error",
+        error: {
+          kind: "temporary",
+          code: "creator_profile_temporarily_unavailable",
+          message: "different",
+        },
+      },
+      headers: {},
+    },
+    {
+      body: {
+        status: "error",
+        error: {
+          kind: "temporary",
+          code: "creator_profile_temporarily_unavailable",
+          message: "Onchain creator data is temporarily unavailable",
+          rpcUrl: "https://secret.invalid",
+        },
+      },
+      headers: {},
+    },
+    {
+      body: {
+        status: "error",
+        error: {
+          kind: "temporary",
+          code: "creator_profile_temporarily_unavailable",
+          message: "Onchain creator data is temporarily unavailable",
+        },
+      },
+      headers: { "x-programmable-rpc-provider": "alchemy" },
+    },
+  ];
+  for (const scenario of scenarios) {
+    const baseFetch = stagedFetch();
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: async (url) => {
+          if (url.pathname !== "/api/explore/profile") return baseFetch(url);
+          return new Response(JSON.stringify(scenario.body), {
+            status: 503,
+            headers: {
+              "cache-control": "no-store",
+              "content-type": "application/json",
+              ...scenario.headers,
+            },
+          });
+        },
+        appendOutput: () => undefined,
+      }),
+      /profile response is neither ready nor fail-closed/u,
+    );
+  }
 });
 
 test("staged smoke rejects chart market provenance leakage", async () => {

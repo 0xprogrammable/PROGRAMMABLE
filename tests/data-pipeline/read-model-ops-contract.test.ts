@@ -1105,7 +1105,7 @@ describe("read-model operations source contract", () => {
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
-        [path]: workflow + "\n# npm run perf:read-model:staged-refresh\n",
+        [path]: workflow + "\n# npm run perf:read-model:staged-health\n",
       },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
