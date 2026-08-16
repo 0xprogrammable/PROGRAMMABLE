@@ -46,8 +46,9 @@ export function LandingPage() {
 
       if (window.location.hash !== "#explore") return;
 
-      const target = document.getElementById("explore");
-      const header = document.querySelector<HTMLElement>(".site-header");
+      const chapter = document.getElementById("explore");
+      const header = document.querySelector<HTMLElement>(".header-inner");
+      const target = chapter?.querySelector<HTMLElement>("h1") ?? chapter;
       if (!target) return;
 
       const headerHeight = header?.getBoundingClientRect().height ?? 0;

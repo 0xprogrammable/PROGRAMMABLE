@@ -69,7 +69,7 @@ describe("Explore UI contract", () => {
     );
   });
 
-  it("keeps nine stable cards and groups links next to market cap", () => {
+  it("keeps nine desktop cards and a compact four-card mobile page", () => {
     const source = readFileSync(
       join(root, "components/explore-view.tsx"),
       "utf8",
@@ -80,6 +80,9 @@ describe("Explore UI contract", () => {
     );
 
     expect(source).toContain("export const EXPLORE_TOKENS_PER_PAGE = 9");
+    expect(source).toContain("export const EXPLORE_MOBILE_TOKENS_PER_PAGE = 4");
+    expect(source).toContain("const pageSize = useExploreTokensPerPage()");
+    expect(source).toContain("limit: String(pageSize)");
     expect(styles).toMatch(
       /\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[^}]*width:\s*100%;/s,
     );
@@ -87,8 +90,14 @@ describe("Explore UI contract", () => {
       /\.runnerArt\s*\{[^}]*aspect-ratio:\s*1;[^}]*width:\s*100%;/s,
     );
     expect(styles).toMatch(/\.runnerMeta\s*\{[^}]*gap:\s*4px;/s);
-    expect(styles).not.toMatch(
-      /\.runnerSocials\s*\{[^}]*margin-inline-start:\s*auto;/s,
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?grid-template-areas:[\s\S]*?"search search"[\s\S]*?"pages sort";/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
+    );
+    expect(styles).toMatch(
+      /\.revealedGrid \.runnerCard:nth-child\(n \+ 5\)\s*\{[^}]*display:\s*none;/s,
     );
     expect(source).not.toContain("styles.runnerIndex");
     expect(source).not.toContain("styles.sortReadout");
@@ -100,7 +109,7 @@ describe("Explore UI contract", () => {
       /\.runnerHeading h3\s*\{[^}]*line-height:\s*1\.15;/s,
     );
     expect(source).toContain(
-      'sizes="(max-width: 360px) 96px, (max-width: 700px) 104px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 299px"',
+      'sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"',
     );
     expect(source).not.toContain("<small>CA</small>");
     expect(source).not.toContain('valuationLabel ?? "Unavailable"');
@@ -162,6 +171,8 @@ describe("Explore UI contract", () => {
     expect(source).not.toContain("Loading tokens");
     expect(source).not.toContain("Updating tokens");
     expect(source).not.toContain("Page {activePage} of {pageCount}");
+    expect(source).not.toContain("Partial launch index");
+    expect(source).not.toContain("Launch index may be out of date");
   });
 
   it("keeps phone controls readable while narrow mouse windows retain desktop popovers", () => {

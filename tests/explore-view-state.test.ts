@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPLORE_MOBILE_TOKENS_PER_PAGE,
   EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
   EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
@@ -8,6 +9,7 @@ import {
   exploreDataQualityMessage,
   exploreAppliedSortLabel,
   exploreMarketStatusLabel,
+  exploreTokensPerPageForViewport,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
@@ -397,8 +399,12 @@ describe("Explore refresh state", () => {
     ).toBeNull();
   });
 
-  it("uses a balanced nine-card page and compact desktop pagination", () => {
+  it("uses nine desktop cards and four mobile cards per page", () => {
     expect(EXPLORE_TOKENS_PER_PAGE).toBe(9);
+    expect(EXPLORE_MOBILE_TOKENS_PER_PAGE).toBe(4);
+    expect(exploreTokensPerPageForViewport(390)).toBe(4);
+    expect(exploreTokensPerPageForViewport(700)).toBe(4);
+    expect(exploreTokensPerPageForViewport(701)).toBe(9);
     expect(getExplorePaginationItems(1, 10)).toEqual([
       1,
       2,
@@ -1227,6 +1233,20 @@ describe("Explore refresh state", () => {
 
   it("does not surface a market availability banner", () => {
     expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBeNull();
+    expect(exploreDataQualityMessage({
+      ...unavailableMarketDataQuality,
+      launchIdentity: {
+        ...unavailableMarketDataQuality.launchIdentity,
+        status: "partial",
+      },
+    })).toBeNull();
+    expect(exploreDataQualityMessage({
+      ...unavailableMarketDataQuality,
+      launchIdentity: {
+        ...unavailableMarketDataQuality.launchIdentity,
+        status: "last-known-good",
+      },
+    })).toBeNull();
   });
 
   it("retries the first non-USD FDV and returns the second fail-closed", async () => {

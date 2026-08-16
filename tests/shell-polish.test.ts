@@ -30,12 +30,17 @@ describe("public shell polish", () => {
 
   it("keeps route motion measured, interruptible and compositor-friendly", () => {
     const source = read("components/route-transition.tsx");
+    const interfaceStyles = read("app/interface.css");
 
     expect(source).toContain('"(prefers-reduced-motion: reduce)"');
     expect(source).toContain("routeAnimationRef.current?.cancel()");
     expect(source).toContain("translate3d(0, 12px, 0)");
     expect(source).toContain("duration: enteringDocs ? 420 : 720");
     expect(source).not.toContain("key={pathname}");
+    expect(source).toContain('heading.dataset.routeAnnouncementFocus = "true"');
+    expect(interfaceStyles).toMatch(
+      /h1\[data-route-announcement-focus="true"\]:focus\s*\{[^}]*outline:\s*0;/s,
+    );
   });
 
   it("renders one shared footer after every route and keeps it below the fold", () => {

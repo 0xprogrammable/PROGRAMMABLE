@@ -103,6 +103,8 @@ describe("landing page contract", () => {
       'window.scrollTo({ behavior: "auto", left: 0, top: 0 })',
     );
     expect(landing).toContain('window.location.hash !== "#explore"');
+    expect(landing).toContain('document.querySelector<HTMLElement>(".header-inner")');
+    expect(landing).toContain('chapter?.querySelector<HTMLElement>("h1")');
     expect(landing).toContain('window.scrollTo({ behavior: "auto"');
     expect(landing).toContain("data-reveal-section");
     expect(landing).not.toContain('addEventListener("wheel"');
@@ -168,6 +170,16 @@ describe("landing page contract", () => {
     expect(navigation).toContain("onClick={restartHome}");
     expect(navigation).toContain("event.metaKey");
     expect(navigation).toContain("event.ctrlKey");
+  });
+
+  it("realigns a repeated home Explore activation after the mobile menu closes", () => {
+    const navigation = read("components/site-navigation.tsx");
+
+    expect(navigation).toContain("prepareLandingExploreNavigation(");
+    expect(navigation).toContain('window.history.pushState(null, "", "/#explore")');
+    expect(navigation).toContain('window.dispatchEvent(new Event("hashchange"))');
+    expect(navigation).toContain("MOBILE_MENU_TRANSITION_MS + 20");
+    expect(navigation).toContain("onNavigate={finishMobileNavigation}");
   });
 
   it("uses fluid shared gutters instead of a desktop to mobile width jump", () => {
