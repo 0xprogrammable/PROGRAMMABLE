@@ -424,6 +424,51 @@ test("staged smoke accepts identity-only Explore and token responses", async () 
   assert.match(output[0][1], /market_read_status=unavailable/u);
 });
 
+test("staged smoke accepts monotonic Envio progress with stable identities", async () => {
+  const advancedAt = "2026-08-16T08:00:12.000Z";
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(
+      ({ body, url }) =>
+        url.pathname === "/api/explore" &&
+          url.searchParams.get("sort") === "newest"
+          ? {
+              ...body,
+              catalog: {
+                ...body.catalog,
+                lastIndexedAt: advancedAt,
+                asOfBlock: "25740012",
+                asOfBlockHash: `0x${"ab".repeat(32)}`,
+                evidence: {
+                  ...body.catalog.evidence,
+                  progressBlock: "25740012",
+                  commitment: `sha256:${"cd".repeat(32)}`,
+                },
+              },
+            }
+          : body,
+      ({ extraHeaders, omittedHeaders, url }) => ({
+        extraHeaders: url.pathname === "/api/explore" &&
+            url.searchParams.get("sort") === "newest"
+          ? {
+              ...extraHeaders,
+              "x-programmable-identity-last-indexed-at": advancedAt,
+            }
+          : extraHeaders,
+        omittedHeaders,
+      }),
+    ),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.catalogSource, "envio-classic-v3");
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+});
+
 test("staged smoke rejects a mixed Explore identity commitment", async () => {
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({

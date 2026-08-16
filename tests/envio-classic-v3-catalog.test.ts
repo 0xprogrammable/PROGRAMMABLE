@@ -8,6 +8,7 @@ import {
   createEnvioClassicV3CatalogReaderV1,
   ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE,
   ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY,
+  envioClassicV3IdentityCommitmentV1,
 } from "../lib/market-data/envio-classic-v3-catalog.server";
 
 const release = getDataPipelineReleaseBinding();
@@ -268,6 +269,25 @@ describe("Envio Classic V3 public catalog", () => {
     expect(test.readRpcSnapshot).toHaveBeenCalledWith(expect.objectContaining({
       anchorBlock: String(ANCHOR_BLOCK),
     }));
+    const identityCommitment = envioClassicV3IdentityCommitmentV1(
+      catalog,
+      catalog.entries,
+    );
+    expect(envioClassicV3IdentityCommitmentV1({
+      ...catalog,
+      generatedAt: "2026-08-16T12:00:12.000Z",
+      asOfBlock: String(ANCHOR_BLOCK + 12),
+      asOfBlockHash: hex32(60_012),
+      evidence: {
+        ...catalog.evidence,
+        progressBlock: String(ANCHOR_BLOCK + 12),
+        commitment: `sha256:${"ab".repeat(32)}`,
+      },
+    }, catalog.entries)).toBe(identityCommitment);
+    expect(envioClassicV3IdentityCommitmentV1(
+      catalog,
+      catalog.entries.slice(1),
+    )).not.toBe(identityCommitment);
   });
 
   it("fails closed for an empty catalog, family drift, and payload mismatch", async () => {
