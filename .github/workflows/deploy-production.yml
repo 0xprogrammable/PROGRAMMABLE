@@ -664,6 +664,41 @@ jobs:
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
 
+      - name: Seed exact staged durable launch catalog
+        id: durable-catalog-seed
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+        run: |
+          set -euo pipefail
+          result_path="$RUNNER_TEMP/staged-durable-catalog-seed.json"
+          test ! -e "$result_path"
+          node scripts/perf/read-model-staged-refresh.mjs \
+            --target-url "$STAGED_TARGET_URL" \
+            --deployment-id "$STAGED_DEPLOYMENT_ID" \
+            --git-head "$GITHUB_SHA" > "$result_path"
+          RESULT_PATH="$result_path" node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.env.RESULT_PATH, "utf8"));
+          if (
+            result?.ok !== true ||
+            result.deploymentId !== process.env.STAGED_DEPLOYMENT_ID ||
+            result.gitHead !== process.env.GITHUB_SHA ||
+            !/^(?:0|[1-9][0-9]{0,77})$/u.test(result.refreshBlockNumber) ||
+            !Number.isSafeInteger(result.tokenCount) ||
+            result.tokenCount < 1
+          ) {
+            throw new Error("staged durable catalog seed result is invalid");
+          }
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `block_number=${result.refreshBlockNumber}\ntoken_count=${result.tokenCount}\n`,
+          );
+          NODE
+
       - name: Prove clean candidate carries no Generic signer probe authority
         id: generic-signer-probe-clean
         if: steps.generic-signer-probe-delete.outcome == 'success'
@@ -1057,10 +1092,6 @@ jobs:
 
       - name: Smoke staged static identity and Dex public APIs
         id: public-provider-smoke
-        if: >-
-          needs.release-gate.outputs.verified_custom_v2 != 'true' ||
-          needs.release-gate.outputs.verified_interface == 'true' ||
-          needs.release-gate.outputs.verified_read_model == 'true'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -1091,6 +1122,8 @@ jobs:
           MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
+          CATALOG_BLOCK_NUMBER: ${{ steps.durable-catalog-seed.outputs.block_number }}
+          CATALOG_TOKEN_COUNT: ${{ steps.durable-catalog-seed.outputs.token_count }}
         run: |
           {
             echo "## Staged production candidate"
@@ -1101,6 +1134,8 @@ jobs:
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Launch identities: validated last-good catalog"
+            echo "- Durable catalog seed block: \`$CATALOG_BLOCK_NUMBER\`"
+            echo "- Durable catalog seed token count: \`$CATALOG_TOKEN_COUNT\`"
             echo "- Market data provider: Dexscreener (optional enrichment)"
             echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
