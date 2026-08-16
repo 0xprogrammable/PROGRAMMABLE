@@ -38,7 +38,12 @@ export function LandingPage() {
   const pageRef = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
-    const alignExploreHash = () => {
+    const alignLandingHash = () => {
+      if (window.location.hash === "") {
+        window.scrollTo({ behavior: "auto", left: 0, top: 0 });
+        return;
+      }
+
       if (window.location.hash !== "#explore") return;
 
       const target = document.getElementById("explore");
@@ -56,9 +61,9 @@ export function LandingPage() {
       window.scrollTo({ behavior: "auto", left: 0, top });
     };
 
-    alignExploreHash();
-    window.addEventListener("hashchange", alignExploreHash);
-    return () => window.removeEventListener("hashchange", alignExploreHash);
+    alignLandingHash();
+    window.addEventListener("hashchange", alignLandingHash);
+    return () => window.removeEventListener("hashchange", alignLandingHash);
   }, []);
 
   useEffect(() => {
