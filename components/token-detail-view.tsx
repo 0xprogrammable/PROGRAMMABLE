@@ -1499,28 +1499,6 @@ function TokenDetailContent({
               >
                 {token.name}
               </h1>
-              {projectLinks.length > 0 ? (
-                <nav className={styles.links} aria-label={`${token.name} links`}>
-                  {projectLinks.map((link) => {
-                    const label = getLinkLabel(link.kind);
-                    return (
-                      <a
-                        className={`${styles.socialLink} ${
-                          link.kind === "website" ? styles.websiteLink : ""
-                        }`}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`${token.name} on ${label}`}
-                        title={label}
-                        key={`${link.kind}:${link.url}`}
-                      >
-                        <TokenLinkIcon kind={link.kind} />
-                      </a>
-                    );
-                  })}
-                </nav>
-              ) : null}
               <div className={styles.addressActions}>
                 <button
                   className={styles.address}
@@ -1548,6 +1526,31 @@ function TokenDetailContent({
                     <Copy aria-hidden="true" size={14} />
                   )}
                 </button>
+                {projectLinks.length > 0 ? (
+                  <nav
+                    className={`${styles.links} ${styles.addressLinks}`}
+                    aria-label={`${token.name} links`}
+                  >
+                    {projectLinks.map((link) => {
+                      const label = getLinkLabel(link.kind);
+                      return (
+                        <a
+                          className={`${styles.socialLink} ${
+                            link.kind === "website" ? styles.websiteLink : ""
+                          }`}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`${token.name} on ${label}`}
+                          title={label}
+                          key={`${link.kind}:${link.url}`}
+                        >
+                          <TokenLinkIcon kind={link.kind} />
+                        </a>
+                      );
+                    })}
+                  </nav>
+                ) : null}
               </div>
 
               {token.description?.trim() ? (

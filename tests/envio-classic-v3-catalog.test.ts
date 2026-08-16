@@ -16,6 +16,12 @@ const ANCHOR_BLOCK = 25_770_000;
 const EVENT_BLOCK = 25_639_700;
 const STATE_BLOCK_HASH = `0x${"ee".repeat(32)}` as const;
 const STATE_TRANSACTION_HASH = `0x${"ff".repeat(32)}` as const;
+const PROGRAMMABLE_MAIN_ASSET_ADDRESS =
+  "0x7987f03462200b3d8a072e02c89a8a41dcb124ee" as const;
+const OFFICIAL_LAUNCH_HASH =
+  "0xf62bfccb2c0e3832607d8e6c48c00b0411d1d9bf12337fd039c4821d25e8cd20" as const;
+const OFFICIAL_OCCURRENCE =
+  "1:0x17e7e16d94fdf07c3d06586080c68264a39756b326ecf9d55d5170542d8b733d:0x47668b99d392ba82fc82d2a38413bd679e6ec8a04e5cf9535bff2c558259732a:976" as const;
 
 function hex32(value: number) {
   return `0x${value.toString(16).padStart(64, "0")}` as const;
@@ -154,6 +160,91 @@ function eventFixture(launch: ReturnType<typeof launchFixture>) {
   };
 }
 
+function officialLaunchFixture() {
+  const hook = release.sources.find(
+    (source) => source.contractName === "ClassicV2Hook",
+  )!.address;
+  return {
+    id: `1:classic-v2:${OFFICIAL_LAUNCH_HASH}`,
+    chainId: 1,
+    model: "classic",
+    releaseVersion: "classic-v2",
+    launchHash: OFFICIAL_LAUNCH_HASH,
+    token: PROGRAMMABLE_MAIN_ASSET_ADDRESS,
+    creator: "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+    quoteAsset: null,
+    poolId: "0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+    hook,
+    rewardVault: null,
+    positionRecipient: "0xe68da18043623c31a93426b084c0ad1ca494c566",
+    positionTokenId: "352224",
+    totalSwapFeeBps: 100,
+    buySwapFeeBps: null,
+    sellSwapFeeBps: null,
+    rewardConfigurationHash: null,
+    quoteConfigurationHash: null,
+    totalSupply: "1000000000000000000000000000",
+    tokenLiquidityAmount: "999999999999999999999987736",
+    lockedTokenDust: "12264",
+    initialTick: 204200,
+    tickLower: -887200,
+    tickUpper: 204200,
+    lpFeePips: 0,
+    launchOccurrenceId: OFFICIAL_OCCURRENCE,
+    liquidityOccurrenceId: `${OFFICIAL_OCCURRENCE}:liquidity`,
+    initialBuyOccurrenceId: `${OFFICIAL_OCCURRENCE}:buy`,
+    custodyOccurrenceId: null,
+    coordinatorOccurrenceId: null,
+    hasLaunchEvent: true,
+    hasLiquidityEvent: true,
+    hasInitialBuyEvent: true,
+    hasCustodyEvent: false,
+    hasCoordinatorEvent: false,
+    hasPoolRegistrationEvent: true,
+    hasPoolFeeDisclosureEvent: true,
+    hasRewardVaultFactoryEvent: false,
+    provenanceValid: true,
+    isComplete: true,
+    updatedBlock: "25627056",
+  };
+}
+
+function officialEventFixture() {
+  const launch = officialLaunchFixture();
+  const launcher = release.sources.find(
+    (source) => source.contractName === "ClassicV2Launcher",
+  )!.address;
+  const [, blockHash, transactionHash, logIndex] = OFFICIAL_OCCURRENCE.split(":");
+  return {
+    id: OFFICIAL_OCCURRENCE,
+    downstreamLogicalId: null,
+    receiptLogOrdinal: null,
+    chainId: 1,
+    blockNumber: "25627056",
+    blockHash,
+    blockTimestamp: "1785190343",
+    transactionHash,
+    transactionIndex: "279",
+    blockGlobalLogIndex: logIndex,
+    sourceAddress: launcher,
+    contractName: "ClassicV2Launcher",
+    eventName: "MemeTokenLaunched",
+    model: "classic",
+    releaseVersion: "classic-v2",
+    decodedPayload: JSON.stringify({
+      creator: launch.creator,
+      feeHook: launch.hook,
+      launchHash: launch.launchHash,
+      poolId: launch.poolId,
+      positionRecipient: launch.positionRecipient,
+      positionTokenId: launch.positionTokenId,
+      token: launch.token,
+      totalSwapFeeBps: String(launch.totalSwapFeeBps),
+    }),
+    payloadHash: hex32(70_000),
+  };
+}
+
 function json(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), {
     status,
@@ -193,6 +284,14 @@ function harness(input: {
       events = input.mutateEvents?.(events) ?? events;
       return json({ data: { ChainEvent: events } });
     }
+    if (request.query.includes("ProgrammableOfficialMainToken")) {
+      return json({
+        data: {
+          OfficialLaunch: [officialLaunchFixture()],
+          OfficialEvent: [officialEventFixture()],
+        },
+      });
+    }
     throw new Error("Unexpected Envio query");
   });
   const readRpcSnapshot = vi.fn(async ({
@@ -210,6 +309,16 @@ function harness(input: {
       name: `Token ${index + 1}`,
       symbol: `T${index + 1}`,
       decimals: 18,
+      ...(token.toLowerCase() === PROGRAMMABLE_MAIN_ASSET_ADDRESS
+        ? {
+            description: "The official Programmable token",
+            imageUrl: "https://assets.example/programmble.webp",
+            links: [
+              { kind: "website" as const, url: "https://programmable.family/" },
+              { kind: "x" as const, url: "https://x.com/programmable" },
+            ],
+          }
+        : {}),
     }])),
     observedAnchorBlock: anchorBlock,
   }));
@@ -218,7 +327,7 @@ function harness(input: {
 
 describe("Envio Classic V3 public catalog", () => {
   it("bounds RPC metadata work to 96 calls and two concurrent batches", () => {
-    expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE).toBe(32);
+    expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE).toBe(24);
     expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY).toBe(2);
   });
 
@@ -236,7 +345,11 @@ describe("Envio Classic V3 public catalog", () => {
       asOfBlock: String(ANCHOR_BLOCK),
       completeness: { classic: "current", stock: "excluded", custom: "unavailable" },
       scope: {
-        included: ["classic-v3", "registry.custom-launched"],
+        included: [
+          "classic-v3",
+          "official-main-token",
+          "registry.custom-launched",
+        ],
         excluded: [
           "classic-v1",
           "classic-v2",
@@ -253,8 +366,13 @@ describe("Envio Classic V3 public catalog", () => {
         progressBlock: String(ANCHOR_BLOCK),
       },
     });
-    expect(catalog.entries).toHaveLength(65);
-    expect(catalog.entries.every((entry) =>
+    expect(catalog.entries).toHaveLength(66);
+    const classicV3Entries = catalog.entries.filter((entry) =>
+      entry.exploreKind === "token" &&
+      entry.launchModelVersion === "classic-v3"
+    );
+    expect(classicV3Entries).toHaveLength(65);
+    expect(classicV3Entries.every((entry) =>
       entry.exploreKind === "token" &&
       entry.launchModel === "classic" &&
       entry.launchModelVersion === "classic-v3" &&
@@ -263,6 +381,24 @@ describe("Envio Classic V3 public catalog", () => {
         entry.sellHookFeeBps ?? 0,
       )
     )).toBe(true);
+    expect(catalog.entries.find((entry) =>
+      entry.exploreKind === "token" &&
+      entry.tokenAddress.toLowerCase() === PROGRAMMABLE_MAIN_ASSET_ADDRESS
+    )).toMatchObject({
+      launchModel: "classic",
+      launchModelVersion: "classic-v2",
+      totalSwapFeeBps: 100,
+      description: "The official Programmable token",
+      imageUrl: "https://assets.example/programmble.webp",
+      links: [
+        { kind: "website", url: "https://programmable.family/" },
+        { kind: "x", url: "https://x.com/programmable" },
+      ],
+    });
+    expect(catalog.entries.filter((entry) =>
+      entry.exploreKind === "token" &&
+      entry.launchModelVersion === "classic-v2"
+    )).toHaveLength(1);
     expect(test.requests.filter((request) =>
       request.query.includes("ProgrammableClassicV3Catalog")
     )).toHaveLength(2);

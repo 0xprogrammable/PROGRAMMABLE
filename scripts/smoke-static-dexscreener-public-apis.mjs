@@ -6,6 +6,8 @@ const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const CATALOG_SOURCES = new Set(["envio-classic-v3"]);
+const PROGRAMMABLE_MAIN_ASSET_ADDRESS =
+  "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const CATALOG_STATUSES = new Set([
   "current",
   "last-known-good",
@@ -98,11 +100,15 @@ function exactExplorePage(response, tokens, expected = { page: 1, pageSize: 20 }
 function exactIdentity(token) {
   if (typeof token?.id !== "string" || token.id.trim() === "") return null;
   if (token.exploreKind === "token") {
+    const tokenAddress = String(token.tokenAddress ?? "").toLowerCase();
+    const exactOfficialException =
+      tokenAddress === PROGRAMMABLE_MAIN_ASSET_ADDRESS &&
+      token.launchModelVersion === "classic-v2";
     if (
-      !ADDRESS.test(String(token.tokenAddress ?? "").toLowerCase()) ||
+      !ADDRESS.test(tokenAddress) ||
       !/^0x[0-9a-f]{64}$/u.test(String(token.poolId ?? "").toLowerCase()) ||
       token.launchModel !== "classic" ||
-      token.launchModelVersion !== "classic-v3" ||
+      (token.launchModelVersion !== "classic-v3" && !exactOfficialException) ||
       token.launchStampProvenance !== undefined
     ) return null;
     return JSON.stringify([
@@ -310,6 +316,7 @@ function exactCatalogSnapshot(response) {
     ["current", "unavailable"].includes(customStatus) &&
     JSON.stringify(catalog.scope?.included) === JSON.stringify([
       "classic-v3",
+      "official-main-token",
       "registry.custom-launched",
     ]) &&
     JSON.stringify(catalog.scope?.excluded) === JSON.stringify([

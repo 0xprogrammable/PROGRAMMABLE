@@ -156,7 +156,8 @@
 .addressActions {
   align-items: center;
   display: flex;
-  gap: 0;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 10px;
   min-width: 0;
 }
@@ -243,6 +244,11 @@
   flex-wrap: wrap;
   gap: 6px;
   margin: 10px 0 0;
+}
+
+.addressLinks {
+  flex: none;
+  margin: 0;
 }
 
 .socialLink {

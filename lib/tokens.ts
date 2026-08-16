@@ -520,6 +520,7 @@ export type LauncherToken = {
     | "stock-paired"
     | "custom-graph";
   launchModelVersion?:
+    | "classic-v2"
     | "classic-v3"
     | "stock-paired-v1"
     | "stock-paired-v2"

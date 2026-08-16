@@ -26,6 +26,7 @@ import {
   characterLength,
   hasUnsafeDisplayCharacters,
   isValidTokenSymbol,
+  MAX_TOKEN_DESCRIPTION_BYTES,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_NAME_CHARACTERS,
   MAX_TOKEN_SYMBOL_BYTES,
@@ -33,6 +34,7 @@ import {
 } from "../metadata-policy";
 import { uerc20ReadAbi } from "../onchain/abis";
 import { getWebsiteReadOnchainDeployment } from "../onchain/config";
+import { buildTokenLinks, sanitizeImageUrl } from "../onchain/metadata";
 import { withOperationalRpcFailover } from
   "../onchain/operational-rpc-failover.server";
 import { canonicalSha256 } from "../server/projection-target/hashing";
@@ -45,11 +47,17 @@ const GRAPHQL_TIMEOUT_MS = 3_000;
 const GRAPHQL_MAXIMUM_BODY_BYTES = 4 * 1024 * 1024;
 const LAUNCH_PAGE_SIZE = 64;
 const MAXIMUM_LAUNCH_COUNT = 5_000;
-export const ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE = 32;
+export const ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE = 24;
 export const ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY = 2;
 const MAXIMUM_RPC_HEAD_SKEW_BLOCKS = 8n;
 const NATIVE_CURRENCY_ADDRESS =
   "0x0000000000000000000000000000000000000000" as const;
+const PROGRAMMABLE_MAIN_ASSET_ADDRESS =
+  "0x7987f03462200b3d8a072e02c89a8a41dcb124ee" as const;
+const OFFICIAL_MAIN_TOKEN_LAUNCH_ID =
+  "1:classic-v2:0xf62bfccb2c0e3832607d8e6c48c00b0411d1d9bf12337fd039c4821d25e8cd20" as const;
+const OFFICIAL_MAIN_TOKEN_OCCURRENCE_ID =
+  "1:0x17e7e16d94fdf07c3d06586080c68264a39756b326ecf9d55d5170542d8b733d:0x47668b99d392ba82fc82d2a38413bd679e6ec8a04e5cf9535bff2c558259732a:976" as const;
 
 const CLASSIC_V3_LAUNCH_QUERY = `
   query ProgrammableClassicV3Catalog(
@@ -207,6 +215,31 @@ const EVENT_KEYS = [
   "payloadHash",
 ] as const;
 
+const OFFICIAL_MAIN_TOKEN_QUERY = `
+  query ProgrammableOfficialMainToken($anchorBlock: numeric!) {
+    OfficialLaunch: Launch(
+      where: {
+        _and: [
+          { id: { _eq: "${OFFICIAL_MAIN_TOKEN_LAUNCH_ID}" } }
+          { token: { _eq: "${PROGRAMMABLE_MAIN_ASSET_ADDRESS}" } }
+          { updatedBlock: { _lte: $anchorBlock } }
+          { isComplete: { _eq: true } }
+          { provenanceValid: { _eq: true } }
+        ]
+      }
+      limit: 2
+    ) {
+      ${LAUNCH_KEYS.join("\n      ")}
+    }
+    OfficialEvent: ChainEvent(
+      where: { id: { _eq: "${OFFICIAL_MAIN_TOKEN_OCCURRENCE_ID}" } }
+      limit: 2
+    ) {
+      ${EVENT_KEYS.join("\n      ")}
+    }
+  }
+`;
+
 type CatalogReadOptions = Readonly<{
   signal?: AbortSignal;
   /** Absolute Unix epoch deadline in milliseconds. */
@@ -248,11 +281,46 @@ type EnvioClassicV3LaunchEvent = Readonly<{
   decodedPayload: Readonly<Record<string, string>>;
 }>;
 
+type OfficialMainTokenLaunchRow = Readonly<{
+  id: typeof OFFICIAL_MAIN_TOKEN_LAUNCH_ID;
+  launchHash: Hex;
+  token: Address;
+  creator: Address;
+  poolId: Hex;
+  hook: Address;
+  positionRecipient: Address;
+  positionTokenId: string;
+  totalSwapFeeBps: number;
+  totalSupply: string;
+  tokenLiquidityAmount: string;
+  lockedTokenDust: string;
+  initialTick: number;
+  tickLower: number;
+  tickUpper: number;
+  lpFeePips: number;
+  launchOccurrenceId: typeof OFFICIAL_MAIN_TOKEN_OCCURRENCE_ID;
+  updatedBlock: string;
+}>;
+
+type OfficialMainTokenLaunchEvent = Readonly<{
+  id: typeof OFFICIAL_MAIN_TOKEN_OCCURRENCE_ID;
+  blockNumber: string;
+  blockHash: Hex;
+  blockTimestamp: string;
+  transactionHash: Hex;
+  transactionIndex: number;
+  blockGlobalLogIndex: number;
+  decodedPayload: Readonly<Record<string, string>>;
+}>;
+
 type TokenMetadata = Readonly<{
   tokenAddress: Address;
   name: string;
   symbol: string;
   decimals: number;
+  description?: string;
+  imageUrl?: string;
+  links?: LauncherToken["links"];
 }>;
 
 type RpcCatalogSnapshot = Readonly<{
@@ -275,7 +343,11 @@ export type EnvioClassicV3CatalogV1 = Readonly<{
     custom: "unavailable";
   }>;
   scope: Readonly<{
-    included: readonly ["classic-v3", "registry.custom-launched"];
+    included: readonly [
+      "classic-v3",
+      "official-main-token",
+      "registry.custom-launched",
+    ];
     excluded: readonly [
       "classic-v1",
       "classic-v2",
@@ -402,6 +474,29 @@ function launchSourceBindings(release: DataPipelineReleaseBinding) {
     throw new Error("Classic V3 Envio source bindings are incomplete");
   }
   return Object.freeze({ launcher, hook });
+}
+
+function officialMainTokenSourceBindings(release: DataPipelineReleaseBinding) {
+  const classicV2 = release.releases.find((candidate) =>
+    candidate.model === "classic" &&
+    candidate.releaseVersion === "classic-v2"
+  );
+  const launcher = release.sources.find(
+    (candidate) => candidate.contractName === "ClassicV2Launcher",
+  );
+  const hook = release.sources.find(
+    (candidate) => candidate.contractName === "ClassicV2Hook",
+  );
+  if (
+    !classicV2 ||
+    !launcher ||
+    !hook ||
+    !classicV2.sourceContracts.includes(launcher.contractName) ||
+    !classicV2.sourceContracts.includes(hook.contractName)
+  ) {
+    throw new Error("Official main token Envio source bindings are incomplete");
+  }
+  return Object.freeze({ classicV2, launcher, hook });
 }
 
 function parseLaunchRow(
@@ -623,6 +718,217 @@ function assertLaunchEventBinding(
   }
 }
 
+function parseOfficialMainTokenLaunch(
+  value: unknown,
+  release: DataPipelineReleaseBinding,
+): OfficialMainTokenLaunchRow {
+  if (!isRecord(value) || !hasOnlyKeys(value, LAUNCH_KEYS)) {
+    throw new Error("Official main token launch row shape drifted");
+  }
+  const sources = officialMainTokenSourceBindings(release);
+  const id = exactString(value.id, /^1:classic-v2:0x[0-9a-f]{64}$/u, "official launch id");
+  const launchHash = bytes32(value.launchHash, "official launch hash");
+  const token = address(value.token, "official token");
+  const creator = address(value.creator, "official creator");
+  const poolId = bytes32(value.poolId, "official pool id");
+  const hook = address(value.hook, "official hook");
+  const positionRecipient = address(
+    value.positionRecipient,
+    "official position recipient",
+  );
+  const launchOccurrenceId = exactString(
+    value.launchOccurrenceId,
+    /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
+    "official launch occurrence",
+  );
+  if (
+    id !== OFFICIAL_MAIN_TOKEN_LAUNCH_ID ||
+    token.toLowerCase() !== PROGRAMMABLE_MAIN_ASSET_ADDRESS ||
+    value.chainId !== 1 ||
+    value.model !== "classic" ||
+    value.releaseVersion !== "classic-v2" ||
+    id !== `1:classic-v2:${launchHash}` ||
+    hook.toLowerCase() !== sources.hook.address.toLowerCase() ||
+    launchOccurrenceId !== OFFICIAL_MAIN_TOKEN_OCCURRENCE_ID ||
+    value.quoteAsset !== null ||
+    value.rewardVault !== null ||
+    value.buySwapFeeBps !== null ||
+    value.sellSwapFeeBps !== null ||
+    value.rewardConfigurationHash !== null ||
+    value.quoteConfigurationHash !== null ||
+    value.custodyOccurrenceId !== null ||
+    value.coordinatorOccurrenceId !== null ||
+    value.hasLaunchEvent !== true ||
+    value.hasLiquidityEvent !== true ||
+    value.hasInitialBuyEvent !== true ||
+    value.hasCustodyEvent !== false ||
+    value.hasCoordinatorEvent !== false ||
+    value.hasPoolRegistrationEvent !== true ||
+    value.hasPoolFeeDisclosureEvent !== true ||
+    value.hasRewardVaultFactoryEvent !== false ||
+    value.provenanceValid !== true ||
+    value.isComplete !== true ||
+    typeof value.liquidityOccurrenceId !== "string" ||
+    typeof value.initialBuyOccurrenceId !== "string"
+  ) {
+    throw new Error("Official main token failed exact release validation");
+  }
+  return Object.freeze({
+    id,
+    launchHash,
+    token,
+    creator,
+    poolId,
+    hook,
+    positionRecipient,
+    positionTokenId: unsignedText(
+      value.positionTokenId,
+      "official position token id",
+    ),
+    totalSwapFeeBps: boundedInteger(
+      value.totalSwapFeeBps,
+      0,
+      10_000,
+      "official total swap fee",
+    ),
+    totalSupply: unsignedText(value.totalSupply, "official total supply"),
+    tokenLiquidityAmount: unsignedText(
+      value.tokenLiquidityAmount,
+      "official token liquidity amount",
+    ),
+    lockedTokenDust: unsignedText(
+      value.lockedTokenDust,
+      "official locked token dust",
+    ),
+    initialTick: boundedInteger(
+      value.initialTick,
+      -887_272,
+      887_272,
+      "official initial tick",
+    ),
+    tickLower: boundedInteger(
+      value.tickLower,
+      -887_272,
+      887_272,
+      "official tick lower",
+    ),
+    tickUpper: boundedInteger(
+      value.tickUpper,
+      -887_272,
+      887_272,
+      "official tick upper",
+    ),
+    lpFeePips: boundedInteger(value.lpFeePips, 0, 1_000_000, "official LP fee"),
+    launchOccurrenceId,
+    updatedBlock: unsignedText(value.updatedBlock, "official updated block"),
+  });
+}
+
+function parseOfficialMainTokenEvent(
+  value: unknown,
+  release: DataPipelineReleaseBinding,
+): OfficialMainTokenLaunchEvent {
+  if (!isRecord(value) || !hasOnlyKeys(value, EVENT_KEYS)) {
+    throw new Error("Official main token event shape drifted");
+  }
+  const sources = officialMainTokenSourceBindings(release);
+  const id = exactString(
+    value.id,
+    /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
+    "official event id",
+  );
+  const blockHash = bytes32(value.blockHash, "official event block hash");
+  const transactionHash = bytes32(
+    value.transactionHash,
+    "official event transaction hash",
+  );
+  const blockGlobalLogIndex = safeUnsignedInteger(
+    value.blockGlobalLogIndex,
+    "official event log index",
+  );
+  bytes32(value.payloadHash, "official event payload hash");
+  if (
+    id !== OFFICIAL_MAIN_TOKEN_OCCURRENCE_ID ||
+    value.downstreamLogicalId !== null ||
+    value.receiptLogOrdinal !== null ||
+    value.chainId !== 1 ||
+    value.model !== "classic" ||
+    value.releaseVersion !== "classic-v2" ||
+    value.contractName !== "ClassicV2Launcher" ||
+    value.eventName !== "MemeTokenLaunched" ||
+    address(value.sourceAddress, "official event source").toLowerCase() !==
+      sources.launcher.address.toLowerCase() ||
+    id !== `1:${blockHash}:${transactionHash}:${blockGlobalLogIndex}` ||
+    typeof value.decodedPayload !== "string"
+  ) {
+    throw new Error("Official main token event failed exact validation");
+  }
+  let decodedPayload: unknown;
+  try {
+    decodedPayload = JSON.parse(value.decodedPayload);
+  } catch {
+    throw new Error("Official main token event payload is invalid");
+  }
+  const payloadKeys = [
+    "creator",
+    "feeHook",
+    "launchHash",
+    "poolId",
+    "positionRecipient",
+    "positionTokenId",
+    "token",
+    "totalSwapFeeBps",
+  ] as const;
+  if (
+    !isRecord(decodedPayload) ||
+    !hasOnlyKeys(decodedPayload, payloadKeys) ||
+    Object.values(decodedPayload).some((item) => typeof item !== "string")
+  ) {
+    throw new Error("Official main token event payload shape drifted");
+  }
+  return Object.freeze({
+    id,
+    blockNumber: unsignedText(value.blockNumber, "official event block number"),
+    blockHash,
+    blockTimestamp: unsignedText(
+      value.blockTimestamp,
+      "official event block timestamp",
+    ),
+    transactionHash,
+    transactionIndex: safeUnsignedInteger(
+      value.transactionIndex,
+      "official event transaction index",
+    ),
+    blockGlobalLogIndex,
+    decodedPayload: decodedPayload as Record<string, string>,
+  });
+}
+
+function assertOfficialMainTokenBinding(
+  launch: OfficialMainTokenLaunchRow,
+  event: OfficialMainTokenLaunchEvent,
+  release: DataPipelineReleaseBinding,
+) {
+  const { classicV2 } = officialMainTokenSourceBindings(release);
+  const payload = event.decodedPayload;
+  const sameHex = (left: string, right: string) =>
+    left.toLowerCase() === right.toLowerCase();
+  if (
+    BigInt(event.blockNumber) < BigInt(classicV2.activationBlock) ||
+    BigInt(launch.updatedBlock) < BigInt(event.blockNumber) ||
+    !sameHex(payload.launchHash!, launch.launchHash) ||
+    !sameHex(payload.token!, launch.token) ||
+    !sameHex(payload.creator!, launch.creator) ||
+    !sameHex(payload.poolId!, launch.poolId) ||
+    !sameHex(payload.feeHook!, launch.hook) ||
+    !sameHex(payload.positionRecipient!, launch.positionRecipient) ||
+    payload.positionTokenId !== launch.positionTokenId ||
+    payload.totalSwapFeeBps !== String(launch.totalSwapFeeBps)
+  ) {
+    throw new Error("Official main token event binding failed");
+  }
+}
+
 function parseRows(response: unknown, field: "Launch" | "ChainEvent") {
   if (
     !isRecord(response) ||
@@ -763,11 +1069,51 @@ async function readClassicV3Rows(
   });
 }
 
+async function readOfficialMainToken(
+  release: DataPipelineReleaseBinding,
+  anchorBlock: string,
+  fetcher: DataPipelineFetcher,
+) {
+  const response = await graphqlRequest(release, {
+    query: OFFICIAL_MAIN_TOKEN_QUERY,
+    variables: { anchorBlock },
+  }, fetcher);
+  if (
+    !isRecord(response) ||
+    !hasOnlyKeys(response, ["data"]) ||
+    !isRecord(response.data) ||
+    !hasOnlyKeys(response.data, ["OfficialLaunch", "OfficialEvent"]) ||
+    !Array.isArray(response.data.OfficialLaunch) ||
+    !Array.isArray(response.data.OfficialEvent) ||
+    response.data.OfficialLaunch.length !== 1 ||
+    response.data.OfficialEvent.length !== 1
+  ) {
+    throw new Error("Official main token Envio coverage is incomplete");
+  }
+  const launch = parseOfficialMainTokenLaunch(
+    response.data.OfficialLaunch[0],
+    release,
+  );
+  const event = parseOfficialMainTokenEvent(
+    response.data.OfficialEvent[0],
+    release,
+  );
+  if (
+    BigInt(launch.updatedBlock) > BigInt(anchorBlock) ||
+    BigInt(event.blockNumber) > BigInt(anchorBlock)
+  ) {
+    throw new Error("Official main token exceeds Envio progress");
+  }
+  assertOfficialMainTokenBinding(launch, event, release);
+  return Object.freeze({ launch, event });
+}
+
 function validTokenMetadata(
   tokenAddress: Address,
   nameValue: unknown,
   symbolValue: unknown,
   decimalsValue: unknown,
+  extendedValue?: unknown,
 ): TokenMetadata {
   const name = typeof nameValue === "string" ? nameValue.trim() : "";
   const symbol = typeof symbolValue === "string" ? symbolValue.trim() : "";
@@ -788,11 +1134,31 @@ function validTokenMetadata(
   ) {
     throw new Error(`Token metadata is invalid for ${tokenAddress}`);
   }
+  const extended = Array.isArray(extendedValue) && extendedValue.length === 4
+    ? extendedValue
+    : null;
+  const rawDescription = extended?.[0];
+  const description = typeof rawDescription === "string"
+    ? rawDescription.trim()
+    : "";
+  const safeDescription = description &&
+      utf8ByteLength(description) <= MAX_TOKEN_DESCRIPTION_BYTES &&
+      !hasUnsafeDisplayCharacters(description)
+    ? description
+    : undefined;
+  const imageUrl = sanitizeImageUrl(extended?.[2]) ?? undefined;
+  const extraData = typeof extended?.[3] === "string" && isHex(extended[3])
+    ? extended[3] as Hex
+    : "0x";
+  const links = buildTokenLinks(extended?.[1], extraData);
   return Object.freeze({
     tokenAddress,
     name,
     symbol,
     decimals: decimalsValue,
+    ...(safeDescription ? { description: safeDescription } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(links.length > 0 ? { links } : {}),
   });
 }
 
@@ -868,6 +1234,7 @@ async function defaultReadRpcSnapshot(input: Readonly<{
           { address: tokenAddress, abi: uerc20ReadAbi, functionName: "name" as const },
           { address: tokenAddress, abi: uerc20ReadAbi, functionName: "symbol" as const },
           { address: tokenAddress, abi: uerc20ReadAbi, functionName: "decimals" as const },
+          { address: tokenAddress, abi: uerc20ReadAbi, functionName: "metadata" as const },
         ]);
         const results = await client.multicall({
           contracts,
@@ -875,9 +1242,10 @@ async function defaultReadRpcSnapshot(input: Readonly<{
           allowFailure: true,
         });
         return tokens.map((tokenAddress, index) => {
-          const name = results[index * 3];
-          const symbol = results[index * 3 + 1];
-          const decimals = results[index * 3 + 2];
+          const name = results[index * 4];
+          const symbol = results[index * 4 + 1];
+          const decimals = results[index * 4 + 2];
+          const extended = results[index * 4 + 3];
           if (
             name?.status !== "success" ||
             symbol?.status !== "success" ||
@@ -890,6 +1258,7 @@ async function defaultReadRpcSnapshot(input: Readonly<{
             name.result,
             symbol.result,
             decimals.result,
+            extended?.status === "success" ? extended.result : undefined,
           );
         });
       },
@@ -908,9 +1277,13 @@ async function defaultReadRpcSnapshot(input: Readonly<{
 function buildEntries(
   launches: readonly EnvioClassicV3LaunchRow[],
   events: ReadonlyMap<string, EnvioClassicV3LaunchEvent>,
+  official: Readonly<{
+    launch: OfficialMainTokenLaunchRow;
+    event: OfficialMainTokenLaunchEvent;
+  }>,
   metadata: ReadonlyMap<string, TokenMetadata>,
 ) {
-  return Object.freeze(launches.map((launch) => {
+  const classicEntries = launches.map((launch) => {
     const event = events.get(launch.launchOccurrenceId);
     const tokenMetadata = metadata.get(launch.token.toLowerCase());
     if (!event || !tokenMetadata) {
@@ -924,6 +1297,11 @@ function buildEntries(
       id: `1:${launch.token.toLowerCase()}`,
       name: tokenMetadata.name,
       symbol: tokenMetadata.symbol,
+      ...(tokenMetadata.description
+        ? { description: tokenMetadata.description }
+        : {}),
+      ...(tokenMetadata.imageUrl ? { imageUrl: tokenMetadata.imageUrl } : {}),
+      ...(tokenMetadata.links ? { links: tokenMetadata.links } : {}),
       tokenAddress: launch.token,
       hookAddress: launch.hook,
       poolId: launch.poolId,
@@ -960,7 +1338,58 @@ function buildEntries(
       liquidityPath: "meme",
     };
     return canonicalTokenExploreEntryV1(token);
-  }));
+  });
+  const officialMetadata = metadata.get(official.launch.token.toLowerCase());
+  if (!officialMetadata) {
+    throw new Error("Official main token metadata is not hydrated");
+  }
+  const officialToken: LauncherToken = {
+    id: `1:${official.launch.token.toLowerCase()}`,
+    name: officialMetadata.name,
+    symbol: officialMetadata.symbol,
+    ...(officialMetadata.description
+      ? { description: officialMetadata.description }
+      : {}),
+    ...(officialMetadata.imageUrl ? { imageUrl: officialMetadata.imageUrl } : {}),
+    ...(officialMetadata.links ? { links: officialMetadata.links } : {}),
+    tokenAddress: official.launch.token,
+    hookAddress: official.launch.hook,
+    poolId: official.launch.poolId,
+    creatorAddress: official.launch.creator,
+    positionRecipient: official.launch.positionRecipient,
+    positionTokenId: official.launch.positionTokenId,
+    launchHash: official.launch.launchHash,
+    launchBlockNumber: official.event.blockNumber,
+    launchTransactionHash: official.event.transactionHash,
+    launchTransactionIndex: official.event.transactionIndex,
+    launchLogIndex: official.event.blockGlobalLogIndex,
+    launchedAt: new Date(
+      Number(BigInt(official.event.blockTimestamp)) * 1_000,
+    ).toISOString(),
+    totalSupply: formatUnits(
+      BigInt(official.launch.totalSupply),
+      officialMetadata.decimals,
+    ),
+    totalSupplyRaw: official.launch.totalSupply,
+    tokenDecimals: officialMetadata.decimals,
+    tokenLiquidityAmountRaw: official.launch.tokenLiquidityAmount,
+    lockedTokenDustRaw: official.launch.lockedTokenDust,
+    quoteAssetAddress: NATIVE_CURRENCY_ADDRESS,
+    quoteAssetSymbol: "ETH",
+    quoteAssetName: "Ether",
+    totalSwapFeeBps: official.launch.totalSwapFeeBps,
+    initialTick: official.launch.initialTick,
+    tickLower: official.launch.tickLower,
+    tickUpper: official.launch.tickUpper,
+    lpFeePips: official.launch.lpFeePips,
+    launchModel: "classic",
+    launchModelVersion: "classic-v2",
+    liquidityPath: "meme",
+  };
+  return Object.freeze([
+    ...classicEntries,
+    canonicalTokenExploreEntryV1(officialToken),
+  ]);
 }
 
 async function readUncached(
@@ -983,14 +1412,21 @@ async function readUncached(
   if (sourceLag < 0n || sourceLag > BigInt(release.confirmations)) {
     throw new Error("Envio Classic V3 indexer freshness is invalid");
   }
-  const rows = await readClassicV3Rows(
-    release,
-    progress.progressBlock,
-    fetcher,
-  );
+  const [rows, official] = await Promise.all([
+    readClassicV3Rows(release, progress.progressBlock, fetcher),
+    readOfficialMainToken(release, progress.progressBlock, fetcher),
+  ]);
+  if (rows.launches.some((launch) =>
+    launch.token.toLowerCase() === official.launch.token.toLowerCase()
+  )) {
+    throw new Error("Official main token identity collides with Classic V3");
+  }
   const rpc = await (dependencies.readRpcSnapshot ?? defaultReadRpcSnapshot)({
     anchorBlock: progress.progressBlock,
-    tokens: rows.launches.map((launch) => launch.token),
+    tokens: [
+      ...rows.launches.map((launch) => launch.token),
+      official.launch.token,
+    ],
     deadlineMs: options.deadlineMs,
     signal: options.signal,
   });
@@ -998,7 +1434,7 @@ async function readUncached(
   if (
     rpcLag < 0n ||
     rpcLag > BigInt(release.confirmations) + MAXIMUM_RPC_HEAD_SKEW_BLOCKS ||
-    rpc.metadata.size !== rows.launches.length
+    rpc.metadata.size !== rows.launches.length + 1
   ) {
     throw new Error("Envio Classic V3 RPC freshness or metadata coverage failed");
   }
@@ -1020,7 +1456,7 @@ async function readUncached(
   const generatedAt = new Date(
     Number(BigInt(rpc.anchorBlockTimestamp)) * 1_000,
   ).toISOString();
-  const entries = buildEntries(rows.launches, rows.events, rpc.metadata);
+  const entries = buildEntries(rows.launches, rows.events, official, rpc.metadata);
   const evidenceCore = {
     deployment: progress.deployment,
     sourceCommit: release.envio.sourceCommit,
@@ -1050,6 +1486,7 @@ async function readUncached(
     scope: Object.freeze({
       included: Object.freeze([
         "classic-v3",
+        "official-main-token",
         "registry.custom-launched",
       ] as const),
       excluded: Object.freeze([

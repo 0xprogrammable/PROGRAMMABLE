@@ -167,7 +167,11 @@ type ExploreCatalogBoundary = Readonly<{
     custom: "current" | "unavailable";
   }>;
   scope: Readonly<{
-    included: readonly ["classic-v3", "registry.custom-launched"];
+    included: readonly [
+      "classic-v3",
+      "official-main-token",
+      "registry.custom-launched",
+    ];
     excluded: readonly [
       "classic-v1",
       "classic-v2",
@@ -960,6 +964,7 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     ) ||
     !exactStringArray(value.scope.included, [
       "classic-v3",
+      "official-main-token",
       "registry.custom-launched",
     ]) ||
     !exactStringArray(value.scope.excluded, [
@@ -1846,6 +1851,7 @@ export function ExploreView({
   const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const refreshKey = useLiveDataRefresh({
     enabled: !preview && !loadingOnly,
   });
@@ -1902,15 +1908,18 @@ export function ExploreView({
     try {
       await navigator.clipboard.writeText(token.tokenAddress);
       setCopyFeedback(`${token.name} contract address copied`);
+      setCopiedTokenId(token.id);
       if (copyFeedbackTimerRef.current !== null) {
         window.clearTimeout(copyFeedbackTimerRef.current);
       }
       copyFeedbackTimerRef.current = window.setTimeout(() => {
         setCopyFeedback("");
+        setCopiedTokenId(null);
         copyFeedbackTimerRef.current = null;
       }, 1800);
     } catch {
       setCopyFeedback("Contract address could not be copied");
+      setCopiedTokenId(null);
     }
   }
 
@@ -2323,11 +2332,26 @@ export function ExploreView({
                     <button
                       className={styles.runnerCopyButton}
                       type="button"
-                      aria-label={`Copy ${token.name} contract address`}
-                      title="Copy contract address"
+                      aria-label={
+                        copiedTokenId === token.id
+                          ? `${token.name} contract address copied`
+                          : `Copy ${token.name} contract address`
+                      }
+                      title={
+                        copiedTokenId === token.id
+                          ? "Copied"
+                          : "Copy contract address"
+                      }
+                      data-state={
+                        copiedTokenId === token.id ? "copied" : undefined
+                      }
                       onClick={() => void copyContractAddress(token)}
                     >
-                      <Copy aria-hidden="true" size={14} strokeWidth={1.8} />
+                      {copiedTokenId === token.id ? (
+                        <Check aria-hidden="true" size={15} strokeWidth={2} />
+                      ) : (
+                        <Copy aria-hidden="true" size={14} strokeWidth={1.8} />
+                      )}
                     </button>
                   </div>
                 ) : null}

@@ -1288,6 +1288,11 @@
   width: 32px;
 }
 
+.runnerCopyButton[data-state="copied"] {
+  background: var(--webde-control);
+  color: var(--webde-ink);
+}
+
 .runnerSocialLink {
   border-radius: 7px;
   color: var(--webde-dim);
