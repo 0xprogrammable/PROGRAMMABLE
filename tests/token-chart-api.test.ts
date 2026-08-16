@@ -30,11 +30,13 @@ const token = {
 
 const mocks = vi.hoisted(() => ({
   catalog: vi.fn(),
+  mergeEntries: vi.fn(),
   customEnabled: vi.fn(),
   customDirectory: vi.fn(),
 }));
 vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
   readLastGoodLaunchCatalogV1: mocks.catalog,
+  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -60,6 +62,10 @@ describe("provider-free interim token chart API", () => {
     });
     mocks.customEnabled.mockReturnValue(false);
     mocks.customDirectory.mockResolvedValue([]);
+    mocks.mergeEntries.mockImplementation((canonical, custom) => [
+      ...canonical,
+      ...custom,
+    ]);
   });
 
   it("returns an explicit neutral unavailable contract for a known identity", async () => {
@@ -113,6 +119,26 @@ describe("provider-free interim token chart API", () => {
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
       "durable-blob+registry.custom-launched",
+    );
+  });
+
+  it("fails closed when Custom identities collide with the catalog", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.customDirectory.mockResolvedValue([{
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"99".repeat(32)}`,
+      tokenAddress: address,
+      markets: [],
+    }]);
+    mocks.mergeEntries.mockImplementationOnce(() => {
+      throw new Error("Launch catalog contains duplicate identities");
+    });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "last-good",
     );
   });
 

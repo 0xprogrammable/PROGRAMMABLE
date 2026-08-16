@@ -355,6 +355,7 @@ function exactFdvRanking(response, tokens) {
     ranking.totalCount !== response.body?.total ||
     !Number.isSafeInteger(ranking.qualifiedCount) ||
     ranking.qualifiedCount < 0 ||
+    ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount ||
     ranking.qualifiedCount > ranking.totalCount
   ) return false;
   const qualified = tokens.filter(qualifiedDexscreenerFdv);
@@ -505,6 +506,19 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     identities.some((identity) => identity === null) ||
     new Set(identities).size !== identities.length
   ) throw new Error("Explore identity set is malformed or duplicated");
+  const initialNewestIdentities = newestTokens.map(exactIdentity);
+  if (
+    initialNewestIdentities.some((identity) => identity === null) ||
+    initialNewestIdentities.some((identity, index) =>
+      identity !== identities[index]
+    )
+  ) throw new Error("Initial Newest page is outside the paged catalog");
+  const completeIdentitySet = new Set(identities);
+  const highestIdentities = highestTokens.map(exactIdentity);
+  if (
+    highestIdentities.some((identity) => identity === null) ||
+    highestIdentities.some((identity) => !completeIdentitySet.has(identity))
+  ) throw new Error("Highest FDV page is outside the paged catalog");
   for (let index = 1; index < completeCatalogTokens.length; index += 1) {
     if (
       Date.parse(completeCatalogTokens[index - 1].launchedAt) <

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
-import { readLastGoodLaunchCatalogV1 } from
+import {
+  mergeLastGoodLaunchCatalogEntriesV1,
+  readLastGoodLaunchCatalogV1,
+} from
   "../../../../../lib/market-data/last-good-launch-catalog.server";
 import { isTokenChartRange } from "../../../../../lib/onchain/chart";
 import { readProductionCustomExploreDirectoryV1 } from
@@ -36,18 +39,19 @@ export async function GET(request: NextRequest) {
     let entries = catalog.entries;
     let customStatus: "current" | "unavailable" = "unavailable";
     if (isCustomLaunchRegistryPublicReadEnabled()) {
+      let customEntries;
       try {
-        entries = [
-          ...entries,
-          ...await readProductionCustomExploreDirectoryV1(request.signal),
-        ];
-        customStatus = "current";
+        customEntries = await readProductionCustomExploreDirectoryV1(request.signal);
       } catch {
         // A Custom Registry outage cannot invalidate an already committed
         // canonical identity, but an unknown address remains indeterminate.
         if (!entries.some((entry) =>
           entry.tokenAddress?.toLowerCase() === address.toLowerCase()
         )) return unavailable(address, range, catalog.source, 503);
+      }
+      if (customEntries !== undefined) {
+        entries = mergeLastGoodLaunchCatalogEntriesV1(entries, customEntries);
+        customStatus = "current";
       }
     }
     if (!entries.some((entry) =>

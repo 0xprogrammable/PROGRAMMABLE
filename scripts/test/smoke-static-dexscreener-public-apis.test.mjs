@@ -275,6 +275,89 @@ function stagedFetch(
   };
 }
 
+function pagedCatalogTransform(allEntries, options = {}) {
+  return ({ body, url }) => {
+    if (url.pathname === "/api/explore") {
+      const page = Number(url.searchParams.get("page"));
+      const pageSize = Number(url.searchParams.get("limit"));
+      const sort = url.searchParams.get("sort");
+      const tokens = allEntries.slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
+      if (options.phantomNewest && sort === "newest" && pageSize === 20) {
+        tokens[0] = entry(98);
+      }
+      if (options.phantomHighest && sort === "market-cap") {
+        tokens[0] = {
+          ...entry(99),
+          valuation: {
+            status: "available",
+            metric: "fdv",
+            supplyBasis: "total",
+            currency: "usd",
+            freshness: "provider-recent",
+            source: "dexscreener",
+            valueWad: "1000000000000000000",
+          },
+        };
+      }
+      const qualifiedCount = options.phantomHighest && sort === "market-cap"
+        ? 1
+        : 0;
+      const requestedCount = sort === "market-cap"
+        ? allEntries.length
+        : tokens.length;
+      return {
+        ...body,
+        tokens,
+        page,
+        pageSize,
+        total: allEntries.length,
+        totalPages: Math.ceil(allEntries.length / pageSize),
+        marketRead: {
+          ...marketRead(requestedCount),
+          ...(qualifiedCount === 0
+            ? {}
+            : {
+                status: "complete",
+                observedCount: qualifiedCount,
+                qualifiedCount,
+                unavailableCount: requestedCount - qualifiedCount,
+              }),
+        },
+        catalog: {
+          ...body.catalog,
+          identityCount: allEntries.length,
+        },
+        ...(sort === "market-cap"
+          ? {
+              ranking: qualifiedCount === 0
+                ? { ...body.ranking, totalCount: allEntries.length }
+                : {
+                    status: "partial",
+                    requested: "fdv",
+                    applied: "qualified-fdv-then-launch-order",
+                    qualifiedCount,
+                    totalCount: allEntries.length,
+                  },
+            }
+          : { ranking: undefined }),
+      };
+    }
+    if (url.pathname === "/api/explore/token") {
+      return {
+        ...body,
+        catalog: {
+          ...body.catalog,
+          identityCount: allEntries.length,
+        },
+      };
+    }
+    return body;
+  };
+}
+
 test("staged smoke accepts identity-only Explore and token responses", async () => {
   const output = [];
   const result = await runStagedStaticDexscreenerSmokeV1({
@@ -374,6 +457,55 @@ test("staged smoke rejects a partial ranking with no qualified first-page row", 
   );
 });
 
+test("staged smoke rejects ranking qualification without market evidence", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(({ body, url }) =>
+        url.pathname === "/api/explore" &&
+          url.searchParams.get("sort") === "market-cap"
+          ? {
+              ...body,
+              tokens: [
+                {
+                  ...body.tokens[0],
+                  valuation: {
+                    status: "available",
+                    metric: "fdv",
+                    supplyBasis: "total",
+                    currency: "usd",
+                    freshness: "provider-recent",
+                    source: "dexscreener",
+                    valueWad: "1000000000000000000",
+                  },
+                },
+                body.tokens[1],
+              ],
+              marketRead: {
+                ...body.marketRead,
+                status: "complete",
+                observedCount: 1,
+                qualifiedCount: 0,
+              },
+              ranking: {
+                status: "partial",
+                requested: "fdv",
+                applied: "qualified-fdv-then-launch-order",
+                qualifiedCount: 1,
+                totalCount: 2,
+              },
+            }
+          : body),
+      appendOutput: () => undefined,
+    }),
+    /Highest FDV response contract is invalid/u,
+  );
+});
+
 test("staged smoke rejects a zero or undercounted Dex request set", async () => {
   for (const requestedCount of [0, 1]) {
     await assert.rejects(
@@ -409,54 +541,47 @@ test("staged smoke binds Highest FDV to the complete paged identity set", async 
       VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
       GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
     },
-    fetchImpl: stagedFetch(({ body, url }) => {
-      if (url.pathname === "/api/explore") {
-        const page = Number(url.searchParams.get("page"));
-        const pageSize = Number(url.searchParams.get("limit"));
-        const sort = url.searchParams.get("sort");
-        const tokens = allEntries.slice(
-          (page - 1) * pageSize,
-          page * pageSize,
-        );
-        return {
-          ...body,
-          tokens,
-          page,
-          pageSize,
-          total: allEntries.length,
-          totalPages: Math.ceil(allEntries.length / pageSize),
-          marketRead: marketRead(
-            sort === "market-cap" ? allEntries.length : tokens.length,
-          ),
-          catalog: {
-            ...body.catalog,
-            identityCount: allEntries.length,
-          },
-          ...(sort === "market-cap"
-            ? {
-                ranking: {
-                  ...body.ranking,
-                  totalCount: allEntries.length,
-                },
-              }
-            : { ranking: undefined }),
-        };
-      }
-      if (url.pathname === "/api/explore/token") {
-        return {
-          ...body,
-          catalog: {
-            ...body.catalog,
-            identityCount: allEntries.length,
-          },
-        };
-      }
-      return body;
-    }),
+    fetchImpl: stagedFetch(pagedCatalogTransform(allEntries)),
     appendOutput: () => undefined,
   });
 
   assert.equal(result.marketReadStatus, "unavailable");
+});
+
+test("staged smoke rejects a phantom on the initial Newest page", async () => {
+  const allEntries = Array.from({ length: 21 }, (_, index) => entry(index));
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(pagedCatalogTransform(allEntries, {
+        phantomNewest: true,
+      })),
+      appendOutput: () => undefined,
+    }),
+    /Initial Newest page is outside the paged catalog/u,
+  );
+});
+
+test("staged smoke rejects a phantom on the Highest FDV page", async () => {
+  const allEntries = Array.from({ length: 21 }, (_, index) => entry(index));
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(pagedCatalogTransform(allEntries, {
+        phantomHighest: true,
+      })),
+      appendOutput: () => undefined,
+    }),
+    /Highest FDV page is outside the paged catalog/u,
+  );
 });
 
 test("staged smoke treats configured provider health as informational", async () => {

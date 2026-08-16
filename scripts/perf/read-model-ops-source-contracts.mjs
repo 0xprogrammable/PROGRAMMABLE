@@ -2100,6 +2100,7 @@ export function evaluateReadModelOperationsSourceContracts(
     ) &&
     includesEverySourceFragment(publicChart, [
       "readLastGoodLaunchCatalogV1()",
+      "mergeLastGoodLaunchCatalogEntriesV1(",
       "readProductionCustomExploreDirectoryV1(request.signal)",
       'let customStatus: "current" | "unavailable" = "unavailable"',
       '`${catalog.source}+registry.custom-launched`',
@@ -2227,7 +2228,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "const completeCatalogTokens = [...newestTokens]",
         "Explore catalog pagination contract is invalid",
         "exactMarketRead(highest, completeCatalogTokens)",
+        "Initial Newest page is outside the paged catalog",
+        "Highest FDV page is outside the paged catalog",
         "exactFdvRanking(highest, highestTokens)",
+        "ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount",
         "qualified.length === Math.min(tokens.length, ranking.qualifiedCount)",
         "!exactSamePageOrder(highest, newest)",
         'token.exploreKind === "token"',
