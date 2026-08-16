@@ -42,11 +42,6 @@ function loadCustomLaunch() {
   return import("@/components/custom-launch-experience");
 }
 
-const LazyLaunchBuilderForm = lazy(async () => {
-  const launchModule = await loadLaunchForm();
-  return { default: launchModule.LaunchBuilderForm };
-});
-
 const LazyCustomLaunchExperience = lazy(async () => {
   const customModule = await loadCustomLaunch();
   return { default: customModule.CustomLaunchExperience };
@@ -58,6 +53,9 @@ const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development
       return { default: previewModule.CustomLaunchLocalPreview };
     })
   : null;
+
+type LaunchBuilderComponent =
+  (typeof import("@/components/launch-builder"))["LaunchBuilderForm"];
 
 function LaunchFormLoading({
   onBack,
@@ -139,6 +137,10 @@ function LaunchExperienceRuntime({
   trustedLaunchPermitSigners = [],
 }: LaunchExperienceProps) {
   const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
+  const [loadedLaunchBuilder, setLoadedLaunchBuilder] =
+    useState<LaunchBuilderComponent | null>(null);
+  const [preparingModel, setPreparingModel] = useState<LaunchModel | null>(null);
+  const [modelLoadError, setModelLoadError] = useState("");
   const customLaunchButtonRef = useRef<HTMLButtonElement>(null);
   const restoreCustomLaunchFocusRef = useRef(false);
 
@@ -148,7 +150,11 @@ function LaunchExperienceRuntime({
     customLaunchButtonRef.current?.focus();
   }, [selectedModel]);
 
-  function chooseModel(candidate: LaunchModel | "custom") {
+  useEffect(() => {
+    void loadLaunchForm().catch(() => undefined);
+  }, []);
+
+  async function chooseModel(candidate: LaunchModel | "custom") {
     if (candidate === "custom") {
       if (!customLaunchPublicEnabled) return;
       window.scrollTo({ left: 0, top: 0, behavior: "auto" });
@@ -165,8 +171,19 @@ function LaunchExperienceRuntime({
       return;
     }
 
-    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    setSelectedModel(model);
+    setPreparingModel(model);
+    setModelLoadError("");
+
+    try {
+      const launchModule = await loadLaunchForm();
+      setLoadedLaunchBuilder(() => launchModule.LaunchBuilderForm);
+      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+      setSelectedModel(model);
+    } catch {
+      setModelLoadError("Classic could not open. Try again.");
+    } finally {
+      setPreparingModel(null);
+    }
   }
 
   function returnToModels() {
@@ -180,7 +197,9 @@ function LaunchExperienceRuntime({
       <LaunchModelPicker
         customLaunchPublicEnabled={customLaunchPublicEnabled}
         customLaunchButtonRef={customLaunchButtonRef}
+        modelLoadError={modelLoadError}
         onChoose={chooseModel}
+        preparingModel={preparingModel}
       />
     );
   }
@@ -196,21 +215,24 @@ function LaunchExperienceRuntime({
     );
   }
 
+  if (!loadedLaunchBuilder) return null;
+
+  const LoadedLaunchBuilder = loadedLaunchBuilder;
   return (
-    <Suspense fallback={<LaunchFormLoading onBack={returnToModels} />}>
-      <LazyLaunchBuilderForm
-        model={selectedModel}
-        onBackToModels={returnToModels}
-        stockPairedPublicLaunchEnabled={false}
-      />
-    </Suspense>
+    <LoadedLaunchBuilder
+      model={selectedModel}
+      onBackToModels={returnToModels}
+      stockPairedPublicLaunchEnabled={false}
+    />
   );
 }
 
 export function LaunchModelPicker({
   customLaunchPublicEnabled = false,
   customLaunchButtonRef,
+  modelLoadError = "",
   onChoose,
+  preparingModel = null,
 }: {
   /**
    * This is the same closed-world gate used by the generic Custom Launch API.
@@ -218,7 +240,9 @@ export function LaunchModelPicker({
    */
   customLaunchPublicEnabled?: boolean;
   customLaunchButtonRef?: RefObject<HTMLButtonElement | null>;
-  onChoose: (model: LaunchModel | "custom") => void;
+  modelLoadError?: string;
+  onChoose: (model: LaunchModel | "custom") => void | Promise<void>;
+  preparingModel?: LaunchModel | null;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
@@ -309,7 +333,9 @@ export function LaunchModelPicker({
           }
           onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
           onClick={
-            customLaunchPublicEnabled ? () => onChoose("custom") : undefined
+            customLaunchPublicEnabled
+              ? () => void onChoose("custom")
+              : undefined
           }
         >
           {customCardContent}
@@ -321,14 +347,18 @@ export function LaunchModelPicker({
           data-launch-model-available={classicV3LaunchAvailable}
           data-launch-model-launchable={classicV3LaunchAvailable}
           type="button"
-          disabled={!classicV3LaunchAvailable}
+          disabled={!classicV3LaunchAvailable || preparingModel !== null}
+          aria-busy={preparingModel === "classic-v3"}
           aria-labelledby="launch-model-classic-title"
           aria-describedby="launch-model-classic-description"
           onPointerEnter={
             classicV3LaunchAvailable ? preloadAvailableForm : undefined
           }
+          onPointerDown={
+            classicV3LaunchAvailable ? preloadAvailableForm : undefined
+          }
           onFocus={classicV3LaunchAvailable ? preloadAvailableForm : undefined}
-          onClick={() => onChoose("classic-v3")}
+          onClick={() => void onChoose("classic-v3")}
         >
           <span
             className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt} ${launchExperience.classicArt}`}
@@ -375,7 +405,9 @@ export function LaunchModelPicker({
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Create a Classic coin
+                {preparingModel === "classic-v3"
+                  ? "Opening Classic"
+                  : "Create a Classic coin"}
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}
@@ -383,6 +415,11 @@ export function LaunchModelPicker({
         </button>
 
       </div>
+      {modelLoadError ? (
+        <p className={launchExperience.modelLoadError} role="alert">
+          {modelLoadError}
+        </p>
+      ) : null}
     </div>
   );
 }

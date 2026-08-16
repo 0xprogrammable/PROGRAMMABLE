@@ -74,6 +74,20 @@ const profileViewSource = readFileSync(
   "utf8",
 );
 
+describe("profile editor composition", () => {
+  it("keeps banner actions on the trailing edge away from the avatar", () => {
+    expect(profileExperienceCss).toMatch(
+      /\.bannerActions\s*\{[^}]*flex-direction:\s*row-reverse;[^}]*right:\s*14px;/s,
+    );
+    expect(profileExperienceCss).not.toMatch(
+      /\.bannerActions\s*\{[^}]*left:\s*14px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.bannerActions\s*\{[^}]*align-items:\s*flex-end;[^}]*right:\s*10px;/,
+    );
+  });
+});
+
 const tokens: ProfileToken[] = [
   {
     address: firstAddress,

@@ -1257,6 +1257,15 @@
   margin-top: 48px;
 }
 
+.modelLoadError {
+  color: var(--webde-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 24px auto 0;
+  max-width: 36rem;
+  text-align: center;
+}
+
 .modelCard.modelCard {
   background: rgb(24 24 24 / 0.92);
   border-color: var(--webde-line);
@@ -1290,6 +1299,11 @@
 
 .modelCard.modelCard:disabled {
   opacity: 0.54;
+}
+
+.modelCard.modelCard[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.82;
 }
 
 .formPage.formPage[data-launch-model="classic-v3"] {

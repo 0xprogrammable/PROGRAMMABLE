@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -43,6 +49,21 @@ export function SiteHeader() {
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
 
+  function restartHome(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    window.location.assign("/");
+  }
+
   useEffect(() => {
     if (!menuOpen) return;
 
@@ -74,7 +95,12 @@ export function SiteHeader() {
     <header ref={headerRef} className={`site-header ${styles.siteHeader}`}>
       <div className={`header-inner ${styles.headerInner}`}>
         <div className="header-brand">
-          <Link className="wordmark" href="/" aria-label="Programmable home">
+          <Link
+            className="wordmark"
+            href="/"
+            aria-label="Programmable home"
+            onClick={restartHome}
+          >
             <Image
               className="wordmark-logo"
               src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"

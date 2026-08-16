@@ -8,7 +8,7 @@ import { ExploreView } from "@/components/explore-view";
 import styles from "@/components/landing-page.module.css";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
-const HERO_TWINKLE_COUNT = 132;
+const HERO_TWINKLE_COUNT = 164;
 
 type HeroStarStyle = CSSProperties & {
   "--hero-star-delay": string;
@@ -21,7 +21,9 @@ function heroStarStyle(index: number): HeroStarStyle {
   const vertical = (index * 29.71 + 7.3) % 62;
   const duration = 4.4 + ((index * 17) % 41) / 10;
   const delay = -((index * 23) % 97) / 10;
-  const size = 0.58 + ((index * 7) % 9) / 20;
+  const sizeStep = ((index * 7) % 11) / 20;
+  const emphasis = index % 29 === 0 ? 0.5 : index % 13 === 0 ? 0.26 : 0;
+  const size = 0.64 + sizeStep + emphasis;
 
   return {
     left: `${horizontal + 2}%`,

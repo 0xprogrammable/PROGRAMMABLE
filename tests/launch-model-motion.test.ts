@@ -54,7 +54,7 @@ describe("launch model artwork", () => {
       'aria-describedby="launch-model-classic-description"',
     );
     expect(source).toContain(
-      'customLaunchPublicEnabled ? () => onChoose("custom") : undefined',
+      '? () => void onChoose("custom")',
     );
     expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',
@@ -114,6 +114,19 @@ describe("launch model artwork", () => {
     expect(css).toContain("--classic-control-surface-selected: #242424");
     expect(css).toMatch(
       /\.formPage\.formPage\s+:global\(\.classic-launch-button\)\s*\{[\s\S]*?background:\s*#fff;[\s\S]*?color:\s*#000;/,
+    );
+  });
+
+  it("loads the Classic module before replacing the picker", () => {
+    const source = read("components/launch-entry.tsx");
+
+    expect(source).toContain("const launchModule = await loadLaunchForm()");
+    expect(source).toContain(
+      "setLoadedLaunchBuilder(() => launchModule.LaunchBuilderForm)",
+    );
+    expect(source).toContain("if (!loadedLaunchBuilder) return null");
+    expect(source).not.toContain(
+      "<Suspense fallback={<LaunchFormLoading onBack={returnToModels} />}>",
     );
   });
 });
