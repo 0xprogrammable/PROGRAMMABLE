@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "programmable.custom-gateway-route-release-candidate.v1",
-  "status": "LOCAL_RELEASE_CANDIDATE_NOT_DEPLOYED",
-  "productionActivation": "NOT_AUTHORIZED",
+  "schemaVersion": "programmable.custom-gateway-route-prelaunch.v1",
+  "status": "SOURCE_ONLY_NOT_DEPLOYED",
+  "productionActivation": false,
   "inputs": {
-    "schemaVersion": "programmable.custom-gateway-route-release-input.v1",
+    "schemaVersion": "programmable.custom-gateway-route-prelaunch-input.v1",
     "chainId": "1",
     "publicBase": {
       "repository": "0xprogrammable/programmable",
@@ -21,12 +21,6 @@
       "foundationArtifactSha256": "sha256:eb18bd3e1d3426cf9b5bf8aaf44665e04f8c468b0482bac280636936728637e6",
       "descriptorSchemaSha256": "sha256:1a3449647184822eedb8a291911918880fb048355fda3877654cfc502cd78ca5",
       "descriptorAdapterSourceSha256": "sha256:8e74d43c9cb940eeddd5edc9974cca08961318a9512493b989e4ce51c9f854e2"
-    },
-    "rejectedLegacyCandidate": {
-      "name": "Shards V1 route",
-      "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
-      "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
-      "reason": "Registry V1 and candidate-specific; not reusable for Registry V2"
     },
     "registryV2": {
       "address": "0x845506084a1afb969fa4def444a2bdeee794aaad",
@@ -63,16 +57,16 @@
       "sha256": "sha256:66d966931e87625ce42801a92bf418dff12b7fd94525136c460bc72584164d64"
     },
     {
-      "path": "script/generate-custom-gateway-route-v1-release-candidate.mjs",
-      "sha256": "sha256:b955d1e987efa6369eddc0acd4c28550234c7b25289fd4c4a1979eb8503bdd6e"
+      "path": "script/generate-custom-gateway-route-v1-prelaunch.mjs",
+      "sha256": "sha256:342114bb813b24db81ccea557624388ab09df3cdbddaf33feecd9736a81f05e3"
     },
     {
-      "path": "security/CUSTOM-GATEWAY-ROUTE-V1-RELEASE-CANDIDATE.md",
-      "sha256": "sha256:8887b2e186849bf084a1380fec227691b1bbf6517adc4c180c693f9f5d40109b"
+      "path": "security/CUSTOM-GATEWAY-ROUTE-V1-PRELAUNCH.md",
+      "sha256": "sha256:6f8e8ca079d64e9e4942bc26bff0eb84522bf10fbe43c0561f6be62675c30850"
     },
     {
-      "path": "spec/custom-gateway-route-v1.input.json",
-      "sha256": "sha256:5142b177994aafda17efeba904f8db943f246ed99ba0ffca9ef1e0526a58a10a"
+      "path": "spec/custom-gateway-route-v1.prelaunch.input.json",
+      "sha256": "sha256:2abed02fa4c3267797e16be2e62a9710f6bf94a9cfcbf232ee6373f1817dbc79"
     },
     {
       "path": "src/ProgrammableCreate2GraphDeployerV1.sol",
@@ -104,7 +98,7 @@
     },
     {
       "path": "test/ProgrammableCustomGatewayRouteV1MainnetFork.t.sol",
-      "sha256": "sha256:175ea8a63dee4a5ebaf8d5538e2ef3d8fff5dc0fbe62cf9962012aee39d9caaa"
+      "sha256": "sha256:28ebfa2d6f439d8fdab58210a3be79963cf2a2bfe807ff5fd58840851f49fcfe"
     }
   ],
   "artifacts": [

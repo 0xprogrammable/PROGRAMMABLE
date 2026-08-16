@@ -77,7 +77,8 @@ abstract contract ProgrammableCustomGatewayRouteV1ForkBase is Test {
     ProgrammableCustomLaunchGatewayV1 internal gateway;
 
     function setUp() public virtual {
-        string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://ethereum-rpc.publicnode.com"));
+        string memory rpc =
+            vm.envOr("PROGRAMMABLE_ROUTE_TEST_RPC_URL", string("https://eth-mainnet.public.blastapi.io"));
         vm.createSelectFork(rpc, MAINNET_FORK_BLOCK);
         assertEq(block.number, MAINNET_FORK_BLOCK);
         assertEq(blockhash(MAINNET_FORK_BLOCK - 1), MAINNET_FORK_PARENT_HASH);

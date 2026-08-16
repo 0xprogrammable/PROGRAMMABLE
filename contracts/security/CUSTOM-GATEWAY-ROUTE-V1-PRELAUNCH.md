@@ -1,14 +1,11 @@
-# Custom Gateway Route V1 release candidate
+# Custom Gateway Route V1 prelaunch source closure
 
 ## Status
 
-This closure is a local, candidate-neutral source release candidate. It has not been deployed, signed,
+This closure is a local, source-only prelaunch package. It has not been deployed, signed,
 broadcast, pushed, merged, or activated. It does not claim that any launch is registered or finalized.
 The authenticated internal `routeAdapterRelease.adapterBindingHash` remains a required integration input;
 deployment must fail closed until its raw `bytes32` value is frozen with the corresponding adapter release.
-
-The rejected Shards revision `8afe4548553b406bd0374b3a8958f1a186104b11` is Registry V1 and
-candidate-specific. None of its route contracts is reused here.
 
 ## Frozen architecture
 
@@ -103,7 +100,7 @@ the canonical Registry reports `Finalized`.
 
 ## Exact later operator and wallet transactions
 
-These actions are deliberately not performed by this release-candidate task:
+These actions are deliberately not performed by this source-only task:
 
 1. Freeze the authenticated internal adapter release and substitute the raw, non-zero
    `routeAdapterRelease.adapterBindingHash` into the deployment input.
@@ -136,6 +133,8 @@ No transaction hash alone is proof of deployment correctness, registration, fina
 - Reproduction of the frozen Generic-v2 source and runtime hashes.
 - Mainnet-fork dependency identity and runtime checks at pinned block `25767247`, hash
   `0x4f5631c21b5b4ef7c08931546621bbf028213138377f3d591de1874e8336d48d`.
+  The test uses only the dedicated optional `PROGRAMMABLE_ROUTE_TEST_RPC_URL` override and otherwise the reviewed
+  Blast public endpoint; unrelated global RPC configuration cannot silently change its provider.
 - A real local-fork Registry-v2 controller lifecycle using the deployed Registry's approver, registrar, and finalizer
   roles: authorization, user Gateway execution, 12 route-confirmation blocks, registration, 12-block Registry
   finality, finalization, counters, state, descriptor, commitments, and emitter-bound event topics. Only future block

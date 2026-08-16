@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "programmable.custom-gateway-route-release-input.v1",
+  "schemaVersion": "programmable.custom-gateway-route-prelaunch-input.v1",
   "chainId": "1",
   "publicBase": {
     "repository": "0xprogrammable/programmable",
@@ -17,12 +17,6 @@
     "foundationArtifactSha256": "sha256:eb18bd3e1d3426cf9b5bf8aaf44665e04f8c468b0482bac280636936728637e6",
     "descriptorSchemaSha256": "sha256:1a3449647184822eedb8a291911918880fb048355fda3877654cfc502cd78ca5",
     "descriptorAdapterSourceSha256": "sha256:8e74d43c9cb940eeddd5edc9974cca08961318a9512493b989e4ce51c9f854e2"
-  },
-  "rejectedLegacyCandidate": {
-    "name": "Shards V1 route",
-    "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
-    "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
-    "reason": "Registry V1 and candidate-specific; not reusable for Registry V2"
   },
   "registryV2": {
     "address": "0x845506084a1afb969fa4def444a2bdeee794aaad",

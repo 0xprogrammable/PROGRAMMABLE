@@ -7,8 +7,8 @@ import { spawnSync } from "node:child_process";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const contractsDirectory = resolve(scriptDirectory, "..");
-const inputPath = resolve(contractsDirectory, "spec/custom-gateway-route-v1.input.json");
-const outputPath = resolve(contractsDirectory, "spec/custom-gateway-route-v1.release-candidate.json");
+const inputPath = resolve(contractsDirectory, "spec/custom-gateway-route-v1.prelaunch.input.json");
+const outputPath = resolve(contractsDirectory, "spec/custom-gateway-route-v1.prelaunch.v1.json");
 const input = JSON.parse(readFileSync(inputPath, "utf8"));
 
 const contracts = [
@@ -19,9 +19,9 @@ const contracts = [
 ];
 const sources = [
   "script/DeployProgrammableCustomGatewayRouteV1.s.sol",
-  "script/generate-custom-gateway-route-v1-release-candidate.mjs",
-  "security/CUSTOM-GATEWAY-ROUTE-V1-RELEASE-CANDIDATE.md",
-  "spec/custom-gateway-route-v1.input.json",
+  "script/generate-custom-gateway-route-v1-prelaunch.mjs",
+  "security/CUSTOM-GATEWAY-ROUTE-V1-PRELAUNCH.md",
+  "spec/custom-gateway-route-v1.prelaunch.input.json",
   "src/ProgrammableCreate2GraphDeployerV1.sol",
   "src/ProgrammableRouteGatedCreate2GraphFactoryV1.sol",
   "src/ProgrammableCustomLaunchGatewayV1.sol",
@@ -118,9 +118,9 @@ function bytecodeSummary(name) {
 }
 
 const manifest = {
-  schemaVersion: "programmable.custom-gateway-route-release-candidate.v1",
-  status: "LOCAL_RELEASE_CANDIDATE_NOT_DEPLOYED",
-  productionActivation: "NOT_AUTHORIZED",
+  schemaVersion: "programmable.custom-gateway-route-prelaunch.v1",
+  status: "SOURCE_ONLY_NOT_DEPLOYED",
+  productionActivation: false,
   inputs: input,
   sourceClosure: sources.map((path) => ({
     path,
