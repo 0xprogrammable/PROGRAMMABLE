@@ -4,8 +4,8 @@
   "publicBase": {
     "repository": "0xprogrammable/programmable",
     "branch": "production",
-    "commit": "d9d302b87269e16df6efb2bab87f2abe6ea957d5",
-    "tree": "de6b67b73d211515cb844d1543866fbeb2901b0d"
+    "commit": "29ef4d7c2cb9ec6e45f5d4f61d8c2f91e910bee4",
+    "tree": "b0afd9dad72a4ada2d5adc0270734a654155b443"
   },
   "genericV2Source": {
     "repository": "0xprogrammable/programmable-open-hook-v2-internal",
