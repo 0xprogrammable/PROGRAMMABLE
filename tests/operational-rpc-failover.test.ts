@@ -30,6 +30,7 @@ const deployment = {
   stateViewRuntimeCodeHash: `0x${"33".repeat(32)}`,
   rpcUrl: "https://primary.example/rpc-key",
   rpcUrlSecondary: "https://secondary.example/rpc-key",
+  rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
   confirmations: 12n,
   logBlockRange: 5_000n,
 } satisfies ReadyOnchainDeployment;
@@ -126,6 +127,28 @@ describe("operational RPC failover", () => {
       deployment.rpcUrl,
       deployment.rpcUrlSecondary,
     ]);
+  });
+
+  it("uses the fixed secondary after dRPC returns its code 10 timeout", async () => {
+    const calls: string[] = [];
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      calls.push(candidate.rpcUrl);
+      if (candidate.rpcUrl === deployment.rpcUrl) {
+        throw rpcFailure("provider timeout", 10);
+      }
+      return "secondary-ready";
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toBe("secondary-ready");
+    expect(calls).toEqual([
+      deployment.rpcUrl,
+      deployment.rpcUrlSecondary,
+    ]);
+    expect(
+      isOperationalRpcFailoverEligible(rpcFailure("provider timeout", 10)),
+    ).toBe(false);
   });
 
   it("uses the fixed secondary after an exact archive-read limitation", async () => {
