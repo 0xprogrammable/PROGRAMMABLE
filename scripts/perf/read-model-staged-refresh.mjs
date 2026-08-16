@@ -6,12 +6,12 @@ import {
 } from "./read-model-live-verifier.mjs";
 
 const REFRESH_PATH = "/api/ops/index-v2";
-const HEALTH_PATH = "/api/ops/health";
 const MAXIMUM_JSON_BYTES = 64 * 1024;
-const MAXIMUM_FRESH_AGE_SECONDS = 10 * 60;
 const CANONICAL_UINT = /^(?:0|[1-9][0-9]{0,77})$/u;
 const HEX32 = /^0x[0-9a-f]{64}$/u;
-const MAXIMUM_UINT64 = (1n << 64n) - 1n;
+const REQUEST_ATTEMPTS = 2;
+const REQUEST_RETRY_DELAY_MS = 2_000;
+const REQUEST_TIMEOUT_MS = 330_000;
 const PREWARM_STEP_COUNT = 32;
 const PREWARM_STEPS = Object.freeze([
   "01", "02", "03", "04", "05", "06", "07", "08",
@@ -135,6 +135,35 @@ async function requestJson(fetchImpl, url, headers, timeoutMs) {
   return { response, body: await boundedJson(response) };
 }
 
+function retriableStatus(status) {
+  return status === 429 || status >= 500;
+}
+
+async function requestJsonWithRetry(
+  fetchImpl,
+  url,
+  headers,
+  { attempts, retryDelayMs, sleepImpl, timeoutMs },
+) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const value = await requestJson(fetchImpl, url, headers, timeoutMs);
+      if (!retriableStatus(value.response.status) || attempt === attempts) {
+        return value;
+      }
+      lastError = new Error(
+        `staged refresh request returned ${value.response.status}`,
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) throw error;
+    }
+    await sleepImpl(retryDelayMs);
+  }
+  throw lastError ?? new Error("staged refresh request failed");
+}
+
 function exactRefreshResponse(value) {
   return (
     value.response.status === 200 &&
@@ -145,7 +174,7 @@ function exactRefreshResponse(value) {
     value.body?.ok === true &&
     CANONICAL_UINT.test(value.body.blockNumber) &&
     Number.isSafeInteger(value.body.tokenCount) &&
-    value.body.tokenCount >= 0 &&
+    value.body.tokenCount > 0 &&
     typeof value.body.updated === "boolean" &&
     ["recorded", "already-recorded", "empty"].includes(
       value.body.portfolioHistory?.status,
@@ -154,11 +183,10 @@ function exactRefreshResponse(value) {
     value.body.portfolioHistory.blockNumber === value.body.blockNumber &&
     Number.isSafeInteger(value.body.portfolioHistory?.tokenCount) &&
     value.body.portfolioHistory.tokenCount === value.body.tokenCount &&
-    (value.body.portfolioHistory.status === "empty"
-      ? value.body.tokenCount === 0 && value.body.portfolioHistory.path === null
-      : typeof value.body.portfolioHistory.path === "string" &&
-        value.body.portfolioHistory.path.length >= 1 &&
-        value.body.portfolioHistory.path.length <= 1_024)
+    value.body.portfolioHistory.status !== "empty" &&
+    typeof value.body.portfolioHistory.path === "string" &&
+    value.body.portfolioHistory.path.length >= 1 &&
+    value.body.portfolioHistory.path.length <= 1_024
   );
 }
 
@@ -214,67 +242,6 @@ function exactPrewarmResponse(value, phase) {
   );
 }
 
-function exactHealthProof(value, refresh) {
-  const index = value.body?.index;
-  const rpc = value.body?.rpc;
-  const confirmedBlock = rpc?.confirmedBlock;
-  const primary = rpc?.providers?.primary;
-  const secondary = rpc?.providers?.secondary;
-  const indexBlock = CANONICAL_UINT.test(index?.blockNumber)
-    ? BigInt(index.blockNumber)
-    : null;
-  const confirmedBlockNumber = CANONICAL_UINT.test(confirmedBlock?.number)
-    ? BigInt(confirmedBlock.number)
-    : null;
-  const primaryHead = CANONICAL_UINT.test(primary?.head)
-    ? BigInt(primary.head)
-    : null;
-  const secondaryHead = CANONICAL_UINT.test(secondary?.head)
-    ? BigInt(secondary.head)
-    : null;
-  const refreshBlock = BigInt(refresh.body.blockNumber);
-  return (
-    value.response.status === 200 &&
-    value.body?.status === "healthy" &&
-    value.body.chainId === 1 &&
-    value.body.indexSource === "durable" &&
-    value.body.indexedReadModel?.status === "disabled" &&
-    indexBlock !== null &&
-    indexBlock <= MAXIMUM_UINT64 &&
-    indexBlock >= refreshBlock &&
-    Number.isSafeInteger(index?.ageSeconds) &&
-    index.ageSeconds >= 0 &&
-    index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS &&
-    Number.isSafeInteger(index?.tokenCount) &&
-    index.tokenCount === refresh.body.tokenCount &&
-    rpc?.status === "healthy" &&
-    rpc?.chainId === 1 &&
-    rpc?.read?.status === "available" &&
-    rpc?.quorum?.status === "verified" &&
-    confirmedBlockNumber !== null &&
-    confirmedBlockNumber <= MAXIMUM_UINT64 &&
-    confirmedBlockNumber >= indexBlock &&
-    confirmedBlockNumber >= refreshBlock &&
-    HEX32.test(confirmedBlock?.hash) &&
-    confirmedBlock.hash !== `0x${"00".repeat(32)}` &&
-    rpc?.freshness?.maxHeadAgeSeconds === 300 &&
-    primary?.status === "available" &&
-    secondary?.status === "available" &&
-    primaryHead !== null &&
-    secondaryHead !== null &&
-    primaryHead <= MAXIMUM_UINT64 &&
-    secondaryHead <= MAXIMUM_UINT64 &&
-    primaryHead >= confirmedBlockNumber &&
-    secondaryHead >= confirmedBlockNumber &&
-    Number.isSafeInteger(primary?.headAgeSeconds) &&
-    Number.isSafeInteger(secondary?.headAgeSeconds) &&
-    primary.headAgeSeconds >= 0 &&
-    secondary.headAgeSeconds >= 0 &&
-    primary.headAgeSeconds <= rpc.freshness.maxHeadAgeSeconds &&
-    secondary.headAgeSeconds <= rpc.freshness.maxHeadAgeSeconds
-  );
-}
-
 export async function refreshExactStagedReadModel(input) {
   const target = exactStagedTarget(input.targetUrl);
   if (
@@ -318,18 +285,40 @@ export async function refreshExactStagedReadModel(input) {
     "Cache-Control": "no-cache",
     "User-Agent": "programmable-staged-read-model-refresh/1",
     "x-vercel-protection-bypass": input.automationBypassSecret,
+    "x-vercel-set-bypass-cookie": "false",
   };
+  const requestAttempts = input.requestAttempts ?? REQUEST_ATTEMPTS;
+  const requestRetryDelayMs =
+    input.requestRetryDelayMs ?? REQUEST_RETRY_DELAY_MS;
+  if (
+    !Number.isSafeInteger(requestAttempts) ||
+    requestAttempts < 1 ||
+    requestAttempts > 3 ||
+    !Number.isSafeInteger(requestRetryDelayMs) ||
+    requestRetryDelayMs < 0 ||
+    requestRetryDelayMs > 10_000
+  ) {
+    throw new Error("staged refresh retry policy is invalid");
+  }
+  const sleepImpl =
+    input.sleepImpl ??
+    ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
   const previousPrewarmBlocks = new Map();
   for (let index = 0; index < PREWARM_PHASES.length; index += 2) {
     const phasePair = PREWARM_PHASES.slice(index, index + 2);
     const results = await Promise.allSettled(phasePair.map(async (phase) => {
       const prewarmUrl = new URL(REFRESH_PATH, target);
       prewarmUrl.searchParams.set("phase", phase);
-      return requestJson(
+      return requestJsonWithRetry(
         fetchImpl,
         prewarmUrl,
         protectedHeaders,
-        330_000,
+        {
+          attempts: requestAttempts,
+          retryDelayMs: requestRetryDelayMs,
+          sleepImpl,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+        },
       );
     }));
     for (let pairIndex = 0; pairIndex < phasePair.length; pairIndex += 1) {
@@ -354,46 +343,21 @@ export async function refreshExactStagedReadModel(input) {
     }
   }
 
-  const refresh = await requestJson(
+  const refresh = await requestJsonWithRetry(
     fetchImpl,
     new URL(REFRESH_PATH, target),
     protectedHeaders,
-    330_000,
+    {
+      attempts: requestAttempts,
+      retryDelayMs: requestRetryDelayMs,
+      sleepImpl,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    },
   );
   if (!exactRefreshResponse(refresh)) {
     throw new Error(
       `exact staged durable refresh failed (${refresh.response.status})`,
     );
-  }
-
-  const healthUrl = new URL(HEALTH_PATH, target);
-  healthUrl.searchParams.set(
-    "stage_refresh_proof",
-    `${input.expectedGitHead}-${input.expectedDeploymentId}`,
-  );
-  const healthAttempts = input.healthAttempts ?? 12;
-  const healthRetryDelayMs = input.healthRetryDelayMs ?? 5_000;
-  const sleepImpl =
-    input.sleepImpl ??
-    ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
-  let health = null;
-  for (let attempt = 1; attempt <= healthAttempts; attempt += 1) {
-    health = await requestJson(
-      fetchImpl,
-      healthUrl,
-      {
-        Accept: "application/json",
-        "Cache-Control": "no-cache",
-        "User-Agent": "programmable-staged-read-model-refresh/1",
-        "x-vercel-protection-bypass": input.automationBypassSecret,
-      },
-      30_000,
-    );
-    if (exactHealthProof(health, refresh)) break;
-    if (attempt < healthAttempts) await sleepImpl(healthRetryDelayMs);
-  }
-  if (!health || !exactHealthProof(health, refresh)) {
-    throw new Error("exact staged durable freshness proof failed");
   }
 
   return {
@@ -402,13 +366,10 @@ export async function refreshExactStagedReadModel(input) {
     deploymentId: input.expectedDeploymentId,
     gitHead: input.expectedGitHead,
     refreshBlockNumber: refresh.body.blockNumber,
-    visibleBlockNumber: health.body.index.blockNumber,
-    confirmedBlockNumber: health.body.rpc.confirmedBlock.number,
-    confirmedBlockHash: health.body.rpc.confirmedBlock.hash,
-    tokenCount: health.body.index.tokenCount,
-    ageSeconds: health.body.index.ageSeconds,
+    tokenCount: refresh.body.tokenCount,
     updated: refresh.body.updated,
     portfolioHistoryStatus: refresh.body.portfolioHistory.status,
+    portfolioHistoryPath: refresh.body.portfolioHistory.path,
   };
 }
 

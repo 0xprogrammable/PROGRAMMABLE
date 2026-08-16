@@ -26,7 +26,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "lib/onchain/historical-read-rpc.server.ts",
           sha256:
-            "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d",
+            "c20db55489aa28c24a7eb888cbc80eb9d51944d3fe8908e9805d8984e15a2d6c",
         }),
         Object.freeze({
           path: "lib/onchain/persistent-rpc-cache.server.ts",
@@ -99,7 +99,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
           sha256:
-            "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7",
+            "d501b92d6a28b7e8e1a2a29cae329e2c3a530da941f9b1cbab65e8c6036ca342",
         }),
         currentMarketRpc: Object.freeze({
           path: "lib/market-data/current-market-rpc.server.ts",
@@ -658,7 +658,6 @@ export const STAGED_HEALTH_HANDOFF_SOURCE_GUARDS = Object.freeze([
 ]);
 export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   'const REFRESH_PATH = "/api/ops/index-v2";',
-  'const HEALTH_PATH = "/api/ops/health";',
   '!target.hostname.endsWith(".vercel.app")',
   "fetchVercelDeployment({",
   "idOrUrl: target.hostname",
@@ -671,6 +670,12 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "Authorization: `Bearer ${input.cronSecret}`",
   '"x-vercel-protection-bypass": input.automationBypassSecret',
   'redirect: "error"',
+  "const REQUEST_ATTEMPTS = 2;",
+  "const REQUEST_RETRY_DELAY_MS = 2_000;",
+  "requestAttempts > 3",
+  "requestRetryDelayMs > 10_000",
+  "requestJsonWithRetry(",
+  "return status === 429 || status >= 500;",
   "const PREWARM_STEP_COUNT = 32;",
   "const PREWARM_STEPS = Object.freeze([",
   '"01", "02", "03", "04", "05", "06", "07", "08"',
@@ -686,16 +691,12 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   'prewarmUrl.searchParams.set("phase", phase)',
   "if (!exactPrewarmResponse(prewarm, phase)) {",
   "if (!exactRefreshResponse(refresh)) {",
-  'value.body.indexSource === "durable"',
-  'value.body.indexedReadModel?.status === "disabled"',
-  "index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS",
-  'rpc?.quorum?.status === "verified"',
-  "confirmedBlockNumber >= refreshBlock",
-  'confirmedBlock.hash !== `0x${"00".repeat(32)}`',
-  "primaryHead >= confirmedBlockNumber",
-  "secondaryHead >= confirmedBlockNumber",
-  '"stage_refresh_proof"',
+  "value.body.tokenCount > 0",
+  'value.body.portfolioHistory.status !== "empty"',
+  "portfolioHistoryPath: refresh.body.portfolioHistory.path",
 ]);
+const STAGED_DURABLE_REFRESH_SOURCE_SHA256 =
+  "bf7273c8dff2197e2bbb663419c5de3302bdccbe259418da5e916089890cea4c";
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
 }
@@ -1373,10 +1374,12 @@ export function evaluateReadModelOperationsSourceContracts(
       legacyRouteSource?.includes(
         "historicalReadOnchainDeployment(deployment)",
       ) &&
-      historicalRpcSource?.includes("productionMainnetRpcPair(environment)") &&
+      historicalRpcSource?.includes(
+        "productionRecoveryMainnetRpcPair(environment)",
+      ) &&
       historicalRpcSource?.includes("primary: binding.primary.url") &&
       historicalRpcSource?.includes("secondary: binding.secondary.url") &&
-      historicalRpcSource?.includes('primary?.vendorGroup !== "drpc"') &&
+      historicalRpcSource?.includes('primary?.vendorGroup !== "alchemy"') &&
       historicalRpcSource?.includes('secondary?.vendorGroup !== "quicknode"') &&
       historicalRpcSource?.includes(
         "primary.endpointCommitment !== binding.primary.endpointCommitment",
@@ -1538,14 +1541,8 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-legacy-scheduler-watchdog",
     schedulerWatchdog?.workflow?.path ===
-      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path &&
-      !source(".github/workflows/deploy-production.yml")?.includes(
-        "perf:read-model:staged-refresh",
-      ) &&
-      !source(".github/workflows/deploy-production.yml")?.includes(
-        "perf:read-model:staged-health",
-      ),
-    "legacy refresh tooling is not a production Website release prerequisite",
+      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path,
+    "the recurring durable refresh remains bound to its reviewed production workflow",
   );
   const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;
   check(
@@ -1840,6 +1837,8 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/market-data/dexscreener-shadow.server.ts") ?? "";
   const stagedPublicSmokeScript =
     source("scripts/smoke-static-dexscreener-public-apis.mjs") ?? "";
+  const stagedDurableRefresh =
+    source("scripts/perf/read-model-staged-refresh.mjs") ?? "";
   const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
   const publicClassicProfile =
     source("app/api/profile/classic-v3/route.ts") ?? "";
@@ -1958,6 +1957,17 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedBitquerySmoke = deployWorkflow.indexOf(
     "Smoke staged static identity and Dex public APIs",
   );
+  const stagedCatalogSeed = deployWorkflow.indexOf(
+    "Seed exact staged durable launch catalog",
+  );
+  const stagedCatalogSeedEnd = deployWorkflow.indexOf(
+    "Prove clean candidate carries no Generic signer probe authority",
+    stagedCatalogSeed,
+  );
+  const stagedCatalogSeedBlock =
+    stagedCatalogSeed >= 0 && stagedCatalogSeedEnd > stagedCatalogSeed
+      ? deployWorkflow.slice(stagedCatalogSeed, stagedCatalogSeedEnd)
+      : "";
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
     "Reverify staged candidate binding",
     stagedBitquerySmoke,
@@ -2187,6 +2197,29 @@ export function evaluateReadModelOperationsSourceContracts(
     "Profile, Claim and Trade retain singular commitment-bound dRPC reads, non-enumerable endpoints, no write authority and no hidden fallback",
   );
   check(
+    "ops-staged-durable-refresh-gate",
+    stagedCatalogSeed >
+      deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      stagedCatalogSeed < stagedBitquerySmoke &&
+      sha256(stagedDurableRefresh) ===
+        STAGED_DURABLE_REFRESH_SOURCE_SHA256 &&
+      STAGED_DURABLE_REFRESH_SOURCE_GUARDS.every((fragment) =>
+        stagedDurableRefresh.includes(fragment)
+      ) &&
+      includesEverySourceFragment(stagedCatalogSeedBlock, [
+        "CRON_SECRET: $\{{ secrets.CRON_SECRET }}",
+        "VERCEL_TOKEN: $\{{ secrets.VERCEL_TOKEN }}",
+        "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+        "node scripts/perf/read-model-staged-refresh.mjs",
+        '--target-url "$STAGED_TARGET_URL"',
+        '--deployment-id "$STAGED_DEPLOYMENT_ID"',
+        '--git-head "$GITHUB_SHA"',
+        "result.tokenCount < 1",
+      ]) &&
+      !stagedCatalogSeedBlock.includes("        if:"),
+    "every exact staged candidate seeds a non-empty durable catalog through bounded dual-provider prewarm before public Fast-Lane smoke",
+  );
+  check(
     "ops-protected-public-provider-stage-smoke",
     stagedBitquerySmoke >
       deployWorkflow.indexOf("Resolve exact staged deployment") &&
@@ -2199,6 +2232,7 @@ export function evaluateReadModelOperationsSourceContracts(
       (stagedBitquerySmokeBlock.match(
         /smoke-static-dexscreener-public-apis\.mjs/gu,
       )?.length ?? 0) === 1 &&
+      !stagedBitquerySmokeBlock.includes("        if:") &&
       stagedProviderHandoff &&
       includesEverySourceFragment(stagedPublicSmokeScript, [
         '"/api/ops/health"',
@@ -2244,10 +2278,20 @@ export function evaluateReadModelOperationsSourceContracts(
         "exactIdentity(detailToken) !== exactIdentity(selectedToken)",
         "detail.body?.token ?? detail.body?.customProject",
         "catalogBoundary.launchSource",
-        "profile.status !== 200",
-        'profile.headers.get("x-programmable-launch-source") !== "drpc"',
-        'profile.headers.get("x-programmable-read-source") !== "drpc"',
-        'profile.headers.get("x-programmable-rpc-provider") !== "drpc-primary"',
+        "const profileFailClosed =",
+        'profile.status === 503',
+        'exactObjectKeys(profile.body, ["error", "status"])',
+        'exactObjectKeys(profile.body?.error, ["code", "kind", "message"])',
+        'profile.body?.error?.code === "creator_profile_temporarily_unavailable"',
+        '"Onchain creator data is temporarily unavailable"',
+        'profile.headers.get("cache-control") === "no-store"',
+        'profile.headers.get("x-programmable-launch-source") === null',
+        'profile.headers.get("x-programmable-read-source") === null',
+        'profile.headers.get("x-programmable-rpc-provider") === null',
+        "if (!profileReady && !profileFailClosed)",
+        'profile.headers.get("x-programmable-launch-source") === "drpc"',
+        'profile.headers.get("x-programmable-read-source") === "drpc"',
+        'profile.headers.get("x-programmable-rpc-provider") === "drpc-primary"',
         'schemaVersion !== "programmable.market-chart-unavailable.v1"',
         'chart.headers.get("cache-control") !== "no-store"',
         'chart.headers.get("x-programmable-data-quality") !== "unavailable"',
@@ -2285,7 +2329,6 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-obsolete-public-read-gates-absent",
     !deployWorkflow.includes("perf:read-model:deploy-policy") &&
       !deployWorkflow.includes("perf:read-model:wake-canary") &&
-      !deployWorkflow.includes("perf:read-model:staged-refresh") &&
       !deployWorkflow.includes("perf:read-model:staged-health") &&
       !deployWorkflow.includes("Capture staged read-model evidence") &&
       !deployWorkflow.includes("Gate indexed or shadow read path") &&
@@ -2294,7 +2337,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !deployWorkflow.includes(
         "Refresh and prove exact staged durable read model",
       ),
-    "secondary RPC, prewarm, durable, indexed and Graph availability gates are absent from Website staging",
+    "obsolete indexed, Graph, wake and staged-health gates remain absent from Website staging",
   );
   const exactVerifyProofGateStart = deployWorkflow.indexOf("  release-gate:");
   const exactVerifyProofGateEnd = deployWorkflow.indexOf("  deploy:");

@@ -42,7 +42,22 @@ function parseJson(text, label) {
   }
 }
 
-async function requestJson(target, headers, path, fetchImpl) {
+function exactObjectKeys(value, expected) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index]);
+}
+
+async function requestJson(
+  target,
+  headers,
+  path,
+  fetchImpl,
+  acceptedStatuses = new Set([200]),
+) {
   const requestUrl = new URL(path, target);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const response = await fetchImpl(requestUrl, {
@@ -55,7 +70,7 @@ async function requestJson(target, headers, path, fetchImpl) {
       maximumBytes: 4 * 1024 * 1024,
       label: `public API ${path}`,
     });
-    if (!response.ok) {
+    if (!acceptedStatuses.has(response.status)) {
       throw new Error(`Public API ${path} returned HTTP ${response.status}`);
     }
     return {
@@ -425,7 +440,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         "x-vercel-set-bypass-cookie": "false",
       }
     : {};
-  const request = (path) => requestJson(target, headers, path, fetchImpl);
+  const request = (path, acceptedStatuses) =>
+    requestJson(target, headers, path, fetchImpl, acceptedStatuses);
 
   const health = await request("/api/ops/health");
   if (!exactInformationalHealth(health)) {
@@ -571,21 +587,38 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const profileAccount = profileToken.creatorAddress;
   const profile = await request(
     "/api/explore/profile?account=" + encodeURIComponent(profileAccount),
+    new Set([200, 503]),
   );
-  if (
-    profile.status !== 200 ||
-    profile.body?.status !== "ready" ||
-    profile.body?.account?.toLowerCase() !== profileAccount.toLowerCase() ||
-    !Array.isArray(profile.body?.tokens) ||
-    !Array.isArray(profile.body?.pools) ||
-    !Array.isArray(profile.body?.claims) ||
-    !/^(?:0|[1-9][0-9]*)$/u.test(
+  const profileReady =
+    profile.status === 200 &&
+    profile.body?.status === "ready" &&
+    profile.body?.account?.toLowerCase() === profileAccount.toLowerCase() &&
+    Array.isArray(profile.body?.tokens) &&
+    Array.isArray(profile.body?.pools) &&
+    Array.isArray(profile.body?.claims) &&
+    /^(?:0|[1-9][0-9]*)$/u.test(
       String(profile.body?.totals?.claimableWei ?? ""),
-    ) ||
-    profile.headers.get("x-programmable-launch-source") !== "drpc" ||
-    profile.headers.get("x-programmable-read-source") !== "drpc" ||
-    profile.headers.get("x-programmable-rpc-provider") !== "drpc-primary"
-  ) throw new Error("Creator profile and claims response is not ready");
+    ) &&
+    profile.headers.get("x-programmable-launch-source") === "drpc" &&
+    profile.headers.get("x-programmable-read-source") === "drpc" &&
+    profile.headers.get("x-programmable-rpc-provider") === "drpc-primary";
+  const profileFailClosed =
+    profile.status === 503 &&
+    exactObjectKeys(profile.body, ["error", "status"]) &&
+    exactObjectKeys(profile.body?.error, ["code", "kind", "message"]) &&
+    profile.body?.status === "error" &&
+    profile.body?.error?.kind === "temporary" &&
+    profile.body?.error?.code === "creator_profile_temporarily_unavailable" &&
+    profile.body?.error?.message ===
+      "Onchain creator data is temporarily unavailable" &&
+    profile.headers.get("cache-control") === "no-store" &&
+    profile.headers.get("x-programmable-launch-source") === null &&
+    profile.headers.get("x-programmable-read-source") === null &&
+    profile.headers.get("x-programmable-rpc-provider") === null;
+  if (!profileReady && !profileFailClosed) {
+    throw new Error("Creator profile response is neither ready nor fail-closed");
+  }
+  const profileStatus = profileReady ? "ready" : "fail-closed-unavailable";
 
   const githubOutput = environment.GITHUB_OUTPUT;
   if (targetKind === "staged" && !githubOutput) {
@@ -639,6 +672,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     marketReadStatus,
     tokenAddress,
     profileAccount,
+    profileStatus,
     detailStatus,
     chartStatus,
     creatorClaimPrepare: "separate-live-probe-required",

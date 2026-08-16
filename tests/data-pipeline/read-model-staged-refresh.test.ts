@@ -76,48 +76,11 @@ function prewarmFixture(
   };
 }
 
-function healthFixture(overrides: Record<string, unknown> = {}) {
-  return {
-    status: "healthy",
-    chainId: 1,
-    index: {
-      ageSeconds: 2,
-      blockNumber: BLOCK_NUMBER,
-      tokenCount: 343,
-    },
-    indexSource: "durable",
-    indexedReadModel: { status: "disabled" },
-    rpc: {
-      status: "healthy",
-      chainId: 1,
-      read: { status: "available" },
-      quorum: { status: "verified" },
-      confirmedBlock: { number: BLOCK_NUMBER, hash: BLOCK_HASH },
-      freshness: { maxHeadAgeSeconds: 300 },
-      providers: {
-        primary: {
-          status: "available",
-          head: BLOCK_NUMBER,
-          headAgeSeconds: 1,
-        },
-        secondary: {
-          status: "available",
-          head: BLOCK_NUMBER,
-          headAgeSeconds: 1,
-        },
-      },
-    },
-    ...overrides,
-  };
-}
-
 function stagedFetch(
   input: {
     deployment?: Record<string, unknown>;
     refreshBody?: Record<string, unknown>;
     refreshStatus?: number;
-    healthBody?: Record<string, unknown>;
-    healthStatus?: number;
     prewarmBody?: (
       phase: string,
       body: Record<string, unknown>,
@@ -151,15 +114,6 @@ function stagedFetch(
         headers: { "cache-control": "no-store" },
       });
     }
-    if (
-      url.origin === new URL(TARGET_URL).origin &&
-      url.pathname === "/api/ops/health"
-    ) {
-      return Response.json(input.healthBody ?? healthFixture(), {
-        status: input.healthStatus ?? 200,
-        headers: { "cache-control": "no-store" },
-      });
-    }
     throw new Error(`unexpected staged refresh request: ${url.toString()}`);
   };
 }
@@ -177,8 +131,8 @@ function stagedRefreshInput(
     projectId: PROJECT_ID,
     cronSecret: CRON_SECRET,
     automationBypassSecret: AUTOMATION_BYPASS_SECRET,
-    healthAttempts: 1,
-    healthRetryDelayMs: 0,
+    requestAttempts: 1,
+    requestRetryDelayMs: 0,
     sleepImpl: vi.fn(async () => undefined),
     fetchImpl,
     ...overrides,
@@ -186,7 +140,7 @@ function stagedRefreshInput(
 }
 
 describe("exact staged durable refresh runtime", () => {
-  it("refreshes only after exact deployment binding and proves visible freshness", async () => {
+  it("seeds a non-empty catalog only after exact deployment binding and all prewarm phases", async () => {
     const requests: Array<{ headers: Headers; url: URL }> = [];
     const result = await refreshExactStagedReadModel(
       stagedRefreshInput(stagedFetch({ requests })),
@@ -198,10 +152,9 @@ describe("exact staged durable refresh runtime", () => {
       deploymentId: DEPLOYMENT_ID,
       gitHead: GIT_HEAD,
       refreshBlockNumber: BLOCK_NUMBER,
-      visibleBlockNumber: BLOCK_NUMBER,
-      confirmedBlockNumber: BLOCK_NUMBER,
       tokenCount: 343,
-      ageSeconds: 2,
+      portfolioHistoryStatus: "recorded",
+      portfolioHistoryPath: "portfolio-history/1/2026-08-13T05.json",
     });
     expect(requests[0]?.url.pathname).toBe(
       `/v13/deployments/${new URL(TARGET_URL).hostname}`,
@@ -221,11 +174,7 @@ describe("exact staged durable refresh runtime", () => {
     expect(refreshRequest.headers.get("x-vercel-protection-bypass")).toBe(
       AUTOMATION_BYPASS_SECRET,
     );
-    const healthRequest = requests[66]!;
-    expect(healthRequest.headers.get("authorization")).toBeNull();
-    expect(healthRequest.url.searchParams.get("stage_refresh_proof")).toBe(
-      `${GIT_HEAD}-${DEPLOYMENT_ID}`,
-    );
+    expect(requests).toHaveLength(66);
   });
 
   it.each([
@@ -261,7 +210,7 @@ describe("exact staged durable refresh runtime", () => {
     },
   );
 
-  it("fails closed on an invalid refresh response without reading health", async () => {
+  it("fails closed on an invalid refresh response", async () => {
     const requests: Array<{ headers: Headers; url: URL }> = [];
     await expect(
       refreshExactStagedReadModel(
@@ -278,9 +227,7 @@ describe("exact staged durable refresh runtime", () => {
         ),
       ),
     ).rejects.toThrow("exact staged durable refresh failed");
-    expect(requests.map(({ url }) => url.pathname)).not.toContain(
-      "/api/ops/health",
-    );
+    expect(requests).toHaveLength(66);
   });
 
   it("fails before the final refresh on a non-exact prewarm prefix", async () => {
@@ -311,25 +258,52 @@ describe("exact staged durable refresh runtime", () => {
     ).toBe(false);
   });
 
-  it("fails closed when the refreshed index is not visibly fresh", async () => {
-    const sleepImpl = vi.fn(async () => undefined);
+  it("fails closed when refresh returns an empty catalog", async () => {
     await expect(
       refreshExactStagedReadModel(
         stagedRefreshInput(
           stagedFetch({
-            healthBody: healthFixture({
-              index: {
-                ageSeconds: 601,
+            refreshBody: refreshFixture({
+              tokenCount: 0,
+              portfolioHistory: {
+                status: "empty",
                 blockNumber: BLOCK_NUMBER,
-                tokenCount: 343,
+                tokenCount: 0,
+                path: null,
               },
             }),
           }),
-          { healthAttempts: 3, sleepImpl },
         ),
       ),
-    ).rejects.toThrow("exact staged durable freshness proof failed");
-    expect(sleepImpl).toHaveBeenCalledTimes(2);
+    ).rejects.toThrow("exact staged durable refresh failed");
+  });
+
+  it("retries a transient prewarm response once and stays bounded", async () => {
+    let transientFailures = 0;
+    const sleepImpl = vi.fn(async () => undefined);
+    const baseFetch = stagedFetch();
+    const fetchImpl = async (request: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(request));
+      if (
+        url.searchParams.get("phase") === "classic-primary-01" &&
+        transientFailures === 0
+      ) {
+        transientFailures += 1;
+        return Response.json({ ok: false }, {
+          status: 503,
+          headers: { "cache-control": "no-store" },
+        });
+      }
+      return baseFetch(request, init);
+    };
+    await expect(
+      refreshExactStagedReadModel(stagedRefreshInput(fetchImpl, {
+        requestAttempts: 2,
+        sleepImpl,
+      })),
+    ).resolves.toMatchObject({ ok: true, tokenCount: 343 });
+    expect(transientFailures).toBe(1);
+    expect(sleepImpl).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a public origin and missing server-only credentials", async () => {
@@ -348,7 +322,7 @@ describe("exact staged durable refresh runtime", () => {
   });
 });
 
-describe.skip("retired staged durable refresh source contract", () => {
+describe("staged durable catalog seed source contract", () => {
   it("rejects any unreviewed staged refresh verifier bytes", () => {
     const path = "scripts/perf/read-model-staged-refresh.mjs";
     const source = readFileSync(resolve(ROOT, path), "utf8");
@@ -390,24 +364,21 @@ describe.skip("retired staged durable refresh source contract", () => {
     [
       "drops exact Git binding",
       (step: string) =>
-        step.replace("          EXPECTED_GIT_HEAD: ${{ github.sha }}\n", ""),
+        step.replace('            --git-head "$GITHUB_SHA" > "$result_path"\n', ""),
     ],
     [
-      "masks failure",
+      "accepts an empty catalog",
       (step: string) =>
-        step.replace(
-          '          --git-head "$EXPECTED_GIT_HEAD"\n',
-          '          --git-head "$EXPECTED_GIT_HEAD" || true\n',
-        ),
+        step.replace("            result.tokenCount < 1\n", ""),
     ],
   ])("fails when the workflow %s", (_label, mutate) => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
     const stepStart = workflow.indexOf(
-      "      - name: Refresh and prove exact staged durable read model",
+      "      - name: Seed exact staged durable launch catalog",
     );
     const stepEnd = workflow.indexOf(
-      "      - name: Smoke staged public market APIs",
+      "      - name: Prove clean candidate carries no Generic signer probe authority",
     );
     expect(stepStart).toBeGreaterThanOrEqual(0);
     expect(stepEnd).toBeGreaterThan(stepStart);

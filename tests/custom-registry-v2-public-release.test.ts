@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { keccak256, toFunctionSelector } from "viem";
 
 vi.mock("server-only", () => ({}));
@@ -7,10 +7,13 @@ import {
   CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH_V2,
   PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V2,
 } from "../lib/custom-launch/registry-public-manifest-v2";
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
 import {
   createCustomRegistryManifestHandlerV2,
   createCustomRegistryReadinessHandlerV2,
   handleProductionCustomRegistryManifestV2,
+  handleProductionCustomRegistryReadinessV2,
   resolveCustomRegistryPublicManifestV2,
 } from "../lib/server/custom-launch/registry-manifest-v2";
 
@@ -20,6 +23,10 @@ const transactionHash = `0x${"34".repeat(32)}` as const;
 const blockHash = `0x${"56".repeat(32)}` as const;
 const policyBindingHash = `0x${"78".repeat(32)}` as const;
 const now = () => new Date("2026-08-13T00:00:00.000Z");
+const alchemyUrl =
+  "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
+const quicknodeUrl =
+  "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
 
 function prelaunchSource() {
   return {
@@ -122,6 +129,11 @@ function rpcResponse(input?: Readonly<{
 }
 
 describe("Custom Registry V2 public release binding", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
   it("publishes the exact null prelaunch identity without profile semantics", () => {
     expect(resolveCustomRegistryPublicManifestV2(prelaunchSource())).toEqual(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V2,
@@ -250,6 +262,46 @@ describe("Custom Registry V2 public release binding", () => {
         toFunctionSelector("REGISTRY_GENERATION()"),
       ]);
     }
+  });
+
+  it("uses only the committed recovery pair for production readiness", async () => {
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+      "https://lb.drpc.live/ethereum/depleted-test-key",
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+      alchemyUrl,
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", alchemyUrl),
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+      quicknodeUrl,
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", quicknodeUrl),
+    );
+    const rpcFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      "[]",
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", rpcFetch);
+
+    const response = await handleProductionCustomRegistryReadinessV2(
+      request("/api/custom-launch/registry/v2/readiness"),
+    );
+
+    expect(response.status).toBe(503);
+    expect(rpcFetch).toHaveBeenCalledTimes(2);
+    expect(rpcFetch.mock.calls.map(([url]) => url.toString())).toEqual([
+      alchemyUrl,
+      quicknodeUrl,
+    ]);
   });
 
   it.each([

@@ -6,6 +6,7 @@ import {
   WEBSITE_MAINNET_RPC_ENV,
   productionMainnetRpcPrimary,
   productionMainnetRpcPair,
+  productionRecoveryMainnetRpcPair,
   websiteMainnetRpcPair,
 } from "../lib/onchain/website-rpc-providers.server";
 
@@ -73,6 +74,62 @@ describe("Website Mainnet RPC provider bindings", () => {
       secondaryProvider: "alchemy",
       secondaryUrl: ALCHEMY_URL,
     }))).toThrow("Production RPC provider roles are invalid");
+  });
+
+  it("binds recovery reads to the committed legacy Alchemy and QuickNode pair", () => {
+    const recovery = productionRecoveryMainnetRpcPair({
+      ...environment({ primaryUrl: "https://eth.drpc.org" }),
+      ETHEREUM_RPC_URL: DRPC_URL,
+      ETHEREUM_RPC_URL_B: DRPC_URL,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        rpcProviderCommitment("endpoint", ALCHEMY_URL),
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        rpcProviderCommitment("endpoint", QUICKNODE_URL),
+    });
+
+    expect(recovery).toEqual({
+      source: "legacy-alchemy-quicknode",
+      primary: {
+        provider: "alchemy",
+        url: ALCHEMY_URL,
+        endpointCommitment: rpcProviderCommitment("endpoint", ALCHEMY_URL),
+      },
+      secondary: {
+        provider: "quicknode",
+        url: QUICKNODE_URL,
+        endpointCommitment: rpcProviderCommitment("endpoint", QUICKNODE_URL),
+      },
+    });
+  });
+
+  it("keeps recovery closed on aliases, host drift and commitment drift", () => {
+    const committed = {
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        rpcProviderCommitment("endpoint", ALCHEMY_URL),
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        rpcProviderCommitment("endpoint", QUICKNODE_URL),
+    };
+    expect(() => productionRecoveryMainnetRpcPair({
+      ETHEREUM_RPC_URL: ALCHEMY_URL,
+      ETHEREUM_RPC_URL_B: QUICKNODE_URL,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        rpcProviderCommitment("endpoint", ALCHEMY_URL),
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        rpcProviderCommitment("endpoint", QUICKNODE_URL),
+    })).toThrow("Website primary RPC binding is unavailable");
+    expect(() => productionRecoveryMainnetRpcPair({
+      ...committed,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: DRPC_URL,
+    })).toThrow("Website primary RPC binding is invalid");
+    expect(() => productionRecoveryMainnetRpcPair({
+      ...committed,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        `0x${"ab".repeat(32)}`,
+    })).toThrow("Website secondary RPC endpoint commitment mismatch");
   });
 
   it("binds only the committed dRPC primary without secondary configuration", () => {

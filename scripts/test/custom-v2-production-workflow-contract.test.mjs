@@ -261,15 +261,25 @@ test("new stage and cleanup HTTP consumers share the bounded streaming reader", 
   assert.doesNotMatch(reconciler, /response\.(?:json|text)\(\)/u);
 });
 
-test("Custom-only changes do not invoke the public data smoke", () => {
+test("every staged candidate seeds the durable catalog before public data smoke", () => {
+  const seed = stepBlock(
+    deploy,
+    "Seed exact staged durable launch catalog",
+  );
+  assert.match(seed, /CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}/u);
+  assert.match(seed, /VERCEL_AUTOMATION_BYPASS_SECRET:/u);
+  assert.match(seed, /read-model-staged-refresh\.mjs/u);
+  assert.match(seed, /--target-url "\$STAGED_TARGET_URL"/u);
+  assert.match(seed, /--deployment-id "\$STAGED_DEPLOYMENT_ID"/u);
+  assert.match(seed, /--git-head "\$GITHUB_SHA"/u);
+  assert.match(seed, /result\.tokenCount < 1/u);
+  assert.doesNotMatch(seed, /\n        if:/u);
+
   const smoke = stepBlock(
     deploy,
     "Smoke staged static identity and Dex public APIs",
   );
-  assert.match(
-    smoke,
-    /if: >-[\s\S]*verified_custom_v2 != 'true'[\s\S]*verified_interface == 'true'[\s\S]*verified_read_model == 'true'/u,
-  );
+  assert.doesNotMatch(smoke, /\n        if:/u);
   assert.match(
     smoke,
     /node scripts\/smoke-static-dexscreener-public-apis\.mjs/u,
@@ -279,9 +289,15 @@ test("Custom-only changes do not invoke the public data smoke", () => {
     1,
   );
   assert.doesNotMatch(smoke, /node --input-type=module|bitquery|drpc/iu);
+  assert.ok(
+    deploy.indexOf("Seed exact staged durable launch catalog") <
+      deploy.indexOf("Smoke staged static identity and Dex public APIs"),
+  );
 
   const handoff = stepBlock(deploy, "Record staged candidate handoff");
   assert.match(handoff, /Launch identities: validated last-good catalog/u);
+  assert.match(handoff, /Durable catalog seed block:/u);
+  assert.match(handoff, /Durable catalog seed token count:/u);
   assert.match(
     handoff,
     /Market data provider: Dexscreener \(optional enrichment\)/u,

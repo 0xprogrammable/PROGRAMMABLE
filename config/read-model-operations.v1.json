@@ -18,7 +18,7 @@
         },
         {
           "path": "lib/onchain/historical-read-rpc.server.ts",
-          "sha256": "0a68b8388003cea8c59c11790f7255df00c94ab773339850ce41c0e1b4c3aa0d"
+          "sha256": "c20db55489aa28c24a7eb888cbc80eb9d51944d3fe8908e9805d8984e15a2d6c"
         },
         {
           "path": "lib/onchain/persistent-rpc-cache.server.ts",
@@ -83,7 +83,7 @@
         },
         "providerConfig": {
           "path": "lib/onchain/website-rpc-providers.server.ts",
-          "sha256": "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7"
+          "sha256": "d501b92d6a28b7e8e1a2a29cae329e2c3a530da941f9b1cbab65e8c6036ca342"
         },
         "currentMarketRpc": {
           "path": "lib/market-data/current-market-rpc.server.ts",

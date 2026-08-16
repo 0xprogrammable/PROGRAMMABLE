@@ -7,15 +7,22 @@ import {
   historicalReadOnchainDeployment,
 } from "../lib/onchain/historical-read-rpc.server";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
-import { productionMainnetRpcEnvironment } from
-  "../lib/onchain/website-rpc-providers.server";
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
+
+const ALCHEMY_RPC_URL =
+  "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
 const DRPC_RPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_RPC_URL =
   "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
-const environment = productionMainnetRpcEnvironment(
-  DRPC_RPC_URL,
-  QUICKNODE_RPC_URL,
-);
+const environment = {
+  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_RPC_URL,
+  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+    rpcProviderCommitment("endpoint", ALCHEMY_RPC_URL),
+  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_RPC_URL,
+  PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+    rpcProviderCommitment("endpoint", QUICKNODE_RPC_URL),
+};
 
 const deployment: ReadyOnchainDeployment = {
   environment: "production",
@@ -36,11 +43,11 @@ const deployment: ReadyOnchainDeployment = {
 };
 
 describe("historical read RPC deployment", () => {
-  it("uses the exact commitment-bound production dRPC and QuickNode pair", () => {
+  it("uses the exact commitment-bound Alchemy and QuickNode recovery pair", () => {
     expect(historicalReadOnchainDeployment(deployment, environment)).toMatchObject({
-      rpcUrl: DRPC_RPC_URL,
+      rpcUrl: ALCHEMY_RPC_URL,
       rpcUrlSecondary: QUICKNODE_RPC_URL,
-      rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
+      rpcProviderIds: { primary: "alchemy", secondary: "quicknode" },
     });
   });
 
@@ -51,7 +58,7 @@ describe("historical read RPC deployment", () => {
       rpcUrlSecondary: null,
     }, environment);
 
-    expect(historical.rpcUrl).toBe(DRPC_RPC_URL);
+    expect(historical.rpcUrl).toBe(ALCHEMY_RPC_URL);
     expect(historical.rpcUrlSecondary).toBe(QUICKNODE_RPC_URL);
   });
 
