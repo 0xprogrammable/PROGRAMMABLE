@@ -43,7 +43,7 @@
       "providerPasses": 2,
       "requestDeadlineMs": 270000,
       "classicPrewarmStepCount": 32,
-      "prewarmProviderConcurrency": 2,
+      "prewarmProviderConcurrency": 1,
       "prewarmRequestDeadlineMs": 250000
     },
     "schedulerWatchdog": {

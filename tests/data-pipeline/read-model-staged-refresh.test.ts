@@ -133,6 +133,7 @@ function stagedRefreshInput(
     automationBypassSecret: AUTOMATION_BYPASS_SECRET,
     requestAttempts: 1,
     requestRetryDelayMs: 0,
+    prewarmPhaseDelayMs: 0,
     sleepImpl: vi.fn(async () => undefined),
     fetchImpl,
     ...overrides,
@@ -278,17 +279,74 @@ describe("exact staged durable refresh runtime", () => {
     ).rejects.toThrow("exact staged durable refresh failed");
   });
 
-  it("retries a transient prewarm response once and stays bounded", async () => {
+  it("serializes provider phases and backs off past a rolling 10-second 429 window", async () => {
     let transientFailures = 0;
+    let activePrewarms = 0;
+    let maximumActivePrewarms = 0;
     const sleepImpl = vi.fn(async () => undefined);
     const baseFetch = stagedFetch();
     const fetchImpl = async (request: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(request));
-      if (
-        url.searchParams.get("phase") === "classic-primary-01" &&
-        transientFailures === 0
-      ) {
-        transientFailures += 1;
+      if (/^classic-(?:primary|secondary)-[0-9]{2}$/u.test(
+        url.searchParams.get("phase") ?? "",
+      )) {
+        activePrewarms += 1;
+        maximumActivePrewarms = Math.max(
+          maximumActivePrewarms,
+          activePrewarms,
+        );
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          if (
+            url.searchParams.get("phase") === "classic-primary-01" &&
+            transientFailures < 2
+          ) {
+            transientFailures += 1;
+            return Response.json({ ok: false }, {
+              status: 503,
+              headers: { "cache-control": "no-store" },
+            });
+          }
+          return baseFetch(request, init);
+        } finally {
+          activePrewarms -= 1;
+        }
+      }
+      return baseFetch(request, init);
+    };
+    await expect(
+      refreshExactStagedReadModel(stagedRefreshInput(fetchImpl, {
+        requestAttempts: 3,
+        requestRetryDelayMs: 5_000,
+        sleepImpl,
+      })),
+    ).resolves.toMatchObject({ ok: true, tokenCount: 343 });
+    expect(transientFailures).toBe(2);
+    expect(maximumActivePrewarms).toBe(1);
+    expect(sleepImpl).toHaveBeenNthCalledWith(1, 5_000);
+    expect(sleepImpl).toHaveBeenNthCalledWith(2, 10_000);
+  });
+
+  it("paces successful prewarm phases without overlapping providers", async () => {
+    const sleepImpl = vi.fn(async (_delayMs: number) => undefined);
+    await expect(
+      refreshExactStagedReadModel(stagedRefreshInput(stagedFetch(), {
+        prewarmPhaseDelayMs: 1_000,
+        sleepImpl,
+      })),
+    ).resolves.toMatchObject({ ok: true, tokenCount: 343 });
+    expect(sleepImpl).toHaveBeenCalledTimes(63);
+    expect(sleepImpl.mock.calls.every(([delay]) => delay === 1_000)).toBe(true);
+  });
+
+  it("stops after three bounded transient failures before secondary or final refresh", async () => {
+    const requests: URL[] = [];
+    const sleepImpl = vi.fn(async () => undefined);
+    const baseFetch = stagedFetch();
+    const fetchImpl = async (request: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(request));
+      requests.push(url);
+      if (url.searchParams.get("phase") === "classic-primary-01") {
         return Response.json({ ok: false }, {
           status: 503,
           headers: { "cache-control": "no-store" },
@@ -298,12 +356,28 @@ describe("exact staged durable refresh runtime", () => {
     };
     await expect(
       refreshExactStagedReadModel(stagedRefreshInput(fetchImpl, {
-        requestAttempts: 2,
+        requestAttempts: 3,
+        requestRetryDelayMs: 5_000,
         sleepImpl,
       })),
-    ).resolves.toMatchObject({ ok: true, tokenCount: 343 });
-    expect(transientFailures).toBe(1);
-    expect(sleepImpl).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow("classic-primary-01 prewarm failed (503)");
+    expect(
+      requests.filter((url) =>
+        url.searchParams.get("phase") === "classic-primary-01"
+      ),
+    ).toHaveLength(3);
+    expect(
+      requests.some((url) =>
+        url.searchParams.get("phase") === "classic-secondary-01"
+      ),
+    ).toBe(false);
+    expect(
+      requests.some((url) =>
+        url.pathname === "/api/ops/index-v2" &&
+        !url.searchParams.has("phase")
+      ),
+    ).toBe(false);
+    expect(sleepImpl.mock.calls).toEqual([[5_000], [10_000]]);
   });
 
   it("rejects a public origin and missing server-only credentials", async () => {
