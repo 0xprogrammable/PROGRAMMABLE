@@ -117,3 +117,16 @@ condition = "AND"
 regexTarget = "match"
 paths = ['''tests/bitquery-market-data\.test\.ts''']
 regexes = ['''(?i)0x3f2a426365e7a438a7f9f758766cff419d207d51''']
+
+[[allowlists]]
+description = "Dexscreener tests use one deterministic bypass fixture and one public token address"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''scripts/test/smoke-static-dexscreener-public-apis\.test\.mjs''',
+  '''tests/dexscreener-shadow\.test\.ts''',
+]
+regexes = [
+  '''VERCEL_AUTOMATION_BYPASS_SECRET:\s*"0123456789abcdef",''',
+  '''tokenAddress:\s*"0x9ea1917b68aa295d3a59be8c3934bcb45a1e449b",''',
+]
