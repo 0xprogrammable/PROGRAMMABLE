@@ -490,296 +490,6 @@ function includesEverySourceFragment(source, fragments) {
   );
 }
 
-export const POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS = Object.freeze([
-  "function hasUnevidencedBitqueryFdv",
-  "if (depth > 12) return true",
-  "if (seen.has(value)) return true",
-  "object.fdvUsdWad !== undefined",
-  "object.marketCapUsdWad !== undefined",
-  'object.metric === "fdv"',
-  'object.status === "available" || object.valueUsdWad !== undefined',
-  "function exactCanonicalClassicNativeToken",
-  'token?.exploreKind !== "token"',
-  'token.launchModel !== "classic"',
-  'token.liquidityPath === "meme"',
-  "token.launchStampProvenance === undefined",
-  'token.liquidityPath === "programmable-v4"',
-  'stamp?.schemaVersion === "programmable.launch-stamp-provenance.v1"',
-  'stamp.kind === "classic"',
-  "stamp.chainId === 1",
-  "sameBytes32(stamp.poolId, poolId)",
-  "sameAddress(stamp.poolKey?.currency0, NATIVE_CURRENCY)",
-  "sameAddress(stamp.poolKey?.currency1, tokenAddress)",
-  "sameAddress(stamp.poolKey?.hooks, token?.hookAddress)",
-  "tokenAddress === GOLDEN_TOKEN_ADDRESS",
-  'valuation?.status !== "available"',
-  'valuation.metric !== "fdv"',
-  'valuation.supplyBasis !== "total"',
-  'valuation.currency !== "usd"',
-  'valuation.source !== "stateview-chainlink"',
-  'valuation.freshness !== "current"',
-  "token.fdvUsdWad !== valuation.valueWad",
-  "!positiveInteger(valuation.asOfBlock)",
-  "!exactBytes32(valuation.asOfBlockHash)",
-  "!currentMarketEvidenceTime(valuation.asOfTime)",
-  'valuation.lagBlocks !== "0"',
-  '"programmable.stateview-chainlink-price-evidence.v1"',
-  'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
-  'price.chainId !== "1"',
-  "!sameAddress(price.tokenAddress, tokenAddress)",
-  "!sameAddress(price.quoteAddress, NATIVE_CURRENCY)",
-  "!sameBytes32(price.poolId, market?.primaryPoolId)",
-  "price.stateViewAddress?.toLowerCase() !== MAINNET_STATE_VIEW",
-  "MAINNET_STATE_VIEW_RUNTIME_CODE_HASH",
-  "price.blockNumber !== valuation.asOfBlock",
-  "!sameBytes32(price.blockHash, valuation.asOfBlockHash)",
-  "!exactUnixTimestamp(price.blockTimestamp)",
-  "price.blockTime !== valuation.asOfTime",
-  "Number(BigInt(price.blockTimestamp)) * 1_000",
-  "!positiveInteger(price.sqrtPriceX96)",
-  "!positiveInteger(price.activeLiquidity)",
-  "!positiveInteger(price.activeVirtualToken0Wei)",
-  "!positiveInteger(price.activeVirtualLiquidityUsdWad)",
-  '"stateview-active-liquidity-virtual-depth-usd"',
-  "!positiveInteger(price.tokenPriceEthWei)",
-  "!positiveInteger(price.tokenPriceUsdWad)",
-  "price.totalSupplyRaw !== token.totalSupplyRaw",
-  "price.tokenDecimals !== token.tokenDecimals",
-  "price.fdvUsdWad !== valuation.valueWad",
-  "quote?.feedAddress?.toLowerCase() !== MAINNET_ETH_USD_FEED",
-  "!positiveInteger(quote.roundId)",
-  "!positiveInteger(quote.answeredInRound)",
-  "BigInt(quote.answeredInRound) < BigInt(quote.roundId)",
-  "!positiveInteger(quote.answer)",
-  "quote.decimals !== 8",
-  "!exactUnixTimestamp(quote.updatedAt)",
-  "Number(BigInt(quote.updatedAt)) * 1_000",
-  "!positiveInteger(token.totalSupplyRaw)",
-  "token.tokenDecimals < 0",
-  "token.tokenDecimals > 255",
-  'market?.schemaVersion !== "programmable.market-data.v1"',
-  'market.source !== "bitquery"',
-  'market.status !== "current"',
-  "!currentMarketTime(market.generatedAt)",
-  "!exactBytes32(market.primaryPoolId)",
-  "!sameBytes32(token.poolId, market.primaryPoolId)",
-  'primary?.identity?.chainId !== "1"',
-  "!sameAddress(primary.identity.tokenAddress, tokenAddress)",
-  "!sameBytes32(primary.identity.poolId, market.primaryPoolId)",
-  'primary.identity.protocol !== "uniswap_v4"',
-  'primary.source !== "bitquery"',
-  'primary.status !== "current"',
-  "hasUnevidencedBitqueryFdv(market)",
-  'liquidity?.source !== "official-uniswap-v4-subgraph"',
-  'liquidity.identity?.chainId !== "1"',
-  'liquidity.identity.protocol !== "uniswap_v4"',
-  "!sameBytes32(liquidity.identity.poolId, market.primaryPoolId)",
-  "!sameAddress(liquidity.identity.tokenAddress, tokenAddress)",
-  "liquidity.identity.quoteAddress, price.quoteAddress",
-  'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
-  "liquidity.reportedPoolBalances?.token0?.address",
-  "liquidity.reportedPoolBalances?.token1?.address",
-  "liquidity.reportedPoolBalances.token0.decimals !== 18",
-  "liquidity.reportedPoolBalances.token1.decimals !== token.tokenDecimals",
-  "!unsignedDecimal(liquidity.reportedPoolBalances.token0.amountDecimal)",
-  "!unsignedDecimal(liquidity.reportedPoolBalances.token1.amountDecimal)",
-  "!positiveDecimal(liquidity.reportedPoolBalances.token0.amountDecimal)",
-  "!positiveDecimal(liquidity.reportedPoolBalances.token1.amountDecimal)",
-  "BigInt(liquidity.tvlUsdWad) < MINIMUM_PUBLIC_FDV_LIQUIDITY_USD_WAD",
-  'liquidity.freshness !== "current"',
-  "provenance?.subgraphId !== OFFICIAL_V4_SUBGRAPH_ID",
-  "provenance?.deployment !== OFFICIAL_V4_SUBGRAPH_DEPLOYMENT",
-  "!positiveInteger(provenance.indexedBlockNumber)",
-  "!exactBytes32(provenance.indexedBlockHash)",
-  "!exactUnixTimestamp(provenance.indexedBlockTimestamp)",
-  "!currentMarketEvidenceTime(provenance.indexedBlockTime)",
-  "!positiveInteger(provenance.referenceHeadBlockNumber)",
-  "!exactBytes32(provenance.referenceHeadBlockHash)",
-  "!unsignedInteger(provenance.lagBlocks)",
-  "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
-  "valuation.asOfBlockHash, provenance.referenceHeadBlockHash",
-  "lagBlocks === referenceBlock - indexedBlock",
-  "lagBlocks <= OFFICIAL_V4_LIQUIDITY_MAXIMUM_LAG_BLOCKS",
-  "provenance.indexedBlockHash,",
-  "provenance.indexedBlockTime ===",
-  "indexedTimestamp <= valuationTimeSeconds",
-  "feedUpdatedAt <= valuationTimeSeconds",
-  "valuationTimeSeconds - feedUpdatedAt <= 7_200n",
-  "expectedFdvUsdWad.toString() === valuation.valueWad",
-  "expectedTokenPriceEthWei.toString() === price.tokenPriceEthWei",
-  "expectedTokenPriceUsdWad.toString() === price.tokenPriceUsdWad",
-  "activeVirtualToken0Wei.toString() === price.activeVirtualToken0Wei",
-  "expectedActiveVirtualLiquidityUsdWad >=",
-  "price.activeVirtualLiquidityUsdWad",
-  "verifyCurrentPublicOnchainEvidenceV1",
-  '"eth_getBlockByNumber"',
-  '"eth_getCode"',
-  '"eth_call"',
-  "requireCanonical: true",
-  "keccak256(stateViewCode)",
-  "sameCurrentEvidenceObservation(first, second)",
-  "first.blockHash !== valuation.asOfBlockHash.toLowerCase()",
-  "first.stateViewRuntimeCodeHash !== MAINNET_STATE_VIEW_RUNTIME_CODE_HASH",
-  "first.sqrtPriceX96.toString() !== price.sqrtPriceX96",
-  "first.activeLiquidity.toString() !== price.activeLiquidity",
-  "first.totalSupplyRaw.toString() !== price.totalSupplyRaw",
-  "first.feedDecimals !== quote.decimals",
-  "first.roundId.toString() !== quote.roundId",
-  "first.answeredInRound.toString() !== quote.answeredInRound",
-  "providerCount: observations.length",
-]);
-
-export const POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS = Object.freeze([
-  "exactExploreValuationSnapshot(",
-  'value.schemaVersion !== "programmable.explore-valuation-snapshot.v1"',
-  "Object.keys(value).length !== 11",
-  "value.chainId !== 1",
-  "!positiveInteger(value.blockNumber)",
-  "!exactBytes32(value.blockHash)",
-  "value.blockHash !== value.blockHash.toLowerCase()",
-  'value?.liquidityBlockNumber === "none"',
-  'value?.liquidityBlockHash === "none"',
-  "positiveInteger(value?.liquidityBlockNumber)",
-  "exactBytes32(value?.liquidityBlockHash)",
-  "value.liquidityBlockHash === value.liquidityBlockHash.toLowerCase()",
-  "(!noLiquiditySnapshot &&",
-  "!concreteLiquiditySnapshot ||",
-  "BigInt(value.liquidityBlockNumber) > BigInt(value.blockNumber)",
-  "!/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment)",
-  'value.sort !== "market-cap"',
-  'value.query !== ""',
-  "value.socials !== null",
-  "value.pageSize !== EXPLORE_PAGE_SIZE",
-  "!sameValuationSnapshot(valuationSnapshot, pageSnapshot)",
-  "total > MAXIMUM_EXPLORE_TOKENS",
-  "totalPages !== Math.ceil(total / EXPLORE_PAGE_SIZE)",
-  "responses.length !== totalPages",
-  'page?.status !== "ready"',
-  "page?.sort !== valuationSnapshot.sort",
-  "page?.query !== valuationSnapshot.query",
-  "page?.page !== index + 1",
-  "page?.pageSize !== valuationSnapshot.pageSize",
-  "page?.total !== total",
-  "page?.totalPages !== totalPages",
-  "pageTokens.length !== expectedLength",
-  '"programmable.explore-data-quality.v1"',
-  "quality.available + quality.unavailable !== pageTokens.length",
-  "quality.stale > quality.available",
-  "quality.unknown !== 0",
-  'response.headers.readSource !== "operational+durable+postgres"',
-  "response.headers.rpcProvider !== null",
-  "response.headers.marketAsOf !== (quality.asOfTime ?? null)",
-  "!exactCurrentPublicMarketHeaders(response)",
-  "!currentMarketEvidenceTime(quality.asOfTime)",
-  "token.valuation.asOfBlock !== quality.asOfBlock",
-  "token.valuation.asOfBlock !== valuationSnapshot.blockNumber",
-  "token.valuation.asOfBlockHash,",
-  "valuationSnapshot.blockHash,",
-  "token.liquidityEvidence?.provenance?.referenceHeadBlockNumber !==",
-  "token.liquidityEvidence?.provenance?.referenceHeadBlockHash,",
-  "token.liquidityEvidence?.provenance?.indexedBlockNumber !==",
-  "valuationSnapshot.liquidityBlockNumber",
-  "token.liquidityEvidence?.provenance?.indexedBlockHash,",
-  "valuationSnapshot.liquidityBlockHash,",
-  'response.headers.marketSource !== "bitquery"',
-  "response.headers.valuationBlock !== null",
-  "ids.has(token.id)",
-  "addresses.has(address)",
-  "tokens.length !== total",
-  "!UNAVAILABLE_VALUATION_REASONS.has(valuation.reason)",
-  "token?.fdvUsdWad !== undefined",
-  "hasUnevidencedBitqueryFdv(token?.marketData)",
-  'valuation.source === "bitquery"',
-  "return null;",
-  'valuation.source !== "stateview-chainlink"',
-  "sawNonCurrent",
-  "!exactCurrentPublicFdvLiquidity(token)",
-  "value > previousCurrentFdv",
-  "return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
-  "left.schemaVersion === right.schemaVersion",
-  "left.chainId === right.chainId",
-  "left.blockNumber === right.blockNumber",
-  "left.blockHash === right.blockHash",
-  "left.liquidityBlockNumber === right.liquidityBlockNumber",
-  "left.liquidityBlockHash === right.liquidityBlockHash",
-  "left.rankingCommitment === right.rankingCommitment",
-  "left.sort === right.sort",
-  "left.query === right.query",
-  "left.socials === right.socials",
-  "left.pageSize === right.pageSize",
-  'search.set("valuationBlock", snapshot.blockNumber)',
-  'search.set("valuationBlockHash", snapshot.blockHash)',
-  'search.set("liquidityBlock", snapshot.liquidityBlockNumber)',
-  'search.set("liquidityBlockHash", snapshot.liquidityBlockHash)',
-  'search.set("rankingCommitment", snapshot.rankingCommitment)',
-]);
-
-export const POST_PROMOTION_PAGINATION_SOURCE_GUARDS = Object.freeze([
-  "const firstExploreSnapshot = exactExploreValuationSnapshot(",
-  "firstExplore.body?.valuationSnapshot,",
-  "firstExploreSnapshot !== null &&",
-  "firstExploreSnapshot === null",
-  "Array.from({ length: expectedExplorePages - 1 }, (_, index) =>",
-  "exploreContinuationPath(firstExploreSnapshot, index + 2)",
-  'search.set("valuationBlock", snapshot.blockNumber)',
-  'search.set("valuationBlockHash", snapshot.blockHash)',
-  'search.set("liquidityBlock", snapshot.liquidityBlockNumber)',
-  'search.set("liquidityBlockHash", snapshot.liquidityBlockHash)',
-  'search.set("rankingCommitment", snapshot.rankingCommitment)',
-]);
-
-export const POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS = Object.freeze([
-  "!sameAddress(detailToken?.tokenAddress, exploreToken?.tokenAddress)",
-  "!sameAddress(detailToken?.hookAddress, exploreToken?.hookAddress)",
-  "detailToken?.launchModel !== exploreToken?.launchModel",
-  "detailToken?.liquidityPath !== exploreToken?.liquidityPath",
-  "detailToken?.marketData?.primaryPoolId,",
-  "exploreToken?.marketData?.primaryPoolId,",
-  "detailToken?.valuation?.priceEvidence?.quoteAddress,",
-  "exploreToken?.valuation?.priceEvidence?.quoteAddress,",
-  "!exactCurrentPublicMarketHeaders(response)",
-  "!exactCurrentPublicFdvLiquidity(detailToken)",
-  "detailBlock < exploreBlock",
-  "Date.parse(detailToken.valuation.asOfTime) <",
-  "detailBlock !== exploreBlock",
-  "JSON.stringify(detailToken.valuation)",
-  "JSON.stringify(detailToken.liquidityEvidence)",
-  'response.headers.marketSource !== "bitquery"',
-  'response.headers.priceSource !== "bitquery"',
-  'chart.readStatus !== "live"',
-  '["ready", "insufficient-history"].includes(chart.status)',
-  "chart.truncated !== false",
-  'chart.identity?.chainId !== "1"',
-  "!sameAddress(chart.identity?.tokenAddress, tokenAddress)",
-  "!sameBytes32(chart.identity?.poolId, poolId)",
-  "!sameAddress(chart.identity?.quoteAddress, quoteAddress)",
-  'chart.identity?.protocol !== "uniswap_v4"',
-  "chart.range !== range",
-  "chart.points.length < 2 || chart.swapCount < 2",
-  "chart.points.length !== 1 || chart.swapCount !== 1",
-  'chart.valuation?.status !== "unavailable"',
-  'chart.valuation?.reason !== "source-unavailable"',
-  '"fdvUsdWad" in chart',
-  '"valuationMetric" in chart',
-  "chart.asOfTime !== chart.points.at(-1)?.observedAt",
-  "response.headers.marketAsOf !== chart.asOfTime",
-  "requireCurrentAsOf && !currentMarketTime(chart.asOfTime)",
-  'point?.valueSemantics !== "period-median"',
-  "time !== bucketEnd",
-  "bucketStart >= bucketEnd",
-  "observedAt < bucketStart",
-  "observedAt > bucketEnd",
-  "!positiveDecimal(point?.priceQuote)",
-  'typeof point?.quoteSymbol !== "string"',
-  "point?.priceUsd !== undefined",
-  "point?.ohlcUsd !== undefined",
-  "point?.ohlcQuote !== undefined",
-  "point.tradeCount < 1",
-  "bucketStart < previousBucketEnd",
-  "block <= previousBlock",
-  "totalTrades === chart.swapCount",
-]);
-
 export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
   "const hasUnevidencedBitqueryFdv = (",
   "if (depth > 12) return true",
@@ -986,63 +696,6 @@ export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
   "secondaryHead >= confirmedBlockNumber",
   '"stage_refresh_proof"',
 ]);
-const STAGED_DURABLE_REFRESH_SCRIPT_SHA256 =
-  "da794e41cc86d8d36ff8d945cba279fa0282477aaaecad0259efab9411023701";
-const STAGED_DURABLE_REFRESH_WORKFLOW_STEP = [
-  "      - name: Refresh and prove exact staged durable read model",
-  "        if: needs.release-gate.outputs.verified_read_model == 'true'",
-  "        env:",
-  "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
-  "          CRON_SECRET: ${{ secrets.CRON_SECRET }}",
-  "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-  "          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
-  "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-  "          EXPECTED_GIT_HEAD: ${{ github.sha }}",
-  "        run: >-",
-  "          npm run perf:read-model:staged-refresh --",
-  '          --target-url "$STAGED_TARGET_URL"',
-  '          --deployment-id "$STAGED_DEPLOYMENT_ID"',
-  '          --git-head "$EXPECTED_GIT_HEAD"',
-].join("\n");
-const STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 =
-  "853e49a15d1d056f538a7451c5fc67829056c6e48bebd4a6aa791242a61b9d73";
-const STAGED_HEALTH_HANDOFF_WORKFLOW_STEP = [
-  "      - name: Gate exact staged operational health",
-  "        env:",
-  "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
-  "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-  "          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
-  "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
-  "          EXPECTED_GIT_HEAD: ${{ github.sha }}",
-  "        run: >-",
-  "          npm run perf:read-model:staged-health --",
-  '          --target-url "$STAGED_TARGET_URL"',
-  '          --deployment-id "$STAGED_DEPLOYMENT_ID"',
-  '          --git-head "$EXPECTED_GIT_HEAD"',
-].join("\n");
-const POST_PROMOTION_PRODUCTION_ORIGIN_GUARD = [
-  "  if (target.origin !== PRODUCTION_ORIGIN) {",
-  "    throw new Error(",
-  '      "post-promotion target must be the programmable.market production origin",',
-  "    );",
-  "  }",
-].join("\n");
-const POST_PROMOTION_TARGET_GUARD_PREFIX = [
-  "export async function verifyPostPromotion(input) {",
-  "  const target = new URL(input.targetUrl);",
-  "  if (",
-  '    target.protocol !== "https:" ||',
-  '    target.username !== "" ||',
-  '    target.password !== "" ||',
-  '    target.pathname !== "/" ||',
-  '    target.search !== "" ||',
-  '    target.hash !== ""',
-  "  ) {",
-  '    throw new Error("post-promotion target must be an HTTPS origin");',
-  "  }",
-  POST_PROMOTION_PRODUCTION_ORIGIN_GUARD,
-].join("\n");
-
 function expectedDigest(path, approved, overrides) {
   return overrides?.[path] ?? approved;
 }
@@ -1101,136 +754,6 @@ function routeIsPermanentlyClosed(source, binding) {
     source.includes('code: "legacy_index_route_closed"') &&
     /status\s*:\s*410\b/u.test(source) &&
     /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(source)
-  );
-}
-
-function legacySchedulerWatchdogIsFailClosed(
-  workflowSource,
-  binding,
-  source,
-  expectedSha256Overrides,
-) {
-  const pinnedNodeSetup = [
-    "      - name: Install pinned Node.js runtime",
-    `        uses: ${binding?.nodeRuntime?.setupAction}@${binding?.nodeRuntime?.setupActionSha} # ${binding?.nodeRuntime?.setupActionRelease}`,
-    "        with:",
-    `          node-version: ${binding?.nodeRuntime?.version}`,
-    `          package-manager-cache: ${binding?.nodeRuntime?.packageManagerCache}`,
-  ].join("\n");
-  const pinnedNodeSetupIndex = workflowSource?.indexOf(pinnedNodeSetup) ?? -1;
-  const watchdogStepIndex =
-    workflowSource?.indexOf(
-      "      - name: Refresh and prove durable freshness",
-    ) ?? -1;
-  return (
-    typeof workflowSource === "string" &&
-    binding?.provider === "github-actions" &&
-    binding.schedule === "2-57/5 * * * *" &&
-    binding.targetOrigin === "https://programmable.market" &&
-    binding.environment === "production" &&
-    binding.secretEnvironment === "CRON_SECRET" &&
-    binding.concurrencyGroup === "production-read-model-refresh" &&
-    binding.freshnessMaximumAgeSeconds === 600 &&
-    binding.nodeRuntime?.setupAction === "actions/setup-node" &&
-    binding.nodeRuntime?.setupActionSha ===
-      "820762786026740c76f36085b0efc47a31fe5020" &&
-    binding.nodeRuntime?.setupActionRelease === "v7.0.0" &&
-    binding.nodeRuntime?.version === "24.14.0" &&
-    binding.nodeRuntime?.packageManagerCache === false &&
-    binding.rpcProof?.confirmedBlockRequired === true &&
-    binding.rpcProof?.providerPairRequired === true &&
-    binding.rpcProof?.maximumHeadAgeSeconds === 300 &&
-    sourceBindingMatches(
-      source,
-      binding.rpcProof?.healthRoute,
-      expectedSha256Overrides,
-    ) &&
-    sourceBindingMatches(
-      source,
-      binding.rpcProof?.rpcRuntime,
-      expectedSha256Overrides,
-    ) &&
-    sourceBindingMatches(
-      source,
-      binding.rpcProof?.deploymentConfig,
-      expectedSha256Overrides,
-    ) &&
-    sourceBindingMatches(
-      source,
-      binding.rpcProof?.providerConfig,
-      expectedSha256Overrides,
-    ) &&
-    sourceBindingMatches(
-      source,
-      binding.rpcProof?.currentMarketRpc,
-      expectedSha256Overrides,
-    ) &&
-    source(binding.rpcProof?.healthRoute?.path)?.includes(
-      "currentMarketOnchainDeployment(deployment)",
-    ) &&
-    source(APPROVED_OPERATIONS.legacyIndexer.route)?.includes(
-      "historicalReadOnchainDeployment(deployment)",
-    ) &&
-    workflowSource.includes("name: Refresh production read model") &&
-    workflowSource.includes('    - cron: "2-57/5 * * * *"') &&
-    workflowSource.includes("  workflow_dispatch:") &&
-    workflowSource.includes("permissions: {}") &&
-    workflowSource.includes("  group: production-read-model-refresh") &&
-    workflowSource.includes("  cancel-in-progress: false") &&
-    workflowSource.includes(
-      "github.repository == '0xprogrammable/programmable'",
-    ) &&
-    workflowSource.includes("github.ref == 'refs/heads/production'") &&
-    workflowSource.includes("    timeout-minutes: 9") &&
-    workflowSource.includes("      name: production") &&
-    pinnedNodeSetupIndex >= 0 &&
-    pinnedNodeSetupIndex < watchdogStepIndex &&
-    workflowSource.match(/uses:\s*actions\/setup-node@/gu)?.length === 1 &&
-    workflowSource.includes("CRON_SECRET: ${{ secrets.CRON_SECRET }}") &&
-    workflowSource.includes("TARGET_ORIGIN: https://programmable.market") &&
-    workflowSource.includes('targetOrigin !== "https://programmable.market"') &&
-    workflowSource.includes("secretBytes < 32") &&
-    workflowSource.includes("secretBytes > 1_024") &&
-    workflowSource.includes('/[\\r\\n]/u.test(cronSecret ?? "")') &&
-    workflowSource.includes('"/api/ops/index-v2"') &&
-    workflowSource.includes("headers.authorization = `Bearer ${cronSecret}`") &&
-    workflowSource.includes('redirect: "error"') &&
-    workflowSource.includes("signal: AbortSignal.timeout(timeoutMs)") &&
-    workflowSource.includes("const MAXIMUM_JSON_BYTES = 64 * 1024") &&
-    workflowSource.includes("bytes > MAXIMUM_JSON_BYTES") &&
-    workflowSource.includes("refresh.response.status !== 200") &&
-    workflowSource.includes('includes("no-store")') &&
-    workflowSource.includes("refresh.body?.ok !== true") &&
-    workflowSource.includes("refresh.body.portfolioHistory.blockNumber !==") &&
-    workflowSource.includes("refresh.body.portfolioHistory.tokenCount !==") &&
-    workflowSource.includes(
-      'refresh.body.portfolioHistory.status === "empty"',
-    ) &&
-    workflowSource.includes("health.response.status === 200") &&
-    workflowSource.includes('health.body?.status === "healthy"') &&
-    workflowSource.includes('health.body.indexSource === "durable"') &&
-    workflowSource.includes(
-      'health.body.indexedReadModel?.status === "disabled"',
-    ) &&
-    workflowSource.includes("healthBlock >= refreshBlock") &&
-    workflowSource.includes("index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS") &&
-    workflowSource.includes('rpc?.status === "healthy"') &&
-    workflowSource.includes('rpc?.read?.status === "available"') &&
-    workflowSource.includes('rpc?.quorum?.status === "verified"') &&
-    workflowSource.includes("confirmedBlockNumber >= healthBlock") &&
-    workflowSource.includes("confirmedBlockNumber >= refreshBlock") &&
-    workflowSource.includes("HEX32.test(confirmedBlock?.hash)") &&
-    workflowSource.includes('confirmedBlock.hash !== `0x${"00".repeat(32)}`') &&
-    workflowSource.includes("rpc?.freshness?.maxHeadAgeSeconds === 300") &&
-    workflowSource.includes('primary?.status === "available"') &&
-    workflowSource.includes('secondary?.status === "available"') &&
-    workflowSource.includes("primaryHead >= confirmedBlockNumber") &&
-    workflowSource.includes("secondaryHead >= confirmedBlockNumber") &&
-    !workflowSource.includes("actions/checkout") &&
-    !workflowSource.includes("VERCEL_TOKEN") &&
-    !workflowSource.includes("VERCEL_AUTOMATION_BYPASS_SECRET") &&
-    !workflowSource.includes("pull_request") &&
-    !workflowSource.includes("contents: write")
   );
 }
 
@@ -2269,63 +1792,26 @@ export function evaluateReadModelOperationsSourceContracts(
   const packageJson = parseJson(source("package.json"));
   const deployPolicy =
     source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
-  const wakeCanary = source(approvedTrigger.canary.path) ?? "";
   const environmentExample = source(".env.example") ?? "";
   const realBlockSlaOperator =
     source("scripts/perf/read-model-real-block-sla-operator.mjs") ?? "";
-  const stagedHealth =
-    source("scripts/perf/read-model-staged-health.mjs") ?? "";
-  const stagedDurableRefresh =
-    source("scripts/perf/read-model-staged-refresh.mjs") ?? "";
   const postPromotion =
     source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const postPromotionVerifierStart = postPromotion.indexOf(
     "export async function verifyPostPromotion(input) {",
   );
-  const postPromotionOriginGuardStart = postPromotion.indexOf(
-    POST_PROMOTION_PRODUCTION_ORIGIN_GUARD,
+  const postPromotionVerifierEnd = postPromotion.indexOf(
+    "async function main()",
     postPromotionVerifierStart,
   );
-  const postPromotionBindingGuardStart = postPromotion.indexOf(
-    "  if (\n    !/^dpl_",
-    postPromotionOriginGuardStart +
-      POST_PROMOTION_PRODUCTION_ORIGIN_GUARD.length,
-  );
-  const postPromotionOriginGuardBlock =
+  const postPromotionVerifierBlock =
     postPromotionVerifierStart >= 0 &&
-    postPromotionOriginGuardStart > postPromotionVerifierStart &&
-    postPromotionBindingGuardStart > postPromotionOriginGuardStart
-      ? postPromotion
-          .slice(postPromotionOriginGuardStart, postPromotionBindingGuardStart)
-          .trimEnd()
+    postPromotionVerifierEnd > postPromotionVerifierStart
+      ? postPromotion.slice(
+          postPromotionVerifierStart,
+          postPromotionVerifierEnd,
+        )
       : "";
-  const postCurrentEvidenceStart = postPromotion.indexOf(
-    "function exactCanonicalClassicNativeToken",
-  );
-  const postCurrentEvidenceEnd = postPromotion.indexOf(
-    "function exactExploreRanking",
-  );
-  const postCurrentEvidenceBlock =
-    postCurrentEvidenceStart >= 0 &&
-    postCurrentEvidenceEnd > postCurrentEvidenceStart
-      ? postPromotion.slice(postCurrentEvidenceStart, postCurrentEvidenceEnd)
-      : "";
-  const postGlobalRankingEnd = postPromotion.indexOf(
-    "function exactCurrentPublicDetail",
-  );
-  const postGlobalRankingBlock =
-    postCurrentEvidenceEnd >= 0 && postGlobalRankingEnd > postCurrentEvidenceEnd
-      ? postPromotion.slice(postCurrentEvidenceEnd, postGlobalRankingEnd)
-      : "";
-  const postDetailChartEnd = postPromotion.indexOf("function publicChecks");
-  const postDetailChartBlock =
-    postGlobalRankingEnd >= 0 && postDetailChartEnd > postGlobalRankingEnd
-      ? postPromotion.slice(postGlobalRankingEnd, postDetailChartEnd)
-      : "";
-  const bitqueryGoldenParity =
-    source("scripts/perf/bitquery-golden-market-parity.mjs") ?? "";
-  const bitqueryHistoricalRelease =
-    source("scripts/perf/bitquery-historical-release-gate.mjs") ?? "";
   const productionBinding =
     source("scripts/perf/read-model-production-binding.mjs") ?? "";
   const operationsRunbook =
@@ -2343,10 +1829,17 @@ export function evaluateReadModelOperationsSourceContracts(
     source("scripts/data-pipeline/cutover-runtime.mjs") ?? "";
   const bootstrapRuntime =
     source("scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs") ?? "";
-  const publicHealth = source("app/api/ops/health/route.ts") ?? "";
   const publicExplore = source("app/api/explore/route.ts") ?? "";
   const publicToken = source("app/api/explore/token/route.ts") ?? "";
   const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
+  const lastGoodLaunchCatalog =
+    source("lib/market-data/last-good-launch-catalog.server.ts") ?? "";
+  const dexscreenerExplore =
+    source("lib/market-data/dexscreener-explore.server.ts") ?? "";
+  const dexscreenerShadow =
+    source("lib/market-data/dexscreener-shadow.server.ts") ?? "";
+  const stagedPublicSmokeScript =
+    source("scripts/smoke-static-dexscreener-public-apis.mjs") ?? "";
   const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
   const publicClassicProfile =
     source("app/api/profile/classic-v3/route.ts") ?? "";
@@ -2355,14 +1848,35 @@ export function evaluateReadModelOperationsSourceContracts(
   const creatorClaimPrepare =
     source("app/api/explore/profile/claim/route.ts") ?? "";
   const tradePrepare = source("app/api/trade/prepare/route.ts") ?? "";
-  const primaryRpcLaunchCatalog =
-    source("lib/market-data/primary-rpc-launches.server.ts") ?? "";
   const websiteRpcProviders =
     source("lib/onchain/website-rpc-providers.server.ts") ?? "";
   const actionRpcProviders =
     source("lib/server/action-rpc-quorum.server.ts") ?? "";
   const actionRpcIdentity =
     source("lib/server/action-rpc-identity.server.ts") ?? "";
+  const primaryRpcLaunchCatalog =
+    source("lib/market-data/primary-rpc-launches.server.ts") ?? "";
+  const primaryResolverStart = websiteRpcProviders.indexOf(
+    "export function productionMainnetRpcPrimary(",
+  );
+  const primaryResolverEnd = websiteRpcProviders.indexOf(
+    "\nexport function ",
+    primaryResolverStart + 1,
+  );
+  const primaryResolver = primaryResolverStart >= 0
+    ? websiteRpcProviders.slice(
+        primaryResolverStart,
+        primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
+      )
+    : "";
+  const classicProfileGetEnd = publicClassicProfile.indexOf("export async function POST");
+  const publicClassicProfileGet = classicProfileGetEnd >= 0
+    ? publicClassicProfile.slice(0, classicProfileGetEnd)
+    : "";
+  const stockProfileGetEnd = publicStockProfile.indexOf("export async function POST");
+  const publicStockProfileGet = stockProfileGetEnd >= 0
+    ? publicStockProfile.slice(0, stockProfileGetEnd)
+    : "";
   const retiredCandidateCutover = Object.freeze({
     productionRunbook: productionCutoverRunbook,
     envioRunbook: envioCandidateRunbook,
@@ -2442,7 +1956,7 @@ export function evaluateReadModelOperationsSourceContracts(
     "the stream secret name is documented without a value and is fail-closed in deploy policy",
   );
   const stagedBitquerySmoke = deployWorkflow.indexOf(
-    "Smoke staged Bitquery public APIs",
+    "Smoke staged static identity and Dex public APIs",
   );
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
     "Reverify staged candidate binding",
@@ -2452,219 +1966,6 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
-  const stagedBitquery503Retry =
-    /const requestUrl = new URL\(path, target\);[\s\S]*for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{[\s\S]*const response = await fetch\(requestUrl, \{[\s\S]*if \(response\.status === 503 && attempt === 0\) continue;[\s\S]*if \(!response\.ok\)/u.test(
-      stagedBitquerySmokeBlock,
-    );
-  const stagedBitqueryEmptyFdvRetry =
-    stagedBitquerySmokeBlock.includes(
-      "async function requestJson(path, retryWhen = null)",
-    ) &&
-    /response\.status === 200 &&\s*attempt === 0 &&\s*retryWhen\?\.\(result\) === true/u.test(
-      stagedBitquerySmokeBlock,
-    ) &&
-    stagedBitquerySmokeBlock.includes("retryWhen?.(result) === true") &&
-    stagedBitquerySmokeBlock.includes(
-      '["market-cap", "market-cap-asc"].includes(expectedSort)',
-    ) &&
-    stagedBitquerySmokeBlock.includes(
-      "response.body?.sort === expectedSort",
-    ) &&
-    stagedBitquerySmokeBlock.includes(
-      'token.valuation.freshness === "current"',
-    ) &&
-    stagedBitquerySmokeBlock.includes('token.valuation.metric === "fdv"') &&
-    stagedBitquerySmokeBlock.includes(
-      'token.valuation.supplyBasis === "total"',
-    ) &&
-    stagedBitquerySmokeBlock.includes('token.valuation.currency === "usd"') &&
-    stagedBitquerySmokeBlock.includes('token.valuation.source === "bitquery"') &&
-    stagedBitquerySmokeBlock.includes(
-      "positiveInteger.test(String(token.valuation.valueWad ?? \"\"))",
-    ) &&
-    stagedBitquerySmokeBlock.includes(
-      '"/api/explore?limit=20&page=1&sort=market-cap",\n' +
-        "            (response) =>\n" +
-        '              emptyCurrentBitqueryFdvRanking(response, "market-cap"),',
-    ) &&
-    (stagedBitquerySmokeBlock.match(/emptyCurrentBitqueryFdvRanking/gu)?.length ?? 0) === 2;
-  const stagedAllowedMarketReadStatuses =
-    /\[\s*"current",\s*"transport-unavailable",\s*"response-unavailable",?\s*\]\.includes\(\s*highestMarketReadStatus,?\s*\)/u.test(
-      stagedBitquerySmokeBlock,
-    );
-  const stagedCurrentMarketBranch = stagedBitquerySmokeBlock.indexOf(
-    'if (marketReadStatus === "current")',
-  );
-  const stagedDegradedMarketBranch = stagedBitquerySmokeBlock.indexOf(
-    "} else {",
-    stagedCurrentMarketBranch,
-  );
-  const stagedDetailProbe = stagedBitquerySmokeBlock.indexOf(
-    '"/api/explore/token?address="',
-  );
-  const stagedChartProbe = stagedBitquerySmokeBlock.indexOf(
-    '"/api/explore/token/chart?address="',
-  );
-  const stagedProfileProbe = stagedBitquerySmokeBlock.indexOf(
-    "const profileToken =",
-  );
-  const stagedLaunchIdentityContractStart = stagedBitquerySmokeBlock.indexOf(
-    "function exactCurrentLaunchIdentity(response)",
-  );
-  const stagedLaunchIdentityContractEnd = stagedBitquerySmokeBlock.indexOf(
-    "function exactExploreIdentity(token)",
-    stagedLaunchIdentityContractStart,
-  );
-  const stagedLaunchIdentityContractBlock =
-    stagedLaunchIdentityContractStart >= 0 &&
-    stagedLaunchIdentityContractEnd > stagedLaunchIdentityContractStart
-      ? stagedBitquerySmokeBlock.slice(
-          stagedLaunchIdentityContractStart,
-          stagedLaunchIdentityContractEnd,
-        )
-      : "";
-  const stagedLaunchIdentityContract = includesEverySourceFragment(
-    stagedLaunchIdentityContractBlock,
-    [
-      'launchIdentity?.status === "current"',
-      'launchIdentity.canonical === "current"',
-      'launchIdentity.custom === "current"',
-      "Number.isSafeInteger(launchIdentity.ageMs)",
-      "launchIdentity.ageMs >= 0",
-      "launchIdentity.ageMs < 60_000",
-      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
-      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
-    ],
-  );
-  const stagedBitqueryMarketReadStatusContract =
-    stagedCurrentMarketBranch >= 0 &&
-    stagedDetailProbe > stagedCurrentMarketBranch &&
-    stagedChartProbe > stagedDetailProbe &&
-    stagedDegradedMarketBranch > stagedChartProbe &&
-    stagedProfileProbe > stagedDegradedMarketBranch &&
-    stagedLaunchIdentityContract &&
-    stagedAllowedMarketReadStatuses &&
-    includesEverySourceFragment(stagedBitquerySmokeBlock, [
-      "status: response.status",
-      "highest.status !== 200",
-      "newest.status !== 200",
-      '"x-programmable-market-read-status"',
-      '"current",\n              "transport-unavailable",\n              "response-unavailable",',
-      "newestMarketReadStatus !== highestMarketReadStatus",
-      "exactCurrentExploreSources(highest)",
-      "exactCurrentExploreSources(newest)",
-      "exactCurrentExploreSources(response) &&",
-      "exactExplorePage(response, tokens) &&",
-      "exactExplorePage(highest, highestTokens)",
-      "exactExplorePage(newest, newestTokens)",
-      "function exactCurrentLaunchIdentity(response)",
-      'launchIdentity?.status === "current"',
-      'launchIdentity.canonical === "current"',
-      'launchIdentity.custom === "current"',
-      "Number.isSafeInteger(launchIdentity.ageMs)",
-      "launchIdentity.ageMs >= 0",
-      "launchIdentity.ageMs < 60_000",
-      'positiveInteger.test(String(launchIdentity.asOfBlock ?? ""))',
-      'positiveInteger.test(\n                String(launchIdentity.referenceBlock ?? ""),',
-      "!exactCurrentLaunchIdentity(highest)",
-      "!exactCurrentLaunchIdentity(newest)",
-      "response.body?.page === 1",
-      "response.body?.pageSize === 20",
-      "total >= tokens.length",
-      "tokens.length === Math.min(20, total)",
-      "totalPages === Math.ceil(total / 20)",
-      "function exactExploreIdentity(token)",
-      'typeof token?.id !== "string" || token.id.trim().length === 0',
-      'token.exploreKind === "token" &&',
-      'address.test(String(token.tokenAddress ?? "").toLowerCase())',
-      'token.tokenAddress.toLowerCase()',
-      'token.exploreKind === "custom-project" &&',
-      'String(token.customProjectId ?? "")',
-      'String(token.customLaunchId ?? "")',
-      '"custom-project",\n                token.id,\n                token.customProjectId,\n                token.customLaunchId,',
-      "function exactDegradedLaunchOrder(",
-      "highest.body?.page !== newest.body?.page",
-      "highest.body?.pageSize !== newest.body?.pageSize",
-      "highest.body?.total !== newest.body?.total",
-      "highest.body?.totalPages !== newest.body?.totalPages",
-      "highestTokens.length !== newestTokens.length",
-      "const highestIdentities = highestTokens.map(exactExploreIdentity)",
-      "const newestIdentities = newestTokens.map(exactExploreIdentity)",
-      "highestIdentities.every((identity) => identity !== null)",
-      "newestIdentities.every((identity) => identity !== null)",
-      "new Set(highestIdentities).size === highestIdentities.length",
-      "new Set(newestIdentities).size === newestIdentities.length",
-      "(identity, index) => identity === newestIdentities[index]",
-      'response.headers.get("x-programmable-read-source") ===\n                "drpc+bitquery"',
-      'response.headers.get("x-programmable-market-source") ===\n                "bitquery"',
-      'response.headers.get("x-programmable-price-source") ===\n                "bitquery"',
-      'response.headers.get("x-programmable-market-provider") ===\n                "bitquery"',
-      'response.headers.get("cache-control") === "no-store"',
-      'response.headers.get("x-programmable-read-source") === "drpc"',
-      'response.headers.get("x-programmable-data-quality") === "partial"',
-      '"transport-unavailable"',
-      '!response.headers.has("x-programmable-market-source")',
-      '!response.headers.has("x-programmable-price-source")',
-      '!response.headers.has("x-programmable-market-as-of")',
-      'response.body?.dataQuality?.status === "partial"',
-      'launchIdentity?.status === "current"',
-      'launchIdentity.canonical === "current"',
-      'launchIdentity.custom === "current"',
-      "function exactUnavailableMarketRead(marketRead, readStatus)",
-      'marketRead?.provider === "bitquery"',
-      'marketRead.status === "unavailable"',
-      '["market-core", "market-liquidity", "market-price"].includes(\n' +
-        "                marketRead.phase,\n" +
-        "              )",
-      'readStatus === "transport-unavailable"',
-      'marketRead.category === "transport"',
-      "marketRead.reason === undefined",
-      "marketRead.httpStatus === undefined",
-      'readStatus === "response-unavailable"',
-      'marketRead.category === "response"',
-      'marketRead.reason === "http-status"',
-      "marketRead.httpStatus === 402",
-      "exactUnavailableMarketRead(marketRead, readStatus)",
-      'valuation?.status === "unavailable"',
-      'valuation.metric === "fdv"',
-      "valuation.available === 0",
-      "valuation.unavailable === tokens.length",
-      "valuation.stale === 0",
-      "valuation.unknown === 0",
-      "valuation.asOfBlock === null",
-      "valuation.asOfTime === null",
-      "tokens.length > 0",
-      "tokens.every(exactUnavailableValuation)",
-      "valuation.asOfTime === null &&\n              tokens.length > 0 &&\n              tokens.every(exactUnavailableValuation)",
-      'valuation?.reason === "no-market"',
-      'token?.exploreKind === "custom-project"',
-      "token.markets.length === 0",
-      'valuation.reason === "source-unavailable" || exactNoMarket',
-      "Object.keys(valuation).length === 2",
-      "token?.fdvUsdWad === undefined",
-      "token?.marketCapUsdWad === undefined",
-      "token?.marketCapEthWad === undefined",
-      "token?.priceUsdWad === undefined",
-      "token?.priceEthWad === undefined",
-      "token?.liquidityEvidence === undefined",
-      "token?.marketData === undefined",
-      "token?.uniswapV4Pool === undefined",
-      'ranking?.status === "unavailable"',
-      'ranking.requested === "fdv"',
-      'ranking.applied === "launch-order"',
-      ": ranking === undefined",
-      "exactUnavailableExplore(\n                highest,\n                highestTokens,\n                true,",
-      "exactUnavailableExplore(newest, newestTokens, false)",
-      "!exactDegradedLaunchOrder(\n                highest,\n                highestTokens,\n                newest,\n                newestTokens,",
-      'detailStatus = "skipped-provider-unavailable"',
-      'chartStatus = "skipped-provider-unavailable"',
-      '"verified-staged-drpc-bitquery-public-apis"',
-      '"verified-staged-drpc-launches-bitquery-transport-unavailable"',
-      '"verified-staged-drpc-launches-bitquery-response-unavailable"',
-      '"market_read_status=" + marketReadStatus',
-      '"detail_status=" + detailStatus',
-      '"chart_status=" + chartStatus',
-    ]);
   const stagedProviderHandoff = includesEverySourceFragment(deployWorkflow, [
     "MARKET_READ_STATUS: $\{{ steps.public-provider-smoke.outputs.market_read_status }}",
     "DETAIL_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.detail_status }}",
@@ -2673,229 +1974,7 @@ export function evaluateReadModelOperationsSourceContracts(
     'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
     'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
   ]);
-  const publicIdentityAndMarketRoutes = [
-    publicExplore,
-    publicToken,
-    publicChart,
-  ];
-  const classicProfilePostStart = publicClassicProfile.indexOf(
-    "export async function POST(",
-  );
-  const stockProfilePostStart = publicStockProfile.indexOf(
-    "export async function POST(",
-  );
-  const publicClassicProfileGet =
-    classicProfilePostStart >= 0
-      ? publicClassicProfile.slice(0, classicProfilePostStart)
-      : publicClassicProfile;
-  const publicStockProfileGet =
-    stockProfilePostStart >= 0
-      ? publicStockProfile.slice(0, stockProfilePostStart)
-      : publicStockProfile;
-  const tokenCanonicalHeadersStart = publicToken.indexOf(
-    "function canonicalResponseHeaders(",
-  );
-  const tokenCustomHeadersStart = publicToken.indexOf(
-    "function customResponseHeaders(",
-    tokenCanonicalHeadersStart + 1,
-  );
-  const tokenUnavailableResponseStart = publicToken.indexOf(
-    "function unavailableResponse(",
-    tokenCustomHeadersStart + 1,
-  );
-  const tokenCanonicalHeaders =
-    tokenCanonicalHeadersStart >= 0 && tokenCustomHeadersStart >= 0
-      ? publicToken.slice(tokenCanonicalHeadersStart, tokenCustomHeadersStart)
-      : "";
-  const tokenCustomHeaders =
-    tokenCustomHeadersStart >= 0 && tokenUnavailableResponseStart >= 0
-      ? publicToken.slice(tokenCustomHeadersStart, tokenUnavailableResponseStart)
-      : "";
-  const tokenCatalogReadStart = publicToken.indexOf(
-    "catalog = await readPrimaryRpcExploreEntriesV1(",
-  );
-  const tokenCanonicalEntryStart = publicToken.indexOf(
-    "const canonicalEntry = catalog.entries.find(",
-    tokenCatalogReadStart + 1,
-  );
-  const tokenCatalogFailureStart = publicToken.indexOf(
-    "} catch (error) {",
-    tokenCatalogReadStart + 1,
-  );
-  const tokenCatalogFailure =
-    tokenCatalogFailureStart >= 0 && tokenCanonicalEntryStart >= 0
-      ? publicToken.slice(tokenCatalogFailureStart, tokenCanonicalEntryStart)
-      : "";
-  const tokenCustomMissStart = publicToken.indexOf(
-    "if (entry === null) {",
-    tokenCanonicalEntryStart + 1,
-  );
-  const tokenCustomMissEnd = publicToken.indexOf(
-    "if (!entry) {",
-    tokenCustomMissStart + 1,
-  );
-  const tokenCustomMiss =
-    tokenCustomMissStart >= 0 && tokenCustomMissEnd >= 0
-      ? publicToken.slice(tokenCustomMissStart, tokenCustomMissEnd)
-      : "";
-  const tokenCanonicalHeaderContract =
-    includesEverySourceFragment(tokenCanonicalHeaders, [
-      '"X-Programmable-Launch-Source": "drpc"',
-      '"X-Programmable-Read-Source": input.marketRead ? "drpc+bitquery" : "drpc"',
-      '? { "X-Programmable-Market-Source": "bitquery" }',
-      '? { "X-Programmable-Price-Source": "bitquery" }',
-    ]) && !tokenCanonicalHeaders.includes("registry.custom-launched");
-  const tokenCustomHeaderContract = includesEverySourceFragment(
-    tokenCustomHeaders,
-    [
-      '"X-Programmable-Launch-Source": "registry.custom-launched"',
-      '? "drpc+registry.custom-launched+bitquery"',
-      ': "drpc+registry.custom-launched"',
-      '? { "X-Programmable-Market-Source": "bitquery" }',
-      '? { "X-Programmable-Price-Source": "bitquery" }',
-    ],
-  );
-  const tokenCustomSourceContract =
-    tokenCatalogReadStart >= 0 &&
-    tokenCatalogFailureStart > tokenCatalogReadStart &&
-    tokenCanonicalEntryStart > tokenCatalogFailureStart &&
-    includesEverySourceFragment(tokenCatalogFailure, [
-      "safePrimaryRpcLaunchCatalogError(error)",
-      "return unavailableResponse(canonicalResponseHeaders({",
-    ]) &&
-    !tokenCatalogFailure.includes("readProductionCustomExploreDirectoryV1") &&
-    tokenCustomMissStart > tokenCanonicalEntryStart &&
-    tokenCustomMissEnd > tokenCustomMissStart &&
-    includesEverySourceFragment(tokenCustomMiss, [
-      "await readProductionCustomExploreDirectoryV1(",
-      "return unavailableResponse(customResponseHeaders({",
-      "isCustom = entry !== null",
-    ]) &&
-    publicToken.includes("let isCustom = false") &&
-    publicToken.includes(
-      "headers: (isCustom\n          ? customResponseHeaders\n          : canonicalResponseHeaders)(",
-    );
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
-  const publicRuntimeRoutes = [
-    ...publicIdentityAndMarketRoutes,
-    publicCreatorProfile,
-    ...publicActionRoutes,
-  ];
-  const obsoletePublicBinding =
-    /readAlchemy|readDurable|valuationSnapshot|readOfficialUniswap|StateView|Chainlink|Envio|readBitqueryExploreEntriesV1|readBitqueryCreatorProfile|readBitqueryClassicV3Profile|readBitqueryStockPairedProfile|readBitqueryExploreModelV1/u;
-  const primaryResolverStart = websiteRpcProviders.indexOf(
-    "export function productionMainnetRpcPrimary(",
-  );
-  const primaryResolverEnd = websiteRpcProviders.indexOf(
-    "\nexport function ",
-    primaryResolverStart + 1,
-  );
-  const primaryResolver =
-    primaryResolverStart >= 0
-      ? websiteRpcProviders.slice(
-          primaryResolverStart,
-          primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
-        )
-      : "";
-  const publicExploreHasMarketReadStatus = publicExplore.includes(
-    '"X-Programmable-Market-Read-Status"',
-  );
-  const publicExploreFailSoftStart = publicExplore.indexOf(
-    "function isFailSoftMarketReadFailure(",
-  );
-  const publicExploreFailSoftEnd = publicExplore.indexOf(
-    "function unavailableMarketReadStatus(",
-    publicExploreFailSoftStart,
-  );
-  const publicExploreFailSoftBlock =
-    publicExploreFailSoftStart >= 0 &&
-    publicExploreFailSoftEnd > publicExploreFailSoftStart
-      ? publicExplore.slice(publicExploreFailSoftStart, publicExploreFailSoftEnd)
-      : "";
-  const publicExploreFailSoftContract = includesEverySourceFragment(
-    publicExploreFailSoftBlock,
-    [
-      "identityEntryCount > 0",
-      "marketIdentityCount > 0",
-      "!signal.aborted",
-      "error instanceof BitqueryMarketDataError",
-      "): error is FailSoftMarketReadFailure {",
-      'error.category === "transport"',
-      'error.category === "response"',
-      'error.reason === "http-status"',
-      "error.httpStatus === 402",
-      '(error.phase === "market-core" ||\n' +
-        '      error.phase === "market-liquidity" ||\n' +
-        '      error.phase === "market-price")',
-    ],
-  );
-  const publicExploreLegacyHealthyHeaderContract =
-    !publicExploreHasMarketReadStatus &&
-    includesEverySourceFragment(publicExplore, [
-      '"X-Programmable-Launch-Source": "drpc"',
-      '"X-Programmable-Read-Source": "drpc+bitquery"',
-      '"X-Programmable-Market-Source": "bitquery"',
-      '"X-Programmable-Price-Source": "bitquery"',
-    ]);
-  const publicExploreMarketReadContract =
-    publicExploreHasMarketReadStatus &&
-    publicExploreFailSoftContract &&
-    includesEverySourceFragment(publicExplore, [
-      "function isFailSoftMarketReadFailure(",
-      "type FailSoftMarketReadFailure =",
-      "category: \"transport\";",
-      "category: \"response\";",
-      'reason: "http-status";',
-      "httpStatus: 402;",
-      "function unavailableMarketReadStatus(error: FailSoftMarketReadFailure)",
-      '? "transport-unavailable" as const',
-      ': "response-unavailable" as const',
-      "marketReadFailure === null",
-      "let marketReadFailure: FailSoftMarketReadFailure | null = null",
-      "marketReadFailure = error",
-      "marketByToken = new Map()",
-      'console.error("Explore market read unavailable", {',
-      "market: safeBitqueryMarketDataError(error)",
-      'provider: "bitquery" as const',
-      'status: "unavailable" as const',
-      "category: marketReadFailure.category",
-      "phase: marketReadFailure.phase",
-      'reason: "http-status" as const',
-      "httpStatus: 402 as const",
-      'requested: "fdv" as const',
-      'applied: "launch-order" as const',
-      '? "public, max-age=0, s-maxage=2"',
-      ': "no-store"',
-      '"X-Programmable-Launch-Source": "drpc"',
-      '"X-Programmable-Read-Source": marketReadFailure === null',
-      '? "drpc+bitquery"',
-      ': "drpc"',
-      '"X-Programmable-Market-Read-Status":',
-      '? "current"',
-      ': unavailableMarketReadStatus(marketReadFailure)',
-      '"X-Programmable-Market-Provider": "bitquery"',
-      '"X-Programmable-Market-Source": "bitquery"',
-      '"X-Programmable-Price-Source": "bitquery"',
-      "marketReadFailure === null &&",
-      '"Cache-Control": marketReadFailure === null\n' +
-        '            ? "public, max-age=0, s-maxage=2"\n' +
-        '            : "no-store",',
-      '"X-Programmable-Read-Source": marketReadFailure === null\n' +
-        '            ? "drpc+bitquery"\n' +
-        '            : "drpc",',
-      '"X-Programmable-Market-Read-Status":\n' +
-        "            marketReadFailure === null\n" +
-        '              ? "current"\n' +
-        "              : unavailableMarketReadStatus(marketReadFailure),",
-      "...(marketReadFailure === null\n" +
-        "            ? {\n" +
-        '                "X-Programmable-Market-Source": "bitquery",\n' +
-        '                "X-Programmable-Price-Source": "bitquery",\n' +
-        "              }\n" +
-        "            : {}),",
-      "...(marketReadFailure === null &&\n" +
-        "              dataQuality.valuation.asOfTime",
-    ]);
   const primaryRpcLaunchCatalogCacheStart =
     primaryRpcLaunchCatalog.indexOf(
       "export function createPrimaryRpcLaunchCatalogCacheV1",
@@ -2948,58 +2027,111 @@ export function evaluateReadModelOperationsSourceContracts(
     primaryRpcLaunchCatalogCacheContract,
     "the dRPC launch catalog cache is commitment-bound, singleflight, fresh for less than 60 seconds, and never serves stale data",
   );
+  const fastLanePublicProviderContract =
+    includesEverySourceFragment(lastGoodLaunchCatalog, [
+      'getOnchainDeployment("production")',
+      "readDurableExploreModel(deployment, options)",
+      'durable.reason !== "stale"',
+      "throw new Error(`Durable launch catalog is ${durable.reason}`)",
+      'source: "durable-blob"',
+      'kind: "durable-envelope"',
+      "mergeLastGoodLaunchCatalogEntriesV1",
+      'entry.exploreKind === "custom-project"',
+      "entry.tokenAddress !== undefined || entry.markets.length > 0",
+      "lastGoodLaunchIdentityCommitmentV1",
+      'canonicalSha256("programmable.fast-lane-identity.v1"',
+    ]) &&
+    !/committedBaseline|committed-envio-baseline|productionMainnetRpcPrimary|readPrimaryRpcExploreEntriesV1|readBitquery/iu.test(
+      lastGoodLaunchCatalog,
+    ) &&
+    includesEverySourceFragment(dexscreenerExplore, [
+      "exploreEntriesMarketIdentitiesV1(entries)",
+      "exploreEntryMarketIdentitiesV1(entry)",
+      "readDexscreenerMarketShadowV1(identities, wait)",
+      'provider: "dexscreener"',
+      'currency: "USD"',
+      'source: "dexscreener"',
+      ': "source-unavailable"',
+    ]) &&
+    includesEverySourceFragment(dexscreenerShadow, [
+      "DEFAULT_TIMEOUT_MS = 3_000",
+      "DEFAULT_CACHE_TTL_MS = 5 * 60 * 1_000",
+      "DEFAULT_FAILURE_CACHE_TTL_MS = 15_000",
+      "DEFAULT_MAXIMUM_CONCURRENT_BATCHES = 2",
+      "DEFAULT_MINIMUM_REQUEST_INTERVAL_MS = 1_000",
+      "DEFAULT_MAXIMUM_READ_DURATION_MS = 7_000",
+      "const cache = new Map<string, CachedSnapshot>()",
+      "const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>()",
+    ]) &&
+    includesEverySourceFragment(publicExplore, [
+      "readLastGoodLaunchCatalogV1({",
+      "readProductionCustomExploreDirectoryV1(",
+      "mergeLastGoodLaunchCatalogEntriesV1(",
+      "lastGoodLaunchIdentityCommitmentV1(",
+      "readDexscreenerExploreEntriesV1(filtered, {",
+      "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
+      'let customStatus: "current" | "unavailable" = "unavailable"',
+      'requested: "fdv" as const',
+      'applied: rankingStatus === "complete"',
+      '"qualified-fdv-then-launch-order" as const',
+      '"launch-order" as const',
+      '"X-Programmable-Launch-Source": launchSource',
+      '"X-Programmable-Read-Source": `${launchSource}+dexscreener`',
+      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Identity-Last-Indexed-At": catalog.generatedAt',
+    ]) &&
+    !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
+      publicExplore,
+    ) &&
+    includesEverySourceFragment(publicToken, [
+      "readLastGoodLaunchCatalogV1({",
+      "readProductionCustomExploreDirectoryV1(",
+      "mergeLastGoodLaunchCatalogEntriesV1(",
+      "lastGoodLaunchIdentityCommitmentV1(",
+      "const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(",
+      "readDexscreenerExploreEntriesV1([entry], {",
+      '"X-Programmable-Launch-Source": input.launchSource',
+      '"X-Programmable-Read-Source": `${input.launchSource}+dexscreener`',
+      '"X-Programmable-Market-Provider": "dexscreener"',
+      'valuation: { status: "unavailable", reason: "source-unavailable" }',
+    ]) &&
+    !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
+      publicToken,
+    ) &&
+    includesEverySourceFragment(publicChart, [
+      "readLastGoodLaunchCatalogV1()",
+      "mergeLastGoodLaunchCatalogEntriesV1(",
+      "readProductionCustomExploreDirectoryV1(request.signal)",
+      'let customStatus: "current" | "unavailable" = "unavailable"',
+      '`${catalog.source}+registry.custom-launched`',
+      'schemaVersion: "programmable.market-chart-unavailable.v1"',
+      'reason: "history-provider-unavailable"',
+      'source: null',
+      '"Cache-Control": "no-store"',
+    ]) &&
+    !/readPrimaryRpcExploreEntriesV1|readBitquery|productionMainnetRpcPrimary/iu.test(
+      publicChart,
+    );
   check(
     "ops-public-provider-split-source-contract",
-    exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&
-      publicHealth.includes("bitqueryMarketDataConfigured") &&
-      !/readDurableExploreModel|readOperationalRpcHealth|currentMarketOnchainDeployment/u.test(
-        publicHealth,
-      ) &&
-      websiteRpcProviders.includes(
-        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
-      ) &&
-      websiteRpcProviders.includes(
-        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
-      ) &&
-      websiteRpcProviders.includes(
-        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
-      ) &&
-      primaryResolver.includes("WEBSITE_MAINNET_RPC_ENV.primaryProvider") &&
-      primaryResolver.includes("WEBSITE_MAINNET_RPC_ENV.primaryUrl") &&
-      primaryResolver.includes("WEBSITE_MAINNET_RPC_ENV.primaryCommitment") &&
-      primaryResolver.includes('primary.provider !== "drpc"') &&
-      !/secondary|fallback|quorum/iu.test(primaryResolver) &&
-      primaryRpcLaunchCatalog.includes("readPrimaryRpcExploreEntriesV1") &&
-      primaryRpcLaunchCatalog.includes("productionMainnetRpcPrimary") &&
-      primaryRpcLaunchCatalog.includes('source: "drpc"') &&
-      !/bitquery|alchemy|durable|blob|secondary|fallback|quorum|subgraph|stateview|chainlink|envio/iu.test(
-        primaryRpcLaunchCatalog,
-      ) &&
-      publicIdentityAndMarketRoutes.every((route) =>
-        route.includes("readPrimaryRpcExploreEntriesV1"),
-      ) &&
-      publicExplore.includes("readBitqueryTokenMarketDataStrictV1") &&
-      publicToken.includes("readBitqueryTokenMarketDataStrictV1") &&
-      publicChart.includes("readBitqueryMarketChartStrictV1") &&
-      (publicExploreLegacyHealthyHeaderContract ||
-        publicExploreMarketReadContract) &&
-      publicChart.includes('"X-Programmable-Launch-Source": "drpc"') &&
-      publicChart.includes(
-        '"X-Programmable-Read-Source": "drpc+bitquery"',
-      ) &&
-      publicChart.includes(
-        '"X-Programmable-Market-Source": "bitquery"',
-      ) &&
-      tokenCanonicalHeaderContract &&
-      tokenCustomHeaderContract &&
-      tokenCustomSourceContract &&
-      publicCreatorProfile.includes("readCreatorProfile") &&
-      publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
-      publicCreatorProfile.includes('"X-Programmable-Launch-Source": "drpc"') &&
-      publicCreatorProfile.includes('"X-Programmable-Read-Source": "drpc"') &&
-      publicCreatorProfile.includes(
-        '"X-Programmable-Rpc-Provider": "drpc-primary"',
-      ) &&
+    fastLanePublicProviderContract,
+    "Explore list and token detail use a validated last-good identity catalog plus bounded exact-identity Dexscreener enrichment while profile and action routes retain their committed dRPC semantics",
+  );
+  const publicProfileAndActionRoutes = [
+    publicCreatorProfile,
+    publicClassicProfileGet,
+    publicStockProfileGet,
+    ...publicActionRoutes,
+  ];
+  check(
+    "ops-profile-claim-trade-provider-boundary",
+    includesEverySourceFragment(publicCreatorProfile, [
+      "readCreatorProfile",
+      "productionMainnetRpcPrimary",
+      '"X-Programmable-Launch-Source": "drpc"',
+      '"X-Programmable-Read-Source": "drpc"',
+      '"X-Programmable-Rpc-Provider": "drpc-primary"',
+    ]) &&
       publicClassicProfileGet.includes("classicV3ActionRpcProvider") &&
       publicStockProfileGet.includes("stockPairedActionRpcProvider") &&
       [publicClassicProfileGet, publicStockProfileGet].every(
@@ -3007,15 +2139,29 @@ export function evaluateReadModelOperationsSourceContracts(
           route.includes('"X-Programmable-Read-Source": "rpc"') &&
           route.includes('"X-Programmable-Rpc-Provider": "drpc-primary"'),
       ) &&
-      actionRpcProviders.includes("createCommittedActionRpcProvider") &&
-      actionRpcProviders.includes("tradeActionRpcProvider") &&
-      actionRpcProviders.includes("creatorClaimRpcProvider") &&
-      actionRpcProviders.includes(
+      includesEverySourceFragment(websiteRpcProviders, [
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      ]) &&
+      includesEverySourceFragment(primaryResolver, [
+        "WEBSITE_MAINNET_RPC_ENV.primaryProvider",
+        "WEBSITE_MAINNET_RPC_ENV.primaryUrl",
+        "WEBSITE_MAINNET_RPC_ENV.primaryCommitment",
+        'primary.provider !== "drpc"',
+      ]) &&
+      !/secondary|fallback|quorum/iu.test(primaryResolver) &&
+      includesEverySourceFragment(actionRpcProviders, [
+        "createCommittedActionRpcProvider",
+        "tradeActionRpcProvider",
+        "creatorClaimRpcProvider",
         'Object.defineProperty(provider, "endpoint"',
-      ) &&
-      actionRpcProviders.includes("enumerable: false") &&
-      actionRpcIdentity.includes("readTradeActionModelFromRpc") &&
-      actionRpcIdentity.includes("readCreatorClaimIdentityFromRpc") &&
+        "enumerable: false",
+      ]) &&
+      includesEverySourceFragment(actionRpcIdentity, [
+        "readTradeActionModelFromRpc",
+        "readCreatorClaimIdentityFromRpc",
+      ]) &&
       !/bitquery|alchemy|durable|blob|secondary|fallback|quorum|subgraph|stateview|chainlink|envio/iu.test(
         actionRpcIdentity,
       ) &&
@@ -3034,14 +2180,11 @@ export function evaluateReadModelOperationsSourceContracts(
             route,
           ),
       ) &&
-      publicRuntimeRoutes.every(
+      publicProfileAndActionRoutes.every(
         (route) =>
-          !obsoletePublicBinding.test(route) &&
-          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(
-            route,
-          ),
+          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
-    "public identity and action state use one commitment-bound dRPC primary, Custom Registry detail is a separate post-miss source, and market, FDV and charts use explicit Bitquery reads with bounded transport or exact HTTP 402 Explore degradation",
+    "Profile, Claim and Trade retain singular commitment-bound dRPC reads, non-enumerable endpoints, no write authority and no hidden fallback",
   );
   check(
     "ops-protected-public-provider-stage-smoke",
@@ -3050,47 +2193,93 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
-      stagedBitquerySmokeBlock.includes('requestJson("/api/ops/health")') &&
-      stagedBitquery503Retry &&
-      stagedBitqueryEmptyFdvRetry &&
-      stagedBitqueryMarketReadStatusContract &&
+      stagedBitquerySmokeBlock.includes(
+        "node scripts/smoke-static-dexscreener-public-apis.mjs",
+      ) &&
+      (stagedBitquerySmokeBlock.match(
+        /smoke-static-dexscreener-public-apis\.mjs/gu,
+      )?.length ?? 0) === 1 &&
       stagedProviderHandoff &&
-      stagedBitquerySmokeBlock.includes("sort=market-cap") &&
-      stagedBitquerySmokeBlock.includes("sort=newest") &&
-      stagedBitquerySmokeBlock.includes("/api/explore/token?address=") &&
-      stagedBitquerySmokeBlock.includes("/api/explore/token/chart?address=") &&
-      stagedBitquerySmokeBlock.includes("/api/explore/profile?account=") &&
-      stagedBitquerySmokeBlock.includes("x-programmable-launch-source") &&
-      stagedBitquerySmokeBlock.includes("x-programmable-read-source") &&
-      stagedBitquerySmokeBlock.includes("x-programmable-market-source") &&
-      stagedBitquerySmokeBlock.includes('"drpc"') &&
-      stagedBitquerySmokeBlock.includes('"drpc+bitquery"') &&
-      stagedBitquerySmokeBlock.includes('"bitquery"') &&
-      stagedBitquerySmokeBlock.includes(
+      includesEverySourceFragment(stagedPublicSmokeScript, [
+        '"/api/ops/health"',
+        "function exactInformationalHealth(response)",
+        '["ready", "degraded"].includes(response.body?.status)',
+        'typeof response.body.provider.configured === "boolean"',
+        "!healthHasSensitiveData(response.body)",
+        'healthAuthority: "informational-only"',
+        '"/api/explore?limit=20&page=1&sort=market-cap"',
+        '"/api/explore?limit=20&page=1&sort=newest"',
+        '"/api/explore/token?address="',
+        '"/api/explore/token/chart?address="',
+        '"/api/explore/profile?account="',
+        "readBoundedResponseText(response",
+        "maximumBytes: 4 * 1024 * 1024",
+        "attempt < 2",
+        "response.status === 503 && attempt === 0",
+        "qualifiedDexscreenerFdv",
+        'valuation.freshness === "provider-recent"',
+        "exactUnavailableValuation",
+        "exactCatalogSnapshot(highest)",
+        "catalog.launchSource === launchSource",
+        "highestCatalog !== newestCatalog",
+        "function exactMarketIdentityCount(tokens)",
+        "function exactMarketRead(response, tokens)",
+        "read.requestedCount !== expectedRequestedCount",
+        "const completeCatalogTokens = [...newestTokens]",
+        "Explore catalog pagination contract is invalid",
+        "exactMarketRead(highest, completeCatalogTokens)",
+        "Initial Newest page is outside the paged catalog",
+        "new Set(highestIdentities).size !== highestIdentities.length",
+        "Highest FDV page is outside the paged catalog",
+        "exactFdvRanking(highest, highestTokens)",
+        "ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount",
+        "qualified.length === Math.min(tokens.length, ranking.qualifiedCount)",
+        "!exactSamePageOrder(highest, newest)",
+        'token.exploreKind === "token"',
+        'token.exploreKind !== "custom-project" ||\n    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? ""))',
+        'token.customProjectId',
+        'token.customLaunchId',
+        'Array.isArray(token.markets)',
+        "const deterministicMarkets = markets",
+        "exactIdentity(detailToken) !== exactIdentity(selectedToken)",
+        "detail.body?.token ?? detail.body?.customProject",
+        "catalogBoundary.launchSource",
+        "profile.status !== 200",
         'profile.headers.get("x-programmable-launch-source") !== "drpc"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
         'profile.headers.get("x-programmable-read-source") !== "drpc"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
-        'profile.headers.get("x-programmable-rpc-provider") !==',
-      ) &&
-      stagedBitquerySmokeBlock.includes('"drpc-primary"') &&
-      stagedBitquerySmokeBlock.includes(
+        'profile.headers.get("x-programmable-rpc-provider") !== "drpc-primary"',
+        'schemaVersion !== "programmable.market-chart-unavailable.v1"',
+        'chart.headers.get("cache-control") !== "no-store"',
+        'chart.headers.get("x-programmable-data-quality") !== "unavailable"',
+        'chart.headers.get("x-programmable-market-provider") !== null',
+        'chart.headers.get("x-programmable-valuation-block") !== null',
+        'detail.headers.get("x-programmable-market-provider") !== "dexscreener"',
+        'marketProvider: "dexscreener"',
         'creatorClaimPrepare: "separate-live-probe-required"',
-      ) &&
-      stagedBitquerySmokeBlock.includes(
         'tradePrepare: "separate-live-probe-required"',
+        "runProductionStaticDexscreenerSmokeV1",
+      ]) &&
+      !stagedPublicSmokeScript.includes(
+        "ranking.qualifiedCount !== response.body?.marketRead?.qualifiedCount",
       ) &&
-      !stagedBitquerySmokeBlock.includes("/api/explore/profile/claim") &&
-      !stagedBitquerySmokeBlock.includes("/api/trade/prepare") &&
+      !stagedPublicSmokeScript.includes("/api/explore/profile/claim") &&
+      !stagedPublicSmokeScript.includes("/api/trade/prepare") &&
       !/PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL|PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY|https?:\/\/[^"'\s]+rpc/iu.test(
-        stagedBitquerySmokeBlock,
+        stagedPublicSmokeScript,
       ) &&
-      !/alchemy|blob|durable|graph|stateview|chainlink|envio|prewarm|secondary|fallback|quorum/iu.test(
-        stagedBitquerySmokeBlock,
-      ),
-    "the immutable staged candidate proves dRPC identity and profile responses plus either current Bitquery market reads or an exact transport or HTTP 402 unavailable handoff without exposing an RPC endpoint",
+      !/PROGRAMMABLE_WEBSITE_MAINNET_RPC|readPrimaryRpc|readBitquery|readDurableExploreModel|https?:\/\/[^"'\s]+rpc/iu.test(
+        stagedPublicSmokeScript,
+      ) &&
+      packageJson?.scripts?.test?.includes(
+        "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
+      ) === true &&
+      packageJson?.scripts?.["test:interface:ci"]?.includes(
+        "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
+      ) === true &&
+      packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
+        "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
+      ) === true,
+    "the immutable staged candidate proves validated last-good identities, optional exact-identity Dexscreener enrichment, identity-only outage behavior, and unchanged profile/claim response semantics without exposing an RPC endpoint",
   );
   check(
     "ops-obsolete-public-read-gates-absent",
@@ -3213,126 +2402,25 @@ export function evaluateReadModelOperationsSourceContracts(
       retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
-      postPromotion.includes('"/api/ops/health"') &&
-      postPromotion.includes(
-        "`/api/explore?limit=${EXPLORE_PAGE_SIZE}&page=1&sort=market-cap`",
+      includesEverySourceFragment(postPromotionVerifierBlock, [
+        'target.toString() !== `${PRODUCTION_ORIGIN}/`',
+        'throw new Error("exact production deployment binding is required")',
+        "verifyProductionDeploymentBinding({",
+        "runProductionStaticDexscreenerSmokeV1({ fetchImpl })",
+        'id: "production-static-identity-dexscreener-public-apis"',
+      ]) &&
+      !/runtimeProductionProviderEndpoints|verifyBitquery|stateview|chainlink|\/api\/ops\/health|\/api\/explore\/token\/chart/iu.test(
+        postPromotionVerifierBlock,
       ) &&
-      postPromotion.includes('"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"') &&
-      postPromotion.includes(
-        '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
-      ) &&
-      postPromotion.includes("exactBitqueryHeaders") &&
-      postPromotion.includes("exactExploreRanking") &&
-      postPromotion.includes(
-        "exploreContinuationPath(firstExploreSnapshot, index + 2)",
-      ) &&
-      postPromotion.includes("exactCurrentPublicFdvLiquidity") &&
-      postPromotion.includes("exactGoldenDetail") &&
-      postPromotion.includes("exactGoldenSearch") &&
-      postPromotion.includes("exactGoldenChart") &&
-      postPromotion.includes("quoteAddress: GOLDEN_QUOTE_ADDRESS") &&
-      postPromotion.includes('Object.freeze(["1h", "1d", "1w", "all"])') &&
-      includesEverySourceFragment(
-        postCurrentEvidenceBlock,
-        POST_PROMOTION_CURRENT_EVIDENCE_SOURCE_GUARDS,
-      ) &&
-      includesEverySourceFragment(
-        postGlobalRankingBlock,
-        POST_PROMOTION_GLOBAL_RANKING_SOURCE_GUARDS,
-      ) &&
-      includesEverySourceFragment(
+      !/verifyLegacyReadModelPostPromotion|@deprecated Historical Bitquery|loadReadModelReleaseEvidence|verifyLiveCacheAndKeyContracts/iu.test(
         postPromotion,
-        POST_PROMOTION_PAGINATION_SOURCE_GUARDS,
       ) &&
-      includesEverySourceFragment(
-        postDetailChartBlock,
-        POST_PROMOTION_DETAIL_CHART_SOURCE_GUARDS,
-      ) &&
-      postPromotion.includes('chart.readStatus !== "live"') &&
-      postPromotion.includes("verifyBitqueryGoldenMarketExecutionV1") &&
-      postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV2") &&
-      postPromotion.includes(
-        "verifyBitqueryGoldenMarketExecutionV1({\n      token: responses[4].body?.token,\n      fetchImpl,\n      rpcUrls:",
-      ) &&
-      postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
-      postPromotion.includes(
-        "return currentCount > 0 ? { currentToken, tokens, valuationSnapshot } : null;",
-      ) &&
-      postPromotion.includes("tokenAddress === GOLDEN_TOKEN_ADDRESS") &&
-      postPromotion.includes(
-        "!sameBytes32(primary.identity.poolId, market.primaryPoolId)",
-      ) &&
-      postPromotion.includes('primary.identity.protocol !== "uniswap_v4"') &&
-      postPromotion.includes(
-        'liquidity?.source !== "official-uniswap-v4-subgraph"',
-      ) &&
-      postPromotion.includes(
-        "provenance?.subgraphId !== OFFICIAL_V4_SUBGRAPH_ID",
-      ) &&
-      postPromotion.includes(
-        "provenance?.deployment !== OFFICIAL_V4_SUBGRAPH_DEPLOYMENT",
-      ) &&
-      postPromotion.includes(
-        "BigInt(liquidity.tvlUsdWad) < MINIMUM_PUBLIC_FDV_LIQUIDITY_USD_WAD",
-      ) &&
-      postPromotion.includes('token.launchModel !== "classic"') &&
-      postPromotion.includes(
-        'liquidity.valueBasis !== "official-subgraph-pool-tvl-usd"',
-      ) &&
-      postPromotion.includes(
-        "lagBlocks <= OFFICIAL_V4_LIQUIDITY_MAXIMUM_LAG_BLOCKS",
-      ) &&
-      postPromotion.includes(
-        "valuation.asOfBlock === provenance.referenceHeadBlockNumber",
-      ) &&
-      postPromotion.includes(
-        "expectedFdvUsdWad.toString() === valuation.valueWad",
-      ) &&
-      postPromotion.includes("expectedActiveVirtualLiquidityUsdWad >=") &&
-      postPromotion.includes("price.activeVirtualLiquidityUsdWad") &&
-      postPromotion.includes("price.activeVirtualToken0Wei") &&
-      postPromotion.includes(
-        '"stateview-active-liquidity-virtual-depth-usd"',
-      ) &&
-      postPromotion.includes('id: "production-current-public-detail"') &&
-      postPromotion.includes(
-        'id: "production-current-public-bitquery-charts"',
-      ) &&
-      postPromotion.includes("MAXIMUM_EXPLORE_TOKENS") &&
-      postPromotion.includes("responses.length !== totalPages") &&
-      postPromotion.includes('valuation.source !== "stateview-chainlink"') &&
-      postPromotion.includes(
-        'price?.source !== "uniswap-v4-stateview-chainlink-v1"',
-      ) &&
-      postPromotion.includes("currentMarketEvidenceTime(quality.asOfTime)") &&
-      postPromotion.includes(
-        'id: "production-bitquery-golden-independent-parity"',
-      ) &&
-      postPromotion.includes(
-        'const PRODUCTION_ORIGIN = "https://programmable.market";',
-      ) &&
-      postPromotion.startsWith(
-        POST_PROMOTION_TARGET_GUARD_PREFIX,
-        postPromotionVerifierStart,
-      ) &&
-      postPromotionOriginGuardBlock ===
-        POST_PROMOTION_PRODUCTION_ORIGIN_GUARD &&
-      postPromotion.includes(
-        'response.headers.get("x-programmable-market-source")',
-      ) &&
-      postPromotion.includes(
-        'response.headers.get("x-programmable-price-source")',
-      ) &&
-      postPromotion.includes(
-        'response.headers.get("x-programmable-market-as-of")',
-      ) &&
-      postPromotion.includes('"x-programmable-valuation-block"') &&
-      postPromotion.includes(
-        'response.headers.get("x-programmable-data-quality")',
-      ) &&
-      !postPromotion.includes("/api/indexers/v1/token-list") &&
-      postPromotion.includes("verifyLiveCacheAndKeyContracts"),
-    "the workflow is stage-only, the current runbook requires exact SLA-gated promotion and the historical cutover stays retired",
+      postPromotion.includes("verifyPostPromotion({") &&
+      !postPromotion.includes("evidencePath: args.evidence") &&
+      !operationsRunbook.includes(
+        '--evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"',
+      ),
+    "the workflow is stage-only and the manual promotion sequence verifies exact deployment binding plus the committed identity and fail-soft Dex public contract",
   );
   check(
     "ops-vercel-project-prerequisite",

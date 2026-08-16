@@ -1,380 +1,311 @@
-import { readFileSync } from "node:fs";
-
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import type {
-  MarketDataIdentityV1,
-  TokenMarketDataV1,
-} from "../lib/market-data/market-data-v1";
-import type {
-  CanonicalTokenExploreEntry,
-  CustomProjectExploreEntry,
-} from "../lib/tokens";
+import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
-  readPrimaryRpcExploreEntriesV1: vi.fn(),
-  readBitqueryTokenMarketDataStrictV1: vi.fn(),
-  readProductionCustomExploreDirectoryV1: vi.fn(),
+  readCatalog: vi.fn(),
+  readDex: vi.fn(),
+  identityCommitment: vi.fn(() => `sha256:${"ef".repeat(32)}`),
+  mergeEntries: vi.fn((canonical: readonly unknown[], custom: readonly unknown[]) => [
+    ...canonical,
+    ...custom,
+  ]),
+  customEnabled: vi.fn(() => false),
+  readCustom: vi.fn(),
 }));
 
-vi.mock("../lib/market-data/primary-rpc-launches.server", () => ({
-  readPrimaryRpcExploreEntriesV1: mocks.readPrimaryRpcExploreEntriesV1,
-  safePrimaryRpcLaunchCatalogError: vi.fn(() => ({
-    name: "PrimaryRpcLaunchCatalogError",
-    category: "transport",
-  })),
+vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
+  readLastGoodLaunchCatalogV1: mocks.readCatalog,
+  lastGoodLaunchIdentityCommitmentV1: mocks.identityCommitment,
+  mergeLastGoodLaunchCatalogEntriesV1: mocks.mergeEntries,
 }));
-
-vi.mock("../lib/market-data/bitquery.server", () => ({
-  BitqueryMarketDataError: class BitqueryMarketDataError extends Error {
-    category: string;
-    constructor(category: string) {
-      super("Market data is temporarily unavailable");
-      this.category = category;
-    }
-  },
-  readBitqueryTokenMarketDataStrictV1:
-    mocks.readBitqueryTokenMarketDataStrictV1,
-  safeBitqueryMarketDataError: vi.fn(() => ({
-    name: "BitqueryMarketDataError",
-    category: "transport",
-  })),
+vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
+  readDexscreenerExploreEntriesV1: mocks.readDex,
 }));
-
+vi.mock("../lib/server/custom-launch/public-readiness", () => ({
+  isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
+}));
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
-  readProductionCustomExploreDirectoryV1:
-    mocks.readProductionCustomExploreDirectoryV1,
+  readProductionCustomExploreDirectoryV1: mocks.readCustom,
 }));
 
 import { GET } from "../app/api/explore/token/route";
 
-const TOKEN_ADDRESS =
-  "0x1111111111111111111111111111111111111111" as const;
-const UNKNOWN_ADDRESS =
-  "0x2222222222222222222222222222222222222222" as const;
-const HOOK_ADDRESS =
-  "0x3333333333333333333333333333333333333333" as const;
-const POOL_ID = `0x${"44".repeat(32)}` as const;
-const NOW = new Date("2026-08-14T12:00:00.000Z");
+const NOW = "2026-08-16T08:00:00.000Z";
 
-const canonicalEntry = {
-  exploreKind: "token",
-  id: `1:${TOKEN_ADDRESS}`,
-  name: "dRPC Token",
-  symbol: "DRPC",
-  tokenAddress: TOKEN_ADDRESS,
-  hookAddress: HOOK_ADDRESS,
-  poolId: POOL_ID,
-  launchedAt: "2026-08-14T10:00:00.000Z",
-  totalSupplyRaw: "1000000000000000000000000",
-  tokenDecimals: 18,
-  totalSwapFeeBps: 100,
-  launchModel: "classic",
-  liquidityPath: "meme",
-  launchCategoryProvenance: {
-    schemaVersion: "programmable.explore-launch-category-provenance.v1",
-    category: "classic",
-    source: "canonical-launch-read-model",
-    recordId: `1:${TOKEN_ADDRESS}`,
-    modelId: "classic",
-    modelVersion: null,
-  },
-} as const satisfies CanonicalTokenExploreEntry;
+function token(): ExploreEntry {
+  const value = {
+    id: "1:0x1111111111111111111111111111111111111111",
+    name: "Known Token",
+    symbol: "KNOWN",
+    tokenAddress: "0x1111111111111111111111111111111111111111",
+    hookAddress: "0x3333333333333333333333333333333333333333",
+    poolId: `0x${"44".repeat(32)}` as const,
+    launchedAt: NOW,
+    totalSwapFeeBps: 100,
+    liquidityPath: "meme",
+    launchModel: "classic",
+    launchModelVersion: "classic-v3",
+  } satisfies LauncherToken;
+  return {
+    ...value,
+    exploreKind: "token",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "classic",
+      source: "canonical-launch-read-model",
+      recordId: value.id,
+      modelId: "classic",
+      modelVersion: "classic-v3",
+    },
+  };
+}
 
+const entry = token();
+const customAddress = "0x9999999999999999999999999999999999999999" as const;
 const customEntry = {
   exploreKind: "custom-project",
   id: `custom:sha256:${"55".repeat(32)}`,
   name: "Custom Project",
   symbol: "CUSTOM",
   links: [],
-  launchedAt: "2026-08-14T09:00:00.000Z",
-  finalizedAt: "2026-08-14T09:05:00.000Z",
+  launchedAt: NOW,
+  finalizedAt: NOW,
   chainId: "1",
   modelId: "custom-model",
   customProjectId: `sha256:${"55".repeat(32)}`,
   customLaunchId: `sha256:${"66".repeat(32)}`,
-  launchingWallet: { namespace: "eip155:1", value: HOOK_ADDRESS },
+  launchingWallet: {
+    namespace: "eip155:1",
+    value: "0x3333333333333333333333333333333333333333",
+  },
   postLaunchAuthorityInventory: {},
   postLaunchAuthorityInventoryHash: `sha256:${"77".repeat(32)}`,
-  tokenAddress: UNKNOWN_ADDRESS,
+  tokenAddress: customAddress,
   tokenDecimals: 18,
   markets: [],
   launchCategoryProvenance: {},
-} as unknown as CustomProjectExploreEntry;
+} as unknown as ExploreEntry;
 
-function bitqueryMarketData(
-  identities: readonly MarketDataIdentityV1[],
-): ReadonlyMap<string, TokenMarketDataV1> {
-  return new Map(identities.map((identity) => [identity.tokenAddress, {
-    schemaVersion: "programmable.market-data.v1",
-    source: "bitquery",
-    generatedAt: NOW.toISOString(),
-    status: "current",
-    primaryPoolId: identity.poolId,
-    pools: [{
-      identity,
-      source: "bitquery",
-      status: "current",
-      quality: "complete",
-      asOfTime: NOW.toISOString(),
-      latestTrade: {
-        transactionHash: `0x${"aa".repeat(32)}`,
-        logIndex: 1,
-        blockNumber: "25800000",
-        time: NOW.toISOString(),
-        tokenSide: "buy",
-        priceUsdWad: "1000000000000000000",
-        priceUsdAsOfTime: NOW.toISOString(),
-        priceUsdSource: "bitquery-token-price-index-v1",
-        rawPriceUsdWad: "1000000000000000000",
-      },
-      liquidity: {
-        asOfTime: NOW.toISOString(),
-        asOfBlock: "25800000",
-        valueUsdWad: "100000000000000000000000",
-        freshness: "current",
-      },
-      valuation: {
-        status: "available",
-        metric: "fdv",
-        supplyBasis: "total",
-        valueUsdWad: "1000000000000000000000000",
-        fdvUsdWad: "1000000000000000000000000",
-        totalSupply: "1000000",
-        asOfTime: NOW.toISOString(),
-        freshness: "current",
-      },
-    }],
-  } satisfies TokenMarketDataV1]));
+function catalog() {
+  return {
+    source: "durable-blob",
+    status: "last-known-good",
+    generatedAt: NOW,
+    asOfBlock: "25740000",
+    asOfBlockHash: `0x${"ab".repeat(32)}`,
+    entries: [entry],
+    completeness: {
+      classic: "last-known-good",
+      stock: "unavailable",
+      custom: "unavailable",
+    },
+    evidence: { kind: "durable-envelope", commitment: `0x${"cd".repeat(32)}` },
+  };
 }
 
-describe("dRPC identity and Bitquery market token detail API", () => {
+function marketRead(status: "complete" | "partial" | "unavailable") {
+  const available = status === "complete";
+  return {
+    provider: "dexscreener",
+    status,
+    currency: "USD",
+    requestedCount: 1,
+    observedCount: available ? 1 : 0,
+    qualifiedCount: available ? 1 : 0,
+    unavailableCount: available ? 0 : 1,
+    oldestFetchedAt: available ? NOW : null,
+    newestFetchedAt: available ? NOW : null,
+  };
+}
+
+function request(address: string = entry.tokenAddress!, extra = "") {
+  return new NextRequest(
+    `http://localhost/api/explore/token?address=${address}${extra}`,
+  );
+}
+
+async function json(response: Response) {
+  // Test fixtures intentionally inspect several public response variants.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await response.json() as Record<string, any>;
+}
+
+describe("Token detail static identity and Dexscreener market contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
-      source: "drpc",
-      entries: [canonicalEntry],
-      generatedAt: NOW.toISOString(),
-      asOfBlock: "25800000",
-    });
-    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
-    mocks.readBitqueryTokenMarketDataStrictV1.mockImplementation(
-      async (identities: readonly MarketDataIdentityV1[]) =>
-        bitqueryMarketData(identities),
-    );
-  });
-
-  it("serves dRPC launch identity with current Bitquery market data", async () => {
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
-    ));
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(mocks.readPrimaryRpcExploreEntriesV1).toHaveBeenCalledWith({
-      requestedTokenAddress: TOKEN_ADDRESS,
-      signal: expect.any(AbortSignal),
-    });
-    expect(mocks.readProductionCustomExploreDirectoryV1).not.toHaveBeenCalled();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).toHaveBeenCalledWith(
-      [{
-        chainId: "1",
-        tokenAddress: TOKEN_ADDRESS,
-        poolId: POOL_ID,
-        quoteAddress: "0x0000000000000000000000000000000000000000",
-        protocol: "uniswap_v4",
-      }],
-      { signal: expect.any(AbortSignal) },
-    );
-    expect(body).toMatchObject({
-      status: "ready",
-      token: {
-        tokenAddress: TOKEN_ADDRESS,
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.readCatalog.mockResolvedValue(catalog());
+    mocks.customEnabled.mockReturnValue(false);
+    mocks.readCustom.mockResolvedValue([]);
+    mocks.readDex.mockResolvedValue({
+      entries: [{
+        ...entry,
         valuation: {
           status: "available",
           metric: "fdv",
+          supplyBasis: "total",
           currency: "usd",
-          source: "bitquery",
-          valueWad: "1000000000000000000000000",
+          valueWad: "9000000000000000000000",
+          freshness: "provider-recent",
+          source: "dexscreener",
+          asOfTime: NOW,
+        },
+      }],
+      marketRead: marketRead("complete"),
+    });
+  });
+
+  it("serves an independently verified Custom Registry identity fail-soft", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([customEntry]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...customEntry,
+        valuation: { status: "unavailable", reason: "no-market" },
+      }],
+      marketRead: {
+        ...marketRead("complete"),
+        requestedCount: 0,
+        observedCount: 0,
+        qualifiedCount: 0,
+        unavailableCount: 0,
+      },
+    });
+
+    const response = await GET(request(customAddress));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.customProject).toMatchObject({
+      id: customEntry.id,
+      tokenAddress: customAddress,
+      valuation: { status: "unavailable", reason: "no-market" },
+    });
+    expect(body.token).toBeNull();
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob+registry.custom-launched",
+    );
+  });
+
+  it("preserves a verified Custom identity when the market adapter throws", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([customEntry]);
+    mocks.readDex.mockRejectedValueOnce(new Error("Dex transport failed"));
+
+    const response = await GET(request(customAddress));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.token).toBeNull();
+    expect(body.customProject).toMatchObject({
+      id: customEntry.id,
+      tokenAddress: customAddress,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    expect(body.catalog).toMatchObject({
+      launchSource: "durable-blob+registry.custom-launched",
+      completeness: { custom: "current" },
+    });
+  });
+
+  it("keeps a canonical identity visible when the Custom Registry is unavailable", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockRejectedValue(new Error("custom unavailable"));
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect((await json(response)).token.id).toBe(entry.id);
+  });
+
+  it("serves a known identity with Dexscreener FDV", async () => {
+    const response = await GET(request());
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "ready",
+      token: {
+        id: entry.id,
+        tokenAddress: entry.tokenAddress,
+        valuation: {
+          status: "available",
+          source: "dexscreener",
+          valueWad: "9000000000000000000000",
         },
       },
       customProject: null,
       snapshot: { chainId: 1 },
     });
-    expect(body).not.toHaveProperty("dataQuality");
-    expect(body).not.toHaveProperty("launchDiscoverySnapshot");
-    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "drpc",
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "durable-blob+dexscreener",
     );
-    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "drpc+bitquery",
+    expect(response.headers.get("x-programmable-price-source")).toBe(
+      "dexscreener",
     );
-    expect(response.headers.get("X-Programmable-Market-Source")).toBe(
-      "bitquery",
-    );
-    expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "bitquery",
-    );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
   });
 
-  it("returns a definitive 404 from the dRPC catalog without market reads", async () => {
-    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
-      source: "drpc",
-      entries: [],
-      generatedAt: NOW.toISOString(),
-      asOfBlock: "25800000",
+  it("retains the requested identity when Dexscreener has no exact pair", async () => {
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...entry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: marketRead("unavailable"),
     });
-
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${UNKNOWN_ADDRESS}`,
-    ));
-
-    expect(response.status).toBe(404);
-    expect(mocks.readProductionCustomExploreDirectoryV1).toHaveBeenCalledWith(
-      expect.any(AbortSignal),
-    );
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({
-      status: "ready",
-      token: null,
-      customProject: null,
-      snapshot: null,
-    });
-  });
-
-  it("serves a Custom Registry project only after a successful canonical miss", async () => {
-    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
-      source: "drpc",
-      entries: [],
-      generatedAt: NOW.toISOString(),
-      asOfBlock: "25800000",
-    });
-    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([
-      customEntry,
-    ]);
-
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${UNKNOWN_ADDRESS}`,
-    ));
-
+    const response = await GET(request());
+    const body = await json(response);
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      token: null,
-      customProject: {
-        tokenAddress: UNKNOWN_ADDRESS,
-        valuation: { status: "unavailable", reason: "no-market" },
-      },
-      snapshot: null,
+    expect(body.token).toMatchObject({
+      id: entry.id,
+      tokenAddress: entry.tokenAddress,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
     });
-    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "registry.custom-launched",
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBe(
+      "unavailable",
     );
-    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "drpc+registry.custom-launched",
-    );
-    expect(response.headers.get("X-Programmable-Market-Source")).toBeNull();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the Custom Registry read fails after a canonical miss", async () => {
-    mocks.readPrimaryRpcExploreEntriesV1.mockResolvedValue({
-      source: "drpc",
-      entries: [],
-      generatedAt: NOW.toISOString(),
-      asOfBlock: "25800000",
+  it("retains the identity when the market adapter unexpectedly throws", async () => {
+    mocks.readDex.mockRejectedValueOnce(new Error("Dex outage"));
+    const response = await GET(request());
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.token.id).toBe(entry.id);
+    expect(body.token.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
     });
-    mocks.readProductionCustomExploreDirectoryV1.mockRejectedValue(
-      new Error("registry unavailable"),
-    );
-
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${UNKNOWN_ADDRESS}`,
-    ));
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "registry.custom-launched",
-    );
-    expect(response.headers.get("X-Programmable-Market-Source")).toBeNull();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
   });
 
-  it("fails directly when primary dRPC identity fails", async () => {
-    mocks.readPrimaryRpcExploreEntriesV1.mockRejectedValue(
-      new Error("drpc unavailable"),
+  it("returns 404 without invoking Dex for an unknown identity", async () => {
+    const response = await GET(
+      request("0x9999999999999999999999999999999999999999"),
     );
-
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
-    ));
-
-    expect(response.status).toBe(503);
-    expect(mocks.readProductionCustomExploreDirectoryV1).not.toHaveBeenCalled();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-  });
-
-  it("fails directly when the strict Bitquery market read fails", async () => {
-    mocks.readBitqueryTokenMarketDataStrictV1.mockRejectedValue(
-      new Error("bitquery market unavailable"),
-    );
-
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
-    ));
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-  });
-
-  it("fails when Bitquery omits the required dRPC token market", async () => {
-    mocks.readBitqueryTokenMarketDataStrictV1.mockResolvedValue(new Map());
-    const response = await GET(new NextRequest(
-      `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
-    ));
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(404);
+    expect(await json(response)).toMatchObject({ token: null, customProject: null });
+    expect(mocks.readDex).not.toHaveBeenCalled();
   });
 
   it.each([
-    `address=${TOKEN_ADDRESS}&unused=random`,
-    `address=${TOKEN_ADDRESS}&address=${UNKNOWN_ADDRESS}`,
-    "address=not-an-address",
-  ])("rejects invalid query shape before any provider read: %s", async (query) => {
-    const response = await GET(
-      new NextRequest(`http://localhost/api/explore/token?${query}`),
-    );
-
+    ["0x1234", ""],
+    [entry.tokenAddress!, "&unexpected=true"],
+    [entry.tokenAddress!, `&address=${entry.tokenAddress}`],
+  ])("rejects malformed or repeated input", async (address, extra) => {
+    const response = await GET(request(address, extra));
     expect(response.status).toBe(400);
-    expect(mocks.readPrimaryRpcExploreEntriesV1).not.toHaveBeenCalled();
-    expect(mocks.readBitqueryTokenMarketDataStrictV1).not.toHaveBeenCalled();
+    expect(mocks.readCatalog).not.toHaveBeenCalled();
+    expect(mocks.readDex).not.toHaveBeenCalled();
   });
 
-  it("contains no legacy public-read provider or fallback wiring", () => {
-    const source = readFileSync(
-      new URL("../app/api/explore/token/route.ts", import.meta.url),
-      "utf8",
-    );
-
-    for (const forbidden of [
-      "readAlchemyExploreModel",
-      "readDurableExploreModel",
-      "readVerifiedOperationalMarketSnapshot",
-      "currentMarketOnchainDeployment",
-      "hydrateMissingCanonicalTokenSupplyV1",
-      "readExploreReferenceHeadWithinRouteBudget",
-      "valueExploreEntriesWithCurrentEvidence",
-      "readBitqueryExploreEntriesV1",
-      "stateview-chainlink",
-      "official-uniswap-v4-subgraph",
-      "fallback:",
-    ]) {
-      expect(source).not.toContain(forbidden);
-    }
-    expect(source).toContain("readPrimaryRpcExploreEntriesV1");
-    expect(source).toContain("readProductionCustomExploreDirectoryV1");
+  it("returns 503 only when no validated identity catalog can be read", async () => {
+    mocks.readCatalog.mockRejectedValueOnce(new Error("catalog unavailable"));
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    expect(await json(response)).toEqual({
+      error: "Token data is temporarily unavailable",
+    });
+    expect(mocks.readDex).not.toHaveBeenCalled();
   });
 });

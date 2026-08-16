@@ -193,6 +193,25 @@ describe("canonical Router stamp surfaces", () => {
         pageSize: 9,
         total: 2,
         totalPages: 1,
+        catalog: {
+          source: "durable-blob",
+          launchSource: "durable-blob+registry.custom-launched",
+          status: "current",
+          lastIndexedAt: "2026-08-16T08:00:00.000Z",
+          asOfBlock: "25740000",
+          asOfBlockHash: `0x${"aa".repeat(32)}`,
+          identityCount: 2,
+          identityCommitment: `sha256:${"bb".repeat(32)}`,
+          completeness: {
+            classic: "current",
+            stock: "unavailable",
+            custom: "current",
+          },
+          evidence: {
+            kind: "durable-envelope",
+            commitment: `0x${"cc".repeat(32)}`,
+          },
+        },
       }), {
         status: 200,
         headers: { "Content-Type": "application/json" },

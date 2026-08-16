@@ -476,6 +476,9 @@ export function TokenPriceChart({
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
+  // The interim public runtime has no authoritative historical provider.
+  // Preview fixtures remain available without enabling any live request path.
+  const historyEnabled = preview;
   const [request, setRequest] = useState<ChartRequestState | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
   const [activePointIndex, setActivePointIndex] = useState<number | null>(
@@ -483,7 +486,7 @@ export function TokenPriceChart({
   );
   const refreshTaskRef = useRef<SerializedChartRefresh | null>(null);
   const refreshKey = useLiveDataRefresh({
-    enabled: launchModel !== "stock-paired" && !preview,
+    enabled: historyEnabled && launchModel !== "stock-paired" && !preview,
   });
   const chartId = useId().replaceAll(":", "");
   const gradientId = `${chartId}-fill`;
@@ -504,6 +507,8 @@ export function TokenPriceChart({
   const failed =
     preview
       ? false
+      : !historyEnabled
+      ? true
       : launchModel === "stock-paired"
       ? false
       : request?.key === requestKey
@@ -512,7 +517,7 @@ export function TokenPriceChart({
   const loading = !payload && !failed;
 
   useEffect(() => {
-    if (launchModel === "stock-paired" || preview) {
+    if (!historyEnabled || launchModel === "stock-paired" || preview) {
       refreshTaskRef.current = null;
       return;
     }
@@ -551,6 +556,7 @@ export function TokenPriceChart({
     };
   }, [
     launchModel,
+    historyEnabled,
     preview,
     range,
     requestKey,
@@ -596,7 +602,7 @@ export function TokenPriceChart({
         : emptyMessage;
 
   useEffect(() => {
-    if (launchModel === "stock-paired" || range === "all") {
+    if (!historyEnabled || launchModel === "stock-paired" || range === "all") {
       onVolumeChange?.(null);
       return;
     }
@@ -615,7 +621,7 @@ export function TokenPriceChart({
       volumeEth: payload.volumeEth,
       volumeUsdWad: payload.volumeUsdWad,
     });
-  }, [failed, launchModel, onVolumeChange, payload, range]);
+  }, [failed, historyEnabled, launchModel, onVolumeChange, payload, range]);
 
   function inspectPointer(event: PointerEvent<HTMLDivElement>) {
     if (!chart) return;
@@ -688,7 +694,7 @@ export function TokenPriceChart({
                 : "—"}
           </p>
         </div>
-        {launchModel !== "stock-paired" ? (
+        {historyEnabled && launchModel !== "stock-paired" ? (
           <div className={styles.ranges} aria-label="Chart range" role="group">
             {CHART_RANGES.map((option) => (
               <button

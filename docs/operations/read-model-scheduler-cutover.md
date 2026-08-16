@@ -78,11 +78,10 @@ normal release gate:
    for at least two delivered blocks. Disable the stream on repeated `401`,
    `413` or `5xx` responses; the minute crons keep the read model progressing.
 
-Visible Explore, token detail and price-chart clients refresh every five
-seconds while the tab is visible and on focus. Ready public read-model
-responses use a two-second CDN freshness window. This removes the scheduler and
-cache minute-scale delay; it does not promise sub-second chain finality or hide
-Envio, RPC, reorg or database latency.
+Visible Explore and token detail clients continue their bounded refreshes while
+the tab is visible. Historical chart requests are disabled in the interim and
+the chart route reports `history-provider-unavailable`; it does not fall back to
+the retired dRPC/Bitquery history scan.
 
 `/api/ops/index-v2` is the only legacy writer route. The former
 `/api/ops/index` alias is permanently closed and is not scheduled.
@@ -252,8 +251,7 @@ vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 npm run perf:read-model:post-promotion -- \
   --target-url "https://programmable.market" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
-  --git-head "$GITHUB_SHA" \
-  --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"
+  --git-head "$GITHUB_SHA"
 ```
 
 If the promotion command or post-promotion gate returns an uncertain result,
@@ -262,9 +260,12 @@ staged deployment, using the exact previous deployment recorded by the
 staging workflow, then reverify its deployment ID and Git commit. Keep the
 current database release and public-read flags fenced throughout that recovery.
 
-`PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` must also be present in the gate process
-so the exported HMAC can be verified without exposing the secret. The gate CLI
-rejects the legacy caller-assembled evidence format entirely. It fails closed unless delivery-to-first-visible latency is at most ten
+The earlier real-block SLA commands require
+`PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` so the exported HMAC can be verified
+without exposing the secret. The post-promotion command does not reload the
+retired Bitquery-era caller-assembled evidence bundle; it verifies the exact
+deployment and the Durable-identity/Dex public surface directly. The real-block
+gate fails closed unless delivery-to-first-visible latency is at most ten
 seconds, both providers agree on the exact block, finality is explicitly
 `optimistic`, confirmations are in `0..11`, every nested commitment matches, and
 the overall evidence commitment is intact. The committed gate validates this

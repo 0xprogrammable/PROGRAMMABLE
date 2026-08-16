@@ -35,6 +35,7 @@ import {
   exploreValuation,
   isExploreDataQuality,
   isExploreValuation,
+  isExploreValuationQualifiedV1,
   type ExploreDataQuality,
   type ExploreValuation,
   type ValuedExploreEntry,
@@ -70,6 +71,7 @@ type TokenCard = {
     | "No market"
     | "Waiting for first trade"
     | "Last verified"
+    | "Provider recent"
     | "Limited market data"
     | "Unavailable";
   usesFallbackImage: boolean;
@@ -83,6 +85,7 @@ export function exploreMarketStatusLabel(
   | "No market"
   | "Waiting for first trade"
   | "Last verified"
+  | "Provider recent"
   | "Limited market data"
   | "Unavailable"
   | undefined {
@@ -98,6 +101,7 @@ export function exploreMarketStatusLabel(
     ? explicit
     : exploreValuation(entry);
   if (valuation.status === "unavailable") return "Unavailable";
+  if (valuation.freshness === "provider-recent") return "Provider recent";
   if (valuation.freshness === "stale") return "Last verified";
   if (valuation.freshness === "unknown") return "Unavailable";
   return undefined;
@@ -107,28 +111,59 @@ type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
-type ExploreMarketReadBase = Readonly<{
+type DexscreenerExploreMarketRead = Readonly<{
+  provider: "dexscreener";
+  status: "complete" | "partial" | "unavailable";
+  currency: "USD";
+  requestedCount: number;
+  observedCount: number;
+  qualifiedCount: number;
+  unavailableCount: number;
+  oldestFetchedAt: string | null;
+  newestFetchedAt: string | null;
+}>;
+
+type LegacyBitqueryExploreMarketRead = Readonly<{
   provider: "bitquery";
   status: "unavailable";
   phase: "market-core" | "market-liquidity" | "market-price";
-}>;
+}> & (
+  | Readonly<{ category: "transport"; reason?: never; httpStatus?: never }>
+  | Readonly<{ category: "response"; reason: "http-status"; httpStatus: 402 }>
+);
 
 type ExploreMarketRead =
-  | ExploreMarketReadBase & Readonly<{
-      category: "transport";
-      reason?: never;
-      httpStatus?: never;
-    }>
-  | ExploreMarketReadBase & Readonly<{
-      category: "response";
-      reason: "http-status";
-      httpStatus: 402;
-    }>;
+  | DexscreenerExploreMarketRead
+  | LegacyBitqueryExploreMarketRead;
 
 type ExploreRanking = Readonly<{
-  status: "unavailable";
+  status: "complete" | "partial" | "unavailable";
   requested: "fdv";
-  applied: "launch-order";
+  applied: "fdv" | "qualified-fdv-then-launch-order" | "launch-order";
+  qualifiedCount?: number;
+  totalCount?: number;
+}>;
+
+type ExploreCatalogBoundary = Readonly<{
+  source: "durable-blob";
+  launchSource:
+    | "durable-blob"
+    | "durable-blob+registry.custom-launched";
+  status: "current" | "last-known-good";
+  lastIndexedAt: string;
+  asOfBlock: string;
+  asOfBlockHash: `0x${string}`;
+  identityCount: number;
+  identityCommitment: `sha256:${string}`;
+  completeness: Readonly<{
+    classic: "current" | "last-known-good";
+    stock: "current" | "last-known-good" | "unavailable";
+    custom: "current" | "unavailable";
+  }>;
+  evidence: Readonly<{
+    kind: "durable-envelope";
+    commitment: `0x${string}`;
+  }>;
 }>;
 
 type ExplorePayload = {
@@ -141,7 +176,23 @@ type ExplorePayload = {
   dataQuality?: ExploreDataQuality;
   marketRead?: ExploreMarketRead;
   ranking?: ExploreRanking;
+  catalog?: ExploreCatalogBoundary;
 };
+
+export function exploreAppliedSortLabel(
+  sort: TokenSort,
+  ranking: ExploreRanking | undefined,
+) {
+  if (
+    (sort === "market-cap" || sort === "market-cap-asc") &&
+    ranking?.status === "unavailable"
+  ) return "Launch order";
+  if (
+    (sort === "market-cap" || sort === "market-cap-asc") &&
+    ranking?.status === "partial"
+  ) return "Available FDV";
+  return sortOptions.find((option) => option.id === sort)?.label ?? "Sort";
+}
 
 type ExploreState =
   | { phase: "loading" }
@@ -732,24 +783,131 @@ function positiveInteger(value: unknown, fallback: number) {
 
 function parseExploreMarketRead(value: unknown): ExploreMarketRead | null {
   if (
+    isRecord(value) &&
+    value.provider === "bitquery" &&
+    value.status === "unavailable" &&
+    ["market-core", "market-liquidity", "market-price"].includes(
+      String(value.phase),
+    )
+  ) {
+    if (
+      value.category === "transport" &&
+      value.reason === undefined &&
+      value.httpStatus === undefined
+    ) return value as LegacyBitqueryExploreMarketRead;
+    if (
+      value.category === "response" &&
+      value.reason === "http-status" &&
+      value.httpStatus === 402
+    ) return value as LegacyBitqueryExploreMarketRead;
+    return null;
+  }
+  if (
     !isRecord(value) ||
-    value.provider !== "bitquery" ||
-    value.status !== "unavailable" ||
-    (value.phase !== "market-core" &&
-      value.phase !== "market-liquidity" &&
-      value.phase !== "market-price")
+    value.provider !== "dexscreener" ||
+    !["complete", "partial", "unavailable"].includes(String(value.status)) ||
+    value.currency !== "USD" ||
+    !["requestedCount", "observedCount", "qualifiedCount", "unavailableCount"]
+      .every((field) => Number.isSafeInteger(value[field]) && Number(value[field]) >= 0) ||
+    Number(value.qualifiedCount) > Number(value.observedCount) ||
+    Number(value.observedCount) > Number(value.requestedCount) ||
+    Number(value.unavailableCount) !==
+      Number(value.requestedCount) - Number(value.qualifiedCount) ||
+    (value.oldestFetchedAt !== null &&
+      (typeof value.oldestFetchedAt !== "string" ||
+        !Number.isFinite(Date.parse(value.oldestFetchedAt)))) ||
+    (value.newestFetchedAt !== null &&
+      (typeof value.newestFetchedAt !== "string" ||
+        !Number.isFinite(Date.parse(value.newestFetchedAt))))
   ) return null;
+  const observed = Number(value.observedCount);
+  // Transport completion and pair coverage are independent. A complete
+  // Dexscreener read can honestly observe only a small subset of the known
+  // tokens when the remaining token requests returned no exact pair.
+  if (value.status === "unavailable" && observed !== 0) return null;
+  return value as ExploreMarketRead;
+}
+
+function parseExploreRanking(value: unknown, total: unknown): ExploreRanking | null {
   if (
-    value.category === "transport" &&
-    value.reason === undefined &&
-    value.httpStatus === undefined
-  ) return value as ExploreMarketRead;
+    isRecord(value) &&
+    value.status === "unavailable" &&
+    value.requested === "fdv" &&
+    value.applied === "launch-order" &&
+    value.qualifiedCount === undefined &&
+    value.totalCount === undefined
+  ) return value as ExploreRanking;
   if (
-    value.category === "response" &&
-    value.reason === "http-status" &&
-    value.httpStatus === 402
-  ) return value as ExploreMarketRead;
-  return null;
+    !isRecord(value) ||
+    !["complete", "partial", "unavailable"].includes(String(value.status)) ||
+    value.requested !== "fdv" ||
+    !["fdv", "qualified-fdv-then-launch-order", "launch-order"].includes(
+      String(value.applied),
+    ) ||
+    !Number.isSafeInteger(value.qualifiedCount) ||
+    Number(value.qualifiedCount) < 0 ||
+    !Number.isSafeInteger(value.totalCount) ||
+    Number(value.totalCount) < 0 ||
+    value.totalCount !== total ||
+    Number(value.qualifiedCount) > Number(value.totalCount)
+  ) return null;
+  const qualified = Number(value.qualifiedCount);
+  const count = Number(value.totalCount);
+  if (
+    (value.status === "complete" &&
+      (qualified !== count || value.applied !== "fdv")) ||
+    (value.status === "partial" &&
+      (qualified === 0 || qualified >= count ||
+        value.applied !== "qualified-fdv-then-launch-order")) ||
+    (value.status === "unavailable" &&
+      (qualified !== 0 || value.applied !== "launch-order"))
+  ) return null;
+  return value as ExploreRanking;
+}
+
+function exactIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string" &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(Date.parse(value)).toISOString() === value;
+}
+
+function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
+  if (!isRecord(value) || !isRecord(value.completeness) ||
+    !isRecord(value.evidence)) return null;
+  const expectedLaunchSource = value.completeness.custom === "current"
+    ? "durable-blob+registry.custom-launched"
+    : "durable-blob";
+  if (
+    value.source !== "durable-blob" ||
+    value.launchSource !== expectedLaunchSource ||
+    !["current", "last-known-good"].includes(String(value.status)) ||
+    !exactIsoTimestamp(value.lastIndexedAt) ||
+    typeof value.asOfBlock !== "string" ||
+    !/^[1-9][0-9]*$/u.test(value.asOfBlock) ||
+    typeof value.asOfBlockHash !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(value.asOfBlockHash) ||
+    !Number.isSafeInteger(value.identityCount) ||
+    Number(value.identityCount) < 0 ||
+    typeof value.identityCommitment !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.identityCommitment) ||
+    !["current", "last-known-good"].includes(
+      String(value.completeness.classic),
+    ) ||
+    !["current", "last-known-good", "unavailable"].includes(
+      String(value.completeness.stock),
+    ) ||
+    !["current", "unavailable"].includes(
+      String(value.completeness.custom),
+    ) ||
+    value.evidence.kind !== "durable-envelope" ||
+    typeof value.evidence.commitment !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(value.evidence.commitment)
+  ) return null;
+  return value as ExploreCatalogBoundary;
+}
+
+function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
+  return JSON.stringify(value);
 }
 
 function parseExplorePayload(value: unknown): ExplorePayload {
@@ -772,17 +930,16 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   if (value.marketRead !== undefined && marketRead === null) {
     throw new Error("The token registry returned invalid market read data");
   }
-  const ranking = isRecord(value.ranking) &&
-      value.ranking.status === "unavailable" &&
-      value.ranking.requested === "fdv" &&
-      value.ranking.applied === "launch-order"
-    ? value.ranking as ExploreRanking
-    : null;
+  const ranking = parseExploreRanking(value.ranking, value.total);
   if (
     value.ranking !== undefined &&
     (ranking === null || marketRead === null)
   ) {
     throw new Error("The token registry returned invalid ranking data");
+  }
+  const catalog = parseExploreCatalog(value.catalog);
+  if (catalog === null) {
+    throw new Error("The token registry returned invalid catalog data");
   }
 
   const tokens = value.tokens.map(parseExploreEntry);
@@ -808,12 +965,22 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   ) {
     throw new Error("The token registry returned invalid pagination data");
   }
+  const availableValuations = tokens.filter(
+    (token) => token?.valuation.status === "available",
+  ).length;
+  if (marketRead !== null && value.dataQuality === undefined) {
+    throw new Error("The token registry returned inconsistent market read data");
+  }
   if (
-    marketRead !== null &&
-    (value.dataQuality === undefined ||
-      value.dataQuality.valuation.status !== "unavailable" ||
-      value.dataQuality.valuation.available !== 0 ||
-      tokens.some((token) => token?.valuation.status !== "unavailable"))
+    value.dataQuality !== undefined &&
+    (value.dataQuality.generatedAt !== catalog.lastIndexedAt ||
+      value.dataQuality.launchIdentity.asOfBlock !== catalog.asOfBlock ||
+      value.dataQuality.launchIdentity.custom !== catalog.completeness.custom)
+  ) {
+    throw new Error("The token registry returned inconsistent catalog data");
+  }
+  if (
+    marketRead?.status === "unavailable" && availableValuations !== 0
   ) {
     throw new Error("The token registry returned inconsistent market read data");
   }
@@ -833,6 +1000,7 @@ function parseExplorePayload(value: unknown): ExplorePayload {
       : { dataQuality: value.dataQuality }),
     ...(marketRead === null ? {} : { marketRead }),
     ...(ranking === null ? {} : { ranking }),
+    catalog,
   };
 }
 
@@ -958,24 +1126,6 @@ function assertExploreResponseContract(
   }
 }
 
-function shouldRetryMissingBitqueryFdv(
-  search: URLSearchParams,
-  payload: ExplorePayload,
-) {
-  const sort = search.get("sort");
-  if (sort !== "market-cap" && sort !== "market-cap-asc") return false;
-  return !payload.tokens.some((token) => {
-    const valuation = token.valuation;
-    return valuation.status === "available" &&
-      valuation.metric === "fdv" &&
-      valuation.supplyBasis === "total" &&
-      valuation.currency === "usd" &&
-      valuation.freshness === "current" &&
-      valuation.source === "bitquery" &&
-      BigInt(valuation.valueWad) > 0n;
-  });
-}
-
 function assertUniqueExploreDatasetEntries(
   entries: readonly ValuedExploreEntry[],
 ) {
@@ -993,6 +1143,25 @@ function assertUniqueExploreDatasetEntries(
     }
     tokenAddresses.add(tokenAddress);
   }
+}
+
+function shouldRetryMissingBitqueryFdv(
+  search: URLSearchParams,
+  payload: ExplorePayload,
+) {
+  const sort = search.get("sort");
+  if (sort !== "market-cap" && sort !== "market-cap-asc") return false;
+  if (payload.marketRead !== undefined) return false;
+  return !payload.tokens.some((token) => {
+    const valuation = token.valuation;
+    return valuation.status === "available" &&
+      valuation.metric === "fdv" &&
+      valuation.supplyBasis === "total" &&
+      valuation.currency === "usd" &&
+      valuation.freshness === "current" &&
+      valuation.source === "bitquery" &&
+      BigInt(valuation.valueWad) > 0n;
+  });
 }
 
 function readResolvedExplorePayload(contentKey: string) {
@@ -1061,45 +1230,41 @@ async function fetchExplorePayload(
       const marketReadStatus = response.headers.get(
         "X-Programmable-Market-Read-Status",
       );
-      const expectedUnavailableStatus = payload.marketRead?.category === "transport"
-        ? "transport-unavailable"
-        : payload.marketRead?.category === "response"
-          ? "response-unavailable"
+      const expectedLegacyStatus =
+        payload.marketRead?.provider === "bitquery"
+          ? payload.marketRead.category === "transport"
+            ? "transport-unavailable"
+            : "response-unavailable"
           : null;
       if (
-        expectedUnavailableStatus !== null &&
-        marketReadStatus !== expectedUnavailableStatus
+        payload.marketRead?.provider === "dexscreener" &&
+        marketReadStatus !== payload.marketRead.status
       ) {
         throw new Error("The token registry returned inconsistent market read data");
       }
       if (
-        marketReadStatus === "transport-unavailable" &&
-        payload.marketRead?.category !== "transport"
+        expectedLegacyStatus !== null &&
+        marketReadStatus !== expectedLegacyStatus
       ) {
         throw new Error("The token registry returned inconsistent market read data");
       }
       if (
-        marketReadStatus === "response-unavailable" &&
-        payload.marketRead?.category !== "response"
+        marketReadStatus !== null &&
+        ![
+          "complete",
+          "partial",
+          "unavailable",
+          "current",
+          "transport-unavailable",
+          "response-unavailable",
+        ].includes(marketReadStatus)
       ) {
         throw new Error("The token registry returned inconsistent market read data");
       }
-      if (
-        marketReadStatus === "current" &&
-        payload.marketRead?.status === "unavailable"
-      ) {
-        throw new Error("The token registry returned inconsistent market read data");
-      }
-      const marketReadUnavailable =
-        marketReadStatus === "transport-unavailable" ||
-        marketReadStatus === "response-unavailable";
       if (
         attempt === 0 &&
-        !marketReadUnavailable &&
         shouldRetryMissingBitqueryFdv(search, payload)
-      ) {
-        continue;
-      }
+      ) continue;
       return payload;
     } catch (error) {
       signal.throwIfAborted();
@@ -1193,6 +1358,10 @@ export async function loadExploreModelDataset(
     `${contentKey}\u0000model-page:1`,
     firstPageSearch,
   );
+  if (firstPage.catalog === undefined) {
+    throw new Error("Tokens changed while filters were loading");
+  }
+  const firstPageCatalog = firstPage.catalog;
   if (firstPage.totalPages <= 1) {
     return firstPage;
   }
@@ -1211,7 +1380,10 @@ export async function loadExploreModelDataset(
         payload.page !== page ||
         payload.pageSize !== firstPage.pageSize ||
         payload.total !== firstPage.total ||
-        payload.totalPages !== firstPage.totalPages
+        payload.totalPages !== firstPage.totalPages ||
+        payload.catalog === undefined ||
+        exploreCatalogBoundaryKey(payload.catalog) !==
+          exploreCatalogBoundaryKey(firstPageCatalog)
       ) {
         throw new Error("Tokens changed while filters were loading");
       }
@@ -1235,10 +1407,15 @@ export async function loadExploreModelDataset(
     const markerIsConsistent = degradedPages.every((payload) =>
       payload.marketRead?.provider === degradedPage.marketRead?.provider &&
       payload.marketRead?.status === degradedPage.marketRead?.status &&
-      payload.marketRead?.category === degradedPage.marketRead?.category &&
-      payload.marketRead?.phase === degradedPage.marketRead?.phase &&
-      payload.marketRead?.reason === degradedPage.marketRead?.reason &&
-      payload.marketRead?.httpStatus === degradedPage.marketRead?.httpStatus &&
+      (payload.marketRead?.provider !== "dexscreener" ||
+        degradedPage.marketRead?.provider !== "dexscreener" ||
+        payload.marketRead.currency === degradedPage.marketRead.currency) &&
+      (payload.marketRead?.provider !== "bitquery" ||
+        degradedPage.marketRead?.provider !== "bitquery" ||
+        (payload.marketRead.category === degradedPage.marketRead.category &&
+          payload.marketRead.phase === degradedPage.marketRead.phase &&
+          payload.marketRead.reason === degradedPage.marketRead.reason &&
+          payload.marketRead.httpStatus === degradedPage.marketRead.httpStatus)) &&
       payload.ranking?.status === degradedPage.ranking?.status &&
       payload.ranking?.requested === degradedPage.ranking?.requested &&
       payload.ranking?.applied === degradedPage.ranking?.applied
@@ -1431,8 +1608,7 @@ export function getExploreValuationMetric(
   token: ExploreEntry | ValuedExploreEntry,
 ): MarketCapMetric | undefined {
   const valuation = valuationForEntry(token);
-  if (valuation.status !== "available" || valuation.freshness !== "current")
-    return undefined;
+  if (!isExploreValuationQualifiedV1(valuation)) return undefined;
   const value = Number(BigInt(valuation.valueWad)) / 1e18;
   if (!Number.isFinite(value) || value <= 0) return undefined;
   if (valuation.currency === "usd") return { kind: "usd", value };
@@ -1565,10 +1741,10 @@ export function exploreDataQualityMessage(
 ) {
   if (!quality) return null;
   if (quality.launchIdentity.status === "partial") {
-    return "Some launches may be temporarily unavailable";
+    return `Partial launch index · last indexed ${quality.generatedAt.slice(0, 10)}`;
   }
   if (quality.launchIdentity.status === "last-known-good") {
-    return "Launches may be out of date";
+    return `Launch index may be out of date · last indexed ${quality.generatedAt.slice(0, 10)}`;
   }
   if (quality.valuation.status === "stale") {
     return "Prices may be out of date";
@@ -1873,8 +2049,8 @@ export function ExploreView({
       displayState.requestKey !== requestKey);
   const activeFilterCount =
     Number(socialFilter !== "all") + Number(modelFilter !== "all");
-  const activeSortLabel =
-    sortOptions.find((option) => option.id === sort)?.label ?? "Sort";
+  const ranking = payload?.ranking;
+  const activeSortLabel = exploreAppliedSortLabel(sort, ranking);
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||

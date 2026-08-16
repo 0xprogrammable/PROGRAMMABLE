@@ -59,8 +59,8 @@ export type ExploreValuation =
       currency: "usd" | "eth" | "quote";
       valueWad: string;
       quoteSymbol?: string;
-      freshness: "current" | "stale" | "unknown";
-      source?: "bitquery" | "stateview-chainlink";
+      freshness: "current" | "provider-recent" | "stale" | "unknown";
+      source?: "bitquery" | "dexscreener" | "stateview-chainlink";
       asOfTime?: string;
       asOfBlock?: string;
       asOfBlockHash?: `0x${string}`;
@@ -136,7 +136,12 @@ export type ExploreDataQuality = Readonly<{
     ageMs: number | null;
   }>;
   valuation: Readonly<{
-    status: "current" | "partial" | "stale" | "unavailable";
+    status:
+      | "current"
+      | "provider-recent"
+      | "partial"
+      | "stale"
+      | "unavailable";
     metric: "market-cap" | "fdv" | "mixed";
     available: number;
     unavailable: number;
@@ -771,7 +776,7 @@ export function publicExploreEntryV1(
     entry.valuation.status === "available" &&
     entry.valuation.metric === "fdv" &&
     entry.valuation.currency === "usd" &&
-    entry.valuation.freshness === "current"
+    isExploreValuationQualifiedV1(entry.valuation)
   ) {
     output.fdvUsdWad = entry.valuation.valueWad;
   } else {
@@ -804,9 +809,18 @@ export function valuationSortValue(entry: ExploreEntry): bigint | null {
   return value?.status === "available" &&
     value.metric === "fdv" &&
     value.currency === "usd" &&
-    value.freshness === "current"
+    isExploreValuationQualifiedV1(value)
     ? positiveUint256(value.valueWad)
     : null;
+}
+
+export function isExploreValuationQualifiedV1(
+  value: ExploreValuation,
+): value is Extract<ExploreValuation, { status: "available" }> {
+  return value.status === "available" && (
+    value.freshness === "current" ||
+    (value.freshness === "provider-recent" && value.source === "dexscreener")
+  );
 }
 
 function latestAvailableValuationBlock(
@@ -852,6 +866,12 @@ export function buildExploreDataQuality(input: Readonly<{
   );
   const stale = available.filter((value) => value.freshness === "stale");
   const unknown = available.filter((value) => value.freshness === "unknown");
+  const providerRecent = available.filter(
+    (value) => value.freshness === "provider-recent",
+  );
+  const onchainCurrent = available.filter(
+    (value) => value.freshness === "current",
+  );
   const unavailable = valuations.length - available.length;
   const incompleteMarketData = input.entries.filter((entry) => {
     const marketData = entry.marketData;
@@ -867,9 +887,12 @@ export function buildExploreDataQuality(input: Readonly<{
       ? "unavailable" as const
       : stale.length > 0
         ? "stale" as const
-        : unavailable > 0 || unknown.length > 0 || incompleteMarketData > 0
+        : unavailable > 0 || unknown.length > 0 || incompleteMarketData > 0 ||
+            (providerRecent.length > 0 && onchainCurrent.length > 0)
           ? "partial" as const
-          : "current" as const;
+          : providerRecent.length === available.length
+            ? "provider-recent" as const
+            : "current" as const;
   const identityAsOf = blockNumber(input.identityAsOfBlock);
   const reference = blockNumber(input.referenceBlock);
   const identityLag =
@@ -891,6 +914,7 @@ export function buildExploreDataQuality(input: Readonly<{
       ? "stale" as const
       : launchIdentityStatus === "partial" ||
           valuationStatus === "partial" ||
+          valuationStatus === "provider-recent" ||
           valuationStatus === "unavailable"
         ? "partial" as const
         : "complete" as const;
@@ -948,12 +972,18 @@ export function isExploreValuation(value: unknown): value is ExploreValuation {
     (candidate.metric !== "fdv" || candidate.supplyBasis === "total") &&
     ["usd", "eth", "quote"].includes(String(candidate.currency)) &&
     positiveUint256(candidate.valueWad) !== null &&
-    ["current", "stale", "unknown"].includes(String(candidate.freshness)) &&
+    ["current", "provider-recent", "stale", "unknown"].includes(
+      String(candidate.freshness),
+    ) &&
+    (candidate.freshness !== "provider-recent" ||
+      (candidate.source === "dexscreener" &&
+        typeof candidate.asOfTime === "string")) &&
     (candidate.currency !== "quote" ||
       (typeof candidate.quoteSymbol === "string" &&
         candidate.quoteSymbol.trim().length > 0)) &&
     (candidate.source === undefined ||
       candidate.source === "bitquery" ||
+      candidate.source === "dexscreener" ||
       candidate.source === "stateview-chainlink") &&
     (candidate.asOfTime === undefined ||
       (typeof candidate.asOfTime === "string" &&
@@ -1006,7 +1036,7 @@ export function isExploreDataQuality(
       (typeof identityRecord.ageMs === "number" &&
         Number.isSafeInteger(identityRecord.ageMs) &&
         identityRecord.ageMs >= 0)) &&
-    ["current", "partial", "stale", "unavailable"].includes(
+    ["current", "provider-recent", "partial", "stale", "unavailable"].includes(
       String(valuationRecord.status),
     ) &&
     ["market-cap", "fdv", "mixed"].includes(
