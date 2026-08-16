@@ -666,6 +666,12 @@ describe("read-model operations source contract", () => {
       "isPersistentCacheRangeLimitError(error)",
       "false",
     ],
+    [
+      "recovery-only 500-block log windows",
+      "lib/onchain/historical-read-rpc.server.ts",
+      "const RECOVERY_MAX_LOG_BLOCK_RANGE = 500n;",
+      "const RECOVERY_MAX_LOG_BLOCK_RANGE = 5_000n;",
+    ],
   ])(
     "rejects a legacy refresh missing %s",
     (_label, path, needle, replacement) => {
