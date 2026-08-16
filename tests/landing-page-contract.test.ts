@@ -98,6 +98,10 @@ describe("landing page contract", () => {
     expect(styles).toContain(".definitionLogoFrame");
     expect(landing).toContain("new IntersectionObserver(");
     expect(landing).toContain("useLayoutEffect(() =>");
+    expect(landing).toContain('if (window.location.hash === "")');
+    expect(landing).toContain(
+      'window.scrollTo({ behavior: "auto", left: 0, top: 0 })',
+    );
     expect(landing).toContain('window.location.hash !== "#explore"');
     expect(landing).toContain('window.scrollTo({ behavior: "auto"');
     expect(landing).toContain("data-reveal-section");
