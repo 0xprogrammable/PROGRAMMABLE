@@ -24,7 +24,10 @@ const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 export function isCustomLaunchPublicEnabled(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
-  if (environment.PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED !== "true") {
+  if (
+    environment.PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED !== "true"
+    || !isCustomLaunchRegistryPublicReadEnabled(environment)
+  ) {
     return false;
   }
   const origin = environment.PROGRAMMABLE_APPROVAL_SERVICE_V2_ORIGIN?.trim();
@@ -63,8 +66,8 @@ export function isCustomLaunchPublicEnabled(
 export function isCustomLaunchRegistryPublicReadEnabled(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
-  void environment;
-  return false;
+  return environment.PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED === "true"
+    && environment.PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED === "true";
 }
 
 export function configuredLaunchPermitSignersV2(

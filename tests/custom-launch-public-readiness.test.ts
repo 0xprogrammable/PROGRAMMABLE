@@ -47,6 +47,7 @@ const receiptSigner = {
 
 const configured = {
   PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "true",
+  PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
   PROGRAMMABLE_APPROVAL_SERVICE_V2_ORIGIN: "https://approval.programmable.example",
   PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: `sha256:${"9".repeat(64)}`,
   PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "manual_review",
@@ -106,9 +107,18 @@ describe("Custom launch public readiness", () => {
 
   it("separates finalized Registry reads from launch-write service readiness", () => {
     expect(isCustomLaunchRegistryPublicReadEnabled({
+      PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "true",
+      PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
+    })).toBe(true);
+    expect(isCustomLaunchRegistryPublicReadEnabled({
+      PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "false",
       PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
     })).toBe(false);
     expect(isCustomLaunchRegistryPublicReadEnabled({
+      ...configured,
+      PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "false",
+    })).toBe(false);
+    expect(isCustomLaunchPublicEnabled({
       ...configured,
       PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "false",
     })).toBe(false);
