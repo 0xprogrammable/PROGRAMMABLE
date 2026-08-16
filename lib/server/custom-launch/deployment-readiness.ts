@@ -6,7 +6,11 @@ import {
 } from "../projection-target/canonical-json";
 import {
   getProductionWebsiteProjectionTargetV1,
+  getProductionWebsiteRegistryCustomPublicReadTargetV1,
 } from "../projection-target/website-target";
+import {
+  handleProductionGenericLaunchReadinessV2,
+} from "./generic-launch-production-v2";
 import {
   configuredLaunchPermitSignersV2,
   isCustomLaunchPublicEnabled,
@@ -157,7 +161,21 @@ export function handleProductionCustomLaunchDeploymentReadinessV1(
     environment: process.env,
     serviceFetch: globalThis.fetch.bind(globalThis),
     assertWebsiteProjectionDatabaseReadiness: async () => {
-      await getProductionWebsiteProjectionTargetV1().assertProductionReadiness();
+      const genericReadiness = handleProductionGenericLaunchReadinessV2(new Request(
+        "https://programmable.invalid/api/custom-launch/generic/v2/readiness",
+        { headers: { accept: "application/json" } },
+      ));
+      const [, , genericResponse] = await Promise.all([
+        getProductionWebsiteProjectionTargetV1().assertProductionReadiness(),
+        getProductionWebsiteRegistryCustomPublicReadTargetV1()
+          .assertProductionReadiness(),
+        genericReadiness,
+      ]);
+      if (genericResponse.status !== 200) {
+        await genericResponse.body?.cancel();
+        throw new TypeError("Generic launch V2 is not ready");
+      }
+      await genericResponse.body?.cancel();
     },
     now: () => new Date(),
   });

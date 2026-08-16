@@ -3,7 +3,7 @@ import {
 } from "@/lib/server/custom-launch/deployment-readiness";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 10;
+export const maxDuration = 20;
 export const runtime = "nodejs";
 
 export function GET(request: Request): Promise<Response> {
