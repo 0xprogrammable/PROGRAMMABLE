@@ -60,7 +60,7 @@ or invalid observations are stale and unqualified.
 - Endpoint: `GET /tokens/v1/ethereum/{tokenAddresses}`
 - Maximum batch: 30 unique sorted token addresses
 - Default concurrency: 2 across all concurrent reads of one reader instance
-- Default per-reader start interval: 750 ms (at most 80 starts/minute)
+- Default per-reader start interval: 250 ms (at most 240 starts/minute)
 - Default request-and-body deadline: 3 seconds
 - Default whole-producer deadline: 7 seconds across every batch; unfinished
   tokens become unavailable and no later batch starts
@@ -83,7 +83,7 @@ or invalid observations are stale and unqualified.
   cancellation, a 4 MB streaming cap, and never leave shared singleflight
   pinned after all callers leave
 
-The limiter and cache are process-local. The 80 starts/minute per reader cap is
+The limiter and cache are process-local. The 240 starts/minute per reader cap is
 well below the documented provider ceiling, but horizontal serverless fan-out
 still multiplies it. Production telemetry must therefore watch 429s and keep the
 identity-only response path healthy.

@@ -68,8 +68,9 @@ function customProject() {
       },
       {
         marketId: "market-a",
-        kind: "auction",
-        status: "verification_pending",
+        kind: "uniswap-v4",
+        status: "active",
+        poolId: `0x${"98".repeat(32)}`,
         baseAsset: {
           assetId: "custom-token",
           identity: { namespace: "eip155:1/erc20", value: CUSTOM_TOKEN },
@@ -420,6 +421,14 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
           return {
             ...body,
             tokens: [project, entry(1)],
+            marketRead: {
+              ...body.marketRead,
+              status: "complete",
+              requestedCount: 3,
+              observedCount: 2,
+              qualifiedCount: 2,
+              unavailableCount: 1,
+            },
             catalog: {
               ...body.catalog,
               launchSource: "durable-blob+registry.custom-launched",

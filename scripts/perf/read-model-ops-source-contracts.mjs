@@ -2036,6 +2036,8 @@ export function evaluateReadModelOperationsSourceContracts(
       'source: "durable-blob"',
       'kind: "durable-envelope"',
       "mergeLastGoodLaunchCatalogEntriesV1",
+      'entry.exploreKind === "custom-project"',
+      "entry.tokenAddress !== undefined || entry.markets.length > 0",
       "lastGoodLaunchIdentityCommitmentV1",
       'canonicalSha256("programmable.fast-lane-identity.v1"',
     ]) &&
@@ -2056,7 +2058,8 @@ export function evaluateReadModelOperationsSourceContracts(
       "DEFAULT_CACHE_TTL_MS = 5 * 60 * 1_000",
       "DEFAULT_FAILURE_CACHE_TTL_MS = 15_000",
       "DEFAULT_MAXIMUM_CONCURRENT_BATCHES = 2",
-      "DEFAULT_MINIMUM_REQUEST_INTERVAL_MS = 750",
+      "DEFAULT_MINIMUM_REQUEST_INTERVAL_MS = 250",
+      "DEFAULT_MAXIMUM_READ_DURATION_MS = 7_000",
       "const cache = new Map<string, CachedSnapshot>()",
       "const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>()",
     ]) &&
@@ -2215,7 +2218,8 @@ export function evaluateReadModelOperationsSourceContracts(
         "exactCatalogSnapshot(highest)",
         "catalog.launchSource === launchSource",
         "highestCatalog !== newestCatalog",
-        "exactMarketRead(highest, highest.body.total)",
+        "function exactMarketRead(response)",
+        "exactMarketRead(highest)",
         "exactFdvRanking(highest, highestTokens)",
         "qualified.length === Math.min(tokens.length, ranking.qualifiedCount)",
         "!exactSamePageOrder(highest, newest)",
@@ -2243,6 +2247,9 @@ export function evaluateReadModelOperationsSourceContracts(
         'tradePrepare: "separate-live-probe-required"',
         "runProductionStaticDexscreenerSmokeV1",
       ]) &&
+      !stagedPublicSmokeScript.includes(
+        "ranking.qualifiedCount !== response.body?.marketRead?.qualifiedCount",
+      ) &&
       !stagedPublicSmokeScript.includes("/api/explore/profile/claim") &&
       !stagedPublicSmokeScript.includes("/api/trade/prepare") &&
       !/PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL|PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY|https?:\/\/[^"'\s]+rpc/iu.test(

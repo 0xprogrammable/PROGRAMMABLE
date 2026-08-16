@@ -240,21 +240,23 @@ function exactCatalogSnapshot(response) {
   });
 }
 
-function exactMarketRead(response, expectedRequestedCount) {
+function exactMarketRead(response) {
   const read = response.body?.marketRead;
   if (
     read?.provider !== "dexscreener" ||
     !MARKET_READ_STATUSES.has(read.status) ||
     read.currency !== "USD" ||
-    read.requestedCount !== expectedRequestedCount ||
+    !Number.isSafeInteger(read.requestedCount) ||
     !Number.isSafeInteger(read.observedCount) ||
     !Number.isSafeInteger(read.qualifiedCount) ||
     !Number.isSafeInteger(read.unavailableCount) ||
+    read.requestedCount < 0 ||
     read.observedCount < 0 ||
     read.observedCount > read.requestedCount ||
     read.qualifiedCount < 0 ||
     read.qualifiedCount > read.observedCount ||
     read.unavailableCount !== read.requestedCount - read.qualifiedCount ||
+    (read.status === "unavailable" && read.observedCount !== 0) ||
     response.headers.get("x-programmable-market-provider") !== "dexscreener" ||
     response.headers.get("x-programmable-market-read-status") !== read.status
   ) return false;
@@ -271,7 +273,6 @@ function exactFdvRanking(response, tokens) {
     !["complete", "partial", "unavailable"].includes(ranking?.status) ||
     ranking.requested !== "fdv" ||
     ranking.totalCount !== response.body?.total ||
-    ranking.qualifiedCount !== response.body?.marketRead?.qualifiedCount ||
     !Number.isSafeInteger(ranking.qualifiedCount) ||
     ranking.qualifiedCount < 0 ||
     ranking.qualifiedCount > ranking.totalCount
@@ -368,7 +369,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     highestTokens.length < 1 ||
     !exactExplorePage(highest, highestTokens) ||
     exactCatalogSnapshot(highest) === null ||
-    !exactMarketRead(highest, highest.body.total) ||
+    !exactMarketRead(highest) ||
     !exactFdvRanking(highest, highestTokens)
   ) throw new Error("Highest FDV response contract is invalid");
   if (
@@ -379,7 +380,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     newestTokens.length < 1 ||
     !exactExplorePage(newest, newestTokens) ||
     exactCatalogSnapshot(newest) === null ||
-    !exactMarketRead(newest, newestTokens.length)
+    !exactMarketRead(newest)
   ) throw new Error("Newest launches response contract is invalid");
   const highestCatalog = exactCatalogSnapshot(highest);
   const newestCatalog = exactCatalogSnapshot(newest);

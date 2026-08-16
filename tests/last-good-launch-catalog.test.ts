@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ExploreEntry } from "../lib/tokens";
+
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({ readDurable: vi.fn() }));
@@ -97,6 +99,35 @@ describe("last-good launch catalog", () => {
     const catalog = await readLastGoodLaunchCatalogV1();
     expect(catalog.status).toBe("last-known-good");
     expect(catalog.entries).toHaveLength(1);
+  });
+
+  it("includes only verified Custom results that produced a token or market", async () => {
+    const { mergeLastGoodLaunchCatalogEntriesV1 } = await reader();
+    const customBase = {
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"11".repeat(32)}`,
+      markets: [],
+    } as const;
+    const tokenOnly = {
+      ...customBase,
+      id: `custom:sha256:${"22".repeat(32)}`,
+      tokenAddress: "0x2222222222222222222222222222222222222222",
+    };
+    const marketOnly = {
+      ...customBase,
+      id: `custom:sha256:${"33".repeat(32)}`,
+      markets: [{ marketId: "market-only" }],
+    };
+
+    const merged = mergeLastGoodLaunchCatalogEntriesV1(
+      [],
+      [customBase, tokenOnly, marketOnly] as unknown as readonly ExploreEntry[],
+    );
+
+    expect(merged.map((entry) => entry.id)).toEqual([
+      tokenOnly.id,
+      marketOnly.id,
+    ]);
   });
 
   it("fails closed when the validated durable catalog is missing", async () => {

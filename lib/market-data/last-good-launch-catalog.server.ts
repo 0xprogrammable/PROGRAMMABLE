@@ -207,7 +207,11 @@ export function mergeLastGoodLaunchCatalogEntriesV1(
   canonical: readonly ExploreEntry[],
   custom: readonly ExploreEntry[],
 ) {
-  const entries = Object.freeze([...canonical, ...custom]);
+  const producedCustomEntries = custom.filter((entry) =>
+    entry.exploreKind === "custom-project" &&
+    (entry.tokenAddress !== undefined || entry.markets.length > 0)
+  );
+  const entries = Object.freeze([...canonical, ...producedCustomEntries]);
   assertUniqueEntries(entries);
   return entries;
 }

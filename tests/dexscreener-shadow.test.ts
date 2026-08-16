@@ -168,6 +168,37 @@ describe("Dexscreener server-only shadow reader", () => {
     expect(snapshot).not.toHaveProperty("freshness");
   });
 
+  it("completes all 12 cold batches inside the production default budget", async () => {
+    vi.useFakeTimers({ now: Date.parse(FETCHED_AT) });
+    const identities = Array.from({ length: 351 }, (_, index) =>
+      identity(index + 1));
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const requested = new Set(
+        urlTokens(input).map((value) => value.toLowerCase()),
+      );
+      return jsonResponse(identities
+        .filter((item) => requested.has(item.tokenAddress))
+        .map((item) => pair(item)));
+    });
+    const pending = createDexscreenerShadowReaderV1({
+      fetchImpl,
+      now: () => new Date(Date.now()),
+    }).read(identities);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    const snapshot = await pending;
+
+    expect(fetchImpl).toHaveBeenCalledTimes(12);
+    expect(snapshot).toMatchObject({
+      readStatus: "complete",
+      requestedCount: 351,
+      observedCount: 351,
+      qualifiedCount: 351,
+      unavailableCount: 0,
+    });
+    expect(snapshot.results).toHaveLength(351);
+  });
+
   it("binds only one exact ethereum Uniswap-v4 canonical pair", async () => {
     const item = identity(7);
     const foreign = [
