@@ -11,6 +11,10 @@ const DRPC_MAINNET_RPC_PATH = /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u;
 const QUICKNODE_MAINNET_RPC_HOST =
   /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
 const QUICKNODE_MAINNET_RPC_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
+const TENDERLY_RECOVERY_MAINNET_RPC_URL =
+  "https://mainnet.gateway.tenderly.co/";
+const TENDERLY_RECOVERY_MAINNET_RPC_ENDPOINT_COMMITMENT =
+  "0x64d51011a3cc5cd1147970d28c3b771000e1ae0b89f4711d4898386f10fc167f";
 
 export const WEBSITE_MAINNET_RPC_ENV = Object.freeze({
   primaryProvider: "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
@@ -35,6 +39,16 @@ export type WebsiteMainnetRpcPair = Readonly<{
   source: "role-bound-v1" | "legacy-alchemy-quicknode";
   primary: WebsiteRpcBinding;
   secondary: WebsiteRpcBinding;
+}>;
+
+export type ProductionRecoveryMainnetRpcPair = Readonly<{
+  source: "fixed-tenderly-quicknode-v1";
+  primary: Readonly<{
+    provider: "tenderly";
+    url: string;
+    endpointCommitment: string;
+  }>;
+  secondary: WebsiteRpcBinding & Readonly<{ provider: "quicknode" }>;
 }>;
 
 export function productionMainnetRpcEnvironment(
@@ -91,6 +105,29 @@ function providerPathIsValid(parsed: URL, provider: MainnetRpcProviderId) {
       "docs-demo";
 }
 
+function fixedTenderlyRecoveryBinding() {
+  const parsed = new URL(TENDERLY_RECOVERY_MAINNET_RPC_URL);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== "mainnet.gateway.tenderly.co" ||
+    parsed.pathname !== "/" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== "" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    rpcProviderCommitment("endpoint", parsed.href) !==
+      TENDERLY_RECOVERY_MAINNET_RPC_ENDPOINT_COMMITMENT
+  ) {
+    throw new Error("Production recovery primary RPC binding is invalid");
+  }
+  return Object.freeze({
+    provider: "tenderly" as const,
+    url: parsed.href,
+    endpointCommitment: TENDERLY_RECOVERY_MAINNET_RPC_ENDPOINT_COMMITMENT,
+  });
+}
+
 function strictRpcUrl(
   value: string | undefined,
   provider: MainnetRpcProviderId,
@@ -137,12 +174,12 @@ function requiredCommitment(
   return value;
 }
 
-function binding(
-  provider: MainnetRpcProviderId,
+function binding<Provider extends MainnetRpcProviderId>(
+  provider: Provider,
   rawUrl: string | undefined,
   rawCommitment: string | undefined,
   role: "primary" | "secondary",
-): WebsiteRpcBinding {
+): WebsiteRpcBinding & Readonly<{ provider: Provider }> {
   const url = strictRpcUrl(rawUrl, provider, role);
   const endpointCommitment = requiredCommitment(rawCommitment, role);
   if (rpcProviderCommitment("endpoint", url) !== endpointCommitment) {
@@ -216,24 +253,6 @@ function legacyPair(environment: RuntimeEnvironment) {
   );
 }
 
-function committedLegacyProviderPair(environment: RuntimeEnvironment) {
-  return pair(
-    "legacy-alchemy-quicknode",
-    binding(
-      "alchemy",
-      environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
-      environment.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT,
-      "primary",
-    ),
-    binding(
-      "quicknode",
-      environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
-      environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT,
-      "secondary",
-    ),
-  );
-}
-
 /**
  * Resolves the fixed Website read quorum. Once any role-bound v1 field is
  * configured, all six fields become mandatory and legacy values are ignored.
@@ -270,8 +289,9 @@ export function productionMainnetRpcPair(
 }
 
 /**
- * Resolves the commitment-bound Alchemy + QuickNode recovery quorum used only
- * for Custom Registry deployment verification and historical index rebuilds.
+ * Resolves the fixed Tenderly + commitment-bound QuickNode recovery quorum
+ * used only for Custom Registry deployment verification and historical index
+ * rebuilds.
  * It deliberately ignores role-bound Website and generic RPC aliases so a
  * depleted public-read primary cannot block recovery or silently change the
  * reviewed recovery endpoints. Public Profile, Claim and Trade reads must
@@ -279,15 +299,25 @@ export function productionMainnetRpcPair(
  */
 export function productionRecoveryMainnetRpcPair(
   environment: RuntimeEnvironment = process.env,
-): WebsiteMainnetRpcPair {
-  const resolved = committedLegacyProviderPair(environment);
+): ProductionRecoveryMainnetRpcPair {
+  const primary = fixedTenderlyRecoveryBinding();
+  const secondary = binding(
+    "quicknode",
+    environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+    environment.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT,
+    "secondary",
+  );
   if (
-    resolved.primary.provider !== "alchemy" ||
-    resolved.secondary.provider !== "quicknode"
+    primary.url === secondary.url ||
+    primary.endpointCommitment === secondary.endpointCommitment
   ) {
     throw new Error("Production recovery RPC provider roles are invalid");
   }
-  return resolved;
+  return Object.freeze({
+    source: "fixed-tenderly-quicknode-v1",
+    primary,
+    secondary,
+  });
 }
 
 /**

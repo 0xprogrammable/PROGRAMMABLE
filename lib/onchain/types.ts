@@ -4,7 +4,11 @@ import type { LauncherToken } from "../tokens";
 
 export type DeploymentEnvironment = "production" | "rehearsal";
 export type ClassicReleaseVersion = "classic-v1" | "classic-v2";
-export type MainnetRpcProviderId = "alchemy" | "drpc" | "quicknode";
+export type MainnetRpcProviderId =
+  | "alchemy"
+  | "drpc"
+  | "quicknode"
+  | "tenderly";
 
 type OnchainDeploymentBase = {
   environment: DeploymentEnvironment;

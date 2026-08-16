@@ -10,15 +10,11 @@ import type { ReadyOnchainDeployment } from "../lib/onchain/types";
 import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 
-const ALCHEMY_RPC_URL =
-  "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
+const TENDERLY_RPC_URL = "https://mainnet.gateway.tenderly.co/";
 const DRPC_RPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_RPC_URL =
   "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
 const environment = {
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_RPC_URL,
-  PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
-    rpcProviderCommitment("endpoint", ALCHEMY_RPC_URL),
   PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_RPC_URL,
   PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
     rpcProviderCommitment("endpoint", QUICKNODE_RPC_URL),
@@ -43,11 +39,11 @@ const deployment: ReadyOnchainDeployment = {
 };
 
 describe("historical read RPC deployment", () => {
-  it("uses the exact commitment-bound Alchemy and QuickNode recovery pair", () => {
+  it("uses the fixed Tenderly and commitment-bound QuickNode recovery pair", () => {
     expect(historicalReadOnchainDeployment(deployment, environment)).toMatchObject({
-      rpcUrl: ALCHEMY_RPC_URL,
+      rpcUrl: TENDERLY_RPC_URL,
       rpcUrlSecondary: QUICKNODE_RPC_URL,
-      rpcProviderIds: { primary: "alchemy", secondary: "quicknode" },
+      rpcProviderIds: { primary: "tenderly", secondary: "quicknode" },
     });
   });
 
@@ -58,7 +54,7 @@ describe("historical read RPC deployment", () => {
       rpcUrlSecondary: null,
     }, environment);
 
-    expect(historical.rpcUrl).toBe(ALCHEMY_RPC_URL);
+    expect(historical.rpcUrl).toBe(TENDERLY_RPC_URL);
     expect(historical.rpcUrlSecondary).toBe(QUICKNODE_RPC_URL);
   });
 

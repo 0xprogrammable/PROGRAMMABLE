@@ -26,7 +26,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "lib/onchain/historical-read-rpc.server.ts",
           sha256:
-            "c20db55489aa28c24a7eb888cbc80eb9d51944d3fe8908e9805d8984e15a2d6c",
+            "543447b498ef2cfbe7e5fb75eb7457b596a34b9ccc75092a442292991fc262f9",
         }),
         Object.freeze({
           path: "lib/onchain/persistent-rpc-cache.server.ts",
@@ -99,7 +99,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
           sha256:
-            "d501b92d6a28b7e8e1a2a29cae329e2c3a530da941f9b1cbab65e8c6036ca342",
+            "cb0115ba5f594d892e56e407f1a59a52d4c236d7924b78cce4ed727bede21400",
         }),
         currentMarketRpc: Object.freeze({
           path: "lib/market-data/current-market-rpc.server.ts",
@@ -1384,7 +1384,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       historicalRpcSource?.includes("primary: binding.primary.url") &&
       historicalRpcSource?.includes("secondary: binding.secondary.url") &&
-      historicalRpcSource?.includes('primary?.vendorGroup !== "alchemy"') &&
+      historicalRpcSource?.includes('primary?.vendorGroup !== "tenderly"') &&
       historicalRpcSource?.includes('secondary?.vendorGroup !== "quicknode"') &&
       historicalRpcSource?.includes(
         "primary.endpointCommitment !== binding.primary.endpointCommitment",

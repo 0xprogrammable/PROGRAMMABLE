@@ -23,8 +23,7 @@ const transactionHash = `0x${"34".repeat(32)}` as const;
 const blockHash = `0x${"56".repeat(32)}` as const;
 const policyBindingHash = `0x${"78".repeat(32)}` as const;
 const now = () => new Date("2026-08-13T00:00:00.000Z");
-const alchemyUrl =
-  "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
+const tenderlyUrl = "https://mainnet.gateway.tenderly.co/";
 const quicknodeUrl =
   "https://programmable-mainnet.ethereum-mainnet.quiknode.pro/quicknode-test-key/";
 
@@ -271,14 +270,6 @@ describe("Custom Registry V2 public release binding", () => {
       "https://lb.drpc.live/ethereum/depleted-test-key",
     );
     vi.stubEnv(
-      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-      alchemyUrl,
-    );
-    vi.stubEnv(
-      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
-      rpcProviderCommitment("endpoint", alchemyUrl),
-    );
-    vi.stubEnv(
       "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
       quicknodeUrl,
     );
@@ -299,7 +290,7 @@ describe("Custom Registry V2 public release binding", () => {
     expect(response.status).toBe(503);
     expect(rpcFetch).toHaveBeenCalledTimes(2);
     expect(rpcFetch.mock.calls.map(([url]) => url.toString())).toEqual([
-      alchemyUrl,
+      tenderlyUrl,
       quicknodeUrl,
     ]);
   });
