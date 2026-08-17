@@ -48,6 +48,29 @@ describe("Classic launch plan", () => {
     );
   });
 
+  it("batches the immutable Classic preflight reads without weakening them", () => {
+    const preflightSource = readFileSync(
+      new URL("../app/api/launch/preflight/route.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(preflightSource).toContain(
+      "const LAUNCH_RPC_MULTICALL_BATCH_BYTES = 16_384;",
+    );
+    expect(preflightSource).toContain(
+      "const LAUNCH_RPC_JSON_BATCH_SIZE = 32;",
+    );
+    expect(preflightSource).toContain(
+      "batchSize: LAUNCH_RPC_MULTICALL_BATCH_BYTES",
+    );
+    expect(preflightSource).toContain(
+      "batchSize: LAUNCH_RPC_JSON_BATCH_SIZE",
+    );
+    expect(preflightSource).toContain(
+      "await assertClassicV3Infrastructure(",
+    );
+  });
+
   it("starts every new draft on the single supported launch path", () => {
     const draft = createEmptyDraft();
 
