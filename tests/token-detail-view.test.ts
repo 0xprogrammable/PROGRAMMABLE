@@ -112,11 +112,11 @@ describe("token detail metrics", () => {
 
     expect(buildTokenDetailMetrics(withoutSupply)[0]).toEqual({
       label: "FDV",
-      value: "Unavailable",
+      value: "Not available yet",
     });
     expect(buildTokenDetailMetrics(withoutLiquidity, "$999M")[0]).toEqual({
       label: "FDV",
-      value: "Unavailable",
+      value: "Not available yet",
     });
   });
 

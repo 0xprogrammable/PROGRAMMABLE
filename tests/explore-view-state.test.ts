@@ -9,6 +9,7 @@ import {
   exploreDataQualityMessage,
   exploreAppliedSortLabel,
   exploreMarketStatusLabel,
+  exploreUnavailableFdvLabel,
   exploreTokensPerPageForViewport,
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
@@ -991,6 +992,17 @@ describe("Explore refresh state", () => {
       kind: "usd",
       value: 125,
     });
+  });
+
+  it("explains missing FDV without inventing a value", () => {
+    expect(exploreUnavailableFdvLabel("Waiting for first trade")).toBe(
+      "Waiting for first trade",
+    );
+    expect(exploreUnavailableFdvLabel("No market")).toBe("No market yet");
+    expect(exploreUnavailableFdvLabel("Unavailable")).toBe(
+      "Not available yet",
+    );
+    expect(exploreUnavailableFdvLabel(undefined)).toBe("Not available yet");
   });
 
   it("labels bounded offchain FDV as provider recent, never onchain current", () => {

@@ -64,6 +64,14 @@ import {
 } from "@/lib/tokens";
 import styles from "./explore-experience.module.css";
 
+type ExploreMarketStatus =
+  | "No market"
+  | "Waiting for first trade"
+  | "Last verified"
+  | "Provider recent"
+  | "Limited market data"
+  | "Unavailable";
+
 type TokenCard = {
   id: string;
   name: string;
@@ -73,13 +81,7 @@ type TokenCard = {
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
   valuationMetric?: "Market cap" | "FDV";
-  marketStatus?:
-    | "No market"
-    | "Waiting for first trade"
-    | "Last verified"
-    | "Provider recent"
-    | "Limited market data"
-    | "Unavailable";
+  marketStatus?: ExploreMarketStatus;
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
   launchCategory: "Classic" | "Custom";
@@ -87,14 +89,7 @@ type TokenCard = {
 
 export function exploreMarketStatusLabel(
   entry: ExploreEntry | ValuedExploreEntry,
-):
-  | "No market"
-  | "Waiting for first trade"
-  | "Last verified"
-  | "Provider recent"
-  | "Limited market data"
-  | "Unavailable"
-  | undefined {
+): ExploreMarketStatus | undefined {
   const marketData = (entry as Partial<ValuedExploreEntry>).marketData;
   if (marketData && isTokenMarketDataV1(marketData)) {
     return marketDataStatusLabel(marketData);
@@ -111,6 +106,14 @@ export function exploreMarketStatusLabel(
   if (valuation.freshness === "stale") return "Last verified";
   if (valuation.freshness === "unknown") return "Unavailable";
   return undefined;
+}
+
+export function exploreUnavailableFdvLabel(
+  status: ExploreMarketStatus | undefined,
+) {
+  if (status === "Waiting for first trade") return status;
+  if (status === "No market") return "No market yet";
+  return "Not available yet";
 }
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -2293,14 +2296,15 @@ export function ExploreView({
                   <h3 title={token.name}>{token.name}</h3>
                   {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-                {valuationLabel ? (
-                  <div className={styles.runnerData}>
-                    <span>
-                      <small>{token.valuationMetric ?? "Market cap"}</small>
-                      <strong>{valuationLabel}</strong>
-                    </span>
-                  </div>
-                ) : null}
+                <div className={styles.runnerData}>
+                  <span>
+                    <small>{token.valuationMetric ?? "FDV"}</small>
+                    <strong>
+                      {valuationLabel ??
+                        exploreUnavailableFdvLabel(token.marketStatus)}
+                    </strong>
+                  </span>
+                </div>
               </div>
             </>
           );
@@ -2472,7 +2476,7 @@ export function ExploreView({
                             } active`
                       }
                     >
-                      <span>Sort by</span>
+                      <span>{`Sort: ${activeSortLabel}`}</span>
                       {activeFilterCount > 0 ? (
                         <span
                           className={styles.activeFilterCount}
@@ -2527,10 +2531,10 @@ export function ExploreView({
                       <div
                         className={styles.filterGroup}
                         role="group"
-                        aria-labelledby="explore-market-cap-label"
+                        aria-labelledby="explore-fdv-label"
                       >
-                        <p className={styles.filterLabel} id="explore-market-cap-label">
-                          Market Cap
+                        <p className={styles.filterLabel} id="explore-fdv-label">
+                          FDV
                         </p>
                         {sortOptions.slice(2).map((option) => (
                           <button

@@ -912,7 +912,7 @@ export function buildTokenDetailMetrics(
   const values: Array<TokenMetric | null> = [
     {
       label: getValuationMetricLabel(valuation),
-      value: formattedFdv ?? "Unavailable",
+      value: formattedFdv ?? "Not available yet",
     },
     {
       label: "Category",
@@ -1779,11 +1779,11 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
         ? "Current"
         : project.marketData?.status === "partial"
           ? "Limited"
-          : "Unavailable";
+          : "Not available yet";
   return [
     {
       label: getValuationMetricLabel(valuation),
-      value: valuationValue ?? "Unavailable",
+      value: valuationValue ?? "Not available yet",
     },
     { label: "Market data", value: marketStatus },
     ...(primary?.volume24hUsdWad
