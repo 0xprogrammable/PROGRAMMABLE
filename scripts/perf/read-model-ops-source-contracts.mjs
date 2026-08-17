@@ -2116,23 +2116,27 @@ export function evaluateReadModelOperationsSourceContracts(
       publicToken,
     ) &&
     includesEverySourceFragment(publicChart, [
+      "readBitqueryMarketChartV1({",
       "readEnvioClassicV3CatalogV1({",
+      "exploreEntryMarketIdentitiesV1(entry)",
       "mergeEnvioClassicV3CatalogEntriesV1(",
       "readProductionCustomExploreDirectoryV1(request.signal)",
       'let customStatus: "current" | "unavailable" = "unavailable"',
       '`${catalog.source}+registry.custom-launched`',
-      'schemaVersion: "programmable.market-chart-unavailable.v1"',
-      'reason: "history-provider-unavailable"',
-      'source: null',
-      '"Cache-Control": "no-store"',
+      'schemaVersion: "programmable.market-chart-error.v1"',
+      'reason: "identity-unavailable"',
+      '"X-Programmable-Market-Provider": "bitquery"',
+      '"X-Programmable-Market-Read-Status": chart.readStatus',
+      '"X-Programmable-Read-Source": `${launchSource}+bitquery`',
+      "TOKEN_CHART_CACHE_CONTROL",
     ]) &&
-    !/readPrimaryRpcExploreEntriesV1|readBitquery|productionMainnetRpcPrimary/iu.test(
+    !/readPrimaryRpcExploreEntriesV1|productionMainnetRpcPrimary/iu.test(
       publicChart,
     );
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list and token detail use the validated Envio Classic V3 catalog plus bounded exact-identity Dexscreener enrichment while profile and action routes retain their committed dRPC semantics",
+    "Explore list and token detail use the validated Envio Classic V3 catalog plus bounded exact-identity Dexscreener enrichment; charts bind one exact pool through Bitquery while profile and action routes retain their committed dRPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2300,10 +2304,11 @@ export function evaluateReadModelOperationsSourceContracts(
         'profile.headers.get("x-programmable-launch-source") === "drpc"',
         'profile.headers.get("x-programmable-read-source") === "drpc"',
         'profile.headers.get("x-programmable-rpc-provider") === "drpc-primary"',
-        'schemaVersion !== "programmable.market-chart-unavailable.v1"',
-        'chart.headers.get("cache-control") !== "no-store"',
-        'chart.headers.get("x-programmable-data-quality") !== "unavailable"',
-        'chart.headers.get("x-programmable-market-provider") !== null',
+        'schemaVersion !== "programmable.market-chart.v1"',
+        'chart.body?.source !== "bitquery"',
+        'chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase()',
+        'chart.headers.get("cache-control") !==\n      "public, max-age=0, s-maxage=2, stale-while-revalidate=2"',
+        'chart.headers.get("x-programmable-market-provider") !== "bitquery"',
         'chart.headers.get("x-programmable-valuation-block") !== null',
         'detail.headers.get("x-programmable-market-provider") !== "dexscreener"',
         'marketProvider: "dexscreener"',

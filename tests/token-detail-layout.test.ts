@@ -24,13 +24,15 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain(': "Onchain"');
   });
 
-  it("does not preload unavailable historical chart data", () => {
+  it("keeps detail charts lazy while enabling exact pool-bound history", () => {
     const viewSource = detailSource.slice(
       detailSource.indexOf("export function TokenDetailView"),
     );
 
     expect(viewSource).not.toContain("preloadTokenChart");
-    expect(chartSource).toContain("const historyEnabled = preview;");
+    expect(chartSource).toContain(
+      "const historyEnabled = shouldEnablePriceHistory(launchModel);",
+    );
   });
 
   it("announces the inspected chart value without duplicating the visual tooltip", () => {

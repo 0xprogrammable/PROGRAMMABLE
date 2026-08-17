@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
+import { readBitqueryMarketChartV1 } from
+  "../../../../../lib/market-data/bitquery.server";
 import {
   mergeEnvioClassicV3CatalogEntriesV1,
   readEnvioClassicV3CatalogV1,
 } from
   "../../../../../lib/market-data/envio-classic-v3-catalog.server";
+import { exploreEntryMarketIdentitiesV1 } from
+  "../../../../../lib/market-data/explore-market-identities";
+import type {
+  MarketChartErrorV1,
+  MarketChartV1,
+} from "../../../../../lib/market-data/market-data-v1";
 import { isTokenChartRange } from "../../../../../lib/onchain/chart";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../../lib/server/custom-launch/explore-directory-v1";
@@ -14,6 +22,9 @@ import { isCustomLaunchRegistryPublicReadEnabled } from
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const TOKEN_CHART_CACHE_CONTROL =
+  "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
@@ -50,27 +61,65 @@ export async function GET(request: NextRequest) {
         // canonical identity, but an unknown address remains indeterminate.
         if (!entries.some((entry) =>
           entry.tokenAddress?.toLowerCase() === address.toLowerCase()
-        )) return unavailable(address, range, catalog.source, 503);
+        )) {
+          return unavailable({
+            address,
+            range,
+            launchSource: catalog.source,
+            reason: "identity-unavailable",
+            status: 503,
+          });
+        }
       }
       if (customEntries !== undefined) {
         entries = mergeEnvioClassicV3CatalogEntriesV1(entries, customEntries);
         customStatus = "current";
       }
     }
-    if (!entries.some((entry) =>
-      entry.tokenAddress?.toLowerCase() === address.toLowerCase()
-    )) {
+    const entry = entries.find((candidate) =>
+      candidate.tokenAddress?.toLowerCase() === address.toLowerCase()
+    );
+    if (entry === undefined) {
       return json({ error: "Token not found" }, 404);
     }
     const launchSource = customStatus === "current"
       ? `${catalog.source}+registry.custom-launched`
       : catalog.source;
-    return unavailable(address, range, launchSource, 200);
+    const identities = exploreEntryMarketIdentitiesV1(entry);
+    if (identities.length !== 1) {
+      return unavailable({
+        address,
+        range,
+        launchSource,
+        reason: "identity-unavailable",
+      });
+    }
+    if (range === "all" && !Number.isFinite(Date.parse(entry.launchedAt))) {
+      return unavailable({
+        address,
+        range,
+        launchSource,
+        reason: "identity-unavailable",
+      });
+    }
+    const chart = await readBitqueryMarketChartV1({
+      identity: identities[0],
+      range,
+      ...(range === "all" ? { historyStart: entry.launchedAt } : {}),
+      signal: request.signal,
+    });
+    return chartResponse(chart, launchSource);
   } catch (error) {
     console.error("Token chart identity read failed", {
       name: error instanceof Error ? error.name : "LaunchCatalogError",
     });
-    return unavailable(address, range, "envio-classic-v3", 503);
+    return unavailable({
+      address,
+      range,
+      launchSource: "envio-classic-v3",
+      reason: "market-data-unavailable",
+      status: 503,
+    });
   }
 }
 
@@ -81,31 +130,64 @@ function json(body: unknown, status: number) {
   });
 }
 
-function unavailable(
-  address: `0x${string}`,
-  range: string,
-  launchSource: string,
-  status: 200 | 503,
-) {
+function unavailable(input: Readonly<{
+  address: `0x${string}`;
+  range: "1h" | "1d" | "1w" | "all";
+  launchSource: string;
+  reason: MarketChartErrorV1["reason"];
+  status?: 200 | 503;
+}>) {
+  const status = input.status ?? 200;
+  const body: MarketChartErrorV1 = {
+    schemaVersion: "programmable.market-chart-error.v1",
+    source: "bitquery",
+    status: "unavailable",
+    generatedAt: new Date().toISOString(),
+    address: input.address,
+    range: input.range,
+    reason: input.reason,
+    error: "Price history is temporarily unavailable",
+  };
   return NextResponse.json(
-    {
-      schemaVersion: "programmable.market-chart-unavailable.v1",
-      source: null,
-      status: "unavailable",
-      generatedAt: new Date().toISOString(),
-      address,
-      range,
-      reason: "history-provider-unavailable",
-    },
+    body,
     {
       status,
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": status === 503 ? "no-store" : TOKEN_CHART_CACHE_CONTROL,
         "X-Programmable-Data-Quality": "unavailable",
-        "X-Programmable-Launch-Source": launchSource,
-        "X-Programmable-Read-Source": launchSource,
+        "X-Programmable-Launch-Source": input.launchSource,
+        "X-Programmable-Read-Source": input.launchSource,
         ...(status === 503 ? { "Retry-After": "5" } : {}),
       },
     },
   );
+}
+
+function chartResponse(chart: MarketChartV1, launchSource: string) {
+  const dataQuality = chart.status === "ready" ||
+      chart.status === "insufficient-history"
+    ? "current"
+    : chart.status === "partial"
+      ? "partial"
+      : "unavailable";
+  const hasPriceHistory = chart.points.length > 0;
+  return NextResponse.json(chart, {
+    headers: {
+      "Cache-Control": TOKEN_CHART_CACHE_CONTROL,
+      "X-Programmable-Data-Quality": dataQuality,
+      "X-Programmable-Launch-Source": launchSource,
+      "X-Programmable-Read-Source": `${launchSource}+bitquery`,
+      "X-Programmable-Market-Provider": "bitquery",
+      "X-Programmable-Market-Read-Status": chart.readStatus,
+      ...(hasPriceHistory
+        ? {
+            "X-Programmable-Market-Source": "bitquery",
+            "X-Programmable-Price-Source": "bitquery",
+          }
+        : {}),
+      ...(chart.asOfTime
+        ? { "X-Programmable-Market-As-Of": chart.asOfTime }
+        : {}),
+    },
+  });
 }

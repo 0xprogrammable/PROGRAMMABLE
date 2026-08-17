@@ -122,7 +122,7 @@ export async function verifyPostPromotion(input) {
     id: "production-static-identity-dexscreener-public-apis",
     status: publicSurface ? "pass" : "fail",
     detail:
-      "production serves one catalog-bound identity surface with optional exact-pool Dexscreener enrichment, profile reads, and an explicit provider-free chart",
+      "production serves one catalog-bound identity surface with optional exact-pool Dexscreener enrichment, profile reads, and an exact pool-bound Bitquery chart",
   });
   const failures = checks
     .filter(({ status }) => status !== "pass")

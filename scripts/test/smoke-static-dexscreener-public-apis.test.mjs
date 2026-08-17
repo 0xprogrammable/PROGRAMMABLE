@@ -228,12 +228,23 @@ function stagedFetch(
       };
     } else if (url.pathname === "/api/explore/token/chart") {
       body = {
-        schemaVersion: "programmable.market-chart-unavailable.v1",
-        source: null,
+        schemaVersion: "programmable.market-chart.v1",
+        source: "bitquery",
+        readStatus: "cache-fallback",
         status: "unavailable",
-        reason: "history-provider-unavailable",
-        address: url.searchParams.get("address"),
+        generatedAt: NOW,
+        identity: {
+          chainId: "1",
+          tokenAddress: url.searchParams.get("address"),
+          poolId: POOL,
+          quoteAddress: "0x0000000000000000000000000000000000000000",
+          protocol: "uniswap_v4",
+        },
         range: "1d",
+        points: [],
+        swapCount: 0,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+        truncated: false,
       };
     } else if (url.pathname === "/api/explore/profile") {
       body = {
@@ -258,9 +269,11 @@ function stagedFetch(
         : {}),
       ...(url.pathname === "/api/explore/token/chart"
         ? {
-            "cache-control": "no-store",
+            "cache-control": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
             "x-programmable-data-quality": "unavailable",
-            "x-programmable-read-source": "envio-classic-v3",
+            "x-programmable-read-source": "envio-classic-v3+bitquery",
+            "x-programmable-market-provider": "bitquery",
+            "x-programmable-market-read-status": "cache-fallback",
           }
         : {}),
       ...(url.pathname === "/api/explore/profile"
@@ -279,8 +292,6 @@ function stagedFetch(
     };
     const omittedHeaders = url.pathname === "/api/explore/token/chart"
       ? [
-          "x-programmable-market-provider",
-          "x-programmable-market-read-status",
           "x-programmable-market-source",
           "x-programmable-price-source",
           "x-programmable-market-as-of",
@@ -804,7 +815,7 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
               "x-programmable-launch-source":
                 "envio-classic-v3+registry.custom-launched",
               "x-programmable-read-source": url.pathname.endsWith("/chart")
-                ? "envio-classic-v3+registry.custom-launched"
+                ? "envio-classic-v3+registry.custom-launched+bitquery"
                 : "envio-classic-v3+registry.custom-launched+dexscreener",
             }
           : extraHeaders,
@@ -950,7 +961,7 @@ test("staged smoke rejects chart market provenance leakage", async () => {
       })),
       appendOutput: () => undefined,
     }),
-    /chart interim unavailable contract is invalid/u,
+    /chart pool-bound contract is invalid/u,
   );
 });
 

@@ -399,8 +399,8 @@ export async function verifyLiveCacheAndKeyContracts(input) {
     {
       id: "cache-key-chart-address",
       condition:
-        sameAddress(chartPrimary.body?.address, primaryTokenAddress) &&
-        sameAddress(chartSecondary.body?.address, secondaryTokenAddress),
+        sameAddress(chartPrimary.body?.identity?.tokenAddress, primaryTokenAddress) &&
+        sameAddress(chartSecondary.body?.identity?.tokenAddress, secondaryTokenAddress),
       detail: "chart cache keys preserve distinct token addresses",
     },
     {
@@ -409,7 +409,7 @@ export async function verifyLiveCacheAndKeyContracts(input) {
         chartPrimary.body?.range === "all" &&
         chartSecondary.body?.range === "all" &&
         chartHour.body?.range === "1h" &&
-        sameAddress(chartHour.body?.address, primaryTokenAddress),
+        sameAddress(chartHour.body?.identity?.tokenAddress, primaryTokenAddress),
       detail: "chart cache keys preserve distinct ranges",
     },
     {

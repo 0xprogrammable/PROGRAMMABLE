@@ -79,9 +79,10 @@ normal release gate:
    `413` or `5xx` responses; the minute crons keep the read model progressing.
 
 Visible Explore and token detail clients continue their bounded refreshes while
-the tab is visible. Historical chart requests are disabled in the interim and
-the chart route reports `history-provider-unavailable`; it does not fall back to
-the retired dRPC/Bitquery history scan.
+the tab is visible. Historical chart requests use the bounded Bitquery reader
+only after exact token, quote-asset and Uniswap v4 pool binding. A provider
+outage returns an unavailable chart without hiding the verified token identity;
+the route does not fall back to the retired dRPC history scan.
 
 `/api/ops/index-v2` is the only legacy writer route. The former
 `/api/ops/index` alias is permanently closed and is not scheduled.
