@@ -29,11 +29,6 @@ import {
   isInterfacePreviewHost,
   useInterfacePreview,
 } from "@/components/interface-preview";
-import {
-  LIVE_DATA_REFRESH_INTERVAL_MS,
-  shouldRefreshLiveData,
-  useLiveDataRefresh,
-} from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
 import {
@@ -81,7 +76,7 @@ type TokenCard = {
   imageUrl: string;
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
-  valuationMetric?: "Market cap" | "FDV";
+  valuationMetric?: "Market cap" | "Valuation";
   marketStatus?: ExploreMarketStatus;
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
@@ -219,7 +214,7 @@ export function exploreAppliedSortLabel(
   if (
     (sort === "market-cap" || sort === "market-cap-asc") &&
     ranking?.status === "partial"
-  ) return "Available FDV";
+  ) return "Available valuation";
   return sortOptions.find((option) => option.id === sort)?.label ?? "Sort";
 }
 
@@ -236,7 +231,6 @@ type ExploreState =
       payload: ExplorePayload;
       requestKey: string;
       contentKey: string;
-      refreshError?: string;
     };
 
 export type ExploreInitialResponse = Readonly<{
@@ -256,7 +250,6 @@ export function preserveExplorePayloadOnRefreshFailure(
     ? {
         ...current,
         requestKey: input.requestKey,
-        refreshError: input.message,
       }
     : {
         phase: "error",
@@ -307,7 +300,6 @@ function useExploreTokensPerPage() {
 }
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
-export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
   "/brand/programmable-token-fallback-02-moon.webp",
@@ -319,8 +311,8 @@ const fallbackTokenImages = [
 const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "market-cap", label: "Highest FDV" },
-  { id: "market-cap-asc", label: "Lowest FDV" },
+  { id: "market-cap", label: "Highest valuation" },
+  { id: "market-cap-asc", label: "Lowest valuation" },
 ];
 const socialFilterOptions: {
   id: Exclude<ExploreSocialFilter, "all">;
@@ -376,17 +368,6 @@ function comparePreviewLaunchOrder(left: LauncherToken, right: LauncherToken) {
   }
 
   return left.tokenAddress.localeCompare(right.tokenAddress);
-}
-
-export function shouldRefreshExplore(input: {
-  visibilityState: DocumentVisibilityState;
-  lastRefreshAt: number;
-  now: number;
-}) {
-  return shouldRefreshLiveData({
-    ...input,
-    intervalMs: EXPLORE_REFRESH_INTERVAL_MS,
-  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1776,7 +1757,7 @@ export function getTokenCards(
             valuationMetric:
               valuation.metric === "market-cap"
                 ? ("Market cap" as const)
-                : ("FDV" as const),
+                : ("Valuation" as const),
           }
         : {}),
       marketStatus: exploreMarketStatusLabel(token),
@@ -1827,16 +1808,6 @@ function resultRangeLabel(payload: ExplorePayload | null) {
   }`;
 }
 
-export function exploreDataQualityMessage(
-  quality: ExploreDataQuality | undefined,
-) {
-  if (!quality) return null;
-  if (quality.valuation.status === "stale") {
-    return "Prices may be out of date";
-  }
-  return null;
-}
-
 export function ExploreView({
   initialResponse,
   loadingOnly = false,
@@ -1856,9 +1827,6 @@ export function ExploreView({
   const [retryKey, setRetryKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
-  const refreshKey = useLiveDataRefresh({
-    enabled: !preview && !loadingOnly,
-  });
   const activeExploreContentKey = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultStatusRef = useRef<HTMLParagraphElement>(null);
@@ -1869,8 +1837,8 @@ export function ExploreView({
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
-  const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
-  const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}\u0000${refreshKey}`;
+  const requestKey = `${contentKey}\u0000${retryKey}`;
+  const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
   const activeRequestContentKey =
     modelFilter === "all" ? contentKey : modelDatasetKey;
   const [initialState] = useState(() =>
@@ -2139,7 +2107,6 @@ export function ExploreView({
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const resultLabel =
     displayState.phase === "error" ? "" : resultRangeLabel(payload);
-  const dataQualityMessage = exploreDataQualityMessage(payload?.dataQuality);
   const busy =
     !preview &&
     (displayState.phase === "loading" ||
@@ -2305,7 +2272,15 @@ export function ExploreView({
                 </header>
                 <div className={styles.runnerData}>
                   <span>
-                    <small>{token.valuationMetric ?? "FDV"}</small>
+                    <small
+                      title={
+                        token.valuationMetric === "Valuation"
+                          ? "Fully diluted valuation"
+                          : undefined
+                      }
+                    >
+                      {token.valuationMetric ?? "Valuation"}
+                    </small>
                     <strong>
                       {valuationLabel ??
                         exploreUnavailableFdvLabel(token.marketStatus)}
@@ -2538,10 +2513,14 @@ export function ExploreView({
                       <div
                         className={styles.filterGroup}
                         role="group"
-                        aria-labelledby="explore-fdv-label"
+                        aria-labelledby="explore-valuation-label"
                       >
-                        <p className={styles.filterLabel} id="explore-fdv-label">
-                          FDV
+                        <p
+                          className={styles.filterLabel}
+                          id="explore-valuation-label"
+                          title="Fully diluted valuation"
+                        >
+                          Valuation
                         </p>
                         {sortOptions.slice(2).map((option) => (
                           <button
@@ -2682,20 +2661,6 @@ export function ExploreView({
           <p className="sr-only" role="status" aria-live="polite">
             {copyFeedback}
           </p>
-
-          {displayState.phase === "ready" &&
-          (displayState.refreshError || dataQualityMessage) ? (
-            <div className="token-refresh-warning" role="status">
-              <span>
-                {displayState.refreshError
-                  ? "Prices may be out of date"
-                  : dataQualityMessage}
-              </span>
-              <button type="button" onClick={retryTokens}>
-                Refresh
-              </button>
-            </div>
-          ) : null}
 
           {renderTokenState()}
         </section>
