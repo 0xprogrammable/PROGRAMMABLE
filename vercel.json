@@ -1,6 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/sites/site_V93gQ",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/sites/site_V93gQ/:match*",
+      "destination": "/docs/:match*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/docs",
