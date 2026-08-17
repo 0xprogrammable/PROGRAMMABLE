@@ -664,7 +664,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   );
   const chartHasHistory = Array.isArray(chart.body?.points) &&
     chart.body.points.length > 0;
-  if (
+  const chartContractValid =
     chart.status !== 200 ||
     chart.body?.schemaVersion !== "programmable.market-chart.v1" ||
     chart.body?.source !== "bitquery" ||
@@ -697,8 +697,36 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       chart.headers.get("x-programmable-price-source") !== null ||
       chart.headers.get("x-programmable-market-as-of") !== null
     )) ||
-    chart.headers.get("x-programmable-valuation-block") !== null
-  ) throw new Error("Token chart pool-bound contract is invalid");
+    chart.headers.get("x-programmable-valuation-block") !== null;
+  if (chartContractValid) {
+    throw new Error(
+      "Token chart pool-bound contract is invalid: " + JSON.stringify({
+        status: chart.status,
+        schemaVersion: chart.body?.schemaVersion ?? null,
+        source: chart.body?.source ?? null,
+        readStatus: chart.body?.readStatus ?? null,
+        identityMatches: chart.body?.identity?.tokenAddress?.toLowerCase() ===
+          tokenAddress.toLowerCase(),
+        range: chart.body?.range ?? null,
+        valuationStatus: chart.body?.valuation?.status ?? null,
+        valuationReason: chart.body?.valuation?.reason ?? null,
+        cacheControl: chart.headers.get("cache-control"),
+        dataQuality: chart.headers.get("x-programmable-data-quality"),
+        launchSource: chart.headers.get("x-programmable-launch-source"),
+        readSource: chart.headers.get("x-programmable-read-source"),
+        marketProvider: chart.headers.get("x-programmable-market-provider"),
+        marketReadStatus: chart.headers.get(
+          "x-programmable-market-read-status",
+        ),
+        hasHistory: chartHasHistory,
+        marketSource: chart.headers.get("x-programmable-market-source"),
+        priceSource: chart.headers.get("x-programmable-price-source"),
+        hasMarketAsOf: chart.headers.get("x-programmable-market-as-of") !== null,
+        hasValuationBlock:
+          chart.headers.get("x-programmable-valuation-block") !== null,
+      }),
+    );
+  }
   const chartStatus = chart.body.status;
   if (githubOutput) {
     appendOutput(
