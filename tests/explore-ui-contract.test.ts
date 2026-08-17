@@ -45,7 +45,7 @@ describe("Explore UI contract", () => {
     );
 
     expect(source).toContain('id="explore-model-label"');
-    expect(source).toContain('id="explore-market-cap-label"');
+    expect(source).toContain('id="explore-fdv-label"');
     expect(source).toContain('id="explore-age-label"');
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
@@ -53,11 +53,11 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       'Number(socialFilter !== "all") + Number(modelFilter !== "all")',
     );
-    expect(source).toContain("<span>Sort by</span>");
+    expect(source).toContain('<span>{`Sort: ${activeSortLabel}`}</span>');
     expect(source.indexOf('id="explore-model-label"')).toBeLessThan(
-      source.indexOf('id="explore-market-cap-label"'),
+      source.indexOf('id="explore-fdv-label"'),
     );
-    expect(source.indexOf('id="explore-market-cap-label"')).toBeLessThan(
+    expect(source.indexOf('id="explore-fdv-label"')).toBeLessThan(
       source.indexOf('id="explore-age-label"'),
     );
     expect(source.indexOf('id="explore-age-label"')).toBeLessThan(
@@ -121,7 +121,9 @@ describe("Explore UI contract", () => {
       'sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"',
     );
     expect(source).not.toContain("<small>CA</small>");
-    expect(source).not.toContain('valuationLabel ?? "Unavailable"');
+    expect(source).toContain(
+      "exploreUnavailableFdvLabel(token.marketStatus)",
+    );
     expect(source).toContain("Copy ${token.name} contract address");
     expect(source).toContain('token.marketStatus !== "Unavailable"');
     expect(styles).toMatch(
