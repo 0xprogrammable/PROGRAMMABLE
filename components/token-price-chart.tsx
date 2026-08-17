@@ -73,6 +73,8 @@ const chartPayloadCache = new Map<
 >();
 const chartPayloadRequests = new Map<string, Promise<ChartPayload>>();
 const MAX_CHART_PAYLOAD_CACHE_ENTRIES = 64;
+const CHART_PAYLOAD_CACHE_CURRENT_MAX_AGE_MS = 60_000;
+const CHART_REFRESH_INTERVAL_MS = 60_000;
 
 function cacheChartPayload(key: string, payload: ChartPayload) {
   chartPayloadCache.delete(key);
@@ -145,12 +147,17 @@ export function acceptChartPayload(
 async function requestTokenChartPayload(
   tokenAddress: `0x${string}`,
   range: ChartRange,
+  allowCache: boolean,
 ) {
   const key = `${tokenAddress.toLowerCase()}:${range}`;
   const active = chartPayloadRequests.get(key);
   if (active) return active;
   const cached = chartPayloadCache.get(key);
-  if (cached && Date.now() - cached.updatedAt < 2_000) {
+  if (
+    allowCache &&
+    cached &&
+    Date.now() - cached.updatedAt < CHART_PAYLOAD_CACHE_CURRENT_MAX_AGE_MS
+  ) {
     return cached.payload;
   }
   const request = fetch(
@@ -164,7 +171,9 @@ async function requestTokenChartPayload(
       if (payload === null) {
         throw new Error("Chart source is not ready");
       }
-      if (payload.status !== "partial") cacheChartPayload(key, payload);
+      if (allowCache && payload.status !== "partial") {
+        cacheChartPayload(key, payload);
+      }
       return payload;
     })
     .finally(() => {
@@ -180,7 +189,7 @@ export function preloadTokenChart(
   tokenAddress: `0x${string}`,
   range: ChartRange = "1d",
 ) {
-  return requestTokenChartPayload(tokenAddress, range).catch(() => null);
+  return requestTokenChartPayload(tokenAddress, range, true).catch(() => null);
 }
 
 type SerializedChartRefresh = {
@@ -491,8 +500,10 @@ export function TokenPriceChart({
     null,
   );
   const refreshTaskRef = useRef<SerializedChartRefresh | null>(null);
+  const chartCacheable = launchModel === "classic";
   const refreshKey = useLiveDataRefresh({
     enabled: historyEnabled && launchModel !== "stock-paired" && !preview,
+    intervalMs: CHART_REFRESH_INTERVAL_MS,
   });
   const chartId = useId().replaceAll(":", "");
   const gradientId = `${chartId}-fill`;
@@ -533,6 +544,7 @@ export function TokenPriceChart({
         const nextPayload = await requestTokenChartPayload(
           tokenAddress,
           range,
+          chartCacheable,
         );
         if (signal.aborted) return;
         setRequest(acceptChartPayload(requestKey, nextPayload));
@@ -546,7 +558,9 @@ export function TokenPriceChart({
           preserveChartPayloadOnFailure(
             current,
             requestKey,
-            chartPayloadCache.get(requestKey)?.payload ?? null,
+            chartCacheable
+              ? chartPayloadCache.get(requestKey)?.payload ?? null
+              : null,
           ),
         );
       }
@@ -567,6 +581,7 @@ export function TokenPriceChart({
     range,
     requestKey,
     tokenAddress,
+    chartCacheable,
   ]);
 
   useEffect(() => {
