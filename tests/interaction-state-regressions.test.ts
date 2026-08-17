@@ -110,7 +110,9 @@ describe("interaction state regressions", () => {
     expect(exploreSource).not.toContain("<dt>Market cap</dt>");
     expect(exploreSource).toContain("runnerMeta");
     expect(exploreSource).toContain("runnerData");
-    expect(exploreSource).toContain('token.valuationMetric ?? "FDV"');
+    expect(exploreSource).toContain('token.valuationMetric ?? "Valuation"');
+    expect(exploreSource).not.toContain("Prices may be out of date");
+    expect(exploreSource).not.toContain("useLiveDataRefresh");
     expect(exploreSource).not.toContain("No description yet.");
     expect(exploreSource).not.toContain('{ id: "all", label: "Any" }');
     expect(exploreSource).toMatch(

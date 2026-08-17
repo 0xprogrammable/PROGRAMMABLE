@@ -4,9 +4,7 @@ import {
   EXPLORE_MOBILE_TOKENS_PER_PAGE,
   EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
   EXPLORE_TOKENS_PER_PAGE,
-  EXPLORE_REFRESH_INTERVAL_MS,
   createExploreInitialState,
-  exploreDataQualityMessage,
   exploreAppliedSortLabel,
   exploreMarketStatusLabel,
   exploreUnavailableFdvLabel,
@@ -24,7 +22,6 @@ import {
   paginateTokensByExploreFilters,
   paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
-  shouldRefreshExplore,
   tokenHasSocialLinks,
   tokenLaunchModelGroup,
 } from "../components/explore-view";
@@ -933,32 +930,7 @@ describe("Explore refresh state", () => {
     },
   );
 
-  it("refreshes only visible Explore content after the freshness interval", () => {
-    expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(5_000);
-    expect(
-      shouldRefreshExplore({
-        visibilityState: "hidden",
-        lastRefreshAt: 0,
-        now: 20_000,
-      }),
-    ).toBe(false);
-    expect(
-      shouldRefreshExplore({
-        visibilityState: "visible",
-        lastRefreshAt: 5_000,
-        now: 9_999,
-      }),
-    ).toBe(false);
-    expect(
-      shouldRefreshExplore({
-        visibilityState: "visible",
-        lastRefreshAt: 5_000,
-        now: 10_000,
-      }),
-    ).toBe(true);
-  });
-
-  it("exposes total-supply valuation as FDV without calling it market cap", () => {
+  it("presents total-supply FDV as valuation without calling it market cap", () => {
     const token = {
       id: "1:test",
       name: "Test",
@@ -976,22 +948,25 @@ describe("Explore refresh state", () => {
       liquidityPath: "meme",
     } satisfies LauncherToken;
 
-    expect(getExploreValuationMetric({
+    const entry = {
       ...classicEntry(token),
       valuation: {
-        status: "available",
-        metric: "fdv",
-        supplyBasis: "total",
-        currency: "usd",
+        status: "available" as const,
+        metric: "fdv" as const,
+        supplyBasis: "total" as const,
+        currency: "usd" as const,
         valueWad: "125000000000000000000",
-        freshness: "current",
+        freshness: "current" as const,
         asOfBlock: "25730000",
         lagBlocks: "0",
       },
-    })).toEqual({
+    };
+
+    expect(getExploreValuationMetric(entry)).toEqual({
       kind: "usd",
       value: 125,
     });
+    expect(getTokenCards([entry])[0]?.valuationMetric).toBe("Valuation");
   });
 
   it("explains missing FDV without inventing a value", () => {
@@ -1043,7 +1018,6 @@ describe("Explore refresh state", () => {
       payload,
       contentKey: "same-content",
       requestKey: "refresh-request",
-      refreshError: "RPC unavailable",
     });
   });
 
@@ -1245,24 +1219,6 @@ describe("Explore refresh state", () => {
       new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
     )).rejects.toThrow("inconsistent market read data");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not surface a market availability banner", () => {
-    expect(exploreDataQualityMessage(unavailableMarketDataQuality)).toBeNull();
-    expect(exploreDataQualityMessage({
-      ...unavailableMarketDataQuality,
-      launchIdentity: {
-        ...unavailableMarketDataQuality.launchIdentity,
-        status: "partial",
-      },
-    })).toBeNull();
-    expect(exploreDataQualityMessage({
-      ...unavailableMarketDataQuality,
-      launchIdentity: {
-        ...unavailableMarketDataQuality.launchIdentity,
-        status: "last-known-good",
-      },
-    })).toBeNull();
   });
 
   it("retries the first non-USD FDV and returns the second fail-closed", async () => {
@@ -1703,7 +1659,7 @@ describe("Explore refresh state", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(exploreAppliedSortLabel("market-cap", result.ranking)).toBe(
-      "Highest FDV",
+      "Highest valuation",
     );
   });
 
@@ -1916,7 +1872,7 @@ describe("Explore refresh state", () => {
       applied: "qualified-fdv-then-launch-order",
       qualifiedCount: 1,
       totalCount: 2,
-    })).toBe("Available FDV");
+    })).toBe("Available valuation");
   });
 
   it("rejects malformed Dexscreener counts fail closed", async () => {
