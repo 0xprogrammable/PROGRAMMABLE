@@ -29,7 +29,12 @@ describe("Explore UI contract", () => {
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
     expect(source).not.toContain("useLiveDataRefresh");
-    expect(source).toContain("useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)");
+    expect(source).toContain(
+      "const [valuationSort, setValuationSort] = useState<ExploreValuationSort>",
+    );
+    expect(source).toContain(
+      'const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none")',
+    );
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain("<h1>Explore Hooks</h1>");
     expect(source).not.toContain("ExploreGridSkeleton");
@@ -43,6 +48,10 @@ describe("Explore UI contract", () => {
       join(root, "components/explore-view.tsx"),
       "utf8",
     );
+    const styles = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
 
     expect(source).toContain('id="explore-model-label"');
     expect(source).toContain('id="explore-valuation-label"');
@@ -50,10 +59,10 @@ describe("Explore UI contract", () => {
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
     expect(source).toContain('{ id: "custom-hook", label: "Custom" }');
-    expect(source).toContain(
-      'Number(socialFilter !== "all") + Number(modelFilter !== "all")',
-    );
-    expect(source).toContain('<span>{`Sort: ${activeSortLabel}`}</span>');
+    expect(source).toContain('Number(valuationSort !== "none")');
+    expect(source).toContain('Number(ageSort !== "none")');
+    expect(source).toContain("<span>Filters</span>");
+    expect(source).toContain("{activeFilterCount}");
     expect(source.indexOf('id="explore-model-label"')).toBeLessThan(
       source.indexOf('id="explore-valuation-label"'),
     );
@@ -63,7 +72,26 @@ describe("Explore UI contract", () => {
     expect(source.indexOf('id="explore-age-label"')).toBeLessThan(
       source.indexOf('id="explore-socials-label"'),
     );
-    expect(source).toContain("useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)");
+    expect(source).toContain("valuationSortOptions.map((option) => (");
+    expect(source).toContain("ageSortOptions.map((option) => (");
+    expect(source).toContain("setValuationSort((current) =>");
+    expect(source).toContain("setAgeSort((current) =>");
+    expect(source).not.toContain("setSort(option.id)");
+    expect(styles).toMatch(
+      /\.runnersIntro :global\(\.token-filter\)\s*\{[^}]*flex:\s*0 0 122px;[^}]*width:\s*122px;/s,
+    );
+    expect(styles).toMatch(
+      /\.runnersIntro \.filterMenu\s*\{[^}]*left:\s*auto;[^}]*right:\s*0;[^}]*transform-origin:\s*top right;/s,
+    );
+    expect(
+      source.indexOf(
+        'if (debouncedQuery || socialFilter !== "all" || modelFilter !== "all")',
+      ),
+    ).toBeLessThan(
+      source.indexOf(
+        'if (payload?.dataQuality?.launchIdentity.status === "partial")',
+      ),
+    );
     expect(source).not.toMatch(
       /onClick=\{\(\) => \{[\s\S]{0,300}filterRef\.current/s,
     );
