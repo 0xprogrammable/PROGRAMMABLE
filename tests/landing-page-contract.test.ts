@@ -16,7 +16,7 @@ describe("landing page contract", () => {
     expect(explorePage).toContain("import { ExploreView }");
     expect(explorePage).toContain('canonical: "/explore"');
     expect(navigation).toContain(
-      '{ href: "/#explore", label: "Explore", activePath: "/explore" }',
+      '{ href: "/explore", label: "Explore" }',
     );
     expect(navigation).toContain('href="/"');
     expect(homePage).toContain(
@@ -172,14 +172,12 @@ describe("landing page contract", () => {
     expect(navigation).toContain("event.ctrlKey");
   });
 
-  it("realigns a repeated home Explore activation after the mobile menu closes", () => {
+  it("opens Explore as its own route from the shared topbar", () => {
     const navigation = read("components/site-navigation.tsx");
 
-    expect(navigation).toContain("prepareLandingExploreNavigation(");
-    expect(navigation).toContain('window.history.pushState(null, "", "/#explore")');
-    expect(navigation).toContain('window.dispatchEvent(new Event("hashchange"))');
-    expect(navigation).toContain("MOBILE_MENU_TRANSITION_MS + 20");
-    expect(navigation).toContain("onNavigate={finishMobileNavigation}");
+    expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
+    expect(navigation).not.toContain("prepareLandingExploreNavigation(");
+    expect(navigation).not.toContain('window.history.pushState(null, "", "/#explore")');
   });
 
   it("uses fluid shared gutters instead of a desktop to mobile width jump", () => {
