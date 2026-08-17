@@ -52,6 +52,7 @@ import {
   marketDataStatusLabel,
 } from "@/lib/market-data/market-data-v1";
 import {
+  applyTokenImageFallback,
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
@@ -2288,6 +2289,12 @@ export function ExploreView({
                   sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
+                  onError={(event) => {
+                    applyTokenImageFallback(
+                      event.currentTarget,
+                      getFallbackTokenImage(token.tokenAddress ?? token.id),
+                    );
+                  }}
                 />
               </div>
 

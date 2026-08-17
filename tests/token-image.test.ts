@@ -4,6 +4,7 @@ import sharp from "sharp";
 vi.mock("server-only", () => ({}));
 
 import {
+  applyTokenImageFallback,
   canOptimizeTokenImage,
   getProgrammableTokenImageAssetName,
   getTokenCardImageSource,
@@ -149,5 +150,35 @@ describe("token image policy", () => {
         `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}/token-images/nested/example.webp`,
       ),
     ).toBe("");
+  });
+
+  it("replaces a failed external image with one inert local fallback", () => {
+    const removed: string[] = [];
+    const image = {
+      alt: "Broken token artwork",
+      dataset: {} as DOMStringMap,
+      src: "https://example.com/broken.webp",
+      removeAttribute(name: string) {
+        removed.push(name);
+      },
+    } as unknown as HTMLImageElement;
+
+    expect(applyTokenImageFallback(
+      image,
+      "/brand/programmable-token-fallback-01-dawn.webp",
+    )).toBe(true);
+    expect(image).toMatchObject({
+      alt: "",
+      src: "/brand/programmable-token-fallback-01-dawn.webp",
+      dataset: { tokenImageFallback: "true" },
+    });
+    expect(removed).toEqual(["srcset"]);
+    expect(applyTokenImageFallback(
+      image,
+      "/brand/programmable-token-fallback-02-moon.webp",
+    )).toBe(false);
+    expect(image.src).toBe(
+      "/brand/programmable-token-fallback-01-dawn.webp",
+    );
   });
 });
