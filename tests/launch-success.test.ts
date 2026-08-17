@@ -4,12 +4,14 @@ import {
   findClassicV3IndexedLaunch,
   findDeepV3IndexedLaunch,
   findIndexedLaunch,
+  LAUNCH_INDEX_AUTO_RETRY_DELAY_MS,
   LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS,
   LAUNCH_INDEX_POLL_ATTEMPTS,
   launchDraftForSuccessDisplay,
   launchDraftIsLocked,
   launchIsConfirmedButUnindexed,
   launchIndexPollDelayMs,
+  launchIndexShouldRetryAutomatically,
   launchPollDelayMs,
   launchSuccessSummary,
   launchSubmissionUsesCurrentDraft,
@@ -72,7 +74,7 @@ describe("launch success indexing", () => {
 
     expect(launchSuccessSummary(submission, null)).toEqual({
       address: tokenAddress,
-      href: `https://etherscan.io/address/${tokenAddress}`,
+      href: `/token/${tokenAddress}`,
       name: "Programmable Test",
       symbol: "PGT",
       chainId: 1,
@@ -86,6 +88,36 @@ describe("launch success indexing", () => {
         null,
       ),
     ).toBeNull();
+  });
+
+  it("keeps confirmed token navigation on Programmable while indexing catches up", () => {
+    const submission: PendingLaunchSubmission = {
+      version: 2,
+      transactionHash,
+      account,
+      chainId: 1,
+      model: "classic-v3",
+      submittedAtMs: 1_000_000,
+      receiptConfirmedAtMs: 1_001_000,
+      tokenAddress: tokenAddress as `0x${string}`,
+      tokenName: "Programmable Test",
+      tokenSymbol: "PGT",
+    };
+
+    expect(launchSuccessSummary(submission, null)?.href).toBe(
+      `/token/${tokenAddress}`,
+    );
+    expect(LAUNCH_INDEX_AUTO_RETRY_DELAY_MS).toBe(6_000);
+    expect(launchIndexShouldRetryAutomatically(true, "index-unavailable")).toBe(
+      true,
+    );
+    expect(launchIndexShouldRetryAutomatically(true, "index-timeout")).toBe(
+      true,
+    );
+    expect(launchIndexShouldRetryAutomatically(true, "indexing")).toBe(false);
+    expect(
+      launchIndexShouldRetryAutomatically(false, "index-unavailable"),
+    ).toBe(false);
   });
 
   it("upgrades the confirmed success link only for the same indexed token", () => {
