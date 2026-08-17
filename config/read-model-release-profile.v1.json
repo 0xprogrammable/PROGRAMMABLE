@@ -149,7 +149,7 @@
   "cacheContracts": {
     "exploreList": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     "tokenDetail": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
-    "tokenChart": "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
+    "tokenChart": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     "creatorProfile": "private, max-age=0, s-maxage=15",
     "classicProfile": "no-store",
     "stockProfile": "no-store",

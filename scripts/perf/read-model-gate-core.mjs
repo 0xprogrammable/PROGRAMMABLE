@@ -120,7 +120,7 @@ const EXPECTED_CACHE_CONTRACTS = Object.freeze({
   tokenDetail:
     "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   tokenChart:
-    "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
+    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   creatorProfile: "private, max-age=0, s-maxage=15",
   classicProfile: "no-store",
   stockProfile: "no-store",
