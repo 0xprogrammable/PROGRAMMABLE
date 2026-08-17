@@ -54,6 +54,18 @@ export function getTokenCardImageSource(source: string) {
     : source;
 }
 
+export function applyTokenImageFallback(
+  image: HTMLImageElement,
+  fallbackSource: string,
+) {
+  if (image.dataset.tokenImageFallback === "true") return false;
+  image.dataset.tokenImageFallback = "true";
+  image.alt = "";
+  image.removeAttribute("srcset");
+  image.src = fallbackSource;
+  return true;
+}
+
 export function getTokenImageFileError(file: Pick<File, "size" | "type">) {
   if (!acceptedTokenImageTypes.has(file.type)) {
     return "Choose a JPG, PNG or WebP image";

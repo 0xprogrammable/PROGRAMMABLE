@@ -47,6 +47,7 @@ import {
   type TokenMarketDataV1,
 } from "@/lib/market-data/market-data-v1";
 import {
+  applyTokenImageFallback,
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
@@ -1483,6 +1484,12 @@ function TokenDetailContent({
                 priority
                 sizes="(max-width: 720px) 88px, 132px"
                 unoptimized={!canOptimizeTokenImage(imageSource)}
+                onError={(event) => {
+                  applyTokenImageFallback(
+                    event.currentTarget,
+                    getFallbackTokenImage(token.tokenAddress),
+                  );
+                }}
               />
             </div>
 
@@ -1863,6 +1870,14 @@ function CustomProjectDetailContent({
               priority
               sizes="(max-width: 720px) 88px, 132px"
               unoptimized={!canOptimizeTokenImage(imageSource)}
+              onError={(event) => {
+                applyTokenImageFallback(
+                  event.currentTarget,
+                  getFallbackTokenImage(
+                    project.tokenAddress ?? project.customProjectId,
+                  ),
+                );
+              }}
             />
           </div>
           <div className={styles.identityCopy}>
