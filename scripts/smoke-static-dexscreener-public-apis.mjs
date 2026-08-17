@@ -674,8 +674,13 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     chart.body?.range !== "1d" ||
     chart.body?.valuation?.status !== "unavailable" ||
     chart.body?.valuation?.reason !== "source-unavailable" ||
-    chart.headers.get("cache-control") !==
-      "public, max-age=0, s-maxage=2, stale-while-revalidate=2" ||
+    // Vercel normalizes shared-cache directives on dynamic route responses to
+    // this publicly observable fresh-response policy. The route-level policy
+    // remains accepted for direct runtime tests; the stage probe must accept
+    // the exact header a browser receives.
+    (chart.headers.get("cache-control") !==
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2" &&
+      chart.headers.get("cache-control") !== "public, max-age=0") ||
     !["current", "partial", "unavailable"].includes(
       chart.headers.get("x-programmable-data-quality"),
     ) ||
