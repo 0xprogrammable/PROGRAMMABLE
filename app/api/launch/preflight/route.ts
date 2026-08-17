@@ -133,6 +133,9 @@ const MAX_REQUEST_BYTES = 50_000;
 const REQUIRED_FEE_HOOK_FLAGS = 8_396n;
 const HOOK_FLAG_MASK = (1n << 14n) - 1n;
 const STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE = 64;
+const LAUNCH_RPC_MULTICALL_BATCH_BYTES = 16_384;
+const LAUNCH_RPC_JSON_BATCH_SIZE = 32;
+const LAUNCH_RPC_BATCH_WAIT_MS = 4;
 
 const launchEnvironment =
   process.env.PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -154,7 +157,17 @@ const selectedStockPairedRelease =
 function createLaunchRpcClient(rpcUrl: string) {
   return createPublicClient({
     chain: launchChain,
+    batch: {
+      multicall: {
+        batchSize: LAUNCH_RPC_MULTICALL_BATCH_BYTES,
+        wait: LAUNCH_RPC_BATCH_WAIT_MS,
+      },
+    },
     transport: http(rpcUrl, {
+      batch: {
+        batchSize: LAUNCH_RPC_JSON_BATCH_SIZE,
+        wait: LAUNCH_RPC_BATCH_WAIT_MS,
+      },
       retryCount: 1,
       timeout: 12_000,
     }),
