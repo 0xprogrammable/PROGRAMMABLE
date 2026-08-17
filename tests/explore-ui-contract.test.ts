@@ -28,7 +28,7 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
-    expect(source).toContain("enabled: !preview && !loadingOnly");
+    expect(source).not.toContain("useLiveDataRefresh");
     expect(source).toContain("useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT)");
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain("<h1>Explore Hooks</h1>");
@@ -45,7 +45,7 @@ describe("Explore UI contract", () => {
     );
 
     expect(source).toContain('id="explore-model-label"');
-    expect(source).toContain('id="explore-fdv-label"');
+    expect(source).toContain('id="explore-valuation-label"');
     expect(source).toContain('id="explore-age-label"');
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
@@ -55,9 +55,9 @@ describe("Explore UI contract", () => {
     );
     expect(source).toContain('<span>{`Sort: ${activeSortLabel}`}</span>');
     expect(source.indexOf('id="explore-model-label"')).toBeLessThan(
-      source.indexOf('id="explore-fdv-label"'),
+      source.indexOf('id="explore-valuation-label"'),
     );
-    expect(source.indexOf('id="explore-fdv-label"')).toBeLessThan(
+    expect(source.indexOf('id="explore-valuation-label"')).toBeLessThan(
       source.indexOf('id="explore-age-label"'),
     );
     expect(source.indexOf('id="explore-age-label"')).toBeLessThan(
