@@ -1,12 +1,14 @@
 ---
 description: How reviewed Custom hook projects become exact, wallet bound Programmable releases
-cover: ../.gitbook/assets/custom.webp
+cover: ../.gitbook/assets/custom-v2.png
 coverY: 0
 ---
 
 # Custom hooks
 
 Custom is the release path for products that need their own Uniswap v4 hook, application logic or execution graph. It is not one generic contract with a free form configuration. Each accepted project carries its own source identity, permissions, fee policy, dependency set and launch transaction requirements.
+
+A hook is a smart contract that a Uniswap v4 pool calls at defined points in a transaction. It can apply product specific behavior directly around swaps and other pool actions. What it can do depends on its declared permissions and exact code, which is why Custom review is bound to one source revision rather than to a project name.
 
 ## Public review
 

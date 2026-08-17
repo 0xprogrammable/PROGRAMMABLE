@@ -10,11 +10,13 @@ info:
     Classic is live on Ethereum. Programmable Custom is reserved for launches
     accepted through the canonical Custom Registry. Registry discovery and its
     finalized approved launch feed are live, while general public intake remains
-    prelaunch.
+    prelaunch. Historical Stock-Paired launches are not part of the version 2
+    Programmable Custom classification.
 
-    Within v2, existing fields keep their type and meaning. New deployments and
-    capabilities are additive. Consumers must ignore unknown fields and preserve
-    unsupported records so they remain discoverable.
+    Within v2, existing fields keep their type and meaning. New deployments,
+    capabilities and market kinds are additive. Consumers must ignore unknown
+    fields and keep unknown market kinds discoverable, even when they cannot
+    chart, quote or execute them.
   license:
     name: MIT
     identifier: MIT
@@ -155,7 +157,7 @@ paths:
       summary: List normalized Programmable launches
       description: |
         Returns Classic and Custom launches through one cursor-paginated
-        envelope. A launch can contain zero, one or several pool records. The API
+        envelope. A launch can contain zero, one or several markets. The API
         never fabricates a pool for a token without one. Token amounts are raw
         decimal integer strings. Persist `page.resumeCursor` after processing a
         completed poll and pass it back as `after`. `page.nextCursor` is only
@@ -268,7 +270,7 @@ paths:
       summary: Read the token-list compatibility projection
       description: |
         Returns a token-list-compatible projection for integrations that need
-        token identity and metadata. Use the launch feed for pool details,
+        token identity and metadata. Use the launch feed for markets,
         capabilities, provenance, finality and complete fee disclosure.
       parameters:
         - $ref: "#/components/parameters/ChainIdQuery"
