@@ -273,6 +273,12 @@ const CHART_RANGES: ReadonlyArray<{
   { value: "all", label: "ALL" },
 ];
 
+function shouldEnablePriceHistory(
+  launchModel: ChartLaunchModel | undefined,
+): boolean {
+  return launchModel !== "stock-paired";
+}
+
 const VIEWBOX_WIDTH = 600;
 const VIEWBOX_HEIGHT = 132;
 const PLOT_LEFT = 7;
@@ -476,9 +482,9 @@ export function TokenPriceChart({
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
-  // The interim public runtime has no authoritative historical provider.
-  // Preview fixtures remain available without enabling any live request path.
-  const historyEnabled = preview;
+  // Live history is read only through the exact pool-bound chart endpoint.
+  // Stock-Paired families intentionally remain outside the public chart scope.
+  const historyEnabled = shouldEnablePriceHistory(launchModel);
   const [request, setRequest] = useState<ChartRequestState | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
   const [activePointIndex, setActivePointIndex] = useState<number | null>(

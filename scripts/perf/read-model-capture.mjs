@@ -340,7 +340,7 @@ function responseMatchesDatasetKey(route, body, datasetKey, expectedRange) {
   }
   if (route === "tokenChart") {
     return (
-      sameAddress(body.address, datasetKey) &&
+      sameAddress(body.identity?.tokenAddress, datasetKey) &&
       Array.isArray(body.points) &&
       body.range === expectedRange
     );

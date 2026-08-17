@@ -662,27 +662,44 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     "/api/explore/token/chart?address=" + encodeURIComponent(tokenAddress) +
       "&range=1d",
   );
+  const chartHasHistory = Array.isArray(chart.body?.points) &&
+    chart.body.points.length > 0;
   if (
     chart.status !== 200 ||
-    chart.body?.schemaVersion !== "programmable.market-chart-unavailable.v1" ||
-    chart.body?.source !== null ||
-    chart.body?.status !== "unavailable" ||
-    chart.body?.reason !== "history-provider-unavailable" ||
-    chart.body?.address?.toLowerCase() !== tokenAddress.toLowerCase() ||
+    chart.body?.schemaVersion !== "programmable.market-chart.v1" ||
+    chart.body?.source !== "bitquery" ||
+    !["ready", "insufficient-history", "partial", "waiting-for-first-trade", "unavailable"].includes(chart.body?.status) ||
+    !["live", "cache-fallback"].includes(chart.body?.readStatus) ||
+    chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase() ||
     chart.body?.range !== "1d" ||
-    chart.headers.get("cache-control") !== "no-store" ||
-    chart.headers.get("x-programmable-data-quality") !== "unavailable" ||
+    chart.body?.valuation?.status !== "unavailable" ||
+    chart.body?.valuation?.reason !== "source-unavailable" ||
+    chart.headers.get("cache-control") !==
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2" ||
+    !["current", "partial", "unavailable"].includes(
+      chart.headers.get("x-programmable-data-quality"),
+    ) ||
     chart.headers.get("x-programmable-launch-source") !==
       catalogBoundary.launchSource ||
     chart.headers.get("x-programmable-read-source") !==
-      catalogBoundary.launchSource ||
-    chart.headers.get("x-programmable-market-provider") !== null ||
-    chart.headers.get("x-programmable-market-source") !== null ||
-    chart.headers.get("x-programmable-price-source") !== null ||
-    chart.headers.get("x-programmable-market-as-of") !== null ||
+      `${catalogBoundary.launchSource}+bitquery` ||
+    chart.headers.get("x-programmable-market-provider") !== "bitquery" ||
+    !["live", "cache-fallback"].includes(
+      chart.headers.get("x-programmable-market-read-status"),
+    ) ||
+    (chartHasHistory && (
+      chart.headers.get("x-programmable-market-source") !== "bitquery" ||
+      chart.headers.get("x-programmable-price-source") !== "bitquery" ||
+      chart.headers.get("x-programmable-market-as-of") !== chart.body?.asOfTime
+    )) ||
+    (!chartHasHistory && (
+      chart.headers.get("x-programmable-market-source") !== null ||
+      chart.headers.get("x-programmable-price-source") !== null ||
+      chart.headers.get("x-programmable-market-as-of") !== null
+    )) ||
     chart.headers.get("x-programmable-valuation-block") !== null
-  ) throw new Error("Token chart interim unavailable contract is invalid");
-  const chartStatus = "unavailable";
+  ) throw new Error("Token chart pool-bound contract is invalid");
+  const chartStatus = chart.body.status;
   if (githubOutput) {
     appendOutput(
       githubOutput,

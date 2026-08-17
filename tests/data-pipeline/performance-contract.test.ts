@@ -585,13 +585,12 @@ describe("read-model performance contract", () => {
       sourceContracts
         .evaluateReadModelSourceContracts(process.cwd(), profile)
         .failures.map((failure: { id: string }) => failure.id),
-    ).toEqual([
-      "source-cache-exploreList",
-      "source-cache-tokenDetail",
-      "source-cache-tokenChart",
-      "source-cache-tokenList",
-      "source-cache-publicIndexer",
-    ]);
+      ).toEqual([
+        "source-cache-exploreList",
+        "source-cache-tokenDetail",
+        "source-cache-tokenList",
+        "source-cache-publicIndexer",
+      ]);
 
     const fixture = createBundle(true);
     const result = gateCore.evaluateReadModelReleaseEvidence(
@@ -1147,7 +1146,7 @@ describe("read-model performance contract", () => {
         cacheControl = expectedCache.tokenDetail;
       } else if (url.pathname === "/api/explore/token/chart") {
         body = {
-          address: url.searchParams.get("address"),
+          identity: { tokenAddress: url.searchParams.get("address") },
           range: url.searchParams.get("range"),
         };
         cacheControl = expectedCache.tokenChart;
@@ -1280,7 +1279,10 @@ describe("read-model performance contract", () => {
         return new Response(
           JSON.stringify({
             ...body,
-            address: fixture.datasetManifest.keys.tokenAddresses[0],
+            identity: {
+              ...body.identity,
+              tokenAddress: fixture.datasetManifest.keys.tokenAddresses[0],
+            },
           }),
           {
             status: 200,

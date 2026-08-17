@@ -3,9 +3,13 @@ import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { MarketChartV1 } from "../lib/market-data/market-data-v1";
+
 vi.mock("server-only", () => ({}));
 
 const address = "0x1111111111111111111111111111111111111111";
+const poolId = `0x${"33".repeat(32)}` as const;
+const nativeEth = "0x0000000000000000000000000000000000000000" as const;
 const token = {
   exploreKind: "token",
   id: `1:${address}`,
@@ -13,7 +17,7 @@ const token = {
   symbol: "TEST",
   tokenAddress: address,
   hookAddress: "0x2222222222222222222222222222222222222222",
-  poolId: `0x${"33".repeat(32)}`,
+  poolId,
   launchedAt: "2026-08-11T00:00:00.000Z",
   totalSwapFeeBps: 100,
   launchModel: "classic",
@@ -28,15 +32,63 @@ const token = {
   },
 } as const;
 
+const chart = {
+  schemaVersion: "programmable.market-chart.v1",
+  source: "bitquery",
+  readStatus: "live",
+  status: "ready",
+  generatedAt: "2026-08-17T12:00:00.000Z",
+  identity: {
+    chainId: "1",
+    tokenAddress: address,
+    poolId,
+    quoteAddress: nativeEth,
+    protocol: "uniswap_v4",
+  },
+  range: "1d",
+  points: [
+    {
+      blockNumber: "25740000",
+      time: "2026-08-17T11:00:00.000Z",
+      bucketStart: "2026-08-17T10:40:00.000Z",
+      bucketEnd: "2026-08-17T11:00:00.000Z",
+      observedAt: "2026-08-17T11:00:00.000Z",
+      valueSemantics: "period-median",
+      priceQuote: "0.00001",
+      quoteSymbol: "ETH",
+      tradeCount: 1,
+    },
+    {
+      blockNumber: "25740001",
+      time: "2026-08-17T11:20:00.000Z",
+      bucketStart: "2026-08-17T11:00:00.000Z",
+      bucketEnd: "2026-08-17T11:20:00.000Z",
+      observedAt: "2026-08-17T11:20:00.000Z",
+      valueSemantics: "period-median",
+      priceQuote: "0.000011",
+      quoteSymbol: "ETH",
+      tradeCount: 1,
+    },
+  ],
+  swapCount: 2,
+  valuation: { status: "unavailable", reason: "source-unavailable" },
+  asOfTime: "2026-08-17T11:20:00.000Z",
+  truncated: false,
+} as const satisfies MarketChartV1;
+
 const mocks = vi.hoisted(() => ({
   catalog: vi.fn(),
   mergeEntries: vi.fn(),
   customEnabled: vi.fn(),
   customDirectory: vi.fn(),
+  readChart: vi.fn(),
 }));
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
   readEnvioClassicV3CatalogV1: mocks.catalog,
   mergeEnvioClassicV3CatalogEntriesV1: mocks.mergeEntries,
+}));
+vi.mock("../lib/market-data/bitquery.server", () => ({
+  readBitqueryMarketChartV1: mocks.readChart,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -51,7 +103,7 @@ function request(query = `address=${address}&range=1d`) {
   return new NextRequest(`http://localhost/api/explore/token/chart?${query}`);
 }
 
-describe("provider-free interim token chart API", () => {
+describe("pool-bound token chart API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.catalog.mockResolvedValue({
@@ -66,50 +118,83 @@ describe("provider-free interim token chart API", () => {
       ...canonical,
       ...custom,
     ]);
+    mocks.readChart.mockResolvedValue(chart);
   });
 
-  it("returns an explicit neutral unavailable contract for a known identity", async () => {
+  it("reads a known Classic token through its exact quote-bound pool", async () => {
     const response = await GET(request());
+
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+    );
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "envio-classic-v3",
+      "envio-classic-v3+bitquery",
     );
-    expect(response.headers.get("x-programmable-data-quality")).toBe(
-      "unavailable",
+    expect(response.headers.get("x-programmable-data-quality")).toBe("current");
+    expect(response.headers.get("x-programmable-market-provider")).toBe(
+      "bitquery",
     );
-    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
-    expect(response.headers.get("x-programmable-market-source")).toBeNull();
-    expect(response.headers.get("x-programmable-price-source")).toBeNull();
-    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
-    expect(response.headers.get("x-programmable-valuation-block")).toBeNull();
-    await expect(response.json()).resolves.toMatchObject({
-      schemaVersion: "programmable.market-chart-unavailable.v1",
-      source: null,
-      status: "unavailable",
-      reason: "history-provider-unavailable",
-      address,
+    expect(response.headers.get("x-programmable-market-read-status")).toBe(
+      "live",
+    );
+    expect(response.headers.get("x-programmable-market-source")).toBe(
+      "bitquery",
+    );
+    expect(response.headers.get("x-programmable-price-source")).toBe(
+      "bitquery",
+    );
+    expect(response.headers.get("x-programmable-market-as-of")).toBe(
+      "2026-08-17T11:20:00.000Z",
+    );
+    await expect(response.json()).resolves.toEqual(chart);
+    expect(mocks.readChart).toHaveBeenCalledWith(expect.objectContaining({
+      identity: chart.identity,
       range: "1d",
-    });
+    }));
   });
 
-  it("returns 404 for an address outside the committed identity catalog", async () => {
-    mocks.catalog.mockResolvedValue({ source: "envio-classic-v3", entries: [] });
-    expect((await GET(request())).status).toBe(404);
+  it("binds an all-time chart to the verified launch timestamp", async () => {
+    mocks.readChart.mockResolvedValue({ ...chart, range: "all" });
+
+    const response = await GET(request(`address=${address}&range=all`));
+
+    expect(response.status).toBe(200);
+    expect(mocks.readChart).toHaveBeenCalledWith(expect.objectContaining({
+      identity: chart.identity,
+      range: "all",
+      historyStart: token.launchedAt,
+    }));
   });
 
-  it("labels a successful Custom Registry boundary explicitly", async () => {
+  it("labels a successful Custom Registry boundary and reads one verified pool", async () => {
     const customAddress = "0x9999999999999999999999999999999999999999";
+    const customPoolId = `0x${"99".repeat(32)}`;
     mocks.customEnabled.mockReturnValue(true);
     mocks.customDirectory.mockResolvedValue([{
       exploreKind: "custom-project",
       id: `custom:sha256:${"99".repeat(32)}`,
       tokenAddress: customAddress,
-      markets: [],
+      launchedAt: "2026-08-17T00:00:00.000Z",
+      chainId: "1",
+      markets: [{
+        status: "active",
+        poolId: customPoolId,
+        baseAsset: { identity: { value: customAddress } },
+        quoteAsset: { identity: { value: nativeEth } },
+      }],
     }]);
+    mocks.readChart.mockResolvedValue({
+      ...chart,
+      identity: {
+        ...chart.identity,
+        tokenAddress: customAddress,
+        poolId: customPoolId,
+      },
+    });
 
     const response = await GET(request(`address=${customAddress}&range=1d`));
 
@@ -118,8 +203,97 @@ describe("provider-free interim token chart API", () => {
       "envio-classic-v3+registry.custom-launched",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "envio-classic-v3+registry.custom-launched",
+      "envio-classic-v3+registry.custom-launched+bitquery",
     );
+    expect(mocks.readChart).toHaveBeenCalledWith(expect.objectContaining({
+      identity: expect.objectContaining({
+        tokenAddress: customAddress,
+        poolId: customPoolId,
+        quoteAddress: nativeEth,
+      }),
+    }));
+  });
+
+  it("fails closed instead of choosing between multiple verified Custom pools", async () => {
+    const customAddress = "0x9999999999999999999999999999999999999999";
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.customDirectory.mockResolvedValue([{
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"99".repeat(32)}`,
+      tokenAddress: customAddress,
+      launchedAt: "2026-08-17T00:00:00.000Z",
+      chainId: "1",
+      markets: [
+        {
+          status: "active",
+          poolId: `0x${"98".repeat(32)}`,
+          baseAsset: { identity: { value: customAddress } },
+          quoteAsset: { identity: { value: nativeEth } },
+        },
+        {
+          status: "active",
+          poolId: `0x${"99".repeat(32)}`,
+          baseAsset: { identity: { value: customAddress } },
+          quoteAsset: { identity: { value: nativeEth } },
+        },
+      ],
+    }]);
+
+    const response = await GET(request(`address=${customAddress}&range=1d`));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-data-quality")).toBe(
+      "unavailable",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.market-chart-error.v1",
+      source: "bitquery",
+      status: "unavailable",
+      reason: "identity-unavailable",
+      address: customAddress,
+      range: "1d",
+    });
+    expect(mocks.readChart).not.toHaveBeenCalled();
+  });
+
+  it("preserves a known token identity when the market provider is unavailable", async () => {
+    mocks.readChart.mockResolvedValue({
+      ...chart,
+      readStatus: "cache-fallback",
+      status: "unavailable",
+      points: [],
+      swapCount: 0,
+      asOfTime: undefined,
+    });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "envio-classic-v3",
+    );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "envio-classic-v3+bitquery",
+    );
+    expect(response.headers.get("x-programmable-data-quality")).toBe(
+      "unavailable",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBe(
+      "bitquery",
+    );
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.market-chart.v1",
+      identity: chart.identity,
+      status: "unavailable",
+      points: [],
+    });
+  });
+
+  it("returns 404 for an address outside the committed identity catalog", async () => {
+    mocks.catalog.mockResolvedValue({ source: "envio-classic-v3", entries: [] });
+    expect((await GET(request())).status).toBe(404);
   });
 
   it("fails closed when Custom identities collide with the catalog", async () => {
@@ -143,7 +317,7 @@ describe("provider-free interim token chart API", () => {
   });
 
   it("returns 503 only when the identity catalog cannot be read", async () => {
-    mocks.catalog.mockRejectedValue(new Error("blob unavailable"));
+    mocks.catalog.mockRejectedValue(new Error("catalog unavailable"));
     const response = await GET(request());
     expect(response.status).toBe(503);
     expect(response.headers.get("retry-after")).toBe("5");
@@ -159,17 +333,19 @@ describe("provider-free interim token chart API", () => {
     expect(mocks.catalog).not.toHaveBeenCalled();
   });
 
-  it("contains no dRPC, Bitquery or historical reader dependency", () => {
+  it("uses the bounded Bitquery reader without an RPC or historical scan", () => {
     const source = readFileSync(
       new URL("../app/api/explore/token/chart/route.ts", import.meta.url),
       "utf8",
     );
-    expect(source).not.toMatch(/bitquery|readPrimaryRpc|readTokenChartSeries/iu);
+    expect(source).toContain("readBitqueryMarketChartV1");
+    expect(source).toContain("exploreEntryMarketIdentitiesV1");
+    expect(source).not.toMatch(/readPrimaryRpc|readTokenChartSeries/iu);
     expect(source).toContain("readEnvioClassicV3CatalogV1");
   });
 
-  it("keeps the browser chart request disabled outside preview fixtures", () => {
-    const chart = readFileSync(
+  it("enables browser chart requests outside preview fixtures", () => {
+    const chartSource = readFileSync(
       new URL("../components/token-price-chart.tsx", import.meta.url),
       "utf8",
     );
@@ -177,8 +353,10 @@ describe("provider-free interim token chart API", () => {
       new URL("../components/token-detail-view.tsx", import.meta.url),
       "utf8",
     );
-    expect(chart).toContain("const historyEnabled = preview;");
-    expect(chart).not.toContain("historyAvailable");
+    expect(chartSource).toContain(
+      "const historyEnabled = shouldEnablePriceHistory(launchModel);",
+    );
+    expect(chartSource).not.toContain("historyAvailable");
     expect(detail).not.toContain("preloadTokenChart");
   });
 });
