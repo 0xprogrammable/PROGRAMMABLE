@@ -29,6 +29,7 @@ import {
   removePendingLaunchSubmission,
   submissionPhaseForPendingLaunch,
   shouldCelebrateIndexedLaunch,
+  shouldRestoreConfirmedLaunchSuccess,
   updatePendingLaunchSubmission,
   writePendingLaunchSubmission,
   type PendingLaunchStorage,
@@ -207,6 +208,38 @@ describe("launch success indexing", () => {
         ...currentDraft,
         submittedDraftVersion: 2,
         nowMs: submittedAtMs + 10_000,
+      }),
+    ).toBe(false);
+  });
+
+  it("restores a confirmed unresolved launch success within the stale window", () => {
+    const submittedAtMs = 1_000_000;
+    const submission: PendingLaunchSubmission = {
+      version: 2,
+      transactionHash,
+      account,
+      chainId: 1,
+      model: "classic-v3",
+      submittedAtMs,
+      receiptConfirmedAtMs: submittedAtMs + 1_000,
+    };
+
+    expect(
+      shouldRestoreConfirmedLaunchSuccess(
+        submission,
+        submittedAtMs + PENDING_LAUNCH_STALE_AFTER_MS - 1,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRestoreConfirmedLaunchSuccess(
+        submission,
+        submittedAtMs + PENDING_LAUNCH_STALE_AFTER_MS,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRestoreConfirmedLaunchSuccess({
+        ...submission,
+        receiptConfirmedAtMs: undefined,
       }),
     ).toBe(false);
   });
@@ -948,6 +981,41 @@ describe("launch success indexing", () => {
     });
     expect(
       findClassicV3IndexedLaunch({ status: "ready", launch: null }),
+    ).toBeNull();
+
+    expect(
+      findClassicV3IndexedLaunch(
+        {
+          status: "ready",
+          token: {
+            tokenAddress,
+            name: "Catalog token",
+            symbol: "CAT",
+            launchTransactionHash: transactionHash,
+          },
+        },
+        transactionHash,
+        tokenAddress,
+      ),
+    ).toEqual({
+      address: tokenAddress,
+      href: `/token/${tokenAddress}`,
+      name: "Catalog token",
+      symbol: "CAT",
+    });
+    expect(
+      findClassicV3IndexedLaunch(
+        {
+          token: {
+            tokenAddress,
+            name: "Wrong transaction",
+            symbol: "BAD",
+            launchTransactionHash: `0x${"34".repeat(32)}`,
+          },
+        },
+        transactionHash,
+        tokenAddress,
+      ),
     ).toBeNull();
   });
 
