@@ -11,6 +11,7 @@ import {
   launchIsConfirmedButUnindexed,
   launchIndexPollDelayMs,
   launchPollDelayMs,
+  launchSuccessSummary,
   launchSubmissionUsesCurrentDraft,
   parsePendingLaunchSubmission,
   pendingSubmissionCanBeDiscarded,
@@ -53,6 +54,76 @@ function createMemoryStorage(): PendingLaunchStorage {
 }
 
 describe("launch success indexing", () => {
+  it("shows a confirmed launch before indexing completes", () => {
+    const submission: PendingLaunchSubmission = {
+      version: 2,
+      transactionHash,
+      account,
+      chainId: 1,
+      model: "classic-v3",
+      submittedAtMs: 1_000_000,
+      receiptConfirmedAtMs: 1_001_000,
+      tokenAddress: tokenAddress as `0x${string}`,
+      tokenName: "Programmable Test",
+      tokenSymbol: "PGT",
+      estimatedInitialBuyTokenAmount: 12_345_678,
+    };
+
+    expect(launchSuccessSummary(submission, null)).toEqual({
+      address: tokenAddress,
+      href: `https://etherscan.io/address/${tokenAddress}`,
+      name: "Programmable Test",
+      symbol: "PGT",
+      chainId: 1,
+      indexed: false,
+      transactionHash,
+      estimatedInitialBuyTokenAmount: 12_345_678,
+    });
+    expect(
+      launchSuccessSummary(
+        { ...submission, receiptConfirmedAtMs: undefined },
+        null,
+      ),
+    ).toBeNull();
+  });
+
+  it("upgrades the confirmed success link only for the same indexed token", () => {
+    const submission: PendingLaunchSubmission = {
+      version: 2,
+      transactionHash,
+      account,
+      chainId: 1,
+      model: "classic-v3",
+      submittedAtMs: 1_000_000,
+      receiptConfirmedAtMs: 1_001_000,
+      tokenAddress: tokenAddress as `0x${string}`,
+      tokenName: "Pending name",
+      tokenSymbol: "PND",
+    };
+
+    expect(
+      launchSuccessSummary(submission, {
+        address: tokenAddress as `0x${string}`,
+        href: `/explore/token/${tokenAddress}`,
+        name: "Indexed name",
+        symbol: "IDX",
+      }),
+    ).toMatchObject({
+      href: `/explore/token/${tokenAddress}`,
+      name: "Indexed name",
+      symbol: "IDX",
+      indexed: true,
+    });
+    expect(
+      launchSuccessSummary(submission, {
+        address: "0x3333333333333333333333333333333333333333",
+        href: "/wrong-token",
+        name: "Wrong token",
+        symbol: "BAD",
+      }),
+    ).toBeNull();
+  });
+
   it("locks launch controls until restore completes and after submission", () => {
     expect(launchDraftIsLocked(false, "idle", "")).toBe(true);
     expect(launchDraftIsLocked(true, "preparing", "")).toBe(true);
@@ -667,6 +738,44 @@ describe("launch success indexing", () => {
       ...valid,
       receiptConfirmedAtMs: valid.submittedAtMs + 1,
     });
+
+    const launchSummary = {
+      ...valid,
+      tokenAddress,
+      tokenName: "Programmable Test",
+      tokenSymbol: "PGT",
+      estimatedInitialBuyTokenAmount: 12_345_678,
+    };
+    expect(
+      parsePendingLaunchSubmission(
+        JSON.stringify(launchSummary),
+        "classic-v3",
+        1,
+        account,
+        valid.submittedAtMs,
+      ),
+    ).toEqual(launchSummary);
+    expect(
+      parsePendingLaunchSubmission(
+        JSON.stringify({ ...launchSummary, tokenAddress: "0x1234" }),
+        "classic-v3",
+        1,
+        account,
+        valid.submittedAtMs,
+      ),
+    ).toBeNull();
+    expect(
+      parsePendingLaunchSubmission(
+        JSON.stringify({
+          ...launchSummary,
+          estimatedInitialBuyTokenAmount: -1,
+        }),
+        "classic-v3",
+        1,
+        account,
+        valid.submittedAtMs,
+      ),
+    ).toBeNull();
   });
 
   it("does not expire pending submissions until the stale threshold", () => {

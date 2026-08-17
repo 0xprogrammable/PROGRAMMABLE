@@ -18,6 +18,7 @@ import {
   Check,
   ChevronDown,
   CircleCheck,
+  Copy,
   ImagePlus,
   RotateCcw,
   Trash2,
@@ -60,6 +61,7 @@ import {
   MAX_TOKEN_DESCRIPTION_BYTES,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_NAME_CHARACTERS,
+  MAX_TOKEN_SYMBOL_BYTES,
   MAX_TOKEN_SYMBOL_CHARACTERS,
   characterLength,
   normalizeOptionalHttpsUrl,
@@ -79,6 +81,7 @@ import {
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
+  MEME_TOKEN_SUPPLY_WHOLE,
   parseInitialBuyWei,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
@@ -132,6 +135,10 @@ export type PendingLaunchSubmission = {
   model: LaunchModel;
   submittedAtMs: number;
   receiptConfirmedAtMs?: number;
+  tokenAddress?: `0x${string}`;
+  tokenName?: string;
+  tokenSymbol?: string;
+  estimatedInitialBuyTokenAmount?: number;
 };
 
 export type LaunchSubmissionPhaseRecord = {
@@ -155,6 +162,13 @@ export type IndexedLaunch = {
 type IndexedLaunchRecord = {
   launch: IndexedLaunch;
   submission: PendingLaunchSubmission;
+};
+
+export type LaunchSuccessSummary = IndexedLaunch & {
+  chainId: 1 | 11_155_111;
+  estimatedInitialBuyTokenAmount?: number;
+  indexed: boolean;
+  transactionHash: `0x${string}`;
 };
 
 const emptyTokenImageState: TokenImageState = {
@@ -260,6 +274,46 @@ export function shouldCelebrateIndexedLaunch({
   );
 }
 
+export function launchSuccessSummary(
+  submission: PendingLaunchSubmission | null | undefined,
+  indexedLaunch: IndexedLaunch | null | undefined,
+): LaunchSuccessSummary | null {
+  if (!submission?.receiptConfirmedAtMs) return null;
+  if (
+    indexedLaunch &&
+    submission.tokenAddress &&
+    indexedLaunch.address.toLowerCase() !==
+      submission.tokenAddress.toLowerCase()
+  ) {
+    return null;
+  }
+
+  const address = indexedLaunch?.address ?? submission.tokenAddress;
+  const name = indexedLaunch?.name ?? submission.tokenName;
+  const symbol = indexedLaunch?.symbol ?? submission.tokenSymbol;
+  if (!address || !name || !symbol) return null;
+
+  const explorer =
+    submission.chainId === 11_155_111
+      ? "https://sepolia.etherscan.io"
+      : "https://etherscan.io";
+  return {
+    address,
+    href: indexedLaunch?.href ?? `${explorer}/address/${address}`,
+    name,
+    symbol,
+    chainId: submission.chainId,
+    indexed: Boolean(indexedLaunch),
+    transactionHash: submission.transactionHash,
+    ...(submission.estimatedInitialBuyTokenAmount !== undefined
+      ? {
+          estimatedInitialBuyTokenAmount:
+            submission.estimatedInitialBuyTokenAmount,
+        }
+      : {}),
+  };
+}
+
 export function pendingLaunchStorageKey(
   model: LaunchModel,
   chainId: 1 | 11_155_111,
@@ -325,7 +379,29 @@ export function parsePendingLaunchSubmission(
           !Number.isSafeInteger(candidate.receiptConfirmedAtMs) ||
           candidate.receiptConfirmedAtMs < candidate.submittedAtMs ||
           candidate.receiptConfirmedAtMs >
-            nowMs + PENDING_LAUNCH_MAX_CLOCK_SKEW_MS))
+            nowMs + PENDING_LAUNCH_MAX_CLOCK_SKEW_MS)) ||
+      (candidate.tokenAddress !== undefined &&
+        (typeof candidate.tokenAddress !== "string" ||
+          !/^0x[a-fA-F0-9]{40}$/.test(candidate.tokenAddress))) ||
+      (candidate.tokenName !== undefined &&
+        (typeof candidate.tokenName !== "string" ||
+          candidate.tokenName.trim() !== candidate.tokenName ||
+          candidate.tokenName.length === 0 ||
+          characterLength(candidate.tokenName) > MAX_TOKEN_NAME_CHARACTERS ||
+          utf8ByteLength(candidate.tokenName) > MAX_TOKEN_NAME_BYTES)) ||
+      (candidate.tokenSymbol !== undefined &&
+        (typeof candidate.tokenSymbol !== "string" ||
+          candidate.tokenSymbol.trim() !== candidate.tokenSymbol ||
+          candidate.tokenSymbol.length === 0 ||
+          characterLength(candidate.tokenSymbol) >
+            MAX_TOKEN_SYMBOL_CHARACTERS ||
+          utf8ByteLength(candidate.tokenSymbol) > MAX_TOKEN_SYMBOL_BYTES)) ||
+      (candidate.estimatedInitialBuyTokenAmount !== undefined &&
+        (typeof candidate.estimatedInitialBuyTokenAmount !== "number" ||
+          !Number.isFinite(candidate.estimatedInitialBuyTokenAmount) ||
+          candidate.estimatedInitialBuyTokenAmount <= 0 ||
+          candidate.estimatedInitialBuyTokenAmount >
+            MEME_TOKEN_SUPPLY_WHOLE))
     ) {
       return null;
     }
@@ -339,6 +415,21 @@ export function parsePendingLaunchSubmission(
       submittedAtMs: candidate.submittedAtMs,
       ...(typeof candidate.receiptConfirmedAtMs === "number"
         ? { receiptConfirmedAtMs: candidate.receiptConfirmedAtMs }
+        : {}),
+      ...(typeof candidate.tokenAddress === "string"
+        ? { tokenAddress: candidate.tokenAddress as `0x${string}` }
+        : {}),
+      ...(typeof candidate.tokenName === "string"
+        ? { tokenName: candidate.tokenName }
+        : {}),
+      ...(typeof candidate.tokenSymbol === "string"
+        ? { tokenSymbol: candidate.tokenSymbol }
+        : {}),
+      ...(typeof candidate.estimatedInitialBuyTokenAmount === "number"
+        ? {
+            estimatedInitialBuyTokenAmount:
+              candidate.estimatedInitialBuyTokenAmount,
+          }
         : {}),
     };
   } catch {
@@ -1168,6 +1259,7 @@ function LaunchBuilderFormView({
     )
       ? indexedLaunchRecord.launch
       : null;
+  const successLaunch = launchSuccessSummary(activeSubmission, indexedLaunch);
   const confirmedButUnindexed = launchIsConfirmedButUnindexed(
     activeSubmission,
     indexedLaunchRecord?.submission ?? null,
@@ -1384,6 +1476,14 @@ function LaunchBuilderFormView({
         if (!activeSubmission.receiptConfirmedAtMs) {
           updateBrowserPendingLaunch(confirmedSubmission);
           setCurrentSubmission(confirmedSubmission);
+          const celebrateLaunch = shouldCelebrateIndexedLaunch({
+            submission: confirmedSubmission,
+            currentDraftSubmissionHash,
+            currentDraftVersion: draftVersion.current,
+            submittedDraftVersion,
+          });
+          setSuccessOpen(celebrateLaunch);
+          setNotice(celebrateLaunch ? "Launch successful" : "");
         }
 
         setSubmissionPhaseFor(confirmedSubmission, "indexing");
@@ -1413,14 +1513,6 @@ function LaunchBuilderFormView({
           submission: confirmedSubmission,
         });
         clearSubmissionPhase();
-        const celebrateLaunch = shouldCelebrateIndexedLaunch({
-          submission: confirmedSubmission,
-          currentDraftSubmissionHash,
-          currentDraftVersion: draftVersion.current,
-          submittedDraftVersion,
-        });
-        setSuccessOpen(celebrateLaunch);
-        setNotice(celebrateLaunch ? "Token created" : "");
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
@@ -1629,6 +1721,7 @@ function LaunchBuilderFormView({
       kind: "launch" as const,
       checkedDraft,
       planHash: result.planHash,
+      predictedToken: result.predictedToken,
       transaction: result.transaction,
     };
   }
@@ -1720,6 +1813,13 @@ function LaunchBuilderFormView({
                 });
       setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
+      const initialBuyPreview =
+        model === "classic-v3"
+          ? getClassicInitialBuyPreview(
+              checkedDraft.initialBuyEth,
+              checkedDraft.buySwapFeePercent,
+            )
+          : null;
       const pendingSubmission: PendingLaunchSubmission = {
         version: 2,
         transactionHash: hash,
@@ -1727,6 +1827,16 @@ function LaunchBuilderFormView({
         chainId: launchChainId,
         model,
         submittedAtMs: Date.now(),
+        ...(prepared.predictedToken
+          ? { tokenAddress: prepared.predictedToken }
+          : {}),
+        tokenName: checkedDraft.tokenName.trim(),
+        tokenSymbol: checkedDraft.tokenSymbol.trim(),
+        ...(initialBuyPreview
+          ? {
+              estimatedInitialBuyTokenAmount: initialBuyPreview.tokenAmount,
+            }
+          : {}),
       };
       setSubmissionPersistenceWarning(
         !writeBrowserPendingLaunch(pendingSubmission),
@@ -2143,9 +2253,9 @@ function LaunchBuilderFormView({
         ) : null}
       </form>
 
-      {indexedLaunch && successOpen ? (
+      {successLaunch && successOpen ? (
         <LaunchSuccessDialog
-          launch={indexedLaunch}
+          launch={successLaunch}
           draft={
             model === "classic-v3" ||
             model === "deep" ||
@@ -2184,13 +2294,33 @@ function LaunchSuccessDialog({
   account,
   onClose,
 }: {
-  launch: IndexedLaunch;
+  launch: LaunchSuccessSummary;
   draft?: LaunchDraft;
   account?: string;
   onClose: () => void;
 }) {
   const viewLinkRef = useRef<HTMLAnchorElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
+  const copyResetTimer = useRef<number | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
+
+  async function copyTokenAddress() {
+    if (copyResetTimer.current !== null) {
+      window.clearTimeout(copyResetTimer.current);
+    }
+    try {
+      await navigator.clipboard.writeText(launch.address);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+    copyResetTimer.current = window.setTimeout(
+      () => setCopyState("idle"),
+      2_000,
+    );
+  }
 
   useEffect(() => {
     const previouslyFocused =
@@ -2244,6 +2374,9 @@ function LaunchSuccessDialog({
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
+      if (copyResetTimer.current !== null) {
+        window.clearTimeout(copyResetTimer.current);
+      }
       document.body.style.overflow = previousOverflow;
       for (const element of inertedElements) {
         element.inert = false;
@@ -2277,6 +2410,7 @@ function LaunchSuccessDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="launch-success-title"
+        aria-describedby="launch-success-description"
       >
         <button
           className="icon-button launch-success-close"
@@ -2292,11 +2426,60 @@ function LaunchSuccessDialog({
           size={36}
           strokeWidth={1.6}
         />
-        <p className="eyebrow">Launch complete</p>
-        <h2 id="launch-success-title">Your token is live</h2>
-        <p>
-          {launch.name} <span>${launch.symbol}</span>
+        <p className="eyebrow">Launch successful</p>
+        <h2 id="launch-success-title">{launch.name} was created</h2>
+        <p id="launch-success-description">
+          {launch.indexed
+            ? "Your token page is ready."
+            : "The transaction is confirmed. Your token page is being indexed."}
         </p>
+        <p className="launch-success-symbol">${launch.symbol}</p>
+        <div className="launch-success-address">
+          <span>Contract address</span>
+          <button
+            type="button"
+            onClick={() => void copyTokenAddress()}
+            aria-label={
+              copyState === "copied"
+                ? `${launch.name} contract address copied`
+                : `Copy ${launch.name} contract address`
+            }
+            title={
+              copyState === "copied" ? "Copied" : "Copy contract address"
+            }
+          >
+            <code>{shortenAddress(launch.address)}</code>
+            <span aria-hidden="true">
+              {copyState === "copied" ? "Copied" : "Copy"}
+            </span>
+            {copyState === "copied" ? (
+              <Check aria-hidden="true" size={15} />
+            ) : (
+              <Copy aria-hidden="true" size={15} />
+            )}
+          </button>
+          <span className="launch-success-copy-status" aria-live="polite">
+            {copyState === "error"
+              ? "Contract address could not be copied"
+              : copyState === "copied"
+                ? "Contract address copied"
+                : ""}
+          </span>
+        </div>
+        {launch.estimatedInitialBuyTokenAmount !== undefined ? (
+          <dl className="launch-success-tokens">
+            <div>
+              <dt>Estimated tokens from initial buy</dt>
+              <dd>
+                ≈{" "}
+                {compactInitialBuyTokenFormatter.format(
+                  launch.estimatedInitialBuyTokenAmount,
+                )}{" "}
+                ${launch.symbol}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
         {deepLaunch ? (
           <dl className="launch-success-v3">
             <div>
@@ -2335,7 +2518,7 @@ function LaunchSuccessDialog({
               <dd>{classicConfiguration.rewards.beneficiaries.length}</dd>
             </div>
             <div>
-              <dt>Initial Buy</dt>
+              <dt>Token access</dt>
               <dd>
                 {classicConfiguration.initialBuyCustody.mode === "unlocked"
                   ? "Unlocked"
@@ -2347,9 +2530,21 @@ function LaunchSuccessDialog({
             </div>
           </dl>
         ) : null}
-        <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
-          View your token
-        </Link>
+        {launch.indexed ? (
+          <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
+            View your token
+          </Link>
+        ) : (
+          <a
+            ref={viewLinkRef}
+            className="primary-button"
+            href={launch.href}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View on Etherscan
+          </a>
+        )}
       </section>
     </div>
   );

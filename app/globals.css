@@ -6680,7 +6680,9 @@ html[data-theme="dark"] .theme-toggle-sun {
   border: 1px solid var(--popover-border);
   border-radius: 24px;
   box-shadow: var(--overlay-shadow);
-  max-width: 420px;
+  max-height: calc(100svh - 32px);
+  max-width: 460px;
+  overflow-y: auto;
   padding: 34px;
   position: relative;
   text-align: center;
@@ -6716,9 +6718,117 @@ html[data-theme="dark"] .theme-toggle-sun {
   margin-left: 5px;
 }
 
+.launch-success-dialog > .launch-success-symbol {
+  color: var(--accent-strong);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.launch-success-address {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  text-align: left;
+}
+
+.launch-success-address > span:first-child {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.launch-success-address button {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 9px 12px;
+  width: 100%;
+}
+
+.launch-success-address button:hover {
+  border-color: var(--popover-border);
+}
+
+.launch-success-address button:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.launch-success-address code {
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launch-success-address button > span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  margin-left: auto;
+}
+
+.launch-success-copy-status {
+  color: var(--muted);
+  font-size: 11px;
+  min-height: 14px;
+}
+
+.launch-success-tokens {
+  margin: 12px 0 0;
+}
+
+.launch-success-tokens > div {
+  align-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--popover-border);
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.launch-success-tokens dt {
+  color: var(--text-soft);
+  font-size: 11px;
+  text-align: left;
+}
+
+.launch-success-tokens dd {
+  font-size: 13px;
+  font-weight: 750;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .launch-success-dialog > .primary-button {
   margin-top: 24px;
   width: 100%;
+}
+
+@media (max-width: 520px) {
+  .launch-success-backdrop {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .launch-success-dialog {
+    border-radius: 22px;
+    padding: 30px 20px 20px;
+  }
+
+  .launch-success-dialog h2 {
+    font-size: 27px;
+  }
 }
 
 @media (min-width: 1021px) {
