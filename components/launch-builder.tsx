@@ -190,6 +190,7 @@ const STOCK_PAIRED_DISPLAY_NAMES: Record<string, string> = {
 
 const LAUNCH_RECEIPT_POLL_ATTEMPTS = 12;
 export const LAUNCH_INDEX_POLL_ATTEMPTS = 18;
+export const LAUNCH_INDEX_AUTO_RETRY_DELAY_MS = 6_000;
 export const PENDING_LAUNCH_STALE_AFTER_MS = 24 * 60 * 60 * 1_000;
 export const LAUNCH_SUCCESS_CELEBRATION_MAX_AGE_MS = 30 * 60 * 1_000;
 const PENDING_LAUNCH_MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
@@ -211,6 +212,17 @@ export function launchPollDelayMs(attempt: number) {
 export function launchIndexPollDelayMs(attempt: number) {
   const normalizedAttempt = Math.max(0, Math.floor(attempt));
   return Math.min(4_000 + normalizedAttempt * 1_000, 12_000);
+}
+
+export function launchIndexShouldRetryAutomatically(
+  confirmedButUnindexed: boolean,
+  submissionPhase: LaunchSubmissionPhase,
+) {
+  return (
+    confirmedButUnindexed &&
+    (submissionPhase === "index-unavailable" ||
+      submissionPhase === "index-timeout")
+  );
 }
 
 export function launchDraftIsLocked(
@@ -305,13 +317,9 @@ export function launchSuccessSummary(
   const symbol = indexedLaunch?.symbol ?? submission.tokenSymbol;
   if (!address || !name || !symbol) return null;
 
-  const explorer =
-    submission.chainId === 11_155_111
-      ? "https://sepolia.etherscan.io"
-      : "https://etherscan.io";
   return {
     address,
-    href: indexedLaunch?.href ?? `${explorer}/address/${address}`,
+    href: indexedLaunch?.href ?? `/token/${address}`,
     name,
     symbol,
     chainId: submission.chainId,
@@ -1250,6 +1258,7 @@ function LaunchBuilderFormView({
   const [indexedLaunchRecord, setIndexedLaunchRecord] =
     useState<IndexedLaunchRecord | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
+  const successShownTransactionRef = useRef("");
   const closeSuccessDialog = useCallback(() => {
     setSuccessOpen(false);
   }, []);
@@ -1364,6 +1373,36 @@ function LaunchBuilderFormView({
     const timer = window.setTimeout(() => setNotice(""), 2400);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (
+      !activeSubmission ||
+      !successLaunch ||
+      !shouldRestoreConfirmedLaunchSuccess(activeSubmission)
+    ) {
+      return;
+    }
+    const transactionKey = `${activeSubmission.chainId}:${activeSubmission.transactionHash.toLowerCase()}`;
+    if (successShownTransactionRef.current === transactionKey) return;
+    successShownTransactionRef.current = transactionKey;
+    setSuccessOpen(true);
+    setNotice("Launch successful");
+  }, [activeSubmission, successLaunch]);
+
+  useEffect(() => {
+    if (
+      !launchIndexShouldRetryAutomatically(
+        confirmedButUnindexed,
+        submissionPhase,
+      )
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setConfirmationRetryKey((current) => current + 1);
+    }, LAUNCH_INDEX_AUTO_RETRY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [confirmedButUnindexed, submissionPhase]);
 
   useEffect(() => {
     if (
@@ -1508,14 +1547,6 @@ function LaunchBuilderFormView({
         if (!activeSubmission.receiptConfirmedAtMs) {
           updateBrowserPendingLaunch(confirmedSubmission);
           setCurrentSubmission(confirmedSubmission);
-          const celebrateLaunch = shouldCelebrateIndexedLaunch({
-            submission: confirmedSubmission,
-            currentDraftSubmissionHash,
-            currentDraftVersion: draftVersion.current,
-            submittedDraftVersion,
-          });
-          setSuccessOpen(celebrateLaunch);
-          setNotice(celebrateLaunch ? "Launch successful" : "");
         }
 
         setSubmissionPhaseFor(confirmedSubmission, "indexing");
@@ -1545,13 +1576,6 @@ function LaunchBuilderFormView({
           submission: confirmedSubmission,
         });
         clearSubmissionPhase();
-        if (
-          !confirmedSubmission.tokenAddress &&
-          shouldRestoreConfirmedLaunchSuccess(confirmedSubmission)
-        ) {
-          setSuccessOpen(true);
-          setNotice("Launch successful");
-        }
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
@@ -2067,7 +2091,7 @@ function LaunchBuilderFormView({
       ? "Token details are locked while the transaction is prepared."
       : unresolvedSubmission
         ? confirmedButUnindexed
-          ? "This transaction is confirmed and its hash remains saved while the token index catches up. You can safely go back."
+          ? "This launch is complete. View the token or go back."
           : "Token details are locked to the submitted transaction. Check its status before taking another action."
         : hasSubmittedTransaction
           ? "This completed launch is locked. View the token or go back."
@@ -2077,6 +2101,14 @@ function LaunchBuilderFormView({
     <p>
       {indexedLaunch.name} <span>·</span> ${indexedLaunch.symbol}
     </p>
+  ) : confirmedButUnindexed ? (
+    successLaunch ? (
+      <p>
+        {successLaunch.name} <span>·</span> ${successLaunch.symbol}
+      </p>
+    ) : (
+      <p>Launch confirmed</p>
+    )
   ) : transactionHash ? (
     <>
       <a
@@ -2119,8 +2151,25 @@ function LaunchBuilderFormView({
       className="primary-button classic-launch-button"
       href={indexedLaunch.href}
     >
-      View your token
+      View token
     </Link>
+  ) : confirmedButUnindexed ? (
+    successLaunch ? (
+      <Link
+        className="primary-button classic-launch-button"
+        href={successLaunch.href}
+      >
+        View token
+      </Link>
+    ) : (
+      <button
+        className="primary-button classic-launch-button"
+        type="button"
+        disabled
+      >
+        Launch confirmed
+      </button>
+    )
   ) : transactionHash ? (
     <button
       className="primary-button classic-launch-button"
@@ -2449,7 +2498,6 @@ function LaunchSuccessDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="launch-success-title"
-        aria-describedby="launch-success-description"
       >
         <button
           className="icon-button launch-success-close"
@@ -2467,11 +2515,6 @@ function LaunchSuccessDialog({
         />
         <p className="eyebrow">Launch successful</p>
         <h2 id="launch-success-title">{launch.name} was created</h2>
-        <p id="launch-success-description">
-          {launch.indexed
-            ? "Your token page is ready."
-            : "The transaction is confirmed. Your token page is being indexed."}
-        </p>
         <p className="launch-success-symbol">${launch.symbol}</p>
         <div className="launch-success-address">
           <span>Contract address</span>
@@ -2569,21 +2612,9 @@ function LaunchSuccessDialog({
             </div>
           </dl>
         ) : null}
-        {launch.indexed ? (
-          <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
-            View your token
-          </Link>
-        ) : (
-          <a
-            ref={viewLinkRef}
-            className="primary-button"
-            href={launch.href}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View on Etherscan
-          </a>
-        )}
+        <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
+          View token
+        </Link>
       </section>
     </div>
   );
