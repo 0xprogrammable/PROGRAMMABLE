@@ -1,94 +1,167 @@
 <p align="center">
-  <img src="./assets/readme/programmable-repository-cover-v1.jpg" alt="The Warm Ivory Programmable mark stands between two flowering plants in Programmable's night garden" width="100%" />
+  <a href="https://programmable.market" aria-label="Open Programmable">
+    <picture>
+      <source
+        media="(prefers-reduced-motion: reduce)"
+        srcset="./assets/readme/programmable-repository-night-garden-v3.png"
+      />
+      <img
+        src="./assets/readme/programmable-repository-night-garden-v4.gif"
+        alt="Programmable's white loop mark above a colorful night garden while small round stars twinkle in a black sky"
+        width="100%"
+      />
+    </picture>
+  </a>
 </p>
 
 <h1 align="center">Programmable</h1>
 
+<h3 align="center">Shape what assets can do</h3>
+
 <p align="center">
-  Application, contracts and public data for tokens built with Uniswap v4 hooks.
+  The public product, contracts, read model and release evidence for Programmable on Ethereum.
 </p>
 
 <p align="center">
-  <a href="https://programmable.market">Website</a>
-  ·
+  <a href="https://programmable.market"><strong>Open Programmable</strong></a>
+  &nbsp;·&nbsp;
   <a href="https://programmable.market/explore">Explore</a>
-  ·
+  &nbsp;·&nbsp;
   <a href="https://programmable.market/launch">Create</a>
-  ·
-  <a href="https://programmable.market/docs/developers">Documentation</a>
+  &nbsp;·&nbsp;
+  <a href="https://programmable.market/docs">Docs</a>
+  &nbsp;·&nbsp;
+  <a href="https://programmable.market/docs/developers">Developers</a>
 </p>
 
-Programmable is an Ethereum application for launching, exploring and trading tokens whose market behavior is defined by Uniswap v4 hooks. This repository contains the website, the contract workspace, the public read model and the evidence that binds what the application shows to deployed code.
+## What this repository owns
 
-## Inside this repository
+Programmable is a launch platform for Uniswap v4 products. This repository contains the Next.js application, the
+contract workspace, the public read model and the evidence that binds what the product shows to deployed code.
 
-The product interface and API routes live in [`app/`](./app) and [`components/`](./components). The Solidity workspace, deployment scripts and release evidence live in [`contracts/`](./contracts). Chain reads, indexing and shared product logic live in [`indexer/`](./indexer) and [`lib/`](./lib). Verification, documentation and operations are maintained in [`scripts/`](./scripts), [`tests/`](./tests), [`docs/`](./docs) and [`ops/`](./ops).
+Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
+rewards. Custom is the reviewed path for products that need their own hook, application logic or execution graph. In
+both models, the connected wallet reviews and signs its own Ethereum transaction.
 
-The complete directory guide is in [`docs/PROJECT-STRUCTURE.md`](./docs/PROJECT-STRUCTURE.md).
+## Launch models
 
-## Public repositories
+| Model       | What it creates                                                       | Access                                                    |
+| ----------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Classic** | A fixed supply token with configurable buy and sell transaction fees  | Open through [Create](https://programmable.market/launch) |
+| **Custom**  | A token or application with an individually reviewed hook and release | Accepted and activated revisions only                     |
 
-Programmable uses five public repositories with separate responsibilities.
+A hook is a smart contract attached to a Uniswap v4 pool. The pool calls it at defined points in a transaction, which
+lets the product apply behavior at the pool level. A hook can change fees, accounting, access or other pool behavior,
+but the word hook does not establish safety, compatibility or launch approval.
 
-| Repository                                                             | Purpose                                                                             |
-| :--------------------------------------------------------------------- | :---------------------------------------------------------------------------------- |
-| [`programmable`](https://github.com/0xprogrammable/programmable)       | The application, contract releases, public read model and release evidence          |
-| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)         | The agent skill and local tools used to build reproducible Uniswap v4 projects      |
-| [`submit-launch`](https://github.com/0xprogrammable/submit-launch)     | One concrete project, token and hook revision prepared for exact-revision review    |
-| [`submit-template`](https://github.com/0xprogrammable/submit-template) | Reusable hook template requirements, version binding and acceptance rules           |
-| [`developers`](https://github.com/0xprogrammable/developers)           | Discovery manifests, API contracts and verification examples for external platforms |
+[Compare Classic and Custom](https://programmable.market/docs/tokens)
 
-Use this repository for product, contract and website work. Use `hookbuilder` to build a project, `submit-launch` for one concrete launch submission, `submit-template` for reusable hook logic and `developers` to integrate Programmable data into another product. Review services remain internal; the public repositories describe the inputs and records they consume.
+<p align="center">
+  <img
+    src="./assets/readme/programmable-repository-system-v4.jpg"
+    alt="A river connects distinct flowering regions inside Programmable's night garden"
+    width="100%"
+  />
+</p>
 
-## How data reaches the application
+## How public state is built
 
-Programmable reads recognized contract events and finalized public records, then reconstructs project and market state at a defined chain snapshot. The application uses that data for Explore, token pages, profiles and transaction preparation.
+1. A creator configures Classic or prepares one exact reviewed Custom release.
+2. The connected wallet checks the network, destination, calldata and value before signing.
+3. Ethereum confirms the transaction and the launch reaches the required finality.
+4. The read model publishes the canonical token, pool and launch identity.
+5. Optional price, chart and liquidity data are attached only when their providers return current evidence.
 
-The connected wallet confirms user transactions. A listing, source match or public record does not by itself authorize a launch or prove that a project is safe.
+Canonical launch identity remains visible when optional market data is unavailable. The application does not invent
+valuation, liquidity, provenance or provider support from a token name, ticker or image.
 
-External consumers can use the public token feed at [`/api/indexers/v1/tokens`](https://programmable.market/api/indexers/v1/tokens). The integration contract and discovery manifest are maintained in [`0xprogrammable/developers`](https://github.com/0xprogrammable/developers).
+## Repository map
 
-## Local development
+| Path                                                            | Responsibility                                                                    |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [`app/`](./app), [`components/`](./components)                  | Product routes, API handlers and shared interface components                      |
+| [`lib/`](./lib), [`indexer/`](./indexer)                        | Product logic, onchain readers, indexing and external integrations                |
+| [`contracts/`](./contracts)                                     | Foundry contracts, tests, deployment scripts, specifications and release evidence |
+| [`config/`](./config), [`scripts/`](./scripts), [`ops/`](./ops) | Shared configuration, verification and production operations                      |
+| [`tests/`](./tests), [`docs/`](./docs)                          | Application tests and maintained product, security and operations documentation   |
+| [`public/`](./public), [`assets/`](./assets)                    | Runtime brand files, social previews and repository presentation assets           |
+
+Read the complete [project structure](./docs/PROJECT-STRUCTURE.md).
+
+## Run locally
+
+Use Node.js `24.14.0`, then install the locked dependency tree and start the application:
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. Supply your own Privy, RPC and storage configuration in `.env.local`. Never commit RPC
+credentials, storage tokens, signing material or other secrets.
 
-Provide your own Privy, RPC and storage configuration in `.env.local`. Do not commit RPC credentials, storage tokens, signing material or other secrets.
+## Verify a change
 
-## Verification
-
-Run the complete product gate:
+Run the complete repository gate:
 
 ```bash
 npm run verify
 ```
 
-For contract changes, also use the dedicated contract gate:
+For a contract-focused change, also run:
 
 ```bash
 npm run contracts:verify
 ```
 
-These are local repository checks. They do not prove that a change has been deployed or activated in production.
+These commands prove only the local revision that was checked. They do not prove deployment, production activation,
+provider availability or onchain lifecycle completion.
 
-## Reference
+## Public interfaces
 
-- [Project structure](./docs/PROJECT-STRUCTURE.md)
-- [Developer documentation](https://programmable.market/docs/developers)
-- [Public indexer feed](./docs/public-indexer-feed.md)
-- [Transaction preflight](./docs/frontend-transaction-preflight.md)
-- [Uniswap source provenance](./docs/uniswap-source-provenance.md)
-- [Mainnet readiness](./contracts/security/MAINNET-READINESS.md)
+| Surface             | Canonical location                                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| Product             | [programmable.market](https://programmable.market)                                                       |
+| Explore             | [programmable.market/explore](https://programmable.market/explore)                                       |
+| Documentation       | [programmable.market/docs](https://programmable.market/docs)                                             |
+| Developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
+| Service status      | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
+| Deployment manifest | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
+
+Contract addresses and integration data should come from the versioned manifest rather than screenshots, token names
+or third-party metadata.
+
+## Related repositories
+
+| Repository                                                             | Responsibility                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)         | Agent Skill and local tools for building reproducible Uniswap v4 projects |
+| [`submit-launch`](https://github.com/0xprogrammable/submit-launch)     | Exact-revision intake and public review records for one completed project |
+| [`submit-template`](https://github.com/0xprogrammable/submit-template) | Requirements and version binding for reusable hook templates              |
+| [`developers`](https://github.com/0xprogrammable/developers)           | Discovery manifests, API contracts and direct verification rules          |
 
 ## Release and security boundaries
 
-`production` contains the complete website product and is the only source for website releases. `main` preserves the public contract and release evidence history. Feature branches merge through reviewed pull requests.
+`production` is the canonical full-product branch and the only source for website releases. `main` preserves public
+contract and release-evidence history. Feature branches merge through reviewed pull requests.
 
-Source verification, local tests, a Registry record or a Programmable listing are not an external audit, a safety guarantee or proof of liquidity. Deployment, activation and public availability require their own evidence.
+Source verification, passing tests, a Registry record, a review result or a visible token page are not an external
+audit, a safety guarantee, proof of liquidity or launch authorization. Deployment, activation, finality and public
+availability require separate evidence.
 
 The smart contracts in this repository have not undergone an external audit or public security contest.
+
+<p align="center">
+  <a href="https://programmable.market">Website</a>
+  &nbsp;·&nbsp;
+  <a href="https://programmable.market/explore">Explore</a>
+  &nbsp;·&nbsp;
+  <a href="https://programmable.market/launch">Create</a>
+  &nbsp;·&nbsp;
+  <a href="https://programmable.market/docs">Docs</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/0xprogrammable">GitHub</a>
+  &nbsp;·&nbsp;
+  <a href="https://x.com/0xprogrammable">X</a>
+</p>
