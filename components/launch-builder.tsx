@@ -274,6 +274,18 @@ export function shouldCelebrateIndexedLaunch({
   );
 }
 
+export function shouldRestoreConfirmedLaunchSuccess(
+  submission: PendingLaunchSubmission,
+  nowMs = Date.now(),
+) {
+  const submissionAgeMs = nowMs - submission.submittedAtMs;
+  return Boolean(
+    submission.receiptConfirmedAtMs &&
+      submissionAgeMs >= -PENDING_LAUNCH_MAX_CLOCK_SKEW_MS &&
+      submissionAgeMs < PENDING_LAUNCH_STALE_AFTER_MS,
+  );
+}
+
 export function launchSuccessSummary(
   submission: PendingLaunchSubmission | null | undefined,
   indexedLaunch: IndexedLaunch | null | undefined,
@@ -813,9 +825,12 @@ export function findIndexedLaunch(
 
 export function findClassicV3IndexedLaunch(
   value: unknown,
+  transactionHash?: string,
+  expectedTokenAddress?: string,
 ): IndexedLaunch | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const launch = (value as { launch?: unknown }).launch;
+  const response = value as { launch?: unknown; token?: unknown };
+  const launch = response.token ?? response.launch;
   if (!launch || typeof launch !== "object" || Array.isArray(launch)) {
     return null;
   }
@@ -824,7 +839,14 @@ export function findClassicV3IndexedLaunch(
     typeof candidate.tokenAddress !== "string" ||
     !/^0x[a-fA-F0-9]{40}$/.test(candidate.tokenAddress) ||
     typeof candidate.name !== "string" ||
-    typeof candidate.symbol !== "string"
+    typeof candidate.symbol !== "string" ||
+    (transactionHash !== undefined &&
+      (typeof candidate.launchTransactionHash !== "string" ||
+        candidate.launchTransactionHash.toLowerCase() !==
+          transactionHash.toLowerCase())) ||
+    (expectedTokenAddress !== undefined &&
+      candidate.tokenAddress.toLowerCase() !==
+        expectedTokenAddress.toLowerCase())
   ) {
     return null;
   }
@@ -1418,9 +1440,11 @@ function LaunchBuilderFormView({
                 submittedAccount,
               )}&transaction=${encodeURIComponent(transactionHash)}`
             : model === "classic-v3"
-              ? `/api/profile/classic-v3?account=${encodeURIComponent(
-                  submittedAccount,
-                )}&launch=${encodeURIComponent(transactionHash)}`
+              ? activeSubmission?.tokenAddress
+                ? `/api/explore/token?address=${encodeURIComponent(
+                    activeSubmission.tokenAddress,
+                  )}`
+                : "/api/explore?sort=newest&limit=100"
               : `/api/explore/profile?account=${encodeURIComponent(
                   submittedAccount,
                 )}&launch=${encodeURIComponent(
@@ -1435,8 +1459,16 @@ function LaunchBuilderFormView({
       if (!response.ok) throw new Error("Launch index is unavailable");
       return model === "deep"
         ? findDeepV3IndexedLaunch(body, transactionHash)
-        : model === "stock-paired" || model === "classic-v3"
+        : model === "stock-paired"
           ? findClassicV3IndexedLaunch(body)
+          : model === "classic-v3" && activeSubmission?.tokenAddress
+            ? findClassicV3IndexedLaunch(
+                body,
+                transactionHash,
+                activeSubmission.tokenAddress,
+              )
+            : model === "classic-v3"
+              ? findIndexedLaunch(body, transactionHash)
           : findIndexedLaunch(body, transactionHash);
     };
 
@@ -1513,6 +1545,13 @@ function LaunchBuilderFormView({
           submission: confirmedSubmission,
         });
         clearSubmissionPhase();
+        if (
+          !confirmedSubmission.tokenAddress &&
+          shouldRestoreConfirmedLaunchSuccess(confirmedSubmission)
+        ) {
+          setSuccessOpen(true);
+          setNotice("Launch successful");
+        }
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
