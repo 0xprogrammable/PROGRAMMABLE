@@ -269,7 +269,7 @@ function stagedFetch(
         : {}),
       ...(url.pathname === "/api/explore/token/chart"
         ? {
-            "cache-control": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+            "cache-control": "public, max-age=0",
             "x-programmable-data-quality": "unavailable",
             "x-programmable-read-source": "envio-classic-v3+bitquery",
             "x-programmable-market-provider": "bitquery",
