@@ -97,6 +97,15 @@ describe("Explore UI contract", () => {
       /@media \(max-width: 700px\)[\s\S]*?\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
     );
     expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.runnerContract\s*\{[^}]*display:\s*inline-flex;[^}]*order:\s*3;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.runnerSocials\s*\{[^}]*order:\s*4;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*?\.runnerGrid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
+    );
+    expect(styles).toMatch(
       /\.revealedGrid \.runnerCard:nth-child\(n \+ 5\)\s*\{[^}]*display:\s*none;/s,
     );
     expect(source).not.toContain("styles.runnerIndex");

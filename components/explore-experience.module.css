@@ -1458,8 +1458,10 @@
   }
 
   .runnerMeta {
-    min-height: 40px;
-    padding: 0 6px 0 10px;
+    align-content: center;
+    min-height: 76px;
+    padding: 0 4px;
+    row-gap: 0;
   }
 
   .runnerCategory,
@@ -1467,14 +1469,42 @@
     font-size: 10px;
   }
 
+  .runnerCategory {
+    order: 1;
+  }
+
+  .runnerMarketStatus {
+    margin-inline-start: auto;
+    order: 2;
+    padding-inline-end: 2px;
+  }
+
   .runnerContract {
-    display: none;
+    display: inline-flex;
+    gap: 0;
+    order: 3;
+  }
+
+  .runnerContract code {
+    font-size: 9px;
+  }
+
+  .runnerCopyButton {
+    height: 36px;
+    width: 28px;
   }
 
   .runnerSocials {
     flex-basis: auto;
     justify-content: flex-end;
     margin-inline-start: auto;
+    min-height: 36px;
+    order: 4;
+  }
+
+  .runnerSocialLink {
+    height: 36px;
+    width: 30px;
   }
 }
 
@@ -1517,6 +1547,10 @@
 }
 
 @media (max-width: 360px) {
+  .runnerGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .runnersIntro :global(.token-toolbar) {
     grid-template-columns: minmax(0, 1fr) auto;
   }
