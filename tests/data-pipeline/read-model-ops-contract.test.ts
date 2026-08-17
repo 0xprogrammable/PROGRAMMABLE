@@ -895,15 +895,15 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("rejects a public action route that restores RPC quorum selection", () => {
+  it("rejects a public trade route that removes bounded operational failover", () => {
     const path = "app/api/trade/prepare/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
-    expect(route).toContain("tradeActionRpcProvider");
+    expect(route).toContain("withOperationalRpcFailover");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         [path]: route.replaceAll(
-          "tradeActionRpcProvider",
-          "tradeActionRpcProviders",
+          "withOperationalRpcFailover",
+          "withoutOperationalRpcFailover",
         ),
       },
     });

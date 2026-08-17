@@ -2182,7 +2182,11 @@ export function evaluateReadModelOperationsSourceContracts(
       !/bitquery|alchemy|durable|blob|secondary|fallback|quorum|subgraph|stateview|chainlink|envio/iu.test(
         actionRpcIdentity,
       ) &&
-      tradePrepare.includes("tradeActionRpcProvider") &&
+      includesEverySourceFragment(tradePrepare, [
+        "getWebsiteReadOnchainDeployment",
+        "withOperationalRpcFailover",
+      ]) &&
+      !tradePrepare.includes("tradeActionRpcProvider") &&
       !tradePrepare.includes("tradeActionRpcProviders") &&
       tradePrepare.includes('"Cache-Control": "no-store"') &&
       creatorClaimPrepare.includes("creatorClaimRpcProvider") &&
@@ -2201,7 +2205,7 @@ export function evaluateReadModelOperationsSourceContracts(
         (route) =>
           !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
-    "Profile, Claim and Trade retain singular commitment-bound dRPC reads, non-enumerable endpoints, no write authority and no hidden fallback",
+    "Profile and Claim retain singular commitment-bound dRPC reads while Trade permits one complete-operation QuickNode retry only after an eligible dRPC transport or capacity failure; all action routes retain no write authority or hidden provider rotation",
   );
   check(
     "ops-staged-envio-catalog-gate",

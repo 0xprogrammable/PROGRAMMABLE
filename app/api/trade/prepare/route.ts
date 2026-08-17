@@ -28,7 +28,10 @@ import {
   ActionRpcIdentityError,
   readTradeActionModelFromRpc,
 } from "../../../../lib/server/action-rpc-identity.server";
-import { tradeActionRpcProvider } from "../../../../lib/server/action-rpc-quorum.server";
+import { getWebsiteReadOnchainDeployment } from
+  "../../../../lib/onchain/config";
+import { withOperationalRpcFailover } from
+  "../../../../lib/onchain/operational-rpc-failover.server";
 import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -127,52 +130,66 @@ export async function POST(request: NextRequest) {
         "Trading identity is only available on Ethereum mainnet",
       );
     }
-    const provider = tradeActionRpcProvider(actionChainId);
-    const client = createPublicClient({
-      chain: actionChainId === 1 ? mainnet : sepolia,
-      transport: http(provider.endpoint, {
-        retryCount: 1,
-        timeout: 12_000,
-      }),
-    });
-    const blockNumber = await client.getBlockNumber();
-    const block = await client.getBlock({ blockNumber });
-    if (!block.hash) throw new Error("The action snapshot has no block hash");
-    const registry = await readTradeActionModelFromRpc({
-      client,
-      chainId: actionChainId,
-      token: tradeRequest.token,
-      blockNumber,
-      blockHash: block.hash,
-    });
-    const indexedToken = registry.tokens.find(
-      (candidate) =>
-        candidate.tokenAddress.toLowerCase() ===
-        tradeRequest.token.toLowerCase(),
-    );
-    if (indexedToken?.launchModel === "stock-paired") {
-      const { deployment } = resolveStockPairedTradeDeployment(
-        tradeRequest.chainId,
-        registry,
-        tradeRequest.token,
+    const rpcDeployment = getWebsiteReadOnchainDeployment("production");
+    if (
+      rpcDeployment.status !== "ready" ||
+      rpcDeployment.chainId !== actionChainId
+    ) {
+      throw new ClassicTradeUnavailableError(
+        "The configured Ethereum RPC is unavailable",
       );
-      const prepared = await prepareStockPairedTrade(
-        runtimeClient(client),
-        deployment,
-        tradeRequest,
-      );
-      return json(prepared);
     }
-    const deployment = resolveTradeDeployment(
-      tradeRequest.chainId,
-      registry,
-      tradeRequest.token,
-    );
-    const prepared = await prepareClassicTrade(
-      runtimeClient(client),
-      deployment,
-      tradeRequest,
-      registry,
+    const prepared = await withOperationalRpcFailover(
+      rpcDeployment,
+      async ({ rpcUrl }) => {
+        const client = createPublicClient({
+          chain: actionChainId === 1 ? mainnet : sepolia,
+          transport: http(rpcUrl, {
+            retryCount: 1,
+            timeout: 12_000,
+          }),
+        });
+        const blockNumber = await client.getBlockNumber();
+        const block = await client.getBlock({ blockNumber });
+        if (!block.hash) {
+          throw new Error("The action snapshot has no block hash");
+        }
+        const registry = await readTradeActionModelFromRpc({
+          client,
+          chainId: actionChainId,
+          token: tradeRequest.token,
+          blockNumber,
+          blockHash: block.hash,
+        });
+        const indexedToken = registry.tokens.find(
+          (candidate) =>
+            candidate.tokenAddress.toLowerCase() ===
+            tradeRequest.token.toLowerCase(),
+        );
+        if (indexedToken?.launchModel === "stock-paired") {
+          const { deployment } = resolveStockPairedTradeDeployment(
+            tradeRequest.chainId,
+            registry,
+            tradeRequest.token,
+          );
+          return prepareStockPairedTrade(
+            runtimeClient(client),
+            deployment,
+            tradeRequest,
+          );
+        }
+        const deployment = resolveTradeDeployment(
+          tradeRequest.chainId,
+          registry,
+          tradeRequest.token,
+        );
+        return prepareClassicTrade(
+          runtimeClient(client),
+          deployment,
+          tradeRequest,
+          registry,
+        );
+      },
     );
     return json(prepared);
   } catch (error) {

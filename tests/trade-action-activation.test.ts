@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RpcRequestError } from "viem";
 
 vi.mock("server-only", () => ({}));
 
@@ -181,12 +182,19 @@ describe("trade action identity activation", () => {
   );
 
   it.each([true, false])(
-    "does not consult the configured secondary RPC with indexed lookup %s",
+    "keeps a healthy preparation on the primary RPC with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
         "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
         "https://second-node.ethereum-mainnet.quiknode.pro/second-secret-key/",
+      );
+      vi.stubEnv(
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
+        rpcProviderCommitment(
+          "endpoint",
+          "https://second-node.ethereum-mainnet.quiknode.pro/second-secret-key/",
+        ),
       );
 
       const response = await POST(request());
@@ -201,6 +209,32 @@ describe("trade action identity activation", () => {
       expect(serialized).not.toContain("second-secret-key");
     },
   );
+
+  it("retries the complete preparation once on the bound secondary after dRPC code 10", async () => {
+    const primaryRpcError = new RpcRequestError({
+      body: { method: "eth_blockNumber" },
+      error: { code: 10, message: "User balance exceeded" },
+      url: "https://lb.drpc.live/ethereum/drpc-action-key",
+    });
+    mocks.createPublicClient
+      .mockReturnValueOnce({
+        getBlockNumber: vi.fn().mockRejectedValue(primaryRpcError),
+      } as never)
+      .mockReturnValueOnce({
+        getBlockNumber: vi.fn().mockResolvedValue(101n),
+        getBlock: vi.fn().mockResolvedValue({ hash: `0x${"33".repeat(32)}` }),
+      } as never);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+    expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
+    expect(mocks.prepare).toHaveBeenCalledTimes(1);
+    await expect(response.json()).resolves.toMatchObject({
+      quote: { amountOut: "100" },
+    });
+  });
 
   it("rejects a primary endpoint that does not match its commitment", async () => {
     vi.stubEnv(
