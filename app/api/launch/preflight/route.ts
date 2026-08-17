@@ -134,7 +134,6 @@ const REQUIRED_FEE_HOOK_FLAGS = 8_396n;
 const HOOK_FLAG_MASK = (1n << 14n) - 1n;
 const STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE = 64;
 const LAUNCH_RPC_MULTICALL_BATCH_BYTES = 16_384;
-const LAUNCH_RPC_JSON_BATCH_SIZE = 32;
 const LAUNCH_RPC_BATCH_WAIT_MS = 4;
 
 const launchEnvironment =
@@ -164,10 +163,6 @@ function createLaunchRpcClient(rpcUrl: string) {
       },
     },
     transport: http(rpcUrl, {
-      batch: {
-        batchSize: LAUNCH_RPC_JSON_BATCH_SIZE,
-        wait: LAUNCH_RPC_BATCH_WAIT_MS,
-      },
       retryCount: 1,
       timeout: 12_000,
     }),
@@ -1000,74 +995,71 @@ async function assertClassicV3Infrastructure(
   rpcClient: LaunchRpcClient,
 ) {
   const client = rpcClient;
-  await Promise.all([
-    assertRuntimeCodeHash(
+  const runtimeCodeBindings = [
+    [
       officialPoolManager,
       selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
       "Uniswap PoolManager",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       officialPositionManager,
       selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
       "Uniswap PositionManager",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       officialTokenFactory,
       selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
       "Uniswap UERC20Factory",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       hookFactory,
       codeHashes.ethCreatorFeeHookFactoryV3,
       "Classic hook factory",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       hook,
       codeHashes.ethCreatorFeeHookV3,
       "Classic hook",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       vaultFactory,
       codeHashes.classicRewardVaultFactoryV1,
       "Classic reward factory",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       ctoAuthority,
       codeHashes.classicCtoAuthorityV1,
       "Classic CTO authority",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       initialBuyVestingWalletFactory,
       codeHashes.classicInitialBuyVestingWalletFactoryV1,
       "Classic Initial Buy custody factory",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       launchPolicy,
       codeHashes.classicLaunchPolicyV1,
       "Classic launch policy",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       positionForwarderFactory,
       codeHashes.lockedPositionFeeForwarderFactory,
       "Locked position factory",
-      rpcClient,
-    ),
-    assertRuntimeCodeHash(
+    ],
+    [
       launcher,
       codeHashes.memeLaunchV2,
       "Classic launcher",
+    ],
+  ] as const;
+  for (const [address, expected, label] of runtimeCodeBindings) {
+    await assertRuntimeCodeHash(
+      address,
+      expected,
+      label,
       rpcClient,
-    ),
-  ]);
+    );
+  }
 
   const [
     configuredPoolManager,
