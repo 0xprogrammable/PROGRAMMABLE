@@ -28,6 +28,21 @@ contract FirstMoverToken is MockERC20 {
     }
 }
 
+/// @dev Has a working `creator()` so registration reaches the symbol lookup, but its `symbol()` always reverts.
+///      Deliberately not a MockERC20: the hook only ever calls `creator()` and `symbol()` on the token it is
+///      registering, so this is the minimal surface needed to exercise the fallback to `UnreadableSymbol`.
+contract RevertingSymbolToken {
+    address public immutable creator;
+
+    constructor(address creator_) {
+        creator = creator_;
+    }
+
+    function symbol() external pure returns (string memory) {
+        revert("no symbol");
+    }
+}
+
 /// @dev Registry behaviour end to end: claiming, confirming, lapsing, derivative detection and tribute routing.
 contract EthFirstMoverFeeHookV1Test is Deployers {
     uint16 internal constant FEE_BPS = 1000;
@@ -290,6 +305,94 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
         assertEq(poolId, stillWithinWindow.poolId);
     }
 
+    /// @dev Tribute is charged and routed the same way on a sell, not just a buy -- the split is derived from
+    ///      whatever creator fee this swap actually charged, whichever direction it went.
+    function test_tributeSplitsExactlyOnASellSideSwap() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+
+        Launch memory copycat = _launch("PEPE");
+        uint256 originalBeforeSell = _creatorAccrued(original.poolId);
+        uint256 copycatBeforeSell = _creatorAccrued(copycat.poolId);
+
+        _sellExactInput(copycat, 50_000 ether);
+
+        uint256 retained = _creatorAccrued(copycat.poolId) - copycatBeforeSell;
+        uint256 tribute = _creatorAccrued(original.poolId) - originalBeforeSell;
+        assertGt(retained, 0, "setup: the sell charged a creator fee");
+        assertGt(tribute, 0, "a sell on a copy still pays the original");
+
+        (uint256 expectedRetained, uint256 expectedTribute) =
+            TickerClaimV1.splitTribute(retained + tribute, hook.TRIBUTE_SHARE_BPS());
+        assertEq(retained, expectedRetained, "the copy keeps exactly the split's retained share on a sell");
+        assertEq(tribute, expectedTribute, "the tribute matches the split exactly on a sell");
+    }
+
+    /// @dev And on exact-output swaps, which take a different path to the same charging function than either an
+    ///      exact-input buy or an exact-input sell.
+    function test_tributeSplitsExactlyOnAnExactOutputSwap() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+
+        Launch memory copycat = _launch("PEPE");
+        uint256 originalBeforeBuy = _creatorAccrued(original.poolId);
+        uint256 copycatBeforeBuy = _creatorAccrued(copycat.poolId);
+
+        // The pool opens at roughly 1:1 price, so 0.5 ether of token costs roughly 0.5 ether of native plus the
+        // pool's swap fee; 5 ether of budget leaves comfortable headroom for price impact within the liquidity
+        // range `_launch` seeds.
+        _buyExactOutput(copycat, 0.5 ether, 5 ether);
+
+        uint256 retained = _creatorAccrued(copycat.poolId) - copycatBeforeBuy;
+        uint256 tribute = _creatorAccrued(original.poolId) - originalBeforeBuy;
+        assertGt(retained, 0, "setup: the exact-output swap charged a creator fee");
+        assertGt(tribute, 0, "an exact-output buy on a copy still pays the original");
+
+        (uint256 expectedRetained, uint256 expectedTribute) =
+            TickerClaimV1.splitTribute(retained + tribute, hook.TRIBUTE_SHARE_BPS());
+        assertEq(retained, expectedRetained, "the copy keeps exactly the split's retained share on exact-output");
+        assertEq(tribute, expectedTribute, "the tribute matches the split exactly on exact-output");
+    }
+
+    /// @dev A ticker can be copied more than once. Every copy owes tribute to the same live original directly --
+    ///      there is no chaining through intermediate copies, and a third or fourth copy is not treated as a
+    ///      derivative of the second copy, nor does its tribute compound or dilute anyone else's.
+    function test_chainOfThreeCopiesAllPayTheSameOriginalIndependently() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+
+        Launch memory copyTwo = _launch("PEPE");
+        Launch memory copyThree = _launch("PEPE");
+        Launch memory copyFour = _launch("PEPE");
+
+        (bytes32 originalOfTwo,) = hook.derivativeOf(copyTwo.poolId);
+        (bytes32 originalOfThree,) = hook.derivativeOf(copyThree.poolId);
+        (bytes32 originalOfFour,) = hook.derivativeOf(copyFour.poolId);
+        assertEq(originalOfTwo, original.poolId);
+        assertEq(originalOfThree, original.poolId, "the third copy owes the original, not the second copy");
+        assertEq(originalOfFour, original.poolId, "the fourth copy owes the original, not any other copy");
+
+        uint256 originalBefore = _creatorAccrued(original.poolId);
+
+        uint256 gross = 1 ether;
+        _buy(copyTwo, gross);
+        _buy(copyThree, gross);
+        _buy(copyFour, gross);
+
+        (uint256 creatorFee,,) = hook.quoteGrossFees(gross, FEE_BPS);
+        (, uint256 tributePerCopy) = TickerClaimV1.splitTribute(creatorFee, hook.TRIBUTE_SHARE_BPS());
+
+        assertEq(
+            _creatorAccrued(original.poolId) - originalBefore,
+            tributePerCopy * 3,
+            "three equal-sized copies each pay their own tribute; nothing compounds between them"
+        );
+        assertFalse(hook.isOriginal(copyTwo.poolId));
+        assertFalse(hook.isOriginal(copyThree.poolId));
+        assertFalse(hook.isOriginal(copyFour.poolId));
+        assertTrue(hook.isOriginal(original.poolId));
+    }
+
     // --- Fee-rounding regressions -------------------------------------------------------------------------------
 
     /// @dev The exploit this guards against: previously, if a single swap's gross amount was small enough that the
@@ -400,6 +503,18 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
         hook.registerPool(key, address(v), FEE_BPS, FEE_BPS);
     }
 
+    /// @dev The hook takes the ticker from the token itself rather than an argument the registrant supplies, so a
+    ///      token that cannot report a `symbol()` has nothing to claim -- registration fails outright instead of
+    ///      silently claiming an empty or default string.
+    function test_registrationRevertsWhenSymbolCallReverts() public {
+        RevertingSymbolToken token = new RevertingSymbolToken(address(this));
+        (PoolKey memory key, bytes32 id) = _keyForAddress(address(token));
+        FeeSplitVaultV1 v = _deployVault(id, _nextSalt());
+
+        vm.expectRevert(abi.encodeWithSelector(EthFirstMoverFeeHookV1.UnreadableSymbol.selector, address(token)));
+        hook.registerPool(key, address(v), FEE_BPS, FEE_BPS);
+    }
+
     function test_onlyPoolManagerCanCallHookCallbacks() public {
         Launch memory first = _launch("PEPE");
         SwapParams memory params =
@@ -457,9 +572,15 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
     }
 
     function _keyFor(FirstMoverToken token) private view returns (PoolKey memory key, bytes32 id) {
+        return _keyForAddress(address(token));
+    }
+
+    /// @dev Same pool-key shape as `_keyFor`, but for tests that need a token not typed as `FirstMoverToken` --
+    ///      e.g. one that deliberately does not behave like a normal launch token.
+    function _keyForAddress(address token) private view returns (PoolKey memory key, bytes32 id) {
         key = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
-            currency1: Currency.wrap(address(token)),
+            currency1: Currency.wrap(token),
             fee: hook.LP_FEE_PIPS(),
             tickSpacing: hook.TICK_SPACING(),
             hooks: hook
