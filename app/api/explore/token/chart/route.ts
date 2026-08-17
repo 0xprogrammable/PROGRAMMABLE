@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const TOKEN_CHART_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
+  "public, max-age=0, s-maxage=60, stale-while-revalidate=60";
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;

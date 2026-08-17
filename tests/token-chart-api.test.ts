@@ -126,7 +126,7 @@ describe("pool-bound token chart API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+      "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
     );
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3",
