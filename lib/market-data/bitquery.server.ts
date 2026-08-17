@@ -42,6 +42,9 @@ const MARKET_CACHE_MAX_AGE_MS = 15 * 60 * 1_000;
 const DURABLE_MARKET_CACHE_SECONDS = 5 * 60;
 const CHART_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const CHART_CACHE_MAX_AGE_MS = 2 * 60 * 1_000;
+const DURABLE_CURRENT_CHART_CACHE_SECONDS = 60;
+const DURABLE_WEEK_CHART_CACHE_SECONDS = 5 * 60;
+const DURABLE_ALL_HISTORY_CHART_CACHE_SECONDS = 15 * 60;
 const CHART_READ_TIMEOUT_MS = 12_000;
 const MAXIMUM_CHART_POINTS = 80;
 const MAXIMUM_ALL_HISTORY_CHART_POINTS = 32;
@@ -569,6 +572,32 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   range: "1h" | "1d" | "1w" | "all";
   historyStart?: string;
 }> & BitqueryReaderOptions): Promise<MarketChartV1> {
+  // Test readers and explicitly injected provider credentials retain the exact
+  // direct-read contract. Public production reads use the Next Data Cache,
+  // keyed by the already pool-bound identity and selected range.
+  if (
+    process.env.NODE_ENV !== "test" &&
+    input.fetchImpl === undefined &&
+    input.now === undefined &&
+    input.token === undefined
+  ) {
+    const identity = canonicalMarketChartIdentity(input.identity);
+    if (input.range === "all" && input.historyStart !== undefined) {
+      return readDurablyCachedAllHistoryBitqueryMarketChartV1(
+        identity,
+        input.historyStart,
+      );
+    }
+    if (input.range === "1w") {
+      return readDurablyCachedWeeklyBitqueryMarketChartV1(identity);
+    }
+    if (input.range === "1h" || input.range === "1d") {
+      return readDurablyCachedCurrentBitqueryMarketChartV1(
+        identity,
+        input.range,
+      );
+    }
+  }
   return readBitqueryMarketChart(input, false);
 }
 
@@ -732,6 +761,35 @@ async function readBitqueryMarketChart(
     input.signal?.removeEventListener("abort", abortChartRead);
   }
 }
+
+// Keep only successful, provider-backed chart reads in the durable cache.
+// A provider failure rejects this cache fill, allowing the public caller to
+// preserve the existing in-process last-good fallback without persisting an
+// unavailable response across regions.
+const readDurablyCachedCurrentBitqueryMarketChartV1 = unstable_cache(
+  async (
+    identity: MarketChartIdentityV1,
+    range: "1h" | "1d",
+  ) => readBitqueryMarketChart({ identity, range }, true),
+  ["programmable-bitquery-market-chart-current-v1"],
+  { revalidate: DURABLE_CURRENT_CHART_CACHE_SECONDS },
+);
+
+const readDurablyCachedWeeklyBitqueryMarketChartV1 = unstable_cache(
+  async (identity: MarketChartIdentityV1) => readBitqueryMarketChart({
+    identity,
+    range: "1w",
+  }, true),
+  ["programmable-bitquery-market-chart-week-v1"],
+  { revalidate: DURABLE_WEEK_CHART_CACHE_SECONDS },
+);
+
+const readDurablyCachedAllHistoryBitqueryMarketChartV1 = unstable_cache(
+  async (identity: MarketChartIdentityV1, historyStart: string) =>
+    readBitqueryMarketChart({ identity, range: "all", historyStart }, true),
+  ["programmable-bitquery-market-chart-all-v1"],
+  { revalidate: DURABLE_ALL_HISTORY_CHART_CACHE_SECONDS },
+);
 
 export function clearBitqueryMarketDataCachesForTests(): void {
   marketCache.clear();

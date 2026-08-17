@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const TOKEN_CHART_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
+  "public, max-age=0, s-maxage=60, stale-while-revalidate=60";
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       ...(range === "all" ? { historyStart: entry.launchedAt } : {}),
       signal: request.signal,
     });
-    return chartResponse(chart, launchSource);
+    return chartResponse(chart, launchSource, entry.exploreKind === "token");
   } catch (error) {
     console.error("Token chart identity read failed", {
       name: error instanceof Error ? error.name : "LaunchCatalogError",
@@ -153,7 +153,7 @@ function unavailable(input: Readonly<{
     {
       status,
       headers: {
-        "Cache-Control": status === 503 ? "no-store" : TOKEN_CHART_CACHE_CONTROL,
+        "Cache-Control": "no-store",
         "X-Programmable-Data-Quality": "unavailable",
         "X-Programmable-Launch-Source": input.launchSource,
         "X-Programmable-Read-Source": input.launchSource,
@@ -163,7 +163,11 @@ function unavailable(input: Readonly<{
   );
 }
 
-function chartResponse(chart: MarketChartV1, launchSource: string) {
+function chartResponse(
+  chart: MarketChartV1,
+  launchSource: string,
+  isCanonicalToken: boolean,
+) {
   const dataQuality = chart.status === "ready" ||
       chart.status === "insufficient-history"
     ? "current"
@@ -173,7 +177,12 @@ function chartResponse(chart: MarketChartV1, launchSource: string) {
   const hasPriceHistory = chart.points.length > 0;
   return NextResponse.json(chart, {
     headers: {
-      "Cache-Control": TOKEN_CHART_CACHE_CONTROL,
+      // Registry Custom visibility stays fail-closed at the identity boundary.
+      // Only canonical token charts with a live Bitquery result may be shared
+      // at the edge; transient fallbacks must be retried instead of cached.
+      "Cache-Control": isCanonicalToken && chart.readStatus === "live"
+        ? TOKEN_CHART_CACHE_CONTROL
+        : "no-store",
       "X-Programmable-Data-Quality": dataQuality,
       "X-Programmable-Launch-Source": launchSource,
       "X-Programmable-Read-Source": `${launchSource}+bitquery`,

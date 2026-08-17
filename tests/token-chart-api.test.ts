@@ -126,7 +126,7 @@ describe("pool-bound token chart API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+      "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
     );
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3",
@@ -205,6 +205,7 @@ describe("pool-bound token chart API", () => {
     expect(response.headers.get("x-programmable-read-source")).toBe(
       "envio-classic-v3+registry.custom-launched+bitquery",
     );
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(mocks.readChart).toHaveBeenCalledWith(expect.objectContaining({
       identity: expect.objectContaining({
         tokenAddress: customAddress,
@@ -245,6 +246,7 @@ describe("pool-bound token chart API", () => {
     expect(response.headers.get("x-programmable-data-quality")).toBe(
       "unavailable",
     );
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-programmable-market-provider")).toBeNull();
     await expect(response.json()).resolves.toMatchObject({
       schemaVersion: "programmable.market-chart-error.v1",

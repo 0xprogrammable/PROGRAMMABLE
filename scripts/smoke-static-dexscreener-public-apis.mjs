@@ -679,7 +679,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     // remains accepted for direct runtime tests; the stage probe must accept
     // the exact header a browser receives.
     (chart.headers.get("cache-control") !==
-      "public, max-age=0, s-maxage=2, stale-while-revalidate=2" &&
+      "public, max-age=0, s-maxage=60, stale-while-revalidate=60" &&
       chart.headers.get("cache-control") !== "public, max-age=0") ||
     !["current", "partial", "unavailable"].includes(
       chart.headers.get("x-programmable-data-quality"),
