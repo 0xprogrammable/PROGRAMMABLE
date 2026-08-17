@@ -113,6 +113,8 @@ export function exploreUnavailableFdvLabel(
 }
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
+export type ExploreValuationSort = "none" | "highest" | "lowest";
+export type ExploreAgeSort = "none" | "newest" | "oldest";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
@@ -215,7 +217,20 @@ export function exploreAppliedSortLabel(
     (sort === "market-cap" || sort === "market-cap-asc") &&
     ranking?.status === "partial"
   ) return "Available valuation";
-  return sortOptions.find((option) => option.id === sort)?.label ?? "Sort";
+  if (sort === "newest") return "Newest";
+  if (sort === "oldest") return "Oldest";
+  if (sort === "market-cap") return "Highest valuation";
+  return "Lowest valuation";
+}
+
+export function resolveExploreServerSort(
+  valuationSort: ExploreValuationSort,
+  ageSort: ExploreAgeSort,
+): TokenSort {
+  if (valuationSort === "highest") return "market-cap";
+  if (valuationSort === "lowest") return "market-cap-asc";
+  if (ageSort === "oldest") return "oldest";
+  return "newest";
 }
 
 type ExploreState =
@@ -308,11 +323,19 @@ const fallbackTokenImages = [
   "/brand/programmable-token-fallback-05-lavender.webp",
   "/brand/programmable-token-fallback-06-dusk.webp",
 ] as const;
-const sortOptions: { id: TokenSort; label: string }[] = [
+const valuationSortOptions: {
+  id: Exclude<ExploreValuationSort, "none">;
+  label: string;
+}[] = [
+  { id: "highest", label: "Highest" },
+  { id: "lowest", label: "Lowest" },
+];
+const ageSortOptions: {
+  id: Exclude<ExploreAgeSort, "none">;
+  label: string;
+}[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "market-cap", label: "Highest valuation" },
-  { id: "market-cap-asc", label: "Lowest valuation" },
 ];
 const socialFilterOptions: {
   id: Exclude<ExploreSocialFilter, "all">;
@@ -977,7 +1000,18 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
 }
 
 function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
-  return JSON.stringify(value);
+  return JSON.stringify({
+    source: value.source,
+    launchSource: value.launchSource,
+    status: value.status,
+    identityCount: value.identityCount,
+    identityCommitment: value.identityCommitment,
+    completeness: value.completeness,
+    scope: value.scope,
+    deployment: value.evidence.deployment,
+    sourceCommit: value.evidence.sourceCommit,
+    evidenceCommitment: value.evidence.commitment,
+  });
 }
 
 function parseExplorePayload(value: unknown): ExplorePayload {
@@ -1566,11 +1600,16 @@ export function paginateExploreModelDataset(
   modelFilter: ExploreModelFilter,
   requestedPage: number,
   pageSize = EXPLORE_TOKENS_PER_PAGE,
+  valuationSort: ExploreValuationSort = "none",
+  ageSort: ExploreAgeSort = "none",
+  socialFilter: ExploreSocialFilter = "all",
 ): ExplorePayload {
-  const page = paginateTokensByExploreFilters(
+  const page = paginateTokensByExploreSelections(
     dataset.tokens,
-    "all",
+    socialFilter,
     modelFilter,
+    valuationSort,
+    ageSort,
     requestedPage,
     pageSize,
   );
@@ -1657,6 +1696,98 @@ export function paginateTokensByExploreFilters<T extends ExploreEntry>(
     page,
     pageSize,
     total: filtered.length,
+    totalPages,
+  };
+}
+
+function compareExploreEntryAge(left: ExploreEntry, right: ExploreEntry) {
+  const leftTime = Date.parse(left.launchedAt);
+  const rightTime = Date.parse(right.launchedAt);
+  if (
+    Number.isFinite(leftTime) &&
+    Number.isFinite(rightTime) &&
+    leftTime !== rightTime
+  ) {
+    return leftTime - rightTime;
+  }
+  if (left.exploreKind === "token" && right.exploreKind === "token") {
+    return comparePreviewLaunchOrder(left, right);
+  }
+  return left.id.localeCompare(right.id);
+}
+
+function compareExploreEntryValuation(
+  left: ExploreEntry | ValuedExploreEntry,
+  right: ExploreEntry | ValuedExploreEntry,
+  direction: Exclude<ExploreValuationSort, "none">,
+) {
+  const leftValuation = valuationForEntry(left);
+  const rightValuation = valuationForEntry(right);
+  const leftQualified = isExploreValuationQualifiedV1(leftValuation);
+  const rightQualified = isExploreValuationQualifiedV1(rightValuation);
+  if (leftQualified !== rightQualified) return leftQualified ? -1 : 1;
+  if (!leftQualified || !rightQualified) return 0;
+  if (leftValuation.currency !== rightValuation.currency) return 0;
+
+  const leftValue = BigInt(leftValuation.valueWad);
+  const rightValue = BigInt(rightValuation.valueWad);
+  if (leftValue === rightValue) return 0;
+  const ascending = leftValue < rightValue ? -1 : 1;
+  return direction === "lowest" ? ascending : -ascending;
+}
+
+export function sortExploreEntriesBySelections<T extends ExploreEntry>(
+  tokens: T[],
+  valuationSort: ExploreValuationSort,
+  ageSort: ExploreAgeSort,
+) {
+  if (valuationSort === "none" && ageSort === "none") return tokens;
+  return [...tokens].sort((left, right) => {
+    if (valuationSort !== "none") {
+      const valuationComparison = compareExploreEntryValuation(
+        left,
+        right,
+        valuationSort,
+      );
+      if (valuationComparison !== 0) return valuationComparison;
+    }
+    if (ageSort !== "none") {
+      const ageComparison = compareExploreEntryAge(left, right);
+      if (ageComparison !== 0) {
+        return ageSort === "newest" ? -ageComparison : ageComparison;
+      }
+    }
+    return 0;
+  });
+}
+
+export function paginateTokensByExploreSelections<T extends ExploreEntry>(
+  tokens: T[],
+  socialFilter: ExploreSocialFilter,
+  modelFilter: ExploreModelFilter,
+  valuationSort: ExploreValuationSort,
+  ageSort: ExploreAgeSort,
+  requestedPage: number,
+  pageSize = EXPLORE_TOKENS_PER_PAGE,
+) {
+  const filtered = filterTokensByLaunchModel(
+    filterTokensBySocialPresence(tokens, socialFilter),
+    modelFilter,
+  );
+  const ranked = sortExploreEntriesBySelections(
+    filtered,
+    valuationSort,
+    ageSort,
+  );
+  const totalPages = Math.ceil(ranked.length / pageSize);
+  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
+
+  return {
+    tokens: ranked.slice(offset, offset + pageSize),
+    page,
+    pageSize,
+    total: ranked.length,
     totalPages,
   };
 }
@@ -1819,7 +1950,10 @@ export function ExploreView({
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [sort, setSort] = useState<TokenSort>(DEFAULT_EXPLORE_VIEW_SORT);
+  const [valuationSort, setValuationSort] = useState<ExploreValuationSort>(
+    DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none",
+  );
+  const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none");
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -1836,11 +1970,15 @@ export function ExploreView({
     payload: ExplorePayload;
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
+  const sort = resolveExploreServerSort(valuationSort, ageSort);
+  const requiresCompleteDataset =
+    modelFilter !== "all" ||
+    (valuationSort !== "none" && ageSort !== "none");
+  const contentKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}`;
-  const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
+  const modelDatasetKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
   const activeRequestContentKey =
-    modelFilter === "all" ? contentKey : modelDatasetKey;
+    requiresCompleteDataset ? modelDatasetKey : contentKey;
   const [initialState] = useState(() =>
     createExploreInitialState(initialResponse, {
       requestKey,
@@ -1976,7 +2114,7 @@ export function ExploreView({
     async function loadTokens() {
       try {
         let payload: ExplorePayload;
-        if (modelFilter === "all") {
+        if (!requiresCompleteDataset) {
           payload = await loadExplorePage(
             activeRequestContentKey,
             search,
@@ -2005,6 +2143,9 @@ export function ExploreView({
             modelFilter,
             currentPage,
             pageSize,
+            valuationSort,
+            ageSort,
+            socialFilter,
           );
         }
         if (ignore) return;
@@ -2050,8 +2191,11 @@ export function ExploreView({
     loadingOnly,
     preview,
     requestKey,
+    requiresCompleteDataset,
     socialFilter,
     sort,
+    valuationSort,
+    ageSort,
   ]);
 
   const previewPayload = useMemo<ExplorePayload>(() => {
@@ -2061,24 +2205,15 @@ export function ExploreView({
         value.toLowerCase().includes(searchValue),
       ),
     );
-    const ranked = [...filtered].sort((left, right) => {
-      if (sort === "newest" || sort === "oldest") {
-        const launchComparison = comparePreviewLaunchOrder(left, right);
-        return sort === "newest" ? -launchComparison : launchComparison;
-      }
-      const leftFdv = BigInt(left.indexedMarketCapUsdWad ?? "0");
-      const rightFdv = BigInt(right.indexedMarketCapUsdWad ?? "0");
-      const delta = leftFdv === rightFdv ? 0 : leftFdv > rightFdv ? -1 : 1;
-      return sort === "market-cap" ? delta : -delta;
-    });
-
-    const paginated = paginateTokensByExploreFilters(
-      ranked.map((entry) => ({
+    const paginated = paginateTokensByExploreSelections(
+      filtered.map((entry) => ({
         ...entry,
         valuation: exploreValuation(entry),
       })),
       socialFilter,
       modelFilter,
+      valuationSort,
+      ageSort,
       currentPage,
       pageSize,
     );
@@ -2087,7 +2222,15 @@ export function ExploreView({
       status: "ready",
       ...paginated,
     };
-  }, [currentPage, debouncedQuery, modelFilter, pageSize, socialFilter, sort]);
+  }, [
+    ageSort,
+    currentPage,
+    debouncedQuery,
+    modelFilter,
+    pageSize,
+    socialFilter,
+    valuationSort,
+  ]);
 
   const displayState: ExploreState = preview
     ? {
@@ -2112,9 +2255,31 @@ export function ExploreView({
     (displayState.phase === "loading" ||
       displayState.requestKey !== requestKey);
   const activeFilterCount =
-    Number(socialFilter !== "all") + Number(modelFilter !== "all");
-  const ranking = payload?.ranking;
-  const activeSortLabel = exploreAppliedSortLabel(sort, ranking);
+    Number(socialFilter !== "all") +
+    Number(modelFilter !== "all") +
+    Number(valuationSort !== "none") +
+    Number(ageSort !== "none");
+  const activeSelectionLabels = [
+    modelFilter === "classic"
+      ? "Classic"
+      : modelFilter === "custom-hook"
+        ? "Custom"
+        : null,
+    valuationSort === "highest"
+      ? "Highest valuation"
+      : valuationSort === "lowest"
+        ? "Lowest valuation"
+        : null,
+    ageSort === "newest" ? "Newest" : ageSort === "oldest" ? "Oldest" : null,
+    socialFilter === "yes"
+      ? "With socials"
+      : socialFilter === "no"
+        ? "Without socials"
+        : null,
+  ].filter((label): label is string => label !== null);
+  const activeSelectionSummary = activeSelectionLabels.length === 0
+    ? "No filters or sorts selected"
+    : `${activeSelectionLabels.join(", ")} selected`;
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
@@ -2167,26 +2332,6 @@ export function ExploreView({
     }
 
     if (cards.length === 0) {
-      if (payload?.dataQuality?.launchIdentity.status === "partial") {
-        return (
-          <div className={`${styles.emptyState} liquid-glass-surface`}>
-            <div>
-              <h2>Launches are catching up</h2>
-              <p>
-                Some launches are temporarily unavailable. Try again in a
-                moment.
-              </p>
-            </div>
-            <button
-              className={styles.emptyAction}
-              type="button"
-              onClick={retryTokens}
-            >
-              Refresh
-            </button>
-          </div>
-        );
-      }
       if (debouncedQuery || socialFilter !== "all" || modelFilter !== "all") {
         const hasActiveFilter = socialFilter !== "all" || modelFilter !== "all";
         const noMatchMessage = debouncedQuery
@@ -2207,11 +2352,33 @@ export function ExploreView({
                 setQuery("");
                 setSocialFilter("all");
                 setModelFilter("all");
+                setValuationSort("highest");
+                setAgeSort("none");
                 setCurrentPage(1);
                 searchInputRef.current?.focus();
               }}
             >
               Clear filters
+            </button>
+          </div>
+        );
+      }
+      if (payload?.dataQuality?.launchIdentity.status === "partial") {
+        return (
+          <div className={`${styles.emptyState} liquid-glass-surface`}>
+            <div>
+              <h2>Launches are catching up</h2>
+              <p>
+                Some launches are temporarily unavailable. Try again in a
+                moment.
+              </p>
+            </div>
+            <button
+              className={styles.emptyAction}
+              type="button"
+              onClick={retryTokens}
+            >
+              Refresh
             </button>
           </div>
         );
@@ -2450,23 +2617,17 @@ export function ExploreView({
                     <summary
                       className="liquid-glass-control"
                       aria-controls="explore-filter-panel"
-                      aria-label={
-                        activeFilterCount === 0
-                          ? `Filter and sort tokens, ${activeSortLabel} selected`
-                          : `Filter and sort tokens, ${activeSortLabel} selected, ${activeFilterCount} ${
-                              activeFilterCount === 1 ? "filter" : "filters"
-                            } active`
-                      }
+                      aria-label={`Filter and sort tokens. ${activeSelectionSummary}. ${activeFilterCount} ${
+                        activeFilterCount === 1 ? "selection" : "selections"
+                      } active.`}
                     >
-                      <span>{`Sort: ${activeSortLabel}`}</span>
-                      {activeFilterCount > 0 ? (
-                        <span
-                          className={styles.activeFilterCount}
-                          aria-hidden="true"
-                        >
-                          {activeFilterCount}
-                        </span>
-                      ) : null}
+                      <span>Filters</span>
+                      <span
+                        className={styles.activeFilterCount}
+                        aria-hidden="true"
+                      >
+                        {activeFilterCount}
+                      </span>
                       <ChevronDown
                         className="token-filter-chevron"
                         aria-hidden="true"
@@ -2522,19 +2683,25 @@ export function ExploreView({
                         >
                           Valuation
                         </p>
-                        {sortOptions.slice(2).map((option) => (
+                        {valuationSortOptions.map((option) => (
                           <button
                             key={option.id}
-                            className={sort === option.id ? "active" : undefined}
+                            className={
+                              valuationSort === option.id ? "active" : undefined
+                            }
                             type="button"
-                            aria-pressed={sort === option.id}
+                            aria-pressed={valuationSort === option.id}
                             onClick={() => {
-                              setSort(option.id);
+                              setValuationSort((current) =>
+                                current === option.id ? "none" : option.id,
+                              );
                               setCurrentPage(1);
                             }}
                           >
-                            <span>{option.id === "market-cap" ? "Highest" : "Lowest"}</span>
-                            {sort === option.id ? <Check aria-hidden="true" size={15} /> : null}
+                            <span>{option.label}</span>
+                            {valuationSort === option.id ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : null}
                           </button>
                         ))}
                       </div>
@@ -2547,19 +2714,25 @@ export function ExploreView({
                         <p className={styles.filterLabel} id="explore-age-label">
                           Age
                         </p>
-                        {sortOptions.slice(0, 2).map((option) => (
+                        {ageSortOptions.map((option) => (
                           <button
                             key={option.id}
-                            className={sort === option.id ? "active" : undefined}
+                            className={
+                              ageSort === option.id ? "active" : undefined
+                            }
                             type="button"
-                            aria-pressed={sort === option.id}
+                            aria-pressed={ageSort === option.id}
                             onClick={() => {
-                              setSort(option.id);
+                              setAgeSort((current) =>
+                                current === option.id ? "none" : option.id,
+                              );
                               setCurrentPage(1);
                             }}
                           >
                             <span>{option.label}</span>
-                            {sort === option.id ? <Check aria-hidden="true" size={15} /> : null}
+                            {ageSort === option.id ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : null}
                           </button>
                         ))}
                       </div>

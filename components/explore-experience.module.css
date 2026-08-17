@@ -1086,6 +1086,12 @@
   width: 230px;
 }
 
+.runnersIntro :global(.token-filter) {
+  flex: 0 0 122px;
+  min-width: 122px;
+  width: 122px;
+}
+
 .runnersIntro :global(.token-search:focus-within),
 .runnersIntro :global(.token-filter[open] summary) {
   background: var(--webde-surface-raised);
@@ -1099,8 +1105,10 @@
 }
 
 .runnersIntro :global(.token-filter summary) {
+  justify-content: center;
   min-height: 44px;
   padding-inline: 14px 12px;
+  width: 100%;
 }
 
 .runnersIntro :global(.token-pagination) {
@@ -1130,6 +1138,12 @@
   box-shadow: 0 24px 64px rgb(0 0 0 / 0.58);
   min-width: 230px;
   padding: 8px;
+}
+
+.runnersIntro .filterMenu {
+  left: auto;
+  right: 0;
+  transform-origin: top right;
 }
 
 .filterMenu button {

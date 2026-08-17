@@ -20,8 +20,11 @@ import {
   loadExplorePayload,
   paginateExploreModelDataset,
   paginateTokensByExploreFilters,
+  paginateTokensByExploreSelections,
   paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
+  resolveExploreServerSort,
+  sortExploreEntriesBySelections,
   tokenHasSocialLinks,
   tokenLaunchModelGroup,
 } from "../components/explore-view";
@@ -584,6 +587,58 @@ describe("Explore refresh state", () => {
     ).toMatchObject({ total: 0, totalPages: 0, tokens: [] });
   });
 
+  it("combines Hook Type, valuation and age ordering without clearing a selection", () => {
+    const valued = (
+      index: number,
+      valueWad: string,
+      launchedAt: string,
+    ) => ({
+      ...modelFilterEntry(index, "available"),
+      launchedAt,
+      valuation: {
+        ...modelFilterEntry(index, "available").valuation,
+        valueWad,
+      },
+    });
+    const highOld = valued(1, "9000000000000000000", "2026-08-01T00:00:00.000Z");
+    const highNew = valued(2, "9000000000000000000", "2026-08-04T00:00:00.000Z");
+    const lowNewest = valued(3, "2000000000000000000", "2026-08-05T00:00:00.000Z");
+    const unavailable = {
+      ...modelFilterEntry(4, "unavailable"),
+      launchedAt: "2026-08-06T00:00:00.000Z",
+    };
+
+    expect(resolveExploreServerSort("highest", "newest")).toBe("market-cap");
+    expect(resolveExploreServerSort("none", "oldest")).toBe("oldest");
+    expect(
+      sortExploreEntriesBySelections(
+        [lowNewest, highOld, unavailable, highNew],
+        "highest",
+        "newest",
+      ).map((token) => token.id),
+    ).toEqual([highNew.id, highOld.id, lowNewest.id, unavailable.id]);
+    expect(
+      paginateTokensByExploreSelections(
+        [customEntry(99), lowNewest, highOld, unavailable, highNew],
+        "all",
+        "classic",
+        "highest",
+        "newest",
+        1,
+        2,
+      ),
+    ).toMatchObject({
+      page: 1,
+      pageSize: 2,
+      total: 4,
+      totalPages: 2,
+      tokens: [
+        expect.objectContaining({ id: highNew.id }),
+        expect.objectContaining({ id: highOld.id }),
+      ],
+    });
+  });
+
   it("loads every server page before model filtering and preserves server order", async () => {
     const tokens = Array.from({ length: 230 }, (_, index) => index < 145
       ? classicEntry({
@@ -698,6 +753,47 @@ describe("Explore refresh state", () => {
       "commitment-drift-model-dataset",
       new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
     )).rejects.toThrow("Tokens changed while filters were loading");
+  });
+
+  it("accepts index progress advancing between pages when identity stays exact", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "unavailable"),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "https://example.test");
+      const page = Number(url.searchParams.get("page"));
+      const pageSize = Number(url.searchParams.get("limit"));
+      const asOfBlock = page === 1 ? "25740000" : "25740001";
+      return new Response(JSON.stringify({
+        status: "ready",
+        tokens: tokens.slice((page - 1) * pageSize, page * pageSize),
+        page,
+        pageSize,
+        total: tokens.length,
+        totalPages: 2,
+        catalog: {
+          ...catalogBoundary,
+          lastIndexedAt: page === 1
+            ? "2026-08-14T00:00:00.000Z"
+            : "2026-08-14T00:00:12.000Z",
+          asOfBlock,
+          asOfBlockHash: page === 1
+            ? catalogBoundary.asOfBlockHash
+            : `0x${"bc".repeat(32)}`,
+          identityCount: tokens.length,
+          evidence: {
+            ...catalogBoundary.evidence,
+            progressBlock: asOfBlock,
+          },
+        },
+      }), { status: 200 });
+    });
+
+    await expect(loadExploreModelDataset(
+      "progress-only-drift-model-dataset",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({ total: tokens.length, totalPages: 2 });
   });
 
   it("preserves an all-page transport marker and does not cache the degraded model dataset", async () => {
