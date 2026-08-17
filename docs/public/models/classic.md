@@ -1,6 +1,6 @@
 ---
 description: How Classic creates a fixed supply token, locked liquidity and creator rewards on Ethereum
-cover: ../.gitbook/assets/classic.webp
+cover: ../.gitbook/assets/classic-v2.png
 coverY: 0
 ---
 

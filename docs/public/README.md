@@ -1,24 +1,28 @@
 ---
-description: Official documentation for creating, reviewing and verifying Programmable launches on Ethereum
-cover: .gitbook/assets/programmable-night-garden.webp
+description: Official documentation for launching, reviewing and integrating Programmable on Ethereum
+cover: .gitbook/assets/programmable-night-garden-v2.png
 coverY: 0
 ---
 
 # Programmable
 
-Programmable is a launch platform for tokens whose trading rules are part of the product. Classic gives a creator a fixed supply token, a permanently locked Uniswap v4 position and separately configured buy and sell transaction fees. Custom releases use individually reviewed hooks when the standard model is not enough.
+Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the reviewed path for products that need their own hook, application logic or execution graph.
 
-The public interface runs on Ethereum. A creator can launch Classic directly from the website, while a Custom project moves through public source review and an exact release binding before its creator wallet receives an executable launch path. The wallet still reviews and signs the final transaction. Programmable does not sign it on the creator's behalf.
+The public interface runs on Ethereum. Classic is available directly from Create. A Custom project moves through public source review and an exact release binding before the named creator wallet receives an executable launch path. In both cases, the wallet reviews and signs its own transaction.
 
 {% hint style="info" %}
 These docs describe current public products and the evidence available for them. A successful check, accepted source revision or visible token page is not a guarantee of safety, liquidity or future value.
 {% endhint %}
 
-## Start with the product
+## Choose a path
 
-Creators who want the standard public path can open [Create](https://programmable.market/launch) and choose Classic. Builders who need a project specific hook can start with the [Programmable v4 Builder](https://github.com/0xprogrammable/hookbuilder/releases/latest), then submit one exact public revision through [Submit a Launch](https://github.com/0xprogrammable/submit-launch).
+| I want to                    | Start here                                                                               | What happens next                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Launch a standard token      | [Create Classic](https://programmable.market/launch)                                     | Configure the token, fees, reward recipients and Initial Buy before signing one Ethereum transaction                         |
+| Build with a custom hook     | [Programmable v4 Builder](https://github.com/0xprogrammable/hookbuilder/releases/latest) | Prepare one exact public revision, then submit it through [Submit a Launch](https://github.com/0xprogrammable/submit-launch) |
+| Verify or integrate launches | [Developer reference](developers/README.md)                                              | Resolve current deployments from the manifest and reproduce provenance from Ethereum                                         |
 
-Readers who are checking an existing token should begin with [Explore](https://programmable.market/explore), use the contract address rather than a name or ticker, and continue to the verification pages when provenance matters.
+To inspect an existing token, begin with [Explore](https://programmable.market/explore) and use its contract address rather than only a name or ticker.
 
 {% content-ref url="tokens.md" %}
 [tokens.md](tokens.md)
@@ -32,9 +36,16 @@ Readers who are checking an existing token should begin with [Explore](https://p
 [README.md](developers/README.md)
 {% endcontent-ref %}
 
-## What Programmable records
+## How a launch becomes public
 
-Each supported launch has a token, pool identity and launch model. New Router based launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical launches remain discoverable through the public data service even when they predate the Router.
+1. The creator configures a supported launch or prepares one exact reviewed Custom release.
+2. The creator wallet checks the network, destination, calldata and value, then signs the transaction.
+3. Ethereum confirms the transaction and the launch reaches the required finality.
+4. Explore and the developer feeds publish the canonical token and pool identity. Optional price, chart and liquidity data remain separate.
+
+## What Programmable proves
+
+Each supported launch has a token, pool identity and launch model. Router based launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical launches remain discoverable through the public data service even when they predate the Router.
 
 Programmable keeps source review, launch authority, wallet execution, chain finality and public indexing separate. That separation is deliberate: it makes it possible to say exactly what has been proven without turning one green check into a broader claim.
 

@@ -1,10 +1,10 @@
 ---
-description: Choose the right path for a Classic token, a reviewed Custom project or reusable hook work
+description: Start a Classic token or prepare one exact Custom project for review
 ---
 
-# Create with Programmable
+# Create
 
-Creators can use the direct Classic flow or prepare a project specific Custom release. The paths share the same public product but have different evidence requirements because a configurable standard token and an unfamiliar hook should not be treated as the same review problem.
+Choose Classic when the product fits the standard launch settings. Choose Custom when its behavior depends on project specific hook code or a wider execution graph. The two paths share one public product, but they use different review and release evidence.
 
 ## Launch Classic
 
@@ -16,9 +16,9 @@ Custom work starts with the [Programmable v4 Builder](https://github.com/0xprogr
 
 The application path is public, but authority remains separate. The accepted source revision must receive a matching release binding before its named wallet can launch through the product.
 
-## Publish reusable work
+## Reusable work
 
-Reusable public templates have their own repository and fee model because one template can affect many later launches. The repository exists and publishes the requirements, while public template applications and fee share activation are not open yet. The current status is stated directly on [Submit a Template](https://github.com/0xprogrammable/submit-template).
+Reusable public templates have their own repository and fee model because one template can affect many later launches. The repository publishes the requirements, but public applications and fee share activation are not open. The current state is recorded in [Submit a Template](https://github.com/0xprogrammable/submit-template).
 
 {% content-ref url="launch.md" %}
 [launch.md](launch.md)
