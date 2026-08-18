@@ -342,16 +342,74 @@ function marketCapUsdForPoint(
     : undefined;
 }
 
+function positiveChartNumber(value: string | undefined) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function bindMarketCapHistory(
+  points: readonly TokenChartPoint[],
+  totalSupply?: string,
+  currentMarketCapUsd?: string,
+): TokenChartPoint[] {
+  if (points.length === 0) return [];
+  if (points.every((point) => positiveChartNumber(point.marketCapUsd) !== null)) {
+    return points.map((point) => ({ ...point }));
+  }
+
+  if (
+    positiveChartNumber(totalSupply) !== null &&
+    points.every((point) => positiveChartNumber(point.priceUsd) !== null)
+  ) {
+    return points.map((point) => ({
+      ...point,
+      marketCapUsd: marketCapUsdForPoint(point, totalSupply),
+    }));
+  }
+
+  const anchorMarketCap = positiveChartNumber(currentMarketCapUsd);
+  if (anchorMarketCap === null) return points.map((point) => ({ ...point }));
+
+  const priceField = (["priceUsd", "priceEth", "priceQuote"] as const).find(
+    (field) => points.every((point) => positiveChartNumber(point[field]) !== null),
+  );
+  if (!priceField) return points.map((point) => ({ ...point }));
+  if (priceField === "priceQuote") {
+    const quoteSymbols = new Set(
+      points.map((point) => point.quoteSymbol?.trim()).filter(Boolean),
+    );
+    if (quoteSymbols.size !== 1) return points.map((point) => ({ ...point }));
+  }
+
+  const latestPrice = positiveChartNumber(points.at(-1)?.[priceField]);
+  if (latestPrice === null) return points.map((point) => ({ ...point }));
+
+  return points.map((point) => ({
+    ...point,
+    marketCapUsd: (
+      anchorMarketCap *
+      (positiveChartNumber(point[priceField]) as number) /
+      latestPrice
+    ).toString(),
+  }));
+}
+
 export function selectChartMetric(
   points: readonly TokenChartPoint[],
   totalSupply?: string,
+  currentMarketCapUsd?: string,
 ): "market-cap" | "price" {
-  if (!totalSupply || points.length === 0) return "price";
-  const hasUsdPriceHistory = points.every((point) => {
-    const value = Number(point.priceUsd);
-    return Number.isFinite(value) && value > 0;
-  });
-  return hasUsdPriceHistory ? "market-cap" : "price";
+  const boundPoints = bindMarketCapHistory(
+    points,
+    totalSupply,
+    currentMarketCapUsd,
+  );
+  return boundPoints.length > 0 && boundPoints.every(
+      (point) => positiveChartNumber(point.marketCapUsd) !== null,
+    )
+    ? "market-cap"
+    : "price";
 }
 
 function chartPointContext(point: TokenChartPoint): string {
@@ -515,6 +573,7 @@ export function TokenPriceChart({
   tokenName,
   launchModel,
   totalSupply,
+  currentMarketCapUsd,
   preview = false,
   onVolumeChange,
 }: {
@@ -522,6 +581,7 @@ export function TokenPriceChart({
   tokenName: string;
   launchModel?: ChartLaunchModel;
   totalSupply?: string;
+  currentMarketCapUsd?: string;
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
@@ -623,16 +683,15 @@ export function TokenPriceChart({
     refreshTaskRef.current?.request();
   }, [refreshKey]);
 
-  const chartMetric = selectChartMetric(payload?.points ?? [], totalSupply);
   const chartPoints = useMemo(
-    () => payload?.points.map((point) => ({
-      ...point,
-      ...(chartMetric === "market-cap"
-        ? { marketCapUsd: marketCapUsdForPoint(point, totalSupply) }
-        : {}),
-    })) ?? [],
-    [chartMetric, payload, totalSupply],
+    () => bindMarketCapHistory(
+      payload?.points ?? [],
+      totalSupply,
+      currentMarketCapUsd,
+    ),
+    [currentMarketCapUsd, payload, totalSupply],
   );
+  const chartMetric = selectChartMetric(chartPoints);
   const chart = useMemo(
     () => createChartGeometry(chartPoints, chartMetric),
     [chartMetric, chartPoints],

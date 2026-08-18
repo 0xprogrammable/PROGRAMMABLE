@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   acceptChartPayload,
+  bindMarketCapHistory,
   createSerializedChartRefresh,
   createChartGeometry,
   formatPrice,
@@ -78,6 +79,23 @@ describe("token price chart inspection", () => {
         "1000000",
       ),
     ).toBe("market-cap");
+  });
+
+  it("anchors exact-pool quote history to the current USD market cap", () => {
+    const points = bindMarketCapHistory(
+      [
+        { blockNumber: "100", priceQuote: "0.0000002", quoteSymbol: "ETH" },
+        { blockNumber: "101", priceQuote: "0.00000025", quoteSymbol: "ETH" },
+      ],
+      "1000000000",
+      "400000",
+    );
+
+    expect(selectChartMetric(points)).toBe("market-cap");
+    expect(points.map((point) => Number(point.marketCapUsd))).toEqual([
+      320000,
+      400000,
+    ]);
   });
 
   it("maps the pointer to the nearest plotted price point", () => {
