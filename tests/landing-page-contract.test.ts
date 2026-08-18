@@ -97,6 +97,7 @@ describe("landing page contract", () => {
     expect(styles).toContain("align-items: baseline;");
     expect(styles).toContain(".definitionLogoFrame");
     expect(landing).toContain("new IntersectionObserver(");
+    expect(landing).toContain('rootMargin: "0px 0px 48% 0px"');
     expect(landing).toContain("useLayoutEffect(() =>");
     expect(landing).toContain('if (window.location.hash === "")');
     expect(landing).toContain(

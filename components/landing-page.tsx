@@ -95,7 +95,7 @@ export function LandingPage() {
         });
       },
       {
-        rootMargin: "0px 0px -12% 0px",
+        rootMargin: "0px 0px 48% 0px",
         threshold: 0.12,
       },
     );
