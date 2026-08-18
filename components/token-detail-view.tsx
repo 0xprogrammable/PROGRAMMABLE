@@ -79,7 +79,7 @@ type DetailPayload = {
   snapshot: { chainId: number } | null;
 };
 
-type DetailState =
+export type DetailState =
   | { phase: "loading"; requestKey: string }
   | { phase: "not-found"; requestKey: string }
   | { phase: "not-deployed"; requestKey: string }
@@ -706,6 +706,81 @@ function readApiError(value: unknown) {
   return isRecord(value) && typeof value.error === "string"
     ? value.error
     : "Token data is temporarily unavailable";
+}
+
+export type TokenDetailInitialResponse = Readonly<{
+  status: number;
+  body: unknown;
+}>;
+
+function detailStateFromResponse(
+  response: TokenDetailInitialResponse,
+  tokenAddress: `0x${string}`,
+  requestKey: string,
+): DetailState {
+  if (response.status === 404) {
+    return { phase: "not-found", requestKey };
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(readApiError(response.body));
+  }
+
+  const payload = parseDetailPayload(response.body);
+  if (payload.status === "not-deployed") {
+    return { phase: "not-deployed", requestKey };
+  }
+  if (!payload.token && !payload.customProject) {
+    return { phase: "not-found", requestKey };
+  }
+  if (payload.customProject) {
+    if (
+      payload.customProject.tokenAddress?.toLowerCase() !==
+        tokenAddress.toLowerCase()
+    ) {
+      throw new Error("The token registry returned the wrong custom project");
+    }
+    const customChainId = Number(payload.customProject.chainId);
+    if (!Number.isSafeInteger(customChainId) || customChainId <= 0) {
+      throw new Error("The custom project returned an invalid network");
+    }
+    return {
+      phase: "custom-ready",
+      project: payload.customProject,
+      chainId: customChainId,
+      requestKey,
+    };
+  }
+  if (
+    payload.token &&
+    payload.token.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase()
+  ) {
+    throw new Error("The token registry returned the wrong token");
+  }
+  if (!payload.snapshot) {
+    throw new Error("The token registry returned no verified snapshot");
+  }
+
+  return {
+    phase: "ready",
+    token: payload.token!,
+    chainId: payload.snapshot.chainId,
+    requestKey,
+  };
+}
+
+export function createTokenDetailInitialState(
+  response: TokenDetailInitialResponse | undefined,
+  tokenAddress: `0x${string}` | null,
+  requestKey: string,
+): DetailState | null {
+  if (!response || !tokenAddress) return null;
+  try {
+    return detailStateFromResponse(response, tokenAddress, requestKey);
+  } catch {
+    // A malformed, timed-out or unavailable server read is never treated as a
+    // terminal browser state. The client gets one bounded retry instead.
+    return null;
+  }
 }
 
 function getFallbackTokenImage(address: string) {
@@ -2051,7 +2126,13 @@ function CustomProjectDetailContent({
   );
 }
 
-export function TokenDetailView({ address }: { address: string }) {
+export function TokenDetailView({
+  address,
+  initialResponse,
+}: {
+  address: string;
+  initialResponse?: TokenDetailInitialResponse;
+}) {
   const { wallet: activeWallet } = useWallet();
   const preview = useInterfacePreview();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
@@ -2066,15 +2147,19 @@ export function TokenDetailView({ address }: { address: string }) {
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({
     enabled: normalizedAddress !== null && !preview,
+    intervalMs: 60_000,
   });
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
-  const [state, setState] = useState<DetailState>({
-    phase: "loading",
-    requestKey,
-  });
+  const [initialState] = useState(() =>
+    createTokenDetailInitialState(initialResponse, normalizedAddress, requestKey)
+  );
+  const [state, setState] = useState<DetailState>(
+    () => initialState ?? { phase: "loading", requestKey },
+  );
 
   useEffect(() => {
     if (!normalizedAddress || preview) return;
+    if (initialState !== null && refreshKey === 0 && retryKey === 0) return;
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
@@ -2091,56 +2176,11 @@ export function TokenDetailView({ address }: { address: string }) {
         );
         const body: unknown = await response.json().catch(() => null);
 
-        if (response.status === 404) {
-          setState({ phase: "not-found", requestKey });
-          return;
-        }
-        if (!response.ok) {
-          throw new Error(readApiError(body));
-        }
-
-        const payload = parseDetailPayload(body);
-        if (payload.status === "not-deployed") {
-          setState({ phase: "not-deployed", requestKey });
-          return;
-        }
-        if (!payload.token && !payload.customProject) {
-          setState({ phase: "not-found", requestKey });
-          return;
-        }
-        if (payload.customProject) {
-          if (payload.customProject.tokenAddress?.toLowerCase()
-            !== tokenAddress.toLowerCase()) {
-            throw new Error("The token registry returned the wrong custom project");
-          }
-          const customChainId = Number(payload.customProject.chainId);
-          if (!Number.isSafeInteger(customChainId) || customChainId <= 0) {
-            throw new Error("The custom project returned an invalid network");
-          }
-          setState({
-            phase: "custom-ready",
-            project: payload.customProject,
-            chainId: customChainId,
-            requestKey,
-          });
-          return;
-        }
-        if (payload.token && (
-          payload.token.tokenAddress.toLowerCase() !==
-          tokenAddress.toLowerCase()
-        )) {
-          throw new Error("The token registry returned the wrong token");
-        }
-        if (!payload.snapshot) {
-          throw new Error("The token registry returned no verified snapshot");
-        }
-
-        setState({
-          phase: "ready",
-          token: payload.token!,
-          chainId: payload.snapshot.chainId,
+        setState(detailStateFromResponse(
+          { status: response.status, body },
+          tokenAddress,
           requestKey,
-        });
+        ));
       } catch (error) {
         if (controller.signal.aborted) return;
         const message =
@@ -2158,7 +2198,14 @@ export function TokenDetailView({ address }: { address: string }) {
 
     void loadToken();
     return () => controller.abort();
-  }, [normalizedAddress, preview, refreshKey, requestKey]);
+  }, [
+    initialState,
+    normalizedAddress,
+    preview,
+    refreshKey,
+    requestKey,
+    retryKey,
+  ]);
 
   if (!normalizedAddress) {
     return (

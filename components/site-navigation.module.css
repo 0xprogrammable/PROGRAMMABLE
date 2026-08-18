@@ -4,12 +4,8 @@
   display: none;
 }
 
-/*
- * The touch navigation is capability-gated on purpose. A narrow desktop
- * window still has a fine pointer and keeps the desktop information
- * architecture instead of turning into a phone UI.
- */
-@media (max-width: 60rem) and (hover: none) and (pointer: coarse) {
+/* The full navigation stops fitting comfortably below this content breakpoint. */
+@media (max-width: 60rem) {
   .siteHeader.siteHeader {
     height: calc(72px + env(safe-area-inset-top));
     min-height: calc(72px + env(safe-area-inset-top));
@@ -25,6 +21,10 @@
   }
 
   .headerSocials.headerSocials {
+    display: none;
+  }
+
+  .siteHeader.siteHeader :global(.desktop-nav) {
     display: none;
   }
 
@@ -244,87 +244,6 @@
 
   .mobileSocials :global(.header-social-logo) {
     filter: grayscale(1) contrast(12) brightness(1.25);
-  }
-}
-
-@media (max-width: 60rem) and (hover: hover) and (pointer: fine) {
-  .siteHeader.siteHeader {
-    height: 72px;
-    min-height: 72px;
-  }
-
-  .headerInner.headerInner {
-    column-gap: clamp(6px, 1.5vw, 14px);
-    grid-template-columns: 36px minmax(0, 1fr) auto;
-    padding-inline: clamp(8px, 2vw, 18px);
-  }
-
-  .headerInner.headerInner :global(.wordmark) {
-    height: 44px;
-    width: 36px;
-  }
-
-  .headerInner.headerInner :global(.wordmark-logo) {
-    height: 29px;
-    width: 23px;
-  }
-
-  .siteHeader.siteHeader :global(.desktop-nav) {
-    display: flex;
-    gap: clamp(6px, 1.6vw, 16px);
-    justify-content: center;
-    justify-self: stretch;
-    min-width: 0;
-  }
-
-  .siteHeader.siteHeader :global(.desktop-nav a) {
-    font-size: clamp(12px, 1.8vw, 15px);
-    min-height: 44px;
-    padding-inline: 0;
-    white-space: nowrap;
-  }
-
-  .headerSocials.headerSocials,
-  .menuButton,
-  .mobileSheet {
-    display: none;
-  }
-
-  .headerActions.headerActions {
-    gap: 0;
-    grid-column: 3;
-    grid-row: 1;
-    min-width: 0;
-  }
-
-  .headerActions.headerActions :global(.wallet-button-compact) {
-    font-size: clamp(12px, 1.7vw, 15px);
-    max-width: clamp(80px, 18vw, 112px);
-    min-width: 0;
-    padding-inline: 4px 0;
-  }
-
-  .headerActions.headerActions :global(.wallet-button-compact > span) {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .headerActions.headerActions
-    :global(.wallet-button-compact .wallet-button-chevron) {
-    display: none;
-  }
-}
-
-@media (max-width: 24rem) and (hover: hover) and (pointer: fine) {
-  .siteHeader.siteHeader :global(.desktop-nav) {
-    gap: 4px;
-  }
-
-  .headerActions.headerActions
-    :global(.wallet-button-compact > svg:first-child) {
-    display: none;
   }
 }
 

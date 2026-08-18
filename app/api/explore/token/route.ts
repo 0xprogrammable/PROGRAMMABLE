@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 const FAST_LANE_REQUEST_BUDGET_MS = 8_000;
 
-const SUCCESS_CACHE_CONTROL = "public, max-age=0, s-maxage=2";
+const SUCCESS_CACHE_CONTROL =
+  "public, max-age=0, s-maxage=5, stale-while-revalidate=30";
 
 function tokenAddress(entry: ExploreEntry): string | null {
   return entry.tokenAddress?.toLowerCase() ?? null;

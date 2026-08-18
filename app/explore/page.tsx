@@ -10,7 +10,7 @@ import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_EXPLORE_TIMEOUT_MS = 12_000;
+const INITIAL_EXPLORE_TIMEOUT_MS = 4_000;
 export const INITIAL_EXPLORE_QUERY = new URLSearchParams({
   q: "",
   sort: DEFAULT_EXPLORE_VIEW_SORT,

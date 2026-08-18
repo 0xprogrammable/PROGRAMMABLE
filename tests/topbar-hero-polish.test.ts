@@ -68,23 +68,19 @@ describe("topbar and Explore hero polish", () => {
     for (const label of ["Explore", "Create", "Profile", "Docs"]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
-    expect(navigationCss).toContain(
-      "@media (max-width: 60rem) and (hover: none) and (pointer: coarse)",
-    );
-    expect(navigationCss).toContain(
-      "@media (max-width: 60rem) and (hover: hover) and (pointer: fine)",
-    );
+    expect(navigationCss).toContain("@media (max-width: 60rem)");
     expect(navigationCss).toContain(
       "grid-template-columns: repeat(4, minmax(0, 1fr))",
     );
     expect(navigation).toContain("<HeaderSocialLinks mobile />");
-    expect(navigationCss).not.toContain("@media (max-width: 60rem) {");
     expect(navigationCss).toMatch(
-      /@media \(max-width: 60rem\) and \(hover: hover\) and \(pointer: fine\)[\s\S]*?\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*flex;[\s\S]*?\.menuButton,[\s\S]*?\.mobileSheet\s*\{[^}]*display:\s*none;/s,
+      /@media \(max-width: 60rem\)[\s\S]*?\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
     );
     expect(navigationCss).toMatch(
-      /@media \(max-width: 60rem\) and \(hover: none\) and \(pointer: coarse\)[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;[\s\S]*?\.mobileSocials\s*\{[^}]*display:\s*flex;/s,
+      /@media \(max-width: 60rem\)[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;[\s\S]*?\.mobileSocials\s*\{[^}]*display:\s*flex;/s,
     );
+    expect(navigationCss).not.toContain("(hover: none) and (pointer: coarse)");
+    expect(navigationCss).not.toContain("(hover: hover) and (pointer: fine)");
     expect(landingCss).toMatch(
       /\.docsLink\s*\{[^}]*font-size:\s*18px;/s,
     );

@@ -7,6 +7,7 @@ import { ApplicantRefreshUserUnavailableErrorV1 } from
   "../lib/custom-launch/applicant-refresh-user-gate-v1";
 
 type WalletProviderContract = {
+  shouldEagerLoadWalletRuntime: (pathname: string) => boolean;
   assertExternalWalletAuthorityCurrent: (input: Readonly<{
     expectedAccount: `0x${string}`;
     expectedChainId: string;
@@ -134,6 +135,40 @@ function applicantUser(overrides?: Partial<{
 }
 
 describe("wallet recovery state", () => {
+  it("defers the Privy runtime on read-only routes and keeps wallet routes eager", () => {
+    for (const pathname of ["/", "/explore", "/docs", "/docs/creators"]) {
+      expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(false);
+    }
+    for (const pathname of [
+      "/launch",
+      "/launch/review",
+      "/profile",
+      "/profile/settings",
+      "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
+    ]) {
+      expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(true);
+    }
+  });
+
+  it("keeps Privy behind an explicit dynamic runtime boundary", () => {
+    const provider = readFileSync(
+      join(process.cwd(), "components/wallet-provider.tsx"),
+      "utf8",
+    );
+    const runtime = readFileSync(
+      join(process.cwd(), "components/wallet-provider-runtime.ts"),
+      "utf8",
+    );
+
+    expect(provider).toContain('import("./wallet-provider-runtime")');
+    expect(provider).toContain("onPointerEnter={preloadWallet}");
+    expect(provider).toContain("onFocus={preloadWallet}");
+    expect(provider).not.toMatch(
+      /import\s*\{[\s\S]*?PrivyProvider[\s\S]*?\}\s*from\s*["']@privy-io\/react-auth["']/u,
+    );
+    expect(runtime).toContain('from "@privy-io/react-auth"');
+  });
+
   it("refreshes an authenticated Privy identity token when hook hydration is still null", async () => {
     const loadIdentityToken = vi.fn(async () => "fresh-identity-token");
 

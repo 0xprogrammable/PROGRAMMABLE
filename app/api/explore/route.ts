@@ -407,7 +407,8 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=0, s-maxage=15",
+          "Cache-Control":
+            "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Launch-Source": launchSource,
           "X-Programmable-Read-Source": `${launchSource}+dexscreener`,

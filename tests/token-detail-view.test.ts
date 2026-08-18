@@ -4,6 +4,7 @@ import { parseEther } from "viem";
 import {
   buildChartVolumeMetric,
   buildTokenDetailMetrics,
+  createTokenDetailInitialState,
   formatPreparedMinimum,
   formatStockPairedGrossVolume,
   getValuationMetricLabel,
@@ -49,6 +50,58 @@ const canonicalToken = {
 } satisfies CanonicalTokenExploreEntry;
 
 describe("token detail metrics", () => {
+  it("hydrates a verified server response without a duplicate client request", () => {
+    const state = createTokenDetailInitialState(
+      {
+        status: 200,
+        body: {
+          status: "ready",
+          token: canonicalToken,
+          customProject: null,
+          snapshot: { chainId: 1 },
+        },
+      },
+      canonicalToken.tokenAddress,
+      "initial-request",
+    );
+
+    expect(state).toMatchObject({
+      phase: "ready",
+      token: canonicalToken,
+      chainId: 1,
+      requestKey: "initial-request",
+    });
+  });
+
+  it("keeps unavailable or mismatched server responses retryable", () => {
+    expect(createTokenDetailInitialState(
+      { status: 503, body: { error: "temporarily unavailable" } },
+      canonicalToken.tokenAddress,
+      "unavailable-request",
+    )).toBeNull();
+    expect(createTokenDetailInitialState(
+      {
+        status: 200,
+        body: {
+          status: "ready",
+          token: canonicalToken,
+          customProject: null,
+          snapshot: { chainId: 1 },
+        },
+      },
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mismatched-request",
+    )).toBeNull();
+  });
+
+  it("hydrates a verified not-found response as a terminal empty state", () => {
+    expect(createTokenDetailInitialState(
+      { status: 404, body: { status: "ready" } },
+      canonicalToken.tokenAddress,
+      "missing-request",
+    )).toEqual({ phase: "not-found", requestKey: "missing-request" });
+  });
+
   it("uses the public market cap label for every valuation state", () => {
     expect(getValuationMetricLabel({
       status: "available",

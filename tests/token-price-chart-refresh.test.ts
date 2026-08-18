@@ -4,6 +4,7 @@ import {
   acceptChartPayload,
   createSerializedChartRefresh,
   createChartGeometry,
+  formatPrice,
   getChartKeyboardInspectionIndex,
   isAuthoritativeChartPayload,
   isAuthoritativeChartPayloadStatus,
@@ -57,6 +58,13 @@ const MARKET_CHART = {
 } as const satisfies MarketChartV1;
 
 describe("token price chart inspection", () => {
+  it("keeps small and changing prices compact without changing their unit", () => {
+    expect(formatPrice(0.0000000014549053, "ETH")).toBe("1.45491e-9 ETH");
+    expect(formatPrice(0.00026512345, "ETH")).toBe("0.000265123 ETH");
+    expect(formatPrice(12.3456789, "USD")).toBe("$12.3457");
+    expect(formatPrice(Number.NaN, "ETH")).toBe("Unavailable");
+  });
+
   it("uses quote price history when USD history is not available", () => {
     expect(
       selectChartMetric(

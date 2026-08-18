@@ -2,20 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import {
-  getIdentityToken as getPrivyIdentityToken,
-  PrivyProvider,
-  useIdentityToken,
-  useLinkAccount,
-  useLogin,
-  useOAuthTokens,
-  usePrivy,
-  useSendTransaction as usePrivySendTransaction,
-  useSignMessage as usePrivySignMessage,
-  useUser,
-  useWallets,
-  type PrivyClientConfig,
-} from "@privy-io/react-auth";
+import { usePathname } from "next/navigation";
+import type { PrivyClientConfig } from "@privy-io/react-auth";
 import {
   Check,
   ChevronDown,
@@ -101,6 +89,7 @@ type WalletContextValue = {
   connecting: boolean;
   disconnecting: boolean;
   switchingNetwork: boolean;
+  preloadWallet: () => void;
   openWallet: () => void;
   switchNetwork: (expectedChainId?: string) => Promise<boolean>;
   disconnect: (options?: {
@@ -131,6 +120,35 @@ type WalletContextValue = {
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
+
+type WalletProviderRuntime = typeof import("./wallet-provider-runtime");
+
+let walletProviderRuntimePromise: Promise<WalletProviderRuntime> | null = null;
+
+function loadWalletProviderRuntime() {
+  walletProviderRuntimePromise ??= import("./wallet-provider-runtime").catch(
+    (error: unknown) => {
+      walletProviderRuntimePromise = null;
+      throw error;
+    },
+  );
+  return walletProviderRuntimePromise;
+}
+
+export function shouldEagerLoadWalletRuntime(pathname: string) {
+  return pathname === "/launch"
+    || pathname.startsWith("/launch/")
+    || pathname === "/profile"
+    || pathname.startsWith("/profile/")
+    || pathname.startsWith("/token/");
+}
+
+if (
+  typeof window !== "undefined"
+  && shouldEagerLoadWalletRuntime(window.location.pathname)
+) {
+  void loadWalletProviderRuntime().catch(() => undefined);
+}
 
 const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
 const profileStoragePrefix = "programmable-profile";
@@ -649,15 +667,133 @@ export function selectAuthenticatedWallet<T extends WalletCandidate>(
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const eager = shouldEagerLoadWalletRuntime(pathname);
+  const [activationRequested, setActivationRequested] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"wallet" | "github" | null>(
+    null,
+  );
+  const [runtime, setRuntime] = useState<WalletProviderRuntime | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  const active = eager || activationRequested;
+
+  useEffect(() => {
+    if (!privyAppId || !active || runtime) return;
+
+    let cancelled = false;
+    void loadWalletProviderRuntime().then(
+      (loadedRuntime) => {
+        if (!cancelled) setRuntime(loadedRuntime);
+      },
+      () => {
+        if (!cancelled) setLoadFailed(true);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, loadAttempt, runtime]);
+
   if (!privyAppId) {
     return <UnconfiguredWalletProvider>{children}</UnconfiguredWalletProvider>;
   }
 
+  if (!runtime) {
+    return (
+      <DeferredWalletProvider
+        active={active}
+        loadFailed={loadFailed}
+        onActivate={(action) => {
+          setPendingAction(action);
+          setActivationRequested(true);
+          if (loadFailed) {
+            setLoadFailed(false);
+            setLoadAttempt((current) => current + 1);
+          }
+        }}
+        onPreload={() => {
+          void loadWalletProviderRuntime().catch(() => undefined);
+        }}
+      >
+        {children}
+      </DeferredWalletProvider>
+    );
+  }
+
   return (
-    <ConfiguredWalletProvider appId={privyAppId}>
+    <ConfiguredWalletProvider
+      appId={privyAppId}
+      autoAction={pendingAction}
+      onAutoActionConsumed={() => setPendingAction(null)}
+      runtime={runtime}
+    >
       {children}
     </ConfiguredWalletProvider>
   );
+}
+
+function DeferredWalletProvider({
+  active,
+  children,
+  loadFailed,
+  onActivate,
+  onPreload,
+}: Readonly<{
+  active: boolean;
+  children: ReactNode;
+  loadFailed: boolean;
+  onActivate: (action: "wallet" | "github") => void;
+  onPreload: () => void;
+}>) {
+  const value = useMemo<WalletContextValue>(
+    () => ({
+      wallet: null,
+      username: "",
+      avatarDataUrl: "",
+      authReady: false,
+      authenticated: false,
+      hasSession: false,
+      connecting: active && !loadFailed,
+      disconnecting: false,
+      switchingNetwork: false,
+      preloadWallet: onPreload,
+      openWallet: () => onActivate("wallet"),
+      switchNetwork: async () => false,
+      disconnect: async () => false,
+      getAccessToken: async () => null,
+      getIdentityToken: async () => null,
+      refreshApplicantSession: async () => null,
+      githubConnected: false,
+      githubUserId: "",
+      githubUsername: "",
+      connectGithub: () => onActivate("github"),
+      reauthorizeGithub: async () => {
+        throw new Error("GitHub sign-in is still loading");
+      },
+      setUsername: () => undefined,
+      signLaunchMessage: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      sendBrowserWalletAction: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      sendTransaction: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      readNativeBalance: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      readTradeBalances: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+    }),
+    [active, loadFailed, onActivate, onPreload],
+  );
+
+  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
 function subscribeToTheme(callback: () => void) {
@@ -675,11 +811,18 @@ function getServerThemeSnapshot(): ColorTheme {
 
 function ConfiguredWalletProvider({
   appId,
+  autoAction,
   children,
+  onAutoActionConsumed,
+  runtime,
 }: {
   appId: string;
+  autoAction: "wallet" | "github" | null;
   children: ReactNode;
+  onAutoActionConsumed: () => void;
+  runtime: WalletProviderRuntime;
 }) {
+  const { PrivyProvider } = runtime;
   const theme = useSyncExternalStore(
     subscribeToTheme,
     getThemeSnapshot,
@@ -702,12 +845,40 @@ function ConfiguredWalletProvider({
       appId={appId}
       config={themedPrivyConfig}
     >
-      <PrivyWalletBridge>{children}</PrivyWalletBridge>
+      <PrivyWalletBridge
+        autoAction={autoAction}
+        onAutoActionConsumed={onAutoActionConsumed}
+        runtime={runtime}
+      >
+        {children}
+      </PrivyWalletBridge>
     </PrivyProvider>
   );
 }
 
-function PrivyWalletBridge({ children }: { children: ReactNode }) {
+function PrivyWalletBridge({
+  autoAction,
+  children,
+  onAutoActionConsumed,
+  runtime,
+}: Readonly<{
+  autoAction: "wallet" | "github" | null;
+  children: ReactNode;
+  onAutoActionConsumed: () => void;
+  runtime: WalletProviderRuntime;
+}>) {
+  const {
+    getIdentityToken: getPrivyIdentityToken,
+    useIdentityToken,
+    useLinkAccount,
+    useLogin,
+    useOAuthTokens,
+    usePrivy,
+    useSendTransaction: usePrivySendTransaction,
+    useSignMessage: usePrivySignMessage,
+    useUser,
+    useWallets,
+  } = runtime;
   const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
   const { refreshUser } = useUser();
   const [applicantRefreshUserGate] = useState<ApplicantRefreshUserGateV1<
@@ -848,7 +1019,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       cachedIdentityToken: identityToken,
       loadIdentityToken: getPrivyIdentityToken,
     }),
-    [activeAuthenticated, identityToken],
+    [activeAuthenticated, getPrivyIdentityToken, identityToken],
   );
   const applicantLinkedAccountsFingerprint = useMemo(
     () => applicantLinkedAccountsFingerprintV1(user?.linkedAccounts),
@@ -1047,6 +1218,26 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
 
     startLogin();
   }, [providerTimedOut, sessionAction, startLogin]);
+
+  useEffect(() => {
+    if (autoAction === null || sessionAction === "wait") return;
+
+    const timeout = window.setTimeout(() => {
+      if (autoAction === "github") {
+        connectGithub();
+      } else {
+        openWallet();
+      }
+      onAutoActionConsumed();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [
+    autoAction,
+    connectGithub,
+    onAutoActionConsumed,
+    openWallet,
+    sessionAction,
+  ]);
 
   const disconnect = useCallback(async (options?: {
     showDialogOnFailure?: boolean;
@@ -1486,6 +1677,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       connecting: !providerSettled && !providerTimedOut,
       disconnecting,
       switchingNetwork,
+      preloadWallet: () => undefined,
       openWallet,
       switchNetwork: switchToEthereum,
       disconnect,
@@ -1579,6 +1771,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       connecting: false,
       disconnecting: false,
       switchingNetwork: false,
+      preloadWallet: () => undefined,
       openWallet: () => setDialogOpen(true),
       switchNetwork: async () => false,
       disconnect: async () => false,
@@ -1936,6 +2129,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     disconnecting,
     disconnect,
     openWallet,
+    preloadWallet,
   } = useWallet();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -2005,6 +2199,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           ? `Manage wallet ${username || shortenAddress(wallet.account)}`
           : label
       }
+      onFocus={preloadWallet}
+      onPointerEnter={preloadWallet}
       onClick={() => {
         if (wallet) {
           setMenuError("");

@@ -295,25 +295,26 @@ const PLOT_RIGHT = VIEWBOX_WIDTH - 7;
 const PLOT_TOP = 9;
 const PLOT_BOTTOM = VIEWBOX_HEIGHT - 9;
 
-function formatPrice(value: number, unit: string) {
+function formatPriceMagnitude(value: number) {
+  if (value > 0 && value < 0.000001) {
+    return value
+      .toExponential(5)
+      .replace(/\.0+(?=e)/, "")
+      .replace(/(\.\d*?[1-9])0+(?=e)/, "$1");
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    maximumSignificantDigits: 6,
+    useGrouping: true,
+  }).format(value);
+}
+
+export function formatPrice(value: number, unit: string) {
   if (!Number.isFinite(value) || value < 0) return "Unavailable";
   if (unit === "USD") {
-    if (value >= 1) {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits: 6,
-      }).format(value);
-    }
-    return `$${value.toLocaleString("en-US", {
-      maximumSignificantDigits: 8,
-      useGrouping: false,
-    })}`;
+    return `$${formatPriceMagnitude(value)}`;
   }
-  return `${value.toLocaleString("en-US", {
-    maximumSignificantDigits: 8,
-    useGrouping: false,
-  })} ${unit}`;
+  return `${formatPriceMagnitude(value)} ${unit}`;
 }
 
 function formatChartValue(
