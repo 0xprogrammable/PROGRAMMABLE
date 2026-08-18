@@ -278,9 +278,9 @@ function stagedFetch(
         : {}),
       ...(url.pathname === "/api/explore/profile"
         ? {
-            "x-programmable-launch-source": "drpc",
-            "x-programmable-read-source": "drpc",
-            "x-programmable-rpc-provider": "drpc-primary",
+            "x-programmable-launch-source": "envio-classic-v3",
+            "x-programmable-read-source": "envio-classic-v3",
+            "x-programmable-rpc-provider": "envio-indexer-state",
           }
         : {}),
       ...(observed > 0
