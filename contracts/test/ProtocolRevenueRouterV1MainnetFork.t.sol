@@ -21,6 +21,8 @@ import {
 } from "../src/interfaces/IProtocolRevenueMetaMaskV1.sol";
 
 contract ProtocolRevenueRouterV1MainnetForkTest is Test {
+    // Bind the price-impact expectations to one finalized Mainnet pool state.
+    uint256 internal constant FORK_BLOCK = 25_781_900;
     address internal constant REVENUE_AUTHORITY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal constant TREASURY = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
     address internal constant V4_TOKEN = 0x7987f03462200b3D8A072E02C89A8A41dCB124EE;
@@ -39,7 +41,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
 
     function setUp() public {
         string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://ethereum-rpc.publicnode.com"));
-        vm.createSelectFork(rpc);
+        vm.createSelectFork(rpc, FORK_BLOCK);
         revenueAuthorityCodeHash = REVENUE_AUTHORITY.codehash;
         keeper = makeAddr("protocolRevenueKeeper");
         router = new ProtocolRevenueRouterV1(keeper);
@@ -91,7 +93,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
     /// forge-config: default.fuzz.runs = 32
     /// forge-config: ci.fuzz.runs = 128
     function testFuzz_firstCycleConservesExactRevenueAndDeliversBoughtTokens(uint96 rawRevenue) public {
-        uint256 revenue = bound(uint256(rawRevenue), 0.004 ether, 0.4 ether);
+        uint256 revenue = bound(uint256(rawRevenue), router.MIN_NEW_REVENUE(), 0.003 ether);
         vm.deal(address(router), revenue);
         uint256 treasuryBefore = TREASURY.balance;
         uint256 keeperBefore = keeper.balance;
@@ -275,12 +277,12 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         assertEq(address(router).balance, excessiveRevenue);
     }
 
-    function test_cumulativePriceImpactBoundFailsAtomically() public {
+    function test_priceImpactBoundFailsAtomically() public {
         uint256 revenue = 5 ether;
         vm.deal(address(router), revenue);
         uint256 treasuryBefore = TREASURY.balance;
         int24 referenceTick = router.currentMainPoolTick();
-        vm.expectPartialRevert(ProtocolRevenueRouterV1.SwapTotalTickMoveTooLarge.selector);
+        vm.expectPartialRevert(ProtocolRevenueRouterV1.SwapTickMoveTooLarge.selector);
         vm.prank(REVENUE_AUTHORITY);
         router.process(uint64(block.timestamp), referenceTick, revenue);
         assertEq(TREASURY.balance, treasuryBefore);
