@@ -622,6 +622,20 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     "/api/explore/profile?account=" + encodeURIComponent(profileAccount),
     new Set([200, 503]),
   );
+  const profileSourceReady =
+    (
+      profile.headers.get("x-programmable-launch-source") === "drpc" &&
+      profile.headers.get("x-programmable-read-source") === "drpc" &&
+      profile.headers.get("x-programmable-rpc-provider") === "drpc-primary"
+    ) ||
+    (
+      profile.headers.get("x-programmable-launch-source") ===
+        "envio-classic-v3" &&
+      profile.headers.get("x-programmable-read-source") ===
+        "envio-classic-v3" &&
+      profile.headers.get("x-programmable-rpc-provider") ===
+        "envio-indexer-state"
+    );
   const profileReady =
     profile.status === 200 &&
     profile.body?.status === "ready" &&
@@ -632,9 +646,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     /^(?:0|[1-9][0-9]*)$/u.test(
       String(profile.body?.totals?.claimableWei ?? ""),
     ) &&
-    profile.headers.get("x-programmable-launch-source") === "drpc" &&
-    profile.headers.get("x-programmable-read-source") === "drpc" &&
-    profile.headers.get("x-programmable-rpc-provider") === "drpc-primary";
+    profileSourceReady;
   const profileFailClosed =
     profile.status === 503 &&
     exactObjectKeys(profile.body, ["error", "status"]) &&
