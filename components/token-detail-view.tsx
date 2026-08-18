@@ -115,6 +115,19 @@ function chartTotalSupply(input: {
     : undefined;
 }
 
+function chartCurrentMarketCapUsd(input: {
+  valuation?: ExploreValuation;
+  fdvUsdWad?: string;
+}) {
+  const valueWad = input.valuation?.status === "available" &&
+      input.valuation.currency === "usd"
+    ? input.valuation.valueWad
+    : input.fdvUsdWad;
+  return valueWad && /^\d+$/u.test(valueWad)
+    ? formatUnits(BigInt(valueWad), 18)
+    : undefined;
+}
+
 const CHART_VOLUME_LABELS = {
   "1h": "Volume 1H",
   "1d": "Volume 1D",
@@ -1652,6 +1665,7 @@ function TokenDetailContent({
               tokenName={token.name}
               launchModel={classicTradeLaunchModel}
               totalSupply={chartTotalSupply(token)}
+              currentMarketCapUsd={chartCurrentMarketCapUsd(token)}
               preview={preview}
               onVolumeChange={setChartVolume}
             />
@@ -2013,6 +2027,7 @@ function CustomProjectDetailContent({
               tokenAddress={project.tokenAddress}
               tokenName={project.name}
               totalSupply={chartTotalSupply(project)}
+              currentMarketCapUsd={chartCurrentMarketCapUsd(project)}
             />
             <MetricGrid metrics={metrics} />
           </section>
