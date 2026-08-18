@@ -1181,6 +1181,21 @@ export function handledInitialExploreRequestKey(
   return state?.phase === "ready" ? requestKey : null;
 }
 
+export function createResponsiveExploreInitialState(
+  response: ExploreInitialResponse | undefined,
+  input: Readonly<{
+    reuseAvailable: boolean;
+    isInitialRequest: boolean;
+    requestKey: string;
+    contentKey: string;
+    pageSize: number;
+  }>,
+): ExploreState | null {
+  if (!input.reuseAvailable || !input.isInitialRequest) return null;
+  const state = createExploreInitialState(response, input);
+  return state?.phase === "ready" ? state : null;
+}
+
 type PendingExploreRequest = {
   controller: AbortController;
   promise: Promise<ExplorePayload>;
@@ -2002,6 +2017,9 @@ export function ExploreView({
       pageSize,
     }),
   );
+  const initialResponseReuseAvailable = useRef(
+    initialState?.phase === "ready",
+  );
   const handledRequestKey = useRef<string | null>(
     handledInitialExploreRequestKey(initialState, requestKey),
   );
@@ -2101,6 +2119,39 @@ export function ExploreView({
       return;
     }
 
+    const initialValuationSort: ExploreValuationSort =
+      DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none";
+    const isInitialRequest =
+      debouncedQuery === "" &&
+      valuationSort === initialValuationSort &&
+      ageSort === "none" &&
+      socialFilter === "all" &&
+      modelFilter === "all" &&
+      currentPage === 1 &&
+      retryKey === 0;
+    const responsiveInitialState = createResponsiveExploreInitialState(
+      initialResponse,
+      {
+        reuseAvailable: initialResponseReuseAvailable.current,
+        isInitialRequest,
+        requestKey,
+        contentKey,
+        pageSize,
+      },
+    );
+    if (responsiveInitialState?.phase === "ready") {
+      activeExploreContentKey.current = activeRequestContentKey;
+      cacheResolvedExplorePayload(
+        activeRequestContentKey,
+        responsiveInitialState.payload,
+      );
+      if (handledRequestKey.current !== requestKey) {
+        handledRequestKey.current = requestKey;
+        setState(responsiveInitialState);
+      }
+      return;
+    }
+
     if (handledRequestKey.current === requestKey) {
       activeExploreContentKey.current = activeRequestContentKey;
       if (initialState?.phase === "ready") {
@@ -2111,6 +2162,8 @@ export function ExploreView({
       }
       return;
     }
+
+    initialResponseReuseAvailable.current = false;
 
     let ignore = false;
     const previousContentKey = activeExploreContentKey.current;
@@ -2204,10 +2257,12 @@ export function ExploreView({
     modelDatasetKey,
     modelFilter,
     pageSize,
+    initialResponse,
     initialState,
     loadingOnly,
     preview,
     requestKey,
+    retryKey,
     requiresCompleteDataset,
     socialFilter,
     sort,
