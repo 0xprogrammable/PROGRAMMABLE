@@ -112,11 +112,11 @@ describe("token detail metrics", () => {
 
     expect(buildTokenDetailMetrics(withoutSupply)[0]).toEqual({
       label: "Market cap",
-      value: "Not available yet",
+      value: "",
     });
     expect(buildTokenDetailMetrics(withoutLiquidity, "$999M")[0]).toEqual({
       label: "Market cap",
-      value: "Not available yet",
+      value: "",
     });
   });
 
@@ -127,10 +127,10 @@ describe("token detail metrics", () => {
     });
   });
 
-  it("shows unavailable for a historical point without evidenced USD or ETH FDV", () => {
+  it("ignores an unavailable historical override", () => {
     expect(buildTokenDetailMetrics(token, "Unavailable")[0]).toEqual({
       label: "Market cap",
-      value: "Unavailable",
+      value: "$168.56K",
     });
   });
 
@@ -192,7 +192,7 @@ describe("token detail metrics", () => {
       buildTokenDetailMetrics(token, null, volume).find((metric) =>
         metric.label.startsWith("Volume"),
       ),
-    ).toEqual({ label: "Volume 1W", value: "—" });
+    ).toEqual({ label: "Volume 1W", value: "" });
     expect(buildChartVolumeMetric(null)).toBeUndefined();
     expect(
       buildChartVolumeMetric({

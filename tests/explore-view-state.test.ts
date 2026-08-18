@@ -1071,9 +1071,9 @@ describe("Explore refresh state", () => {
     );
     expect(exploreUnavailableFdvLabel("No market")).toBe("No market yet");
     expect(exploreUnavailableFdvLabel("Unavailable")).toBe(
-      "Not available yet",
+      "",
     );
-    expect(exploreUnavailableFdvLabel(undefined)).toBe("Not available yet");
+    expect(exploreUnavailableFdvLabel(undefined)).toBe("");
   });
 
   it("labels bounded offchain FDV as provider recent, never onchain current", () => {

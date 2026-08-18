@@ -67,6 +67,9 @@ describe("token detail layout", () => {
     expect(chartSource).toContain("{chartStatus}");
     expect(chartSource).toContain('"Market cap history"');
     expect(chartSource).toContain('point.valueSemantics === "period-median"');
+    expect(chartSource).toContain('hour12: true');
+    expect(chartSource).not.toContain('timeZoneName: "short"');
+    expect(chartSource).not.toContain('} to ${formatter.format');
     expect(chartSource).not.toContain("inspect exact prices");
     expect(chartSource).not.toContain("payload.points.length < 2");
     expect(chartSource).toContain("tabIndex={0}");
@@ -147,7 +150,7 @@ describe("token detail layout", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Token details\s*<\/h2>/i);
     expect(detailSource).not.toMatch(/<dt>\s*Network\s*<\/dt>/i);
     expect(detailSource).not.toContain("EthereumMark");
-    expect(detailSource).toContain('className={styles.networkMark}');
+    expect(detailSource).not.toContain('className={styles.networkMark}');
     expect(detailSource).not.toContain('aria-label="Token metadata"');
     expect(detailSource).not.toMatch(/<dt>\s*Published\s*<\/dt>/i);
     expect(detailSource).not.toMatch(/<dt>\s*Quote asset\s*<\/dt>/i);

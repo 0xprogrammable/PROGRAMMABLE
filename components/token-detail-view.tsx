@@ -880,10 +880,10 @@ export function buildChartVolumeMetric(
   return {
     label: CHART_VOLUME_LABELS[volume.range],
     value: volume.pending
-      ? "—"
+      ? ""
       : (formatUsdWadAmount(volume.volumeUsdWad) ??
         formatEth(volume.volumeEth, "amount") ??
-        "—"),
+        ""),
   };
 }
 
@@ -915,7 +915,8 @@ export function buildTokenDetailMetrics(
     : exploreValuation(token);
   const safeFdvOverride = valuation.status === "available" &&
       valuation.metric === "fdv" &&
-      fdvOverride?.trim()
+      fdvOverride?.trim() &&
+      !/^(?:Unavailable|Not available yet|—)$/u.test(fdvOverride.trim())
     ? fdvOverride
     : null;
   const formattedFdv = valuation.status === "available"
@@ -933,7 +934,7 @@ export function buildTokenDetailMetrics(
   const values: Array<TokenMetric | null> = [
     {
       label: getValuationMetricLabel(valuation),
-      value: formattedFdv ?? "Not available yet",
+      value: formattedFdv ?? "",
     },
     {
       label: "Category",
@@ -993,7 +994,10 @@ export function buildTokenDetailMetrics(
 
   return values.filter(
     (metric): metric is TokenMetric =>
-      metric !== null && metric.value.length > 0,
+      metric !== null &&
+      (metric.value.length > 0 ||
+        metric.label === "Market cap" ||
+        metric.label.startsWith("Volume ")),
   );
 }
 
@@ -1527,11 +1531,6 @@ function TokenDetailContent({
                   title={copied ? "Copied" : "Copy contract address"}
                   onClick={copyAddress}
                 >
-                  <span
-                    className={styles.networkMark}
-                  >
-                    CA
-                  </span>
                   <code>{token.tokenAddress}</code>
                   {copied ? (
                     <Check aria-hidden="true" size={14} />
@@ -1793,24 +1792,23 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
         ? "Current"
         : project.marketData?.status === "partial"
           ? "Limited"
-          : "Not available yet";
+          : "";
   return [
     {
       label: getValuationMetricLabel(valuation),
-      value: valuationValue ?? "Not available yet",
+      value: valuationValue ?? "",
     },
     { label: "Market data", value: marketStatus },
     ...(primary?.volume24hUsdWad
       ? [{
           label: "24h volume",
-          value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "Unavailable",
+          value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "",
         }]
       : []),
     ...(primary?.liquidity?.freshness === "current"
       ? [{
           label: "Liquidity",
-          value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ??
-            "Unavailable",
+          value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ?? "",
         }]
       : []),
   ];
@@ -1920,7 +1918,6 @@ function CustomProjectDetailContent({
                     : `Copy ${project.name} contract address`}
                   onClick={() => void copyAddress()}
                 >
-                  <span className={styles.networkMark}>CA</span>
                   <code>{project.tokenAddress}</code>
                   {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
                 </button>
