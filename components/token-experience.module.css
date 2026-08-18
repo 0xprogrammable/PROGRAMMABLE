@@ -184,12 +184,12 @@
 .address,
 .explorerLink {
   align-items: center;
-  -webkit-backdrop-filter: var(--control-glass-backdrop);
-  backdrop-filter: var(--control-glass-backdrop);
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
-  border-radius: var(--radius-control);
-  box-shadow: var(--liquid-glass-control-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
   color: var(--text-soft);
   display: inline-flex;
   min-height: 44px;
@@ -1971,6 +1971,22 @@
   max-width: 1160px;
 }
 
+.navigationRow {
+  margin-bottom: 18px;
+}
+
+.back {
+  font-size: 15px;
+  font-weight: 640;
+  gap: 9px;
+  min-height: 48px;
+}
+
+.back svg {
+  height: 20px;
+  width: 20px;
+}
+
 .layout {
   gap: 16px 20px;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 350px);
@@ -1997,10 +2013,11 @@
 .address {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: var(--webde-surface);
-  border-color: var(--webde-line);
-  border-radius: var(--webde-radius-control);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
   box-shadow: none;
+  padding-inline: 0;
 }
 
 .description {

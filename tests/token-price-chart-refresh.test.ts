@@ -110,6 +110,22 @@ describe("token price chart inspection", () => {
     expect(Number.isFinite(chart?.points[0]?.y)).toBe(true);
     expect(getChartKeyboardInspectionIndex("End", null, 1)).toBe(0);
   });
+
+  it("plots market-cap values in compact USD form when supply is bound", () => {
+    const chart = createChartGeometry([
+      { blockNumber: "100", priceUsd: "0.0003", marketCapUsd: "300000" },
+      { blockNumber: "101", priceUsd: "0.000265", marketCapUsd: "265000" },
+    ], "market-cap");
+
+    expect(chart).toMatchObject({
+      unit: "USD",
+      latestValue: 265000,
+      points: [
+        expect.objectContaining({ value: 300000 }),
+        expect.objectContaining({ value: 265000 }),
+      ],
+    });
+  });
 });
 
 describe("token price chart refresh", () => {

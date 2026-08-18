@@ -1026,7 +1026,7 @@ describe("Explore refresh state", () => {
     },
   );
 
-  it("presents total-supply FDV as valuation without calling it market cap", () => {
+  it("presents total-supply valuation using the public market cap label", () => {
     const token = {
       id: "1:test",
       name: "Test",
@@ -1062,7 +1062,7 @@ describe("Explore refresh state", () => {
       kind: "usd",
       value: 125,
     });
-    expect(getTokenCards([entry])[0]?.valuationMetric).toBe("Valuation");
+    expect(getTokenCards([entry])[0]?.valuationMetric).toBe("Market cap");
   });
 
   it("explains missing FDV without inventing a value", () => {

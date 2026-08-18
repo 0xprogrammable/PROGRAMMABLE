@@ -153,10 +153,7 @@ describe("Explore UI contract", () => {
       "exploreUnavailableFdvLabel(token.marketStatus)",
     );
     expect(source).toContain("Copy ${token.name} contract address");
-    expect(source).toContain('token.marketStatus !== "Unavailable"');
-    expect(styles).toMatch(
-      /\.runnerMarketStatus\s*\{[^}]*color:\s*var\(--explore-ivory-muted\);/s,
-    );
+    expect(source).not.toContain("runnerMarketStatus");
   });
 
   it("uses flat Warm Ivory milk glass without decorative distortion", () => {

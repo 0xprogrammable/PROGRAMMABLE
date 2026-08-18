@@ -102,6 +102,19 @@ export type TokenMetric = {
   value: string;
 };
 
+function chartTotalSupply(input: {
+  totalSupply?: string;
+  marketData?: TokenMarketDataV1;
+}) {
+  if (input.totalSupply?.trim()) return input.totalSupply;
+  const primaryPool = input.marketData?.pools.find(
+    (pool) => pool.identity.poolId === input.marketData?.primaryPoolId,
+  );
+  return primaryPool?.valuation.status === "available"
+    ? primaryPool.valuation.totalSupply
+    : undefined;
+}
+
 const CHART_VOLUME_LABELS = {
   "1h": "Volume 1H",
   "1d": "Volume 1D",
@@ -854,24 +867,8 @@ export function buildChartVolumeMetric(
 export function getValuationMetricLabel(
   valuation: ExploreValuation | undefined,
 ): string {
-  const isMarketCap = valuation?.status === "available" &&
-    valuation.metric === "market-cap" &&
-    valuation.supplyBasis === "circulating";
-  const currentLabel = isMarketCap ? "Market cap" : "FDV";
-
-  if (
-    valuation?.status !== "available" ||
-    valuation.freshness === "current"
-  ) {
-    return currentLabel;
-  }
-  if (valuation.freshness === "provider-recent") {
-    return isMarketCap ? "Provider-recent market cap" : "Provider-recent FDV";
-  }
-  if (valuation.freshness === "stale") {
-    return isMarketCap ? "Last verified market cap" : "Last verified FDV";
-  }
-  return isMarketCap ? "Unverified market cap" : "Unverified FDV";
+  void valuation;
+  return "Market cap";
 }
 
 export function buildTokenDetailMetrics(
@@ -1037,17 +1034,6 @@ function TelegramBrandIcon() {
       <path
         fill="currentColor"
         d="M22.8 3.2 19.5 20.1c-.25 1.2-.91 1.5-1.85.94l-5.03-3.71-2.43 2.34c-.27.27-.5.5-1.02.5l.36-5.13 9.34-8.44c.41-.36-.09-.56-.63-.2L6.7 13.67l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L21.36 3c.9-.33 1.69.2 1.44 1.2Z"
-      />
-    </svg>
-  );
-}
-
-function EthereumMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="m12 2-6.1 10.1L12 15.7l6.1-3.6L12 2Zm0 15-6.1-3.6L12 22l6.1-8.6L12 17Z"
       />
     </svg>
   );
@@ -1520,11 +1506,8 @@ function TokenDetailContent({
                 >
                   <span
                     className={styles.networkMark}
-                    aria-label={getNetworkLabel(chainId)}
-                    title={getNetworkLabel(chainId)}
                   >
-                    <EthereumMark />
-                    <span aria-hidden="true">CA</span>
+                    CA
                   </span>
                   <code>{token.tokenAddress}</code>
                   {copied ? (
@@ -1571,6 +1554,7 @@ function TokenDetailContent({
               tokenAddress={token.tokenAddress}
               tokenName={token.name}
               launchModel={classicTradeLaunchModel}
+              totalSupply={chartTotalSupply(token)}
               preview={preview}
               onVolumeChange={setChartVolume}
             />
@@ -1913,10 +1897,7 @@ function CustomProjectDetailContent({
                     : `Copy ${project.name} contract address`}
                   onClick={() => void copyAddress()}
                 >
-                  <span className={styles.networkMark} title={getNetworkLabel(chainId)}>
-                    <EthereumMark />
-                    <span aria-hidden="true">CA</span>
-                  </span>
+                  <span className={styles.networkMark}>CA</span>
                   <code>{project.tokenAddress}</code>
                   {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
                 </button>
@@ -1936,6 +1917,7 @@ function CustomProjectDetailContent({
             <TokenPriceChart
               tokenAddress={project.tokenAddress}
               tokenName={project.name}
+              totalSupply={chartTotalSupply(project)}
             />
             <MetricGrid metrics={metrics} />
           </section>
