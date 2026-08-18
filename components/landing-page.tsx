@@ -113,14 +113,28 @@ export function LandingPage() {
         aria-labelledby="landing-title"
       >
         <div className={styles.heroArtwork} aria-hidden="true">
-          <Image
-            className={styles.heroGarden}
-            src="/brand/atmosphere/programmable-floral-foreground-v1.avif"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-          />
+          <picture className={styles.heroGardenFrame}>
+            <source
+              media="(max-width: 42.5rem)"
+              srcSet="/brand/atmosphere/programmable-floral-foreground-mobile-v1.avif"
+              type="image/avif"
+            />
+            <source
+              media="(max-width: 60rem)"
+              srcSet="/brand/atmosphere/programmable-floral-foreground-tablet-v1.avif"
+              type="image/avif"
+            />
+            <Image
+              className={styles.heroGarden}
+              src="/brand/atmosphere/programmable-floral-foreground-v1.avif"
+              alt=""
+              fill
+              fetchPriority="high"
+              loading="eager"
+              sizes="100vw"
+              unoptimized
+            />
+          </picture>
           <span className={styles.heroTwinkles}>
             {Array.from({ length: HERO_TWINKLE_COUNT }, (_, index) => (
               <i key={index} style={heroStarStyle(index)} />

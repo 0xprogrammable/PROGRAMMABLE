@@ -25,7 +25,6 @@ type PermissionResponse = {
 
 declare global {
   interface Window {
-    ethereum?: Eip1193Provider;
     PROGRAMMABLE_REVENUE_ACTIVATION: {
       deployer: Address;
       revenueAuthority: Address;
@@ -59,8 +58,9 @@ function status(message: string, error = false) {
 }
 
 function provider() {
-  if (!window.ethereum) throw new Error("MetaMask was not found");
-  return window.ethereum;
+  const ethereum = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+  if (!ethereum) throw new Error("MetaMask was not found");
+  return ethereum;
 }
 
 function sameAddress(left: string | undefined, right: string) {

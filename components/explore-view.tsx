@@ -1119,6 +1119,7 @@ export function createExploreInitialState(
   input: Readonly<{
     requestKey: string;
     contentKey: string;
+    pageSize: number;
   }>,
 ): ExploreState | null {
   if (response === undefined) return null;
@@ -1126,7 +1127,8 @@ export function createExploreInitialState(
     return {
       phase: "error",
       message: readApiError(response.body),
-      ...input,
+      requestKey: input.requestKey,
+      contentKey: input.contentKey,
     };
   }
 
@@ -1138,10 +1140,26 @@ export function createExploreInitialState(
     ) {
       throw new Error("The token registry returned an unexpected first page");
     }
+    if (
+      input.pageSize !== EXPLORE_TOKENS_PER_PAGE &&
+      input.pageSize !== EXPLORE_MOBILE_TOKENS_PER_PAGE
+    ) {
+      throw new Error("The token registry returned an unexpected page size");
+    }
+    const requestedTokenCount = Math.min(input.pageSize, payload.tokens.length);
+    const initialPayload = input.pageSize === payload.pageSize
+      ? payload
+      : {
+          ...payload,
+          tokens: payload.tokens.slice(0, requestedTokenCount),
+          pageSize: input.pageSize,
+          totalPages: Math.ceil(payload.total / input.pageSize),
+        };
     return {
       phase: "ready",
-      payload,
-      ...input,
+      payload: initialPayload,
+      requestKey: input.requestKey,
+      contentKey: input.contentKey,
     };
   } catch (error) {
     return {
@@ -1150,7 +1168,8 @@ export function createExploreInitialState(
         error instanceof Error
           ? error.message
           : "The token registry returned an invalid response",
-      ...input,
+      requestKey: input.requestKey,
+      contentKey: input.contentKey,
     };
   }
 }
@@ -1173,7 +1192,7 @@ const resolvedExplorePayloads = new Map<
   string,
   Readonly<{ payload: ExplorePayload; updatedAt: number }>
 >();
-const RESOLVED_EXPLORE_PAYLOAD_TTL_MS = 4_500;
+const RESOLVED_EXPLORE_PAYLOAD_TTL_MS = 30_000;
 const MAX_RESOLVED_EXPLORE_PAYLOADS = 24;
 
 type ExploreRequestContract = Readonly<{
@@ -1980,6 +1999,7 @@ export function ExploreView({
     createExploreInitialState(initialResponse, {
       requestKey,
       contentKey,
+      pageSize,
     }),
   );
   const handledRequestKey = useRef<string | null>(

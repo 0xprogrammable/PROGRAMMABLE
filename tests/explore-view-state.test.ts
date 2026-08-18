@@ -357,6 +357,7 @@ describe("Explore refresh state", () => {
         {
           contentKey: "initial-content",
           requestKey: "initial-request",
+          pageSize: EXPLORE_TOKENS_PER_PAGE,
         },
       ),
     ).toEqual({
@@ -376,6 +377,7 @@ describe("Explore refresh state", () => {
         {
           contentKey: "initial-content-error",
           requestKey: "initial-request-error",
+          pageSize: EXPLORE_TOKENS_PER_PAGE,
         },
       );
 
@@ -393,7 +395,11 @@ describe("Explore refresh state", () => {
   it("suppresses only the successful server response hydration request", () => {
     const initialState = createExploreInitialState(
       { ok: true, body: payload },
-      { contentKey: "initial-content", requestKey: "initial-request" },
+      {
+        contentKey: "initial-content",
+        requestKey: "initial-request",
+        pageSize: EXPLORE_TOKENS_PER_PAGE,
+      },
     );
 
     expect(
@@ -402,6 +408,29 @@ describe("Explore refresh state", () => {
     expect(
       handledInitialExploreRequestKey(null, "initial-request"),
     ).toBeNull();
+  });
+
+  it("reuses the nine-token server page for the four-token mobile view", () => {
+    const initialState = createExploreInitialState(
+      { ok: true, body: unvaluedMarketPayload },
+      {
+        contentKey: "initial-mobile-content",
+        requestKey: "initial-mobile-request",
+        pageSize: EXPLORE_MOBILE_TOKENS_PER_PAGE,
+      },
+    );
+
+    expect(initialState?.phase).toBe("ready");
+    if (initialState?.phase !== "ready") return;
+    expect(initialState.payload.tokens).toHaveLength(1);
+    expect(initialState.payload.tokens[0]).toMatchObject(
+      unvaluedMarketPayload.tokens[0]!,
+    );
+    expect(initialState.payload.pageSize).toBe(EXPLORE_MOBILE_TOKENS_PER_PAGE);
+    expect(initialState.payload.totalPages).toBe(1);
+    expect(
+      handledInitialExploreRequestKey(initialState, "initial-mobile-request"),
+    ).toBe("initial-mobile-request");
   });
 
   it("uses nine desktop cards and four mobile cards per page", () => {

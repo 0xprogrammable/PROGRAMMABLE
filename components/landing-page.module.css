@@ -55,6 +55,11 @@
   z-index: 3;
 }
 
+.heroGardenFrame {
+  inset: 0;
+  position: absolute;
+}
+
 .heroGarden {
   object-fit: cover;
   object-position: center bottom;
@@ -162,9 +167,9 @@
 }
 
 .definition {
-  min-height: 100svh;
-  padding: clamp(88px, 13vh, 136px)
-    max(clamp(24px, 4vw, 40px), calc((100% - 1280px) / 2)) 96px;
+  padding: clamp(88px, 9vh, 112px)
+    max(clamp(24px, 4vw, 40px), calc((100% - 1280px) / 2))
+    clamp(88px, 9vh, 112px);
   scroll-margin-top: 0;
 }
 
@@ -411,10 +416,6 @@
 }
 
 @media (max-width: 42.5rem) {
-  .heroGarden {
-    object-position: 62% bottom;
-  }
-
   .heroContent {
     padding-bottom: 112px;
     transform: translateY(-4vh);
