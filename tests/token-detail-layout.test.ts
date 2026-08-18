@@ -35,7 +35,7 @@ describe("token detail layout", () => {
     );
   });
 
-  it("announces the inspected chart value without duplicating the visual tooltip", () => {
+  it("keeps the inspected date in the header without a floating tooltip", () => {
     const activeValueIdIndex = chartSource.indexOf("id={activeValueId}");
     const liveRegion = chartSource.slice(
       chartSource.lastIndexOf("<span", activeValueIdIndex),
@@ -45,20 +45,19 @@ describe("token detail layout", () => {
     expect(chartSource).toContain(
       "`${formatChartValue(activePoint.value, chart.unit, chartMetric)}, ${chartPointContext(activePoint)}`",
     );
+    expect(chartSource).toContain('className={styles.context} aria-hidden="true"');
     expect(chartSource).toContain(
-      "<strong>{formatChartValue(activePoint.value, chart.unit, chartMetric)}</strong>",
+      "{activePoint ? chartPointContext(activePoint) : \"\\u00A0\"}",
     );
+    expect(chartSource).not.toContain("className={styles.tooltip}");
     expect(activeValueIdIndex).toBeGreaterThan(-1);
     expect(liveRegion).toContain('className="sr-only"');
     expect(liveRegion).toContain('role="status"');
     expect(liveRegion).toContain('aria-live="polite"');
     expect(liveRegion).toContain('aria-atomic="true"');
     expect(liveRegion).toContain("chartPointContext(activePoint)");
-    expect(chartSource).toMatch(
-      /style=\{\{[\s\S]*?left:\s*`clamp\([^`]+\)`[\s\S]*?\}\}/,
-    );
     expect(chartSource).not.toContain("data-horizontal-edge");
-    expect(chartSource).toContain('data-vertical={activePoint.y < 44 ? "below" : "above"}');
+    expect(chartSource).not.toContain("data-vertical=");
   });
 
   it("keeps chart loading stable, labelled and separate from empty history", () => {

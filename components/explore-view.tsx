@@ -2434,12 +2434,14 @@ export function ExploreView({
                   <h3 title={token.name}>{token.name}</h3>
                   {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-                <div className={styles.runnerData}>
-                  <span>
-                    <small>Market cap</small>
-                    {valuationLabel ? <strong>{valuationLabel}</strong> : null}
-                  </span>
-                </div>
+                {valuationLabel ? (
+                  <div className={styles.runnerData}>
+                    <span>
+                      <small>Market cap</small>
+                      <strong>{valuationLabel}</strong>
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </>
           );

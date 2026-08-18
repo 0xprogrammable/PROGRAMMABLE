@@ -111,6 +111,9 @@ describe("interaction state regressions", () => {
     expect(exploreSource).toContain("runnerMeta");
     expect(exploreSource).toContain("runnerData");
     expect(exploreSource).toContain("<small>Market cap</small>");
+    expect(exploreSource).toMatch(
+      /\{valuationLabel \? \([\s\S]*?<small>Market cap<\/small>[\s\S]*?\) : null\}/,
+    );
     expect(exploreSource).not.toContain(
       "exploreUnavailableFdvLabel(token.marketStatus)",
     );

@@ -27,7 +27,10 @@ describe("token trade amount interface", () => {
       /\.amountCardInvalid \.amountInputRow:focus-within\s*\{[^}]*outline-color:\s*var\(--danger\);/s,
     );
     expect(styles).toMatch(
-      /\.amountInput:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/s,
+      /\.amountInput:focus-visible\s*\{[^}]*box-shadow:\s*inset 0 -2px 0 var\(--focus\);[^}]*outline:\s*0;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(forced-colors: active\)[\s\S]*?\.amountInput:focus-visible\s*\{[^}]*outline:\s*2px solid ButtonText;/s,
     );
   });
 
