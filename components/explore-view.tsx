@@ -289,6 +289,13 @@ export function exploreTokensPerPageForViewport(width: number) {
     : EXPLORE_TOKENS_PER_PAGE;
 }
 
+export function explorePageSizeMatchesViewport(
+  pageSize: number,
+  viewportWidth: number,
+) {
+  return pageSize === exploreTokensPerPageForViewport(viewportWidth);
+}
+
 function subscribeToExploreViewport(onChange: () => void) {
   const query = window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY);
   query.addEventListener("change", onChange);
@@ -2115,6 +2122,13 @@ export function ExploreView({
       loadingOnly ||
       (typeof window !== "undefined" &&
         isInterfacePreviewHost(window.location.hostname))
+    ) {
+      return;
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      !explorePageSizeMatchesViewport(pageSize, window.innerWidth)
     ) {
       return;
     }

@@ -8,6 +8,7 @@ import {
   createResponsiveExploreInitialState,
   exploreAppliedSortLabel,
   exploreMarketStatusLabel,
+  explorePageSizeMatchesViewport,
   exploreUnavailableFdvLabel,
   exploreTokensPerPageForViewport,
   handledInitialExploreRequestKey,
@@ -464,6 +465,9 @@ describe("Explore refresh state", () => {
     expect(exploreTokensPerPageForViewport(390)).toBe(4);
     expect(exploreTokensPerPageForViewport(700)).toBe(4);
     expect(exploreTokensPerPageForViewport(701)).toBe(9);
+    expect(explorePageSizeMatchesViewport(9, 1440)).toBe(true);
+    expect(explorePageSizeMatchesViewport(9, 390)).toBe(false);
+    expect(explorePageSizeMatchesViewport(4, 390)).toBe(true);
     expect(getExplorePaginationItems(1, 10)).toEqual([
       1,
       2,
