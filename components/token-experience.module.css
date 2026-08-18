@@ -1989,7 +1989,7 @@
 
 .layout {
   gap: 16px 20px;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 350px);
+  grid-template-columns: minmax(0, 1.9fr) minmax(260px, 0.82fr);
 }
 
 .identity {

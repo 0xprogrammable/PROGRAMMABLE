@@ -149,9 +149,8 @@ describe("Explore UI contract", () => {
       'sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"',
     );
     expect(source).not.toContain("<small>CA</small>");
-    expect(source).toContain(
-      "exploreUnavailableFdvLabel(token.marketStatus)",
-    );
+    expect(source).toContain("<small>Market cap</small>");
+    expect(source).not.toContain("exploreUnavailableFdvLabel(token.marketStatus)");
     expect(source).toContain("Copy ${token.name} contract address");
     expect(source).not.toContain("runnerMarketStatus");
   });

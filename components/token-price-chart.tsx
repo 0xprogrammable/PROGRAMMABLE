@@ -643,9 +643,7 @@ export function TokenPriceChart({
   const hasLimitedHistory = payload?.status === "partial";
 
   const emptyMessage = chartMetric === "market-cap"
-    ? failed
-      ? "Market cap history is temporarily unavailable"
-      : "Market cap history appears after confirmed trades"
+    ? ""
     : getPriceHistoryEmptyMessage(
         launchModel,
         failed,
@@ -757,7 +755,9 @@ export function TokenPriceChart({
             {chart && displayedPrice !== undefined
               ? formatChartValue(displayedPrice, chart.unit, chartMetric)
               : !loading || launchModel === "stock-paired"
-                ? "Unavailable"
+                ? chartMetric === "market-cap"
+                  ? "—"
+                  : "Unavailable"
                 : "—"}
           </p>
         </div>
@@ -907,7 +907,7 @@ export function TokenPriceChart({
         </div>
       ) : (
         <div className={styles.placeholder}>
-          <p>{emptyMessage}</p>
+          {emptyMessage ? <p>{emptyMessage}</p> : null}
         </div>
       )}
     </section>

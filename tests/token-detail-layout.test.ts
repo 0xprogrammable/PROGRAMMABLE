@@ -73,7 +73,7 @@ describe("token detail layout", () => {
     expect(chartSource).toMatch(
       /\{loading \? \([\s\S]*?styles\.waitingPlot[\s\S]*?aria-hidden="true"[\s\S]*?\) : chart \? \(/,
     );
-    expect(chartSource).toContain("<p>{emptyMessage}</p>");
+    expect(chartSource).toContain("{emptyMessage ? <p>{emptyMessage}</p> : null}");
   });
 
   it("keeps the market workspace compact after removing auxiliary detail panels", () => {
@@ -90,6 +90,9 @@ describe("token detail layout", () => {
     );
     expect(detailStyles).toMatch(
       /\.identity\s*\{[^}]*grid-template-columns:\s*132px minmax\(0, 1fr\);/s,
+    );
+    expect(detailStyles).toContain(
+      "grid-template-columns: minmax(0, 1.9fr) minmax(260px, 0.82fr);",
     );
   });
 
