@@ -356,32 +356,18 @@ export function selectChartMetric(
 }
 
 function chartPointContext(point: TokenChartPoint): string {
-  if (
-    point.valueSemantics === "period-median" &&
-    point.bucketStart &&
-    point.bucketEnd &&
-    Number.isFinite(Date.parse(point.bucketStart)) &&
-    Number.isFinite(Date.parse(point.bucketEnd))
-  ) {
-    const formatter = new Intl.DateTimeFormat("en", {
+  const timestamp = point.valueSemantics === "period-median"
+    ? point.time ?? point.bucketEnd ?? point.bucketStart
+    : point.time;
+  if (timestamp && Number.isFinite(Date.parse(timestamp))) {
+    return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
-      hour: "2-digit",
+      hour: "numeric",
       minute: "2-digit",
       timeZone: "UTC",
-      timeZoneName: "short",
-    });
-    return `${formatter.format(new Date(point.bucketStart))} to ${formatter.format(new Date(point.bucketEnd))}`;
-  }
-  if (point.time && Number.isFinite(Date.parse(point.time))) {
-    return new Intl.DateTimeFormat("en", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "UTC",
-      timeZoneName: "short",
-    }).format(new Date(point.time));
+      hour12: true,
+    }).format(new Date(timestamp));
   }
   return `Block ${point.blockNumber}`;
 }
@@ -768,7 +754,7 @@ export function TokenPriceChart({
               ? formatChartValue(displayedPrice, chart.unit, chartMetric)
               : !loading || launchModel === "stock-paired"
                 ? chartMetric === "market-cap"
-                  ? "—"
+                  ? ""
                   : "Unavailable"
                 : "—"}
           </p>

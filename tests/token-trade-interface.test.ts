@@ -21,13 +21,13 @@ describe("token trade amount interface", () => {
       "aria-invalid={amountInvalid || undefined}",
     );
     expect(styles).toMatch(
-      /\.amountInputRow:focus-within\s*\{[^}]*outline-color:\s*var\(--text-soft\);/s,
+      /\.amountInputRow:focus-within\s*\{[^}]*outline-color:\s*transparent;/s,
     );
     expect(styles).toMatch(
       /\.amountCardInvalid \.amountInputRow:focus-within\s*\{[^}]*outline-color:\s*var\(--danger\);/s,
     );
     expect(styles).toMatch(
-      /\.amountInput:focus-visible\s*\{[^}]*outline:\s*0;/s,
+      /\.amountInput:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/s,
     );
   });
 

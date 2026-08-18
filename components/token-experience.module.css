@@ -162,25 +162,6 @@
   min-width: 0;
 }
 
-.networkMark {
-  align-items: center;
-  color: var(--muted);
-  display: inline-flex;
-  flex: none;
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
-  font-weight: 650;
-  gap: 4px;
-  height: auto;
-  justify-content: center;
-  width: auto;
-}
-
-.networkMark svg {
-  height: 14px;
-  width: 14px;
-}
-
 .address,
 .explorerLink {
   align-items: center;
@@ -1128,7 +1109,7 @@
 }
 
 .amountInputRow:focus-within {
-  outline-color: var(--text-soft);
+  outline-color: transparent;
 }
 
 .amountCardInvalid .amountInputRow:focus-within {
@@ -1267,7 +1248,7 @@
 }
 
 .tradeFacts.tradeSettings > div {
-  align-items: stretch;
+  align-items: center;
   background: var(--liquid-glass-inner-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 15px;
@@ -1275,8 +1256,8 @@
   flex-direction: row;
   gap: 8px;
   justify-content: center;
-  min-height: 48px;
-  padding: 5px 10px;
+  min-height: 42px;
+  padding: 4px 10px;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
@@ -1455,8 +1436,10 @@
 }
 
 .submitted {
+  align-items: center;
   gap: 12px;
   justify-content: center;
+  text-align: center;
 }
 
 .submitted strong {
@@ -1617,7 +1600,9 @@
 }
 
 .amountInput:focus-visible {
-  outline: 0;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
 .socialLink:focus-visible {

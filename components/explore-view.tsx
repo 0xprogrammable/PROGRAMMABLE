@@ -109,7 +109,7 @@ export function exploreUnavailableFdvLabel(
 ) {
   if (status === "Waiting for first trade") return status;
   if (status === "No market") return "No market yet";
-  return "Not available yet";
+  return "";
 }
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -2434,14 +2434,12 @@ export function ExploreView({
                   <h3 title={token.name}>{token.name}</h3>
                   {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-                {valuationLabel ? (
-                  <div className={styles.runnerData}>
-                    <span>
-                      <small>Market cap</small>
-                      <strong>{valuationLabel}</strong>
-                    </span>
-                  </div>
-                ) : null}
+                <div className={styles.runnerData}>
+                  <span>
+                    <small>Market cap</small>
+                    {valuationLabel ? <strong>{valuationLabel}</strong> : null}
+                  </span>
+                </div>
               </div>
             </>
           );
