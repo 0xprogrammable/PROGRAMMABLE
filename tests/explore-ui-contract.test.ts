@@ -150,6 +150,9 @@ describe("Explore UI contract", () => {
     );
     expect(source).not.toContain("<small>CA</small>");
     expect(source).toContain("<small>Market cap</small>");
+    expect(source).toMatch(
+      /\{valuationLabel \? \([\s\S]*?<small>Market cap<\/small>[\s\S]*?\) : null\}/,
+    );
     expect(source).not.toContain("exploreUnavailableFdvLabel(token.marketStatus)");
     expect(source).toContain("Copy ${token.name} contract address");
     expect(source).not.toContain("runnerMarketStatus");

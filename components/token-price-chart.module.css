@@ -41,6 +41,15 @@
   margin: 0;
 }
 
+.context {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  margin: 5px 0 0;
+  min-height: 14px;
+}
+
 .ranges {
   align-items: center;
   background: var(--liquid-glass-inner-background);
@@ -148,42 +157,6 @@
   transform: translate(-50%, -50%);
   width: 8px;
   z-index: 1;
-}
-
-.tooltip {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
-  background: var(--liquid-glass-surface-background-strong);
-  border: 1px solid var(--liquid-glass-border);
-  border-radius: 11px;
-  box-shadow: var(--liquid-glass-control-shadow);
-  display: grid;
-  gap: 2px;
-  max-width: calc(100% - 16px);
-  min-width: max-content;
-  padding: 7px 9px;
-  pointer-events: none;
-  position: absolute;
-  transform: translate(-50%, calc(-100% - 11px));
-  z-index: 2;
-}
-
-.tooltip[data-vertical="below"] {
-  transform: translate(-50%, 11px);
-}
-
-.tooltip strong {
-  color: var(--text);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 680;
-}
-
-.tooltip span {
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
 }
 
 .placeholder {
@@ -352,12 +325,4 @@
 .inspectionDot {
   background: #000;
   border-color: #fff;
-}
-
-.tooltip {
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  background: rgb(24 24 24 / 0.96);
-  border-color: var(--webde-line);
-  box-shadow: 0 12px 34px rgb(0 0 0 / 0.5);
 }

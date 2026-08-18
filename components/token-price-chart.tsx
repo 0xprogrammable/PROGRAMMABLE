@@ -756,6 +756,9 @@ export function TokenPriceChart({
                   : "Unavailable"
                 : "—"}
           </p>
+          <p className={styles.context} aria-hidden="true">
+            {activePoint ? chartPointContext(activePoint) : "\u00A0"}
+          </p>
         </div>
         {historyEnabled && launchModel !== "stock-paired" ? (
           <div className={styles.ranges} aria-label="Chart range" role="group">
@@ -866,28 +869,14 @@ export function TokenPriceChart({
             ) : null}
           </svg>
           {activePoint ? (
-            <>
-              <span
-                className={styles.inspectionDot}
-                style={{
-                  left: `${(activePoint.x / VIEWBOX_WIDTH) * 100}%`,
-                  top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
-                }}
-                aria-hidden="true"
-              />
-              <div
-                className={styles.tooltip}
-                data-vertical={activePoint.y < 44 ? "below" : "above"}
-                style={{
-                  left: `clamp(4.5rem, ${(activePoint.x / VIEWBOX_WIDTH) * 100}%, calc(100% - 4.5rem))`,
-                  top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
-                }}
-                aria-hidden="true"
-              >
-                <strong>{formatChartValue(activePoint.value, chart.unit, chartMetric)}</strong>
-                <span>{chartPointContext(activePoint)}</span>
-              </div>
-            </>
+            <span
+              className={styles.inspectionDot}
+              style={{
+                left: `${(activePoint.x / VIEWBOX_WIDTH) * 100}%`,
+                top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
+              }}
+              aria-hidden="true"
+            />
           ) : null}
           <span
             className="sr-only"
