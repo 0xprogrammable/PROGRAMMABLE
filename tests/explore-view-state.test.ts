@@ -5,6 +5,7 @@ import {
   EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
   EXPLORE_TOKENS_PER_PAGE,
   createExploreInitialState,
+  createResponsiveExploreInitialState,
   exploreAppliedSortLabel,
   exploreMarketStatusLabel,
   exploreUnavailableFdvLabel,
@@ -411,9 +412,11 @@ describe("Explore refresh state", () => {
   });
 
   it("reuses the nine-token server page for the four-token mobile view", () => {
-    const initialState = createExploreInitialState(
+    const initialState = createResponsiveExploreInitialState(
       { ok: true, body: unvaluedMarketPayload },
       {
+        reuseAvailable: true,
+        isInitialRequest: true,
         contentKey: "initial-mobile-content",
         requestKey: "initial-mobile-request",
         pageSize: EXPLORE_MOBILE_TOKENS_PER_PAGE,
@@ -431,6 +434,28 @@ describe("Explore refresh state", () => {
     expect(
       handledInitialExploreRequestKey(initialState, "initial-mobile-request"),
     ).toBe("initial-mobile-request");
+  });
+
+  it("stops reusing the server page after the first non-initial request", () => {
+    const input = {
+      contentKey: "initial-mobile-content",
+      requestKey: "initial-mobile-request",
+      pageSize: EXPLORE_MOBILE_TOKENS_PER_PAGE,
+      isInitialRequest: true,
+    } as const;
+
+    expect(
+      createResponsiveExploreInitialState(
+        { ok: true, body: unvaluedMarketPayload },
+        { ...input, reuseAvailable: false },
+      ),
+    ).toBeNull();
+    expect(
+      createResponsiveExploreInitialState(
+        { ok: true, body: unvaluedMarketPayload },
+        { ...input, reuseAvailable: true, isInitialRequest: false },
+      ),
+    ).toBeNull();
   });
 
   it("uses nine desktop cards and four mobile cards per page", () => {
