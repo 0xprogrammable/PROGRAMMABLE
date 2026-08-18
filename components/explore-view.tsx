@@ -76,7 +76,7 @@ type TokenCard = {
   imageUrl: string;
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
-  valuationMetric?: "Market cap" | "Valuation";
+  valuationMetric?: "Market cap";
   marketStatus?: ExploreMarketStatus;
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
@@ -1885,10 +1885,7 @@ export function getTokenCards(
       valuation: getExploreValuationMetric(token),
       ...(valuation.status === "available"
         ? {
-            valuationMetric:
-              valuation.metric === "market-cap"
-                ? ("Market cap" as const)
-                : ("Valuation" as const),
+            valuationMetric: "Market cap" as const,
           }
         : {}),
       marketStatus: exploreMarketStatusLabel(token),
@@ -2439,15 +2436,7 @@ export function ExploreView({
                 </header>
                 <div className={styles.runnerData}>
                   <span>
-                    <small
-                      title={
-                        token.valuationMetric === "Valuation"
-                          ? "Fully diluted valuation"
-                          : undefined
-                      }
-                    >
-                      {token.valuationMetric ?? "Valuation"}
-                    </small>
+                    <small>{token.valuationMetric ?? "Market cap"}</small>
                     <strong>
                       {valuationLabel ??
                         exploreUnavailableFdvLabel(token.marketStatus)}
@@ -2507,14 +2496,6 @@ export function ExploreView({
                       )}
                     </button>
                   </div>
-                ) : null}
-                {token.marketStatus && token.marketStatus !== "Unavailable" ? (
-                  <span
-                    className={styles.runnerMarketStatus}
-                    aria-label={`Market status ${token.marketStatus}`}
-                  >
-                    {token.marketStatus}
-                  </span>
                 ) : null}
                 {token.links.length > 0 ? (
                   <div

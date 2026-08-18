@@ -43,10 +43,10 @@ describe("token detail layout", () => {
     );
 
     expect(chartSource).toContain(
-      "`${formatPrice(activePoint.value, chart.unit)}, ${chartPointContext(activePoint)}`",
+      "`${formatChartValue(activePoint.value, chart.unit, chartMetric)}, ${chartPointContext(activePoint)}`",
     );
-    expect(chartSource).toMatch(
-      /className=\{styles\.tooltip\}[\s\S]*?aria-hidden="true"[\s\S]*?<strong>\{formatPrice\(activePoint\.value, chart\.unit\)\}<\/strong>[\s\S]*?<span>\{chartPointContext\(activePoint\)\}<\/span>/,
+    expect(chartSource).toContain(
+      "<strong>{formatChartValue(activePoint.value, chart.unit, chartMetric)}</strong>",
     );
     expect(activeValueIdIndex).toBeGreaterThan(-1);
     expect(liveRegion).toContain('className="sr-only"');
@@ -65,7 +65,7 @@ describe("token detail layout", () => {
     expect(chartSource).toContain("aria-busy={loading}");
     expect(chartSource).toContain('role="status"');
     expect(chartSource).toContain("{chartStatus}");
-    expect(chartSource).toContain('"One period median loaded"');
+    expect(chartSource).toContain('"Market cap history"');
     expect(chartSource).toContain('point.valueSemantics === "period-median"');
     expect(chartSource).not.toContain("inspect exact prices");
     expect(chartSource).not.toContain("payload.points.length < 2");
@@ -143,7 +143,8 @@ describe("token detail layout", () => {
   it("keeps only useful identity metadata", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Token details\s*<\/h2>/i);
     expect(detailSource).not.toMatch(/<dt>\s*Network\s*<\/dt>/i);
-    expect(detailSource).toContain("<EthereumMark />");
+    expect(detailSource).not.toContain("EthereumMark");
+    expect(detailSource).toContain('className={styles.networkMark}');
     expect(detailSource).not.toContain('aria-label="Token metadata"');
     expect(detailSource).not.toMatch(/<dt>\s*Published\s*<\/dt>/i);
     expect(detailSource).not.toMatch(/<dt>\s*Quote asset\s*<\/dt>/i);
@@ -152,18 +153,12 @@ describe("token detail layout", () => {
   });
 
   it("keeps canonical detail valuation independent from chart history", () => {
-    expect(detailSource).toContain(
-      'const currentLabel = isMarketCap ? "Market cap" : "FDV";',
-    );
-    expect(detailSource).toContain('valuation.metric === "market-cap"');
-    expect(detailSource).toContain(
-      'valuation.supplyBasis === "circulating"',
-    );
+    expect(detailSource).toContain('return "Market cap";');
     expect(detailSource).not.toContain("fdvEthWei={");
     expect(detailSource).not.toContain("fdvUsdWad={");
     expect(chartSource).not.toContain("payload.marketCap");
     expect(chartSource).not.toContain("payload.fdvUsdWad ?? fdvUsdWad");
-    expect(chartSource).not.toMatch(/marketCap(?:Eth|Usd)\w*\?: string/);
+    expect(chartSource).toContain("marketCapUsd?: string");
     expect(detailSource).not.toContain("chartFdv");
     expect(detailSource).not.toContain("setChartFdv");
     expect(detailSource).not.toContain("onFdvChange");

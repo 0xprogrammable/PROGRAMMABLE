@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { getExplorePreviewChart } from "@/components/explore-preview-data";
 import {
   isMarketChartV1,
@@ -28,6 +29,7 @@ export type TokenChartPoint = {
   valueSemantics?: "period-median";
   priceEth?: string;
   priceUsd?: string;
+  marketCapUsd?: string;
   priceQuote?: string;
   quoteSymbol?: string;
 };
@@ -316,6 +318,31 @@ function formatPrice(value: number, unit: string) {
   })} ${unit}`;
 }
 
+function formatChartValue(
+  value: number,
+  unit: string,
+  metric: "market-cap" | "price",
+) {
+  return metric === "market-cap"
+    ? formatMarketCapMetric({ kind: "usd", value })
+    : formatPrice(value, unit);
+}
+
+function marketCapUsdForPoint(
+  point: TokenChartPoint,
+  totalSupply: string | undefined,
+) {
+  if (!totalSupply || !point.priceUsd) return undefined;
+  const price = Number(point.priceUsd);
+  const supply = Number(totalSupply);
+  const marketCap = price * supply;
+  return Number.isFinite(price) && price > 0 &&
+      Number.isFinite(supply) && supply > 0 &&
+      Number.isFinite(marketCap) && marketCap > 0
+    ? marketCap.toString()
+    : undefined;
+}
+
 function chartPointContext(point: TokenChartPoint): string {
   if (
     point.valueSemantics === "period-median" &&
@@ -332,7 +359,7 @@ function chartPointContext(point: TokenChartPoint): string {
       timeZone: "UTC",
       timeZoneName: "short",
     });
-    return `Period median, ${formatter.format(new Date(point.bucketStart))} to ${formatter.format(new Date(point.bucketEnd))}`;
+    return `${formatter.format(new Date(point.bucketStart))} to ${formatter.format(new Date(point.bucketEnd))}`;
   }
   if (point.time && Number.isFinite(Date.parse(point.time))) {
     return new Intl.DateTimeFormat("en", {
@@ -360,11 +387,17 @@ function linePath(points: PlottedPoint[]) {
   );
 }
 
-export function createChartGeometry(points: readonly TokenChartPoint[]) {
+export function createChartGeometry(
+  points: readonly TokenChartPoint[],
+  metric: "market-cap" | "price" = "price",
+) {
   if (points.length === 0) return null;
-  const usesUsd = points.every(
-    (point) => point.priceUsd && Number(point.priceUsd) > 0,
-  );
+  const usesMarketCap = metric === "market-cap";
+  const usesUsd = points.every((point) => {
+    const value = usesMarketCap ? point.marketCapUsd : point.priceUsd;
+    return value && Number(value) > 0;
+  });
+  if (usesMarketCap && !usesUsd) return null;
   const usesEth = !usesUsd && points.every(
     (point) => point.priceEth && Number(point.priceEth) > 0,
   );
@@ -382,8 +415,10 @@ export function createChartGeometry(points: readonly TokenChartPoint[]) {
     .map((point) => ({
       ...point,
       value: Number(
-        usesUsd
-          ? point.priceUsd
+        usesMarketCap || usesUsd
+          ? usesMarketCap
+            ? point.marketCapUsd
+            : point.priceUsd
           : usesEth
             ? point.priceEth
             : point.priceQuote,
@@ -482,12 +517,14 @@ export function TokenPriceChart({
   tokenAddress,
   tokenName,
   launchModel,
+  totalSupply,
   preview = false,
   onVolumeChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   launchModel?: ChartLaunchModel;
+  totalSupply?: string;
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
@@ -589,37 +626,46 @@ export function TokenPriceChart({
     refreshTaskRef.current?.request();
   }, [refreshKey]);
 
-  const chart = useMemo(() => {
-    return payload ? createChartGeometry(payload.points) : null;
-  }, [payload]);
+  const chartMetric = totalSupply ? "market-cap" : "price";
+  const chartPoints = useMemo(
+    () => payload?.points.map((point) => ({
+      ...point,
+      ...(chartMetric === "market-cap"
+        ? { marketCapUsd: marketCapUsdForPoint(point, totalSupply) }
+        : {}),
+    })) ?? [],
+    [chartMetric, payload, totalSupply],
+  );
+  const chart = useMemo(
+    () => createChartGeometry(chartPoints, chartMetric),
+    [chartMetric, chartPoints],
+  );
   const hasLimitedHistory = payload?.status === "partial";
 
-  const emptyMessage = getPriceHistoryEmptyMessage(
-    launchModel,
-    failed,
-    payload?.status === "waiting-for-first-trade",
-  );
+  const emptyMessage = chartMetric === "market-cap"
+    ? failed
+      ? "Market cap history is temporarily unavailable"
+      : "Market cap history appears after confirmed trades"
+    : getPriceHistoryEmptyMessage(
+        launchModel,
+        failed,
+        payload?.status === "waiting-for-first-trade",
+      );
   const activePoint =
     chart && activePointIndex !== null
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
-  const usesPeriodMedians = chart?.points.every(
-    (point) => point.valueSemantics === "period-median",
-  ) ?? false;
   const displayedPrice = activePoint?.value ?? chart?.latestValue;
+  const historyLabel = chartMetric === "market-cap"
+    ? "Market cap history"
+    : "Price history";
   const chartStatus =
     !payload && !failed
-      ? "Loading price history"
+      ? `Loading ${chartMetric === "market-cap" ? "market cap" : "price"} history`
       : chart
         ? chart.points.length === 1
-          ? usesPeriodMedians
-            ? "One period median loaded"
-            : hasLimitedHistory
-              ? "Last verified price loaded from 1 point"
-              : "Current price loaded from 1 point"
-          : usesPeriodMedians
-            ? `Price history loaded with ${chart.points.length} period medians`
-            : `Price history loaded with ${chart.points.length} points`
+          ? `${historyLabel} loaded from 1 point`
+          : `${historyLabel} loaded with ${chart.points.length} points`
         : emptyMessage;
 
   useEffect(() => {
@@ -684,7 +730,7 @@ export function TokenPriceChart({
     <section
       className={`${styles.shell} liquid-glass-surface`}
       aria-busy={loading}
-      aria-label={`${tokenName} price history`}
+      aria-label={`${tokenName} ${chartMetric === "market-cap" ? "market cap" : "price"} history`}
     >
       <span
         className="sr-only"
@@ -701,15 +747,15 @@ export function TokenPriceChart({
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>
-            {usesPeriodMedians
-              ? "Median price"
+            {chartMetric === "market-cap"
+              ? "Market cap"
               : hasLimitedHistory
                 ? "Last verified price"
                 : "Price"}
           </p>
           <p className={styles.value}>
             {chart && displayedPrice !== undefined
-              ? formatPrice(displayedPrice, chart.unit)
+              ? formatChartValue(displayedPrice, chart.unit, chartMetric)
               : !loading || launchModel === "stock-paired"
                 ? "Unavailable"
                 : "—"}
@@ -748,7 +794,7 @@ export function TokenPriceChart({
           className={styles.plot}
           role="group"
           tabIndex={0}
-          aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect chart values.`}
+          aria-label={`${tokenName} interactive ${chartMetric === "market-cap" ? "market cap" : "price"} chart. Move the pointer or use arrow keys to inspect chart values.`}
           aria-describedby={`${instructionId} ${activeValueId}`}
           onBlur={() => setActivePointIndex(null)}
           onFocus={(event) => {
@@ -842,7 +888,7 @@ export function TokenPriceChart({
                 }}
                 aria-hidden="true"
               >
-                <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
+                <strong>{formatChartValue(activePoint.value, chart.unit, chartMetric)}</strong>
                 <span>{chartPointContext(activePoint)}</span>
               </div>
             </>
@@ -855,7 +901,7 @@ export function TokenPriceChart({
             aria-atomic="true"
           >
             {activePoint
-              ? `${formatPrice(activePoint.value, chart.unit)}, ${chartPointContext(activePoint)}`
+              ? `${formatChartValue(activePoint.value, chart.unit, chartMetric)}, ${chartPointContext(activePoint)}`
               : ""}
           </span>
         </div>
