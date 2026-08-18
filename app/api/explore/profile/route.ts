@@ -26,7 +26,12 @@ import type {
 import { productionMainnetRpcPrimary } from
   "@/lib/onchain/website-rpc-providers.server";
 import { creatorProfileApiError } from "@/lib/profile/onchain-profile";
-import type { LauncherToken } from "@/lib/tokens";
+import type {
+  CanonicalTokenExploreEntry,
+  LauncherToken,
+} from "@/lib/tokens";
+import { readEnvioClassicV3CatalogV1 } from
+  "@/lib/market-data/envio-classic-v3-catalog.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -429,6 +434,64 @@ async function readCreatorProfile(
   };
 }
 
+async function readEnvioCreatorProfile(
+  account: Address,
+  signal: AbortSignal,
+): Promise<CreatorProfile> {
+  const catalog = await readEnvioClassicV3CatalogV1({
+    signal,
+    deadlineMs: Date.now() + 7_500,
+  });
+  const tokens = catalog.entries
+    .filter(
+      (entry): entry is CanonicalTokenExploreEntry =>
+        entry.exploreKind === "token" &&
+        entry.creatorAddress?.toLowerCase() === account.toLowerCase(),
+    )
+    .map((token) => ({
+      ...token,
+      id: token.tokenAddress.toLowerCase(),
+    }));
+  const pools = tokens.flatMap((token) =>
+    typeof token.totalSwapFeeBps === "number"
+      ? [{
+          tokenAddress: token.tokenAddress,
+          name: token.name,
+          symbol: token.symbol,
+          poolId: token.poolId,
+          totalSwapFeeBps: token.totalSwapFeeBps,
+          launchModel: "classic" as const,
+          claimableCreatorFeesWei: "0",
+          claimableCreatorFeesEth: "0",
+          generatedCreatorFeesWei: "0",
+          generatedCreatorFeesEth: "0",
+        }]
+      : [],
+  );
+  return {
+    status: "ready",
+    account,
+    tokens,
+    pools,
+    claims: [],
+    totals: {
+      claimableWei: "0",
+      claimableEth: "0",
+      generatedWei: "0",
+      generatedEth: "0",
+      claimedWei: "0",
+      claimedEth: "0",
+    },
+    snapshot: {
+      chainId: 1,
+      blockNumber: catalog.asOfBlock,
+      blockHash: catalog.asOfBlockHash,
+      blockTimestamp: catalog.generatedAt,
+      confirmations: 12,
+    },
+  };
+}
+
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   if (
@@ -466,6 +529,27 @@ export async function GET(request: NextRequest) {
         category: "read-failed",
       },
     );
+    try {
+      const fallback = await readEnvioCreatorProfile(
+        getAddress(input),
+        request.signal,
+      );
+      return NextResponse.json(fallback, {
+        headers: {
+          "Cache-Control": "private, max-age=0, s-maxage=15",
+          "X-Programmable-Launch-Source": "envio-classic-v3",
+          "X-Programmable-Read-Source": "envio-classic-v3",
+          "X-Programmable-Rpc-Provider": "envio-indexer-state",
+        },
+      });
+    } catch (fallbackError) {
+      console.error("Envio creator profile fallback failed", {
+        name:
+          fallbackError instanceof Error
+            ? fallbackError.name
+            : "EnvioCreatorProfileError",
+      });
+    }
     return NextResponse.json(creatorProfileApiError("temporary"), {
       status: 503,
       headers: { "Cache-Control": "no-store" },

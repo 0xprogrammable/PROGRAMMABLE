@@ -10,6 +10,7 @@ import {
   nearestChartPointIndex,
   parseAuthoritativeChartPayload,
   preserveChartPayloadOnFailure,
+  selectChartMetric,
   shouldClearChartInspectionAfterPointerUp,
 } from "../components/token-price-chart";
 import type { MarketChartV1 } from "../lib/market-data/market-data-v1";
@@ -56,6 +57,21 @@ const MARKET_CHART = {
 } as const satisfies MarketChartV1;
 
 describe("token price chart inspection", () => {
+  it("uses quote price history when USD history is not available", () => {
+    expect(
+      selectChartMetric(
+        [{ blockNumber: "100", priceQuote: "0.1", quoteSymbol: "ETH" }],
+        "1000000",
+      ),
+    ).toBe("price");
+    expect(
+      selectChartMetric(
+        [{ blockNumber: "100", priceUsd: "0.0003" }],
+        "1000000",
+      ),
+    ).toBe("market-cap");
+  });
+
   it("maps the pointer to the nearest plotted price point", () => {
     expect(nearestChartPointIndex(100, 100, 600, 7)).toBe(0);
     expect(nearestChartPointIndex(400, 100, 600, 7)).toBe(3);

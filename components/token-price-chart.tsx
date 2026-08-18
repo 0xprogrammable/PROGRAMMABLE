@@ -343,6 +343,18 @@ function marketCapUsdForPoint(
     : undefined;
 }
 
+export function selectChartMetric(
+  points: readonly TokenChartPoint[],
+  totalSupply?: string,
+): "market-cap" | "price" {
+  if (!totalSupply || points.length === 0) return "price";
+  const hasUsdPriceHistory = points.every((point) => {
+    const value = Number(point.priceUsd);
+    return Number.isFinite(value) && value > 0;
+  });
+  return hasUsdPriceHistory ? "market-cap" : "price";
+}
+
 function chartPointContext(point: TokenChartPoint): string {
   if (
     point.valueSemantics === "period-median" &&
@@ -626,7 +638,7 @@ export function TokenPriceChart({
     refreshTaskRef.current?.request();
   }, [refreshKey]);
 
-  const chartMetric = totalSupply ? "market-cap" : "price";
+  const chartMetric = selectChartMetric(payload?.points ?? [], totalSupply);
   const chartPoints = useMemo(
     () => payload?.points.map((point) => ({
       ...point,

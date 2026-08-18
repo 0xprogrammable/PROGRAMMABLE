@@ -1272,11 +1272,11 @@
   border: 1px solid var(--liquid-glass-border);
   border-radius: 15px;
   box-shadow: var(--liquid-glass-inner-shadow);
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  gap: 8px;
   justify-content: center;
-  min-height: 78px;
-  padding: 7px 10px;
+  min-height: 48px;
+  padding: 5px 10px;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
@@ -1298,7 +1298,8 @@
 .tradeSettings dd {
   align-items: center;
   display: flex;
-  min-height: 44px;
+  justify-content: flex-end;
+  min-height: 32px;
 }
 
 .tradeSettings .slippageControl {
@@ -1307,7 +1308,8 @@
   border-radius: 10px;
   box-shadow: none;
   padding: 0;
-  width: 100%;
+  min-height: 30px;
+  width: auto;
 }
 
 .tradeSettings .slippageControl:focus-within {
@@ -1321,6 +1323,7 @@
 }
 
 .tradeSettings .slippageControl input {
+  min-height: 30px;
   text-align: start;
 }
 
