@@ -7,6 +7,7 @@ import {
   buildTokenTradeApiRequest,
   calculateBuyMaxWei,
   calculateEthVolumeUsdValue,
+  calculateTradeTokenEstimate,
   calculatePriceImpactPercent,
   calculateTradeUsdValue,
   formatTradeAmount,
@@ -163,6 +164,29 @@ describe("TokenTrade request construction", () => {
         tokenPriceUsdWad,
       }),
     ).toBe(1_000);
+  });
+
+  it("estimates the opposite asset for both trade directions", () => {
+    expect(
+      calculateTradeTokenEstimate({
+        side: "buy",
+        amount: "0.5",
+        tokenPriceEth: "0.001",
+      }),
+    ).toBe(500);
+    expect(
+      calculateTradeTokenEstimate({
+        side: "sell",
+        amount: "500",
+        tokenPriceEth: "0.001",
+      }),
+    ).toBe(0.5);
+    expect(
+      calculateTradeTokenEstimate({
+        side: "buy",
+        amount: "1",
+      }),
+    ).toBeNull();
   });
 
   it("derives USD trading volume from the token ETH and USD price", () => {

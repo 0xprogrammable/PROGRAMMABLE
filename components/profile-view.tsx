@@ -427,7 +427,7 @@ export function profileRewardActionErrorMessage(error: unknown) {
 const pendingProfileTransactionStoragePrefix =
   "programmable:profile-pending-transactions:v1:";
 const maximumPersistedProfileTransactions = 32;
-const terminalProfileErrorDelayMs = 900;
+const terminalProfileErrorDelayMs = 2_500;
 const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
 const ethereumBytes32Pattern = /^0x[0-9a-f]{64}$/;
 
@@ -1264,6 +1264,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     const confirmedTransactions = new Map(
       confirmedProfileTransactionsRef.current.classic,
     );
+    const cached = readCachedCreatorProfile(account);
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        setRemoteOnchainData(cached ?? loadingProfileData(account));
+      }
+    });
 
     void fetchCreatorProfile(account, controller.signal)
       .then((data) => {

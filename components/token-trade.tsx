@@ -112,6 +112,35 @@ export function calculateTradeUsdValue(input: {
   return amount * (tokenUsd / tokenEth);
 }
 
+export function calculateTradeTokenEstimate(input: {
+  side: TradeSide;
+  amount: string;
+  tokenPriceEth?: string;
+}) {
+  if (
+    !/^\d+(?:\.\d+)?$/.test(input.amount.trim()) ||
+    !input.tokenPriceEth ||
+    !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)
+  ) {
+    return null;
+  }
+
+  const amount = Number(input.amount);
+  const tokenPriceEth = Number(input.tokenPriceEth);
+  if (
+    !Number.isFinite(amount) ||
+    !Number.isFinite(tokenPriceEth) ||
+    amount < 0 ||
+    tokenPriceEth <= 0
+  ) {
+    return null;
+  }
+
+  return input.side === "buy"
+    ? amount / tokenPriceEth
+    : amount * tokenPriceEth;
+}
+
 export function calculateEthVolumeUsdValue(input: {
   grossVolumeEth?: string;
   tokenPriceEth?: string;
@@ -154,6 +183,14 @@ function formatApproximateUsd(value: number | null) {
     notation: value >= 1_000 ? "compact" : "standard",
     maximumFractionDigits: 2,
   }).format(value)}`;
+}
+
+function formatEstimatedOutput(value: number | null, unit: string) {
+  if (value === null || !Number.isFinite(value) || value < 0) return "";
+  return `Estimated ${new Intl.NumberFormat("en-US", {
+    notation: value >= 1_000 ? "compact" : "standard",
+    maximumSignificantDigits: 7,
+  }).format(value)} ${unit}`;
 }
 
 function formatBasisPoints(value: number) {
@@ -288,6 +325,8 @@ export function TokenTrade({
   tokenDecimals = 18,
   tokenPriceEth,
   tokenPriceUsdWad,
+  quoteAssetSymbol,
+  tokenPriceQuote,
   launchModel,
   quoteAsset,
   buySwapFeeBps,
@@ -345,13 +384,23 @@ export function TokenTrade({
       : null;
   const balances =
     activeBalanceState?.status === "ready" ? activeBalanceState.balances : null;
+  const effectiveTokenPriceEth = tokenPriceEth ??
+    (quoteAssetSymbol?.toUpperCase() === "ETH" ? tokenPriceQuote : undefined);
   const approximateUsd = formatApproximateUsd(
     calculateTradeUsdValue({
       side,
       amount,
-      tokenPriceEth,
+      tokenPriceEth: effectiveTokenPriceEth,
       tokenPriceUsdWad,
     }),
+  );
+  const estimatedOutput = formatEstimatedOutput(
+    calculateTradeTokenEstimate({
+      side,
+      amount,
+      tokenPriceEth: effectiveTokenPriceEth,
+    }),
+    side === "buy" ? symbol : "ETH",
   );
   const displayBalance = balances
     ? side === "buy"
@@ -662,6 +711,7 @@ export function TokenTrade({
         </div>
         <div className={styles.amountMeta}>
           <span aria-live="polite">{approximateUsd || "\u00A0"}</span>
+          <span aria-live="polite">{estimatedOutput || "\u00A0"}</span>
         </div>
       </div>
 

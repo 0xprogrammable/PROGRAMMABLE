@@ -811,6 +811,29 @@ function formatUsdWadAmount(valueWad: string | undefined) {
   return formatUsdAmount(value);
 }
 
+function derivedTokenPriceUsdWad(token: LauncherToken) {
+  if (token.tokenPriceUsdWad && /^\d+$/.test(token.tokenPriceUsdWad)) {
+    return token.tokenPriceUsdWad;
+  }
+  if (
+    !token.fdvUsdWad ||
+    !/^\d+$/.test(token.fdvUsdWad) ||
+    !token.totalSupplyRaw ||
+    !/^\d+$/.test(token.totalSupplyRaw) ||
+    typeof token.tokenDecimals !== "number" ||
+    !Number.isInteger(token.tokenDecimals) ||
+    token.tokenDecimals < 0 ||
+    token.tokenDecimals > 255
+  ) {
+    return undefined;
+  }
+  const supply = BigInt(token.totalSupplyRaw);
+  if (supply <= 0n) return undefined;
+  const price = (BigInt(token.fdvUsdWad) * 10n ** BigInt(token.tokenDecimals)) /
+    supply;
+  return price > 0n ? price.toString() : undefined;
+}
+
 export function formatStockPairedGrossVolume(token: LauncherToken) {
   if (token.launchModel !== "stock-paired") return null;
 
@@ -1600,7 +1623,7 @@ function TokenDetailContent({
               symbol={token.symbol}
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
-              tokenPriceUsdWad={token.tokenPriceUsdWad}
+              tokenPriceUsdWad={derivedTokenPriceUsdWad(token)}
               launchModel={classicTradeLaunchModel}
               quoteAsset={
                 token.quoteAssetAddress
