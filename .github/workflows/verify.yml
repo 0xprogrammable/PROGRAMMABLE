@@ -278,10 +278,10 @@ jobs:
       - name: Verify contracts
         if: needs.scope.outputs.contracts == 'true'
         env:
-          # Prefer the repository's already-authorized archive-capable Mainnet
-          # witness over the public fallback list, whose free endpoints can
-          # reject the fork suite with transient plan limits.
-          ETHEREUM_RPC_URL: ${{ secrets.MAINNET_RPC_URL_A }}
+          # Prefer the repository's already-authorized independent archive
+          # witness over the public fallback list and the dRPC primary, whose
+          # free endpoint can reject the fork suite with plan limits.
+          ETHEREUM_RPC_URL: ${{ secrets.MAINNET_RPC_URL_B }}
         run: npm run contracts:verify:ci
 
       - name: Check official Uniswap deployments
