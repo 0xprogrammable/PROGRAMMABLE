@@ -257,9 +257,7 @@ export function getPriceHistoryEmptyMessage(
     return STOCK_PAIRED_HISTORY_MESSAGE;
   }
   if (waitingForFirstTrade) return "Waiting for first trade";
-  return failed
-    ? "Price history is temporarily unavailable"
-    : "Price history appears after confirmed trades";
+  return failed ? "Price history is temporarily unavailable" : "";
 }
 
 export function shouldRenderPriceHistory(input: {

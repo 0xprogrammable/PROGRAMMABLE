@@ -300,9 +300,7 @@ describe("interaction accessibility", () => {
     expect(getPriceHistoryEmptyMessage("stock-paired", false)).toBe(
       "Historical price data is not available for Stock-Paired tokens",
     );
-    expect(getPriceHistoryEmptyMessage("classic", false)).toBe(
-      "Price history appears after confirmed trades",
-    );
+    expect(getPriceHistoryEmptyMessage("classic", false)).toBe("");
   });
 
   it("keeps the chart surface available without price history", () => {
