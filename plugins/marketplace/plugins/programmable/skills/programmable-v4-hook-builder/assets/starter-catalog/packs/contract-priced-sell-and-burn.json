@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "contract-priced-sell-and-burn",
+  "label": "Contract-priced sell and burn",
+  "summary": "Compose standalone contract-defined price formation with automatic destruction of sold inventory without assuming a v4 pool, hook, AMM, or liquidity position.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [
+    "ordinary-launch"
+  ],
+  "capabilities": [
+    "contract-based-price-formation",
+    "sell-and-burn",
+    "supply-deflation"
+  ],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "requiredFacts": [
+    "Exact purchase, sale, redemption and price-formation formulas with units, domain, rounding and every boundary",
+    "Which sold tokens are received, escrowed and irreversibly burned, and how total supply is reconstructed",
+    "Reserve, collateral or settlement assets, solvency assumptions and the user exit when price formation or funding fails",
+    "Whether any market is Programmable-canonical; a standalone external or non-launchable contract market has zero canonical fee scopes and no fabricated hook or fee-policy instance",
+    "Executed gross quote-side volume and the matching Fee V2 collection profile only for each separately declared Programmable-canonical scope",
+    "Every mutable parameter, emergency power and authority, including whether any actor can mint, seize, redirect, pause or change the curve"
+  ],
+  "requiredFiles": [
+    "Curve and deflation specification with worked examples",
+    "Token, contract-price, burn and settlement source",
+    "Independent high-precision reference model",
+    "Supply, reserve, fee and custody reconstruction index",
+    "Threat model and failure-mode specification"
+  ],
+  "requiredTests": [
+    "Buy, sell, redemption and burn conservation against the independent model",
+    "Monotonicity, exponential or other declared deflation behavior, rounding and uint256 boundaries",
+    "Aggregate-versus-fragmented execution, partial fills, microtrades and exact input/output behavior",
+    "Zero reserve, extreme price, exhausted inventory, cancellation, refund and failed-settlement behavior",
+    "No mint, burn, reserve, fee, authority or alternative-market bypass",
+    "Quote-to-execution parity and explicit provider incompatibility behavior"
+  ],
+  "risks": [
+    "A pricing or rounding error can create free value, over-burn supply or make redemptions insolvent",
+    "A privileged curve, mint, burn or reserve control can silently change the promised economics",
+    "Ordinary routers and quote providers may not simulate nonstandard execution correctly"
+  ]
+}

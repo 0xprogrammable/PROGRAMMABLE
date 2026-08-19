@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "verifiable-randomness",
+  "label": "Verifiable randomness",
+  "summary": "Model one unpredictable outcome source with explicit entropy, manipulation, replay, expiry and provider-failure guarantees without assuming loot or rewards.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "randomness"
+  ],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "requiredFacts": [
+    "Entropy source, request and fulfillment lifecycle, confirmations, expiry and outage fallback",
+    "Who can influence inputs, reorder fulfillment, retry, cancel or replace the randomness provider",
+    "Consumer authorization, replay boundary, request-to-result binding and failure behavior"
+  ],
+  "requiredFiles": [
+    "Randomness integration source",
+    "Provider failure and rotation policy",
+    "Statistical and adversarial test evidence"
+  ],
+  "requiredTests": [
+    "Request, fulfill, expire, retry, cancel and duplicate fulfillment lifecycle",
+    "Replay, reorg, delayed callback, provider rotation and malicious fulfillment",
+    "Deterministic fixture tests plus documented statistical tests with fixed seeds",
+    "Front-running, selective reveal, reroll and input-manipulation scenarios"
+  ],
+  "risks": [
+    "Manipulable or selectively revealed entropy can redirect valuable outcomes",
+    "Provider outage or rotation can break liveness or alter trust assumptions",
+    "Replay or request/result confusion can apply a valid outcome to the wrong action"
+  ]
+}

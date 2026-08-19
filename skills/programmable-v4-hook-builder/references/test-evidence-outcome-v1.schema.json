@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:test-evidence-outcome:1.0.0",
+  "title": "Programmable lossless test-evidence outcome",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "subjectSha256", "methodId", "methodKind", "authorship", "invocation", "outcome", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "subjectSha256": { "$ref": "#/$defs/sha256" },
+    "methodId": { "$ref": "#/$defs/slug" },
+    "methodKind": { "enum": ["build", "unit", "fuzz", "invariant", "fork", "static-analysis", "manual-reproduction", "provider-check", "other"] },
+    "authorship": { "$ref": "#/$defs/authorship" },
+    "invocation": { "$ref": "#/$defs/invocation" },
+    "outcome": { "$ref": "#/$defs/outcome" },
+    "artifacts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "slug": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "authorship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codeAuthor", "testAuthor", "assertionAuthor", "runner", "interpreter", "independence"],
+      "properties": {
+        "codeAuthor": { "$ref": "#/$defs/text" },
+        "testAuthor": { "$ref": "#/$defs/text" },
+        "assertionAuthor": { "$ref": "#/$defs/text" },
+        "runner": { "$ref": "#/$defs/text" },
+        "interpreter": { "$ref": "#/$defs/text" },
+        "independence": { "enum": ["same-run", "independent-reproduction", "external-professional"] }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "toolVersion", "command", "rulesetSha256", "startedAt", "completedAt"],
+      "properties": {
+        "tool": { "$ref": "#/$defs/text" },
+        "toolVersion": { "$ref": "#/$defs/text" },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 }
+        },
+        "rulesetSha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "failed", "skipped"],
+      "properties": {
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "exitCode", "counts", "reasonCode", "reason", "propertyRefs"],
+      "properties": {
+        "status": { "enum": ["passed", "failed", "tooling-blocked", "no-data", "inconclusive", "not-applicable-with-reason"] },
+        "exitCode": { "type": ["integer", "null"] },
+        "counts": { "oneOf": [{ "$ref": "#/$defs/counts" }, { "type": "null" }] },
+        "reasonCode": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "reason": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
+        "propertyRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "mediaType", "byteLength", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "mediaType": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "byteLength": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

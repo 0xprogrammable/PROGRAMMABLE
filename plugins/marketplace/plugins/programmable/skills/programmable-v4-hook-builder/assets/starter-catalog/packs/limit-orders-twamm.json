@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "limit-orders-twamm",
+  "label": "Limit orders and TWAMM",
+  "summary": "Model price-triggered and long-term orders with explicit escrow, execution, cancellation and liveness rules.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "limit-orders",
+    "long-term-orders",
+    "twamm"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "keeper"
+  ],
+  "requiredFacts": [
+    "Order owner, input escrow, price or time condition, expiry, partial fill, cancellation and proceeds claim",
+    "TWAMM interval, virtual execution schedule, rate updates and treatment of missed intervals",
+    "Tick, price, rounding and fee basis for every execution direction",
+    "Keeper permissions, incentives, censorship resistance and permissionless liveness fallback",
+    "Per-pool and per-order accounting keys, maximum active state and cleanup behavior"
+  ],
+  "requiredFiles": [
+    "Order hook and escrow source",
+    "Limit-order and TWAMM math specification",
+    "Keeper and liveness policy",
+    "Order indexer reconstruction specification",
+    "Escrow conservation and lifecycle tests"
+  ],
+  "requiredTests": [
+    "Create, fill, partial fill, cancel, expire and claim across both currency directions",
+    "Independent-model comparison for virtual execution, intervals, rates, fees and rounding",
+    "Missed, duplicated, reordered and censored keeper execution",
+    "Price crossing, tick boundary, zero amount, dust and maximum active-order cases",
+    "Escrow solvency, pool isolation, reentrancy and state-cleanup invariants"
+  ],
+  "risks": [
+    "Escrow or virtual-order accounting errors can create insolvency across many orders",
+    "Keeper timing can become a censorship or value-extraction surface",
+    "Unbounded order state can make execution or cleanup unavailable"
+  ]
+}

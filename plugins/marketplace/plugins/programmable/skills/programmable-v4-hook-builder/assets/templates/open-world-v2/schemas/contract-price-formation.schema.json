@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:example:contract-price-formation:1.0.0",
+  "title": "Example contract price-formation intent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pricingAuthority", "curveFamily", "nativeAmmRequired"],
+  "properties": {
+    "pricingAuthority": { "const": "contract" },
+    "curveFamily": { "type": "string", "minLength": 1 },
+    "nativeAmmRequired": { "type": "boolean" }
+  }
+}

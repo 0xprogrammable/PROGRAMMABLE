@@ -1,101 +1,91 @@
-# Companion manifests
+# Multi-repository project closure
 
-Use a companion manifest when the reviewed project spans the primary GitHub repository plus a separate game, app,
-service, indexer, or other public GitHub repository. Commit every manifest in the exact primary HEAD and pass its path
-to `prepare-pr`. Use at most eight companions.
+Use this reference when an open-world V2 project spans a primary repository plus any number of apps, games, services,
+indexers, keepers, libraries, evidence repositories, or other source surfaces. Application V3 treats every repository as
+an independent public GitHub source binding. There is no product-level limit of eight companions, 512 files, or 20 MB.
+Bounded verifier resources may require deterministic fragmentation or split review; they never make the idea unsafe or
+ineligible.
 
-## Choose the contract
+Historical companion-manifest V1/V2 files, `prepare-pr`, the six-file `application.json` package, and their limits belong
+only to exact historical Submission V1 reproduction. Do not use them to prepare or describe a new V2/V3 project.
 
-| Contract | Use | Closure result |
-| --- | --- | --- |
-| v2 (`2.0.0`) | A separate npm game, app, or service with a static JavaScript/TypeScript module graph | May complete the companion closure gate after exact public verification |
-| v1 (`1.0.0`) | A proposal, unsupported build system, workspace, dynamic loader, or other architecture needing review | Remains proposal-compatible with `COMPANION_CLOSURE_REVIEW_REQUIRED` |
+## Repository graph
 
-Do not weaken or mislabel an unusual project to fit v2. Keep v1 or submit the v2 failure as an architecture/tooling
-question. An incomplete companion closure is not evidence that the idea is unsafe.
+Choose one primary public GitHub repository for project lineage. Give every additional repository a stable package-local
+id and record:
 
-## Build v2
+- canonical public `https://github.com/<owner>/<repo>` identity and immutable numeric GitHub repository id;
+- exact commit and root tree;
+- purpose, owning product surfaces and dependency edges;
+- source-closure mode and exact paths or manifest binding;
+- implementation, test, evidence and runtime roles; and
+- build, service, deployment or provider dependencies needed to review its behavior.
 
-Start from `../assets/templates/companion-manifest-v2.example.json` and validate the document against
-`companion-manifest-v2.schema.json`. Replace every example authority with the exact public companion values:
+A path, workflow, receipt, fee artifact or test in one repository cannot satisfy another repository's binding. Do not
+flatten repositories into one synthetic trust boundary. Detect dependency cycles as architecture and operations facts;
+keep provenance and revision lineage acyclic.
 
-- immutable numeric GitHub repository id;
-- full 40-hex commit id;
-- full 40-hex root tree id from that commit;
-- sorted, disjoint source, test, runtime, and build-configuration paths;
-- npm `package.json` and `package-lock.json` paths;
-- distinct package scripts that perform the build and tests; and
-- at least one successful GitHub Actions run id for that exact repository id, commit, and tree, produced by the closed
-  workflow profile below.
+Application V3 is GitHub-only. A private repository, local path, ZIP, pasted source, mutable branch, other Git host or
+credentialed URL can support local exploration but cannot satisfy the public application contract. Report
+`INTEGRATION_PENDING`, preserve idea eligibility and perform no public-package or external write.
 
-Use `npm-package-lock-v3-static-module-closure-v1` exactly. The current method accepts one npm package with
-`lockfileVersion: 3`. It rejects workspaces, root peer-dependency authority, local links, Git dependencies, non-registry
-tarballs, dependencies without exact versions and canonical 64-byte SHA-512 integrity, missing transitive dependency
-targets, undeclared local imports,
-ambiguous module resolution, aliases, nonliteral dynamic imports, runtime loaders, inline HTML scripts, and unsupported
-source/config languages. Worker and service-worker loaders, `fetch`, WebAssembly instantiation, dynamic DOM construction,
-external HTML/CSS resources, and build scripts capable of downloading or evaluating unbound code stay on v1. That is
-an architecture-review state, not an unsafe-project verdict. Implicit `pre*` and `post*` lifecycle scripts for the
-declared build/test names are rejected.
+## Closure modes
 
-Declare runtime assets such as HTML, CSS, images, fonts, audio, video, WebAssembly, and shaders when the reviewed
-project uses them. Static HTML `src`/`href`, CSS `@import`/`url`, JavaScript/TypeScript imports, CommonJS `require`, and
-quoted shader includes must resolve to one declared path. Remote HTTP resources remain an explicit external runtime
-dependency and therefore cannot receive a v2 static-closure receipt; use v1 and describe the dependency for review.
+Choose independently for each repository:
 
-Copy `../assets/templates/companion-closure-workflow.yml` into `.github/workflows/`. Despite the `.yml` suffix, this
-profile is deliberately strict JSON (valid YAML): exactly one unconditional Ubuntu 24.04 job, pinned checkout and
-setup-node action commits, exact Node version and lock path, `npm ci --ignore-scripts --no-audit --no-fund`, then the
-declared `npm run <build>` and `npm run <test>`. If the package is in a subdirectory, set the same exact
-`working-directory` on all three run steps and point `cache-dependency-path` at that package lock. Other CI may live in
-separate workflows, but only a successful run of this exact closure workflow counts. This binds execution of the named
-scripts; it does not prove that their assertions are meaningful, which remains review work.
+- `inline` binds one to 4,096 exact repository-relative paths and no source manifest.
+- `manifest` binds no inline paths. It content-binds one versioned root source-closure manifest and ordered canonical
+  JSONL fragments.
 
-The combined closure is capped at 512 files, 2 MB per file, and 20 MB per repository. `prepare-pr` resolves raw blobs
-through the bounded anonymous exact-Git path. It does not check out or execute companion code, npm scripts, hooks,
-submodules, or Git configuration.
+Inline is a small-package fast path, not a preferred project class. Crossing its bound selects manifest transport. The
+root manifest is itself an exact blob in the pinned outer tree, repeats repository identity and binds every fragment; it
+does not embed its own containing commit/tree because that would create a Git fixed point. Each entry binds UTF-8 path,
+Git mode, blob id, byte length, SHA-256 and review roles.
 
-## Canonicalize locally
+The trusted verifier must walk the complete application-to-repository-to-root-to-fragment-to-entry chain against raw
+objects from the exact commit. It checks bytewise ordering, uniqueness, ranges, counts, modes, roles, blobs, sizes, hashes
+and closure digest. It must not follow a source symlink or execute candidate code, Git hooks, filters, submodules, build
+scripts or package-install hooks.
 
-Validate and rewrite a manifest before committing it:
+`source-closure-manifest-v1` currently represents SHA-1 Git object databases with 40-hex object ids and separately binds
+content bytes with SHA-256. It requires UTF-8 committed paths. Git SHA-256 object databases and non-UTF-8 paths are
+`INTEGRATION_PENDING` transport cases; a UTF-8 path above the current 16 KiB path-byte budget is
+`HOLD_SPLIT_REVIEW`. Other object formats or encodings need a new versioned contract, generator, verifier and migration.
+Never silently widen V1.
 
-```bash
-node "$SKILL_ROOT/scripts/cli.mjs" companion \
-  ".programmable/companions/game.json" \
-  --write-canonical \
-  --repository-root "$REPOSITORY_ROOT"
-```
+## Dependency closure
 
-This command performs no network access and does not claim closure verification. It writes canonical JSON with one
-trailing newline. Commit that exact file in the primary repository.
+For every repository, identify the build/runtime graph appropriate to its languages and tools. Bind exact lockfiles,
+package versions, integrity records, source revisions, generated inputs and licenses where available. A static npm graph
+may use the existing strict companion closure tooling as supporting evidence, but that historical tool is not the
+Application V3 transport and does not impose its architecture or file limits on the project.
 
-## Verify through `prepare-pr`
+Dynamic imports, workspaces, native libraries, network-fetched build inputs, WebAssembly, remote media, generated code,
+submodules, Git LFS and unsupported toolchains remain representable. They require explicit source/dependency closure and
+review instead of being renamed or dropped to fit one analyzer. Missing analyzer support is a tooling/evidence gap, not a
+product verdict.
 
-Run the normal package gates, then pass every committed companion manifest:
+## Application preparation
 
-```bash
-node "$SKILL_ROOT/scripts/cli.mjs" prepare-pr \
-  "submissions/$APPLICATION_ID" \
-  --repository-root "$REPOSITORY_ROOT" \
-  --companion-manifest ".programmable/companions/game.json" \
-  --companion-manifest ".programmable/companions/service.json"
-```
+Freeze and push every source revision before preparation. First use `cli.mjs open-world prepare-revision` with one
+`--source-root <repository-ref>=<git-root>` per current repository; keep revision and lineage absent from its draft.
+This GET-only step derives the unique revision and creates only a new external `application.v3.json` root when
+explicitly written. Then use that file with the released `cli.mjs open-world application --help` interface. The second
+step is zero-network and binds repository identities, commits, trees, closure, Submission V2, security, fee
+applicability and evidence into the complete package outside all source and Git-control roots.
 
-For v2, `prepare-pr` independently checks the declared numeric repository id, commit, root tree, every closure blob,
-static module/resource graph, complete npm dependency targets, the exact closure workflow, and its successful
-exact-revision Actions receipt. The JSON output records one `github.companionClosure` item with a closure hash and
-exact primary manifest path, then copies that canonical receipt into `centralPackage/application.json`. Downstream
-intake re-reads that manifest and every immutable companion/workflow blob and independently recomputes the receipt,
-including script names, object ids, counts, resolutions, Actions evidence, and closure hash. A v2 mismatch fails
-closed; it never silently falls back to v1.
+On an update, a current repository can supply an earlier commit from its own object database. Use
+`--predecessor-source-root` only for a selected removed or replaced historical repository whose objects are otherwise
+unavailable; a removed inline companion in mixed manifest/inline history is one such case. Do not supply it for fully
+remote-replayable all-inline history.
 
-For v1, `prepare-pr` still verifies the public repository, observed numeric id, exact commit, observed root tree, and
-declared blobs. It keeps the companion closure diagnostic, allowing a proposal to enter architecture review while
-blocking a prototype-ready claim.
+Preparation is local and read-only unless an explicit local write flag is chosen. It does not push, publish, open a pull
+request, approve the project, or authorize launch. Only the revision step performs GET reads; the package builder does
+not use the network. The later GitHub submit/update path first produces a read-only action plan and requires separate
+authorization for its exact current digest.
 
-## Interpretation
+## Evidence meaning
 
-A verified v2 companion removes only the blanket companion-closure blocker. Prototype preparation still requires the
-primary repository's complete review target, exact gate-status authority, tests and evidence, plus every
-capability-specific security and integration gate. It is not an audit, maintainer approval, deployment, provider
-support, or proof of availability.
+A complete closure proves only which exact bytes and dependencies were presented for review. A successful source-owned
+workflow proves only that its declared commands completed for the bound commit. Neither proves that tests are sufficient,
+the project is safe, the Registry accepted it, a runtime matches, a provider supports it, or the product is available.

@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:swap-mode-classification:1.0.0",
+  "title": "Programmable swap-mode classification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "subject", "modes"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "subject": { "$ref": "#/$defs/subject" },
+    "modes": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/mode" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "gitObject": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "evidenceRef": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicationId", "revisionObjectId", "treeObjectId", "chainId", "marketRef", "poolKeySha256"],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/slug" },
+        "revisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "treeObjectId": { "$ref": "#/$defs/gitObject" },
+        "chainId": { "type": "string", "pattern": "^[1-9][0-9]{0,77}$" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "poolKeySha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "supportedProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "positiveNetOutput",
+        "finalUserLimits",
+        "deltaConservation",
+        "feeConformance",
+        "partialFillBehavior",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "positiveNetOutput": { "const": true },
+        "finalUserLimits": { "const": true },
+        "deltaConservation": { "const": true },
+        "feeConformance": { "const": true },
+        "partialFillBehavior": { "enum": ["full-fill-only", "bounded-partial-fill"] },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        }
+      }
+    },
+    "rejectionProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejectionStage",
+        "beforeValueMovement",
+        "beforeStateMutation",
+        "beforeLiabilityCreation",
+        "beforeQuoteOrOffer",
+        "coveredSurfaces",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "rejectionStage": { "enum": ["input-validation", "routing-validation", "quote-validation"] },
+        "beforeValueMovement": { "const": true },
+        "beforeStateMutation": { "const": true },
+        "beforeLiabilityCreation": { "const": true },
+        "beforeQuoteOrOffer": { "const": true },
+        "coveredSurfaces": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "enum": ["direct", "router", "quoter", "ui", "api"] }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "direction", "exactness", "disposition", "supportedProof", "rejectionProof"],
+      "properties": {
+        "id": {
+          "enum": [
+            "zero-for-one-exact-input",
+            "zero-for-one-exact-output",
+            "one-for-zero-exact-input",
+            "one-for-zero-exact-output"
+          ]
+        },
+        "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+        "exactness": { "enum": ["exact-input", "exact-output"] },
+        "disposition": { "enum": ["supported", "rejected"] },
+        "supportedProof": {
+          "oneOf": [{ "$ref": "#/$defs/supportedProof" }, { "type": "null" }]
+        },
+        "rejectionProof": {
+          "oneOf": [{ "$ref": "#/$defs/rejectionProof" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
 interface:
   display_name: "Programmable v4 Builder"
-  short_description: "Build and check open-ended Uniswap v4 projects"
-  default_prompt: "Use $programmable-v4-hook-builder. Turn my idea into a reviewable Programmable Uniswap v4 project, choose the smallest correct architecture, run the checks, and prepare the public GitHub application."
+  short_description: "Build a reviewable v4 project from one prompt"
+  default_prompt: "Use $programmable-v4-hook-builder to build and check my project, then prepare it for Submit a Launch."

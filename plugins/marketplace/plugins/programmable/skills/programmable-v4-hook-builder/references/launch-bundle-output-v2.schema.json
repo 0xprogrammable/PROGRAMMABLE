@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:launch-bundle-output-v2:2.0.0",
+  "title": "Programmable open-world launch bundle output v2",
+  "description": "A deterministic, unsigned preparation report. Every output is NOT_AUTHORIZED and requires a later independent human/admin decision. No output from this contract is a signature, transaction, deployment, inherited approval or availability claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contract",
+    "bundleId",
+    "applicationId",
+    "status",
+    "authorization",
+    "integrity",
+    "sourceBindings",
+    "artifactBindings",
+    "analysis",
+    "generatedTransactions",
+    "signatures",
+    "externalActionsPerformed",
+    "networkAccessed",
+    "writePerformed"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:launch-bundle-output-v2:2.0.0" },
+    "schemaVersion": { "const": "2.0.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "launch-bundle-output-v2" },
+        "version": { "const": "2.0.0" }
+      }
+    },
+    "bundleId": {
+      "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+    },
+    "applicationId": {
+      "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+    },
+    "status": { "const": "NOT_AUTHORIZED" },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalInherited",
+        "feeRecipient",
+        "independentAdminAuthorizer",
+        "adminAuthorization",
+        "requiredNextAction",
+        "canSign",
+        "canBroadcast",
+        "canDeploy",
+        "canExecute",
+        "availabilityClaimed"
+      ],
+      "properties": {
+        "approvalInherited": { "const": false },
+        "feeRecipient": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+        "independentAdminAuthorizer": { "const": "0x2Bb333d48DFAF1596D9036671d2E43168994249E" },
+        "adminAuthorization": { "type": "null" },
+        "requiredNextAction": { "const": "INDEPENDENT_HUMAN_ADMIN_AUTHORIZATION" },
+        "canSign": { "const": false },
+        "canBroadcast": { "const": false },
+        "canDeploy": { "const": false },
+        "canExecute": { "const": false },
+        "availabilityClaimed": { "const": false }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputSha256", "reportSha256", "sourceExternallyVerified"],
+      "properties": {
+        "inputSha256": { "$ref": "#/$defs/sha256" },
+        "reportSha256": { "$ref": "#/$defs/sha256" },
+        "sourceExternallyVerified": { "const": false }
+      }
+    },
+    "sourceBindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceSnapshot" }
+    },
+    "artifactBindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifactBinding" }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "structuralInputState",
+        "sourceBindingState",
+        "registryAcceptanceState",
+        "executionSurfaceState",
+        "tradeCapabilityState",
+        "applicationSubmissionBindingState",
+        "intentBindingState",
+        "feePolicyBindingState",
+        "feeRecipientBindingState",
+        "securityState",
+        "evidenceBindingState",
+        "executionSurfaces",
+        "tradeCapabilities",
+        "feeScopes",
+        "protocolContexts",
+        "conflicts",
+        "unresolved",
+        "reviewItems"
+      ],
+      "properties": {
+        "structuralInputState": { "$ref": "#/$defs/bindingState" },
+        "sourceBindingState": { "$ref": "#/$defs/bindingState" },
+        "registryAcceptanceState": { "$ref": "#/$defs/bindingState" },
+        "executionSurfaceState": { "$ref": "#/$defs/bindingState" },
+        "tradeCapabilityState": { "$ref": "#/$defs/bindingState" },
+        "applicationSubmissionBindingState": { "$ref": "#/$defs/bindingState" },
+        "intentBindingState": { "$ref": "#/$defs/bindingState" },
+        "feePolicyBindingState": { "$ref": "#/$defs/bindingState" },
+        "feeRecipientBindingState": { "$ref": "#/$defs/bindingState" },
+        "securityState": { "$ref": "#/$defs/bindingState" },
+        "evidenceBindingState": { "$ref": "#/$defs/bindingState" },
+        "executionSurfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/executionSurfaceResult" }
+        },
+        "tradeCapabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tradeCapabilityResult" }
+        },
+        "feeScopes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/feeScopeResult" }
+        },
+        "protocolContexts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/protocolContextResult" }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/issue" }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/issue" }
+        },
+        "reviewItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/issue" }
+        }
+      }
+    },
+    "generatedTransactions": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "signatures": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "externalActionsPerformed": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "networkAccessed": { "const": false },
+    "writePerformed": { "const": false }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "canonicalPositiveUint256Decimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$",
+      "description": "Canonical base-10 EVM uint256 in the inclusive range 1..2^256-1; producer validation enforces the upper bound."
+    },
+    "bindingState": {
+      "enum": ["MATCHED", "UNRESOLVED", "CONFLICT"]
+    },
+    "sourceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repositoryUri",
+        "numericRepositoryId",
+        "revisionObjectId",
+        "treeObjectId"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "repositoryUri": { "type": "string", "minLength": 1 },
+        "numericRepositoryId": { "type": "string", "pattern": "^[1-9][0-9]{0,63}$" },
+        "revisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "treeObjectId": { "$ref": "#/$defs/gitObject" }
+      }
+    },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "id",
+        "sourceRef",
+        "path",
+        "gitBlobObjectId",
+        "schemaId",
+        "mediaType",
+        "sha256",
+        "byteLength",
+        "contentMatched"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "application",
+            "submission",
+            "idea-source",
+            "intent-contract",
+            "architecture-decisions",
+            "intent-fidelity",
+            "fee-policy",
+            "security",
+            "execution-surface-coverage",
+            "trade-capability",
+            "registry-acceptance",
+            "evidence"
+          ]
+        },
+        "id": { "$ref": "#/$defs/slug" },
+        "sourceRef": { "$ref": "#/$defs/slug" },
+        "path": { "type": "string", "minLength": 1 },
+        "gitBlobObjectId": { "$ref": "#/$defs/gitObject" },
+        "schemaId": { "type": ["string", "null"] },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "contentMatched": { "type": "boolean" }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "path", "message", "evidenceRefs"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "feeScopeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feeScopeId", "chainId", "state", "marketRef", "protocolContextRef", "evidenceRefs"],
+      "properties": {
+        "feeScopeId": { "type": "string", "minLength": 1 },
+        "chainId": {
+          "oneOf": [
+            { "$ref": "#/$defs/canonicalPositiveUint256Decimal" },
+            { "type": "null" }
+          ]
+        },
+        "state": { "$ref": "#/$defs/bindingState" },
+        "marketRef": { "type": ["string", "null"] },
+        "protocolContextRef": { "type": ["string", "null"] },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "executionSurfaceResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "marketRef", "executionClass", "controller", "feeScopeId", "state"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "executionClass": { "enum": ["programmable-canonical", "external", "non-launchable", "unknown"] },
+        "controller": { "enum": ["programmable", "independent-third-party", "none", "unknown"] },
+        "feeScopeId": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "state": { "$ref": "#/$defs/bindingState" }
+      }
+    },
+    "tradeCapabilityResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "marketRef",
+        "manifestId",
+        "sourceRef",
+        "path",
+        "sha256",
+        "chainId",
+        "poolId",
+        "routeType",
+        "quoteReceiptRefs",
+        "executionReceiptRefs",
+        "bindings",
+        "state"
+      ],
+      "properties": {
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "manifestId": { "$ref": "#/$defs/slug" },
+        "sourceRef": { "$ref": "#/$defs/slug" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "chainId": { "$ref": "#/$defs/canonicalPositiveUint256Decimal" },
+        "poolId": { "type": "string", "pattern": "^0x[a-fA-F0-9]{64}$" },
+        "routeType": { "enum": ["standard-uniswap-v4", "canonical-programmable-adapter"] },
+        "quoteReceiptRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "executionReceiptRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "bindings": { "$ref": "#/$defs/tradeCapabilityBindingStates" },
+        "state": { "$ref": "#/$defs/bindingState" }
+      }
+    },
+    "tradeCapabilityBindingStates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "submissionProjection",
+        "applicationReviewRecord",
+        "chain",
+        "poolKey",
+        "route",
+        "router",
+        "quoter",
+        "permit2",
+        "hookData",
+        "modes",
+        "slippage",
+        "deadline",
+        "fee",
+        "quoteReceipts",
+        "executionReceipts"
+      ],
+      "properties": {
+        "submissionProjection": { "$ref": "#/$defs/bindingState" },
+        "applicationReviewRecord": { "$ref": "#/$defs/bindingState" },
+        "chain": { "$ref": "#/$defs/bindingState" },
+        "poolKey": { "$ref": "#/$defs/bindingState" },
+        "route": { "$ref": "#/$defs/bindingState" },
+        "router": { "$ref": "#/$defs/bindingState" },
+        "quoter": { "$ref": "#/$defs/bindingState" },
+        "permit2": { "$ref": "#/$defs/bindingState" },
+        "hookData": { "$ref": "#/$defs/bindingState" },
+        "modes": { "$ref": "#/$defs/bindingState" },
+        "slippage": { "$ref": "#/$defs/bindingState" },
+        "deadline": { "$ref": "#/$defs/bindingState" },
+        "fee": { "$ref": "#/$defs/bindingState" },
+        "quoteReceipts": { "$ref": "#/$defs/bindingState" },
+        "executionReceipts": { "$ref": "#/$defs/bindingState" }
+      }
+    },
+    "protocolContextResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "protocolId",
+        "state",
+        "v4Relevant",
+        "nativeAmmMode",
+        "customAccountingUsed",
+        "unresolvedCheckIds",
+        "conflictCheckIds"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "protocolId": { "type": "string", "minLength": 1 },
+        "state": { "$ref": "#/$defs/bindingState" },
+        "v4Relevant": { "type": "boolean" },
+        "nativeAmmMode": { "type": ["string", "null"] },
+        "customAccountingUsed": { "type": ["boolean", "null"] },
+        "unresolvedCheckIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "conflictCheckIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

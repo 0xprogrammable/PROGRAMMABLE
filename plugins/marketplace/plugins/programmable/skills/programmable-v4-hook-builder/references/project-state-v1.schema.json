@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:project-state:1.0.0",
+  "title": "Programmable resumable project state",
+  "description": "A small canonical phase checkpoint. It binds input artifacts, open provenance, graph obligations, repository evidence, blockers, and an exact argv-based resume command without granting external authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "sequence",
+    "integrity",
+    "phase",
+    "status",
+    "intentSha256",
+    "artifacts",
+    "selectedArchitectureId",
+    "provenanceRefs",
+    "graphRefs",
+    "repository",
+    "commandResults",
+    "blockers",
+    "next",
+    "authorization"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "sequence": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+    "integrity": { "$ref": "#/$defs/integrity" },
+    "phase": {
+      "enum": [
+        "project-spec",
+        "product-graphs",
+        "architecture-selection",
+        "repository-materialization",
+        "verification",
+        "submission-evidence"
+      ]
+    },
+    "status": { "enum": ["in-progress", "blocked-owner", "blocked-external", "blocked-repository", "locally-complete"] },
+    "intentSha256": { "$ref": "#/$defs/sha256" },
+    "artifacts": { "$ref": "#/$defs/artifactBindings" },
+    "selectedArchitectureId": {
+      "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+    },
+    "provenanceRefs": { "$ref": "#/$defs/provenanceRefs" },
+    "graphRefs": { "$ref": "#/$defs/graphRefs" },
+    "repository": { "$ref": "#/$defs/repository" },
+    "commandResults": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/commandResult" }
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/blocker" }
+    },
+    "next": { "$ref": "#/$defs/next" },
+    "authorization": { "$ref": "#/$defs/authorization" }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "gitObject": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "refs": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/slug" }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "stateSha256 is canonical JSON v2 SHA-256 of the complete state object with the integrity member omitted. previousStateSha256 binds the preceding checkpoint using the same projection.",
+      "required": ["canonicalization", "stateSha256", "previousStateSha256"],
+      "properties": {
+        "canonicalization": { "const": "urn:programmable:canonical-json:2.0.0" },
+        "stateSha256": { "$ref": "#/$defs/sha256" },
+        "previousStateSha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      }
+    },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "nullableArtifactBinding": {
+      "oneOf": [{ "$ref": "#/$defs/artifactBinding" }, { "type": "null" }]
+    },
+    "artifactBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectSpec", "productGraph", "architectureCandidates", "repositoryPlan"],
+      "properties": {
+        "projectSpec": { "$ref": "#/$defs/nullableArtifactBinding" },
+        "productGraph": { "$ref": "#/$defs/nullableArtifactBinding" },
+        "architectureCandidates": { "$ref": "#/$defs/nullableArtifactBinding" },
+        "repositoryPlan": { "$ref": "#/$defs/nullableArtifactBinding" }
+      }
+    },
+    "provenanceRefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmed", "builderAssumptions", "ownerRequired", "externalUnresolved"],
+      "properties": {
+        "confirmed": { "$ref": "#/$defs/refs" },
+        "builderAssumptions": { "$ref": "#/$defs/refs" },
+        "ownerRequired": { "$ref": "#/$defs/refs" },
+        "externalUnresolved": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "graphRefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariants", "failures", "recoveries"],
+      "properties": {
+        "invariants": { "$ref": "#/$defs/refs" },
+        "failures": { "$ref": "#/$defs/refs" },
+        "recoveries": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "branch", "headCommit", "generatedPaths"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "branch": {
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 300 }, { "type": "null" }]
+        },
+        "headCommit": {
+          "oneOf": [{ "$ref": "#/$defs/gitObject" }, { "type": "null" }]
+        },
+        "generatedPaths": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        }
+      }
+    },
+    "commandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commandId", "argvSha256", "status", "exitCode", "stdoutSha256", "stderrSha256", "evidenceArtifactId"],
+      "properties": {
+        "commandId": { "$ref": "#/$defs/slug" },
+        "argvSha256": { "$ref": "#/$defs/sha256" },
+        "status": { "enum": ["passed", "failed", "not-run", "tooling-blocked"] },
+        "exitCode": {
+          "oneOf": [{ "type": "integer", "minimum": 0, "maximum": 255 }, { "type": "null" }]
+        },
+        "stdoutSha256": { "$ref": "#/$defs/sha256" },
+        "stderrSha256": { "$ref": "#/$defs/sha256" },
+        "evidenceArtifactId": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "ref", "message"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "enum": ["owner-required", "external-unresolved", "repository", "evidence"] },
+        "ref": { "$ref": "#/$defs/slug" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    },
+    "next": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "workingDirectory", "resumeCommand"],
+      "properties": {
+        "action": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "workingDirectory": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "resumeCommand": { "$ref": "#/$defs/argv" }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval", "signature", "deployment", "publication", "execution", "registryWrite"],
+      "properties": {
+        "approval": { "const": false },
+        "signature": { "const": false },
+        "deployment": { "const": false },
+        "publication": { "const": false },
+        "execution": { "const": false },
+        "registryWrite": { "const": false }
+      }
+    }
+  }
+}

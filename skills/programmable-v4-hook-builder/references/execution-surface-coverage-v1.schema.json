@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:execution-surface-coverage:1.0.0",
+  "title": "Programmable execution-surface coverage v1",
+  "description": "A content-addressed, source- and security-bound enumeration of every executable or trading entrypoint offered by a reviewed product. Declarations do not prove absence: discovery evidence and the exact source closure must corroborate this record before launch preparation can match.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contract",
+    "applicationId",
+    "applicationRevision",
+    "sourceVerificationBindingsSha256",
+    "securityAssessmentSha256",
+    "discovery",
+    "surfaces",
+    "uncoveredSurfaceIds"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:execution-surface-coverage:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "execution-surface-coverage-v1" },
+        "version": { "const": "1.0.0" }
+      }
+    },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "applicationRevision": { "$ref": "#/$defs/positiveDecimal" },
+    "sourceVerificationBindingsSha256": { "$ref": "#/$defs/sha256" },
+    "securityAssessmentSha256": { "$ref": "#/$defs/sha256" },
+    "discovery": { "$ref": "#/$defs/discovery" },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/executionSurface" }
+    },
+    "uncoveredSurfaceIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/slug" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "Canonical positive decimal identifier, never parsed through a JavaScript Number."
+    },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "gitObject": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "candidateSurfaceIds", "evidenceRefs"],
+      "properties": {
+        "state": { "enum": ["VERIFIED", "UNRESOLVED", "CONFLICT"] },
+        "candidateSurfaceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "executionSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "marketRef",
+        "entrypointKind",
+        "artifactRef",
+        "sourceRef",
+        "revisionObjectId",
+        "treeObjectId",
+        "path",
+        "artifactSha256",
+        "executionClass",
+        "feeScopeId",
+        "modes",
+        "control",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "entrypointKind": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "artifactRef": { "$ref": "#/$defs/slug" },
+        "sourceRef": { "$ref": "#/$defs/slug" },
+        "revisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "treeObjectId": { "$ref": "#/$defs/gitObject" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "artifactSha256": { "$ref": "#/$defs/sha256" },
+        "executionClass": {
+          "enum": ["programmable-canonical", "external", "non-launchable", "unknown"]
+        },
+        "feeScopeId": {
+          "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+        },
+        "modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/executionMode" }
+        },
+        "control": { "$ref": "#/$defs/control" },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "executionMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "executionModel", "direction", "exactness", "quoteRole"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "executionModel": { "enum": ["synchronous", "asynchronous", "custom"] },
+        "direction": { "enum": ["zero-for-one", "one-for-zero", "profile-specific"] },
+        "exactness": { "enum": ["exact-input", "exact-output", "profile-specific"] },
+        "quoteRole": { "enum": ["specified", "unspecified", "profile-specific"] }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controller",
+        "independentlyVerified",
+        "programmableFactoryReachable",
+        "programmableRouterReachable",
+        "programmableUiReachable",
+        "programmableBackendReachable",
+        "programmableHookReachable"
+      ],
+      "properties": {
+        "controller": { "enum": ["programmable", "independent-third-party", "none", "unknown"] },
+        "independentlyVerified": { "type": "boolean" },
+        "programmableFactoryReachable": { "type": ["boolean", "null"] },
+        "programmableRouterReachable": { "type": ["boolean", "null"] },
+        "programmableUiReachable": { "type": ["boolean", "null"] },
+        "programmableBackendReachable": { "type": ["boolean", "null"] },
+        "programmableHookReachable": { "type": ["boolean", "null"] }
+      }
+    }
+  }
+}

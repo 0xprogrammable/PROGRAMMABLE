@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "metadata-disclosures",
+  "label": "Metadata, tags and disclosures",
+  "summary": "Bind public names, media, economics, affiliations and provider-specific evidence without hidden tags.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "standard-review",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "provider-disclosures",
+    "public-metadata"
+  ],
+  "projectSurfaces": [
+    "application",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Project and token names, symbol, description, URIs and exact logo bytes or hash",
+    "Metadata owners, mutability, update authority and history",
+    "All fees, restrictions, external dependencies and affiliations in public language",
+    "Provider tags and support as separate time-bounded evidence states"
+  ],
+  "requiredFiles": [
+    "Canonical metadata record",
+    "Logo and media provenance",
+    "Public disclosure card",
+    "Provider evidence index"
+  ],
+  "requiredTests": [
+    "NFC, confusable, bidirectional, invisible and control-character checks",
+    "URI, media-byte, content-type and hash binding",
+    "Fee and restriction parity across public surfaces",
+    "Unknown, stale, unsupported and confirmed provider states"
+  ],
+  "risks": [
+    "Invisible or confusable text can hide identity or economics",
+    "Provider tags can become stale or imply support that does not exist",
+    "Mutable media can change after review"
+  ]
+}

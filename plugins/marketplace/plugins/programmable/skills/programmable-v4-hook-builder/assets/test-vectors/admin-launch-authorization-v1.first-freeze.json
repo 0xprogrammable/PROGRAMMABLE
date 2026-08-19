@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-admin-launch-authorization-v1-cross-repo-vector",
+  "provenance": {
+    "state": "current-private-unreleased-first-freeze",
+    "adminRepository": "https://github.com/0xprogrammable/programmable",
+    "adminBranch": "codex/builder-admin-prep-20260801",
+    "adminBaseCommit": "af725f44eeb856b5fd364fd43f265f7320303f36",
+    "adminContractCommit": "69bd88808b29b27008ac6f3b54e80cfa449cd76b",
+    "sourceFixturePath": "tests/launch-authorization/fixtures/launch-authorization-v1.json",
+    "sourceContractPaths": [
+      "lib/launch-authorization/types.ts",
+      "lib/launch-authorization/validator.ts",
+      "lib/launch-authorization/hashing.ts",
+      "lib/launch-authorization/executor.ts"
+    ],
+    "note": "Static copy of the current private first V1 freeze. The Admin commit is locally reviewed but not published; replace it only if later integration rewrites the commit. Tests never read a sibling checkout."
+  },
+  "deploymentSpec": {
+    "schemaVersion": "1.0.0",
+    "registry": {
+      "registryCommit": "0x1111111111111111111111111111111111111111",
+      "acceptancePath": "registry/acceptances/wild-arena/acceptance-v1.json",
+      "acceptanceSha256": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicationId": "wild-arena",
+      "applicationRevision": 3,
+      "packageSha256": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "source": {
+      "numericRepositoryId": "123456789",
+      "repositoryUri": "https://github.com/example/wild-arena",
+      "revisionObjectId": "0x2222222222222222222222222222222222222222",
+      "treeObjectId": "0x3333333333333333333333333333333333333333",
+      "reviewedSourceClosureHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "build": {
+      "compiler": "solc:0.8.26+commit.8a97fa7a",
+      "settingsHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "dependencyLockHash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "buildInfoSha256": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "abiHash": "0x1212121212121212121212121212121212121212121212121212121212121212"
+    },
+    "artifacts": [
+      {
+        "component": "authorization-gate",
+        "codeMode": "immutable",
+        "address": "0x1111111111111111111111111111111111111111",
+        "constructorArgsHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "initCodeHash": "0x1313131313131313131313131313131313131313131313131313131313131313",
+        "runtimeCodeHash": "0x1414141414141414141414141414141414141414141414141414141414141414"
+      },
+      {
+        "component": "launcher",
+        "codeMode": "immutable",
+        "address": "0x2222222222222222222222222222222222222222",
+        "constructorArgsHash": "0x1515151515151515151515151515151515151515151515151515151515151515",
+        "initCodeHash": "0x1616161616161616161616161616161616161616161616161616161616161616",
+        "runtimeCodeHash": "0x1717171717171717171717171717171717171717171717171717171717171717"
+      },
+      {
+        "component": "pool-manager",
+        "codeMode": "immutable",
+        "address": "0x4444444444444444444444444444444444444444",
+        "constructorArgsHash": "0x1818181818181818181818181818181818181818181818181818181818181818",
+        "initCodeHash": "0x1919191919191919191919191919191919191919191919191919191919191919",
+        "runtimeCodeHash": "0x2020202020202020202020202020202020202020202020202020202020202020"
+      },
+      {
+        "component": "programmable-fee-hook",
+        "codeMode": "immutable",
+        "address": "0x6666666666666666666666666666666666666666",
+        "constructorArgsHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "initCodeHash": "0x2525252525252525252525252525252525252525252525252525252525252525",
+        "runtimeCodeHash": "0x2626262626262626262626262626262626262626262626262626262626262626"
+      }
+    ],
+    "launch": {
+      "authorityContract": "0x1111111111111111111111111111111111111111",
+      "authorityRuntimeCodeHash": "0x1414141414141414141414141414141414141414141414141414141414141414",
+      "launcher": "0x2222222222222222222222222222222222222222",
+      "launcherRuntimeCodeHash": "0x1717171717171717171717171717171717171717171717171717171717171717",
+      "launchCaller": "0x3333333333333333333333333333333333333333",
+      "nativeValue": "250000000000000000",
+      "poolManager": "0x4444444444444444444444444444444444444444",
+      "poolManagerRuntimeCodeHash": "0x2020202020202020202020202020202020202020202020202020202020202020",
+      "hook": "0x6666666666666666666666666666666666666666",
+      "hookRuntimeCodeHash": "0x2626262626262626262626262626262626262626262626262626262626262626",
+      "launchParametersHash": "0x2121212121212121212121212121212121212121212121212121212121212121",
+      "poolConfigurationHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+      "hookConfigurationHash": "0x2323232323232323232323232323232323232323232323232323232323232323",
+      "chainId": "1"
+    },
+    "buildEvidenceSha256": "0x9696969696969696969696969696969696969696969696969696969696969696",
+    "configurationEvidenceSha256": "0x9898989898989898989898989898989898989898989898989898989898989898",
+    "evidenceBundleHash": "0xb9cd1ab31beb55c7083e2c503175387c49fa97d81172bb15190c747a8aac8271",
+    "feeConformanceEvidenceSha256": "0x9797979797979797979797979797979797979797979797979797979797979797",
+    "feeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "feePolicyHash": "0x72fea66c0711467846f805d8dbe08e5243460ef604cbf3c2626c011c0c0fdac6",
+    "platformFeeHundredthsOfBip": 1000
+  },
+  "expected": {
+    "sourceBindingHash": "0xfc6e8d6ae77528d532ab9d335bbe34240563211be0309d55d65d5e68a61ce82f",
+    "artifactSetHash": "0x7b5838dee8686c8177beb42bc1813cd9919d74172ac0443db298dee7c6937672",
+    "evidenceBundleHash": "0xb9cd1ab31beb55c7083e2c503175387c49fa97d81172bb15190c747a8aac8271",
+    "deploymentSpecHash": "0x813113c7d621380d8a0ded115b724ff513ddd2aebf3e93145723e9a0080ee015"
+  }
+}

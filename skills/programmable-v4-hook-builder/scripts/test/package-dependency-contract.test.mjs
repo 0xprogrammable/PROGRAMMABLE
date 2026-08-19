@@ -55,6 +55,15 @@ test("declared package specifiers accept only the exact package root and safe su
   ]) assert.equal(isExactDeclaredPackageSpecifier(specifier, "three"), false, specifier);
 });
 
+test("v4 SDK accepts only its public package root", () => {
+  assert.equal(isExactDeclaredPackageSpecifier("@uniswap/v4-sdk", "@uniswap/v4-sdk"), true);
+  for (const specifier of [
+    "@uniswap/v4-sdk/entities/pool",
+    "@uniswap/v4-sdk/dist/entities/pool",
+    "@uniswap/v4-sdk/utils/v4Planner"
+  ]) assert.equal(isExactDeclaredPackageSpecifier(specifier, "@uniswap/v4-sdk"), false, specifier);
+});
+
 test("generic package source provenance is an optional all-or-nothing pair", () => {
   const base = { packageName: "three", version: "0.185.1", integrity };
   assert.equal(isExactPackageDependency({ ...base, repository: null, revision: null }), true);

@@ -1,0 +1,1004 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:v4-hook-submission:2.0.0",
+  "title": "Programmable open-world submission v2",
+  "description": "An open architecture graph for any product shape. Templates are accelerators, never an allowlist. Closed protocol fields are limited to real protocol invariants such as Uniswap v4 permission bits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "standardVersion",
+    "applicationId",
+    "stage",
+    "project",
+    "intentPackage",
+    "supportingPackage",
+    "targets",
+    "assets",
+    "markets",
+    "hooks",
+    "lifecyclePhases",
+    "components",
+    "valueFlows",
+    "authorities",
+    "capabilityProfiles",
+    "tradeCapability",
+    "programmableFee",
+    "implementation",
+    "fragmentation"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:v4-hook-submission:2.0.0" },
+    "schemaVersion": { "const": 2 },
+    "standardVersion": { "const": "2.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "stage": { "enum": ["proposal", "prototype"] },
+    "project": { "$ref": "#/$defs/project" },
+    "intentPackage": { "$ref": "#/$defs/intentPackage" },
+    "supportingPackage": { "$ref": "#/$defs/supportingPackage" },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/openNode" }
+    },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "markets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/market" }
+    },
+    "hooks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/hook" }
+    },
+    "lifecyclePhases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/lifecyclePhase" }
+    },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "valueFlows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/valueFlow" }
+    },
+    "authorities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/authority" }
+    },
+    "capabilityProfiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/capabilityProfile" }
+    },
+    "tradeCapability": { "$ref": "#/$defs/tradeCapability" },
+    "programmableFee": { "$ref": "#/$defs/programmableFee" },
+    "implementation": { "$ref": "#/$defs/implementation" },
+    "fragmentation": { "$ref": "#/$defs/fragmentation" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["stage"],
+        "properties": { "stage": { "const": "proposal" } }
+      },
+      "then": {
+        "properties": {
+          "tradeCapability": {
+            "required": ["applicability", "markets"],
+            "properties": {
+              "applicability": { "const": "unresolved" },
+              "markets": { "maxItems": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "required": ["stage"],
+            "properties": { "stage": { "const": "prototype" } }
+          },
+          {
+            "required": ["programmableFee"],
+            "properties": {
+              "programmableFee": {
+                "required": ["conformance"],
+                "properties": {
+                  "conformance": {
+                    "required": ["status"],
+                    "properties": { "status": { "enum": ["required", "complete"] } }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "supportingPackage": {
+            "properties": {
+              "feePolicy": { "$ref": "#/$defs/supportingArtifactBinding" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "text"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "schemaBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "schemaId", "path", "sha256", "byteLength"],
+      "properties": {
+        "kind": { "enum": ["builtin", "repository"] },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "path": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "byteLength": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactType", "schemaId", "path", "sha256", "byteLength"],
+      "properties": {
+        "artifactType": {
+          "enum": ["idea-source", "intent-contract", "architecture-decisions", "intent-fidelity"]
+        },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "summary", "repository", "license"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "summary": { "$ref": "#/$defs/localizedText" },
+        "repository": { "type": ["string", "null"], "maxLength": 2048 },
+        "license": { "type": "string", "minLength": 1, "maxLength": 100 }
+      }
+    },
+    "intentPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ideaSource", "intentContract", "architectureDecisions", "intentFidelity"],
+      "properties": {
+        "ideaSource": { "$ref": "#/$defs/artifactBinding" },
+        "intentContract": { "$ref": "#/$defs/artifactBinding" },
+        "architectureDecisions": { "$ref": "#/$defs/artifactBinding" },
+        "intentFidelity": { "$ref": "#/$defs/artifactBinding" }
+      }
+    },
+    "supportingPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feePolicySchema", "feePolicy", "securityAssessmentSchema", "securityAssessment"],
+      "properties": {
+        "feePolicySchema": { "$ref": "#/$defs/supportingArtifactBinding" },
+        "feePolicy": {
+          "oneOf": [
+            { "$ref": "#/$defs/supportingArtifactBinding" },
+            { "type": "null" }
+          ]
+        },
+        "securityAssessmentSchema": { "$ref": "#/$defs/supportingArtifactBinding" },
+        "securityAssessment": {
+          "oneOf": [
+            { "$ref": "#/$defs/supportingArtifactBinding" },
+            { "type": "null" }
+          ],
+          "description": "May remain null in source-owned submissions. A source-assessed instance is derived only after the source commit exists and is bound by Public Application v3 without a commit/hash cycle."
+        }
+      }
+    },
+    "supportingArtifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactType", "schemaId", "path", "sha256", "byteLength"],
+      "properties": {
+        "artifactType": { "enum": ["fee-policy-schema", "fee-policy", "security-assessment-schema", "security-assessment", "fee-conformance-receipt", "fee-conformance-vector-set", "trade-capability-manifest"] },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "tradeCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "facetEntryRef", "markets"],
+      "properties": {
+        "applicability": { "enum": ["tradable", "no-market", "unresolved"] },
+        "facetEntryRef": { "$ref": "#/$defs/slug" },
+        "markets": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/tradeCapabilityMarket" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["applicability"],
+            "properties": { "applicability": { "const": "tradable" } }
+          },
+          "then": { "properties": { "markets": { "minItems": 1 } } }
+        },
+        {
+          "if": {
+            "required": ["applicability"],
+            "properties": { "applicability": { "enum": ["no-market", "unresolved"] } }
+          },
+          "then": { "properties": { "markets": { "maxItems": 0 } } }
+        }
+      ]
+    },
+    "tradeCapabilityMarket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marketRef", "routeType", "manifest"],
+      "properties": {
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "routeType": { "enum": ["standard-uniswap-v4", "canonical-programmable-adapter"] },
+        "manifest": { "$ref": "#/$defs/tradeCapabilityManifestBinding" }
+      }
+    },
+    "tradeCapabilityManifestBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/supportingArtifactBinding" },
+        {
+          "properties": {
+            "artifactType": { "const": "trade-capability-manifest" },
+            "schemaId": { "const": "urn:programmable:trade-capability-manifest:1.0.0" }
+          }
+        }
+      ]
+    },
+    "evidenceDigestBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceRef", "sha256"],
+      "properties": {
+        "evidenceRef": { "$ref": "#/$defs/slug" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "feeConformanceScopeArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feeScopeRef", "receipt", "vectorSet"],
+      "properties": {
+        "feeScopeRef": { "$ref": "#/$defs/slug" },
+        "receipt": { "$ref": "#/$defs/supportingArtifactBinding" },
+        "vectorSet": { "$ref": "#/$defs/supportingArtifactBinding" }
+      }
+    },
+    "openNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "profileSchema", "profile"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "$ref": "#/$defs/slug",
+          "description": "Open kind. Unknown values are valid when profileSchema is resolvable."
+        },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {
+          "description": "Declarative JSON validated against profileSchema."
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "roleIds", "profileSchema", "profile", "authorityRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open asset kind." },
+        "roleIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" },
+          "description": "Open, composable roles. One asset may be launched, rewarded, collateralized, burned, or serve any future combination."
+        },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "authorityRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "properties": { "kind": { "const": "uniswap-v4-hook" } },
+                "required": ["kind"]
+              },
+              {
+                "properties": {
+                  "profileSchema": {
+                    "properties": { "schemaId": { "const": "urn:programmable:builtin:hook:uniswap-v4:1.0.0" } },
+                    "required": ["schemaId"]
+                  }
+                },
+                "required": ["profileSchema"]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "profile": { "$ref": "#/$defs/v4HookSemanticProfile" },
+              "permissions": { "$ref": "#/$defs/v4Permissions" }
+            }
+          }
+        }
+      ]
+    },
+    "market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "profileSchema",
+        "profile",
+        "assetRefs",
+        "hookRef",
+        "liquidity",
+        "executionClass",
+        "canonicalScopes"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open market or price-formation kind." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "assetRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "hookRef": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "liquidity": { "$ref": "#/$defs/liquidity" },
+        "executionClass": {
+          "enum": ["programmable-canonical", "external", "non-launchable", "unknown"],
+          "description": "Fee-coverage classification only, never a product-kind allowlist. Proposal-stage unknown preserves unresolved execution and fee scope without inventing a classification; prototype validation must resolve it."
+        },
+        "canonicalScopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "liquidity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nativeAmmMode", "minimumInitialLiquidity", "sourceRefs", "custodyRefs"],
+      "properties": {
+        "nativeAmmMode": { "enum": ["none", "optional", "required"] },
+        "minimumInitialLiquidity": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)$" },
+        "sourceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "custodyRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "nativeAmmMode": { "const": "none" } } },
+          "then": { "properties": { "minimumInitialLiquidity": { "const": "0" } } }
+        },
+        {
+          "if": { "properties": { "nativeAmmMode": { "const": "required" } } },
+          "then": { "properties": { "minimumInitialLiquidity": { "pattern": "^[1-9][0-9]*$" } } }
+        }
+      ]
+    },
+    "hook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "profileSchema",
+        "profile",
+        "permissions",
+        "implementationRef",
+        "authorityRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open hook or execution-module kind." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "permissions": {
+          "oneOf": [
+            { "$ref": "#/$defs/v4Permissions" },
+            { "type": "null" }
+          ]
+        },
+        "implementationRef": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "authorityRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "v4Permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beforeInitialize",
+        "afterInitialize",
+        "beforeAddLiquidity",
+        "afterAddLiquidity",
+        "beforeRemoveLiquidity",
+        "afterRemoveLiquidity",
+        "beforeSwap",
+        "afterSwap",
+        "beforeDonate",
+        "afterDonate",
+        "beforeSwapReturnDelta",
+        "afterSwapReturnDelta",
+        "afterAddLiquidityReturnDelta",
+        "afterRemoveLiquidityReturnDelta"
+      ],
+      "properties": {
+        "beforeInitialize": { "type": "boolean" },
+        "afterInitialize": { "type": "boolean" },
+        "beforeAddLiquidity": { "type": "boolean" },
+        "afterAddLiquidity": { "type": "boolean" },
+        "beforeRemoveLiquidity": { "type": "boolean" },
+        "afterRemoveLiquidity": { "type": "boolean" },
+        "beforeSwap": { "type": "boolean" },
+        "afterSwap": { "type": "boolean" },
+        "beforeDonate": { "type": "boolean" },
+        "afterDonate": { "type": "boolean" },
+        "beforeSwapReturnDelta": { "type": "boolean" },
+        "afterSwapReturnDelta": { "type": "boolean" },
+        "afterAddLiquidityReturnDelta": { "type": "boolean" },
+        "afterRemoveLiquidityReturnDelta": { "type": "boolean" }
+      }
+    },
+    "v4HookSemanticProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "purpose",
+        "poolManager",
+        "poolIsolation",
+        "identities",
+        "hookData",
+        "swapAccounting",
+        "returnDelta",
+        "reentrancy",
+        "routing",
+        "deployment",
+        "evidence"
+      ],
+      "properties": {
+        "contractVersion": { "const": "1.0.0" },
+        "purpose": { "type": "string", "minLength": 1 },
+        "poolManager": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["authentication", "binding", "address"],
+          "properties": {
+            "authentication": { "const": "exact-msg-sender" },
+            "binding": { "enum": ["immutable-exact-address", "chain-profile-exact-address"] },
+            "address": { "$ref": "#/$defs/address" }
+          }
+        },
+        "poolIsolation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespace", "crossPoolSubsidy", "crossPoolNetting"],
+          "properties": {
+            "namespace": { "enum": ["pool-id", "single-pool-instance"] },
+            "crossPoolSubsidy": { "const": false },
+            "crossPoolNetting": { "const": false }
+          }
+        },
+        "identities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["msgSenderRole", "senderRole", "senderTreatedAsEndUser", "endUserAuthentication"],
+          "properties": {
+            "msgSenderRole": { "const": "pool-manager" },
+            "senderRole": { "enum": ["router-or-unlock-caller", "liquidity-actor", "donor-or-unlock-caller", "not-used"] },
+            "senderTreatedAsEndUser": { "const": false },
+            "endUserAuthentication": { "enum": ["not-used", "authenticated-versioned-hook-data", "trusted-router-binding"] }
+          }
+        },
+        "hookData": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "versioned", "domainBound", "replayProtected", "malformedRejected", "witness"],
+          "properties": {
+            "mode": { "enum": ["not-used", "versioned-authenticated", "bounded-swap-witness"] },
+            "versioned": { "type": "boolean" },
+            "domainBound": { "type": "boolean" },
+            "replayProtected": { "type": "boolean" },
+            "malformedRejected": { "const": true },
+            "witness": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["encoding", "solidityType", "exactByteLength", "valueSemantics", "executionDeltaBinding", "identitySemantics", "authenticationSemantics", "replaySemantics"],
+                  "properties": {
+                    "encoding": { "const": "abi-v2-static" },
+                    "solidityType": { "const": "uint256" },
+                    "exactByteLength": { "const": 32 },
+                    "valueSemantics": { "const": "exact-output-gross-quote-witness" },
+                    "executionDeltaBinding": { "const": "gross-witness-and-fee-reconciled-to-executed-quote-delta" },
+                    "identitySemantics": { "const": "none" },
+                    "authenticationSemantics": { "const": "none" },
+                    "replaySemantics": { "const": "none" }
+                  }
+                }
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": { "required": ["mode"], "properties": { "mode": { "const": "bounded-swap-witness" } } },
+              "then": {
+                "properties": {
+                  "versioned": { "const": false },
+                  "domainBound": { "const": false },
+                  "replayProtected": { "const": false },
+                  "witness": { "type": "object" }
+                }
+              }
+            },
+            {
+              "if": { "required": ["mode"], "properties": { "mode": { "enum": ["not-used", "versioned-authenticated"] } } },
+              "then": { "properties": { "witness": { "type": "null" } } }
+            }
+          ]
+        },
+        "swapAccounting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "supportedQuadrants",
+            "rejectedQuadrants",
+            "unsupportedRejectedBeforeEffects",
+            "specifiedCurrencyDerived",
+            "unspecifiedCurrencyDerived",
+            "signsDerived",
+            "partialFillPolicy",
+            "unlockDeltasClose",
+            "creditsBacked",
+            "erc20Settlement",
+            "rounding",
+            "tinyAndExtremeValuesTested"
+          ],
+          "properties": {
+            "supportedQuadrants": { "$ref": "#/$defs/v4SwapQuadrants" },
+            "rejectedQuadrants": { "$ref": "#/$defs/v4SwapQuadrants" },
+            "unsupportedRejectedBeforeEffects": { "const": true },
+            "specifiedCurrencyDerived": { "const": true },
+            "unspecifiedCurrencyDerived": { "const": true },
+            "signsDerived": { "const": true },
+            "partialFillPolicy": { "enum": ["supported-and-tested", "rejected-before-effects"] },
+            "unlockDeltasClose": { "const": true },
+            "creditsBacked": { "const": true },
+            "erc20Settlement": { "enum": ["sync-transfer-settle", "periphery-delta-router", "native-settle", "not-applicable"] },
+            "rounding": { "enum": ["explicit-bounded", "exact-no-rounding"] },
+            "tinyAndExtremeValuesTested": { "const": true }
+          }
+        },
+        "returnDelta": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["beforeSwapUsed", "afterSwapUsed", "afterAddLiquidityUsed", "afterRemoveLiquidityUsed", "backing", "noOpAnalyzed", "hardBounds", "deltaConservation", "justification"],
+          "properties": {
+            "beforeSwapUsed": { "type": "boolean" },
+            "afterSwapUsed": { "type": "boolean" },
+            "afterAddLiquidityUsed": { "type": "boolean" },
+            "afterRemoveLiquidityUsed": { "type": "boolean" },
+            "backing": { "enum": ["not-applicable", "hook-owned-assets", "erc6909-claims", "vault-assets", "custom-proven"] },
+            "noOpAnalyzed": { "const": true },
+            "hardBounds": { "const": true },
+            "deltaConservation": { "const": true },
+            "justification": { "type": ["string", "null"] }
+          }
+        },
+        "reentrancy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["guardModel", "nestedUnlocks", "crossFunctionAnalyzed", "externalCallOrderAnalyzed"],
+          "properties": {
+            "guardModel": { "enum": ["pool-manager-lock-aware", "transient-guard", "state-machine", "checks-effects-interactions"] },
+            "nestedUnlocks": { "enum": ["rejected", "proven-safe", "not-applicable"] },
+            "crossFunctionAnalyzed": { "const": true },
+            "externalCallOrderAnalyzed": { "const": true }
+          }
+        },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["universalRouter", "v4Planner", "permit2", "nativeEth", "exactInput", "exactOutput", "singleHop", "multiHop", "perHopHookData", "quoteExecutionParity"],
+          "properties": {
+            "universalRouter": { "const": true },
+            "v4Planner": { "const": true },
+            "permit2": { "const": true },
+            "nativeEth": { "const": true },
+            "exactInput": { "const": true },
+            "exactOutput": { "const": true },
+            "singleHop": { "const": true },
+            "multiHop": { "const": true },
+            "perHopHookData": { "const": true },
+            "quoteExecutionParity": { "const": true }
+          }
+        },
+        "deployment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "creationCodeHash", "constructorArgsHash", "initcodeHash", "permissionMask", "hookMinerSaltRef", "hookMinerSaltSha256", "expectedAddress", "runtimeCodeHash", "poolManagerAddress"],
+          "properties": {
+            "state": { "const": "preimage-bound" },
+            "creationCodeHash": { "$ref": "#/$defs/sha256" },
+            "constructorArgsHash": { "$ref": "#/$defs/sha256" },
+            "initcodeHash": { "$ref": "#/$defs/sha256" },
+            "permissionMask": { "type": "string", "pattern": "^0x[0-3][0-9a-fA-F]{3}$" },
+            "hookMinerSaltRef": { "$ref": "#/$defs/repositoryPath" },
+            "hookMinerSaltSha256": { "$ref": "#/$defs/sha256" },
+            "expectedAddress": { "$ref": "#/$defs/address" },
+            "runtimeCodeHash": { "$ref": "#/$defs/sha256" },
+            "poolManagerAddress": { "$ref": "#/$defs/address" }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unit", "negative", "fuzz", "invariant", "fork", "router", "deployment"],
+          "properties": {
+            "unit": { "$ref": "#/$defs/evidenceRefs" },
+            "negative": { "$ref": "#/$defs/evidenceRefs" },
+            "fuzz": { "$ref": "#/$defs/evidenceRefs" },
+            "invariant": { "$ref": "#/$defs/evidenceRefs" },
+            "fork": { "$ref": "#/$defs/evidenceRefs" },
+            "router": { "$ref": "#/$defs/evidenceRefs" },
+            "deployment": { "$ref": "#/$defs/evidenceRefs" }
+          }
+        }
+      }
+    },
+    "v4SwapQuadrants": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "zero-for-one-exact-input",
+          "zero-for-one-exact-output",
+          "one-for-zero-exact-input",
+          "one-for-zero-exact-output"
+        ]
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "lifecyclePhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "profileSchema",
+        "profile",
+        "predecessorRefs",
+        "assetRefs",
+        "marketRefs",
+        "hookRefs",
+        "componentRefs",
+        "valueFlowRefs",
+        "authorityRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open lifecycle phase kind." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "predecessorRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" },
+          "description": "Acyclic provenance and initial ordering only. Runtime loops belong in transitionRefs."
+        },
+        "transitionRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" },
+          "description": "Open runtime state transitions to lifecycle phases. Cycles and self-transitions are valid for recurring rounds, auctions, epochs, and similar product semantics. Omitted means no declared outgoing runtime transition."
+        },
+        "assetRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "marketRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "hookRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "componentRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "valueFlowRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "authorityRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "profileSchema", "profile", "implementationRefs", "authorityRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open component kind, onchain or offchain." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "implementationRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } },
+        "authorityRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collection", "id"],
+      "properties": {
+        "collection": { "$ref": "#/$defs/slug" },
+        "id": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "valueFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "profileSchema", "profile", "from", "to", "assetRefs", "authorityRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open value-flow kind." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "assetRefs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "authorityRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "profileSchema", "profile", "holder", "capabilityRefs", "revocation"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open authority kind." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "holder": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "capabilityRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "revocation": {
+          "$ref": "#/$defs/slug",
+          "description": "Open revocation or expiry model. Known profiles include immutable, renounceable, time-delayed, governed and external-policy; novel session, capability, threshold and state-conditioned models remain reviewable. Exact policy invariants such as the Programmable fee claimant being immutable are enforced separately."
+        }
+      }
+    },
+    "capabilityProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "profileSchema", "profile", "scopeRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug", "description": "Open capability or trust-surface kind." },
+        "profileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "profile": {},
+        "scopeRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/endpoint" }
+        }
+      }
+    },
+    "programmableFee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyId",
+        "policyVersion",
+        "policyHashPreimage",
+        "policyHash",
+        "policySchema",
+        "platformHundredthsOfBip",
+        "owner",
+        "feeScopes",
+        "executionScopeRefs",
+        "collectionProfileSchema",
+        "collectionProfile",
+        "claimAuthorityRef",
+        "conformance"
+      ],
+      "properties": {
+        "policyId": { "const": "programmable-volume-fee-v2" },
+        "policyVersion": { "const": "2.0.0" },
+        "policyHashPreimage": { "const": "programmable-volume-fee-v2@2.0.0" },
+        "policyHash": { "const": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e" },
+        "policySchema": { "$ref": "#/$defs/schemaBinding" },
+        "platformHundredthsOfBip": { "const": 1000 },
+        "owner": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+        "feeScopes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/feeScope" }
+        },
+        "executionScopeRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "collectionProfileSchema": { "$ref": "#/$defs/schemaBinding" },
+        "collectionProfile": {},
+        "claimAuthorityRef": { "$ref": "#/$defs/slug" },
+        "conformance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "evidenceRefs", "evidenceDigests", "scopeArtifacts"],
+          "properties": {
+            "status": { "enum": ["required", "complete", "not-applicable"] },
+            "evidenceRefs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/slug" }
+            },
+            "evidenceDigests": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/evidenceDigestBinding" }
+            },
+            "scopeArtifacts": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/feeConformanceScopeArtifact" }
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "status": { "const": "complete" } }, "required": ["status"] },
+              "then": {
+                "properties": {
+                  "evidenceRefs": { "minItems": 1 },
+                  "evidenceDigests": { "minItems": 1 },
+                  "scopeArtifacts": { "minItems": 1 }
+                }
+              }
+            },
+            {
+              "if": { "properties": { "status": { "const": "not-applicable" } }, "required": ["status"] },
+              "then": {
+                "properties": {
+                  "evidenceRefs": { "maxItems": 0 },
+                  "evidenceDigests": { "maxItems": 0 },
+                  "scopeArtifacts": { "maxItems": 0 }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "feeScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "marketRef", "chainId", "poolId", "quoteAssetRef", "quoteCurrency", "collectionProfile"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "chainId": { "type": "string", "pattern": "^[1-9][0-9]{0,77}$" },
+        "poolId": {
+          "type": ["string", "null"],
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "quoteAssetRef": { "$ref": "#/$defs/slug" },
+        "quoteCurrency": {
+          "type": ["string", "null"],
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "collectionProfile": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourcePaths", "testPaths", "evidenceRefs"],
+      "properties": {
+        "sourcePaths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } },
+        "testPaths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } },
+        "evidenceRefs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 2048 } }
+      }
+    },
+    "fragmentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "fragments"],
+      "properties": {
+        "strategy": { "enum": ["single-review", "split-review"] },
+        "fragments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "includes", "dependsOn"],
+            "properties": {
+              "id": { "$ref": "#/$defs/slug" },
+              "includes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+              "dependsOn": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

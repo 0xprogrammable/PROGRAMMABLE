@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "repository": {
+    "numericRepositoryId": "987654321",
+    "repositoryUri": "https://github.com/example-builder/large-open-world-project"
+  },
+  "ordering": "repository-path-utf8-bytewise-ascending",
+  "fragmentEncoding": "canonical-json-lines-v1",
+  "entrySchemaId": "urn:programmable:source-closure-manifest:1.0.0#/$defs/sourceEntry",
+  "entryCount": 12000,
+  "fragmentCount": 2,
+  "closureSha256": "sha256:1515151515151515151515151515151515151515151515151515151515151515",
+  "fragments": [
+    {
+      "id": "source-fragment-0001",
+      "sequence": 0,
+      "path": "review/source-closure/source-fragment-0001.jsonl",
+      "sha256": "sha256:1616161616161616161616161616161616161616161616161616161616161616",
+      "byteLength": 1048576,
+      "blobObjectId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "entryCount": 6000,
+      "firstPath": "apps/game/index.html",
+      "lastPath": "packages/contracts/src/GameHook.sol"
+    },
+    {
+      "id": "source-fragment-0002",
+      "sequence": 1,
+      "path": "review/source-closure/source-fragment-0002.jsonl",
+      "sha256": "sha256:1717171717171717171717171717171717171717171717171717171717171717",
+      "byteLength": 1048576,
+      "blobObjectId": "ffffffffffffffffffffffffffffffffffffffff",
+      "entryCount": 6000,
+      "firstPath": "packages/contracts/test/GameHook.t.sol",
+      "lastPath": "worlds/main/zone-999.json"
+    }
+  ]
+}

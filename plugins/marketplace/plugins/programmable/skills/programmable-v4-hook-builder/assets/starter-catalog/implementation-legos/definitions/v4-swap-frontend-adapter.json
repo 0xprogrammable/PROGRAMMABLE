@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "v4-swap-frontend-adapter",
+  "label": "v4 swap frontend adapter",
+  "summary": "Framework-neutral runtime validation for owner-confirmed chain, PoolId, route hash, quote block, exactness, amount, limit, deadline and hookData-bound swap intents.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "not-a-fee-enforcement-component",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "standard-review",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "v4-swap-client"
+    ],
+    "capabilityIds": [
+      "v4-swap-client"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "application"
+  ],
+  "dependencyRequirements": [
+    "TypeScript with BigInt support",
+    "Pinned project-specific Uniswap v4 SDK and router adapter",
+    "Reviewed Universal Router and v4-periphery dependency closure rather than sibling source-head assumptions"
+  ],
+  "requiredFacts": [
+    "Bind quote and execution to one chain, PoolKey, route hash, hookData, quote block number and quote block hash",
+    "Persist the complete user-confirmed intent and require execution to match its exactness, amounts, limit, deadline and route-bound fields",
+    "Use user-visible exact-input or exact-output limits and a finite deadline",
+    "Keep hooked-pool math and provider support as separately evidenced states",
+    "Require downstream exact-output full-fill evidence at every hop, including repeated-currency routes where intermediate underfill can net away",
+    "Require bounded router decoding before static-head, dynamic-offset, array-length, multiplication and short-selector reads",
+    "Require signedRouteContext consumers to authenticate PoolManager as callback caller and Universal Router as callback sender"
+  ],
+  "hardConflictPredicates": [
+    "Execution can change chain, PoolId, route hash, hookData, quote block number or quote block hash after user confirmation",
+    "A runtime value outside exact-input or exact-output passes TypeScript-only assumptions",
+    "Exact-input execution can settle below the confirmed minimum output",
+    "Exact-output execution can settle above the confirmed maximum input",
+    "Exact-output completion is claimed without full-fill-or-revert evidence for every hop and repeated-currency routes",
+    "Untrusted router bytes are read or acted on before every relevant bound and overflow check",
+    "A signedRouteContext consumer accepts only PoolManager identity or only Universal Router identity"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/v4-swap-frontend-adapter/swapAdapter.ts",
+      "targetPath": "implementation/v4-swap-frontend-adapter/src/swapAdapter.ts",
+      "role": "source",
+      "language": "typescript",
+      "sha256": "625694099cbf106a4ecbabe6926164898ad138fad76b173ef212a37bbda8768e"
+    }
+  ]
+}

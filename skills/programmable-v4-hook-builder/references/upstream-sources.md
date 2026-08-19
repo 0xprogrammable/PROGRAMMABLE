@@ -1,13 +1,44 @@
 # Upstream source policy
 
-Source snapshot observed on 2026-08-01.
+The current source and package snapshot was observed on `2026-08-07T08:39:02Z` and is recorded in
+[upstream-snapshot-2026-08-07.json](upstream-snapshot-2026-08-07.json). The larger historical inventory below began
+on 2026-08-01 and includes reviewed drift through 2026-08-03; feed and package records retain their own observation and
+release timestamps. A newer observed head is never silently treated as reviewed or compatible.
 
 Official code is a source, not an automatic compatibility guarantee. Use exact revisions and test the complete version
 set together.
 
-The machine-readable snapshot is [upstream-sources.json](upstream-sources.json). Use
+The machine-readable snapshot is [upstream-sources.json](upstream-sources.json), and the exact reviewed ranges, changed
+files, impact decisions and adopted guidance are closed by
+[upstream-reviewed-drift-v1.json](upstream-reviewed-drift-v1.json). Use
 [routing-and-discovery.md](routing-and-discovery.md) before making listing, indexing, quote, routing, interface, or
 provider-approval claims.
+
+## Current compatibility lanes
+
+The 2026-08-07 snapshot separates five lanes instead of pretending that repository heads form one stack:
+
+- stable Solidity candidate: `@uniswap/v4-core@1.0.2`, `@uniswap/v4-periphery@1.0.3`, Permit2
+  `cc56ad0f3439c502c246fc5cfcc3db92bb8b7219`, solc `0.8.26`, Cancun and via-IR;
+- stable TypeScript candidate: `@uniswap/v4-sdk@2.3.1`, `@uniswap/sdk-core@7.19.0`,
+  `@uniswap/universal-router-sdk@5.11.2` and `@uniswap/permit2-sdk@1.4.0`;
+- OpenZeppelin hook candidate: `@openzeppelin/uniswap-hooks@1.1.1`, `@openzeppelin/contracts@5.5.0`, core `1.0.2`
+  and periphery `1.0.3` with exact registry integrities;
+- local Fee V2 router evidence: OpenZeppelin Contracts `5.6.1` and Hooks `1.1.1`, core `1.0.2`, periphery `1.0.3`,
+  Universal Router `2.1.0`, Router SDK `5.11.2`, v4 SDK `2.3.1`, Permit2 `cc56ad0...`, and Solmate Permit2
+  `8d910d8...`, bound by lock SHA-256 `e73b8f213af284c54550e7bdf5416e9bf1f17774b4f6e23d3bb8f6a150ede759`;
+- current-source canary: the recorded repository heads, tested together in isolation before promotion.
+
+Candidate lanes are only lock-compatible until the Builder has executed installation, compilation, unit, negative,
+fuzz, invariant, fork, router and deployment-bytecode checks. The pinned Fee V2 kernel's local campaign covers 2/2 SDK
+tests and 58/58 Forge tests, including eight ERC-20/native buy/sell exact-input/exact-output modes that quote through the
+real pinned V4Quoter and execute immediately through the real pinned Universal Router with Permit2 or native funding.
+That is deterministic local simulation against one in-process PoolManager, not a provider quote, pinned fork, deployed
+runtime, broadcast transaction, hosted route, approval or production evidence. Its exact offline SDK tree retains
+10 high, 9 moderate and 17 low transitive advisories; that is a recorded limitation, not remediation or production-runtime approval.
+Universal Router `2.2.0` is a GitHub source release while npm latest remains
+`2.1.0`; OpenZeppelin Contracts `5.7.0` is a GitHub release but npm `dev`; OpenZeppelin Hooks `1.2.1` is a prerelease/dev
+artifact. These mismatches are evidence, not upgrade permission.
 
 ## Two distinct baselines
 
@@ -91,7 +122,7 @@ Important drift: current v4-periphery no longer contains BaseHook and HookMiner.
 
 The observed heads are not one compatibility set:
 
-- `v4-periphery@3245c3cb99c48fa1dc2459c3b60abc37d4294aba` locks
+- `v4-periphery@545a5d2a87228167edde48f3b9eda122d1e3c4d6` locks
   `v4-core@59d3ecf53afa9264a16bba0e38f4c5d2231f80bc`.
 - `v4-hooks-public@7da5210f2c81a700820a6b4f585264233d91f349` has repository gitlinks to
   `v4-core@d153b048868a60c2403a3ef5b2301bb247884d46` and
@@ -101,6 +132,11 @@ The observed heads are not one compatibility set:
 Preserve both forms of evidence. The hooks-public mismatch is upstream drift, not a resolved dependency profile. Do not
 combine either observed set with the independently observed v4-core head or generate from it without selecting and
 testing one coherent checkout explicitly.
+
+The reviewed periphery range `3245c3cb99c48fa1dc2459c3b60abc37d4294aba..545a5d2a87228167edde48f3b9eda122d1e3c4d6`
+makes exact-output routing all-or-nothing at every hop. This matters when a route repeats a currency: PoolManager's final
+currency netting can otherwise hide an underfilled intermediate hop. Adopt the full-fill invariant and its regression
+shape, but do not treat the observed head as the Programmable-tested periphery baseline.
 
 ### OpenZeppelin Uniswap hooks
 
@@ -146,7 +182,8 @@ Do not equate every fee base with creator revenue:
 - Preview-only `BaseHookFee` takes a percentage of the unspecified currency as ERC-6909 claims owned by the hook.
 
 `BaseHookFee` does not promise ETH-denominated revenue. The fee currency depends on swap direction and on whether the
-swap is exact-input or exact-output. Require tests for all four quadrants and disclose the resulting asset. Enforce an
+swap is exact-input or exact-output. Require a complete supported/rejected four-quadrant matrix and disclose the
+resulting asset for every supported mode. Enforce an
 application maximum below the base's 100% ceiling. Define `handleHookFees` deliberately: the base supplies no recipient
 split, beneficiary authorization, or payout policy.
 
@@ -227,6 +264,13 @@ explicitly.
 
 The SDK may default to an older router encoding when a generation is omitted. Fail closed instead of guessing.
 
+Trade capability is a first-class Builder contract. Applicability is exactly `tradable`, `no-market`, or `unresolved`.
+`no-market` and `unresolved` emit no selected route, trade manifest, quote result, or execution result, and unresolved
+projects cannot complete. Every selected tradable market binds one `standard-uniswap-v4` or
+`canonical-programmable-adapter` manifest with PoolKey, router/quoter/Permit2 requirements, hook data, directions,
+exactness, slippage/deadline and fee behavior. Every manifest remains `NOT_APPROVED`; typed command results are bounded
+local evidence, never provider, deployment, signing, broadcast, audit, approval or live-tradability evidence.
+
 Routing, discovery, indexing, and intent settlement are separate integration layers. Their repositories are evidence
 about code and documented behavior, not proof that the hosted interface or Trading API currently supports a particular
 hook:
@@ -234,7 +278,7 @@ hook:
 | Source | Observed head | License evidence | Boundary |
 | --- | --- | --- | --- |
 | `Uniswap/docs` | `a0da460b1becfe920330adfab5d11f2f3f63863a` | MIT | Published documentation source; live policy and API pages still need dated observations |
-| `Uniswap/uniroute-public` | `3cce57b8ad8aae7ffa72d4947c535321ada60486` | No license file; README-only MIT claim | Public offchain routing core with placeholder configuration, not the hosted production service |
+| `Uniswap/uniroute-public` | `0e002a0bcb35624df416a9bba7705aef66eb2c52` | No license file; README-only MIT claim | Public offchain routing core with placeholder configuration, not the hosted production service |
 | `Uniswap/onchain-router` | `b01c21e64ae899a8410df91370ab647b1ecec33a` | No repository license; mixed file-level identifiers | Separate constrained onchain router, not Universal Router or a general hooked-pool compatibility layer |
 | `Uniswap/v4-subgraph` | `0c13ab2fbd95306272528ed781511d7e2aa338d3` | GPL-3.0 | Event indexer; indexed does not mean quoted, executable, verified, or approved |
 | `Uniswap/UniswapX` | `3f5019cf206bc2b37a47c7653f039914f93ad60d` | GPL-3.0 | Intent settlement; permissionless filling does not grant the permissioned quoter role |
@@ -246,20 +290,39 @@ The observed public Trading API OpenAPI document is pinned by SHA-256 in the JSO
 fields marked `x-internal: true`. `V4_HOOKS_INCLUSIVE`, `V4_HOOKS_ONLY`, and `V4_NO_HOOKS` select a quote search mode;
 they do not prove allowlisting or execution. An API key authenticates an integrator, not a hook.
 
-The reviewed UniRoute advance from `beaab6050068be2efa329ce9fbcf76d3a14dabe7` to
-`3cce57b8ad8aae7ffa72d4947c535321ada60486` is a four-commit fast-forward. It adds five Robinhood hook addresses to the
-public allowlist, documents one as exact-input-only, removes one Celo gas-token candidate, and introduces configurable
-negative-token and block-number caches. An explicitly requested block bypasses the block-number cache. Because the
-published configuration values are placeholders, this is source evidence about possible routing admission and quote
-freshness behavior, not proof of a deployed cache policy, hosted allowlist, route, audit, or approval. Retain exact-input
-and exact-output parity tests and bind live quote observations separately.
+The latest reviewed UniRoute advance is
+`2cf851e7bb5ed0e722da9edc027aeeafae525f38..0e002a0bcb35624df416a9bba7705aef66eb2c52`; its only source change is the
+Robinhood-V4 Aurora pool-cache path and its tests. When exactly one pool side has a fresh price and that priced side is
+native currency, wrapped native, or USDG, the path may value the other reserve from the pool's own spot price. It caps
+the added ranking TVL at one native unit per pool and separately compares the pools left after the serving hook filter.
+This can keep a fresh launchpad pool visible while its new token lacks a price row, but spot-derived admission remains
+attacker-influenced and the cap is not price-or-liquidity verification. The range changes no dependency manifest,
+lockfile, gitlink, deployment record, Ethereum path, or hosted configuration.
 
-The observed SDK monorepo head is `a7ee2dbf78287d948189c47b4e58a1eadca430bd`. It is not a package lock; retain the
-version, integrity, and release `gitHead` in the table above. The observed Universal Router head is
-`fa3f856951967abd7e0cf33901f6cead31eb5469` and directly locks
-`v4-periphery@9dafaaecc1e2e1e824eda9d941085f96517d827b` plus
-`permit2@cc56ad0f3439c502c246fc5cfcc3db92bb8b7219`. It is GPL-3.0 and remains research until an exact deployed generation
-is independently bound to source, address, runtime hash, and interfaces.
+The preceding reviewed range
+`3cce57b8ad8aae7ffa72d4947c535321ada60486..2cf851e7bb5ed0e722da9edc027aeeafae525f38` added eleven Robinhood hook
+addresses to a source allowlist, while an earlier range introduced configurable negative-token and block-number caches
+and exactness-specific routing behavior. Because published configuration values remain placeholders, all of these are
+source evidence about possible discovery, routing admission, parity, and quote freshness—not proof of a deployed cache
+policy, hosted allowlist, route, audit, or approval. Retain exact-input and exact-output parity tests and bind live quote
+observations separately.
+
+The observed SDK monorepo head advanced from `1e30c3265f3cfb818ed912833f3e65630c8b3490` to
+`d4e9116c61b9e39c74c5704d0224d91ff55d34d3`. The reviewed two commits change only liquidity-launcher-sdk strategy
+generation records and its release version; the `@uniswap/v4-sdk` package remains `2.3.1`. Monorepo HEAD is not a
+package lock: retain each tested package's version, integrity, release `gitHead`, and compatibility evidence from the
+table above.
+
+The latest observed Universal Router range is
+`9e9a780a3c17b61fc78a1a73c85684859dda1bad..d203e7f5525aeae385800f9490b93886711701df`. Its direct gitlinks remain
+`v4-periphery@363226d9e1e2180b67bf6857023dbaad751010c5` and
+`permit2@cc56ad0f3439c502c246fc5cfcc3db92bb8b7219`; these observed edges are not the tested Programmable baseline or a
+resolved cross-repository compatibility set. The latest source bounds router command input decoding before static-head,
+dynamic-offset, array-length, length-multiplication and short-selector reads; it changes `SWEEP.amountMin` to `uint256`,
+adds `UNWRAP_WETH_EXACT`, and requires signed-route hooks to authenticate both PoolManager as callback caller and
+Universal Router as callback sender. The preceding range added the already-unlocked PoolManager path. The router's own
+periphery gitlink does not contain sibling periphery head `545a5d...`, so do not infer the exact-output full-fill fix from
+this router head. No deployment, provider route, release, runtime hash, interface or production support is established.
 
 ### Deployments
 
@@ -269,10 +332,14 @@ and observed runtime hash.
 
 Do not hardcode a newly observed address into generated source or documentation as a permanent truth.
 
-The observed `Uniswap/contracts` registry head is `d47f0f73407c1b0b9d8959bf460a612cdc4a516e`, but the bundled deployment
-snapshot was generated from `37936185dee7decf681360ec799c124e0e034672`. Keep the snapshot bound to that producer
-commit. Current registry HEAD is not retroactive deployment provenance. The registry has no detected repository license;
-consume its data without copying unlicensed code or prose.
+The latest observed `Uniswap/contracts` range is
+`580e74a1e1bced14c09ab66f9e6d7e3ebdd61ac4..0ecb1fcaed7cf36b3f33524e09c07efe5387f9b5`; it changes only the
+Universal Router gitlink to `d203e7f5525aeae385800f9490b93886711701df` and the v4-periphery gitlink to
+`545a5d2a87228167edde48f3b9eda122d1e3c4d6`. These sibling edges are not a compatibility claim: Universal Router itself
+still pins v4-periphery `363226d9e1e2180b67bf6857023dbaad751010c5`. The bundled deployment snapshot and
+unchanged observed deployment-feed hash remain bound to feed-producing commit
+`37936185dee7decf681360ec799c124e0e034672`. A registry source-head or submodule update is not retroactive deployment
+provenance. The registry has no detected repository license; consume its data without copying unlicensed code or prose.
 
 Preserve the feed's `sourceRepo`, `sourceRef`, and `sourceCodeUrl` separately. The feed can name `v4-core` while its
 source URL points to an implementation in `v4-periphery`, and several short source references do not resolve as commits
@@ -286,6 +353,9 @@ evidence before any release claim.
 Reuse deterministic permission decoding, proxy resolution, verified-source intake, untrusted-source handling, structured
 classification, CI validation, and human review. Hooklist inclusion is neither an audit nor routing approval.
 
+The reviewed range `8488c73fd6042a0d37b3312e9f9b74e8d5ced71d..43ca58a8ca62bb950a1b1f01ef23929bd86b8943`
+adds registry entries on BNB, Ethereum and Robinhood. Treat them as discovery data only.
+
 Do not copy maintainer-specific automation, identities, local paths, merge instructions, or unlicensed prose.
 
 ## Official AI resources
@@ -298,14 +368,12 @@ The skill may consult the exact pinned Uniswap AI resources:
 - swap and liquidity planning resources
 - agent-agnostic writing conventions
 
-The observed Uniswap AI source is `9660491dc662fea76c2f8565c2f7ba2abf6e8840`. The Uniswap AI Toolkit pin is
-`9b405c71e42d0cec4026f2c158edf99716600baa` on its `next` default branch, replacing the previously observed
-`bb873ee808564ed0c917b156b651f4ddda43a4c2`. The one-commit fast-forward replaces ai-toolkit's own PR review path with
-the shared `@uniswap/review-cli`, adds repository-specific workflow-security and plugin-convention reviewers, restricts
-comment-triggered reviews to trusted associations, keeps external consumers on the unchanged reusable workflow, and
-loads credentialed review tooling from the trusted default branch rather than PR-head code. These are useful workflow
-security precedents, but the toolkit is general agent-development tooling, not a source of protocol truth. Protocol-
-specific v4 hook generation, security, SDK, and evaluation guidance remains in `Uniswap/uniswap-ai`.
+The observed Uniswap AI head is `86820b932572c4f6dd70116061bc6d67680bd108`. Its reviewed range changes only review
+automation; all eight blobs bound in the historical evaluation source receipt remain unchanged, so that receipt stays
+at `9660491dc662fea76c2f8565c2f7ba2abf6e8840`. The observed AI Toolkit head is
+`f0812c1d0a52ef4bcbda873d2e7eefa374a3fcf6` on `next`. Its reviewed range changes general workflow, release and plugin
+guidance and adds a backtest-change skill. These are useful agent-workflow precedents, not protocol truth. Protocol-
+specific v4 hook generation, security, SDK and evaluation guidance remains in `Uniswap/uniswap-ai`.
 
 Reuse their hook-type discovery, permission questionnaire, official generation schema, and security-companion pattern.
 Replace these gaps:

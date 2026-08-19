@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { TextDecoder } from "node:util";
 import { CENTRAL_APPLICATION_FILES } from "./cli-central-package.mjs";
+import { normalizeBuilderTemplate } from "./builder-template-contract.mjs";
 import { validateCompanionClosureReceipts } from "./companion-manifest-contract.mjs";
 import {
   createGitHubPublicFetchTransportV1,
@@ -12,12 +13,14 @@ import {
 } from "./github-public-source-core.mjs";
 import { CliFailure } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
+import { hasForbiddenInvisibleOrBidi } from "./metadata-core.mjs";
+import { parseBoundedStrictJson } from "./strict-json-core.mjs";
+import { SUBMIT_LAUNCH_INTAKE_CONTRACT as INTAKE } from "./registry-intake-contract.mjs";
 
+const launchRepository = INTAKE.repository;
 export const CENTRAL_GITHUB_TARGET = Object.freeze({
-  owner: "0xprogrammable",
-  repository: "programmable",
-  repositorySlug: "0xprogrammable/programmable",
-  repositoryUrl: "https://github.com/0xprogrammable/programmable"
+  owner: launchRepository.owner, repository: launchRepository.name,
+  repositorySlug: launchRepository.slug, repositoryUrl: launchRepository.url
 });
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/u;
@@ -25,14 +28,18 @@ const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const APPLICATION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const OPAQUE_DECIMAL_PATTERN = /^[1-9][0-9]{0,63}$/u;
-const SAFE_BRANCH_PATTERN = /^(?!\/)(?!.*(?:\.\.|\/\/|@\{|\\|[\u0000-\u0020\u007f~^:?*\[]))[A-Za-z0-9._/-]{1,255}(?<![\/.])$/u;
-const CONTROL_OR_BIDI_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 const DEFAULT_ATTEMPTS = 3;
 const MAX_REQUESTS = 24;
 const MAX_COMMIT_RESPONSE_BYTES = 256 * 1024;
 const MAX_TREE_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_BLOB_RESPONSE_BYTES = 384 * 1024;
 const MAX_APPLICATION_REVISION = 1_000_000;
+const COMPATIBILITY_RESULTS = new Set([
+  "prototype-ready",
+  "changes-required",
+  "architecture-review-required",
+  "tooling-blocked"
+]);
 const MAX_PACKAGE_BYTES = 512 * 1024;
 const MAX_FILE_BYTES = Object.freeze({
   "application.json": 64 * 1024,
@@ -197,6 +204,10 @@ function validateObservedPriorPackage({ applicationId, files }) {
   }
   const applicationBytes = files.get("application.json");
   const application = parseCanonicalApplication(applicationBytes, applicationId);
+  const compatibilityResult = parseCanonicalCompatibilityResult(
+    files.get("compatibility-report.json"),
+    application
+  );
   const reviewNames = CENTRAL_APPLICATION_FILES.slice(1);
   if (!Array.isArray(application.reviewPackage) || application.reviewPackage.length !== reviewNames.length) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application review index is incomplete", { exitCode: 1 });
@@ -232,6 +243,7 @@ function validateObservedPriorPackage({ applicationId, files }) {
       targetDirectory: `submissions/${applicationId}`,
       stage: application.stage,
       applicationRevision: application.applicationRevision,
+      compatibilityResult,
       fileCount: records.length,
       fileOrder: [...CENTRAL_APPLICATION_FILES],
       encoding: "utf8",
@@ -242,17 +254,52 @@ function validateObservedPriorPackage({ applicationId, files }) {
   };
 }
 
+function parseCanonicalCompatibilityResult(bytes, application) {
+  const source = decodeUtf8(bytes, "compatibility-report.json");
+  let compatibility;
+  try {
+    compatibility = parseBoundedStrictJson(source, { maxSourceBytes: MAX_FILE_BYTES["compatibility-report.json"] });
+  } catch {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report is not valid duplicate-free JSON", { exitCode: 1 });
+  }
+  if (hasForbiddenInvisibleOrBidi(source.replaceAll("\n", "")) || source.includes("\r")) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report contains unsafe text", { exitCode: 1 });
+  }
+  if (source !== `${canonicalJson(compatibility)}\n`) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report is not exact canonical JSON", { exitCode: 1 });
+  }
+  const primary = application.source.primary;
+  if (
+    !isExactObject(compatibility, ["applicationId", "disclaimer", "findings", "result", "schemaVersion", "source"])
+    || compatibility.schemaVersion !== 1
+    || compatibility.applicationId !== application.applicationId
+    || !COMPATIBILITY_RESULTS.has(compatibility.result)
+    || !Array.isArray(compatibility.findings)
+    || compatibility.findings.length > 128
+    || typeof compatibility.disclaimer !== "string"
+    || compatibility.disclaimer.length < 1
+    || compatibility.disclaimer.length > 5_000
+    || !isExactObject(compatibility.source, ["numericRepositoryId", "revisionObjectId", "treeObjectId"])
+    || compatibility.source.numericRepositoryId !== primary.numericRepositoryId
+    || compatibility.source.revisionObjectId !== primary.revisionObjectId
+    || compatibility.source.treeObjectId !== primary.treeObjectId
+  ) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report does not match the application source", { exitCode: 1 });
+  }
+  return compatibility.result;
+}
+
 function parseCanonicalApplication(bytes, applicationId) {
   const source = decodeUtf8(bytes, "application.json");
-  const body = source.endsWith("\n") ? source.slice(0, -1) : source;
-  if (CONTROL_OR_BIDI_PATTERN.test(body) || source.includes("\r")) {
-    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest contains unsafe text", { exitCode: 1 });
-  }
   let application;
   try {
-    application = JSON.parse(source);
+    application = parseBoundedStrictJson(source, { maxSourceBytes: MAX_FILE_BYTES["application.json"] });
   } catch {
-    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest is not valid JSON", { exitCode: 1 });
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest is not valid duplicate-free JSON", { exitCode: 1 });
+  }
+  const body = source.endsWith("\n") ? source.slice(0, -1) : source;
+  if (hasForbiddenInvisibleOrBidi(body) || source.includes("\r")) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest contains unsafe text", { exitCode: 1 });
   }
   if (source !== `${canonicalJson(application)}\n`) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest is not exact canonical JSON", { exitCode: 1 });
@@ -265,6 +312,7 @@ function validatePriorApplicationManifest(application, applicationId) {
     "applicationId",
     "applicationRevision",
     "builder",
+    "builderTemplate",
     ...(Object.hasOwn(application ?? {}, "companionClosure") ? ["companionClosure"] : []),
     "declarations",
     "programmableFee",
@@ -287,6 +335,12 @@ function validatePriorApplicationManifest(application, applicationId) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest identity or revision is invalid", { exitCode: 1 });
   }
   const normalizedSource = normalizeSource(application.source, "prior application source");
+  let builderTemplate;
+  try {
+    builderTemplate = normalizeBuilderTemplate(application.builderTemplate);
+  } catch {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application builder-template provenance is invalid", { exitCode: 1 });
+  }
   let companionClosure;
   if (Object.hasOwn(application, "companionClosure")) {
     try {
@@ -301,6 +355,7 @@ function validatePriorApplicationManifest(application, applicationId) {
   return {
     ...application,
     builder: normalizePriorBuilder(application.builder),
+    builderTemplate,
     source: normalizedSource,
     ...(companionClosure === undefined ? {} : { companionClosure })
   };
@@ -456,7 +511,7 @@ async function readTree(treeObjectId, state) {
       || entry.path.length < 1
       || entry.path.length > 255
       || entry.path.includes("/")
-      || CONTROL_OR_BIDI_PATTERN.test(entry.path)
+      || hasForbiddenInvisibleOrBidi(entry.path)
       || !new Set(["blob", "tree", "commit"]).has(entry.type)
       || !/^(?:040000|100644|100755|120000|160000)$/u.test(entry.mode ?? "")
       || !COMMIT_PATTERN.test(entry.sha ?? "")
@@ -582,10 +637,7 @@ function createRequestState({ fetchImplementation, sleepImplementation, attempts
 
 function validateInputs({ baseBranch, applicationId, fetchImplementation, sleepImplementation, attempts, timeoutMs }) {
   if (
-    typeof baseBranch !== "string"
-    || !SAFE_BRANCH_PATTERN.test(baseBranch)
-    || baseBranch.endsWith(".lock")
-    || baseBranch.startsWith("refs/")
+    baseBranch !== launchRepository.defaultBranch
     || typeof fetchImplementation !== "function"
     || typeof sleepImplementation !== "function"
     || !Number.isInteger(attempts)

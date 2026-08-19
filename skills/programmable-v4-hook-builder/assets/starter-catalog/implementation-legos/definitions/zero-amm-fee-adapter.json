@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "zero-amm-fee-adapter",
+  "label": "Zero-AMM fee accumulator",
+  "summary": "Cumulative fragmentation-resistant 0.1% volume accounting for a separately designed zero-AMM settlement path.",
+  "maturity": "experimental",
+  "maturityMeaning": "Hash-bound reference scaffold only; project-specific implementation and evidence are required before prototype readiness.",
+  "feeApplicability": "canonical-scope-conformance-unresolved",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "architecture-review-required",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "contract-priced-sell-and-burn-v4-custom-accounting"
+    ],
+    "capabilityIds": [
+      "sync-custom-zero-amm"
+    ]
+  },
+  "requiresLegos": [
+    "contract-custom-curve"
+  ],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "dependencyRequirements": [
+    "Solidity 0.8.26",
+    "Project-specific PoolManager settlement adapter"
+  ],
+  "requiredFacts": [
+    "Bind gross volume before project-fee allocation for every supported direction and exactness mode",
+    "Settle the cumulative platform liability only to 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "Specify backing, claim, withdrawal, dust and failure ordering outside this accumulator"
+  ],
+  "hardConflictPredicates": [
+    "Any applicable settled volume can avoid the cumulative 0.1% platform liability",
+    "The platform recipient or rate can be redirected by a project authority",
+    "The adapter records a fee liability without backing or a bounded failure exit"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/zero-amm-fee-adapter/ZeroAmmFeeAccumulator.sol",
+      "targetPath": "implementation/zero-amm-fee-adapter/src/ZeroAmmFeeAccumulator.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "97066e0082b55d3e4b95b65ad652cb687398605e85990b2d9586230cd65d34fa"
+    }
+  ]
+}

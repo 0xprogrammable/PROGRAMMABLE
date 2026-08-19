@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "pinId": "TEST-ONLY-programmable-lifecycle-fixture",
+  "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+  "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+  "validFrom": "2026-01-01T00:00:00Z",
+  "validUntil": "2027-01-01T00:00:00Z",
+  "channels": [
+    "stable",
+    "canary"
+  ],
+  "minimumReleaseSequence": "1"
+}

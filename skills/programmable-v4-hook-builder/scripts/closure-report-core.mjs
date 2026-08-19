@@ -129,13 +129,52 @@ export function applyRepositoryClosureToReport(report, closure, { stage, runtime
     : findings.some(({ severity }) => severity === "blocker")
       ? "REDESIGN_REQUIRED"
       : "PROTOTYPE_READY";
+  const readiness = updateReadiness(report.readiness, { stage, findings, requiredGates });
   return {
     ...report,
     decision,
+    readiness,
+    intake: {
+      state: closure.status === "complete" ? "STRUCTURE_CHECKED" : "BLOCKED",
+      assurance: "static-structure-and-builder-declared-evidence-only"
+    },
     closure,
     ...(runtimeAssets === null ? {} : { runtimeAssets }),
     findings,
     requiredGates
+  };
+}
+
+function updateReadiness(previous, { stage, findings, requiredGates }) {
+  const hard = findings.some(({ severity }) => severity === "hard");
+  const blockers = findings.filter(({ severity }) => severity === "blocker");
+  const architectureReviewGateIds = requiredGates
+    .filter(({ id }) => id.includes("architecture-review"))
+    .map(({ id }) => id)
+    .sort(compareUtf8);
+  const priorDesign = isPlainObject(previous) && typeof previous.design === "string"
+    ? previous.design
+    : "DESIGN_CHANGES_REQUIRED";
+  const design = hard
+    ? "DESIGN_HARD_CONFLICT"
+    : priorDesign === "DESIGN_READY" && architectureReviewGateIds.length > 0
+      ? "DESIGN_REVIEW_REQUIRED"
+      : priorDesign;
+  const implementation = stage === "prototype"
+    ? blockers.length > 0 || hard
+      ? "IMPLEMENTATION_CHANGES_REQUIRED"
+      : "STRUCTURALLY_COMPLETE"
+    : isPlainObject(previous) && typeof previous.implementation === "string"
+      ? previous.implementation
+      : "NOT_STARTED";
+  return {
+    design,
+    implementation,
+    designBlockerCodes: isPlainObject(previous) && Array.isArray(previous.designBlockerCodes)
+      ? [...previous.designBlockerCodes]
+      : [],
+    implementationBlockerCodes: blockers.map(({ code }) => code).sort(compareUtf8),
+    architectureReviewGateIds
   };
 }
 

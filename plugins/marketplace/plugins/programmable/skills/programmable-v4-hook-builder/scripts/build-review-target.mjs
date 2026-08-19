@@ -6,6 +6,7 @@ import process from "node:process";
 import { parseCliOrExit } from "./cli-args.mjs";
 import { buildReviewTarget } from "./review-target-core.mjs";
 import { assertInsideRepository, resolveRepositoryRoot } from "./repository-root.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 const MAX_JSON_BYTES = 2_000_000;
 const { options, positionals } = parseCliOrExit({
@@ -40,7 +41,9 @@ try {
   const stat = fs.statSync(submissionPath);
   if (!stat.isFile()) throw new Error("submission.json is not a regular file");
   if (stat.size > MAX_JSON_BYTES) throw new Error(`submission.json exceeds ${MAX_JSON_BYTES} bytes`);
-  submission = JSON.parse(fs.readFileSync(submissionPath, "utf8"));
+  submission = parseBoundedStrictJsonBytes(fs.readFileSync(submissionPath), {
+    maxSourceBytes: MAX_JSON_BYTES
+  });
   target = buildReviewTarget({ repositoryRoot, packageRoot, submission });
 } catch (error) {
   fail(error.message);

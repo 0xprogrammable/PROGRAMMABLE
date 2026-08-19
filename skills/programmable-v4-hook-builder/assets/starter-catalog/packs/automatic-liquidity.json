@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "automatic-liquidity",
+  "label": "Hook-owned automatic liquidity",
+  "summary": "Convert hook-controlled proceeds into canonical-pool liquidity from custom hook callbacks under bounded execution and custody rules.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "automatic-liquidity",
+    "hook-owned-liquidity"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "keeper"
+  ],
+  "requiredFacts": [
+    "Hook-owned funding source, liability separation, threshold, cadence, slippage and deadline",
+    "Which authenticated hook path schedules or triggers execution and what happens when execution fails",
+    "Position ownership, fee ownership, custody, removal and emergency exit",
+    "Price-impact, sandwich and callback-recursion protections"
+  ],
+  "requiredFiles": [
+    "Liquidity execution source",
+    "Position custody policy",
+    "Keeper or trigger specification",
+    "Liquidity lifecycle tests"
+  ],
+  "requiredTests": [
+    "Threshold boundaries and repeated triggers",
+    "Slippage, deadline, zero-liquidity and adverse-price failures",
+    "Position creation, fee collection, removal and owner exits",
+    "Reentrancy, nested PoolManager actions and insolvency invariants"
+  ],
+  "risks": [
+    "Hook-controlled swaps can be sandwiched or recursively triggered",
+    "Unclear LP custody can strand or redirect value"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "v4-liquidity-position-client",
+  "label": "v4 liquidity position client",
+  "summary": "Plan a reviewed v4 pool and PositionManager client with exact ownership, fee collection, discovery and onchain reconciliation.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "standard-review",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "liquidity-position-client",
+    "position-discovery",
+    "position-fee-collection"
+  ],
+  "projectSurfaces": [
+    "application",
+    "indexer"
+  ],
+  "requiredFacts": [
+    "Exact v4 SDK, SDK Core, PositionManager deployment, package integrity, release gitHead and chain binding",
+    "Canonical PoolKey and PoolId construction, native-currency handling, tick range, slippage, deadline and recipient",
+    "Position NFT owner, approval, fee beneficiary, removal, lock, migration, rescue and emergency-exit authority",
+    "Position-id discovery source and onchain reconciliation of ownership, pool, ticks, liquidity, nonce and approvals",
+    "Initialize, explicit mint, explicit increase, decrease, burn and zero-liquidity fee-collection behavior with final token balances",
+    "Current periphery prohibition on MINT_POSITION_FROM_DELTAS and INCREASE_LIQUIDITY_FROM_DELTAS plus final action-byte or trace verification"
+  ],
+  "requiredFiles": [
+    "Liquidity client source using public package-root imports",
+    "Exact dependency and deployment lock",
+    "Position discovery and onchain reconciliation source",
+    "LP custody and fee-beneficiary disclosure",
+    "Executable liquidity integration tests"
+  ],
+  "requiredTests": [
+    "PoolKey sorting, PoolId derivation, native value, ERC-20 Permit2, refunds, deadlines and slippage",
+    "Mint and increase accounting including accrued-fee currency closure and actual final token requirements",
+    "Final action bytes and execution traces contain neither deprecated from-deltas liquidity action",
+    "Decrease, burn and collect-as-zero-liquidity-decrease with exact recipient and final balances",
+    "Indexer or subgraph omissions, stale ownership, reorgs, duplicate token ids and onchain reconciliation",
+    "Unauthorized approval, removal, migration, rescue, lock expiry, empty position and dependency outage"
+  ],
+  "risks": [
+    "PositionManager is not ERC721Enumerable, so an offchain discovery result can be incomplete or stale",
+    "Displayed principal changes can omit accrued fees or native and ERC-20 settlement effects",
+    "Deprecated from-deltas liquidity actions are sandwich-vulnerable because they lack minimum-liquidity protection",
+    "LP lock, ownership or fee-beneficiary claims can be false when removal, approval, rescue or migration authority remains"
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:upstream-reviewed-drift:1.0.0",
+  "title": "Programmable reviewed upstream drift receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "kind",
+    "receiptId",
+    "reviewedAt",
+    "sourceMap",
+    "testedBaseline",
+    "deploymentFeed",
+    "entries"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:upstream-reviewed-drift:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "kind": { "const": "programmable-upstream-reviewed-drift" },
+    "receiptId": { "type": "string", "pattern": "^upstream-drift-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+$" },
+    "reviewedAt": { "type": "string", "format": "date-time" },
+    "sourceMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "snapshotDate", "observedAt"],
+      "properties": {
+        "path": { "const": "references/upstream-sources.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "snapshotDate": { "type": "string", "format": "date" },
+        "observedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "testedBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "digestAlgorithm", "sha256", "bindings"],
+      "properties": {
+        "action": { "const": "unchanged" },
+        "digestAlgorithm": { "const": "sha256-canonical-json-v2" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/repositoryBinding" }
+        }
+      }
+    },
+    "deploymentFeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "name", "sha256", "sourceCommit"],
+      "properties": {
+        "action": { "const": "unchanged" },
+        "name": { "const": "Uniswap Deployments Feed" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceCommit": { "$ref": "#/$defs/commit" }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "repositoryBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "repository", "commit"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\.git$" },
+        "commit": { "$ref": "#/$defs/commit" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "repository",
+        "trackedRef",
+        "fromCommit",
+        "toCommit",
+        "commitTimestamp",
+        "changedFiles",
+        "impact",
+        "adoptedGuidance",
+        "testedBaselineAction",
+        "compatibilitySetAction"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\.git$" },
+        "trackedRef": { "type": "string", "pattern": "^refs/heads/[A-Za-z0-9._/-]+$" },
+        "fromCommit": { "$ref": "#/$defs/commit" },
+        "toCommit": { "$ref": "#/$defs/commit" },
+        "commitTimestamp": { "type": "string", "format": "date-time" },
+        "changedFiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[^/\\\\][^\\\\]*$" }
+        },
+        "impact": { "type": "string", "minLength": 20 },
+        "adoptedGuidance": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?:SKILL\\.md|references/[A-Za-z0-9._/-]+|assets/[A-Za-z0-9._/-]+)$" }
+        },
+        "testedBaselineAction": { "const": "unchanged-observed-only" },
+        "compatibilitySetAction": { "const": "none-not-resolved" }
+      }
+    }
+  }
+}

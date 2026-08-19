@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "mev-protection",
+  "label": "MEV protection",
+  "summary": "Define a specific adversary, protected flow and failure policy for hook-enforced ordering or execution controls.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "mev-protection",
+    "protected-ordering"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "service"
+  ],
+  "requiredFacts": [
+    "Exact MEV adversary and protected user harm: sandwich, backrun, frontrun, censorship, last look or another named threat",
+    "Protection mechanism, trust assumptions, ordering source, expiry and behavior when protection is unavailable",
+    "Which traders, routers, order sources and swap paths receive or bypass protection",
+    "Price, slippage, fee, refund and revert policy for protected and unprotected execution",
+    "Operator, signer, sequencer, relayer or service authority and compromise recovery"
+  ],
+  "requiredFiles": [
+    "MEV threat and mechanism specification",
+    "Protection hook source",
+    "Trusted service or ordering policy",
+    "Bypass and outage disclosure",
+    "Adversarial execution traces"
+  ],
+  "requiredTests": [
+    "Named attacker simulations with measurable protected-user outcomes",
+    "Protection unavailable, stale, censored, reordered, duplicated and bypassed behavior",
+    "Router, direct PoolManager and unsupported order-source paths",
+    "Price, slippage, fee, refund and revert conservation",
+    "Operator or signer compromise, rotation and permissionless exit"
+  ],
+  "risks": [
+    "A vague MEV claim can imply protection that the mechanism does not provide",
+    "Trusted ordering or private flow can introduce censorship, leakage or operator extraction",
+    "Protection rules can block compatible routers or create denial of service"
+  ]
+}

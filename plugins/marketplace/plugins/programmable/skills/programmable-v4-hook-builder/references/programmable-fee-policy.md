@@ -1,8 +1,8 @@
 # Mandatory Programmable volume fee
 
-Policy id: `programmable-volume-fee-v1`  
-Policy version: `1.0.0`  
-Builder release: `programmable-v4-builder-v0.2.1`
+Policy id: `programmable-volume-fee-v1`
+Policy version: `1.1.0`
+Builder candidate: `v0.5.1` (policy unchanged from released `v0.4.0`)
 
 Apply this policy to every new Programmable launch application. Builder releases `v0.1.1` and `v0.2.0` remain
 reproducible for earlier review records, but they are not the current release for a new launch application.
@@ -20,7 +20,7 @@ Measure rates in hundredths of a basis point:
 1,000 hundredths of a bip = 10 bps = 0.10%
 ```
 
-For the project-selected total swap charge `selected`:
+For each independently selected buy or sell total swap charge `selected`:
 
 ```text
 effective = max(selected, 1,000)
@@ -28,7 +28,9 @@ Programmable = 1,000
 project = effective - 1,000
 ```
 
-Treat `selected` as the total hook-owned swap charge, not as an amount to which the Programmable charge is added.
+Treat each side's `selected` as the total hook-owned swap charge, not as an amount to which the Programmable charge is added.
+Buy and sell may use different selected totals, but both sides apply the same minimum and immutable Programmable share.
+The standard kernel accepts at most `100,000` hundredths of a bip (`10%`) on either side; larger declarations are invalid.
 Examples:
 
 | Selected total | Effective total | Programmable | Project |
@@ -47,15 +49,19 @@ surcharge, app payment, donation, or fee on an alternative pool cannot satisfy i
 Accrue the charge on every successful swap of the one canonical Programmable `PoolKey`. Use the executed gross
 quote-side swap volume as the basis, denominated in the canonical pool's quote asset:
 
-- cover token-to-quote and quote-to-token swaps;
-- cover exact-input and exact-output modes;
+- charge every supported successful token-to-quote and quote-to-token swap;
+- classify exact-input and exact-output in both directions as supported-and-charged or unsupported-and-rejected before
+  value, state, liability, quote, router, or UI movement;
 - use the actually executed amount after partial-fill behavior, never the requested amount;
 - measure the gross quote-side amount before deducting the Programmable and project portions; and
 - keep alternative pools outside this policy rather than claiming that they inherit it.
 
 Bind the fee to the canonical pool inside hook execution. Router-only enforcement is bypassable and is not
-launch-ready. Declare rounding, zero/dust treatment, supported swap modes, collection event, claim event, and
-reconciliation behavior without changing the rate or basis.
+launch-ready. Policy `1.1.0` requires independent cumulative platform and project remainders for the lifetime of the
+canonical pool. Claims must not reset them. This closes the split-swap bypass in which per-swap flooring could suppress
+the platform entitlement. A positive gross quote amount below 1,000 smallest quote-asset units must revert atomically
+in the standard profile; materially coarse quote assets need a separately reviewed architecture. Declare supported swap
+modes, collection event, claim event, and reconciliation behavior without changing the rate or basis.
 
 Use quadrant-dependent swap return deltas. The quote asset may be the swap's specified currency, available before the
 core swap, or its unspecified currency, known from executed results after the core swap. Declare
@@ -123,16 +129,19 @@ may remain `null` or pending where the schema permits. A prototype must be fully
 ```json
 {
   "policyId": "programmable-volume-fee-v1",
-  "policyVersion": "1.0.0",
+  "policyVersion": "1.1.0",
   "poolScope": "canonical-launch-pool-key",
   "rates": {
     "unit": "hundredths-of-bip",
-    "selectedHundredthsOfBip": null,
+    "selectedBuyHundredthsOfBip": null,
+    "selectedSellHundredthsOfBip": null,
     "minimumEffectiveHundredthsOfBip": 1000,
-    "effectiveHundredthsOfBip": null,
+    "effectiveBuyHundredthsOfBip": null,
+    "effectiveSellHundredthsOfBip": null,
     "platformHundredthsOfBip": 1000,
-    "projectHundredthsOfBip": null,
-    "formula": "effective=max(selected,1000);platform=1000;project=effective-1000",
+    "projectBuyHundredthsOfBip": null,
+    "projectSellHundredthsOfBip": null,
+    "formula": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
     "lpFeeExcluded": true
   },
   "basis": {
@@ -168,6 +177,11 @@ may remain `null` or pending where the schema permits. A prototype must be fully
     "accrualMode": "claimable-liability",
     "liabilityKeyDimensions": ["poolId", "currency", "owner"],
     "crossPoolNetting": false,
+    "roundingPolicy": "cumulative-independent-platform-project-remainders",
+    "remainderScope": "canonical-pool-lifetime",
+    "claimResetsRemainders": false,
+    "minimumGrossQuoteUnits": 1000,
+    "fragmentationResistant": true,
     "valueFlowId": null,
     "collectionEvent": null,
     "claimEvent": null
@@ -180,24 +194,31 @@ may remain `null` or pending where the schema permits. A prototype must be fully
 ```
 
 Use `collection.status: implemented` only when the exact source and tests prove the canonical-pool hook integration.
-Populate all four supported swap modes, the value-flow id, events, and evidence paths for a prototype.
+Classify all four swap quadrants, populate every supported swap mode, and bind each unsupported mode to an executable
+pre-movement rejection test. Also populate the value-flow id, events, and evidence paths for a prototype.
 
 ## Minimum evidence
 
 Require executable tests that prove:
 
-1. selected totals of zero, below 10 bps, exactly 10 bps, and above 10 bps;
+1. independent buy and sell selected totals of zero, below 10 bps, exactly 10 bps, above 10 bps, and the exact 10% maximum;
 2. the `3% -> 0.1% + 2.9%` non-additive example;
-3. all four direction and exactness modes on the canonical PoolKey;
+3. all four direction and exactness quadrants on the canonical PoolKey as supported-and-charged or
+   unsupported-and-pre-movement-rejected;
 4. actual executed gross quote volume after partial fills is the basis;
-5. LP fees, token taxes, router paths, donations, and alternative pools cannot satisfy or bypass the policy;
+5. LP fees, token taxes, router paths, donations, and alternative pools cannot satisfy or bypass the policy; the
+   standard profile also rejects static LP fees above 999,998 pips so the maximum v4 protocol fee cannot disable exact
+   output;
 6. quadrant-dependent before/after paths match the declared quote asset and same-pool self-calls are forbidden or
    charged through a source- and test-proven internal path;
 7. only the immutable owner can claim, including an owner-selected destination on each claim;
 8. builder, project, administrator, recipient, and arbitrary callers cannot claim or mutate the owner;
 9. no stored mutable recipient or rescue path redirects the platform liability;
 10. liabilities remain solvent, pool-scoped, currency-scoped, owner-scoped, and never cross-pool netted; and
-11. collection and claim events reconcile exactly with balances and liabilities under the declared rounding rule.
+11. cumulative platform and project remainders make split and unsplit accepted volume produce the same lifetime
+    entitlement for each stream, while claims leave both remainders unchanged;
+12. a positive gross quote amount below 1,000 smallest units reverts atomically in the standard profile; and
+13. collection and claim events reconcile exactly with balances and liabilities under the declared rounding rule.
 
 Local checks show only that the declared package and tested implementation satisfy known rules. Do not claim live fee
 collection until maintainers review the exact source, authorize and record deployment, match runtime bytecode, exercise

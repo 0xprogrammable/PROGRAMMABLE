@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:source-closure-manifest:1.0.0",
+  "title": "Programmable source closure manifest v1",
+  "description": "Content-addressed root manifest for an arbitrarily large, Git-bound source closure. The root binds ordered external fragments; each canonical JSON Lines entry is validated against #/$defs/sourceEntry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "repository",
+    "ordering",
+    "fragmentEncoding",
+    "entrySchemaId",
+    "entryCount",
+    "fragmentCount",
+    "closureSha256",
+    "fragments"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "repository": {
+      "$ref": "#/$defs/repository"
+    },
+    "ordering": {
+      "const": "repository-path-utf8-bytewise-ascending"
+    },
+    "fragmentEncoding": {
+      "const": "canonical-json-lines-v1",
+      "description": "Each fragment is the exact UTF-8 concatenation of canonicalJson(sourceEntry) plus one LF per entry. BOM, CRLF, blank lines, trailing spaces, and a missing final LF are invalid."
+    },
+    "entrySchemaId": {
+      "const": "urn:programmable:source-closure-manifest:1.0.0#/$defs/sourceEntry"
+    },
+    "entryCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fragmentCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "closureSha256": {
+      "$ref": "#/$defs/sha256",
+      "description": "SHA-256 of the exact raw fragment bytes concatenated in contiguous sequence order."
+    },
+    "fragments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/fragmentBinding"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*\\\\)(?!.*(?:%2[fF]|%5[cC]))(?!.*\\/$)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]+$"
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numericRepositoryId",
+        "repositoryUri"
+      ],
+      "properties": {
+        "numericRepositoryId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,63}$"
+        },
+        "repositoryUri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^https://github\\.com/(?![^/]*--)[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?/(?!\\.{1,2}$)(?!.*\\.git$)(?=[a-z0-9._-]*[a-z0-9])[a-z0-9._-]{1,100}$"
+        }
+      }
+    },
+    "fragmentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "path",
+        "sha256",
+        "byteLength",
+        "blobObjectId",
+        "entryCount",
+        "firstPath",
+        "lastPath"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "blobObjectId": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "entryCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "firstPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "lastPath": {
+          "$ref": "#/$defs/repositoryPath"
+        }
+      }
+    },
+    "sourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "gitMode",
+        "blobObjectId",
+        "byteLength",
+        "sha256",
+        "roleIds"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "gitMode": {
+          "enum": [
+            "100644",
+            "100755",
+            "120000"
+          ],
+          "description": "Mode 120000 binds the symlink blob bytes only. Verifiers never follow the target; target behavior remains a separate review item."
+        },
+        "blobObjectId": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "roleIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Role IDs are a non-empty set serialized in strict UTF-8 bytewise ascending order so independent generators produce identical canonical JSONL bytes.",
+          "items": {
+            "$ref": "#/$defs/slug"
+          }
+        }
+      }
+    }
+  }
+}

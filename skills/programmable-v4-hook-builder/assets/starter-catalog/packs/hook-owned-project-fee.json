@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "hook-owned-project-fee",
+  "label": "Hook-owned project fee",
+  "summary": "Add a disclosed project share inside the same effective total fee as the Programmable share.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "custom-hook-behavior",
+    "programmable-volume-fee"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "claimable-project-fee",
+    "quote-side-volume-accounting"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Selected total fee and the exact non-additive platform and project split",
+    "Project beneficiary, mutation rules, liability keys and claim behavior",
+    "Executed gross quote-side basis, rounding and partial-fill behavior",
+    "Public fee disclosure for every trading surface"
+  ],
+  "requiredFiles": [
+    "Integrated fee-hook source",
+    "Project beneficiary policy",
+    "Accounting and claim tests",
+    "Public fee disclosure"
+  ],
+  "requiredTests": [
+    "Project share is zero at the 10-basis-point floor",
+    "Higher selected totals split without adding another 10 basis points",
+    "Beneficiary mutation cannot redirect the platform share",
+    "Solvency, claims and pool isolation"
+  ],
+  "risks": [
+    "Additive implementation would charge more than the selected total",
+    "Mutable recipients can create undisclosed payout control"
+  ]
+}

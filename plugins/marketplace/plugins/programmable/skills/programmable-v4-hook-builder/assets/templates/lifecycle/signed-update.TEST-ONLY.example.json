@@ -1,0 +1,66 @@
+{
+  "payload": {
+    "schemaVersion": "1.0.0",
+    "releaseSequence": "2",
+    "channel": "stable",
+    "releaseVersion": "0.3.0",
+    "minimumInstalledVersion": "0.2.1",
+    "releasedAt": "2026-08-03T08:00:00Z",
+    "validUntil": "2026-08-10T00:00:00Z",
+    "standards": {
+      "skill": "0.3.0",
+      "engine": "0.3.0",
+      "policy": "1.0.0",
+      "schema": "1.0.0",
+      "submission": "1.4.0"
+    },
+    "migration": {
+      "required": true,
+      "fromStandard": "1.3.0",
+      "toStandard": "1.4.0",
+      "majorConsentRequired": false
+    },
+    "artifacts": [
+      {
+        "id": "builder-skill-fixture",
+        "bytes": 1234,
+        "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "id": "deterministic-engine-fixture",
+        "bytes": 5678,
+        "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ],
+    "evidence": {
+      "checksums": {
+        "status": "complete",
+        "path": "fixtures/not-real/checksums.json",
+        "evidenceSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "sbom": {
+        "status": "complete",
+        "path": "fixtures/not-real/sbom.json",
+        "evidenceSha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "evals": {
+        "status": "complete",
+        "path": "fixtures/not-real/evals.json",
+        "evidenceSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "canary": {
+        "status": "complete",
+        "path": "fixtures/not-real/canary.json",
+        "evidenceSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+    "issuedAt": "2026-08-03T08:00:00Z",
+    "validUntil": "2026-08-10T00:00:00Z",
+    "payloadSha256": "sha256:8f4651cc2778bf001274fe1c37983fd77f70fac9d6d2fe96dc367d6202b36f00",
+    "signature": "XPZRUyC5crPPCz8YT5RtvNPlKAT4Y13W7fA_0GwpurC-TfA1DiTKF-2dQ5dPFtJXZrM-aCwtDlpu1MAMvHjKCQ"
+  }
+}

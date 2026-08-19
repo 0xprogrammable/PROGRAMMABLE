@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:project-spec:1.0.0",
+  "title": "Programmable open-world ProjectSpec",
+  "description": "A complete product-intent contract. Every required product facet is explicit and every statement carries provenance bound to the preserved verbatim intent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "applicationId", "revision", "intent", "facets", "extensions"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+    "intent": { "$ref": "#/$defs/intent" },
+    "facets": { "$ref": "#/$defs/facets" },
+    "extensions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/extension" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encoding", "verbatimText", "byteLength", "sha256"],
+      "properties": {
+        "encoding": { "const": "utf-8" },
+        "verbatimText": { "type": "string", "minLength": 1, "maxLength": 1000000 },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 4194304 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startByte", "endByte", "sha256"],
+      "properties": {
+        "startByte": { "type": "integer", "minimum": 0, "maximum": 4194304 },
+        "endByte": { "type": "integer", "minimum": 1, "maximum": 4194304 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "facetEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "applicability",
+        "statement",
+        "provenance",
+        "sourceSpans",
+        "rationale",
+        "ownerQuestion",
+        "externalDependencyRefs",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "$ref": "#/$defs/slug",
+          "description": "Open semantic kind. Novel product behavior is preserved rather than mapped to a closed category."
+        },
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "provenance": {
+          "enum": ["confirmed", "builder-assumption", "owner-required", "external-unresolved"]
+        },
+        "sourceSpans": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/sourceSpan" }
+        },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "ownerQuestion": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 2000 },
+            { "type": "null" }
+          ]
+        },
+        "externalDependencyRefs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provenance": { "const": "confirmed" } },
+            "required": ["provenance"]
+          },
+          "then": { "properties": { "sourceSpans": { "minItems": 1 } } }
+        },
+        {
+          "if": {
+            "properties": { "provenance": { "const": "owner-required" } },
+            "required": ["provenance"]
+          },
+          "then": { "properties": { "ownerQuestion": { "type": "string" } } }
+        },
+        {
+          "if": {
+            "properties": { "provenance": { "const": "external-unresolved" } },
+            "required": ["provenance"]
+          },
+          "then": { "properties": { "externalDependencyRefs": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "facet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "summary", "entries"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/facetEntry" }
+        }
+      }
+    },
+    "routingFacet": {
+      "allOf": [
+        { "$ref": "#/$defs/facet" },
+        {
+          "properties": {
+            "entries": {
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "allOf": [
+                  { "$ref": "#/$defs/facetEntry" },
+                  { "properties": { "kind": { "const": "trade-capability" } } }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "applicability": { "const": "applicable" } }, "required": ["applicability"] },
+          "then": { "properties": { "entries": { "items": { "properties": { "applicability": { "const": "applicable" } } } } } }
+        },
+        {
+          "if": { "properties": { "applicability": { "const": "not-applicable" } }, "required": ["applicability"] },
+          "then": { "properties": { "entries": { "items": { "properties": { "applicability": { "const": "not-applicable" } } } } } }
+        },
+        {
+          "if": { "properties": { "applicability": { "const": "unresolved" } }, "required": ["applicability"] },
+          "then": { "properties": { "entries": { "items": { "properties": { "applicability": { "const": "unresolved" } } } } } }
+        }
+      ]
+    },
+    "facets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userExperience",
+        "rolesAndActors",
+        "assetsAndOwnership",
+        "intendedGainsAndLosses",
+        "priceAndMarketMechanics",
+        "valueFlow",
+        "custody",
+        "lifecycle",
+        "feesAndRecipients",
+        "parameters",
+        "authorityAndGovernance",
+        "externalProtocols",
+        "oracles",
+        "keepers",
+        "bridges",
+        "gameServersAndServices",
+        "failureAndRecovery",
+        "chains",
+        "routing",
+        "indexing",
+        "frontend",
+        "assumptions",
+        "ownerDecisions"
+      ],
+      "properties": {
+        "userExperience": { "$ref": "#/$defs/facet" },
+        "rolesAndActors": { "$ref": "#/$defs/facet" },
+        "assetsAndOwnership": { "$ref": "#/$defs/facet" },
+        "intendedGainsAndLosses": { "$ref": "#/$defs/facet" },
+        "priceAndMarketMechanics": { "$ref": "#/$defs/facet" },
+        "valueFlow": { "$ref": "#/$defs/facet" },
+        "custody": { "$ref": "#/$defs/facet" },
+        "lifecycle": { "$ref": "#/$defs/facet" },
+        "feesAndRecipients": { "$ref": "#/$defs/facet" },
+        "parameters": { "$ref": "#/$defs/facet" },
+        "authorityAndGovernance": { "$ref": "#/$defs/facet" },
+        "externalProtocols": { "$ref": "#/$defs/facet" },
+        "oracles": { "$ref": "#/$defs/facet" },
+        "keepers": { "$ref": "#/$defs/facet" },
+        "bridges": { "$ref": "#/$defs/facet" },
+        "gameServersAndServices": { "$ref": "#/$defs/facet" },
+        "failureAndRecovery": { "$ref": "#/$defs/facet" },
+        "chains": { "$ref": "#/$defs/facet" },
+        "routing": {
+          "$ref": "#/$defs/routingFacet",
+          "description": "Must contain exactly one trade-capability entry. Its applicability is applicable for a market, not-applicable for an explicit no-market product, or unresolved when the material market decision is still open."
+        },
+        "indexing": { "$ref": "#/$defs/facet" },
+        "frontend": { "$ref": "#/$defs/facet" },
+        "assumptions": { "$ref": "#/$defs/facet" },
+        "ownerDecisions": { "$ref": "#/$defs/facet" }
+      }
+    },
+    "schemaBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaId", "path", "sha256", "byteLength"],
+      "properties": {
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 4194304 }
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "statement", "provenance", "schemaBinding", "payload"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug" },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "provenance": {
+          "enum": ["confirmed", "builder-assumption", "owner-required", "external-unresolved"]
+        },
+        "schemaBinding": { "$ref": "#/$defs/schemaBinding" },
+        "payload": {
+          "description": "Declarative JSON validated against the exact repository schema binding by the project compiler."
+        }
+      }
+    }
+  }
+}

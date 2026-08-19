@@ -7,11 +7,18 @@ on:
   pull_request:
     paths:
       - "src/**"
+      - "deployment/router-v4/**"
+      - "artifacts/router-v4-deployment-v1/**"
       - "test/ClassicV3MainnetFork.t.sol"
+      - "test/ProgrammableLaunchStampRouterV2*.t.sol"
       - "deployments/**"
       - "models/**"
       - "releases/**"
       - "scripts/verify-mainnet-bytecode.sh"
+      - "scripts/generate-router-v4-deployment-artifact.mjs"
+      - "scripts/generate-router-v4-owner-payloads.py"
+      - "scripts/verify-router-v4-cold-outer-transactions.sh"
+      - "scripts/verify-router-v4-deployment-v1.sh"
       - ".github/workflows/mainnet-evidence.yml"
 
 permissions:
@@ -33,7 +40,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
-          version: stable
+          version: v1.7.1
 
       - name: Bootstrap pinned dependencies
         run: ./scripts/bootstrap-deps.sh
@@ -44,13 +51,63 @@ jobs:
         run: ./scripts/verify-mainnet-bytecode.sh
 
       - name: Run Classic lifecycle fork test
+        shell: bash
         run: |
-          for rpc_url in https://rpc.flashbots.net https://eth.drpc.org; do
-            for attempt in 1 2; do
+          set -euo pipefail
+          for rpc_url in \
+            https://rpc.flashbots.net \
+            https://eth.drpc.org \
+            https://mainnet.gateway.tenderly.co; do
+            for attempt in 1 2 3; do
               echo "Fork attempt ${attempt} with ${rpc_url}"
               if ETHEREUM_RPC_URL="${rpc_url}" forge test --match-contract ClassicV3MainnetForkTest; then
                 exit 0
               fi
+              sleep $((attempt * 3))
+            done
+          done
+          exit 1
+
+      - name: Run exact Router V2 Mainnet fork tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rpc_url in \
+            https://rpc.flashbots.net \
+            https://eth.drpc.org \
+            https://mainnet.gateway.tenderly.co; do
+            for attempt in 1 2 3; do
+              echo "Router V2 fork attempt ${attempt} with ${rpc_url}"
+              if ETHEREUM_RPC_URL="${rpc_url}" FOUNDRY_FUZZ_RUNS=1000 forge test \
+                --match-path 'test/ProgrammableLaunchStampRouterV2*.t.sol' \
+                --fuzz-seed 0x7368617264732d726f757465722d7632; then
+                exit 0
+              fi
+              sleep $((attempt * 3))
+            done
+          done
+          exit 1
+
+      - name: Run exact Router V4 dual-profile Mainnet fork tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rpc_url in \
+            https://rpc.flashbots.net \
+            https://eth.drpc.org \
+            https://mainnet.gateway.tenderly.co; do
+            for attempt in 1 2 3; do
+              echo "Router V4 fork attempt ${attempt} with ${rpc_url}"
+              if (
+                cd deployment/router-v4
+                ETHEREUM_RPC_URL="${rpc_url}" forge test \
+                  --match-path test/ProgrammableExactShardsNestedFactoryFork.t.sol
+                ETHEREUM_RPC_URL="${rpc_url}" forge test \
+                  --match-path test/ProgrammableRouterDeploymentMainnetFork.t.sol
+              ); then
+                exit 0
+              fi
+              sleep $((attempt * 3))
             done
           done
           exit 1

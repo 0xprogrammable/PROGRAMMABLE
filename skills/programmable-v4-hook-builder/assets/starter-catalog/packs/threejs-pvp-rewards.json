@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "threejs-pvp-rewards",
+  "label": "Three.js PvP rewards",
+  "summary": "Connect a browser PvP game to bounded token rewards without trusting a client-reported winner.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "browser-game",
+    "game-outcome-rewards",
+    "threejs"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "game"
+  ],
+  "requiredFacts": [
+    "Round identity, participants, win condition, payout formula and maximum loss",
+    "Chosen authoritative outcome architecture and why the browser cannot self-award",
+    "Whether the outcome is proven onchain, with zero knowledge, by an attester, or by a signed service",
+    "Replay, duplicate kill, draw, disconnect, timeout and dispute behavior",
+    "Sybil, collusion, botting, signer compromise and rate-limit controls"
+  ],
+  "requiredFiles": [
+    "Three.js client source",
+    "Game server or verifier source",
+    "Outcome schema and signer policy",
+    "Reward contract source",
+    "Game and payout tests"
+  ],
+  "requiredTests": [
+    "No client-only reward authority",
+    "Replay, duplicate outcome and cross-round rejection",
+    "Simultaneous kill, draw, disconnect and expiry handling",
+    "Payout cap, solvency, collusion and signer-rotation scenarios"
+  ],
+  "risks": [
+    "Client authority enables forged wins",
+    "Sybil or collusion can drain a reward pool",
+    "Ambiguous round finality can pay twice"
+  ]
+}

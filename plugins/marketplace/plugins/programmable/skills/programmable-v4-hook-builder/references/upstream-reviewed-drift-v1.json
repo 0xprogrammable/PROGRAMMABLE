@@ -1,0 +1,237 @@
+{
+  "$schema": "urn:programmable:upstream-reviewed-drift:1.0.0",
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-upstream-reviewed-drift",
+  "receiptId": "upstream-drift-2026-08-03-launchpad-discovery",
+  "reviewedAt": "2026-08-03T22:10:41Z",
+  "sourceMap": {
+    "path": "references/upstream-sources.json",
+    "sha256": "sha256:8c16c5ac6e707457822405e2b432f678f34bcd8557c3c9e1322f86b84464cd06",
+    "snapshotDate": "2026-08-01",
+    "observedAt": "2026-08-03T22:10:41Z"
+  },
+  "testedBaseline": {
+    "action": "unchanged",
+    "digestAlgorithm": "sha256-canonical-json-v2",
+    "sha256": "sha256:e581728eef7e4a8b9db1814f76188c8d42917cad09650f7046d45b485585ad9d",
+    "bindings": [
+      {
+        "name": "Uniswap v4 Core",
+        "repository": "https://github.com/Uniswap/v4-core.git",
+        "commit": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
+      },
+      {
+        "name": "Uniswap v4 Periphery",
+        "repository": "https://github.com/Uniswap/v4-periphery.git",
+        "commit": "ad04c9f24a170accf5ea1b2836bbafd514537ca6"
+      },
+      {
+        "name": "Uniswap Liquidity Launcher",
+        "repository": "https://github.com/Uniswap/liquidity-launcher.git",
+        "commit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f"
+      },
+      {
+        "name": "Uniswap UERC20 Factory",
+        "repository": "https://github.com/Uniswap/uerc20-factory.git",
+        "commit": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68"
+      },
+      {
+        "name": "OpenZeppelin Uniswap Hooks",
+        "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+        "commit": "26dc8e53f812a1ca390d470342adb6cd8c3286ad"
+      },
+      {
+        "name": "OpenZeppelin Contracts",
+        "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
+        "commit": "21c8312b022f495ebe3621d5daeed20552b43ff9"
+      },
+      {
+        "name": "Permit2",
+        "repository": "https://github.com/Uniswap/permit2.git",
+        "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+      },
+      {
+        "name": "Forge Standard Library",
+        "repository": "https://github.com/foundry-rs/forge-std.git",
+        "commit": "3b20d60d14b343ee4f908cb8079495c07f5e8981"
+      }
+    ]
+  },
+  "deploymentFeed": {
+    "action": "unchanged",
+    "name": "Uniswap Deployments Feed",
+    "sha256": "225d2c77b3b53a9c9c1a8663359577bd1f52ed0c139e10e7ee846687959282d2",
+    "sourceCommit": "37936185dee7decf681360ec799c124e0e034672"
+  },
+  "entries": [
+    {
+      "name": "Uniswap AI Toolkit",
+      "repository": "https://github.com/Uniswap/ai-toolkit.git",
+      "trackedRef": "refs/heads/next",
+      "fromCommit": "9b405c71e42d0cec4026f2c158edf99716600baa",
+      "toCommit": "f0812c1d0a52ef4bcbda873d2e7eefa374a3fcf6",
+      "commitTimestamp": "2026-08-03T19:51:53Z",
+      "changedFiles": [
+        ".github/REUSABLE_WORKFLOWS.md",
+        ".github/workflows/CLAUDE.md",
+        ".github/workflows/README.md",
+        ".github/workflows/_claude-main.yml",
+        ".github/workflows/_claude-task-worker.yml",
+        ".github/workflows/_generate-pr-metadata.yml",
+        ".github/workflows/claude-auto-tasks.yml",
+        ".github/workflows/dev-ai-newsletter.yml",
+        ".github/workflows/examples/06-claude-main-basic.yml",
+        ".github/workflows/examples/07-claude-main-custom.yml",
+        ".github/workflows/examples/10-claude-code-review-advanced.yml",
+        ".github/workflows/examples/11-autonomous-linear-tasks.yml",
+        ".github/workflows/update-action-versions.yml",
+        "CLAUDE.md",
+        "docs/guides/autonomous-claude-tasks.md",
+        "packages/ai-toolkit-nx-claude/package.json",
+        "packages/claude-mcp-helper/package.json",
+        "packages/linear-task-utils/package.json",
+        "packages/linear-task-utils/src/version.ts",
+        "packages/notion-publisher/package.json",
+        "packages/plugins/development-codebase-tools/.claude-plugin/plugin.json",
+        "packages/plugins/development-codebase-tools/agents/agent-orchestrator.md",
+        "packages/plugins/development-codebase-tools/agents/refactorer.md",
+        "packages/plugins/development-codebase-tools/skills/refactor-code/SKILL.md",
+        "packages/plugins/development-planning/.claude-plugin/plugin.json",
+        "packages/plugins/development-planning/agents/execute-plan.md",
+        "packages/plugins/development-planning/agents/planner.md",
+        "packages/plugins/development-planning/skills/execute-plan/SKILL.md",
+        "packages/plugins/development-pr-workflow/.claude-plugin/plugin.json",
+        "packages/plugins/development-pr-workflow/CLAUDE.md",
+        "packages/plugins/development-pr-workflow/README.md",
+        "packages/plugins/development-pr-workflow/commands/backtest-change.md",
+        "packages/plugins/development-pr-workflow/skills/backtest-change/SKILL.md"
+      ],
+      "impact": "General agent workflow, release and plugin guidance changed; no protocol-specific v4 guidance changed.",
+      "adoptedGuidance": ["references/upstream-sources.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    },
+    {
+      "name": "Uniswap Contracts Deployment Registry",
+      "repository": "https://github.com/Uniswap/contracts.git",
+      "trackedRef": "refs/heads/main",
+      "fromCommit": "580e74a1e1bced14c09ab66f9e6d7e3ebdd61ac4",
+      "toCommit": "0ecb1fcaed7cf36b3f33524e09c07efe5387f9b5",
+      "commitTimestamp": "2026-08-03T20:43:13Z",
+      "changedFiles": [
+        "src/pkgs/universal-router",
+        "src/pkgs/v4-periphery"
+      ],
+      "impact": "Only two repository gitlinks advanced; this is not a deployment update or a resolved compatibility set.",
+      "adoptedGuidance": ["references/official-model-patterns.md", "references/upstream-sources.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    },
+    {
+      "name": "Uniswap Hooklist",
+      "repository": "https://github.com/Uniswap/hooklist.git",
+      "trackedRef": "refs/heads/main",
+      "fromCommit": "8488c73fd6042a0d37b3312e9f9b74e8d5ced71d",
+      "toCommit": "43ca58a8ca62bb950a1b1f01ef23929bd86b8943",
+      "commitTimestamp": "2026-08-03T17:36:06Z",
+      "changedFiles": [
+        "hooklist.json",
+        "hooks/bnb/0x8bab0d3049b6d5d17b36d3263786fe587a9d00c4.json",
+        "hooks/ethereum/0x276223c8658b08937a937b711ce38e1715da0080.json",
+        "hooks/ethereum/0xfe36b48c9c0240991e4cef006a2445f2ff524888.json",
+        "hooks/robinhood/0x625591a8aba062e93e8547be32ea5c6abd8900cc.json"
+      ],
+      "impact": "Registry discovery data changed; inclusion remains neither audit, approval, endorsement nor routing evidence.",
+      "adoptedGuidance": ["references/official-model-patterns.md", "references/routing-and-discovery.md", "references/upstream-sources.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    },
+    {
+      "name": "Uniswap UniRoute Public",
+      "repository": "https://github.com/Uniswap/uniroute-public.git",
+      "trackedRef": "refs/heads/main",
+      "fromCommit": "2cf851e7bb5ed0e722da9edc027aeeafae525f38",
+      "toCommit": "0e002a0bcb35624df416a9bba7705aef66eb2c52",
+      "commitTimestamp": "2026-08-03T21:51:38Z",
+      "changedFiles": [
+        "src/lib/poolCaching/auroraPoolsSource.test.ts",
+        "src/lib/poolCaching/auroraPoolsSource.ts"
+      ],
+      "impact": "Robinhood-V4 pool caching can apply a capped one-hop spot-derived TVL top-up to one unpriced side and report servable parity; this is neither Ethereum nor hosted routing evidence.",
+      "adoptedGuidance": ["references/official-model-patterns.md", "references/routing-and-discovery.md", "references/upstream-sources.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    },
+    {
+      "name": "Uniswap AI",
+      "repository": "https://github.com/Uniswap/uniswap-ai.git",
+      "trackedRef": "refs/heads/main",
+      "fromCommit": "9660491dc662fea76c2f8565c2f7ba2abf6e8840",
+      "toCommit": "86820b932572c4f6dd70116061bc6d67680bd108",
+      "commitTimestamp": "2026-08-03T20:17:45Z",
+      "changedFiles": [
+        ".claude/review-context.md",
+        ".claude/review.yml",
+        ".github/workflows/CLAUDE.md",
+        ".github/workflows/claude-code-review.yml"
+      ],
+      "impact": "Repository review automation changed while all eight historically receipted evaluation source blobs stayed unchanged.",
+      "adoptedGuidance": ["references/upstream-sources.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    },
+    {
+      "name": "Uniswap Universal Router",
+      "repository": "https://github.com/Uniswap/universal-router.git",
+      "trackedRef": "refs/heads/main",
+      "fromCommit": "9e9a780a3c17b61fc78a1a73c85684859dda1bad",
+      "toCommit": "d203e7f5525aeae385800f9490b93886711701df",
+      "commitTimestamp": "2026-08-03T20:28:06Z",
+      "changedFiles": [
+        "README.md",
+        "contracts/base/Dispatcher.sol",
+        "contracts/interfaces/IUniversalRouter.sol",
+        "contracts/libraries/Commands.sol",
+        "contracts/modules/Payments.sol",
+        "contracts/modules/V3ToV4Migrator.sol",
+        "contracts/modules/uniswap/v3/BytesLib.sol",
+        "snapshots/UniversalRouterTest.json",
+        "test/foundry-tests/RouteSigner.t.sol",
+        "test/foundry-tests/UniversalRouter.t.sol",
+        "test/integration-tests/UniversalRouter.test.ts",
+        "test/integration-tests/gas-tests/Payments.gas.test.ts",
+        "test/integration-tests/gas-tests/__snapshots__/CheckOwnership.gas.test.ts.snap",
+        "test/integration-tests/gas-tests/__snapshots__/Payments.gas.test.ts.snap",
+        "test/integration-tests/gas-tests/__snapshots__/Uniswap.gas.test.ts.snap",
+        "test/integration-tests/gas-tests/__snapshots__/UniversalVSSwapRouter.gas.test.ts.snap",
+        "test/integration-tests/gas-tests/__snapshots__/V3ToV4Migration.gas.test.ts.snap",
+        "test/integration-tests/shared/planner.ts"
+      ],
+      "impact": "Command-input decoding is bounded and signed route context now requires both PoolManager and Universal Router identity; deployment remains unproven.",
+      "adoptedGuidance": ["assets/starter-catalog/packs/v4-swap-client.json", "references/official-model-patterns.md", "references/upstream-sources.md", "references/v4-protocol-mechanics.md", "references/v4-sdk-integration.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    },
+    {
+      "name": "Uniswap v4 Periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery.git",
+      "trackedRef": "refs/heads/main",
+      "fromCommit": "3245c3cb99c48fa1dc2459c3b60abc37d4294aba",
+      "toCommit": "545a5d2a87228167edde48f3b9eda122d1e3c4d6",
+      "commitTimestamp": "2026-08-03T20:21:42Z",
+      "changedFiles": [
+        "snapshots/PaymentsTests.json",
+        "snapshots/PermissionedV4RouterTest.json",
+        "snapshots/V4RouterTest.json",
+        "src/V4Router.sol",
+        "src/interfaces/IV4Router.sol",
+        "test/hooks/permissionedPools/PermissionedV4Router.t.sol",
+        "test/router/V4RouterExactOutputUnfilled.t.sol"
+      ],
+      "impact": "Exact-output routes now require full fill at every hop, including repeated-currency multihop routes where PoolManager netting could hide intermediate underfill.",
+      "adoptedGuidance": ["assets/starter-catalog/packs/v4-swap-client.json", "references/official-model-patterns.md", "references/upstream-sources.md", "references/v4-protocol-mechanics.md", "references/v4-sdk-integration.md"],
+      "testedBaselineAction": "unchanged-observed-only",
+      "compatibilitySetAction": "none-not-resolved"
+    }
+  ]
+}

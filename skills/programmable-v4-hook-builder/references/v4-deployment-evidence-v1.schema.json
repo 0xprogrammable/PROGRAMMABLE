@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:v4-deployment-evidence:1.0.0",
+  "title": "Programmable Uniswap v4 deployment evidence",
+  "description": "Ethereum-keccak and runtime proof for one final HookMiner preimage. SHA-256 artifact bindings are retained separately and never substitute for Ethereum address derivation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "systemRef",
+    "preimageArtifactId",
+    "runtimeArtifactId",
+    "chainProfile",
+    "create2Deployer",
+    "hookMiner",
+    "hashes",
+    "permissions",
+    "addresses",
+    "runtime",
+    "proof"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "systemRef": { "$ref": "#/$defs/slug" },
+    "preimageArtifactId": { "$ref": "#/$defs/slug" },
+    "runtimeArtifactId": { "$ref": "#/$defs/slug" },
+    "chainProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "chainId", "blockNumber", "blockHash", "poolManager", "evidenceRef"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "chainId": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "blockNumber": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "blockHash": { "$ref": "#/$defs/bytes32" },
+        "poolManager": { "$ref": "#/$defs/address" },
+        "evidenceRef": { "$ref": "#/$defs/repositoryPath" }
+      }
+    },
+    "create2Deployer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "runtimeCodeKeccak256", "evidenceRef"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "runtimeCodeKeccak256": { "$ref": "#/$defs/bytes32" },
+        "evidenceRef": { "$ref": "#/$defs/repositoryPath" }
+      }
+    },
+    "hookMiner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit", "sourceSha256", "saltSha256"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "sourceSha256": { "$ref": "#/$defs/sha256" },
+        "saltSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["creationCodeKeccak256", "constructorArgsKeccak256", "initcodeKeccak256"],
+      "properties": {
+        "creationCodeKeccak256": { "$ref": "#/$defs/bytes32" },
+        "constructorArgsKeccak256": { "$ref": "#/$defs/bytes32" },
+        "initcodeKeccak256": { "$ref": "#/$defs/bytes32" }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permissionMask", "getHookPermissionsMask", "addressLowBitsMask"],
+      "properties": {
+        "permissionMask": { "$ref": "#/$defs/mask" },
+        "getHookPermissionsMask": { "$ref": "#/$defs/mask" },
+        "addressLowBitsMask": { "$ref": "#/$defs/mask" }
+      }
+    },
+    "addresses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected", "actual"],
+      "properties": {
+        "expected": { "$ref": "#/$defs/address" },
+        "actual": { "$ref": "#/$defs/address" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byteLength", "codeSha256", "codeKeccak256"],
+      "properties": {
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+        "codeSha256": { "$ref": "#/$defs/sha256" },
+        "codeKeccak256": { "$ref": "#/$defs/bytes32" }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectedEqualsActual", "permissionsMatch", "runtimeMatches", "poolManagerMatches", "chainProfileMatches"],
+      "properties": {
+        "expectedEqualsActual": { "const": true },
+        "permissionsMatch": { "const": true },
+        "runtimeMatches": { "const": true },
+        "poolManagerMatches": { "const": true },
+        "chainProfileMatches": { "const": true }
+      }
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+    "address": { "type": "string", "minLength": 42, "maxLength": 42 },
+    "bytes32": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+    "mask": { "type": "string", "minLength": 6, "maxLength": 6 },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    }
+  }
+}

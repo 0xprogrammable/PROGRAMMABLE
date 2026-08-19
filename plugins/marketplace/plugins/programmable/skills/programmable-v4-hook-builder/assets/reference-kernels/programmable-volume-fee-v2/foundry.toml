@@ -1,0 +1,39 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+cache_path = "cache"
+libs = ["node_modules"]
+auto_detect_solc = true
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+bytecode_hash = "none"
+cbor_metadata = false
+ffi = false
+build_info = true
+build_info_path = "out/build-info"
+extra_output = ["storageLayout", "metadata"]
+fs_permissions = [
+  { access = "read", path = "./test/vectors" },
+  { access = "read", path = "./out" },
+  { access = "read", path = "./node_modules/@uniswap/universal-router/artifacts" }
+]
+
+[profile.default.fuzz]
+runs = 256
+
+[profile.default.invariant]
+runs = 64
+depth = 32
+fail_on_revert = false
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+wrap_comments = true

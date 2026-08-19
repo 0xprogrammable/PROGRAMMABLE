@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "contract-custom-curve",
+  "label": "Contract and custom curve interface",
+  "summary": "A bounded interface for project-specific contract pricing or custom curve implementations and independent reference models.",
+  "maturity": "experimental",
+  "maturityMeaning": "Hash-bound reference scaffold only; project-specific implementation and evidence are required before prototype readiness.",
+  "feeApplicability": "canonical-scope-conformance-unresolved",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "architecture-review-required",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "contract-priced-sell-and-burn",
+      "custom-curve"
+    ],
+    "capabilityIds": [
+      "contract-based-price-formation",
+      "custom-curve"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "dependencyRequirements": [
+    "Solidity 0.8.26",
+    "Independent project-specific reference model"
+  ],
+  "requiredFacts": [
+    "Specify the exact curve domain, invariant, rounding direction and boundary behavior",
+    "Bind quote-to-execution parity for exact-input and exact-output paths",
+    "Define reserve, liability, partial-fill, withdrawal and retirement behavior"
+  ],
+  "hardConflictPredicates": [
+    "Two economically equivalent executions can extract different value solely by fragmentation",
+    "A quoted exact-output amount can settle for more than the user-bound maximum input",
+    "Any reachable curve state creates unbacked value or traps a declared user exit"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/contract-custom-curve/ICustomPriceCurve.sol",
+      "targetPath": "implementation/contract-custom-curve/src/ICustomPriceCurve.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "52e6144acbeeefc333640559f0b5a5f1dce9571a08b58c27d9c7965fd56268cd"
+    }
+  ]
+}

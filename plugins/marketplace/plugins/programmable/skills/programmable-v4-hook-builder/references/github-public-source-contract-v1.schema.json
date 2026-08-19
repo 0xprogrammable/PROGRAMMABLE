@@ -342,6 +342,7 @@
         "error": {
           "enum": [
             "GITHUB_ACTIONS_RUN_MISMATCH",
+            "GITHUB_ACTIONS_RUN_NOT_SUCCESSFUL",
             "GITHUB_ACTIONS_RUN_NOT_REACHABLE",
             "GITHUB_ACTIONS_WORKFLOW_NOT_IN_TREE",
             "GITHUB_COMMIT_MISMATCH",

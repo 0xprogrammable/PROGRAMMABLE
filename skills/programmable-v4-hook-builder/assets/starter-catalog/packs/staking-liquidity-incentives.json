@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "staking-liquidity-incentives",
+  "label": "Staking and liquidity incentives",
+  "summary": "Plan reward funding, eligibility, accrual, claims and exits for token or liquidity-position incentives.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "liquidity-incentives",
+    "staking-rewards"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Eligible deposit asset or LP position, custody model, lock, withdrawal and emergency-exit rules",
+    "Reward asset, funding source, emission schedule, duration, cap and undistributed-reward treatment",
+    "Accrual basis across deposits, withdrawals, transfers, liquidity changes and out-of-range positions",
+    "Who can fund, pause, recover, change emissions or migrate the program",
+    "Public distinction between projected rewards, funded rewards and evidence-backed realized returns"
+  ],
+  "requiredFiles": [
+    "Staking or incentive source",
+    "Reward-funding and emission policy",
+    "Custody and emergency-exit policy",
+    "Position eligibility specification",
+    "Accrual and solvency tests"
+  ],
+  "requiredTests": [
+    "Deposit, accrue, claim, withdraw and emergency exit across boundary timestamps",
+    "Multiple users, changing balances, transferred positions and zero-liquidity intervals",
+    "Reward conservation, rounding dust, exhausted funding and undistributed rewards",
+    "Pause, migration, rescue and malicious reward-token behavior",
+    "No reward amplification through flash deposits, reentrancy or repeated claims"
+  ],
+  "risks": [
+    "Unfunded or mutable emissions can misrepresent achievable rewards",
+    "Custodied LP positions can expose principal to admin, migration or rescue authority",
+    "Snapshot or rounding errors can overpay strategic deposits"
+  ]
+}

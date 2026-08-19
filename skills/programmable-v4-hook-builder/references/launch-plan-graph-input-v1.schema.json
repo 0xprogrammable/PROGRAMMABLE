@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:launch-plan-graph-input:1.0.0",
+  "title": "Programmable closed launch-plan graph input v1",
+  "description": "A data-only, ordered launch-plan candidate bound to one explicit central submission package profile. It is never approval, signing, deployment, or launch authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contract",
+    "applicationId",
+    "applicationRevision",
+    "centralSubmissionPackage",
+    "featureProfiles",
+    "nodes",
+    "edges"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:launch-plan-graph-input:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "launch-plan-graph-input" },
+        "version": { "const": "1.0.0" }
+      }
+    },
+    "applicationId": { "$ref": "#/$defs/applicationId" },
+    "applicationRevision": { "$ref": "#/$defs/positiveUint256" },
+    "centralSubmissionPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "files"],
+      "properties": {
+        "profile": {
+          "enum": [
+            "legacy-six-file-v1",
+            "authority-extended-seven-file-v1"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 7,
+          "items": { "$ref": "#/$defs/fileBinding" }
+        }
+      }
+    },
+    "featureProfiles": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/featureProfile" }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": { "$ref": "#/$defs/edge" }
+    }
+  },
+  "$defs": {
+    "applicationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "localId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$"
+    },
+    "resourceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "positiveUint256": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 78,
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "fileBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byteLength"],
+      "properties": {
+        "path": {
+          "enum": [
+            "application.json",
+            "launch.json",
+            "PROPOSAL.md",
+            "TEST_PLAN.md",
+            "THREAT_MODEL.md",
+            "compatibility-report.json",
+            "evidence-index.json"
+          ]
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 16777216 }
+      }
+    },
+    "featureProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature", "disposition", "reason"],
+      "properties": {
+        "feature": { "enum": ["token", "pool", "amm", "uniswap-v4-hook"] },
+        "disposition": { "enum": ["required", "optional", "not-applicable", "rejected"] },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 12, "maxLength": 1000 }
+          ]
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodeId",
+        "ordinal",
+        "stage",
+        "action",
+        "disposition",
+        "reason",
+        "conditionRef",
+        "targetRefs",
+        "consumes",
+        "produces",
+        "bindings"
+      ],
+      "properties": {
+        "nodeId": { "$ref": "#/$defs/localId" },
+        "ordinal": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "stage": {
+          "enum": [
+            "deploy",
+            "configure",
+            "initialize",
+            "market-setup",
+            "funding-liquidity",
+            "permissions-authority",
+            "metadata-registry",
+            "postlaunch-authority-inventory"
+          ]
+        },
+        "action": {
+          "enum": [
+            "deploy",
+            "adopt-existing",
+            "configure",
+            "bind-dependencies",
+            "initialize",
+            "create-pool",
+            "create-custom-market",
+            "adopt-market",
+            "fund",
+            "seed-liquidity",
+            "lock-liquidity",
+            "grant",
+            "revoke",
+            "transfer",
+            "renounce",
+            "verify-immutable",
+            "publish-metadata",
+            "register-launch",
+            "record-authority-inventory",
+            "not-applicable"
+          ]
+        },
+        "disposition": { "enum": ["required", "optional", "not-applicable", "rejected"] },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 12, "maxLength": 1000 }
+          ]
+        },
+        "conditionRef": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/localId" }
+          ]
+        },
+        "targetRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/localId" }
+        },
+        "consumes": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/resourceId" }
+        },
+        "produces": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/resourceId" }
+        },
+        "bindings": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/contentBinding" }
+        }
+      }
+    },
+    "contentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bindingId", "mediaType", "sha256"],
+      "properties": {
+        "bindingId": { "$ref": "#/$defs/localId" },
+        "mediaType": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edgeId", "fromNodeId", "toNodeId", "relationship", "resourceRef"],
+      "properties": {
+        "edgeId": { "$ref": "#/$defs/localId" },
+        "fromNodeId": { "$ref": "#/$defs/localId" },
+        "toNodeId": { "$ref": "#/$defs/localId" },
+        "relationship": {
+          "enum": [
+            "precedes",
+            "provides-input",
+            "authority-precondition",
+            "registration-precondition"
+          ]
+        },
+        "resourceRef": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/resourceId" }
+          ]
+        }
+      }
+    }
+  }
+}

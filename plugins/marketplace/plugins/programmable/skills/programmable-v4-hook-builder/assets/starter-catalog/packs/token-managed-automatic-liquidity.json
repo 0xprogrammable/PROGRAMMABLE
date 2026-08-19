@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "token-managed-automatic-liquidity",
+  "label": "Token-managed automatic liquidity",
+  "summary": "Execute bounded canonical-pool liquidity operations from token-controlled inventory without changing standard hook callbacks.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "token-managed-automatic-liquidity",
+    "token-owned-liquidity-inventory",
+    "token-side-special-behavior"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "keeper",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Token-controlled funding source, inventory asset, threshold, cadence, slippage and deadline",
+    "Exact router or PoolManager path and observed-balance accounting for every operation",
+    "Who triggers, pauses, rescues or reconfigures execution and what happens after failure",
+    "LP position owner, fee beneficiary, removal authority and retirement behavior",
+    "Separation from standard Programmable fee-hook balances, liabilities and claims"
+  ],
+  "requiredFiles": [
+    "Token-managed liquidity source",
+    "Inventory accounting specification",
+    "LP custody and retirement policy",
+    "Trigger or keeper specification",
+    "Token, hook and pool integration tests"
+  ],
+  "requiredTests": [
+    "Threshold boundaries, repeated triggers and bounded inventory accumulation",
+    "Slippage, deadline, zero-liquidity, adverse-price and partial-failure behavior",
+    "Observed balance deltas across token, router, PoolManager and LP position",
+    "Reentrancy, recursive trigger, sandwich and parameter-authority adversarial cases",
+    "Position creation, fee collection, removal, rescue and user-exit lifecycle"
+  ],
+  "risks": [
+    "Token-controlled swaps can be sandwiched or recursively triggered",
+    "Router or PoolManager incompatibility can strand token-owned inventory",
+    "Unclear LP custody or rescue authority can redirect user-funded value"
+  ]
+}

@@ -1,7 +1,7 @@
 {
-  "$schema": "urn:programmable:v4-hook-submission:1.3.0",
+  "$schema": "urn:programmable:v4-hook-submission:1.6.0",
   "schemaVersion": 1,
-  "standardVersion": "1.3.0",
+  "standardVersion": "1.6.0",
   "stage": "proposal",
   "model": {
     "id": "example-model",
@@ -16,6 +16,11 @@
     "contact": null,
     "beneficiary": null,
     "licenseDeclaration": null
+  },
+  "builderTemplate": {
+    "schemaVersion": "1.0.0",
+    "source": "manual",
+    "templateSelection": null
   },
   "publicMetadata": {
     "project": {
@@ -37,6 +42,7 @@
       "metadataMutable": null,
       "metadataOwner": null
     },
+    "localDiscoveryTags": [],
     "claimedAffiliations": [],
     "providerPresentations": []
   },
@@ -84,11 +90,31 @@
     "dependencyFailure": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
     "retirement": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null }
   },
+  "launchPlan": {
+    "executorVersion": "launch-authorization-executor-v1",
+    "targetStrategy": null,
+    "targetComponent": null,
+    "callDataFunction": null,
+    "callDataSourcePaths": [],
+    "hookConfigurationRule": null,
+    "hookConfigurationSourcePaths": [],
+    "initialLiquidityRule": null,
+    "liquiditySourcePaths": [],
+    "testPaths": [],
+    "nativeValueRule": null,
+    "minimumNativeValue": null,
+    "maximumNativeValue": null,
+    "nativeValueSource": null,
+    "refundRecipientPolicy": null,
+    "poolMustBeUninitialized": true,
+    "postAcceptanceBundleRequired": true
+  },
   "pool": {
     "currency0": "eth",
     "currency1": "launched-token",
-    "orderingRule": "Native ETH is currency0 and the launched token is currency1.",
+    "orderingRule": "Native ETH is currency0 and the launched token is currency1 in this canonical PoolKey; additional project assets may independently use launched or quote roles.",
     "tickSpacing": null,
+    "minimumInitialLiquidity": null,
     "lpFee": {
       "classification": "lp-fee",
       "mode": null,
@@ -120,16 +146,19 @@
   },
   "programmableFee": {
     "policyId": "programmable-volume-fee-v1",
-    "policyVersion": "1.0.0",
+    "policyVersion": "1.1.0",
     "poolScope": "canonical-launch-pool-key",
     "rates": {
       "unit": "hundredths-of-bip",
-      "selectedHundredthsOfBip": null,
+      "selectedBuyHundredthsOfBip": null,
+      "selectedSellHundredthsOfBip": null,
       "minimumEffectiveHundredthsOfBip": 1000,
-      "effectiveHundredthsOfBip": null,
+      "effectiveBuyHundredthsOfBip": null,
+      "effectiveSellHundredthsOfBip": null,
       "platformHundredthsOfBip": 1000,
-      "projectHundredthsOfBip": null,
-      "formula": "effective=max(selected,1000);platform=1000;project=effective-1000",
+      "projectBuyHundredthsOfBip": null,
+      "projectSellHundredthsOfBip": null,
+      "formula": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
       "lpFeeExcluded": true
     },
     "basis": {
@@ -165,6 +194,11 @@
       "accrualMode": "claimable-liability",
       "liabilityKeyDimensions": ["poolId", "currency", "owner"],
       "crossPoolNetting": false,
+      "roundingPolicy": "cumulative-independent-platform-project-remainders",
+      "remainderScope": "canonical-pool-lifetime",
+      "claimResetsRemainders": false,
+      "minimumGrossQuoteUnits": 1000,
+      "fragmentationResistant": true,
       "valueFlowId": null,
       "collectionEvent": null,
       "claimEvent": null
@@ -209,6 +243,7 @@
     "feeMechanism": {
       "used": null,
       "classification": null,
+      "allocationMode": null,
       "chargedCurrency": null,
       "swapQuadrants": {
         "zeroForOneExactInput": null,
@@ -257,6 +292,7 @@
     "nestedActions": { "used": null, "directPoolManagerCalls": null, "routerCalls": null, "allowedActions": [], "samePoolPolicy": null, "crossPoolPolicy": null, "callbackSuppression": null, "directCallbackBehavior": null, "routerCallbackBehavior": null, "maximumDepth": null, "stateCommitOrder": null, "transientDeltaOwner": null, "syncInterleaving": null, "slippageAggregation": null, "failureAtomicity": null }
   },
   "noHookArchitecture": null,
+  "tokenMechanics": null,
   "valueFlows": [
     {
       "id": "swap",
@@ -312,6 +348,16 @@
       "settlementMode": null,
       "permit2Mode": null,
       "finalSwapDeltaValidated": null
+    },
+    "sdkSafetyProfile": {
+      "packageRootImportsOnly": null,
+      "hookedQuoteSource": null,
+      "localHookedPoolMathDisabled": null,
+      "hookDataParity": null,
+      "multiHopHookDataMode": null,
+      "perHopPriceBounds": null,
+      "slippageSemantics": null,
+      "deprecatedLiquidityActionsDisabled": null
     },
     "appSourcePaths": [],
     "integrationTestPaths": [],
@@ -520,7 +566,9 @@
     "proof": { "used": null, "proofSystem": null, "circuitRevision": null, "verifyingKeyHash": null, "verifierAddress": null, "runtimeHash": null, "setupType": null, "setupProvenance": null, "publicInputs": [], "domainBindings": { "chainId": null, "verifyingContract": null, "modelVersion": null, "pool": null, "action": null, "actorOrRecipient": null, "amountBounds": null, "epochOrDeadline": null }, "replayMode": null, "nullifierScope": null, "nullifierDerivation": null, "nullifierStorage": null, "atomicSpentCheck": null, "resetPolicy": null, "maximumProofBytes": null, "maximumVerificationGas": null, "verifierAuthority": null, "failureRule": null, "privacyClaim": null, "metadataLeakage": null },
     "crossChain": {
       "used": null,
-      "bridgeDependencyId": null,
+      "direction": null,
+      "localBridgeDependencyId": null,
+      "localBridgeAddress": null,
       "source": {
         "network": {
           "namespace": null,
@@ -534,11 +582,16 @@
         }
       },
       "destination": {
-        "chainId": null,
+        "network": {
+          "namespace": null,
+          "reference": null
+        },
         "domain": null,
-        "receiver": null,
-        "receiverDependencyId": null,
-        "authenticatedBridgeCaller": null
+        "receiver": {
+          "encoding": null,
+          "value": null,
+          "canonicalizationRule": null
+        }
       },
       "message": {
         "identifierDerivation": null,
@@ -551,14 +604,13 @@
         "atomicConsumption": null,
         "duplicateBehavior": null,
         "domainBindings": {
-          "bridgeDependencyId": null,
+          "localBridgeDependencyId": null,
           "sourceNetwork": null,
           "sourceDomain": null,
           "sourceSender": null,
-          "destinationChainId": null,
+          "destinationNetwork": null,
           "destinationDomain": null,
-          "receiver": null,
-          "receiverDependencyId": null,
+          "destinationReceiver": null,
           "modelId": null,
           "poolId": null,
           "action": null,
@@ -644,9 +696,11 @@
     "sourcePaths": [],
     "testPaths": [],
     "compilerBuildInfoPaths": [],
+    "githubActionsRunIds": [],
     "specificationPath": null,
     "testEvidencePath": null,
     "dependencyLockPath": null,
+    "feeConformanceManifestPath": null,
     "gateStatusPath": null,
     "reviewTargetPath": null,
     "runtimeAssetManifestPath": null

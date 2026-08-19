@@ -13,6 +13,7 @@
     "title",
     "summary",
     "builder",
+    "builderTemplate",
     "source",
     "companionClosure",
     "programmableFee",
@@ -80,6 +81,9 @@
         }
       }
     },
+    "builderTemplate": {
+      "$ref": "#/$defs/builderTemplate"
+    },
     "source": {
       "$ref": "#/$defs/githubSource__GitHubPublicSourceRequestV1"
     },
@@ -142,6 +146,142 @@
     }
   },
   "$defs": {
+    "builderTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "source",
+        "templateSelection"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "enum": [
+            "manual",
+            "catalog"
+          ]
+        },
+        "templateSelection": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/templateSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "templateSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalogDigest",
+        "selectionDigest",
+        "starterId",
+        "requestedPackIds",
+        "defaultPackIds",
+        "autoIncludedPackIds",
+        "selectedPackIds",
+        "selectedCapabilityIds",
+        "customCapabilities",
+        "ownerProvidedLocalTags",
+        "localProjectTags"
+      ],
+      "properties": {
+        "catalogDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "selectionDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "starterId": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "requestedPackIds": {
+          "$ref": "#/$defs/templateIdList"
+        },
+        "defaultPackIds": {
+          "$ref": "#/$defs/templateIdList"
+        },
+        "autoIncludedPackIds": {
+          "$ref": "#/$defs/templateIdList"
+        },
+        "selectedPackIds": {
+          "$ref": "#/$defs/templateIdList"
+        },
+        "selectedCapabilityIds": {
+          "$ref": "#/$defs/templateIdList"
+        },
+        "customCapabilities": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/templateCustomCapability"
+          }
+        },
+        "ownerProvidedLocalTags": {
+          "$ref": "#/$defs/templateIdList"
+        },
+        "localProjectTags": {
+          "$ref": "#/$defs/templateIdList"
+        }
+      }
+    },
+    "templateIdList": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "maxLength": 120
+      }
+    },
+    "templateCustomCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "catalogStatus",
+        "automaticDecision",
+        "reviewRoute",
+        "eligibilityEffect"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "catalogStatus": {
+          "const": "unlisted"
+        },
+        "automaticDecision": {
+          "const": "none"
+        },
+        "reviewRoute": {
+          "const": "architecture-review-required"
+        },
+        "eligibilityEffect": {
+          "const": "none"
+        }
+      }
+    },
     "programmableFee": {
       "type": "object",
       "additionalProperties": false,
@@ -162,7 +302,7 @@
           "const": "programmable-volume-fee-v1"
         },
         "policyVersion": {
-          "const": "1.0.0"
+          "const": "1.1.0"
         },
         "poolScope": {
           "const": "canonical-launch-pool-key"
@@ -195,11 +335,14 @@
       "additionalProperties": false,
       "required": [
         "unit",
-        "selectedHundredthsOfBip",
+        "selectedBuyHundredthsOfBip",
+        "selectedSellHundredthsOfBip",
         "minimumEffectiveHundredthsOfBip",
-        "effectiveHundredthsOfBip",
+        "effectiveBuyHundredthsOfBip",
+        "effectiveSellHundredthsOfBip",
         "platformHundredthsOfBip",
-        "projectHundredthsOfBip",
+        "projectBuyHundredthsOfBip",
+        "projectSellHundredthsOfBip",
         "formula",
         "lpFeeExcluded"
       ],
@@ -207,7 +350,15 @@
         "unit": {
           "const": "hundredths-of-bip"
         },
-        "selectedHundredthsOfBip": {
+        "selectedBuyHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "selectedSellHundredthsOfBip": {
           "type": [
             "integer",
             "null"
@@ -218,7 +369,15 @@
         "minimumEffectiveHundredthsOfBip": {
           "const": 1000
         },
-        "effectiveHundredthsOfBip": {
+        "effectiveBuyHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1000,
+          "maximum": 999999
+        },
+        "effectiveSellHundredthsOfBip": {
           "type": [
             "integer",
             "null"
@@ -229,7 +388,15 @@
         "platformHundredthsOfBip": {
           "const": 1000
         },
-        "projectHundredthsOfBip": {
+        "projectBuyHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 998999
+        },
+        "projectSellHundredthsOfBip": {
           "type": [
             "integer",
             "null"
@@ -238,7 +405,7 @@
           "maximum": 998999
         },
         "formula": {
-          "const": "effective=max(selected,1000);platform=1000;project=effective-1000"
+          "const": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000"
         },
         "lpFeeExcluded": {
           "const": true
@@ -404,6 +571,11 @@
         "accrualMode",
         "liabilityKeyDimensions",
         "crossPoolNetting",
+        "roundingPolicy",
+        "remainderScope",
+        "claimResetsRemainders",
+        "minimumGrossQuoteUnits",
+        "fragmentationResistant",
         "valueFlowId",
         "collectionEvent",
         "claimEvent"
@@ -421,6 +593,21 @@
         },
         "crossPoolNetting": {
           "const": false
+        },
+        "roundingPolicy": {
+          "const": "cumulative-independent-platform-project-remainders"
+        },
+        "remainderScope": {
+          "const": "canonical-pool-lifetime"
+        },
+        "claimResetsRemainders": {
+          "const": false
+        },
+        "minimumGrossQuoteUnits": {
+          "const": 1000
+        },
+        "fragmentationResistant": {
+          "const": true
         },
         "valueFlowId": {
           "type": [

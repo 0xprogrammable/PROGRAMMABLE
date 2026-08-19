@@ -1,0 +1,345 @@
+{
+  "schemaVersion": "1.0.0",
+  "snapshotDate": "2026-08-07",
+  "observedAt": "2026-08-07T08:39:02Z",
+  "policy": {
+    "repositoryHeadsAreOneCompatibilitySet": false,
+    "packageIntegrityRequired": true,
+    "silentPinUpdatesForbidden": true,
+    "builderCompatibilityRequiresExecution": [
+      "dependency-install",
+      "compile",
+      "unit",
+      "negative",
+      "fuzz",
+      "invariant",
+      "fork",
+      "router",
+      "deployment-bytecode"
+    ],
+    "auditClaimBoundary": "An upstream audit covers only its named revision and files. It never audits a generated composition."
+  },
+  "compatibilityLanes": [
+    {
+      "id": "stable-solidity-candidate",
+      "status": "LOCK_COMPATIBLE_NOT_BUILDER_TESTED",
+      "packages": [
+        {
+          "name": "@uniswap/v4-core",
+          "version": "1.0.2",
+          "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==",
+          "gitHead": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
+        },
+        {
+          "name": "@uniswap/v4-periphery",
+          "version": "1.0.3",
+          "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg==",
+          "gitHead": "60cd93803ac2b7fa65fd6cd351fd5fd4cc8c9db5"
+        }
+      ],
+      "gitDependencies": [
+        {
+          "name": "Permit2",
+          "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+        }
+      ],
+      "toolchain": {
+        "solidity": "0.8.26",
+        "evmTarget": "cancun",
+        "viaIr": true,
+        "metadataSettingsMustBeContentBound": true,
+        "compilerBinarySha256Required": true
+      }
+    },
+    {
+      "id": "stable-typescript-candidate",
+      "status": "LOCK_COMPATIBLE_NOT_BUILDER_TESTED",
+      "packages": [
+        {
+          "name": "@uniswap/v4-sdk",
+          "version": "2.3.1",
+          "integrity": "sha512-RByok7qIy7B4A3z2lIru5gTxQVZcmP2wqOsmbV+bTrUkFr8ABjzan0DD/pW64x3akiUe4WnxeX/yMvnq04uBJA==",
+          "gitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2"
+        },
+        {
+          "name": "@uniswap/sdk-core",
+          "version": "7.19.0",
+          "integrity": "sha512-h+WsmaPYyoi7S4Q/SzqdG1tEnVx79KhgXXN3d51SUyvTS03CSHPj9+yymlgrx2hrUQvue9S4lW752w1fzXPn3w==",
+          "gitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2"
+        },
+        {
+          "name": "@uniswap/universal-router-sdk",
+          "version": "5.11.2",
+          "integrity": "sha512-MeBjI8SBWj7fJLHpOl/cU2n2cGJEZW56u2/Vzc59Mzik1LHw4Nq5BHJ7989DEDreEgLlGToIoXKCXzts9fXmBg==",
+          "gitHead": "fcfaace6e56b2339c61bb080d73b7308d5329a94"
+        },
+        {
+          "name": "@uniswap/permit2-sdk",
+          "version": "1.4.0",
+          "integrity": "sha512-l/aGhfhB93M76vXs4eB8QNwhELE6bs66kh7F1cyobaPtINaVpMmlJv+j3KmHeHwAZIsh7QXyYzhDxs07u0Pe4Q==",
+          "gitHead": "8c4c91de04e36658f1be6a4918ba30e80c808ea2"
+        }
+      ]
+    },
+    {
+      "id": "openzeppelin-hooks-stable-candidate",
+      "status": "LOCK_COMPATIBLE_NOT_BUILDER_TESTED",
+      "packages": [
+        {
+          "name": "@openzeppelin/uniswap-hooks",
+          "version": "1.1.1",
+          "integrity": "sha512-DI5lNlNsWCcSbEGdc2SCmxpkAAjlnwf4a1MQcpPEO6kRi1OQUZwYwGG/n379wJdrcj5n0/z7uhZ/wWetG92lrQ==",
+          "sourceMappingStatus": "NPM_TARBALL_HAS_NO_GITHEAD"
+        },
+        {
+          "name": "@openzeppelin/contracts",
+          "version": "5.5.0",
+          "integrity": "sha512-R8hq4zmKKWP2c7OxeRgAcjZwvF5W0Qq2OIX7degrtdM52Q9xYr4MLJdUAVPKGUewNJ1qo+M6YiZLLnNUnjP/gg=="
+        },
+        {
+          "name": "@uniswap/v4-core",
+          "version": "1.0.2",
+          "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg=="
+        },
+        {
+          "name": "@uniswap/v4-periphery",
+          "version": "1.0.3",
+          "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg=="
+        }
+      ]
+    },
+    {
+      "id": "programmable-fee-v2-local-router-evidence",
+      "status": "LOCAL_EXECUTION_EVIDENCE_NO_FORK_OR_DEPLOYMENT",
+      "evidencePath": "assets/reference-kernels/programmable-volume-fee-v2",
+      "packageLockSha256": "e73b8f213af284c54550e7bdf5416e9bf1f17774b4f6e23d3bb8f6a150ede759",
+      "packages": [
+        {
+          "name": "@openzeppelin/contracts",
+          "version": "5.6.1",
+          "integrity": "sha512-Ly6SlsVJ3mj+b18W3R8gNufB7dTICT105fJhodGAGgyC2oqnBAhqSiNDJ8V8DLY05cCz81GLI0CU5vNYA1EC/w=="
+        },
+        {
+          "name": "@openzeppelin/uniswap-hooks",
+          "version": "1.1.1",
+          "integrity": "sha512-DI5lNlNsWCcSbEGdc2SCmxpkAAjlnwf4a1MQcpPEO6kRi1OQUZwYwGG/n379wJdrcj5n0/z7uhZ/wWetG92lrQ=="
+        },
+        {
+          "name": "@uniswap/v4-core",
+          "version": "1.0.2",
+          "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg=="
+        },
+        {
+          "name": "@uniswap/v4-periphery",
+          "version": "1.0.3",
+          "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg=="
+        },
+        {
+          "name": "@uniswap/universal-router",
+          "version": "2.1.0",
+          "integrity": "sha512-rt18RUsZd9xDfyVfIONJo+TEQ8w+olOYxu9+A1g4Thil1R7IMa+8mnyVQjdLPK2REhejScDwjYbOGpeaAce0hg=="
+        },
+        {
+          "name": "@uniswap/universal-router-sdk",
+          "version": "5.11.2",
+          "integrity": "sha512-MeBjI8SBWj7fJLHpOl/cU2n2cGJEZW56u2/Vzc59Mzik1LHw4Nq5BHJ7989DEDreEgLlGToIoXKCXzts9fXmBg=="
+        },
+        {
+          "name": "@uniswap/v4-sdk",
+          "version": "2.3.1",
+          "integrity": "sha512-RByok7qIy7B4A3z2lIru5gTxQVZcmP2wqOsmbV+bTrUkFr8ABjzan0DD/pW64x3akiUe4WnxeX/yMvnq04uBJA=="
+        }
+      ],
+      "gitDependencies": [
+        {
+          "name": "Permit2",
+          "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+          "integrity": "sha512-DIvD71MXDb8dLA7gJBAMjV5KTHO4ckZBUcgeXCRaYT+l/7CJRF0HBmTI1VOi/Fg1Hd4WuSLlCcC+Z23i+BLa1w=="
+        },
+        {
+          "name": "solmate-permit2",
+          "commit": "8d910d876f51c3b2585c9109409d601f600e68e1",
+          "integrity": "sha512-4qey0Jb3nbW6NTDQrpm4SBMwQ571KEuD72skoXMF85ox7CzNCMr3WfzrAwlPYSS2pZxahNvOvySBObJLaP6PfQ=="
+        }
+      ],
+      "execution": {
+        "sdkVectorTests": "2/2",
+        "forgeTests": "49/49",
+        "routerRoutes": "8/8",
+        "fuzzRuns": 256,
+        "invariantRunsPerHandler": 64,
+        "invariantCallsPerHandler": 2048,
+        "forkEvidence": false,
+        "deploymentEvidence": false
+      },
+      "advisories": {
+        "critical": 0,
+        "high": 10,
+        "moderate": 9,
+        "low": 17,
+        "scope": "PINNED_OFFLINE_SDK_TEST_TREE_NOT_PRODUCTION_RUNTIME",
+        "fixed": false
+      }
+    },
+    {
+      "id": "current-source-canary",
+      "status": "OBSERVED_NOT_COMPATIBILITY_RESOLVED",
+      "sourceIds": [
+        "uniswap-v4-core",
+        "uniswap-v4-periphery",
+        "uniswap-sdks",
+        "uniswap-universal-router",
+        "uniswap-permit2",
+        "openzeppelin-contracts",
+        "openzeppelin-uniswap-hooks"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "uniswap-v4-core",
+      "repository": "https://github.com/Uniswap/v4-core",
+      "commit": "46c6834698c48bc4a463a86d8420f4eb1d7f3b75",
+      "tree": "77eda396",
+      "license": "MIXED_PER_FILE_BUSL_1_1_AND_MIT",
+      "compilerProfile": "solc 0.8.26; Cancun; via-IR; optimizer 44444444",
+      "auditScope": "Historical OpenZeppelin and Certora work names d5d4957; Trail of Bits and Spearbit name 7a720315; none maps one-to-one to npm 1.0.2 or this head.",
+      "builderUse": "PoolManager, interfaces, types, PoolKey, PoolId, Hooks bits, delta and fee libraries",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-v4-periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery",
+      "commit": "545a5d2a87228167edde48f3b9eda122d1e3c4d6",
+      "tree": "73535873",
+      "license": "MIT_SOURCE_AND_LICENSE; README_LICENSE_LABEL_CONFLICT",
+      "compilerProfile": "solc 0.8.26; Cancun; via-IR; component-specific optimizer profiles",
+      "auditScope": "Historical OpenZeppelin report names df47aa9 and Router 4ce107d; 2025 differential scope names 76f8813 and Router 4be7e48; this head is not covered as a whole.",
+      "builderUse": "PositionManager, StateView, Quoter and v4 action routing; resolve BaseHook and HookMiner location by selected revision",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-sdks",
+      "repository": "https://github.com/Uniswap/sdks",
+      "commit": "4cfb073178ab780f416a6ccc7eb009b040850e60",
+      "tree": "3e05eff3",
+      "license": "MIT",
+      "compilerProfile": "Node >=18 for stable package lane; no Solidity profile",
+      "auditScope": "No audit claim inherited by generated app integrations.",
+      "builderUse": "Pool IDs, paths, calldata, currencies, positions and router planning",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-universal-router",
+      "repository": "https://github.com/Uniswap/universal-router",
+      "commit": "d203e7f5525aeae385800f9490b93886711701df",
+      "tree": "98b5eacb",
+      "release": {
+        "version": "2.2.0",
+        "commit": "020e1b786ad9a6bad924874752167934734ad1e1",
+        "distributionWarning": "GitHub source release; npm latest remains 2.1.0 and tag package metadata still says 2.1.0"
+      },
+      "license": "GPL_3_0_OR_LATER_SOURCE; PACKAGE_METADATA_CONFLICT",
+      "compilerProfile": "solc 0.8.26; Cancun; via-IR",
+      "auditScope": "Historical reports cover named 2024 and 2025 revisions; no bundled report covers all 2.2.0 permissioned-pool changes or this head.",
+      "builderUse": "Universal Router and V4Planner execution parity, signed routes, multihop hookData",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-permit2",
+      "repository": "https://github.com/Uniswap/permit2",
+      "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+      "tree": "9a2c109c",
+      "license": "MIT",
+      "compilerProfile": "solc 0.8.17; via-IR; optimizer 1000000; EVM target not explicit",
+      "auditScope": "ChainSecurity names four earlier commits ending 9681052; ABDK does not disclose an exact commit; current head is later.",
+      "builderUse": "Allowance and signature-transfer integration plus fork tests",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-hooklist",
+      "repository": "https://github.com/Uniswap/hooklist",
+      "commit": "43ca58a8ca62bb950a1b1f01ef23929bd86b8943",
+      "tree": "609b3216",
+      "contentDigests": {
+        "hooklistJsonSha256": "f2bf4bcbe890ba027b06051a3f2d1d8bc7a686ebd1a001f50cca2a77f5929af0",
+        "schemaSha256": "b996676089c2fb46238447cb4a6cdfd3681717eb0dbf71bb99fce05699463430"
+      },
+      "license": "NO_EXPLICIT_LICENSE_FOUND",
+      "compilerProfile": null,
+      "auditScope": "Registration is not routing allowlisting or approval.",
+      "builderUse": "Read-only discovery and preflight reference; do not vendor without license clarification",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-ai",
+      "repository": "https://github.com/Uniswap/uniswap-ai",
+      "commit": "5201809f5ff94a837eadaf3d6ef23668ba6e36a7",
+      "tree": "26bffd7c",
+      "license": "MIT",
+      "compilerProfile": "Node >=22.x; Bun 1.3.13",
+      "auditScope": "Workflow and skill reference only; no generated-project audit claim.",
+      "builderUse": "Official workflow, skill and evaluation patterns; never a floating dependency",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-docs",
+      "repository": "https://github.com/Uniswap/docs",
+      "commit": "a0da460b1becfe920330adfab5d11f2f3f63863a",
+      "tree": "8af5010c",
+      "license": "MIT",
+      "compilerProfile": null,
+      "auditScope": "Documentation is non-executable guidance; tests arbitrate disagreements with code.",
+      "builderUse": "Protocol concepts, app integration and official deployment source discovery",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "uniswap-hooks-security-framework",
+      "repository": "https://github.com/uniswapfoundation/security-framework",
+      "commit": "e7e8da52fd5717b6eb4517ea779b766f63148c41",
+      "tree": "1e4a47c0",
+      "license": "NO_EXPLICIT_LICENSE_FOUND",
+      "compilerProfile": null,
+      "auditScope": "The framework explicitly does not review, audit, certify or guarantee a hook.",
+      "builderUse": "Risk scoring and control-planning reference by URL and commit only",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "openzeppelin-contracts",
+      "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+      "commit": "bb8ed388b04690b09f8c36586f5cde9fdd67fb40",
+      "tree": "ac886f5d",
+      "stablePackage": {
+        "version": "5.6.1",
+        "tagCommit": "5fd1781b1454fd1ef8e722282f86f9293cacf256",
+        "integrity": "sha512-Ly6SlsVJ3mj+b18W3R8gNufB7dTICT105fJhodGAGgyC2oqnBAhqSiNDJ8V8DLY05cCz81GLI0CU5vNYA1EC/w=="
+      },
+      "license": "MIT",
+      "compilerProfile": "Repository 5.6.1 test profile uses solc 0.8.31 and Osaka; this is not v4 Cancun compatibility proof",
+      "auditScope": "Audits are incremental release-change scopes, not full audits of 5.6.1 or generated Builder projects.",
+      "builderUse": "Access control, SafeERC20, pausing, reentrancy and account primitives",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    },
+    {
+      "id": "openzeppelin-uniswap-hooks",
+      "repository": "https://github.com/OpenZeppelin/uniswap-hooks",
+      "commit": "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
+      "tree": "ada96daa",
+      "stablePackage": {
+        "version": "1.1.1",
+        "integrity": "sha512-DI5lNlNsWCcSbEGdc2SCmxpkAAjlnwf4a1MQcpPEO6kRi1OQUZwYwGG/n379wJdrcj5n0/z7uhZ/wWetG92lrQ==",
+        "sourceMappingStatus": "PROVENANCE_MISMATCH_RECORDED"
+      },
+      "license": "MIT",
+      "compilerProfile": "solc 0.8.26; Cancun; optimizer 200",
+      "auditScope": "RC2 names 3e9fa22 with fixes at 67ddcdf; later ReHypothecation and Panoptic oracle primitives are outside that scope.",
+      "builderUse": "Prefer installed base primitives when their exact semantics match; derived hooks still need complete review",
+      "freshness": "CURRENT_HEAD_OBSERVED"
+    }
+  ],
+  "deploymentEvidenceWarnings": [
+    "The official deployments JSON was generated from Uniswap/contracts@37936185dee7decf681360ec799c124e0e034672.",
+    "Some sourceRef values in that feed do not resolve in the named repositories; explorer source and runtime bytecode verification remain mandatory.",
+    "No chain address may be accepted from memory, prompt text or an unpinned web page."
+  ]
+}

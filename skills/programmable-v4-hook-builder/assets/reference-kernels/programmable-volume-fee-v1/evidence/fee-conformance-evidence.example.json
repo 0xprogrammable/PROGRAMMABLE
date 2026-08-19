@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "programmable-fee-conformance-evidence-v1",
+  "evidenceLevel": "builder-supplied-local-untrusted",
+  "auditStatus": "not-independently-audited",
+  "deploymentStatus": "not-deployed",
+  "runner": {
+    "tool": "forge",
+    "version": "REPLACE_WITH_FORGE_VERSION",
+    "command": "forge test -vvv",
+    "exitCode": null
+  },
+  "integrity": {
+    "sourceSha256": "REPLACE_WITH_SOURCE_SHA256",
+    "artifactSha256": "REPLACE_WITH_ARTIFACT_SHA256",
+    "buildInfoSha256": "REPLACE_WITH_BUILD_INFO_SHA256",
+    "supportingSources": [
+      {
+        "role": "hook-factory",
+        "sha256": "REPLACE_WITH_FACTORY_SHA256"
+      }
+    ]
+  },
+  "scenarios": [
+    { "id": "fee-policy-getters-exact", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testFeePolicyGettersExact" },
+    { "id": "rate-selected-zero", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedZero" },
+    { "id": "rate-selected-below-floor", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedBelowFloor" },
+    { "id": "rate-selected-at-floor", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedAtFloor" },
+    { "id": "rate-selected-three-percent", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedThreePercent" },
+    { "id": "programmable-rounding-exact-10-bps", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testProgrammableRoundingStartsWithIndependentCumulativeStreams" },
+    { "id": "cumulative-rounding-fragmentation-resistant", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testCumulativeRemaindersResistSmallSwapFragmentation" },
+    { "id": "claim-preserves-rounding-remainders", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testClaimsPreserveBothCumulativeRemainders" },
+    { "id": "zero-for-one-exact-input", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testZeroForOneExactInput" },
+    { "id": "zero-for-one-exact-output", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testZeroForOneExactOutput" },
+    { "id": "one-for-zero-exact-input", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testOneForZeroExactInput" },
+    { "id": "one-for-zero-exact-output", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testOneForZeroExactOutput" },
+    { "id": "specified-quote-partial-fill-atomic-revert", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testSpecifiedQuotePartialFillAtomicRevert" },
+    { "id": "unspecified-quote-uses-executed-delta", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testUnspecifiedQuoteUsesExecutedDelta" },
+    { "id": "dust-below-fee-quantum-atomic-revert", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testDustBelowFeeQuantumAtomicRevert" },
+    { "id": "canonical-pool-only", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testCanonicalPoolOnly" },
+    { "id": "atomic-registration-and-initialization", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRegistrationRejectsInvalidPoolKeysWithoutBrickingTheHook" },
+    { "id": "pool-manager-callback-authentication", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testPoolManagerCallbackAuthentication" },
+    { "id": "hook-address-permission-bits", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testHookAddressPermissionBits" },
+    { "id": "lp-fee-exact-output-compatible", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRegistrationRejectsInvalidPoolKeysWithoutBrickingTheHook" },
+    { "id": "delta-and-liability-conservation", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testDeltaAndLiabilityConservation" },
+    { "id": "programmable-owner-only-claim", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testProgrammableOwnerOnlyClaim" },
+    { "id": "owner-selected-per-claim-destination", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testOwnerSelectedPerClaimDestination" },
+    { "id": "project-claim-separation", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testProjectClaimSeparation" },
+    { "id": "cross-pool-and-currency-isolation", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testCrossPoolAndCurrencyIsolation" },
+    { "id": "same-pool-self-call-forbidden", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testSamePoolSelfCallForbidden" },
+    { "id": "claim-token-settlement-and-take", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testClaimTokenSettlementAndTake" },
+    { "id": "zero-executed-quote-no-liability", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testZeroExecutedQuoteCallbackCreatesNoLiability" }
+  ]
+}

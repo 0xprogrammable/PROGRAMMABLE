@@ -1,20 +1,278 @@
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  createDeterministicTestBatches,
+  runDeterministicTestBatches
+} from "../verify-skill-execution-core.mjs";
+import { validateInstalledProvenance } from "../verify-skill-provenance-core.mjs";
+import { markdownHeadingAnchors, parseCanonicalYamlMapping } from "../verify-skill-yaml-core.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(testDirectory, "..", "..");
 const verifier = path.join(skillRoot, "scripts", "verify-skill.mjs");
+const sourceSkillShape = {
+  name: { type: "string", required: true },
+  description: { type: "string", required: true },
+  license: { type: "string" },
+  metadata: {
+    type: "mapping",
+    fields: { "short-description": { type: "string" } }
+  }
+};
+const installedSkillShape = {
+  ...sourceSkillShape,
+  metadata: {
+    type: "mapping",
+    fields: Object.fromEntries([
+      "github-path",
+      "github-pinned",
+      "github-ref",
+      "github-repo",
+      "github-tree-sha",
+      "local-path"
+    ].map((key) => [key, { type: "provenance-string" }]))
+  }
+};
+const interfaceShape = {
+  interface: {
+    type: "mapping",
+    required: true,
+    fields: Object.fromEntries([
+      ["display_name", true],
+      ["short_description", true],
+      ["icon_small", false],
+      ["icon_large", false],
+      ["brand_color", false],
+      ["default_prompt", true]
+    ].map(([key, required]) => [key, { type: "quoted-string", required }]))
+  }
+};
+
+test("Markdown anchors remove complete nested HTML-like tags without exposing a second tag", () => {
+  assert.deepEqual(
+    [...markdownHeadingAnchors("# Safe <scr<script>ipt> heading\n# Two <em>words</em>\n# Comparison 2 < 3")],
+    ["safe-heading", "two-words", "comparison-2-3"]
+  );
+});
+
+test("source verification partitions every portable test exactly once with bounded fanout", () => {
+  const source = fs.readFileSync(path.join(skillRoot, "scripts", "verify-skill-execution-core.mjs"), "utf8");
+  const testFiles = fs.readdirSync(path.join(skillRoot, "scripts", "test"))
+    .filter((name) => name.endsWith(".test.mjs"))
+    .sort();
+  const batches = createDeterministicTestBatches(testFiles);
+  assert.equal(testFiles.length, 75);
+  assert.deepEqual(batches.map((batch) => batch.length), [38, 37]);
+  assert.deepEqual(batches[0], testFiles.filter((_, index) => index % 2 === 0));
+  assert.deepEqual(batches[1], testFiles.filter((_, index) => index % 2 === 1));
+  assert.deepEqual([...batches.flat()].sort(), testFiles);
+  assert.equal(new Set(batches.flat()).size, testFiles.length);
+  assert.match(source, /args: \["--test", "--test-concurrency=2", \.\.\.batch\]/u);
+  assert.match(source, /const TEST_TIMEOUT_MS = 15 \* 60 \* 1000;/u);
+  assert.match(source, /const TEST_OUTPUT_BYTES = 128 \* 1024 \* 1024;/u);
+  assert.doesNotMatch(source, /--test-concurrency=[3-9]/u);
+});
+
+test("deterministic test shards run sequentially with one shared deadline and output budget", async () => {
+  const testFiles = Array.from({ length: 75 }, (_, index) => `test-${String(index).padStart(2, "0")}.test.mjs`);
+  const calls = [];
+  let activeChildren = 0;
+  let elapsedMs = 0;
+  const result = await runDeterministicTestBatches({
+    command: "/node",
+    cwd: "/skill",
+    env: { PATH: "/bin" },
+    now: () => elapsedMs,
+    runChildProcess: async (options) => {
+      assert.equal(activeChildren, 0);
+      activeChildren += 1;
+      calls.push(options);
+      elapsedMs += calls.length === 1 ? 250 : 500;
+      activeChildren -= 1;
+      return {
+        outputExceeded: false,
+        signal: null,
+        status: 0,
+        stderr: calls.length === 1 ? "de" : "",
+        stdout: calls.length === 1 ? "abc" : "ok",
+        timedOut: false
+      };
+    },
+    testFiles
+  });
+  assert.equal(result.failure, null);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].args, ["--test", "--test-concurrency=2", ...result.batches[0]]);
+  assert.deepEqual(calls[1].args, ["--test", "--test-concurrency=2", ...result.batches[1]]);
+  assert.equal(calls[0].timeoutMs, 15 * 60 * 1000);
+  assert.equal(calls[1].timeoutMs, 15 * 60 * 1000 - 250);
+  assert.equal(calls[0].maximumOutputBytes, 128 * 1024 * 1024);
+  assert.equal(calls[1].maximumOutputBytes, 128 * 1024 * 1024 - 5);
+});
+
+test("deterministic test shards fail first and never double shared resource budgets", async () => {
+  let calls = 0;
+  const firstFailure = await runDeterministicTestBatches({
+    command: "/node",
+    cwd: "/skill",
+    env: {},
+    runChildProcess: async () => {
+      calls += 1;
+      return { outputExceeded: false, signal: "SIGTERM", status: null, stderr: "failed", stdout: "", timedOut: false };
+    },
+    testFiles: ["a.test.mjs", "b.test.mjs"]
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(
+    { batchIndex: firstFailure.failure.batchIndex, kind: firstFailure.failure.kind, signal: firstFailure.failure.signal },
+    { batchIndex: 0, kind: "status", signal: "SIGTERM" }
+  );
+
+  calls = 0;
+  let elapsedMs = 0;
+  const timeout = await runDeterministicTestBatches({
+    command: "/node",
+    cwd: "/skill",
+    env: {},
+    now: () => elapsedMs,
+    runChildProcess: async () => {
+      calls += 1;
+      elapsedMs = 11;
+      return { outputExceeded: false, signal: null, status: 0, stderr: "", stdout: "", timedOut: false };
+    },
+    testFiles: ["a.test.mjs", "b.test.mjs"],
+    timeoutMs: 10
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(timeout.failure, { batchIndex: 1, kind: "timeout", signal: null, status: null });
+
+  calls = 0;
+  const output = await runDeterministicTestBatches({
+    command: "/node",
+    cwd: "/skill",
+    env: {},
+    maximumOutputBytes: 5,
+    runChildProcess: async () => {
+      calls += 1;
+      return { outputExceeded: false, signal: null, status: 0, stderr: "de", stdout: "abc", timedOut: false };
+    },
+    testFiles: ["a.test.mjs", "b.test.mjs"]
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(output.failure, { batchIndex: 1, kind: "output", signal: null, status: null });
+});
+
+test("installed-mode portable execution keeps its single CLI test in one nonempty shard", async () => {
+  const batches = createDeterministicTestBatches(["scripts/test/cli.test.mjs"]);
+  assert.deepEqual(batches, [["scripts/test/cli.test.mjs"]]);
+  let calls = 0;
+  const result = await runDeterministicTestBatches({
+    command: "/node",
+    cwd: "/skill",
+    env: {},
+    runChildProcess: async () => {
+      calls += 1;
+      return { outputExceeded: false, signal: null, status: 0, stderr: "", stdout: "ok", timedOut: false };
+    },
+    testFiles: batches[0]
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.failure, null);
+});
+
+function readDeclaredRequiredInventories() {
+  const source = fs.readFileSync(verifier, "utf8");
+  const testDeclaration = source.match(/const REQUIRED_PORTABLE_TESTS = Object\.freeze\(`([\s\S]*?)`\.trim\(\)\.split/u);
+  assert.ok(testDeclaration, "portable verifier must declare its complete test inventory");
+  const portableTestPaths = testDeclaration[1]
+    .trim()
+    .split(/\s+/u)
+    .map((stem) => `scripts/test/${stem}.test.mjs`);
+  const requiredDeclaration = source.match(/const required = \[\n([\s\S]*?)\n\];\n\nfor \(const relativePath of required\) \{/u);
+  assert.ok(requiredDeclaration, "portable verifier must declare one static required-file inventory");
+
+  const requiredPaths = [];
+  let testInventorySpreads = 0;
+  for (const rawLine of requiredDeclaration[1].split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const literal = line.match(/^"([^"\\\r\n]+)",?$/u);
+    if (literal) {
+      requiredPaths.push(literal[1]);
+    } else if (line === "...REQUIRED_PORTABLE_TESTS,") {
+      requiredPaths.push(...portableTestPaths);
+      testInventorySpreads += 1;
+    } else {
+      assert.fail(`required-file inventory must remain statically enumerable: ${line}`);
+    }
+  }
+
+  assert.equal(testInventorySpreads, 1, "required-file inventory must include the test inventory exactly once");
+  assert.match(
+    source,
+    /for \(const relativePath of required\) \{\n  const entry = packageEntriesByPath\.get\(relativePath\);\n  if \(!entry\?\.stat\.isFile\(\)\) errors\.push\(`missing \$\{relativePath\}`\);\n\}/u,
+    "every declared path must use the generic missing-file guard"
+  );
+  return { portableTestPaths, requiredPaths };
+}
 
 function insertAfterFrontmatterDescription(source, fragment) {
   return source.replace(
     /^description:.*$/m,
     (description) => `${description}\n${fragment}`
   );
+}
+
+function parseSourceSkillYaml(source) {
+  const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/u);
+  assert.ok(frontmatter, "canonical skill fixture must have frontmatter");
+  return parseCanonicalYamlMapping(frontmatter[1], "SKILL.md frontmatter", sourceSkillShape);
+}
+
+function parseInterfaceYaml(source) {
+  return parseCanonicalYamlMapping(source, "agents/openai.yaml", interfaceShape);
+}
+
+function createInstalledFrontmatter(metadataLines) {
+  const source = fs.readFileSync(path.join(skillRoot, "SKILL.md"), "utf8");
+  const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/u);
+  assert.ok(frontmatter, "canonical skill fixture must have frontmatter");
+  const lines = frontmatter[1].split("\n");
+  const rootLine = (key) => {
+    const line = lines.find((candidate) => candidate.startsWith(`${key}:`));
+    assert.ok(line, `canonical skill fixture must declare ${key}`);
+    return line;
+  };
+  return {
+    body: source.slice(frontmatter[0].length).replace(/^(?:\r?\n)+/u, ""),
+    source: [
+      rootLine("description"),
+      rootLine("license"),
+      "metadata:",
+      ...metadataLines.map((line) => `    ${line}`),
+      rootLine("name")
+    ].join("\n")
+  };
+}
+
+function validateInstalledMetadataLines(metadataLines) {
+  const parsed = parseCanonicalYamlMapping(
+    createInstalledFrontmatter(metadataLines).source,
+    "SKILL.md frontmatter",
+    installedSkillShape,
+    { childIndentation: 4 }
+  );
+  const errors = [...parsed.errors];
+  if (errors.length === 0) {
+    errors.push(...validateInstalledProvenance(parsed.value.metadata, parsed.value.name));
+  }
+  return errors;
 }
 
 test("trusted verifier validates a candidate skill as data without executing its tests", () => {
@@ -24,7 +282,7 @@ test("trusted verifier validates a candidate skill as data without executing its
   try {
     fs.cpSync(skillRoot, candidateRoot, { recursive: true });
     fs.writeFileSync(
-      path.join(candidateRoot, "scripts", "test", "must-not-run.test.mjs"),
+      path.join(candidateRoot, "scripts", "test", "trade-capability-manifest.test.mjs"),
       'throw new Error("candidate test code executed");\n'
     );
     const result = childProcess.spawnSync(
@@ -35,6 +293,47 @@ test("trusted verifier validates a candidate skill as data without executing its
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /without executing candidate scripts or tests/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("trusted verifier accepts a real skill root below a harmless ..x container", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "..x-programmable-static-skill-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Validated candidate skill structure/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("trusted verifier rejects a nested duplicate key in any packaged JSON without executing candidate code", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-json-duplicate-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+  const executionMarker = path.join(fixtureRoot, "candidate-code-executed");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(candidateRoot, "references", "programmable-trade-execution-v1.schema.json"),
+      '{"outer":{"same":1,"same":2}}\n'
+    );
+    fs.writeFileSync(
+      path.join(candidateRoot, "scripts", "test", "trade-capability-manifest.test.mjs"),
+      `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(executionMarker)}, "executed\\n");\n`
+    );
+
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /references\/programmable-trade-execution-v1\.schema\.json: must be bounded duplicate-free UTF-8 JSON/u);
+    assert.equal(fs.existsSync(executionMarker), false);
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
@@ -66,51 +365,157 @@ test("non-canonical skill roots fail closed before candidate tests can execute",
   }
 });
 
-for (const requiredPath of [
-  "references/companion-manifest-v2.schema.json",
-  "references/companion-manifests.md",
-  "references/official-model-patterns.md",
-  "references/routing-and-discovery.md",
-  "references/runtime-assets-v1.schema.json",
-  "references/runtime-assets.md",
-  "references/workflow.md",
-  "assets/examples/transparent-pool-scoped-fee.json",
-  "assets/templates/no-hook-architecture.example.json",
-  "assets/templates/runtime-assets.example.json",
-  "assets/templates/companion-closure-workflow.yml",
-  "assets/templates/companion-manifest-v2.example.json",
-  "scripts/build-info-core.mjs",
-  "scripts/check-upstream-drift.mjs",
-  "scripts/companion-manifest-contract.mjs",
-  "scripts/example-materializer-core.mjs",
-  "scripts/github-exact-object-resolver.mjs",
-  "scripts/github-public-source-core.mjs",
-  "scripts/metadata-core.mjs",
-  "scripts/public-claims-core.mjs",
-  "scripts/runtime-assets-core.mjs",
-  "scripts/verify-skill.mjs",
-  "scripts/test/cross-chain-policy.test.mjs",
-  "scripts/test/companion-manifest-v2.test.mjs",
-  "scripts/test/schema-security.test.mjs",
-  "scripts/test/verify-package-build-info.test.mjs"
-]) {
-  test(`trusted verifier requires ${requiredPath}`, () => {
-    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-required-"));
-    const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+test("portable verifier declares every direct test exactly once", () => {
+  const { portableTestPaths } = readDeclaredRequiredInventories();
+  const discovered = fs.readdirSync(testDirectory)
+    .filter((name) => name.endsWith(".test.mjs"))
+    .sort()
+    .map((name) => `scripts/test/${name}`);
 
-    try {
-      fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+  assert.equal(portableTestPaths.length, 75);
+  assert.equal(new Set(portableTestPaths).size, portableTestPaths.length);
+  assert.deepEqual([...portableTestPaths].sort(), discovered);
+});
+
+test("portable verifier deletion-guards its exact required inventory in one bounded probe", () => {
+  const { requiredPaths } = readDeclaredRequiredInventories();
+  const inventorySha256 = crypto
+    .createHash("sha256")
+    .update(`${requiredPaths.join("\n")}\n`)
+    .digest("hex");
+
+  assert.equal(requiredPaths.length, 388);
+  assert.equal(new Set(requiredPaths).size, requiredPaths.length);
+  assert.equal(inventorySha256, "213603c758ec264cc2373cea9f57c1292c72e66f0cca89b41f06fea153b5dc38");
+  for (const requiredPath of requiredPaths) {
+    const entry = fs.lstatSync(path.join(skillRoot, requiredPath));
+    assert.ok(entry.isFile(), `${requiredPath} must be a regular file`);
+  }
+
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-required-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    for (const requiredPath of requiredPaths) {
       fs.rmSync(path.join(candidateRoot, requiredPath));
-
-      const result = runUntrustedVerifier(candidateRoot);
-
-      assert.notEqual(result.status, 0, result.stdout);
-      assert.match(result.stderr, new RegExp(`missing ${escapeRegExp(requiredPath)}`));
-    } finally {
-      fs.rmSync(fixtureRoot, { recursive: true, force: true });
     }
-  });
-}
+
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.equal(result.error, undefined);
+    assert.notEqual(result.status, 0, result.stdout);
+    for (const requiredPath of requiredPaths) {
+      assert.match(
+        result.stderr,
+        new RegExp(`(?:^|\\n)- missing ${escapeRegExp(requiredPath)}(?:\\n|$)`, "u")
+      );
+    }
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("portable verifier rejects discovered-versus-declared test inventory drift", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-test-inventory-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    fs.renameSync(
+      path.join(candidateRoot, "scripts", "test", "strict-json-core.test.mjs"),
+      path.join(candidateRoot, "scripts", "test", "undeclared-portable.test.mjs")
+    );
+
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /portable test inventory must exactly match declared required tests/);
+    assert.match(result.stderr, /missing files: scripts\/test\/strict-json-core\.test\.mjs/);
+    assert.match(result.stderr, /undeclared tests: scripts\/test\/undeclared-portable\.test\.mjs/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("trusted verifier rejects transient build directories at any depth", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-transient-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    const transientRoot = path.join(candidateRoot, "assets", "nested", "node_modules");
+    fs.mkdirSync(transientRoot, { recursive: true });
+    fs.writeFileSync(path.join(transientRoot, "ignored.js"), "throw new Error('must not execute');\n");
+
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /transient build or staging directory is not portable: assets\/nested\/node_modules/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("trusted verifier rejects an adverse or escaping knowledge-routing profile as data", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-knowledge-routing-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    const routingPath = path.join(candidateRoot, "references", "knowledge-routing.json");
+    const routing = JSON.parse(fs.readFileSync(routingPath, "utf8"));
+    routing.policy.automaticAdverseDecision = true;
+    routing.modes.explore.initial.push("../outside.md");
+    fs.writeFileSync(routingPath, `${JSON.stringify(routing, null, 2)}\n`);
+
+    const result = runUntrustedVerifier(candidateRoot);
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /knowledge-routing\.json: identity or non-adverse offline policy is invalid/);
+    assert.match(result.stderr, /knowledge-routing\.json: unsafe reference \.\.\/outside\.md/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("trusted verifier binds every starter catalog member to the catalog digest", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-catalog-digest-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    const memberPath = path.join(candidateRoot, "assets", "starter-catalog", "starters", "blank-custom.json");
+    const member = JSON.parse(fs.readFileSync(memberPath, "utf8"));
+    member.summary = `${member.summary} tampered`;
+    fs.writeFileSync(memberPath, `${JSON.stringify(member, null, 2)}\n`);
+
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /digest mismatch for assets\/starter-catalog\/starters\/blank-custom\.json/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("trusted verifier rejects unlisted starter catalog members", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-catalog-unlisted-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    fs.renameSync(
+      path.join(candidateRoot, "assets", "starter-catalog", "packs", "v4-swap-client.json"),
+      path.join(candidateRoot, "assets", "starter-catalog", "packs", "undeclared.json")
+    );
+
+    const result = runUntrustedVerifier(candidateRoot);
+
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /unlisted catalog member assets\/starter-catalog\/packs\/undeclared\.json/);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
 
 test("trusted verifier rejects a symlinked skill root without resolving it", () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-root-link-"));
@@ -241,7 +646,7 @@ test("trusted verifier rejects an oversized package before scanning its text", (
 
   try {
     fs.cpSync(skillRoot, candidateRoot, { recursive: true });
-    for (let index = 0; index < 9; index += 1) {
+    for (let index = 0; index < 14; index += 1) {
       const prefix = index === 0 ? `${localPath}\n` : "";
       fs.writeFileSync(
         path.join(candidateRoot, "assets", `large-${index}.txt`),
@@ -252,7 +657,7 @@ test("trusted verifier rejects an oversized package before scanning its text", (
     const result = runUntrustedVerifier(candidateRoot);
 
     assert.notEqual(result.status, 0, result.stdout);
-    assert.match(result.stderr, /portable package is \d+ bytes; keep it at or below 8000000/);
+    assert.match(result.stderr, /portable package is \d+ bytes; keep it at or below 12000000/);
     assert.doesNotMatch(result.stderr, /local filesystem path/);
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
@@ -265,7 +670,7 @@ test("trusted verifier rejects excessive file count before checking candidate sc
 
   try {
     fs.cpSync(skillRoot, candidateRoot, { recursive: true });
-    for (let index = 0; index < 260; index += 1) {
+    for (let index = 0; index < 400; index += 1) {
       fs.writeFileSync(path.join(candidateRoot, "assets", `count-${index}.txt`), "\n");
     }
     fs.writeFileSync(path.join(candidateRoot, "scripts", "invalid-syntax.mjs"), "export const = ;\n");
@@ -273,7 +678,7 @@ test("trusted verifier rejects excessive file count before checking candidate sc
     const result = runUntrustedVerifier(candidateRoot);
 
     assert.notEqual(result.status, 0, result.stdout);
-    assert.match(result.stderr, /portable package has \d+ files; keep it at or below 256/);
+    assert.match(result.stderr, /portable package has \d+ files; keep it at or below 640/);
     assert.doesNotMatch(result.stderr, /invalid-syntax|SyntaxError/);
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
@@ -327,182 +732,214 @@ test("candidate schema regex is parsed as data and never executed", () => {
   }
 });
 
-for (const [label, mutate] of [
-  [
-    "an inline host policy hidden below metadata",
-    (source) => insertAfterFrontmatterDescription(
-      source,
-      'metadata: {"allowed-tools": "shell"}'
-    )
-  ],
-  [
-    "a quoted host-policy key",
-    (source) => insertAfterFrontmatterDescription(
-      source,
-      '"allowed\\u002dtools": "shell"'
-    )
-  ],
-  [
-    "an inherited root key",
-    (source) => insertAfterFrontmatterDescription(source, "constructor: bypass")
-  ],
-  [
-    "an inherited root setter key",
-    (source) => insertAfterFrontmatterDescription(source, "__proto__: bypass")
-  ],
-  [
-    "an inherited nested key",
-    (source) => insertAfterFrontmatterDescription(
-      source,
-      "metadata:\n  constructor: bypass"
-    )
-  ],
-  [
-    "an inherited nested setter key",
-    (source) => insertAfterFrontmatterDescription(
-      source,
-      "metadata:\n  __proto__: bypass"
-    )
-  ],
-  [
-    "a custom YAML tag",
-    (source) => source.replace(
-      "description: Use when",
-      "description: !host-policy Use when"
-    )
-  ],
-  [
-    "an anchor",
-    (source) => source.replace(
-      "name: programmable-v4-hook-builder",
-      "name: &shared programmable-v4-hook-builder"
-    )
-  ],
-  [
-    "a duplicate key",
-    (source) => source.replace(
-      "description: Use when",
-      "name: programmable-v4-hook-builder\ndescription: Use when"
-    )
-  ],
-  [
-    "a non-string description",
-    (source) => source.replace(
-      /^description:.*$/m,
-      "description: true"
-    )
-  ],
-  [
-    "an unterminated quoted scalar",
-    (source) => source.replace(
-      "name: programmable-v4-hook-builder",
-      'name: "programmable-v4-hook-builder'
-    )
-  ]
-]) {
-  test(`trusted verifier rejects SKILL.md with ${label}`, () => {
-    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-skill-yaml-"));
-    const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+test("canonical YAML parser rejects the exact SKILL.md mutation matrix as data", () => {
+  const source = fs.readFileSync(path.join(skillRoot, "SKILL.md"), "utf8");
+  for (const [label, mutate, expected] of [
+    [
+      "an inline host policy hidden below metadata",
+      (candidate) => insertAfterFrontmatterDescription(
+        candidate,
+        'metadata: {"allowed-tools": "shell"}'
+      ),
+      /requires metadata to be a block mapping/u
+    ],
+    [
+      "a quoted host-policy key",
+      (candidate) => insertAfterFrontmatterDescription(
+        candidate,
+        '"allowed\\u002dtools": "shell"'
+      ),
+      /outside the supported YAML mapping subset/u
+    ],
+    [
+      "an inherited root key",
+      (candidate) => insertAfterFrontmatterDescription(candidate, "constructor: bypass"),
+      /unsupported key constructor/u
+    ],
+    [
+      "an inherited root setter key",
+      (candidate) => insertAfterFrontmatterDescription(candidate, "__proto__: bypass"),
+      /unsupported key __proto__/u
+    ],
+    [
+      "an inherited nested key",
+      (candidate) => insertAfterFrontmatterDescription(
+        candidate,
+        "metadata:\n  constructor: bypass"
+      ),
+      /unsupported key constructor/u
+    ],
+    [
+      "an inherited nested setter key",
+      (candidate) => insertAfterFrontmatterDescription(
+        candidate,
+        "metadata:\n  __proto__: bypass"
+      ),
+      /unsupported key __proto__/u
+    ],
+    [
+      "a custom YAML tag",
+      (candidate) => candidate.replace(
+        /^description: /m,
+        "description: !host-policy "
+      ),
+      /non-canonical plain string/u
+    ],
+    [
+      "an anchor",
+      (candidate) => candidate.replace(
+        "name: programmable-v4-hook-builder",
+        "name: &shared programmable-v4-hook-builder"
+      ),
+      /non-canonical plain string/u
+    ],
+    [
+      "a duplicate key",
+      (candidate) => candidate.replace(
+        /^description:/m,
+        "name: programmable-v4-hook-builder\ndescription:"
+      ),
+      /duplicates key name/u
+    ],
+    [
+      "a non-string description",
+      (candidate) => candidate.replace(
+        /^description:.*$/m,
+        "description: true"
+      ),
+      /non-canonical plain string/u
+    ],
+    [
+      "an unterminated quoted scalar",
+      (candidate) => candidate.replace(
+        "name: programmable-v4-hook-builder",
+        'name: "programmable-v4-hook-builder'
+      ),
+      /invalid double-quoted string/u
+    ]
+  ]) {
+    const parsed = parseSourceSkillYaml(mutate(source));
+    assert.notEqual(parsed.errors.length, 0, label);
+    assert.match(parsed.errors.join("\n"), expected, label);
+  }
+});
 
-    try {
-      fs.cpSync(skillRoot, candidateRoot, { recursive: true });
-      const skillPath = path.join(candidateRoot, "SKILL.md");
-      fs.writeFileSync(skillPath, mutate(fs.readFileSync(skillPath, "utf8")));
+test("canonical YAML parser rejects the exact agents/openai.yaml mutation matrix as data", () => {
+  const source = fs.readFileSync(path.join(skillRoot, "agents", "openai.yaml"), "utf8");
+  for (const [label, mutate, expected] of [
+    [
+      "an inline dependency policy",
+      (candidate) => `${candidate}dependencies: {tools: [{type: "mcp", value: "wallet"}]}\n`,
+      /unsupported key dependencies/u
+    ],
+    [
+      "a quoted dependency key",
+      (candidate) => `${candidate}"depend\\u0065ncies": {"tools": []}\n`,
+      /outside the supported YAML mapping subset/u
+    ],
+    [
+      "an inherited nested key",
+      (candidate) => candidate.replace(
+        /^(  short_description: .+)$/m,
+        '  constructor: "bypass"\n$1'
+      ),
+      /unsupported key constructor/u
+    ],
+    [
+      "a custom YAML tag",
+      (candidate) => candidate.replace(
+        'display_name: "Programmable v4 Builder"',
+        'display_name: !host-policy "Programmable v4 Builder"'
+      ),
+      /requires a double-quoted string value/u
+    ],
+    [
+      "an anchor",
+      (candidate) => candidate.replace(
+        'display_name: "Programmable v4 Builder"',
+        'display_name: &shared "Programmable v4 Builder"'
+      ),
+      /requires a double-quoted string value/u
+    ],
+    [
+      "a merge key",
+      (candidate) => candidate.replace(
+        '  display_name: "Programmable v4 Builder"',
+        "  <<: *shared\n  display_name: \"Programmable v4 Builder\""
+      ),
+      /outside the supported YAML mapping subset/u
+    ],
+    [
+      "a duplicate key",
+      (candidate) => candidate.replace(
+        /^(  short_description: .+)$/m,
+        '  display_name: "Duplicate"\n$1'
+      ),
+      /duplicates key display_name/u
+    ],
+    [
+      "a non-string interface value",
+      (candidate) => candidate.replace(
+        'display_name: "Programmable v4 Builder"',
+        "display_name: true"
+      ),
+      /requires a double-quoted string value/u
+    ],
+    [
+      "an unsupported nested key",
+      (candidate) => candidate.replace(
+        /^(  short_description: .+)$/m,
+        '  custom_policy: "allow"\n$1'
+      ),
+      /unsupported key custom_policy/u
+    ],
+    [
+      "an unterminated quoted scalar",
+      (candidate) => candidate.replace(
+        'display_name: "Programmable v4 Builder"',
+        'display_name: "Programmable v4 Builder'
+      ),
+      /invalid double-quoted string/u
+    ]
+  ]) {
+    const parsed = parseInterfaceYaml(mutate(source));
+    assert.notEqual(parsed.errors.length, 0, label);
+    assert.match(parsed.errors.join("\n"), expected, label);
+  }
+});
 
-      const result = runUntrustedVerifier(candidateRoot);
+test("trusted verifier integrates both canonical YAML guards without executing candidate code", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-yaml-integration-"));
+  const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+  const executionMarker = path.join(fixtureRoot, "candidate-code-executed");
 
-      assert.notEqual(result.status, 0, result.stdout);
-      assert.match(result.stderr, /SKILL\.md frontmatter:/);
-    } finally {
-      fs.rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  });
-}
+  try {
+    fs.cpSync(skillRoot, candidateRoot, { recursive: true });
+    const skillPath = path.join(candidateRoot, "SKILL.md");
+    fs.writeFileSync(
+      skillPath,
+      insertAfterFrontmatterDescription(
+        fs.readFileSync(skillPath, "utf8"),
+        'metadata: {"allowed-tools": "shell"}'
+      )
+    );
+    const interfacePath = path.join(candidateRoot, "agents", "openai.yaml");
+    fs.appendFileSync(interfacePath, 'dependencies: {tools: [{type: "mcp", value: "wallet"}]}\n');
+    fs.writeFileSync(
+      path.join(candidateRoot, "scripts", "test", "trade-capability-manifest.test.mjs"),
+      `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(executionMarker)}, "executed\\n");\n`
+    );
 
-for (const [label, mutate] of [
-  [
-    "an inline dependency policy",
-    (source) => `${source}dependencies: {tools: [{type: "mcp", value: "wallet"}]}\n`
-  ],
-  [
-    "a quoted dependency key",
-    (source) => `${source}"depend\\u0065ncies": {"tools": []}\n`
-  ],
-  [
-    "an inherited nested key",
-    (source) => source.replace(
-      '  short_description: "Build and check open-ended Uniswap v4 projects"',
-      '  constructor: "bypass"\n  short_description: "Build and check open-ended Uniswap v4 projects"'
-    )
-  ],
-  [
-    "a custom YAML tag",
-    (source) => source.replace(
-      'display_name: "Programmable v4 Builder"',
-      'display_name: !host-policy "Programmable v4 Builder"'
-    )
-  ],
-  [
-    "an anchor",
-    (source) => source.replace(
-      'display_name: "Programmable v4 Builder"',
-      'display_name: &shared "Programmable v4 Builder"'
-    )
-  ],
-  [
-    "a merge key",
-    (source) => source.replace(
-      '  display_name: "Programmable v4 Builder"',
-      "  <<: *shared\n  display_name: \"Programmable v4 Builder\""
-    )
-  ],
-  [
-    "a duplicate key",
-    (source) => source.replace(
-      '  short_description: "Build and check open-ended Uniswap v4 projects"',
-      '  display_name: "Duplicate"\n  short_description: "Build and check open-ended Uniswap v4 projects"'
-    )
-  ],
-  [
-    "a non-string interface value",
-    (source) => source.replace(
-      'display_name: "Programmable v4 Builder"',
-      "display_name: true"
-    )
-  ],
-  [
-    "an unsupported nested key",
-    (source) => source.replace(
-      '  short_description: "Build and check open-ended Uniswap v4 projects"',
-      '  custom_policy: "allow"\n  short_description: "Build and check open-ended Uniswap v4 projects"'
-    )
-  ],
-  [
-    "an unterminated quoted scalar",
-    (source) => source.replace(
-      'display_name: "Programmable v4 Builder"',
-      'display_name: "Programmable v4 Builder'
-    )
-  ]
-]) {
-  test(`trusted verifier rejects agents/openai.yaml with ${label}`, () => {
-    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-agent-yaml-"));
-    const candidateRoot = path.join(fixtureRoot, "programmable-v4-hook-builder");
+    const result = runUntrustedVerifier(candidateRoot);
 
-    try {
-      fs.cpSync(skillRoot, candidateRoot, { recursive: true });
-      const interfacePath = path.join(candidateRoot, "agents", "openai.yaml");
-      fs.writeFileSync(interfacePath, mutate(fs.readFileSync(interfacePath, "utf8")));
-
-      const result = runUntrustedVerifier(candidateRoot);
-
-      assert.notEqual(result.status, 0, result.stdout);
-      assert.match(result.stderr, /agents\/openai\.yaml:/);
-    } finally {
-      fs.rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  });
-}
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /SKILL\.md frontmatter:.*requires metadata to be a block mapping/u);
+    assert.match(result.stderr, /agents\/openai\.yaml:.*unsupported key dependencies/u);
+    assert.equal(fs.existsSync(executionMarker), false);
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
 
 test("trusted verifier accepts supported optional metadata fields as strings", () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-static-canonical-yaml-"));
@@ -554,20 +991,44 @@ test("installed verifier accepts current pinned gh skill GitHub provenance", () 
   }
 });
 
-test("installed verifier accepts current unpinned gh skill GitHub provenance", () => {
-  const fixture = materializeInstalledSkill([
-    "github-path: products/hooks/skills/programmable-v4-hook-builder",
-    "github-ref: v1.0.0",
-    "github-repo: https://github.com/0xprogrammable/programmable",
-    "github-tree-sha: 89abcdef0123456789abcdef0123456789abcdef"
-  ]);
+test("portable verifier rejects runtimes below Node 24 before scanning package bytes", () => {
+  const bootstrap = [
+    'Object.defineProperty(process.versions, "node", { value: "22.23.1" });',
+    `process.argv = [process.execPath, ${JSON.stringify(verifier)}, "--installed"];`,
+    `await import(${JSON.stringify(pathToFileURL(verifier).href)});`
+  ].join("\n");
+  const result = childProcess.spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", bootstrap],
+    { cwd: skillRoot, encoding: "utf8", shell: false }
+  );
+  assert.equal(result.status, 1, result.stdout || result.stderr);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /NODE_24_OR_NEWER_REQUIRED/u);
+});
 
-  try {
-    const result = runInstalledVerifier(fixture.skillRoot);
-
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-  } finally {
-    fs.rmSync(fixture.fixtureRoot, { recursive: true, force: true });
+test("installed metadata parser accepts exact unpinned GitHub and quoted local profiles", () => {
+  const localPath = macAbsolutePath(
+    "example",
+    "Builder's Projects",
+    "programmable-v4-hook-builder"
+  );
+  for (const [label, metadataLines] of [
+    [
+      "unpinned GitHub provenance",
+      [
+        "github-path: products/hooks/skills/programmable-v4-hook-builder",
+        "github-ref: v1.0.0",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 89abcdef0123456789abcdef0123456789abcdef"
+      ]
+    ],
+    [
+      "single-quoted local provenance",
+      [`local-path: '${localPath.replaceAll("'", "''")}'`]
+    ]
+  ]) {
+    assert.deepEqual(validateInstalledMetadataLines(metadataLines), [], label);
   }
 });
 
@@ -611,123 +1072,116 @@ test("installed verifier accepts gh skill local provenance but still scans all o
   }
 });
 
-test("installed verifier accepts gh skill single-quoted local provenance", () => {
-  const localPath = macAbsolutePath(
-    "example",
-    "Builder's Projects",
-    "programmable-v4-hook-builder"
-  );
+test("installed metadata parser rejects the exact provenance mutation matrix", () => {
+  for (const [label, metadataLines, expected] of [
+    [
+      "a policy key",
+      [
+        "github-path: skills/programmable-v4-hook-builder",
+        "github-ref: main",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567",
+        "allowed-tools: shell"
+      ],
+      /unsupported key allowed-tools/u
+    ],
+    [
+      "a custom YAML tag",
+      [
+        "github-path: skills/programmable-v4-hook-builder",
+        "github-ref: !host-policy main",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
+      ],
+      /non-canonical plain string/u
+    ],
+    [
+      "a YAML anchor",
+      [
+        "github-path: skills/programmable-v4-hook-builder",
+        "github-ref: &shared main",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
+      ],
+      /non-canonical plain string/u
+    ],
+    [
+      "a duplicate provenance key",
+      [
+        "github-path: skills/programmable-v4-hook-builder",
+        "github-ref: main",
+        "github-ref: release",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
+      ],
+      /duplicates key github-ref/u
+    ],
+    [
+      "mixed local and remote provenance",
+      [
+        "github-path: skills/programmable-v4-hook-builder",
+        "github-ref: main",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567",
+        `local-path: ${macAbsolutePath("example", "projects", "programmable-v4-hook-builder")}`
+      ],
+      /installed metadata must be exactly local-path or the GitHub repository/u
+    ],
+    [
+      "a repository URL with credentials",
+      [
+        "github-path: skills/programmable-v4-hook-builder",
+        "github-ref: main",
+        "github-repo: https://user@github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
+      ],
+      /github-repo must be a canonical HTTPS GitHub repository URL/u
+    ],
+    [
+      "a traversing GitHub path",
+      [
+        "github-path: skills/../programmable-v4-hook-builder",
+        "github-ref: main",
+        "github-repo: https://github.com/0xprogrammable/programmable",
+        "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
+      ],
+      /github-path must be a normalized relative path/u
+    ],
+    [
+      "a relative local provenance path",
+      ["local-path: projects/programmable-v4-hook-builder"],
+      /local-path must be an absolute filesystem path/u
+    ],
+    [
+      "oversized local provenance",
+      [`local-path: ${macAbsolutePath("example", "a".repeat(4096))}`],
+      /exceeds the 4096-byte provenance limit/u
+    ]
+  ]) {
+    const errors = validateInstalledMetadataLines(metadataLines);
+    assert.notEqual(errors.length, 0, label);
+    assert.match(errors.join("\n"), expected, label);
+  }
+});
+
+test("installed verifier integrates the provenance-profile rejection", () => {
   const fixture = materializeInstalledSkill([
-    `local-path: '${localPath.replaceAll("'", "''")}'`
+    "github-path: skills/programmable-v4-hook-builder",
+    "github-ref: main",
+    "github-repo: https://github.com/0xprogrammable/programmable",
+    "github-tree-sha: 0123456789abcdef0123456789abcdef01234567",
+    `local-path: ${macAbsolutePath("example", "projects", "programmable-v4-hook-builder")}`
   ]);
 
   try {
     const result = runInstalledVerifier(fixture.skillRoot);
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /installed metadata must be exactly local-path or the GitHub repository/u);
   } finally {
     fs.rmSync(fixture.fixtureRoot, { recursive: true, force: true });
   }
 });
-
-for (const [label, metadataLines, expected] of [
-  [
-    "a policy key",
-    [
-      "github-path: skills/programmable-v4-hook-builder",
-      "github-ref: main",
-      "github-repo: https://github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567",
-      "allowed-tools: shell"
-    ],
-    /unsupported key allowed-tools/
-  ],
-  [
-    "a custom YAML tag",
-    [
-      "github-path: skills/programmable-v4-hook-builder",
-      "github-ref: !host-policy main",
-      "github-repo: https://github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
-    ],
-    /non-canonical plain string/
-  ],
-  [
-    "a YAML anchor",
-    [
-      "github-path: skills/programmable-v4-hook-builder",
-      "github-ref: &shared main",
-      "github-repo: https://github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
-    ],
-    /non-canonical plain string/
-  ],
-  [
-    "a duplicate provenance key",
-    [
-      "github-path: skills/programmable-v4-hook-builder",
-      "github-ref: main",
-      "github-ref: release",
-      "github-repo: https://github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
-    ],
-    /duplicates key github-ref/
-  ],
-  [
-    "mixed local and remote provenance",
-    [
-      "github-path: skills/programmable-v4-hook-builder",
-      "github-ref: main",
-      "github-repo: https://github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567",
-      `local-path: ${macAbsolutePath("example", "projects", "programmable-v4-hook-builder")}`
-    ],
-    /installed metadata must be exactly local-path or the GitHub repository/
-  ],
-  [
-    "a repository URL with credentials",
-    [
-      "github-path: skills/programmable-v4-hook-builder",
-      "github-ref: main",
-      "github-repo: https://user@github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
-    ],
-    /github-repo must be a canonical HTTPS GitHub repository URL/
-  ],
-  [
-    "a traversing GitHub path",
-    [
-      "github-path: skills/../programmable-v4-hook-builder",
-      "github-ref: main",
-      "github-repo: https://github.com/0xprogrammable/programmable",
-      "github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
-    ],
-    /github-path must be a normalized relative path/
-  ],
-  [
-    "a relative local provenance path",
-    ["local-path: projects/programmable-v4-hook-builder"],
-    /local-path must be an absolute filesystem path/
-  ],
-  [
-    "oversized local provenance",
-    [`local-path: ${macAbsolutePath("example", "a".repeat(4096))}`],
-    /exceeds the 4096-byte provenance limit/
-  ]
-]) {
-  test(`installed verifier rejects ${label}`, () => {
-    const fixture = materializeInstalledSkill(metadataLines);
-
-    try {
-      const result = runInstalledVerifier(fixture.skillRoot);
-
-      assert.notEqual(result.status, 0, result.stdout);
-      assert.match(result.stderr, expected);
-    } finally {
-      fs.rmSync(fixture.fixtureRoot, { recursive: true, force: true });
-    }
-  });
-}
 
 function materializeInstalledSkill(metadataLines) {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-installed-skill-"));
@@ -735,26 +1189,8 @@ function materializeInstalledSkill(metadataLines) {
   fs.cpSync(skillRoot, installedSkillRoot, { recursive: true });
 
   const skillPath = path.join(installedSkillRoot, "SKILL.md");
-  const source = fs.readFileSync(skillPath, "utf8");
-  const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/);
-  assert.ok(frontmatter, "canonical skill fixture must have frontmatter");
-  const lines = frontmatter[1].split("\n");
-  const rootLine = (key) => {
-    const line = lines.find((candidate) => candidate.startsWith(`${key}:`));
-    assert.ok(line, `canonical skill fixture must declare ${key}`);
-    return line;
-  };
-  const body = source.slice(frontmatter[0].length).replace(/^(?:\r?\n)+/u, "");
-  const installedFrontmatter = [
-    "---",
-    rootLine("description"),
-    rootLine("license"),
-    "metadata:",
-    ...metadataLines.map((line) => `    ${line}`),
-    rootLine("name"),
-    "---"
-  ].join("\n");
-  fs.writeFileSync(skillPath, `${installedFrontmatter}\n${body}`);
+  const installed = createInstalledFrontmatter(metadataLines);
+  fs.writeFileSync(skillPath, `---\n${installed.source}\n---\n${installed.body}`);
 
   return { fixtureRoot, skillRoot: installedSkillRoot };
 }
