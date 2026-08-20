@@ -157,6 +157,15 @@ describe("profile action error copy", () => {
         new Error("Deep reward action is not ready"),
       ),
     ).toBe("Unable to claim. Try again.");
+    expect(
+      profileRewardActionErrorMessage(
+        new Error(
+          "The reward action could not be simulated from current onchain state",
+        ),
+      ),
+    ).toBe(
+      "The reward action could not be simulated from current onchain state",
+    );
   });
 
   it("recognizes nested wallet rejection without leaving a claim error", () => {
@@ -266,10 +275,10 @@ describe("profile workspace loading state", () => {
     ).toBe("loading");
   });
 
-  it("reveals one complete workspace after optional reward sources finish", () => {
+  it("reveals verified rewards while optional sources continue loading", () => {
     expect(
       getProfileWorkspacePhase(["error", "ready", "loading"], false),
-    ).toBe("loading");
+    ).toBe("ready");
     expect(
       getProfileWorkspacePhase(
         ["error", "ready", "not-deployed"],
@@ -283,7 +292,7 @@ describe("profile workspace loading state", () => {
       ),
     ).toBe("error");
     expect(profileViewSource).toMatch(
-      /if \(statuses\.some\(\(status\) => status === "loading"\)\)[\s\S]*?return "loading";[\s\S]*?status === "ready"/,
+      /if \(integrityConflict\) return "error";[\s\S]*?status === "ready"[\s\S]*?status === "loading"/,
     );
   });
 
@@ -389,11 +398,14 @@ describe("profile workspace loading state", () => {
     );
   });
 
-  it("keeps profile loading visually empty and reveals only resolved content", () => {
+  it("reveals the profile shell while reward sources load progressively", () => {
     expect(profileViewSource).toContain(
       'className={styles.profileLoadingState}',
     );
     expect(profileViewSource).toContain(
+      'if (phase === "loading")',
+    );
+    expect(profileViewSource).not.toContain(
       'if (profileWorkspacePhase === "loading")',
     );
     expect(profileViewSource).not.toContain("styles.sessionLoadingWorkspace");

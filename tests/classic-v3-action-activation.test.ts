@@ -12,7 +12,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   indexedEnabled: true,
   lookup: vi.fn(),
-  readProfile: vi.fn(),
+  readCatalog: vi.fn(),
   createPublicClient: vi.fn(),
   getWebsiteReadOnchainDeployment: vi.fn(),
   runtimeHashes: {
@@ -210,13 +210,8 @@ vi.mock("../lib/data-pipeline/action-lookup", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/market-data/bitquery-profile.server", () => ({
-  readBitqueryClassicV3Profile: mocks.readProfile,
-  readBitqueryClassicV3Launch: vi.fn(),
-  safeBitqueryProfileError: vi.fn(() => ({
-    name: "BitqueryProfileError",
-    category: "unexpected",
-  })),
+vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
+  readEnvioClassicV3CatalogV1: mocks.readCatalog,
 }));
 
 vi.mock("../lib/onchain", async (importOriginal) => {
@@ -260,23 +255,22 @@ describe("Classic V3 action identity activation", () => {
     vi.clearAllMocks();
     mocks.getWebsiteReadOnchainDeployment.mockReturnValue(deployment);
     mocks.lookup.mockResolvedValue(actionReward);
-    mocks.readProfile.mockResolvedValue({
-      status: "ready",
-      account,
-      chainId: 1,
-      rewards: [{
-        vaultAddress: vault,
+    mocks.readCatalog.mockResolvedValue({
+      entries: [{
+        exploreKind: "token",
+        launchModelVersion: "classic-v3",
+        rewardVaultAddress: vault,
         poolId,
-        buySwapFeeBps: 100,
-        sellSwapFeeBps: 100,
-        platformFeeBps: 10,
+        buyHookFeeBps: 100,
+        sellHookFeeBps: 100,
+        lpFeePips: 0,
       }],
     });
     mocks.createPublicClient.mockImplementation(() => actionClient(0));
   });
 
   it.each([true, false])(
-    "uses Bitquery identity and one RPC when indexed lookup is %s",
+    "uses Envio identity and one RPC when indexed lookup is %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
@@ -296,7 +290,7 @@ describe("Classic V3 action identity activation", () => {
         },
       });
       expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
-      expect(mocks.readProfile).toHaveBeenCalledTimes(1);
+      expect(mocks.readCatalog).toHaveBeenCalledTimes(1);
       expect(mocks.lookup).not.toHaveBeenCalled();
     },
   );
@@ -318,7 +312,7 @@ describe("Classic V3 action identity activation", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
-    expect(mocks.readProfile).toHaveBeenCalledTimes(1);
+    expect(mocks.readCatalog).toHaveBeenCalledTimes(1);
     expect(serialized).not.toContain("drpc-classic-key");
     expect(serialized).not.toContain("quicknode-classic-key");
   });

@@ -332,11 +332,11 @@ export function getProfileWorkspacePhase(
   terminalErrorReady: boolean,
   integrityConflict = false,
 ): ProfileWorkspacePhase {
+  if (integrityConflict) return "error";
+  if (statuses.some((status) => status === "ready")) return "ready";
   if (statuses.some((status) => status === "loading")) {
     return "loading";
   }
-  if (integrityConflict) return "error";
-  if (statuses.some((status) => status === "ready")) return "ready";
   if (!terminalErrorReady) return "loading";
   return "error";
 }
@@ -436,10 +436,19 @@ export function profileRewardActionErrorMessage(error: unknown) {
   if (walletActionWasCancelled(error)) {
     return "Transaction cancelled. Rewards remain available.";
   }
-  return error instanceof Error &&
-    error.message === walletChangedBeforeSubmission
-    ? error.message
-    : "Unable to claim. Try again.";
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (
+      message === walletChangedBeforeSubmission ||
+      message === insufficientNetworkFee ||
+      /^(?:Connect an Ethereum wallet|Your wallet session expired|The wallet session changed|Wallet connection was interrupted|The wallet could not open|This wallet needs more ETH|There are no rewards to claim|The reward action could not be simulated)/u.test(
+        message,
+      )
+    ) {
+      return message;
+    }
+  }
+  return "Unable to claim. Try again.";
 }
 
 const pendingProfileTransactionStoragePrefix =
@@ -2909,25 +2918,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             Connect wallet
           </button>
         </section>
-      </div>
-    );
-  }
-
-  const profileWorkspacePhase = getProfileWorkspacePhase(
-    [
-      scopedOnchainData.status,
-      scopedClassicV3Rewards.status,
-      scopedDeepRewards.status,
-      scopedDeepV3Profile.status,
-      scopedStockPairedRewards.status,
-    ],
-    terminalErrorReady,
-  );
-
-  if (profileWorkspacePhase === "loading") {
-    return (
-      <div className={`${styles.page} page-width`}>
-        <ProfileLoadingState />
       </div>
     );
   }
