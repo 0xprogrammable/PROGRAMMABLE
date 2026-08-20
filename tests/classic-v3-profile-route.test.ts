@@ -33,8 +33,7 @@ const mocks = vi.hoisted(() => {
   return {
     client,
     createPublicClient: vi.fn(() => client),
-    readBitqueryClassicV3Launch: vi.fn(),
-    readBitqueryClassicV3Profile: vi.fn(),
+    readEnvioClassicV3CatalogV1: vi.fn(),
     runtimeCodes,
   };
 });
@@ -64,10 +63,8 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/market-data/bitquery-profile.server", () => ({
-  readBitqueryClassicV3Launch: mocks.readBitqueryClassicV3Launch,
-  readBitqueryClassicV3Profile: mocks.readBitqueryClassicV3Profile,
-  safeBitqueryProfileError: vi.fn((error) => error),
+vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
+  readEnvioClassicV3CatalogV1: mocks.readEnvioClassicV3CatalogV1,
 }));
 
 import {
@@ -86,12 +83,7 @@ describe("Classic profile release gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createPublicClient.mockReturnValue(mocks.client);
-    mocks.readBitqueryClassicV3Profile.mockResolvedValue({
-      status: "ready",
-      account,
-      chainId: 1,
-      rewards: [],
-    });
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue({ entries: [] });
     vi.stubEnv("ETHEREUM_RPC_URL", drpcRpcUrl);
     vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
     vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
@@ -142,7 +134,6 @@ describe("Classic profile release gate", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.readBitqueryClassicV3Profile).not.toHaveBeenCalled();
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "rpc",
@@ -173,7 +164,6 @@ describe("Classic profile release gate", () => {
       },
     });
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
-    expect(mocks.readBitqueryClassicV3Profile).not.toHaveBeenCalled();
   });
 
   it("rejects invalid launch lookup hashes before reading a provider", async () => {
@@ -187,7 +177,6 @@ describe("Classic profile release gate", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Enter a valid launch transaction hash",
     });
-    expect(mocks.readBitqueryClassicV3Launch).not.toHaveBeenCalled();
     expect(mocks.createPublicClient).not.toHaveBeenCalled();
   });
 

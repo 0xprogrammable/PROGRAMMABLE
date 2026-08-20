@@ -28,8 +28,8 @@ import {
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { getWebsiteReadOnchainDeployment } from "@/lib/onchain";
 import {
-  readBitqueryClassicV3Profile,
-} from "@/lib/market-data/bitquery-profile.server";
+  readEnvioClassicV3CatalogV1,
+} from "@/lib/market-data/envio-classic-v3-catalog.server";
 import {
   safeOperationalRpcError,
   withOperationalRpcFailover,
@@ -39,6 +39,7 @@ import {
   classicV3ProfileApiError,
   encodeClassicV3RewardAction,
 } from "@/lib/profile/classic-v3-rewards";
+import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -816,30 +817,38 @@ export async function POST(request: NextRequest) {
     if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
       return json({ error: "Classic is not deployed yet" }, 409);
     }
-    const profile = await readBitqueryClassicV3Profile(account);
-    if (profile.status !== "ready") {
-      return json({ error: "Classic is not deployed yet" }, 409);
-    }
-    const bitqueryReward = profile.rewards.find(
-      (candidate) =>
-        candidate.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
+    const catalog = await readEnvioClassicV3CatalogV1({
+      signal: request.signal,
+      deadlineMs: Date.now() + 7_000,
+    });
+    const catalogReward = catalog.entries.find(
+      (candidate): candidate is CanonicalTokenExploreEntry =>
+        candidate.exploreKind === "token" &&
+        candidate.launchModelVersion === "classic-v3" &&
+        candidate.rewardVaultAddress?.toLowerCase() ===
+          vaultAddress.toLowerCase(),
     );
-    if (!bitqueryReward) {
+    if (
+      !catalogReward ||
+      catalogReward.rewardVaultAddress === undefined ||
+      typeof catalogReward.buyHookFeeBps !== "number" ||
+      typeof catalogReward.sellHookFeeBps !== "number"
+    ) {
       return json(
         { error: "Only a current or historic payout wallet can continue" },
         403,
       );
     }
     const reward: ClassicActionRewardIdentity = {
-      vaultAddress: bitqueryReward.vaultAddress,
-      poolId: bitqueryReward.poolId,
-      buySwapFeeBps: bitqueryReward.buySwapFeeBps,
-      sellSwapFeeBps: bitqueryReward.sellSwapFeeBps,
+      vaultAddress: catalogReward.rewardVaultAddress,
+      poolId: catalogReward.poolId,
+      buySwapFeeBps: catalogReward.buyHookFeeBps,
+      sellSwapFeeBps: catalogReward.sellHookFeeBps,
       buyCreatorFeeBps: null,
       sellCreatorFeeBps: null,
-      launcherFeeBps: bitqueryReward.platformFeeBps,
+      launcherFeeBps: 10,
       transferTaxBps: 0,
-      lpFeePips: 0,
+      lpFeePips: catalogReward.lpFeePips ?? 0,
     };
     const deployment = classicActionDeployment();
     const prepared = await withOperationalRpcFailover(
