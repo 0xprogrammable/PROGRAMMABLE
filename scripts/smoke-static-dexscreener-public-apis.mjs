@@ -622,19 +622,31 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     "/api/explore/profile?account=" + encodeURIComponent(profileAccount),
     new Set([200, 503]),
   );
+  const profileRpcProvider = profile.headers.get(
+    "x-programmable-rpc-provider",
+  );
+  const profileRpcProviderReady =
+    profileRpcProvider === "drpc-primary" ||
+    profileRpcProvider === "quicknode-secondary";
   const profileSourceReady =
     (
-      profile.headers.get("x-programmable-launch-source") === "drpc" &&
-      profile.headers.get("x-programmable-read-source") === "drpc" &&
-      profile.headers.get("x-programmable-rpc-provider") === "drpc-primary"
+      profile.headers.get("x-programmable-launch-source") === "rpc" &&
+      profile.headers.get("x-programmable-read-source") === "rpc" &&
+      profileRpcProviderReady
     ) ||
     (
       profile.headers.get("x-programmable-launch-source") ===
         "envio-classic-v3" &&
       profile.headers.get("x-programmable-read-source") ===
         "envio-classic-v3" &&
-      profile.headers.get("x-programmable-rpc-provider") ===
-        "envio-indexer-state"
+      profileRpcProvider === "envio-indexer-state"
+    ) ||
+    (
+      profile.headers.get("x-programmable-launch-source") ===
+        "envio-classic-v3" &&
+      profile.headers.get("x-programmable-read-source") ===
+        "envio-classic-v3+rpc" &&
+      profileRpcProviderReady
     );
   const profileReady =
     profile.status === 200 &&

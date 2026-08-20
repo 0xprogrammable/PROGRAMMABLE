@@ -849,6 +849,28 @@ test("staged smoke rejects creator profile provider-header drift", async () => {
   );
 });
 
+test("staged smoke accepts the exact Envio plus RPC creator profile source", async () => {
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(undefined, ({ extraHeaders, omittedHeaders, url }) => ({
+      extraHeaders: url.pathname === "/api/explore/profile"
+        ? {
+            ...extraHeaders,
+            "x-programmable-read-source": "envio-classic-v3+rpc",
+            "x-programmable-rpc-provider": "quicknode-secondary",
+          }
+        : extraHeaders,
+      omittedHeaders,
+    })),
+    appendOutput: () => undefined,
+  });
+  assert.equal(result.profileStatus, "ready");
+});
+
 test("staged smoke accepts the unchanged fail-closed creator profile boundary", async () => {
   const baseFetch = stagedFetch();
   const result = await runStagedStaticDexscreenerSmokeV1({
