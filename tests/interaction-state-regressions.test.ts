@@ -49,16 +49,16 @@ describe("interaction state regressions", () => {
     expect(actionAccessibleName).toContain("${tokenSymbol}");
   });
 
-  it("uses the active profile network for transaction links", () => {
+  it("reconciles submitted profile claims without a manual status action", () => {
     const source = readFileSync(
       join(root, "components/profile-view.tsx"),
       "utf8",
     );
 
-    expect(source).toMatch(
-      /function transactionHref[\s\S]*?chainId === 11_155_111[\s\S]*?sepolia\.etherscan\.io[\s\S]*?etherscan\.io/,
-    );
-    expect(source).toContain("View transaction");
+    expect(source).toContain("autoResumingProfileTransactionsRef");
+    expect(source).toContain('message: "Confirming on Ethereum"');
+    expect(source).not.toContain('return "Check status"');
+    expect(source).not.toContain("View transaction");
   });
 
   it("remounts token-detail trade state when the connected account changes", () => {

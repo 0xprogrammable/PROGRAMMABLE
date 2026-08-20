@@ -2,24 +2,23 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { formatUnits, parseUnits, type Hex } from "viem";
+import { ChevronLeft, ChevronRight, RefreshCw, X } from "lucide-react";
+import { formatUnits, type Hex } from "viem";
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type ChangeEvent,
   type FormEvent,
-  type KeyboardEvent,
   type PointerEvent,
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import {
   prepareAvatarImage,
@@ -83,7 +82,6 @@ import {
   ProfileResponseError,
   UNAVAILABLE_PROFILE_DATA,
   type ProfileClaim,
-  type ProfileActivity,
   type ProfileOnchainData,
   type ProfileToken,
 } from "@/lib/profile/onchain-profile";
@@ -248,17 +246,12 @@ export function resolveStockPairedReceiptGate(
   if (receiptStatus === "unavailable") {
     return {
       outcome: "hold",
-      message: "Status unavailable. Check the same transaction again",
+      message: "Confirming on Ethereum",
     };
   }
   return {
     outcome: "hold",
-    message:
-      pendingStage === "claim"
-        ? "Claim submitted. Check its status before converting"
-        : pendingStage === "swap"
-          ? "Conversion submitted. Check its status before showing it as complete"
-          : "Approval submitted. Check its status before continuing",
+    message: "Confirming on Ethereum",
   };
 }
 
@@ -396,7 +389,29 @@ const transactionCancelledInWallet = "Transaction cancelled in wallet";
 const creatorClaimNotSubmitted =
   "The claim status could not be confirmed. Check your wallet activity before trying again.";
 
+export function walletActionWasCancelled(error: unknown) {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    const record = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (record.code === 4001 || record.code === "ACTION_REJECTED") return true;
+    if (
+      typeof record.message === "string" &&
+      /(?:user|request|transaction).*(?:cancelled|canceled|denied|rejected)|(?:cancelled|canceled) in wallet/iu.test(
+        record.message,
+      )
+    ) {
+      return true;
+    }
+    current = record.cause;
+  }
+  return false;
+}
+
 export function profileCreatorClaimErrorMessage(error: unknown) {
+  if (walletActionWasCancelled(error)) {
+    return "Transaction cancelled. Rewards remain available.";
+  }
   if (
     error instanceof CreatorClaimClientError &&
     error.code !== "invalid-response" &&
@@ -418,10 +433,13 @@ export function profileCreatorClaimErrorMessage(error: unknown) {
 }
 
 export function profileRewardActionErrorMessage(error: unknown) {
+  if (walletActionWasCancelled(error)) {
+    return "Transaction cancelled. Rewards remain available.";
+  }
   return error instanceof Error &&
     error.message === walletChangedBeforeSubmission
     ? error.message
-    : "The reward action was not completed. Check your wallet and try again.";
+    : "Unable to claim. Try again.";
 }
 
 const pendingProfileTransactionStoragePrefix =
@@ -487,6 +505,29 @@ function formatEth(value?: string) {
 
 function formatWei(value: bigint) {
   return formatEth(formatUnits(value, 18));
+}
+
+function metricNumber(value: string | undefined) {
+  if (!value || !/^(?:0|[1-9][0-9]*)$/u.test(value)) return null;
+  const parsed = Number(formatUnits(BigInt(value), 18));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function profileTokenMarketCapLabel(token: ProfileToken) {
+  const usd = metricNumber(token.fdvUsdWad);
+  if (usd !== null) return formatMarketCapMetric({ kind: "usd", value: usd });
+  const quote = metricNumber(token.marketCapQuoteWad);
+  if (quote !== null && token.quoteAssetSymbol?.trim()) {
+    return formatMarketCapMetric({
+      kind: "quote",
+      symbol: token.quoteAssetSymbol.trim(),
+      value: quote,
+    });
+  }
+  const eth = metricNumber(token.marketCapEthWei);
+  return eth === null
+    ? null
+    : formatMarketCapMetric({ kind: "eth", value: eth });
 }
 
 function formatStockRewardEstimate(
@@ -653,7 +694,7 @@ export function preserveInterruptedTransactionStates<
     next[key] = {
       ...state,
       status: "pending",
-      message: "Status check paused. Check the same transaction again",
+      message: "Confirming on Ethereum",
     };
     changed = true;
   }
@@ -971,7 +1012,7 @@ function restoredPendingProfileActionState(
   return {
     account: record.account,
     status: "pending",
-    message: "Transaction submitted. Check its current status",
+    message: "Confirming on Ethereum",
     transactionHash: record.transactionHash,
     ...(record.source === "stock-paired" && record.pendingStage
       ? {
@@ -1119,6 +1160,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const transactionPollControllersRef = useRef<Set<AbortController>>(
     new Set(),
   );
+  const autoResumingProfileTransactionsRef = useRef<Set<string>>(new Set());
   const stockPairedActionLocksRef = useRef<Set<string>>(new Set());
   const hydratedPendingAccountRef = useRef<string | undefined>(undefined);
   const confirmedProfileTransactionsRef = useRef<
@@ -1198,6 +1240,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
     if (previousAccount !== normalizedAccount) {
       abortTransactionPolls();
+      autoResumingProfileTransactionsRef.current.clear();
       hydratedPendingAccountRef.current = undefined;
       for (const targets of Object.values(
         confirmedProfileTransactionsRef.current,
@@ -1267,7 +1310,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     const cached = readCachedCreatorProfile(account);
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
-        setRemoteOnchainData(cached ?? loadingProfileData(account));
+        setRemoteOnchainData((current) =>
+          isProfileDataForAccount(current, account) &&
+            current.status === "ready"
+            ? current
+            : (cached ?? loadingProfileData(account))
+        );
       }
     });
 
@@ -1321,12 +1369,22 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     if (cachedProfile) {
       queueMicrotask(() => {
         if (cancelled || controller.signal.aborted) return;
-        setClassicV3Rewards(cachedProfile.data);
-        setClassicV3SourceState({
-          account,
-          quality: "stale",
-          verifiedAt: cachedProfile.verifiedAt,
-        });
+        setClassicV3Rewards((current) =>
+          current.status === "ready" &&
+            current.account?.toLowerCase() === account.toLowerCase()
+            ? current
+            : cachedProfile.data
+        );
+        setClassicV3SourceState((current) =>
+          current.account?.toLowerCase() === account.toLowerCase() &&
+            current.quality === "current"
+            ? current
+            : {
+                account,
+                quality: "stale",
+                verifiedAt: cachedProfile.verifiedAt,
+              }
+        );
       });
     }
     const confirmedTransactions = new Map(
@@ -1811,9 +1869,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       transactionPollControllersRef.current.add(controller);
       setActionState({
         status: "confirming",
-        message: manualCheck
-          ? "Checking transaction status"
-          : "Confirming on Ethereum",
+        message: "Confirming on Ethereum",
         transactionHash,
       });
 
@@ -1837,7 +1893,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         if (receiptStatus === "pending") {
           setActionState({
             status: "pending",
-            message: "Still pending on Ethereum. Check the status again",
+            message: "Confirming on Ethereum",
             transactionHash,
           });
           return;
@@ -1872,7 +1928,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "pending",
-          message: "Status unavailable. Check the transaction again",
+          message: "Confirming on Ethereum",
           transactionHash,
         });
       } finally {
@@ -1881,6 +1937,66 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!account) return;
+    let pending: PendingProfileTransactionRecord[] = [];
+    try {
+      pending = readPendingProfileTransactions(window.localStorage, account);
+    } catch {
+      return;
+    }
+    for (const record of pending) {
+      if (
+        (record.source !== "classic" && record.source !== "classic-v3") ||
+        (record.action !== "claim" && record.action !== "update-payout")
+      ) {
+        continue;
+      }
+      const resumeKey = [
+        record.source,
+        record.stateKey,
+        record.transactionHash,
+      ].join(":");
+      if (autoResumingProfileTransactionsRef.current.has(resumeKey)) continue;
+      autoResumingProfileTransactionsRef.current.add(resumeKey);
+      const setActionState = (
+        state: Omit<ProfileClaimActionState, "account">,
+      ) => {
+        const update = (
+          current: Record<string, ProfileClaimActionState>,
+        ) => ({
+          ...current,
+          [record.stateKey]: { account: record.account, ...state },
+        });
+        if (record.source === "classic") {
+          setClaimActionStates(update);
+        } else {
+          setClassicV3ActionStates(update);
+        }
+      };
+      void settleSubmittedTransaction({
+        transactionHash: record.transactionHash,
+        chainId: record.chainId,
+        actionAccount: record.account,
+        source: record.source,
+        stateKey: record.stateKey,
+        action: record.action,
+        confirmedMessage:
+          record.action === "claim"
+            ? "Claim confirmed"
+            : "Payout address updated",
+        revertedMessage:
+          record.action === "claim"
+            ? "Claim reverted"
+            : "Payout update reverted",
+        setActionState,
+      }).finally(() => {
+        autoResumingProfileTransactionsRef.current.delete(resumeKey);
+      });
+    }
+  }, [account, liveProfileRefresh, settleSubmittedTransaction]);
+
   const submitCreatorClaim = useCallback(
     async (claim: ProfileClaim) => {
       const claimAccount = account;
@@ -1991,6 +2107,14 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         if (
           activeAccountRef.current?.toLowerCase() !== claimAccount.toLowerCase()
         ) {
+          return;
+        }
+        if (walletActionWasCancelled(caught)) {
+          setClaimActionStates((current) => {
+            const next = { ...current };
+            delete next[stateKey];
+            return next;
+          });
           return;
         }
         setClaimState({
@@ -2123,6 +2247,14 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         ) {
           return;
         }
+        if (walletActionWasCancelled(caught)) {
+          setClassicV3ActionStates((current) => {
+            const next = { ...current };
+            delete next[stateKey];
+            return next;
+          });
+          return;
+        }
         setActionState({
           status: "error",
           message: profileRewardActionErrorMessage(caught),
@@ -2246,6 +2378,14 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           activeAccountRef.current?.toLowerCase() !==
           actionAccount.toLowerCase()
         ) {
+          return;
+        }
+        if (walletActionWasCancelled(caught)) {
+          setDeepActionStates((current) => {
+            const next = { ...current };
+            delete next[stateKey];
+            return next;
+          });
           return;
         }
         setActionState({
@@ -4009,6 +4149,13 @@ function ProfileAccountWorkspace({
         profileEntryOptimisticallyClaimedWei(entry, account, actionStates),
       0n,
     );
+  const nativeClaimable = entries.reduce(
+    (total, entry) =>
+      total +
+      profileEntryActionableNativeWei(entry, account, actionStates),
+    0n,
+  );
+  const nativeEarned = nativeClaimed + nativeClaimable;
   const claimableEntries = sortProfileClaimableEntries(
     entries.filter((entry) =>
       profileEntryHasActionableReward(entry, account, actionStates),
@@ -4021,24 +4168,6 @@ function ProfileAccountWorkspace({
     claimPage,
   );
   const routerLaunchEntries = profileRouterLaunchEntries(entries);
-  const chainId = currentReady
-    ? data.chainId
-    : classicReady
-      ? classicV3Rewards.chainId
-      : deepReady
-        ? deepRewards.chainId
-        : deepV3Ready
-          ? deepV3Profile.chainId
-          : stockPairedReady
-            ? stockPairedRewards.chainId
-            : undefined;
-  const sourceStatuses = [
-    data.status,
-    classicV3Rewards.status,
-    deepRewards.status,
-    deepV3Profile.status,
-    stockPairedRewards.status,
-  ] as const;
   const nativeRewardSourceStatuses = [
     data.status,
     classicV3Rewards.status,
@@ -4049,16 +4178,6 @@ function ProfileAccountWorkspace({
     classicV3SourceState.quality,
     data.sourceQuality ?? "current",
   );
-  const sourceWarning =
-    data.sourceQuality === "stale"
-      ? "Showing the last verified reward totals. Refresh to check current values."
-      : classicV3SourceState.quality === "stale"
-        ? "Showing the last verified Classic rewards. Refresh to check current values."
-        : classicV3SourceState.quality === "unavailable"
-          ? "Classic rewards are temporarily unavailable. Refresh to check current values."
-          : sourceStatuses.some((status) => status === "error")
-            ? "Some reward values are temporarily unavailable. Refresh to check current totals."
-            : "";
   const emptyState =
     rewardDataQuality === "current"
       ? {
@@ -4081,25 +4200,17 @@ function ProfileAccountWorkspace({
       aria-label="Profile overview"
       aria-busy={loading || undefined}
     >
-      {sourceWarning ? (
-        <div className={styles.sourceWarning} role="status">
-          <span>{sourceWarning}</span>
-          <button type="button" onClick={onRetry}>
-            Refresh
-          </button>
-        </div>
-      ) : null}
-
       <ProfileRouterLaunches entries={routerLaunchEntries} />
 
       <div
         className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
         <FeeEarningsPanel
-          nativeClaimed={
-            rewardDataQuality === "partial" ? null : nativeClaimed
+          nativeEarned={rewardDataQuality === "partial" ? null : nativeEarned}
+          nativeClaimable={
+            rewardDataQuality === "partial" ? null : nativeClaimable
           }
-          activity={currentReady ? data.activity : []}
+          nativeClaimed={rewardDataQuality === "partial" ? null : nativeClaimed}
         />
 
         <section
@@ -4115,43 +4226,54 @@ function ProfileAccountWorkspace({
                 Refreshing rewards
               </span>
             ) : null}
-            {claimPageData.totalPages > 1 ? (
-              <nav
-                className={styles.claimPagination}
-                aria-label="Claimable rewards pages"
+            <div className={styles.claimPanelActions}>
+              <button
+                className={styles.claimRefresh}
+                type="button"
+                aria-label="Refresh claimable rewards"
+                onClick={onRetry}
               >
-                <button
-                  type="button"
-                  aria-label="Previous claimable rewards page"
-                  disabled={claimPageData.currentPage === 1}
-                  onClick={() =>
-                    setClaimPage(Math.max(1, claimPageData.currentPage - 1))
-                  }
+                <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
+                <span>Refresh</span>
+              </button>
+              {claimPageData.totalPages > 1 ? (
+                <nav
+                  className={styles.claimPagination}
+                  aria-label="Claimable rewards pages"
                 >
-                  <ChevronLeft aria-hidden="true" size={17} strokeWidth={1.8} />
-                </button>
-                <span aria-live="polite" aria-atomic="true">
-                  {claimPageData.currentPage} / {claimPageData.totalPages}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Next claimable rewards page"
-                  disabled={
-                    claimPageData.currentPage === claimPageData.totalPages
-                  }
-                  onClick={() =>
-                    setClaimPage(
-                      Math.min(
-                        claimPageData.totalPages,
-                        claimPageData.currentPage + 1,
-                      ),
-                    )
-                  }
-                >
-                  <ChevronRight aria-hidden="true" size={17} strokeWidth={1.8} />
-                </button>
-              </nav>
-            ) : null}
+                  <button
+                    type="button"
+                    aria-label="Previous claimable rewards page"
+                    disabled={claimPageData.currentPage === 1}
+                    onClick={() =>
+                      setClaimPage(Math.max(1, claimPageData.currentPage - 1))
+                    }
+                  >
+                    <ChevronLeft aria-hidden="true" size={17} strokeWidth={1.8} />
+                  </button>
+                  <span aria-live="polite" aria-atomic="true">
+                    {claimPageData.currentPage} / {claimPageData.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Next claimable rewards page"
+                    disabled={
+                      claimPageData.currentPage === claimPageData.totalPages
+                    }
+                    onClick={() =>
+                      setClaimPage(
+                        Math.min(
+                          claimPageData.totalPages,
+                          claimPageData.currentPage + 1,
+                        ),
+                      )
+                    }
+                  >
+                    <ChevronRight aria-hidden="true" size={17} strokeWidth={1.8} />
+                  </button>
+                </nav>
+              ) : null}
+            </div>
           </header>
 
           {claimableEntries.length ? (
@@ -4161,7 +4283,6 @@ function ProfileAccountWorkspace({
                   key={entry.token.address}
                   entry={entry}
                   account={account}
-                  chainId={chainId}
                   claimActionStates={claimActionStates}
                   classicV3ActionStates={classicV3ActionStates}
                   deepActionStates={deepActionStates}
@@ -4186,424 +4307,66 @@ function ProfileAccountWorkspace({
 }
 
 function FeeEarningsPanel({
+  nativeEarned,
+  nativeClaimable,
   nativeClaimed,
-  activity,
 }: {
+  nativeEarned: bigint | null;
+  nativeClaimable: bigint | null;
   nativeClaimed: bigint | null;
-  activity: readonly ProfileActivity[];
 }) {
-  const [chartNowMs, setChartNowMs] = useState<number | null>(null);
-  const [range, setRange] = useState<FeeEarningsRange>("all");
-  const initialChartReferenceMs = useMemo(
-    () =>
-      timestampedFeeClaims(activity).reduce(
-        (latest, claim) => Math.max(latest, claim.timestampMs),
-        0,
-      ),
-    [activity],
-  );
-  const chartReferenceMs = chartNowMs ?? initialChartReferenceMs;
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setChartNowMs(Date.now());
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activity]);
-
-  const chart = useMemo(() => {
-    const confirmedFromHistory = timestampedFeeClaims(activity).reduce(
-      (total, claim) => total + claim.valueWei,
-      0n,
-    );
-    return buildFeeEarningsChart(
-      activity,
-      nativeClaimed ?? confirmedFromHistory,
-      0n,
-      {
-        nowMs: chartReferenceMs,
-        range,
-      },
-    );
-  }, [activity, chartReferenceMs, nativeClaimed, range]);
-  const [activePointIndex, setActivePointIndex] = useState(-1);
-  const activePointIndexRef = useRef(-1);
-  const gradientId = useId().replaceAll(":", "");
-  const chartHelpId = `${gradientId}-help`;
-  const resolvedActivePointIndex = chart
-    ? activePointIndex >= 0 && activePointIndex < chart.points.length
-      ? activePointIndex
-      : chart.points.length - 1
-    : -1;
-  const activePoint =
-    chart && activePointIndex >= 0 && activePointIndex < chart.points.length
-      ? chart.points[activePointIndex]
-      : undefined;
-  const displayedPoint = chart
-    ? (activePoint ?? chart.points[chart.points.length - 1])
-    : undefined;
-  const displayedHistoryMoment =
-    chart && displayedPoint
-      ? formatFeeChartMoment(displayedPoint.timestampMs, chart.nowMs)
-      : "Now";
-
-  function resetActivePoint() {
-    if (activePointIndexRef.current === -1) return;
-    activePointIndexRef.current = -1;
-    setActivePointIndex(-1);
-  }
-
-  function activateLastPoint() {
-    if (!chart || activePointIndexRef.current >= 0) return;
-    const lastPointIndex = chart.points.length - 1;
-    activePointIndexRef.current = lastPointIndex;
-    setActivePointIndex(lastPointIndex);
-  }
-
-  function selectPointFromPointer(event: PointerEvent<HTMLDivElement>) {
-    if (!chart) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (bounds.width <= 0) return;
-    const pointerX = Math.min(
-      620,
-      Math.max(0, ((event.clientX - bounds.left) / bounds.width) * 620),
-    );
-    const nearestIndex = chart.points.reduce(
-      (nearest, point, index) =>
-        Math.abs(point.x - pointerX) <
-        Math.abs(chart.points[nearest].x - pointerX)
-          ? index
-          : nearest,
-      0,
-    );
-    if (activePointIndexRef.current === nearestIndex) return;
-    activePointIndexRef.current = nearestIndex;
-    setActivePointIndex(nearestIndex);
-  }
-
-  function handleChartKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!chart) return;
-    let nextIndex = resolvedActivePointIndex;
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-      nextIndex = Math.max(0, resolvedActivePointIndex - 1);
-    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-      nextIndex = Math.min(
-        chart.points.length - 1,
-        resolvedActivePointIndex + 1,
-      );
-    } else if (event.key === "Home") {
-      nextIndex = 0;
-    } else if (event.key === "End") {
-      nextIndex = chart.points.length - 1;
-    } else {
-      return;
-    }
-    event.preventDefault();
-    activePointIndexRef.current = nextIndex;
-    setActivePointIndex(nextIndex);
-  }
+  const composition =
+    nativeEarned !== null && nativeEarned > 0n &&
+      nativeClaimable !== null && nativeClaimed !== null
+      ? {
+          available:
+            Number((nativeClaimable * 10_000n) / nativeEarned) / 100,
+          claimed: Number((nativeClaimed * 10_000n) / nativeEarned) / 100,
+        }
+      : null;
 
   return (
     <section
       className={styles.feePanel}
       aria-labelledby="fee-earnings-title"
     >
-      <h2 className={styles.visuallyHidden} id="fee-earnings-title">
-        Reward history
-      </h2>
+      <header className={styles.feePanelHeader}>
+        <div>
+          <h2 id="fee-earnings-title">Fees earned</h2>
+          <p>Lifetime fees for this wallet</p>
+        </div>
+      </header>
 
-      <figure
-        className={styles.feeChart}
-        aria-label="Confirmed claim history"
-      >
-        <figcaption className={styles.chartHeading}>
+      <div className={styles.feeSummary}>
+        <span className={styles.feeSummaryLabel}>Total earned</span>
+        {nativeEarned === null ? null : <strong>{formatWei(nativeEarned)}</strong>}
+        <div className={styles.feeBreakdown}>
           <span>
-            <strong>
-              {chart && displayedPoint
-                ? formatWei(displayedPoint.valueWei)
-                : nativeClaimed === null
-                  ? "Unavailable"
-                  : formatWei(nativeClaimed)}
-            </strong>
-            <small>{displayedHistoryMoment}</small>
+            Available <b>{nativeClaimable === null ? "—" : formatWei(nativeClaimable)}</b>
           </span>
-          <div className={styles.timeframeControls} aria-label="Chart range">
-            {feeEarningsRanges.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-label={`Show ${option.description}`}
-                aria-pressed={range === option.value}
-                onClick={() => {
-                  setRange(option.value);
-                  activePointIndexRef.current = -1;
-                  setActivePointIndex(-1);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
+          <span>
+            Claimed <b>{nativeClaimed === null ? "—" : formatWei(nativeClaimed)}</b>
+          </span>
+        </div>
+        {composition ? (
+          <div
+            className={styles.feeComposition}
+            role="img"
+            aria-label={`${composition.available.toFixed(2)}% available and ${composition.claimed.toFixed(2)}% claimed`}
+          >
+            <span
+              className={styles.feeCompositionClaimable}
+              style={{ width: `${composition.available}%` }}
+            />
+            <span
+              className={styles.feeCompositionClaimed}
+              style={{ width: `${composition.claimed}%` }}
+            />
           </div>
-        </figcaption>
-        <div className={styles.chartGrid} aria-hidden="true" />
-        {chart && displayedPoint ? (
-          <>
-            <p className={styles.visuallyHidden} id={chartHelpId}>
-              Use the arrow keys to inspect each confirmed earnings point.
-            </p>
-            <div
-              aria-label="Confirmed claim history"
-              aria-describedby={chartHelpId}
-              aria-orientation="horizontal"
-              aria-valuemax={chart.points.length - 1}
-              aria-valuemin={0}
-              aria-valuenow={resolvedActivePointIndex}
-              aria-valuetext={`${formatWei(displayedPoint.valueWei)} at ${formatFeeChartMoment(displayedPoint.timestampMs, chart.nowMs)}`}
-              className={styles.feeChartInteraction}
-              onBlur={resetActivePoint}
-              onFocus={activateLastPoint}
-              onKeyDown={handleChartKeyDown}
-              onPointerDown={(event) => {
-                selectPointFromPointer(event);
-                event.currentTarget.focus();
-              }}
-              onPointerLeave={(event) => {
-                if (document.activeElement !== event.currentTarget) {
-                  resetActivePoint();
-                }
-              }}
-              onPointerMove={selectPointFromPointer}
-              role="slider"
-              tabIndex={0}
-            >
-              <svg
-                aria-hidden="true"
-                className={styles.feePlot}
-                viewBox="0 0 620 150"
-                preserveAspectRatio="none"
-              >
-                <defs>
-                  <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                    <stop
-                      offset="0%"
-                      stopColor="var(--brand-ivory)"
-                      stopOpacity="0.24"
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor="var(--brand-ivory)"
-                      stopOpacity="0"
-                    />
-                  </linearGradient>
-                </defs>
-                <path
-                  className={styles.feeArea}
-                  d={chart.areaPath}
-                  fill={`url(#${gradientId})`}
-                />
-                <path className={styles.feeLine} d={chart.linePath} />
-                {activePoint ? (
-                  <line
-                    className={styles.feeCursor}
-                    x1={activePoint.x}
-                    x2={activePoint.x}
-                    y1="10"
-                    y2="140"
-                  />
-                ) : null}
-              </svg>
-            </div>
-            <div className={styles.chartScale} aria-hidden="true">
-              <span>
-                {formatFeeChartMoment(chart.rangeStartMs, chart.nowMs)}
-              </span>
-              <span>Now</span>
-            </div>
-          </>
-        ) : (
-          <div className={styles.chartEmpty}>
-            <strong>No confirmed claim history yet</strong>
-            <p>
-              Confirmed claims with exact timestamps will build this chart.
-            </p>
-          </div>
-        )}
-      </figure>
+        ) : null}
+      </div>
     </section>
   );
-}
-
-type FeeEarningsChartPoint = {
-  x: number;
-  y: number;
-  timestampMs: number;
-  valueWei: bigint;
-};
-
-export type FeeEarningsRange = "1h" | "1d" | "1w" | "all";
-
-const feeEarningsRanges: ReadonlyArray<{
-  description: string;
-  label: string;
-  value: FeeEarningsRange;
-}> = [
-  { description: "the last day", label: "1D", value: "1d" },
-  { description: "the last seven days", label: "7D", value: "1w" },
-  { description: "all time", label: "ALL", value: "all" },
-];
-
-const feeEarningsRangeMs: Record<Exclude<FeeEarningsRange, "all">, number> = {
-  "1h": 60 * 60 * 1_000,
-  "1d": 24 * 60 * 60 * 1_000,
-  "1w": 7 * 24 * 60 * 60 * 1_000,
-};
-
-function formatFeeChartMoment(timestampMs: number, nowMs: number) {
-  if (Math.abs(nowMs - timestampMs) < 1_000) return "Now";
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-  }).format(timestampMs);
-}
-
-export function parseClaimedFeeWei(detail: string) {
-  const match = detail.trim().match(/^([0-9]+(?:\.[0-9]+)?)\s+ETH\b/iu);
-  if (!match) return null;
-  try {
-    return parseUnits(match[1], 18);
-  } catch {
-    return null;
-  }
-}
-
-function timestampedFeeClaims(activity: readonly ProfileActivity[]) {
-  return activity.flatMap((item) => {
-    if (!/fees claimed/iu.test(item.label) || !item.occurredAtIso) {
-      return [];
-    }
-    const valueWei = parseClaimedFeeWei(item.detail);
-    const timestampMs = Date.parse(item.occurredAtIso);
-    if (valueWei === null || !Number.isFinite(timestampMs)) return [];
-    return [{ timestampMs, valueWei }];
-  });
-}
-
-export function getAvailableFeeEarningsRanges(
-  activity: readonly ProfileActivity[],
-  nowMs = Date.now(),
-) {
-  const claims = timestampedFeeClaims(activity).filter(
-    (claim) => claim.timestampMs <= nowMs,
-  );
-
-  return feeEarningsRanges.flatMap((range) => {
-    if (range.value === "all") return [range.value];
-    const rangeStartMs = nowMs - feeEarningsRangeMs[range.value];
-    return claims.some((claim) => claim.timestampMs >= rangeStartMs)
-      ? [range.value]
-      : [];
-  });
-}
-
-export function buildFeeEarningsChart(
-  activity: readonly ProfileActivity[],
-  nativeClaimed: bigint,
-  _nativeClaimable: bigint,
-  options: Readonly<{
-    nowMs?: number;
-    range?: FeeEarningsRange;
-  }> = {},
-) {
-  const nowMs = options.nowMs ?? Date.now();
-  const range = options.range ?? "all";
-  const claims = timestampedFeeClaims(activity)
-    .filter((claim) => claim.timestampMs <= nowMs)
-    .sort((first, second) => first.timestampMs - second.timestampMs);
-  if (claims.length === 0) return null;
-  const historyTotal = claims.reduce(
-    (total, claim) => total + claim.valueWei,
-    0n,
-  );
-  const rangeStartMs =
-    range === "all"
-      ? (claims[0]?.timestampMs ?? nowMs - 24 * 60 * 60 * 1_000)
-      : nowMs - feeEarningsRangeMs[range];
-  const visibleClaims =
-    range === "all"
-      ? claims
-      : claims.filter(
-          (claim) =>
-            claim.timestampMs >= rangeStartMs &&
-            claim.timestampMs <= nowMs,
-        );
-  const startingTotal =
-    range === "all" && nativeClaimed > historyTotal
-      ? nativeClaimed - historyTotal
-      : 0n;
-  const values = [{ timestampMs: rangeStartMs, valueWei: startingTotal }];
-  let cumulative = startingTotal;
-  for (const claim of visibleClaims) {
-    cumulative += claim.valueWei;
-    values.push({ timestampMs: claim.timestampMs, valueWei: cumulative });
-  }
-
-  const totalWei = cumulative;
-  values.push({ timestampMs: nowMs, valueWei: totalWei });
-  if (totalWei <= 0n || values.length < 2) return null;
-
-  const width = 620;
-  const height = 150;
-  const left = 8;
-  const right = width - 8;
-  const top = 12;
-  const bottom = height - 10;
-  const maximum = values.reduce(
-    (current, value) => (value.valueWei > current ? value.valueWei : current),
-    1n,
-  );
-  const timeSpanMs = Math.max(1, nowMs - rangeStartMs);
-  const points: FeeEarningsChartPoint[] = values.map(
-    ({ timestampMs, valueWei }) => ({
-      timestampMs,
-      valueWei,
-      x:
-        left +
-        ((Math.min(nowMs, Math.max(rangeStartMs, timestampMs)) - rangeStartMs) /
-          timeSpanMs) *
-          (right - left),
-      y:
-        bottom -
-        Number((valueWei * 1_000_000n) / maximum) /
-          1_000_000 *
-          (bottom - top),
-    }),
-  );
-  const linePath = points
-    .map((point, index) =>
-      index === 0
-        ? `M${point.x.toFixed(2)},${point.y.toFixed(2)}`
-        : `H${point.x.toFixed(2)} V${point.y.toFixed(2)}`,
-    )
-    .join(" ");
-
-  return {
-    areaPath: `${linePath} L${right},${height} L${left},${height} Z`,
-    linePath,
-    nowMs,
-    points,
-    rangeStartMs,
-    totalWei,
-  };
-}
-
-function transactionHref(chainId: number | undefined, hash: Hex) {
-  return `${
-    chainId === 11_155_111
-      ? "https://sepolia.etherscan.io"
-      : "https://etherscan.io"
-  }/tx/${hash}`;
 }
 
 export function actionPending(
@@ -4612,7 +4375,8 @@ export function actionPending(
   return (
     state?.status === "preparing" ||
     state?.status === "wallet" ||
-    state?.status === "confirming"
+    state?.status === "confirming" ||
+    state?.status === "pending"
   );
 }
 
@@ -4627,8 +4391,9 @@ export function actionLabel(
 ) {
   if (state?.status === "preparing") return "Preparing";
   if (state?.status === "wallet") return "Confirm in wallet";
-  if (state?.status === "confirming") return "Confirming";
-  if (actionCanCheckStatus(state)) return "Check status";
+  if (state?.status === "confirming" || state?.status === "pending") {
+    return "Confirming";
+  }
   if (state?.status === "confirmed") return "Confirmed";
   if (state?.status === "error") return "Try again";
   return "Claim";
@@ -4768,7 +4533,6 @@ function ProfileClaimDialog({
 function ProfileClaimRow({
   entry,
   account,
-  chainId,
   claimActionStates,
   classicV3ActionStates,
   deepActionStates,
@@ -4780,7 +4544,6 @@ function ProfileClaimRow({
 }: {
   entry: ProfilePortfolioEntry;
   account?: string;
-  chainId?: number;
   claimActionStates: Record<string, ProfileClaimActionState>;
   classicV3ActionStates: Record<string, ClassicV3ActionState>;
   deepActionStates: Record<string, DeepActionState>;
@@ -4917,6 +4680,7 @@ function ProfileClaimRow({
   const tokenImage =
     token.imageUrl?.trim() || getFallbackTokenImage(token.address);
   const tokenImageSource = getTokenCardImageSource(tokenImage);
+  const marketCapLabel = profileTokenMarketCapLabel(token);
   const currentClaimAvailable =
     Boolean(claim) && (currentClaimable > 0n || Boolean(activeClaimState));
   const formattedStockReward =
@@ -5077,6 +4841,9 @@ function ProfileClaimRow({
           <span className={styles.claimCopy}>
             <strong>{token.name}</strong>
             <span>${token.symbol}</span>
+            {marketCapLabel ? (
+              <small>Market cap {marketCapLabel}</small>
+            ) : null}
           </span>
         </Link>
 
@@ -5121,20 +4888,17 @@ function ProfileClaimRow({
 
       <ProfileActionState
         state={activeClaimState}
-        chainId={chainId}
       />
       {classicClaims.map(({ reward, state }) => (
         <ProfileActionState
           key={`${reward.vaultAddress}:state`}
           state={state}
-          chainId={chainId}
         />
       ))}
       {deepClaims.map(({ reward, state }) => (
         <ProfileActionState
           key={`${reward.vaultAddress}:deep-state`}
           state={state}
-          chainId={chainId}
         />
       ))}
       {stockPairedClaims.map(({ reward, claimState, ethState }) => {
@@ -5149,7 +4913,6 @@ function ProfileClaimRow({
           <ProfileActionState
             key={`${reward.vaultAddress}:stock-paired-state`}
             state={visibleState}
-            chainId={chainId}
           />
         );
       })}
@@ -5159,12 +4922,12 @@ function ProfileClaimRow({
 
 function ProfileActionState({
   state,
-  chainId,
 }: {
   state?: ProfileClaimActionState | ClassicV3ActionState;
-  chainId?: number;
 }) {
-  if (!state) return null;
+  if (!state || (state.status !== "confirmed" && state.status !== "error")) {
+    return null;
+  }
   return (
     <p
       className={
@@ -5173,15 +4936,6 @@ function ProfileActionState({
       role={state.status === "error" ? "alert" : "status"}
     >
       {state.message}
-      {state.transactionHash ? (
-        <a
-          href={transactionHref(chainId, state.transactionHash)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          View transaction
-        </a>
-      ) : null}
     </p>
   );
 }
