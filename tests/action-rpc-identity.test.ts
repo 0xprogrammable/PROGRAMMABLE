@@ -81,8 +81,7 @@ describe("single-RPC action identity", () => {
   });
 
   it("derives the fee creator from the launch event instead of token deployment authority", async () => {
-    const getLogs = vi.fn().mockResolvedValue([
-      {
+    const launchLog = {
         address: launcher,
         args: {
           creator,
@@ -99,8 +98,22 @@ describe("single-RPC action identity", () => {
         transactionIndex: 0,
         logIndex: 0,
         removed: false,
-      },
-    ]);
+      };
+    const getLogs = vi.fn(
+      ({ fromBlock, toBlock }: {
+        address: Address;
+        args: { poolId: Hex };
+        fromBlock: bigint;
+        toBlock: bigint;
+        strict: boolean;
+      }) =>
+        Promise.resolve(
+          fromBlock <= launchLog.blockNumber &&
+              launchLog.blockNumber <= toBlock
+            ? [launchLog]
+            : [],
+        ),
+    );
     const readContract = vi.fn(
       ({ functionName }: { functionName: string; blockNumber?: bigint }) => {
         if (functionName === "launchHashOf") return Promise.resolve(launchHash);
@@ -118,7 +131,7 @@ describe("single-RPC action identity", () => {
         client,
         deployment,
         poolId,
-        blockNumber: 100n,
+        blockNumber: 20_100n,
       }),
     ).resolves.toEqual({
       tokenAddress: token,
@@ -127,19 +140,24 @@ describe("single-RPC action identity", () => {
       creatorAddress: creator,
       totalSwapFeeBps: 100,
     });
-    expect(getLogs).toHaveBeenCalledTimes(1);
-    expect(getLogs).toHaveBeenCalledWith(
-      expect.objectContaining({
-        address: launcher,
-        args: { poolId },
-        fromBlock: 10n,
-        toBlock: 100n,
-        strict: true,
-      }),
-    );
+    expect(getLogs).toHaveBeenCalledTimes(3);
+    expect(getLogs.mock.calls.map(([call]) => [
+      call.fromBlock,
+      call.toBlock,
+    ])).toEqual([
+      [10n, 10_009n],
+      [10_010n, 20_009n],
+      [20_010n, 20_100n],
+    ]);
+    expect(getLogs.mock.calls.every(([call]) =>
+      call.address === launcher &&
+      call.args.poolId === poolId &&
+      call.strict === true &&
+      call.toBlock - call.fromBlock < 10_000n
+    )).toBe(true);
     expect(
       readContract.mock.calls.every(
-        ([call]) => call.blockNumber === 100n,
+        ([call]) => call.blockNumber === 20_100n,
       ),
     ).toBe(true);
     expect(readContract).toHaveBeenCalledTimes(3);
@@ -147,7 +165,7 @@ describe("single-RPC action identity", () => {
       expect.objectContaining({
         address: token,
         functionName: "creator",
-        blockNumber: 100n,
+        blockNumber: 20_100n,
       }),
     );
   });

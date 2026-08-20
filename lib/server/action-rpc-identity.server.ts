@@ -29,6 +29,7 @@ import { computeOfficialV4PoolId } from "../uniswap/liquidity-launcher-sdk";
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000" as Address;
 const ZERO_HASH = `0x${"00".repeat(32)}` as Hex;
+const CREATOR_CLAIM_LOG_RANGE = 10_000n;
 
 const classicLauncherStateAbi = parseAbi([
   "function launchHashOf(address token) view returns (bytes32)",
@@ -417,14 +418,25 @@ export async function readCreatorClaimIdentityFromRpc(input: {
   poolId: Hex;
   blockNumber: bigint;
 }): Promise<CreatorClaimTokenIdentity> {
-  const logs = await input.client.getLogs({
-    address: input.deployment.launcher,
-    event: memeTokenLaunchedEvent,
-    args: { poolId: input.poolId },
-    fromBlock: input.deployment.deploymentBlock,
-    toBlock: input.blockNumber,
-    strict: true,
-  });
+  const logs = [];
+  for (
+    let fromBlock = input.deployment.deploymentBlock;
+    fromBlock <= input.blockNumber;
+    fromBlock += CREATOR_CLAIM_LOG_RANGE
+  ) {
+    const toBlock =
+      fromBlock + CREATOR_CLAIM_LOG_RANGE - 1n < input.blockNumber
+        ? fromBlock + CREATOR_CLAIM_LOG_RANGE - 1n
+        : input.blockNumber;
+    logs.push(...await input.client.getLogs({
+      address: input.deployment.launcher,
+      event: memeTokenLaunchedEvent,
+      args: { poolId: input.poolId },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }));
+  }
   const matches = logs.filter(
     (log) => !log.removed && log.blockNumber !== null,
   );
