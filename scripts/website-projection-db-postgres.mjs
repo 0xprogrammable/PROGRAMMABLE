@@ -1421,6 +1421,58 @@ export async function inspectWebsiteProjectionDatabase({
   });
 }
 
+export async function inspectWebsiteProjectionCurrentRotationPosture({
+  sql,
+  plan,
+  expectedProjectRef,
+  sessionIdentity,
+}) {
+  validateWebsiteProjectionPlan(plan);
+  const session = expectedSession(sessionIdentity);
+  await assertSession(sql, session);
+  const remote = await readPresenceAndEvidence(sql);
+  const state = compareWebsiteProjectionEvidence({
+    plan,
+    expectedProjectRef,
+    evidenceTablePresent: remote.evidenceTablePresent,
+    applicationSchemaPresent: remote.applicationSchemaPresent,
+    evidenceRows: remote.evidenceRows,
+    adoptionRows: remote.adoptionRows,
+  });
+  const roleGraph = await readRoleGraph(
+    sql,
+    state.appliedCount,
+  );
+  const catalogSha256 = catalogSnapshotSha256(
+    await readApplicationCatalogSnapshot(sql, roleGraph),
+  );
+  const operatorCatalogSha256 = catalogSnapshotSha256(
+    await readEvidenceCatalogSnapshot(sql),
+  );
+  const latest = remote.evidenceRows.at(-1);
+  if (state.status !== "current"
+    || state.appliedCount !== plan.migrationCount
+    || catalogSha256 !== latest?.catalog_sha256
+    || operatorCatalogSha256 !== latest?.operator_catalog_sha256
+    || roleGraph.runtimeRoleStatus !== "current") {
+    throw new Error("website projection current rotation posture is invalid");
+  }
+  await assertSession(sql, session);
+  return Object.freeze({
+    migrationEvidence: Object.freeze({
+      migrationCount: state.appliedCount,
+      planSha256: plan.planSha256,
+      repositoryCommit: plan.repositoryCommit,
+      repositoryTree: plan.repositoryTree,
+      catalogSha256,
+      operatorCatalogSha256,
+    }),
+    catalogSha256,
+    operatorCatalogSha256,
+    runtimeRoleStatus: roleGraph.runtimeRoleStatus,
+  });
+}
+
 async function bootstrapRuntimeRole(transaction, runtimePassword) {
   const before = await readRoleGraph(transaction, 0);
   if (before.runtimeRoleStatus === "current") return false;

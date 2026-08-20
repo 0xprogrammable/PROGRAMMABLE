@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "programmable.website-projection-database-backend-handoff.v1",
+  "contractType": "website-rotation-output-to-backend-vercel-materializer",
+  "target": {
+    "supabaseProjectRef": "mnnvlrqwhfoppogslsje",
+    "database": "postgres",
+    "runtimeRole": "programmable_website_projection_runtime",
+    "runtimeHost": "aws-0-eu-central-1.pooler.supabase.com",
+    "runtimePort": 6543,
+    "tlsMode": "verify-full-equivalent"
+  },
+  "websiteSourceIdentity": {
+    "transport": "signed-commit-handoff-receipt-v1",
+    "requiredFields": [
+      "repositoryCommit",
+      "repositoryTree",
+      "repositoryParent",
+      "sshSignaturePresent"
+    ],
+    "mustEqualRotationReceiptSource": true,
+    "embeddedInSource": false,
+    "reason": "A commit cannot contain its own Git object identity."
+  },
+  "protectedInputs": [
+    {
+      "id": "reviewedMigrationPlan",
+      "transport": "file",
+      "canonicalBasename": "reviewed-website-projection-plan.json",
+      "mode": "0600",
+      "ownerOnly": true,
+      "outsideGitCheckout": true,
+      "containsSecret": false
+    },
+    {
+      "id": "newRuntimePassword",
+      "transport": "file-or-non-tty-stdin",
+      "canonicalBasename": "new-website-projection-runtime-password",
+      "fileMode": "0600",
+      "ownerOnly": true,
+      "outsideGitCheckout": true,
+      "containsSecret": true,
+      "generatedByWebsiteOperator": false
+    }
+  ],
+  "operatorEnvironment": [
+    {
+      "name": "PROGRAMMABLE_MIGRATOR_DATABASE_URL",
+      "transport": "secret-manager-environment",
+      "cliFlagAllowed": false,
+      "target": "db.mnnvlrqwhfoppogslsje.supabase.co:5432/postgres"
+    },
+    {
+      "name": "PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
+      "transport": "secret-manager-environment",
+      "cliFlagAllowed": false,
+      "target": "provider-server-root-ca"
+    }
+  ],
+  "protectedOutputDirectory": {
+    "mode": "0700",
+    "ownerOnly": true,
+    "outsideGitCheckout": true,
+    "mustNotExistBeforeRotation": true,
+    "publication": "atomic-directory-rename-after-fresh-runtime-probe"
+  },
+  "protectedOutputs": [
+    {
+      "filename": "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL",
+      "environmentName": "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL",
+      "mode": "0600",
+      "sensitive": true,
+      "valueFormat": "exact-postgresql-pooler-url-v1",
+      "digest": {
+        "algorithm": "sha256",
+        "canonicalBytes": "raw-file-bytes",
+        "websiteReceipt": "forbidden",
+        "backendCasReceipt": "required"
+      }
+    },
+    {
+      "filename": "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE",
+      "environmentName": "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE",
+      "mode": "0600",
+      "sensitive": false,
+      "exactValue": "programmable_website_projection_runtime",
+      "digest": {
+        "algorithm": "sha256",
+        "canonicalBytes": "raw-file-bytes",
+        "websiteReceipt": "optional",
+        "backendCasReceipt": "required"
+      }
+    },
+    {
+      "filename": "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
+      "environmentName": "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
+      "mode": "0600",
+      "sensitive": false,
+      "valueFormat": "provider-server-root-ca-pem",
+      "digest": {
+        "algorithm": "sha256",
+        "canonicalBytes": "raw-file-bytes",
+        "websiteReceipt": "required",
+        "backendCasReceipt": "required"
+      }
+    }
+  ],
+  "websiteReceipt": {
+    "filename": "programmable-website-projection-runtime-credential-rotation-v1.json",
+    "mode": "0600",
+    "schemaVersion": "programmable.website-projection-runtime-credential-rotation.v1",
+    "requiredClaims": [
+      "source.repositoryCommit",
+      "source.repositoryTree",
+      "source.repositoryParent",
+      "target.projectRef",
+      "target.runtimeEndpoint",
+      "target.runtimeRole",
+      "migrationEvidence",
+      "catalog.unchanged",
+      "runtimeProbe.leastPrivilege",
+      "tls.caSha256",
+      "tls.hostnameVerified",
+      "cutover.overlappingPasswordsSupported",
+      "cutover.postCommitFailure",
+      "cutover.vercelMutationPerformed",
+      "protectedOutputs.containsSecretDerivedDigest"
+    ],
+    "mustNotContainValues": [
+      "runtime-password",
+      "runtime-database-url",
+      "runtime-database-url-sha256",
+      "runtime-password-sha256"
+    ]
+  },
+  "backendMaterializer": {
+    "authorityBoundary": "separate-explicit-backend-release-authority",
+    "requiredLeaves": [
+      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL",
+      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE",
+      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM"
+    ],
+    "digestRule": "sha256-of-exact-raw-input-bytes",
+    "casRule": "require-expected-prior-digest-before-each-vercel-write",
+    "readbackRule": "record-provider-returned-digest-or-fail-closed",
+    "plaintextReceiptAllowed": false,
+    "websiteReceiptMutationAllowed": false,
+    "receiptSchema": {
+      "schemaVersion": "programmable.backend.website-projection-vercel-materialization.v1",
+      "requiredFields": [
+        "websiteSource.repositoryCommit",
+        "websiteSource.repositoryTree",
+        "websiteSource.repositoryParent",
+        "websiteRotationReceiptSha256",
+        "target.vercelProjectId",
+        "target.environment",
+        "leaves[].environmentName",
+        "leaves[].inputSha256",
+        "leaves[].expectedPriorSha256",
+        "leaves[].providerReadbackSha256",
+        "changed",
+        "materializedAt"
+      ],
+      "forbiddenFields": [
+        "value",
+        "plaintext",
+        "databaseUrl",
+        "password",
+        "caPem"
+      ]
+    },
+    "cutoverSequence": [
+      "dark-stage",
+      "runtime-readiness",
+      "desktop-mobile-api-browser-proof",
+      "separate-promotion-authority"
+    ]
+  }
+}

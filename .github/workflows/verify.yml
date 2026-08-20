@@ -324,7 +324,10 @@ jobs:
 
       - name: Verify exact Website projection database operator
         if: needs.scope.outputs.custom_v2 == 'true'
-        run: node --test scripts/website-projection-db-operator.test.mjs
+        run: >-
+          node --test
+          scripts/website-projection-db-operator.test.mjs
+          scripts/website-projection-db-credential-rotation.test.mjs
 
       - name: Verify exact Generic V2 read-model contract derivation
         if: needs.scope.outputs.custom_v2 == 'true'
