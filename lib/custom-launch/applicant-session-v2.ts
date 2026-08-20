@@ -10,6 +10,7 @@ import {
 
 export type CustomLaunchApplicantRecoveryV2 =
   | "none"
+  | "authorize-github-app"
   | "reconnect-github"
   | "connect-wallet"
   | "retry";
@@ -373,6 +374,9 @@ export function customLaunchApplicantRecoveryV2(
     return caught.reason === "wallet" ? "connect-wallet" : "reconnect-github";
   }
   if (caught instanceof CustomLaunchWebsiteRequestErrorV2) {
+    if (caught.code === "github_app_authorization_required") {
+      return "authorize-github-app";
+    }
     if (
       caught.status === 401
       || caught.status === 403

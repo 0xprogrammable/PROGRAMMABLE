@@ -1529,6 +1529,7 @@ function CustomLaunchRuntime({
   const {
     authReady,
     authenticated,
+    authorizeGithubLaunchApp,
     connectGithub,
     githubConnected,
     githubUserId,
@@ -2859,6 +2860,21 @@ function CustomLaunchRuntime({
       openWallet();
       return;
     }
+    if (applicantRecovery === "authorize-github-app") {
+      setError("");
+      setApplicantReauthorizing(true);
+      setStatusMessage("Reconnect GitHub to prove the current session");
+      try {
+        await authorizeGithubLaunchApp();
+      } catch {
+        setError("Unable to reconnect GitHub. Your last known approval stays visible");
+        setStatusMessage("Wallet actions remain unavailable until GitHub reconnects");
+        setApplicantRecovery("authorize-github-app");
+      } finally {
+        setApplicantReauthorizing(false);
+      }
+      return;
+    }
     if (applicantRecovery === "reconnect-github") {
       setError("");
       if (!githubConnected) {
@@ -2900,6 +2916,7 @@ function CustomLaunchRuntime({
   const applicantRecoveryAction = applicantRecovery === "connect-wallet"
     ? "Connect wallet"
     : applicantRecovery === "reconnect-github"
+      || applicantRecovery === "authorize-github-app"
       ? "Reconnect GitHub"
       : "Try again";
 

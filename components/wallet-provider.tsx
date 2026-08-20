@@ -34,6 +34,9 @@ import {
   isApplicantRefreshUserUnavailableErrorV1,
   type ApplicantRefreshUserGateV1,
 } from "@/lib/custom-launch/applicant-refresh-user-gate-v1";
+import {
+  requestGitHubLaunchAppAuthorizationV1,
+} from "@/lib/custom-launch/github-app-authorization-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import {
   buildEip1193TransactionRequest,
@@ -104,6 +107,7 @@ type WalletContextValue = {
   githubUserId: string;
   githubUsername: string;
   connectGithub: () => void;
+  authorizeGithubLaunchApp: () => Promise<void>;
   reauthorizeGithub: () => Promise<void>;
   setUsername: (username: string) => void;
   signLaunchMessage: (signingMessageBase64Url: string) => Promise<string>;
@@ -770,6 +774,9 @@ function DeferredWalletProvider({
       githubUserId: "",
       githubUsername: "",
       connectGithub: () => onActivate("github"),
+      authorizeGithubLaunchApp: async () => {
+        throw new Error("GitHub sign-in is still loading");
+      },
       reauthorizeGithub: async () => {
         throw new Error("GitHub sign-in is still loading");
       },
@@ -1104,6 +1111,14 @@ function PrivyWalletBridge({
     ready,
     reauthorize,
   ]);
+  const authorizeGithubLaunchApp = useCallback(async () => {
+    const session = await refreshApplicantSession();
+    if (session === null) {
+      throw new Error("Sign in with your approved GitHub account");
+    }
+    const authorization = await requestGitHubLaunchAppAuthorizationV1({ session });
+    window.location.assign(authorization.toString());
+  }, [refreshApplicantSession]);
 
   const profileValue = useSyncExternalStore(
     subscribeToProfiles,
@@ -1688,6 +1703,7 @@ function PrivyWalletBridge({
       githubUserId,
       githubUsername,
       connectGithub,
+      authorizeGithubLaunchApp,
       reauthorizeGithub,
       setUsername,
       signLaunchMessage,
@@ -1699,6 +1715,7 @@ function PrivyWalletBridge({
     [
       activeAuthenticated,
       avatarDataUrl,
+      authorizeGithubLaunchApp,
       connectGithub,
       disconnect,
       disconnecting,
@@ -1782,6 +1799,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       githubUserId: "",
       githubUsername: "",
       connectGithub: () => setDialogOpen(true),
+      authorizeGithubLaunchApp: async () => {
+        throw new Error("GitHub sign-in is unavailable");
+      },
       reauthorizeGithub: async () => {
         throw new Error("GitHub sign-in is unavailable");
       },

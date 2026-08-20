@@ -7,6 +7,9 @@ import { isReviewAuthorityModeV1 } from "@/lib/custom-launch/review-authority-v1
 import {
   isProductionTokenImageUploadReceiptSignerConfiguredV1,
 } from "@/lib/server/token-image-upload-receipt-v1";
+import {
+  isProductionWebsiteGitHubLaunchSessionConfiguredV1,
+} from "./github-launch-session-v1";
 
 const SIGNER_KEYS = [
   "keyId",
@@ -47,6 +50,9 @@ export function isCustomLaunchPublicEnabled(
   ) return false;
   if (configuredLaunchPermitSignersV2(environment).length === 0) return false;
   if (!isProductionTokenImageUploadReceiptSignerConfiguredV1(environment)) {
+    return false;
+  }
+  if (!isProductionWebsiteGitHubLaunchSessionConfiguredV1(environment)) {
     return false;
   }
   try {
