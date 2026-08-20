@@ -1,9 +1,11 @@
 import { NextRequest } from "next/server";
-import { getAddress, type Address, type Hex } from "viem";
+import {
+  getAddress,
+  RpcRequestError,
+  type Address,
+  type Hex,
+} from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { rpcProviderCommitment } from
-  "../lib/data-pipeline/rpc-provider-commitments";
 
 vi.mock("server-only", () => ({}));
 
@@ -12,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   readProfile: vi.fn(),
   createPublicClient: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
   runtimeHashes: {
     "0x01":
       "0x9cc9723456c471d90ac838c02fa4fc47ed4b7e82c85358e71deec978c48d2dc8",
@@ -35,6 +38,18 @@ const drpcRpcUrl =
   "https://lb.drpc.live/ethereum/drpc-classic-key";
 const quickNodeRpcUrl =
   "https://classic-mainnet.ethereum-mainnet.quiknode.pro/quicknode-classic-key/";
+const deployment = {
+  status: "ready" as const,
+  environment: "production" as const,
+  releaseVersion: "classic-v2" as const,
+  chainId: 1 as const,
+  rpcUrl: drpcRpcUrl,
+  rpcUrlSecondary: quickNodeRpcUrl,
+  rpcProviderIds: {
+    primary: "drpc",
+    secondary: "quicknode",
+  },
+};
 
 const indexedToken = {
   chainId: 1 as const,
@@ -204,6 +219,15 @@ vi.mock("../lib/market-data/bitquery-profile.server", () => ({
   })),
 }));
 
+vi.mock("../lib/onchain", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/onchain")>();
+  return {
+    ...actual,
+    getWebsiteReadOnchainDeployment:
+      mocks.getWebsiteReadOnchainDeployment,
+  };
+});
+
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
@@ -234,26 +258,7 @@ function request() {
 describe("Classic V3 action identity activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("ETHEREUM_RPC_URL", drpcRpcUrl);
-    vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
-    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
-    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL", drpcRpcUrl);
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
-      rpcProviderCommitment("endpoint", drpcRpcUrl),
-    );
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
-      "quicknode",
-    );
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
-      quickNodeRpcUrl,
-    );
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
-      rpcProviderCommitment("endpoint", quickNodeRpcUrl),
-    );
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue(deployment);
     mocks.lookup.mockResolvedValue(actionReward);
     mocks.readProfile.mockResolvedValue({
       status: "ready",
@@ -296,22 +301,25 @@ describe("Classic V3 action identity activation", () => {
     },
   );
 
-  it.each([true, false])(
-    "ignores the secondary RPC when indexed lookup is %s",
-    async (indexedEnabled) => {
-      mocks.indexedEnabled = indexedEnabled;
-      vi.stubEnv(
-        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
-        "https://lb.drpc.live/ethereum/second-classic-secret",
-      );
+  it("retries the complete preparation once on the fixed secondary after primary capacity failure", async () => {
+    const primaryRpcError = new RpcRequestError({
+      body: { method: "eth_blockNumber" },
+      error: { code: 10, message: "User balance exceeded" },
+      url: drpcRpcUrl,
+    });
+    mocks.createPublicClient
+      .mockReturnValueOnce({
+        getBlockNumber: vi.fn().mockRejectedValue(primaryRpcError),
+      })
+      .mockReturnValueOnce(actionClient(1));
 
-      const response = await POST(request());
-      const serialized = JSON.stringify(await response.json());
+    const response = await POST(request());
+    const serialized = JSON.stringify(await response.json());
 
-      expect(response.status).toBe(200);
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
-      expect(serialized).not.toContain("drpc-classic-key");
-      expect(serialized).not.toContain("second-classic-secret");
-    },
-  );
+    expect(response.status).toBe(200);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+    expect(mocks.readProfile).toHaveBeenCalledTimes(1);
+    expect(serialized).not.toContain("drpc-classic-key");
+    expect(serialized).not.toContain("quicknode-classic-key");
+  });
 });

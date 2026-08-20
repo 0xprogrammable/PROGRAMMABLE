@@ -16,7 +16,7 @@ import {
   CreatorClaimInputError,
   CreatorClaimUnavailableError,
   buildPreparedCreatorClaim,
-  getOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
   parseCreatorClaimRequest,
 } from "../../../../../lib/onchain";
 import { creatorFeeHookReadAbi } from "../../../../../lib/onchain/abis";
@@ -26,9 +26,9 @@ import {
   type CreatorClaimTokenIdentity,
 } from "../../../../../lib/server/action-rpc-identity.server";
 import {
-  ActionRpcProviderError,
-  creatorClaimRpcProvider,
-} from "../../../../../lib/server/action-rpc-quorum.server";
+  OperationalRpcUnavailableError,
+  withOperationalRpcFailover,
+} from "../../../../../lib/onchain/operational-rpc-failover.server";
 import {
   errorChainIncludesData,
   safeServerErrorSummary,
@@ -43,7 +43,7 @@ const CLAIM_RPC_UNAVAILABLE_MESSAGE =
   "Creator claim reads are temporarily unavailable. Try again";
 
 function claimClient(
-  deployment: ReturnType<typeof getOnchainDeployment>,
+  deployment: ReturnType<typeof getWebsiteReadOnchainDeployment>,
   endpoint: string,
 ) {
   return createPublicClient({
@@ -60,15 +60,15 @@ function claimRpcUnavailable() {
 }
 
 async function currentClaimSnapshot(client: PublicClient) {
-  try {
-    const blockNumber = await client.getBlockNumber();
-    const block = await client.getBlock({ blockNumber });
-    if (!block.hash) throw claimRpcUnavailable();
-    return { blockNumber, blockHash: block.hash as Hex };
-  } catch (error) {
-    if (error instanceof CreatorClaimUnavailableError) throw error;
-    throw claimRpcUnavailable();
+  const blockNumber = await client.getBlockNumber();
+  const block = await client.getBlock({ blockNumber });
+  if (!block.hash) {
+    throw new CreatorClaimUnavailableError(
+      "runtime-mismatch",
+      "The creator claim snapshot has no block hash",
+    );
   }
+  return { blockNumber, blockHash: block.hash as Hex };
 }
 
 async function simulateCreatorClaim(input: {
@@ -101,7 +101,10 @@ async function simulateCreatorClaim(input: {
 
 async function readCurrentClaimState(input: {
   client: PublicClient;
-  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>;
+  deployment: Extract<
+    ReturnType<typeof getWebsiteReadOnchainDeployment>,
+    { status: "ready" }
+  >;
   token: CreatorClaimTokenIdentity;
   blockNumber: bigint;
 }) {
@@ -229,7 +232,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const claimRequest = parseCreatorClaimRequest(input);
-    const deployment = getOnchainDeployment();
+    let deployment: ReturnType<typeof getWebsiteReadOnchainDeployment>;
+    try {
+      deployment = getWebsiteReadOnchainDeployment();
+    } catch {
+      throw claimRpcUnavailable();
+    }
     if (deployment.status !== "ready") {
       throw new CreatorClaimUnavailableError(
         "not-deployed",
@@ -242,80 +250,85 @@ export async function POST(request: NextRequest) {
         `Switch to chain ${deployment.chainId}`,
       );
     }
-    const provider = creatorClaimRpcProvider(deployment);
-    const client = claimClient(deployment, provider.endpoint);
-    const snapshot = await currentClaimSnapshot(client);
-    const token = await readCreatorClaimIdentityFromRpc({
-      client,
+    const response = await withOperationalRpcFailover(
       deployment,
-      poolId: claimRequest.poolId,
-      blockNumber: snapshot.blockNumber,
-    });
-    if (
-      token.creatorAddress.toLowerCase() !== claimRequest.account.toLowerCase()
-    ) {
-      throw new CreatorClaimUnavailableError(
-        "not-creator",
-        "This account is not the recorded creator for the pool",
-      );
-    }
-    const state = await readCurrentClaimState({
-      client,
-      deployment,
-      token,
-      blockNumber: snapshot.blockNumber,
-    });
-    const claimable = state.claimable;
-    if (claimable <= 0n) {
-      throw new CreatorClaimUnavailableError(
-        "nothing-to-claim",
-        "There are no creator fees to claim for this pool",
-      );
-    }
-    const data = encodeFunctionData({
-      abi: creatorFeeHookReadAbi,
-      functionName: "claimCreatorFees",
-      args: [claimRequest.poolId],
-    });
-    const value = 0n;
-    const transaction = {
-      account: claimRequest.account,
-      to: deployment.feeHook,
-      data,
-      value,
-    };
-    const simulation = await simulateCreatorClaim({
-      client,
-      transaction,
-      blockNumber: snapshot.blockNumber,
-    });
-    const intent = {
-      account: claimRequest.account,
-      poolId: claimRequest.poolId,
-      tokenAddress: token.tokenAddress,
-      hookAddress: deployment.feeHook,
-      snapshotClaimableWei: claimable.toString(),
-      snapshotClaimableEth: formatUnits(claimable, 18),
-      snapshot: {
-        chainId: deployment.chainId,
-        blockNumber: snapshot.blockNumber.toString(),
-        blockHash: snapshot.blockHash,
-        confirmations: 0,
+      async (selected) => {
+        const client = claimClient(deployment, selected.rpcUrl);
+        const snapshot = await currentClaimSnapshot(client);
+        const token = await readCreatorClaimIdentityFromRpc({
+          client,
+          deployment,
+          poolId: claimRequest.poolId,
+          blockNumber: snapshot.blockNumber,
+        });
+        if (
+          token.creatorAddress.toLowerCase() !==
+          claimRequest.account.toLowerCase()
+        ) {
+          throw new CreatorClaimUnavailableError(
+            "not-creator",
+            "This account is not the recorded creator for the pool",
+          );
+        }
+        const state = await readCurrentClaimState({
+          client,
+          deployment,
+          token,
+          blockNumber: snapshot.blockNumber,
+        });
+        const claimable = state.claimable;
+        if (claimable <= 0n) {
+          throw new CreatorClaimUnavailableError(
+            "nothing-to-claim",
+            "There are no creator fees to claim for this pool",
+          );
+        }
+        const data = encodeFunctionData({
+          abi: creatorFeeHookReadAbi,
+          functionName: "claimCreatorFees",
+          args: [claimRequest.poolId],
+        });
+        const value = 0n;
+        const transaction = {
+          account: claimRequest.account,
+          to: deployment.feeHook,
+          data,
+          value,
+        };
+        const simulation = await simulateCreatorClaim({
+          client,
+          transaction,
+          blockNumber: snapshot.blockNumber,
+        });
+        const intent = {
+          account: claimRequest.account,
+          poolId: claimRequest.poolId,
+          tokenAddress: token.tokenAddress,
+          hookAddress: deployment.feeHook,
+          snapshotClaimableWei: claimable.toString(),
+          snapshotClaimableEth: formatUnits(claimable, 18),
+          snapshot: {
+            chainId: deployment.chainId,
+            blockNumber: snapshot.blockNumber.toString(),
+            blockHash: snapshot.blockHash,
+            confirmations: 0,
+          },
+          transaction: {
+            kind: "claim-creator-fees" as const,
+            chainId: deployment.chainId,
+            from: claimRequest.account,
+            to: deployment.feeHook,
+            data,
+            value: "0" as const,
+          },
+        };
+        return buildPreparedCreatorClaim(intent, {
+          estimatedGas: simulation.estimatedGas,
+          gasPriceWei: simulation.gasPrice,
+          accountBalanceWei: simulation.accountBalance,
+        });
       },
-      transaction: {
-        kind: "claim-creator-fees" as const,
-        chainId: deployment.chainId,
-        from: claimRequest.account,
-        to: deployment.feeHook,
-        data,
-        value: "0" as const,
-      },
-    };
-    const response = buildPreparedCreatorClaim(intent, {
-      estimatedGas: simulation.estimatedGas,
-      gasPriceWei: simulation.gasPrice,
-      accountBalanceWei: simulation.accountBalance,
-    });
+    );
     return json(response);
   } catch (error) {
     if (error instanceof CreatorClaimInputError) {
@@ -326,11 +339,11 @@ export async function POST(request: NextRequest) {
     }
     if (
       error instanceof CreatorClaimUnavailableError ||
-      error instanceof ActionRpcProviderError ||
-      error instanceof ActionRpcIdentityError
+      error instanceof ActionRpcIdentityError ||
+      error instanceof OperationalRpcUnavailableError
     ) {
       const unavailable =
-        error instanceof ActionRpcProviderError
+        error instanceof OperationalRpcUnavailableError
           ? claimRpcUnavailable()
           : error instanceof ActionRpcIdentityError
             ? new CreatorClaimUnavailableError(error.code, error.message)

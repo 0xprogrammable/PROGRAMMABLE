@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
+import { RpcRequestError } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { rpcProviderCommitment } from
-  "../lib/data-pipeline/rpc-provider-commitments";
 
 vi.mock("server-only", () => ({}));
 
@@ -13,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   coordinatePublicRouteRead: vi.fn(),
   createPublicClient: vi.fn(),
   getWebsiteChartOnchainDeployment: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
   preparePublicRouteRequest: vi.fn(
     async (value: URLSearchParams, headers: Headers, _route: string) => {
       void _route;
@@ -122,6 +121,15 @@ vi.mock("../lib/onchain/config", () => ({
     mocks.getWebsiteChartOnchainDeployment,
 }));
 
+vi.mock("../lib/onchain", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/onchain")>();
+  return {
+    ...actual,
+    getWebsiteReadOnchainDeployment:
+      mocks.getWebsiteReadOnchainDeployment,
+  };
+});
+
 vi.mock("../lib/alchemy/profile.server", () => ({
   AlchemyCreatorProfileIntegrityError:
     mocks.AlchemyCreatorProfileIntegrityError,
@@ -152,12 +160,16 @@ describe("public route coordinator wiring", () => {
     rpcFixtures.client.getLogs.mockResolvedValue([]);
     mocks.createPublicClient.mockReturnValue(rpcFixtures.client);
     const drpc = "https://lb.drpc.live/ethereum/drpc-profile-key";
-    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
-    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL", drpc);
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
-      rpcProviderCommitment("endpoint", drpc),
-    );
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue({
+      status: "ready",
+      environment: "production",
+      releaseVersion: "classic-v2",
+      chainId: 1,
+      rpcUrl: drpc,
+      rpcUrlSecondary:
+        "https://profile-node.ethereum-mainnet.quiknode.pro/quicknode-profile-key/",
+      rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
+    });
   });
 
   it("derives current, generated and claimed totals from sparse dRPC state", async () => {
@@ -251,7 +263,7 @@ describe("public route coordinator wiring", () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it("reports the single committed dRPC creator profile source", async () => {
+  it("reports the healthy bound primary creator profile source", async () => {
     const response = await creatorProfile(
       new NextRequest(
         `http://localhost/api/explore/profile?account=${ACCOUNT}`,
@@ -267,19 +279,23 @@ describe("public route coordinator wiring", () => {
       "private, max-age=0, s-maxage=15",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "drpc",
+      "rpc",
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "drpc",
+      "rpc",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "drpc-primary",
     );
   });
 
-  it("fails closed with 503 when the sole dRPC read fails", async () => {
+  it("retries the whole creator profile read on the fixed secondary after primary capacity failure", async () => {
     rpcFixtures.client.getBlockNumber.mockRejectedValueOnce(
-      new Error("dRPC unavailable"),
+      new RpcRequestError({
+        body: { method: "eth_blockNumber" },
+        error: { code: 10, message: "User balance exceeded" },
+        url: "https://lb.drpc.live/ethereum/drpc-profile-key",
+      }),
     );
 
     const response = await creatorProfile(
@@ -288,24 +304,22 @@ describe("public route coordinator wiring", () => {
       ),
     );
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({
-      status: "error",
-      error: {
-        kind: "temporary",
-        code: "creator_profile_temporarily_unavailable",
-        message: "Onchain creator data is temporarily unavailable",
-      },
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "ready",
+      account: ACCOUNT,
     });
-    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
     expect(mocks.readBitqueryCreatorProfile).not.toHaveBeenCalled();
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "quicknode-secondary",
+    );
   });
 
-  it("fails closed before transport on a primary commitment mismatch", async () => {
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
-      `0x${"00".repeat(32)}`,
-    );
+  it("fails closed before transport when the Website RPC binding is invalid", async () => {
+    mocks.getWebsiteReadOnchainDeployment.mockImplementationOnce(() => {
+      throw new Error("Website primary RPC binding is invalid");
+    });
 
     const response = await creatorProfile(
       new NextRequest(

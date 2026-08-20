@@ -916,7 +916,7 @@ describe("read-model operations source contract", () => {
     [
       "profile provider provenance",
       "app/api/explore/profile/route.ts",
-      '"X-Programmable-Read-Source": "drpc"',
+      '"X-Programmable-Read-Source": "rpc"',
       '"X-Programmable-Read-Source": "unknown"',
     ],
     [
