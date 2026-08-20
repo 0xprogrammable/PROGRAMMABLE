@@ -465,7 +465,10 @@ async function readCreatorProfile(
 async function readEnvioCreatorProfile(
   account: Address,
   signal: AbortSignal,
-): Promise<CreatorProfile> {
+): Promise<Readonly<{
+  profile: CreatorProfile;
+  provider: string;
+}>> {
   const catalog = await readEnvioClassicV3CatalogV1({
     signal,
     deadlineMs: Date.now() + 7_500,
@@ -480,42 +483,131 @@ async function readEnvioCreatorProfile(
       ...token,
       id: token.tokenAddress.toLowerCase(),
     }));
+  const classicV2Tokens = tokens.filter(
+    (token) => token.launchModelVersion === "classic-v2",
+  );
+  const claimState = classicV2Tokens.length
+    ? await (async () => {
+        const deployment = getWebsiteReadOnchainDeployment("production");
+        if (deployment.status !== "ready") {
+          throw new Error("Classic V2 creator rewards are not deployed");
+        }
+        return withOperationalRpcFailover(deployment, async (selected) => {
+          const client = profileClient(selected.rpcUrl);
+          const head = await client.getBlockNumber();
+          const blockNumber = head > CONFIRMATIONS ? head - CONFIRMATIONS : head;
+          const block = await client.getBlock({ blockNumber });
+          if (!block.hash) {
+            throw new Error("Creator reward snapshot has no block hash");
+          }
+          await Promise.all([
+            assertRuntime(
+              client,
+              deployment.launcher,
+              deployment.launcherRuntimeCodeHash,
+              blockNumber,
+            ),
+            assertRuntime(
+              client,
+              deployment.feeHook,
+              deployment.feeHookRuntimeCodeHash,
+              blockNumber,
+            ),
+          ]);
+          const claimableByPool = new Map<string, bigint>();
+          await Promise.all(classicV2Tokens.map(async (token) => {
+            if (
+              token.hookAddress.toLowerCase() !==
+                deployment.feeHook.toLowerCase() ||
+              typeof token.totalSwapFeeBps !== "number"
+            ) {
+              throw new Error("Classic V2 reward identity is invalid");
+            }
+            const config = await client.readContract({
+              address: deployment.feeHook,
+              abi: creatorFeeHookReadAbi,
+              functionName: "poolFeeConfig",
+              args: [token.poolId],
+              blockNumber,
+            });
+            const [creator, registrar, totalSwapFeeBps, registered, accrued] =
+              config;
+            if (
+              !registered ||
+              getAddress(creator).toLowerCase() !== account.toLowerCase() ||
+              getAddress(registrar).toLowerCase() !==
+                deployment.launcher.toLowerCase() ||
+              Number(totalSwapFeeBps) !== token.totalSwapFeeBps
+            ) {
+              throw new Error("Classic V2 reward state is invalid");
+            }
+            claimableByPool.set(token.poolId.toLowerCase(), accrued);
+          }));
+          return {
+            blockNumber,
+            blockHash: block.hash as Hex,
+            blockTimestamp: block.timestamp,
+            confirmations: Number(head - blockNumber),
+            claimableByPool,
+            provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
+          };
+        });
+      })()
+    : null;
   const pools = tokens.flatMap((token) =>
     typeof token.totalSwapFeeBps === "number"
-      ? [{
-          tokenAddress: token.tokenAddress,
-          name: token.name,
-          symbol: token.symbol,
-          poolId: token.poolId,
-          totalSwapFeeBps: token.totalSwapFeeBps,
-          launchModel: "classic" as const,
-          claimableCreatorFeesWei: "0",
-          claimableCreatorFeesEth: "0",
-          generatedCreatorFeesWei: "0",
-          generatedCreatorFeesEth: "0",
-        }]
+      ? (() => {
+          const claimable =
+            claimState?.claimableByPool.get(token.poolId.toLowerCase()) ?? 0n;
+          return [{
+            tokenAddress: token.tokenAddress,
+            name: token.name,
+            symbol: token.symbol,
+            poolId: token.poolId,
+            totalSwapFeeBps: token.totalSwapFeeBps,
+            launchModel: "classic" as const,
+            claimableCreatorFeesWei: claimable.toString(),
+            claimableCreatorFeesEth: formatUnits(claimable, 18),
+            generatedCreatorFeesWei: claimable.toString(),
+            generatedCreatorFeesEth: formatUnits(claimable, 18),
+          }];
+        })()
       : [],
   );
+  const claimable = [...(claimState?.claimableByPool.values() ?? [])]
+    .reduce((sum, value) => sum + value, 0n);
   return {
-    status: "ready",
-    account,
-    tokens,
-    pools,
-    claims: [],
-    totals: {
-      claimableWei: "0",
-      claimableEth: "0",
-      generatedWei: "0",
-      generatedEth: "0",
-      claimedWei: "0",
-      claimedEth: "0",
-    },
-    snapshot: {
-      chainId: 1,
-      blockNumber: catalog.asOfBlock,
-      blockHash: catalog.asOfBlockHash,
-      blockTimestamp: catalog.generatedAt,
-      confirmations: 12,
+    provider: claimState?.provider ?? "envio-indexer-state",
+    profile: {
+      status: "ready",
+      account,
+      tokens,
+      pools,
+      claims: [],
+      totals: {
+        claimableWei: claimable.toString(),
+        claimableEth: formatUnits(claimable, 18),
+        generatedWei: claimable.toString(),
+        generatedEth: formatUnits(claimable, 18),
+        claimedWei: "0",
+        claimedEth: "0",
+      },
+      snapshot: claimState
+        ? {
+            chainId: 1,
+            blockNumber: claimState.blockNumber.toString(),
+            blockHash: claimState.blockHash,
+            blockTimestamp:
+              new Date(Number(claimState.blockTimestamp) * 1_000).toISOString(),
+            confirmations: claimState.confirmations,
+          }
+        : {
+            chainId: 1,
+            blockNumber: catalog.asOfBlock,
+            blockHash: catalog.asOfBlockHash,
+            blockTimestamp: catalog.generatedAt,
+            confirmations: 12,
+          },
     },
   };
 }
@@ -572,12 +664,15 @@ export async function GET(request: NextRequest) {
         getAddress(input),
         request.signal,
       );
-      return NextResponse.json(fallback, {
+      return NextResponse.json(fallback.profile, {
         headers: {
           "Cache-Control": "private, max-age=0, s-maxage=15",
           "X-Programmable-Launch-Source": "envio-classic-v3",
-          "X-Programmable-Read-Source": "envio-classic-v3",
-          "X-Programmable-Rpc-Provider": "envio-indexer-state",
+          "X-Programmable-Read-Source":
+            fallback.provider === "envio-indexer-state"
+              ? "envio-classic-v3"
+              : "envio-classic-v3+rpc",
+          "X-Programmable-Rpc-Provider": fallback.provider,
         },
       });
     } catch (fallbackError) {
