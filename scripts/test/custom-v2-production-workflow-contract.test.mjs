@@ -32,9 +32,18 @@ test("Custom V2 production proof is a dedicated versioned protected lane", () =>
   assert.match(proof, /id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2"/u);
   assert.match(verify, /^  custom-v2:$/mu);
   assert.match(verify, /name: Verify exact Custom V2 surface[\s\S]*npm run verify:custom-v2:ci/u);
-  assert.match(
+  const projectionDatabaseOperator = stepBlock(
     verify,
-    /name: Verify exact Website projection database operator[\s\S]*node --test scripts\/website-projection-db-operator\.test\.mjs/u,
+    "Verify exact Website projection database operator",
+  );
+  assert.match(projectionDatabaseOperator, /node --test/u);
+  assert.match(
+    projectionDatabaseOperator,
+    /scripts\/website-projection-db-operator\.test\.mjs/u,
+  );
+  assert.match(
+    projectionDatabaseOperator,
+    /scripts\/website-projection-db-credential-rotation\.test\.mjs/u,
   );
   assert.match(
     verify,
