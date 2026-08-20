@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -41,6 +41,8 @@ const receiptSigner = {
   providerIdentityHash: canonicalSha256(receiptSignerCore.schemaVersion, receiptSignerCore),
   credentialMode: "vercel-oidc-bearer",
 };
+const websiteSessionPrivateKeyPem = generateKeyPairSync("ed25519").privateKey
+  .export({ type: "pkcs8", format: "pem" }).toString();
 const configured = {
   PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "true",
   PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
@@ -49,6 +51,14 @@ const configured = {
   PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "manual_review",
   NEXT_PUBLIC_PRIVY_APP_ID: "privy-app",
   PRIVY_APP_SECRET: "privy-secret",
+  VERCEL_GIT_COMMIT_SHA: "1".repeat(40),
+  PROGRAMMABLE_GITHUB_LAUNCH_APP_CLIENT_ID: "Iv1.0123456789abcdef",
+  PROGRAMMABLE_GITHUB_LAUNCH_APP_CLIENT_SECRET: "github-client-secret-value",
+  PROGRAMMABLE_WEBSITE_GITHUB_LAUNCH_SESSION_SIGNER_KEY_ID: "website-session-1",
+  PROGRAMMABLE_WEBSITE_GITHUB_LAUNCH_SESSION_SIGNER_PRIVATE_KEY_PEM:
+    websiteSessionPrivateKeyPem,
+  PROGRAMMABLE_WEBSITE_GITHUB_LAUNCH_COOKIE_SEAL_KEY_BASE64URL:
+    Buffer.alloc(32, 7).toString("base64url"),
   TOKEN_IMAGE_BLOB_READ_WRITE_TOKEN: "blob-token",
   PROGRAMMABLE_LAUNCH_PERMIT_SIGNERS_V2_JSON: JSON.stringify([permitSigner]),
   PROGRAMMABLE_TOKEN_IMAGE_UPLOAD_RECEIPT_SIGNER_V1_JSON:
