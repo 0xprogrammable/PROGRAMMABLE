@@ -2136,7 +2136,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list and token detail use the validated Envio Classic V3 catalog plus bounded exact-identity Dexscreener enrichment; charts bind one exact pool through Bitquery while profile and action routes retain their committed dRPC semantics",
+    "Explore list and token detail use the validated Envio Classic V3 catalog plus bounded exact-identity Dexscreener enrichment; charts bind one exact pool through Bitquery while profile and action routes retain their commitment-bound Website RPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2148,17 +2148,26 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-profile-claim-trade-provider-boundary",
     includesEverySourceFragment(publicCreatorProfile, [
       "readCreatorProfile",
-      "productionMainnetRpcPrimary",
-      '"X-Programmable-Launch-Source": "drpc"',
-      '"X-Programmable-Read-Source": "drpc"',
-      '"X-Programmable-Rpc-Provider": "drpc-primary"',
+      "getWebsiteReadOnchainDeployment",
+      "withOperationalRpcFailover",
+      "profileRpcProviderHeader",
+      '"X-Programmable-Launch-Source": "rpc"',
+      '"X-Programmable-Read-Source": "rpc"',
+      '"X-Programmable-Rpc-Provider": result.provider',
     ]) &&
-      publicClassicProfileGet.includes("classicV3ActionRpcProvider") &&
+      !publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
+      includesEverySourceFragment(publicClassicProfileGet, [
+        "getWebsiteReadOnchainDeployment",
+        "withOperationalRpcFailover",
+        "classicRpcProviderHeader",
+        '"X-Programmable-Read-Source": "rpc"',
+        '"X-Programmable-Rpc-Provider": result.provider',
+      ]) &&
+      !publicClassicProfileGet.includes("classicV3ActionRpcProvider") &&
       publicStockProfileGet.includes("stockPairedActionRpcProvider") &&
-      [publicClassicProfileGet, publicStockProfileGet].every(
-        (route) =>
-          route.includes('"X-Programmable-Read-Source": "rpc"') &&
-          route.includes('"X-Programmable-Rpc-Provider": "drpc-primary"'),
+      publicStockProfileGet.includes('"X-Programmable-Read-Source": "rpc"') &&
+      publicStockProfileGet.includes(
+        '"X-Programmable-Rpc-Provider": "drpc-primary"',
       ) &&
       includesEverySourceFragment(websiteRpcProviders, [
         "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
@@ -2175,7 +2184,7 @@ export function evaluateReadModelOperationsSourceContracts(
       includesEverySourceFragment(actionRpcProviders, [
         "createCommittedActionRpcProvider",
         "tradeActionRpcProvider",
-        "creatorClaimRpcProvider",
+        "stockPairedActionRpcProvider",
         'Object.defineProperty(provider, "endpoint"',
         "enumerable: false",
       ]) &&
@@ -2193,7 +2202,11 @@ export function evaluateReadModelOperationsSourceContracts(
       !tradePrepare.includes("tradeActionRpcProvider") &&
       !tradePrepare.includes("tradeActionRpcProviders") &&
       tradePrepare.includes('"Cache-Control": "no-store"') &&
-      creatorClaimPrepare.includes("creatorClaimRpcProvider") &&
+      includesEverySourceFragment(creatorClaimPrepare, [
+        "getWebsiteReadOnchainDeployment",
+        "withOperationalRpcFailover",
+      ]) &&
+      !creatorClaimPrepare.includes("creatorClaimRpcProvider") &&
       !creatorClaimPrepare.includes("creatorClaimRpcProviders") &&
       creatorClaimPrepare.includes('status: "not-submitted"') &&
       creatorClaimPrepare.includes("transactionHash: null") &&
@@ -2209,7 +2222,7 @@ export function evaluateReadModelOperationsSourceContracts(
         (route) =>
           !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
-    "Profile and Claim retain singular commitment-bound dRPC reads while Trade permits one complete-operation QuickNode retry only after an eligible dRPC transport or capacity failure; all action routes retain no write authority or hidden provider rotation",
+    "Profile, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
   );
   check(
     "ops-staged-envio-catalog-gate",

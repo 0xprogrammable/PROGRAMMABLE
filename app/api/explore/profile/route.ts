@@ -23,8 +23,9 @@ import type {
   CreatorClaim,
   CreatorProfile,
 } from "@/lib/onchain/types";
-import { productionMainnetRpcPrimary } from
-  "@/lib/onchain/website-rpc-providers.server";
+import { getWebsiteReadOnchainDeployment } from "@/lib/onchain";
+import { withOperationalRpcFailover } from
+  "@/lib/onchain/operational-rpc-failover.server";
 import { creatorProfileApiError } from "@/lib/profile/onchain-profile";
 import type {
   CanonicalTokenExploreEntry,
@@ -105,13 +106,21 @@ function releases(): readonly Release[] {
   ];
 }
 
-function profileClient() {
-  const provider = productionMainnetRpcPrimary();
+function profileClient(rpcUrl: string) {
   return createPublicClient({
     chain: mainnet,
     batch: { multicall: true },
-    transport: http(provider.url, { retryCount: 1, timeout: 12_000 }),
+    transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
   });
+}
+
+function profileRpcProviderHeader(
+  deployment: ReturnType<typeof getWebsiteReadOnchainDeployment>,
+  rpcUrl: string,
+) {
+  const role = rpcUrl === deployment.rpcUrl ? "primary" : "secondary";
+  const provider = deployment.rpcProviderIds?.[role] ?? "rpc";
+  return `${provider}-${role}`;
 }
 
 function minimum(left: bigint, right: bigint) {
@@ -512,18 +521,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const profile = await readCreatorProfile(getAddress(input), profileClient());
-    return NextResponse.json(profile, {
+    const deployment = getWebsiteReadOnchainDeployment("production");
+    const result = await withOperationalRpcFailover(
+      deployment,
+      async (selected) => ({
+        profile: await readCreatorProfile(
+          getAddress(input),
+          profileClient(selected.rpcUrl),
+        ),
+        provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
+      }),
+    );
+    return NextResponse.json(result.profile, {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Launch-Source": "drpc",
-        "X-Programmable-Read-Source": "drpc",
-        "X-Programmable-Rpc-Provider": "drpc-primary",
+        "X-Programmable-Launch-Source": "rpc",
+        "X-Programmable-Read-Source": "rpc",
+        "X-Programmable-Rpc-Provider": result.provider,
       },
     });
   } catch (error) {
     console.error(
-      "dRPC creator profile read failed",
+      "Creator profile RPC read failed",
       {
         name: error instanceof Error ? error.name : "UnknownError",
         category: "read-failed",

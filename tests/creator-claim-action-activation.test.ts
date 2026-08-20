@@ -2,13 +2,12 @@ import { NextRequest } from "next/server";
 import {
   getAddress,
   keccak256,
+  RpcRequestError,
   type Address,
   type Hex,
 } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { rpcProviderCommitment } from
-  "../lib/data-pipeline/rpc-provider-commitments";
 import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 
 vi.mock("server-only", () => ({}));
@@ -21,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   readBitquery: vi.fn(),
   readIdentity: vi.fn(),
   createPublicClient: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
 }));
 
 const creator = getAddress("0x1111111111111111111111111111111111111111");
@@ -54,6 +54,10 @@ const deployment = {
   rpcUrlSecondary:
     "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/" as
       string | null,
+  rpcProviderIds: {
+    primary: "drpc",
+    secondary: "quicknode",
+  },
   confirmations: 12n,
   logBlockRange: 10_000n,
 };
@@ -151,9 +155,13 @@ function rpcClient(estimatedGas: bigint, gasPrice: bigint, balance: bigint) {
   };
 }
 
-function unavailableRpcClient(message = "provider capacity unavailable") {
+function unavailableRpcClient(message = "provider capacity exceeded") {
   return {
-    getBlockNumber: vi.fn().mockRejectedValue(new Error(message)),
+    getBlockNumber: vi.fn().mockRejectedValue(new RpcRequestError({
+      body: { method: "eth_blockNumber" },
+      error: { code: 10, message },
+      url: deployment.rpcUrl,
+    })),
   };
 }
 
@@ -174,7 +182,8 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
-    getOnchainDeployment: () => deployment,
+    getWebsiteReadOnchainDeployment:
+      mocks.getWebsiteReadOnchainDeployment,
     readExploreModel: mocks.readLegacy,
   };
 });
@@ -220,19 +229,9 @@ describe("creator claim action identity activation", () => {
     vi.clearAllMocks();
     deployment.rpcUrl =
       "https://lb.drpc.live/ethereum/drpc-claim-key";
-    deployment.rpcUrlSecondary = null;
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
-      "drpc",
-    );
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
-      deployment.rpcUrl,
-    );
-    vi.stubEnv(
-      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
-      rpcProviderCommitment("endpoint", deployment.rpcUrl),
-    );
+    deployment.rpcUrlSecondary =
+      "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/";
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue(deployment);
     mocks.lookup.mockResolvedValue(indexedToken);
     mocks.readAlchemy.mockResolvedValue(legacyModel);
     mocks.readLegacy.mockResolvedValue(legacyModel);
@@ -281,22 +280,29 @@ describe("creator claim action identity activation", () => {
     },
   );
 
-  it("does not fall back to public providers when the private pair is unavailable", async () => {
+  it("retries the complete claim preparation on the fixed secondary after primary capacity failure", async () => {
     mocks.createPublicClient.mockReset();
-    mocks.createPublicClient.mockImplementation(() =>
-      unavailableRpcClient("monthly capacity exceeded"),
-    );
+    mocks.createPublicClient
+      .mockReturnValueOnce(
+        unavailableRpcClient("monthly capacity exceeded"),
+      )
+      .mockReturnValueOnce(
+        rpcClient(100_001n, 2_000_000_001n, 10n ** 18n),
+      );
 
     const response = await POST(request());
     const payload = await response.json();
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
     expect(payload).toMatchObject({
-      status: "blocked",
-      error: {
-        code: "rpc-unavailable",
+      status: "ready",
+      gas: {
+        estimatedGas: "100001",
+        gasPriceWei: "2000000001",
       },
     });
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+    expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
   });
 
   it("does not expose a private RPC identity-read failure", async () => {
@@ -323,7 +329,9 @@ describe("creator claim action identity activation", () => {
 
   it("returns a retryable typed error when the configured provider is unavailable", async () => {
     mocks.createPublicClient.mockReset();
-    mocks.createPublicClient.mockImplementation(() => unavailableRpcClient());
+    mocks.createPublicClient
+      .mockReturnValueOnce(unavailableRpcClient())
+      .mockReturnValueOnce(unavailableRpcClient());
 
     const response = await POST(request());
     const payload = await response.json();
@@ -343,10 +351,9 @@ describe("creator claim action identity activation", () => {
     "fails closed before simulation when the primary commitment is invalid with indexed lookup %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
-      vi.stubEnv(
-        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
-        `0x${"00".repeat(32)}`,
-      );
+      mocks.getWebsiteReadOnchainDeployment.mockImplementationOnce(() => {
+        throw new Error("Website primary RPC binding is invalid");
+      });
 
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());

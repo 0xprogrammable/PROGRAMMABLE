@@ -26,16 +26,19 @@ import {
   isClassicV3ReleaseVerified,
 } from "@/lib/classic-v3-release";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
+import { getWebsiteReadOnchainDeployment } from "@/lib/onchain";
 import {
   readBitqueryClassicV3Profile,
 } from "@/lib/market-data/bitquery-profile.server";
-import { safeOperationalRpcError } from
+import {
+  safeOperationalRpcError,
+  withOperationalRpcFailover,
+} from
   "@/lib/onchain/operational-rpc-failover.server";
 import {
   classicV3ProfileApiError,
   encodeClassicV3RewardAction,
 } from "@/lib/profile/classic-v3-rewards";
-import { classicV3ActionRpcProvider } from "@/lib/server/action-rpc-quorum.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -76,28 +79,36 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function classicActionRpcEndpoints() {
-  return [classicV3ActionRpcProvider(environment)];
+function createActionClient(rpcUrl: string) {
+  return createPublicClient({
+    chain,
+    batch: { multicall: true },
+    transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
+  });
 }
 
-function createActionClients() {
-  return classicActionRpcEndpoints().map((provider) =>
-    createPublicClient({
-      chain,
-      batch: { multicall: true },
-      transport: http(provider.endpoint, { retryCount: 1, timeout: 12_000 }),
-    }),
-  );
-}
-
-async function sharedActionBlock(clients: readonly PublicClient[]) {
-  if (clients.length !== 1) {
-    throw new Error("Classic actions require the configured RPC");
-  }
-  const blockNumber = await clients[0]!.getBlockNumber();
-  const block = await clients[0]!.getBlock({ blockNumber });
+async function currentActionBlock(client: PublicClient) {
+  const blockNumber = await client.getBlockNumber();
+  const block = await client.getBlock({ blockNumber });
   if (!block.hash) throw new Error("The configured RPC returned no block hash");
   return blockNumber;
+}
+
+function classicActionDeployment() {
+  const deployment = getWebsiteReadOnchainDeployment(environment);
+  if (deployment.chainId !== chain.id) {
+    throw new Error("Classic action RPC chain does not match the release");
+  }
+  return deployment;
+}
+
+function classicRpcProviderHeader(
+  deployment: ReturnType<typeof classicActionDeployment>,
+  rpcUrl: string,
+) {
+  const role = rpcUrl === deployment.rpcUrl ? "primary" : "secondary";
+  const provider = deployment.rpcProviderIds?.[role] ?? "rpc";
+  return `${provider}-${role}`;
 }
 
 async function assertCodeHashAtBlock(
@@ -694,40 +705,56 @@ export async function GET(request: NextRequest) {
   }
   try {
     const launch = search.get("launch")?.trim();
+    const deployment = classicActionDeployment();
     if (launch) {
       if (!isHex(launch, { strict: true }) || launch.length !== 66) {
         return json({ error: "Enter a valid launch transaction hash" }, 400);
       }
-      const client = createActionClients()[0]!;
+      const result = await withOperationalRpcFailover(
+        deployment,
+        async (selected) => ({
+          profile: await readLaunchByTransactionFromClient(
+            getAddress(input),
+            launch as Hex,
+            createActionClient(selected.rpcUrl),
+          ),
+          provider: classicRpcProviderHeader(deployment, selected.rpcUrl),
+        }),
+      );
       return NextResponse.json(
-        await readLaunchByTransactionFromClient(
-          getAddress(input),
-          launch as Hex,
-          client,
-        ),
+        result.profile,
         {
           headers: {
             "Cache-Control": "private, max-age=0, s-maxage=15",
             "X-Programmable-Read-Source": "rpc",
-            "X-Programmable-Rpc-Provider": "drpc-primary",
+            "X-Programmable-Rpc-Provider": result.provider,
           },
         },
       );
     }
-    const client = createActionClients()[0]!;
+    const result = await withOperationalRpcFailover(
+      deployment,
+      async (selected) => ({
+        profile: await readRewardsFromClient(
+          getAddress(input),
+          createActionClient(selected.rpcUrl),
+        ),
+        provider: classicRpcProviderHeader(deployment, selected.rpcUrl),
+      }),
+    );
     return NextResponse.json(
-      await readRewardsFromClient(getAddress(input), client),
+      result.profile,
       {
         headers: {
           "Cache-Control": "private, max-age=0, s-maxage=15",
           "X-Programmable-Read-Source": "rpc",
-          "X-Programmable-Rpc-Provider": "drpc-primary",
+          "X-Programmable-Rpc-Provider": result.provider,
         },
       },
     );
   } catch (error) {
     console.error(
-      "dRPC Classic profile read failed",
+      "Classic profile RPC read failed",
       safeOperationalRpcError(error),
     );
     return json(classicV3ProfileApiError("temporary"), 503);
@@ -767,9 +794,10 @@ export async function POST(request: NextRequest) {
   }
   const account = getAddress(input.account);
   const vaultAddress = getAddress(input.vaultAddress);
+  const action = input.action as "claim" | "update-payout";
   let newPayoutAddress: Address | undefined;
   let allocationIndex: number | undefined;
-  if (input.action === "update-payout") {
+  if (action === "update-payout") {
     if (
       typeof input.allocationIndex !== "number" ||
       !Number.isSafeInteger(input.allocationIndex) ||
@@ -813,39 +841,45 @@ export async function POST(request: NextRequest) {
       transferTaxBps: 0,
       lpFeePips: 0,
     };
-    const clients = createActionClients();
-    const blockNumber = await sharedActionBlock(clients);
-    const actionStates = await Promise.all(
-      clients.map((client) =>
-        readClassicActionState({
+    const deployment = classicActionDeployment();
+    const prepared = await withOperationalRpcFailover(
+      deployment,
+      async (selected) => {
+        const client = createActionClient(selected.rpcUrl);
+        const blockNumber = await currentActionBlock(client);
+        const actionState = await readClassicActionState({
           client,
           reward,
           account,
           blockNumber,
           allocationIndex,
-        }),
-      ),
-    );
-    const actionState = actionStates[0]!;
-    if (
-      input.action === "update-payout" &&
-      !actionState.ownsAllocation
-    ) {
-      return json(
-        { error: "Only the current owner of this reward allocation can change it" },
-        403,
-      );
-    }
-    if (input.action === "claim" && BigInt(actionState.claimableWei) === 0n) {
-      return json({ error: "There are no rewards to claim" }, 409);
-    }
-    const data = encodeClassicV3RewardAction({
-      action: input.action,
-      allocationIndex,
-      newPayoutAddress,
-    });
-    const simulations = await Promise.all(
-      clients.map(async (client) => {
+        });
+        if (
+          action === "update-payout" &&
+          !actionState.ownsAllocation
+        ) {
+          return {
+            status: 403,
+            body: {
+              error:
+                "Only the current owner of this reward allocation can change it",
+            },
+          } as const;
+        }
+        if (
+          action === "claim" &&
+          BigInt(actionState.claimableWei) === 0n
+        ) {
+          return {
+            status: 409,
+            body: { error: "There are no rewards to claim" },
+          } as const;
+        }
+        const data = encodeClassicV3RewardAction({
+          action,
+          allocationIndex,
+          newPayoutAddress,
+        });
         const transaction = {
           account,
           to: vaultAddress,
@@ -858,52 +892,40 @@ export async function POST(request: NextRequest) {
           client.getGasPrice(),
           client.getBalance({ address: account }),
         ]);
-        return { estimatedGas, gasPrice, balance };
-      }),
-    );
-    const estimatedGas = simulations.reduce(
-      (largest, candidate) =>
-        candidate.estimatedGas > largest
-          ? candidate.estimatedGas
-          : largest,
-      0n,
-    );
-    const gasPrice = simulations.reduce(
-      (largest, candidate) =>
-        candidate.gasPrice > largest ? candidate.gasPrice : largest,
-      0n,
-    );
-    const balance = simulations.reduce(
-      (smallest, candidate) =>
-        candidate.balance < smallest ? candidate.balance : smallest,
-      simulations[0]!.balance,
-    );
-    const gasLimit = (estimatedGas * 120n + 99n) / 100n;
-    if (balance < gasLimit * gasPrice) {
-      return json(
-        { error: "This wallet needs more ETH for the network fee" },
-        409,
-      );
-    }
-    const kind =
-      input.action === "claim"
-        ? "claim-classic-v3-rewards"
-        : "update-classic-v3-payout";
-    return json({
-      status: "ready",
-      action: input.action,
-      account,
-      vaultAddress,
-      transaction: {
-        kind,
-        chainId: chain.id,
-        from: account,
-        to: vaultAddress,
-        data,
-        value: "0",
-        gasLimit: gasLimit.toString(),
+        const gasLimit = (estimatedGas * 120n + 99n) / 100n;
+        if (balance < gasLimit * gasPrice) {
+          return {
+            status: 409,
+            body: {
+              error: "This wallet needs more ETH for the network fee",
+            },
+          } as const;
+        }
+        const kind =
+          action === "claim"
+            ? "claim-classic-v3-rewards"
+            : "update-classic-v3-payout";
+        return {
+          status: 200,
+          body: {
+            status: "ready",
+            action,
+            account,
+            vaultAddress,
+            transaction: {
+              kind,
+              chainId: chain.id,
+              from: account,
+              to: vaultAddress,
+              data,
+              value: "0",
+              gasLimit: gasLimit.toString(),
+            },
+          },
+        } as const;
       },
-    });
+    );
+    return json(prepared.body, prepared.status);
   } catch (error) {
     console.error(
       "Classic reward preparation failed",
