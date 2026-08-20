@@ -9,7 +9,6 @@ import {
   actionCanCheckStatus,
   actionLabel,
   actionPending,
-  buildFeeEarningsChart,
   buildProfilePortfolio,
   clearConfirmedProfileActionStates,
   getProfileSessionView,
@@ -19,7 +18,6 @@ import {
   groupPendingProfileTransactionStates,
   groupProfileRewards,
   parsePendingProfileTransactions,
-  parseClaimedFeeWei,
   paginateProfileClaimableEntries,
   profileClaimableWei,
   profileClaimActionCount,
@@ -30,6 +28,7 @@ import {
   ProfileRouterLaunches,
   profileRewardsForAccount,
   profileRewardActionErrorMessage,
+  profileTokenMarketCapLabel,
   profileTransactionPollAttempts,
   reflectedConfirmedProfileTransactions,
   resolveCreatorProfileReadFailure,
@@ -42,6 +41,7 @@ import {
   stockPairedCheckpointAfterReceipt,
   upsertPendingProfileTransactionRecords,
   waitForTransaction,
+  walletActionWasCancelled,
   withoutClosedDeepProfileData,
   type PendingProfileTransactionRecord,
   type StockPairedPendingStage,
@@ -143,9 +143,7 @@ describe("profile action error copy", () => {
       profileCreatorClaimErrorMessage(
         new Error("Transaction cancelled in wallet"),
       ),
-    ).toBe(
-      "Transaction cancelled. Your rewards are still available to claim.",
-    );
+    ).toBe("Transaction cancelled. Rewards remain available.");
     expect(
       profileCreatorClaimErrorMessage(new Error("private provider detail")),
     ).toBe(
@@ -158,9 +156,18 @@ describe("profile action error copy", () => {
       profileRewardActionErrorMessage(
         new Error("Deep reward action is not ready"),
       ),
-    ).toBe(
-      "The reward action was not completed. Check your wallet and try again.",
-    );
+    ).toBe("Unable to claim. Try again.");
+  });
+
+  it("recognizes nested wallet rejection without leaving a claim error", () => {
+    expect(walletActionWasCancelled({
+      cause: { code: 4001, message: "User rejected the request" },
+    })).toBe(true);
+    expect(
+      profileRewardActionErrorMessage({
+        cause: { code: 4001, message: "User rejected the request" },
+      }),
+    ).toBe("Transaction cancelled. Rewards remain available.");
   });
 });
 
@@ -370,12 +377,12 @@ describe("profile workspace loading state", () => {
     });
   });
 
-  it("contains five desktop claim rows inside the workspace while mobile keeps page flow", () => {
+  it("keeps paginated desktop claim rows top-aligned without an internal scrollbar", () => {
     expect(profileExperienceCss).toMatch(
       /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.profileWorkspace\s*\{[\s\S]*?height: clamp\(/,
     );
     expect(profileExperienceCss).toMatch(
-      /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.claimList\s*\{[\s\S]*?overflow-y: auto;/,
+      /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.claimList\s*\{[\s\S]*?align-content: start;[\s\S]*?overflow: visible;/,
     );
     expect(profileExperienceCss).toMatch(
       /@media \(max-width: 820px\)[\s\S]*?\.profileWorkspace/,
@@ -401,160 +408,15 @@ describe("profile workspace loading state", () => {
   });
 });
 
-describe("fee earnings chart", () => {
-  it("builds a cumulative chart from confirmed claims without inferred accrual", () => {
-    const activity = [
-      {
-        id: "claim:new",
-        label: "Creator fees claimed",
-        detail: "0.3 ETH from NEW",
-        occurredAt: "Today",
-        occurredAtIso: "2026-08-04T11:30:00.000Z",
-        href: "/token/new",
-      },
-      {
-        id: "claim:old",
-        label: "Creator fees claimed",
-        detail: "0.2 ETH from OLD",
-        occurredAt: "Yesterday",
-        occurredAtIso: "2026-08-03T11:30:00.000Z",
-        href: "/token/old",
-      },
-    ];
-
-    expect(parseClaimedFeeWei("0.25 ETH from TEST")).toBe(
-      250_000_000_000_000_000n,
-    );
-    const chart = buildFeeEarningsChart(
-      activity,
-      500_000_000_000_000_000n,
-      100_000_000_000_000_000n,
-    );
-
-    expect(chart?.points.map((point) => point.valueWei)).toEqual([
-      0n,
-      200_000_000_000_000_000n,
-      500_000_000_000_000_000n,
-      500_000_000_000_000_000n,
-    ]);
-    expect(chart?.totalWei).toBe(500_000_000_000_000_000n);
-  });
-
-  it("uses exact 1H, 1D, 1W and all-time earnings windows", () => {
-    const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
-    const activity = [
-      {
-        id: "claim:hour",
-        label: "Creator fees claimed",
-        detail: "0.1 ETH from NOW",
-        occurredAt: "Today",
-        occurredAtIso: "2026-08-04T11:30:00.000Z",
-        href: "/token/now",
-      },
-      {
-        id: "claim:day",
-        label: "Creator fees claimed",
-        detail: "0.2 ETH from DAY",
-        occurredAt: "Today",
-        occurredAtIso: "2026-08-04T06:00:00.000Z",
-        href: "/token/day",
-      },
-      {
-        id: "claim:week",
-        label: "Creator fees claimed",
-        detail: "0.3 ETH from WEEK",
-        occurredAt: "This week",
-        occurredAtIso: "2026-08-01T12:00:00.000Z",
-        href: "/token/week",
-      },
-      {
-        id: "claim:all",
-        label: "Creator fees claimed",
-        detail: "0.4 ETH from OLD",
-        occurredAt: "Last week",
-        occurredAtIso: "2026-07-24T12:00:00.000Z",
-        href: "/token/old",
-      },
-    ];
-
-    const hourly = buildFeeEarningsChart(
-      activity,
-      1_000_000_000_000_000_000n,
-      50_000_000_000_000_000n,
-      { nowMs, range: "1h" },
-    );
-    const daily = buildFeeEarningsChart(
-      activity,
-      1_000_000_000_000_000_000n,
-      50_000_000_000_000_000n,
-      { nowMs, range: "1d" },
-    );
-    const weekly = buildFeeEarningsChart(
-      activity,
-      1_000_000_000_000_000_000n,
-      50_000_000_000_000_000n,
-      { nowMs, range: "1w" },
-    );
-    const allTime = buildFeeEarningsChart(
-      activity,
-      1_000_000_000_000_000_000n,
-      50_000_000_000_000_000n,
-      { nowMs, range: "all" },
-    );
-
-    expect(hourly?.totalWei).toBe(100_000_000_000_000_000n);
-    expect(daily?.totalWei).toBe(300_000_000_000_000_000n);
-    expect(weekly?.totalWei).toBe(600_000_000_000_000_000n);
-    expect(allTime?.totalWei).toBe(1_000_000_000_000_000_000n);
-    expect(profileViewSource).toContain('role="slider"');
-    expect(profileViewSource).not.toContain("styles.claimHistory");
-  });
-
-  it("keeps short and long histories finite without a permanent endpoint marker", () => {
-    const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
-    const oneClaim = buildFeeEarningsChart(
-      [
-        {
-          id: "claim:only",
-          label: "Creator fees claimed",
-          detail: "0.1 ETH from ONE",
-          occurredAt: "Today",
-          occurredAtIso: "2026-08-04T11:30:00.000Z",
-          href: "/token/one",
-        },
-      ],
-      100_000_000_000_000_000n,
-      0n,
-      { nowMs, range: "all" },
-    );
-    const longHistory = buildFeeEarningsChart(
-      Array.from({ length: 80 }, (_, index) => ({
-        id: `claim:${index}`,
-        label: "Creator fees claimed",
-        detail: "0.001 ETH from MANY",
-        occurredAt: "This week",
-        occurredAtIso: new Date(nowMs - (80 - index) * 60_000).toISOString(),
-        href: "/token/many",
-      })),
-      80_000_000_000_000_000n,
-      0n,
-      { nowMs, range: "all" },
-    );
-
-    for (const chart of [oneClaim, longHistory]) {
-      expect(chart).not.toBeNull();
-      expect(
-        chart?.points.every(
-          (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
-        ),
-      ).toBe(true);
-    }
-    expect(profileViewSource).not.toContain("<circle");
-    expect(profileViewSource).not.toContain("styles.feeActivePoint");
-    expect(profileViewSource).toMatch(
-      /\{activePoint \? \([\s\S]*?className=\{styles\.feeCursor\}/,
-    );
-    expect(profileViewSource).toContain("onFocus={activateLastPoint}");
+describe("fee earnings summary", () => {
+  it("shows lifetime earned, available and claimed totals without a claim-history chart", () => {
+    expect(profileViewSource).toContain(">Fees earned</h2>");
+    expect(profileViewSource).toContain(">Lifetime fees for this wallet</p>");
+    expect(profileViewSource).toContain(">Total earned</span>");
+    expect(profileViewSource).toContain("Available <b>");
+    expect(profileViewSource).toContain("Claimed <b>");
+    expect(profileViewSource).not.toContain('role="slider"');
+    expect(profileViewSource).not.toContain("No confirmed claim history");
   });
 
   it("keeps the claim dialog focused on the selected token and actions", () => {
@@ -786,6 +648,14 @@ describe("profile reward grouping", () => {
         (token) => token.symbol,
       ),
     ).toEqual(["ETH_HIGH", "ETH_LOW"]);
+  });
+
+  it("formats a compact USD market cap for claim reward rows", () => {
+    expect(profileTokenMarketCapLabel({
+      ...tokens[0],
+      fdvUsdWad: "502400000000000000000000",
+    })).toBe("$502K");
+    expect(profileTokenMarketCapLabel(tokens[0])).toBeNull();
   });
 
   it("renders one portfolio entry when current and split rewards share a token", () => {
@@ -1105,7 +975,7 @@ describe("profile transaction status", () => {
         message: "Still pending on Ethereum",
         transactionHash,
       }),
-    ).toBe("Check status");
+    ).toBe("Confirming");
     expect(
       actionPending({
         account: firstAddress,
@@ -1113,7 +983,7 @@ describe("profile transaction status", () => {
         message: "Still pending on Ethereum",
         transactionHash,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("uses one receipt request for a manual status check", async () => {

@@ -598,6 +598,32 @@
   margin: 0;
 }
 
+.claimPanelActions {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  margin-inline-start: auto;
+}
+
+.claimRefresh {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 620;
+  gap: 6px;
+  min-height: 44px;
+  padding-inline: 10px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 120ms var(--ease-out);
+}
+
 .panelStatus {
   color: var(--muted);
   font-family: var(--font-instrument), Arial, sans-serif;
@@ -967,6 +993,16 @@
   white-space: nowrap;
 }
 
+.claimCopy small {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .claimAmount {
   display: grid;
   justify-items: end;
@@ -1290,6 +1326,7 @@
   .editAction:hover,
   .secondaryAction:not(:disabled):hover,
   .retryButton:hover,
+  .claimRefresh:hover,
   .claimDialogClose:hover,
   .claimPagination button:not(:disabled):hover {
     background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
@@ -1323,6 +1360,7 @@
 .claimButton:not(:disabled):active,
 .secondaryAction:not(:disabled):active,
 .retryButton:active,
+.claimRefresh:active,
 .claimDialogClose:active,
 .timeframeControls button:not(:disabled):active,
 .claimPagination button:not(:disabled):active {
@@ -1337,6 +1375,7 @@
 .claimButton:focus-visible,
 .secondaryAction:focus-visible,
 .retryButton:focus-visible,
+.claimRefresh:focus-visible,
 .claimDialogClose:focus-visible,
 .sourceWarning button:focus-visible,
 .claimIdentity:focus-visible,
@@ -1372,12 +1411,12 @@
   }
 
   .claimList {
-    flex: 1;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-inline-end: 2px;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
+    align-content: start;
+    flex: none;
+    grid-auto-rows: max-content;
+    overflow: visible;
+    padding-inline-end: 0;
+    scrollbar-gutter: auto;
   }
 
   .claimEmpty {
@@ -1491,6 +1530,16 @@
   .claimablePanel {
     border-radius: 15px;
     padding: 16px 12px;
+  }
+
+  .panelHeader {
+    flex-wrap: wrap;
+  }
+
+  .claimPanelActions {
+    justify-content: space-between;
+    margin-inline-start: 0;
+    width: 100%;
   }
 
   .feePanelHeader {
@@ -1967,12 +2016,20 @@
   padding: 0;
 }
 
-.feePanel,
-.claimablePanel {
+.feePanel {
   background: var(--webde-surface);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-card);
   height: 360px !important;
+  min-height: 360px;
+  padding: 20px;
+}
+
+.claimablePanel {
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  height: auto !important;
   min-height: 360px;
   padding: 20px;
 }
@@ -2045,7 +2102,12 @@
 }
 
 .claimList {
-  scrollbar-color: #474747 transparent;
+  align-content: start;
+  flex: none;
+  grid-auto-rows: max-content;
+  overflow: visible;
+  padding-inline-end: 0;
+  scrollbar-gutter: auto;
 }
 
 .claimRow {
@@ -2094,6 +2156,7 @@
   .editAction:hover,
   .secondaryAction:not(:disabled):hover,
   .retryButton:hover,
+  .claimRefresh:hover,
   .claimDialogClose:hover,
   .claimPagination button:not(:disabled):hover,
   .claimButton:not(:disabled):hover,

@@ -31,6 +31,8 @@ import type {
   CanonicalTokenExploreEntry,
   LauncherToken,
 } from "@/lib/tokens";
+import { readEnvioClassicV2CreatorClaimsV1 } from
+  "@/lib/market-data/envio-classic-v2-creator-claims.server";
 import { readEnvioClassicV3CatalogV1 } from
   "@/lib/market-data/envio-classic-v3-catalog.server";
 
@@ -486,8 +488,9 @@ async function readEnvioCreatorProfile(
   const classicV2Tokens = tokens.filter(
     (token) => token.launchModelVersion === "classic-v2",
   );
-  const claimState = classicV2Tokens.length
-    ? await (async () => {
+  const [claimState, classicV2Claims] = await Promise.all([
+    classicV2Tokens.length
+      ? (async () => {
         const deployment = getWebsiteReadOnchainDeployment("production");
         if (deployment.status !== "ready") {
           throw new Error("Classic V2 creator rewards are not deployed");
@@ -553,12 +556,53 @@ async function readEnvioCreatorProfile(
           };
         });
       })()
-    : null;
+      : Promise.resolve(null),
+    classicV2Tokens.length
+      ? readEnvioClassicV2CreatorClaimsV1({
+          account,
+          poolIds: classicV2Tokens.map((token) => token.poolId),
+          throughBlock: catalog.asOfBlock,
+          signal,
+          deadlineMs: Date.now() + 5_000,
+        })
+      : Promise.resolve([]),
+  ]);
+  const claimedByPool = new Map<string, bigint>();
+  for (const claim of classicV2Claims) {
+    const key = claim.poolId.toLowerCase();
+    claimedByPool.set(
+      key,
+      (claimedByPool.get(key) ?? 0n) + BigInt(claim.amountWei),
+    );
+  }
+  const tokenByPool = new Map(
+    classicV2Tokens.map((token) => [token.poolId.toLowerCase(), token]),
+  );
+  const claims: CreatorClaim[] = classicV2Claims.map((claim) => {
+    const token = tokenByPool.get(claim.poolId.toLowerCase());
+    if (!token) throw new Error("Classic V2 claim token identity is unavailable");
+    return {
+      poolId: claim.poolId,
+      tokenAddress: token.tokenAddress,
+      creatorAddress: claim.creator,
+      recipientAddress: claim.recipient,
+      callerAddress: claim.caller,
+      amountWei: claim.amountWei,
+      amountEth: formatUnits(BigInt(claim.amountWei), 18),
+      blockNumber: claim.blockNumber,
+      transactionHash: claim.transactionHash,
+      transactionIndex: claim.transactionIndex,
+      logIndex: claim.logIndex,
+      claimedAt:
+        new Date(Number(claim.blockTimestamp) * 1_000).toISOString(),
+    };
+  });
   const pools = tokens.flatMap((token) =>
     typeof token.totalSwapFeeBps === "number"
       ? (() => {
           const claimable =
             claimState?.claimableByPool.get(token.poolId.toLowerCase()) ?? 0n;
+          const claimed = claimedByPool.get(token.poolId.toLowerCase()) ?? 0n;
           return [{
             tokenAddress: token.tokenAddress,
             name: token.name,
@@ -568,13 +612,15 @@ async function readEnvioCreatorProfile(
             launchModel: "classic" as const,
             claimableCreatorFeesWei: claimable.toString(),
             claimableCreatorFeesEth: formatUnits(claimable, 18),
-            generatedCreatorFeesWei: claimable.toString(),
-            generatedCreatorFeesEth: formatUnits(claimable, 18),
+            generatedCreatorFeesWei: (claimable + claimed).toString(),
+            generatedCreatorFeesEth: formatUnits(claimable + claimed, 18),
           }];
         })()
       : [],
   );
   const claimable = [...(claimState?.claimableByPool.values() ?? [])]
+    .reduce((sum, value) => sum + value, 0n);
+  const claimed = [...claimedByPool.values()]
     .reduce((sum, value) => sum + value, 0n);
   return {
     provider: claimState?.provider ?? "envio-indexer-state",
@@ -583,14 +629,14 @@ async function readEnvioCreatorProfile(
       account,
       tokens,
       pools,
-      claims: [],
+      claims,
       totals: {
         claimableWei: claimable.toString(),
         claimableEth: formatUnits(claimable, 18),
-        generatedWei: claimable.toString(),
-        generatedEth: formatUnits(claimable, 18),
-        claimedWei: "0",
-        claimedEth: "0",
+        generatedWei: (claimable + claimed).toString(),
+        generatedEth: formatUnits(claimable + claimed, 18),
+        claimedWei: claimed.toString(),
+        claimedEth: formatUnits(claimed, 18),
       },
       snapshot: claimState
         ? {
