@@ -17,6 +17,13 @@ const GRANT_ID = "123e4567-e89b-42d3-a456-426614174002";
 const EXECUTION_RESERVATION_ID = "123e4567-e89b-42d3-a456-426614174003";
 const APPLICATION_HANDLE = `github-${"a".repeat(64)}` as const;
 const PACKAGE_ARTIFACT_HASH = `sha256:${"9".repeat(64)}` as const;
+const WEBSITE_SESSION_CREDENTIAL = "website-session-credential-value";
+
+function testCredentialIssuer() {
+  return {
+    issueCredential: vi.fn(async () => WEBSITE_SESSION_CREDENTIAL),
+  };
+}
 
 function serviceResponse(data: object, status = 200): Response {
   return new Response(JSON.stringify({
@@ -55,12 +62,19 @@ function releaseAttestedServiceFetch(
 function createReleaseBoundBridge(
   dependencies: Omit<
     CustomLaunchBridgeDependenciesV2,
-    "expectedPackageArtifactHash" | "expectedReviewAuthorityMode"
-  >,
+    | "expectedPackageArtifactHash"
+    | "expectedReviewAuthorityMode"
+    | "githubLaunchSessionCredentialIssuer"
+  > & Readonly<{
+    githubLaunchSessionCredentialIssuer?:
+      CustomLaunchBridgeDependenciesV2["githubLaunchSessionCredentialIssuer"];
+  }>,
   reviewAuthorityMode: "manual_review" | "autonomous_ai" = "manual_review",
 ) {
   return createCustomLaunchBridgeHandlerV2({
     ...dependencies,
+    githubLaunchSessionCredentialIssuer:
+      dependencies.githubLaunchSessionCredentialIssuer ?? testCredentialIssuer(),
     serviceFetch: releaseAttestedServiceFetch(dependencies.serviceFetch, reviewAuthorityMode),
     expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
     expectedReviewAuthorityMode: reviewAuthorityMode,
@@ -70,6 +84,7 @@ function createReleaseBoundBridge(
 function authenticatedPrincipal() {
   return {
     privyUserId: "did:privy:user",
+    privySessionId: "privy-session-1",
     githubUserId: "123456789",
     githubUsername: "builder",
     githubPrincipalHash: `sha256:${"1".repeat(64)}` as const,
@@ -109,7 +124,7 @@ describe("custom launch Website bridge V2", () => {
     const serviceFetch = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
       expect(String(input)).toBe("https://approval.example/v2/launch-sessions/challenges");
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer access-token-value");
+      expect(headers.get("authorization")).toBe(`Bearer ${WEBSITE_SESSION_CREDENTIAL}`);
       expect(headers.get("x-privy-identity-token")).toBeNull();
       expect(headers.get("idempotency-key")).toBe("challenge-request-1");
       expect(init?.credentials).toBe("omit");
@@ -163,6 +178,7 @@ describe("custom launch Website bridge V2", () => {
     });
     const handler = createCustomLaunchBridgeHandlerV2({
       authenticator: { authenticate: async () => authenticatedPrincipal() },
+      githubLaunchSessionCredentialIssuer: testCredentialIssuer(),
       serviceOrigin: new URL("https://approval.example"),
       expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
       expectedReviewAuthorityMode: "manual_review",
@@ -187,6 +203,7 @@ describe("custom launch Website bridge V2", () => {
     });
     const handler = createCustomLaunchBridgeHandlerV2({
       authenticator: { authenticate: async () => authenticatedPrincipal() },
+      githubLaunchSessionCredentialIssuer: testCredentialIssuer(),
       serviceOrigin: new URL("https://approval.example"),
       expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
       expectedReviewAuthorityMode: "manual_review",
@@ -227,6 +244,7 @@ describe("custom launch Website bridge V2", () => {
     });
     const handler = createCustomLaunchBridgeHandlerV2({
       authenticator: { authenticate: async () => authenticatedPrincipal() },
+      githubLaunchSessionCredentialIssuer: testCredentialIssuer(),
       serviceOrigin: new URL("https://approval.example"),
       expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
       expectedReviewAuthorityMode: "manual_review",
@@ -722,7 +740,11 @@ describe("custom launch Website bridge V2", () => {
     const serviceFetch = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = String(input);
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer access-token-value");
+      expect(headers.get("authorization")).toBe(
+        url.endsWith(`/v2/launch-preparations/${EXECUTION_RESERVATION_ID}/report`)
+          ? `Bearer ${WEBSITE_SESSION_CREDENTIAL}`
+          : "Bearer access-token-value",
+      );
       expect(headers.get("x-privy-identity-token")).toBeNull();
       if (url.endsWith(`/v3/applications/${APPLICATION_HANDLE}/launch-descriptor`)) {
         expect(init?.method).toBe("GET");

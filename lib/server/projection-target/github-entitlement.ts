@@ -24,6 +24,7 @@ const MAXIMUM_PRIVY_TOKEN_BYTES = 131_072;
 
 export interface AuthenticatedGitHubPrincipalV1 {
   readonly privyUserId: string;
+  readonly privySessionId?: string;
   readonly githubUserId: string;
   readonly githubUsername: string | null;
   readonly githubPrincipalHash: Sha256Digest;
@@ -267,6 +268,7 @@ export function createPrivyGitHubPrincipalAuthenticatorFromBoundaryV1(
       }
       return Object.freeze({
         privyUserId: user.id,
+        privySessionId: access.sessionId,
         githubUserId,
         githubUsername: account.username ?? null,
         githubPrincipalHash: canonicalSha256(

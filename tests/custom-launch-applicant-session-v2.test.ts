@@ -794,6 +794,9 @@ describe("custom launch applicant session currentness", () => {
     expect(customLaunchApplicantRecoveryV2(
       new CustomLaunchWebsiteRequestErrorV2(401, "applicant_authentication_required"),
     )).toBe("reconnect-github");
+    expect(customLaunchApplicantRecoveryV2(
+      new CustomLaunchWebsiteRequestErrorV2(401, "github_app_authorization_required"),
+    )).toBe("authorize-github-app");
   });
 
   it("recovers with a fresh session after a temporary provider failure", async () => {

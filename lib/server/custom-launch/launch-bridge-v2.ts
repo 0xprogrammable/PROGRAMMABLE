@@ -13,6 +13,11 @@ import {
 import { isCustomLaunchPublicEnabled } from "./public-readiness";
 import { assertApprovalServiceReadiness } from "./deployment-readiness";
 import {
+  createProductionWebsiteGitHubLaunchSessionCredentialIssuerV1,
+  WebsiteGitHubLaunchSessionErrorV1,
+  type WebsiteGitHubLaunchSessionCredentialIssuerV1,
+} from "./github-launch-session-v1";
+import {
   exactReviewAuthorityModeV1,
   type ReviewAuthorityModeV1,
 } from "@/lib/custom-launch/review-authority-v1";
@@ -45,6 +50,8 @@ export type CustomLaunchBridgeOperationV2 =
 
 export interface CustomLaunchBridgeDependenciesV2 {
   readonly authenticator: WebsiteEntitlementReadAuthenticatorV1;
+  readonly githubLaunchSessionCredentialIssuer:
+    WebsiteGitHubLaunchSessionCredentialIssuerV1;
   readonly serviceOrigin: URL;
   readonly serviceFetch: typeof fetch;
   readonly expectedPackageArtifactHash: `sha256:${string}`;
@@ -57,6 +64,7 @@ export function createCustomLaunchBridgeHandlerV2(
   const origin = exactServiceOrigin(dependencies.serviceOrigin);
   if (
     typeof dependencies.authenticator?.authenticate !== "function"
+    || typeof dependencies.githubLaunchSessionCredentialIssuer?.issueCredential !== "function"
     || typeof dependencies.serviceFetch !== "function"
     || !SHA256_DIGEST.test(dependencies.expectedPackageArtifactHash)
     || exactReviewAuthorityModeV1(dependencies.expectedReviewAuthorityMode)
@@ -105,8 +113,9 @@ export function createCustomLaunchBridgeHandlerV2(
       || request.headers.get("accept")?.trim().toLowerCase() !== "application/json"
     ) return errorResponse(400, "invalid_request");
 
+    let principal;
     try {
-      await dependencies.authenticator.authenticate(request);
+      principal = await dependencies.authenticator.authenticate(request);
     } catch (error) {
       if (error instanceof GitHubPrincipalAuthenticationErrorV1) {
         return errorResponse(error.status, error.code);
@@ -152,6 +161,22 @@ export function createCustomLaunchBridgeHandlerV2(
       return errorResponse(503, "launch_service_release_unverified");
     }
 
+    let upstreamAuthorization = authorization;
+    if (requiresGitHubLaunchSessionCredential(operation)) {
+      try {
+        upstreamAuthorization = `Bearer ${
+          await dependencies.githubLaunchSessionCredentialIssuer.issueCredential({
+            request,
+            principal,
+          })}`;
+      } catch (error) {
+        if (error instanceof WebsiteGitHubLaunchSessionErrorV1) {
+          return errorResponse(error.status, error.code);
+        }
+        return errorResponse(503, "github_launch_session_unavailable");
+      }
+    }
+
     const controller = new AbortController();
     const abortRequest = () => controller.abort(request.signal.reason);
     request.signal.addEventListener("abort", abortRequest, { once: true });
@@ -166,7 +191,7 @@ export function createCustomLaunchBridgeHandlerV2(
         signal: controller.signal,
         headers: {
           accept: "application/json",
-          authorization,
+          authorization: upstreamAuthorization,
           ...(body === undefined ? {} : {
             "content-type": "application/json",
             "content-length": String(body.byteLength),
@@ -306,6 +331,8 @@ export function handleProductionCustomLaunchBridgeV2(
   try {
     productionHandler ??= createCustomLaunchBridgeHandlerV2({
       authenticator: createPrivyGitHubPrincipalAuthenticatorV1(),
+      githubLaunchSessionCredentialIssuer:
+        createProductionWebsiteGitHubLaunchSessionCredentialIssuerV1(),
       serviceOrigin: new URL(requiredEnvironment("PROGRAMMABLE_APPROVAL_SERVICE_V2_ORIGIN")),
       serviceFetch: globalThis.fetch.bind(globalThis),
       expectedPackageArtifactHash: requiredEnvironment(
@@ -319,6 +346,16 @@ export function handleProductionCustomLaunchBridgeV2(
   } catch {
     return Promise.resolve(errorResponse(503, "launch_bridge_not_configured"));
   }
+}
+
+function requiresGitHubLaunchSessionCredential(
+  operation: CustomLaunchBridgeOperationV2,
+): boolean {
+  return operation.kind === "challenge-create"
+    || operation.kind === "preparation-bind"
+    || operation.kind === "wallet-authenticate"
+    || operation.kind === "launch-authorize"
+    || operation.kind === "transaction-report";
 }
 
 function resolveOperation(operation: CustomLaunchBridgeOperationV2): Readonly<{
