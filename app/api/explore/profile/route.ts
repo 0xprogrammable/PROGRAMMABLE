@@ -39,6 +39,7 @@ export const runtime = "nodejs";
 
 const CONFIRMATIONS = 12n;
 const LOG_RANGE = 10_000n;
+const LOG_RANGE_CONCURRENCY = 2;
 const TOTAL_SUPPLY_RAW = "1000000000000000000000000000";
 
 type Release = Readonly<{
@@ -127,6 +128,28 @@ function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
 }
 
+async function readBoundedLogRanges<Log>(
+  fromBlock: bigint,
+  toBlock: bigint,
+  readRange: (fromBlock: bigint, toBlock: bigint) => Promise<readonly Log[]>,
+) {
+  const ranges: Array<readonly [bigint, bigint]> = [];
+  for (let start = fromBlock; start <= toBlock; start += LOG_RANGE) {
+    ranges.push([start, minimum(toBlock, start + LOG_RANGE - 1n)]);
+  }
+  const results: Log[][] = Array.from({ length: ranges.length }, () => []);
+  let nextRange = 0;
+  const workerCount = Math.min(LOG_RANGE_CONCURRENCY, ranges.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextRange < ranges.length) {
+      const index = nextRange++;
+      const range = ranges[index]!;
+      results[index] = [...await readRange(range[0], range[1])];
+    }
+  }));
+  return results.flat();
+}
+
 async function assertRuntime(
   client: PublicClient,
   address: Address,
@@ -149,49 +172,47 @@ async function readLaunches(
   toBlock: bigint,
 ) {
   const launches: ProfileLaunch[] = [];
-  for (
-    let fromBlock = release.startBlock;
-    fromBlock <= toBlock;
-    fromBlock += LOG_RANGE
-  ) {
-    const logs = await client.getLogs({
+  const logs = await readBoundedLogRanges(
+    release.startBlock,
+    toBlock,
+    (fromBlock, rangeToBlock) => client.getLogs({
       address: release.launcher,
       event: memeTokenLaunchedEvent,
       args: { creator: account },
       fromBlock,
-      toBlock: minimum(toBlock, fromBlock + LOG_RANGE - 1n),
+      toBlock: rangeToBlock,
       strict: true,
-    });
-    for (const log of logs) {
-      if (log.removed) continue;
-      if (
-        log.blockNumber === null ||
-        log.transactionHash === null || log.transactionIndex === null ||
-        log.logIndex === null
-      ) {
-        throw new Error("Creator launch identity is incomplete");
-      }
-      if (
-        log.args.creator.toLowerCase() !== account.toLowerCase() ||
-        log.args.feeHook.toLowerCase() !== release.hook.toLowerCase()
-      ) {
-        throw new Error("Creator launch identity does not match its manifest");
-      }
-      launches.push({
-        release,
-        creator: getAddress(log.args.creator),
-        token: getAddress(log.args.token),
-        poolId: log.args.poolId,
-        positionRecipient: getAddress(log.args.positionRecipient),
-        positionTokenId: log.args.positionTokenId,
-        totalSwapFeeBps: log.args.totalSwapFeeBps,
-        launchHash: log.args.launchHash,
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-      });
+    }),
+  );
+  for (const log of logs) {
+    if (log.removed) continue;
+    if (
+      log.blockNumber === null ||
+      log.transactionHash === null || log.transactionIndex === null ||
+      log.logIndex === null
+    ) {
+      throw new Error("Creator launch identity is incomplete");
     }
+    if (
+      log.args.creator.toLowerCase() !== account.toLowerCase() ||
+      log.args.feeHook.toLowerCase() !== release.hook.toLowerCase()
+    ) {
+      throw new Error("Creator launch identity does not match its manifest");
+    }
+    launches.push({
+      release,
+      creator: getAddress(log.args.creator),
+      token: getAddress(log.args.token),
+      poolId: log.args.poolId,
+      positionRecipient: getAddress(log.args.positionRecipient),
+      positionTokenId: log.args.positionTokenId,
+      totalSwapFeeBps: log.args.totalSwapFeeBps,
+      launchHash: log.args.launchHash,
+      blockNumber: log.blockNumber,
+      transactionHash: log.transactionHash,
+      transactionIndex: log.transactionIndex,
+      logIndex: log.logIndex,
+    });
   }
   return launches;
 }
@@ -209,36 +230,34 @@ async function readClaims(
     launches.map((launch) => [launch.poolId.toLowerCase(), launch.token]),
   );
   const claims = [];
-  for (
-    let fromBlock = release.startBlock;
-    fromBlock <= toBlock;
-    fromBlock += LOG_RANGE
-  ) {
-    const logs = await client.getLogs({
+  const logs = await readBoundedLogRanges(
+    release.startBlock,
+    toBlock,
+    (fromBlock, rangeToBlock) => client.getLogs({
       address: release.hook,
       event: creatorFeesClaimedEvent,
       args: { poolId: poolIds, creator: account },
       fromBlock,
-      toBlock: minimum(toBlock, fromBlock + LOG_RANGE - 1n),
+      toBlock: rangeToBlock,
       strict: true,
-    });
-    for (const log of logs) {
-      if (log.removed) continue;
-      if (
-        log.blockNumber === null ||
-        log.transactionHash === null || log.transactionIndex === null ||
-        log.logIndex === null
-      ) {
-        throw new Error("Creator claim identity is incomplete");
-      }
-      if (
-        log.args.creator.toLowerCase() !== account.toLowerCase() ||
-        !tokenByPool.has(log.args.poolId.toLowerCase())
-      ) {
-        throw new Error("Creator claim is outside its verified profile");
-      }
-      claims.push({ log, token: tokenByPool.get(log.args.poolId.toLowerCase())! });
+    }),
+  );
+  for (const log of logs) {
+    if (log.removed) continue;
+    if (
+      log.blockNumber === null ||
+      log.transactionHash === null || log.transactionIndex === null ||
+      log.logIndex === null
+    ) {
+      throw new Error("Creator claim identity is incomplete");
     }
+    if (
+      log.args.creator.toLowerCase() !== account.toLowerCase() ||
+      !tokenByPool.has(log.args.poolId.toLowerCase())
+    ) {
+      throw new Error("Creator claim is outside its verified profile");
+    }
+    claims.push({ log, token: tokenByPool.get(log.args.poolId.toLowerCase())! });
   }
   return claims;
 }
