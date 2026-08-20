@@ -21,6 +21,7 @@
     "db:test:pglite": "node scripts/run-pglite-db-tests.mjs",
     "projector:provider-commitments": "node scripts/compute-projector-provider-commitments.mjs",
     "db:website-projection:operator": "node scripts/website-projection-db-operator.mjs",
+    "db:website-projection:rotate-credential": "node scripts/website-projection-db-credential-rotation.mjs",
     "verify:service-launch-permit-v2-golden": "node scripts/verify-service-launch-permit-v2-golden.mjs",
     "verify:service-launch-permit-v2-golden:cross-stack": "node scripts/verify-service-launch-permit-v2-golden.mjs --require-canonical",
     "verify:uniswap-launcher-sdk": "node scripts/verify-uniswap-liquidity-launcher-sdk.mjs",

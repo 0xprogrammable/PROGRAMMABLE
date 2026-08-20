@@ -23,6 +23,7 @@ test("routes the versioned Custom V2 surface without legacy market lanes", () =>
   for (const path of [
     "config/custom-registry-v2.deployment.prelaunch.json",
     "config/generic-launch-foundation.prelaunch.v1.json",
+    "docs/operations/WEBSITE-PROJECTION-DATABASE-BACKEND-HANDOFF-V1.json",
     "app/api/custom-launch/registry/v2/manifest/route.ts",
     "app/api/custom-launch/generic/v2/readiness/route.ts",
     "app/api/ops/custom-launch/generic-v2-projector/route.ts",

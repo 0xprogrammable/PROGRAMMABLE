@@ -155,3 +155,67 @@ Success requires `current`, five exact evidence rows, the constrained role graph
 and application/operator catalog fingerprints matching the last atomic evidence
 row. Pending exits 2; drift is an error. Retain the verify JSON with the plan,
 dry-run result, and apply result.
+
+## Existing runtime credential rotation
+
+The bootstrap password is intentionally ignored once
+`programmable_website_projection_runtime` exists. Rotate that existing role only
+with the separate source-owned operator:
+
+```sh
+npm run --silent db:website-projection:rotate-credential -- preflight \
+  --expected-project-ref 'mnnvlrqwhfoppogslsje' \
+  --plan '/secure/operator/reviewed-website-projection-plan.json'
+
+npm run --silent db:website-projection:rotate-credential -- rotate \
+  --expected-project-ref 'mnnvlrqwhfoppogslsje' \
+  --plan '/secure/operator/reviewed-website-projection-plan.json' \
+  --password-file '/secure/operator/new-website-projection-runtime-password' \
+  --output-directory '/secure/operator/website-projection-runtime-v1' \
+  --confirm-rotate \
+    'programmable_website_projection_runtime@mnnvlrqwhfoppogslsje' \
+  --confirm-no-overlap 'single-password-forward-cutover-v1'
+```
+
+Use `--password-stdin yes` instead of `--password-file` only with a non-TTY
+secret-manager pipe. A password file must be an owner-only regular file with
+mode `0600`; it is never accepted as a flag value, environment variable, or
+printed output. The output directory must not exist and its parent must be an
+owner-only real directory with mode `0700`.
+Both protected paths must resolve outside the Git checkout.
+The retained reviewed migration plan must also be an owner-only `0600` regular
+file outside the checkout. Its exact evidence and adoption attestation must be
+current in the database, while its migration order and byte commitments must
+match the current rotation checkout.
+
+The operator reuses the authenticated migration boundary above, requires the
+exact current five-row migration evidence and catalog fingerprints, takes a
+shared migration advisory lock, and changes only the password with `ALTER ROLE`
+inside one database transaction. It then authenticates a fresh connection through the
+exact Frankfurt Supavisor transaction endpoint as
+`programmable_website_projection_runtime.mnnvlrqwhfoppogslsje`, with the
+separate provider CA, hostname verification and the runtime least-privilege
+attestation. Only after that probe succeeds does one atomic directory rename
+publish these owner-only `0600` files:
+
+- `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL`;
+- `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE`;
+- `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM`;
+- `programmable-website-projection-runtime-credential-rotation-v1.json`.
+
+The JSON receipt contains no credential or credential-derived digest. The first
+three files are protected inputs for the Vercel environment controller; their
+creation is not a Vercel change or a Website cutover.
+
+PostgreSQL supports one password for this role, not overlapping old and new
+passwords. A failure before password mutation rolls back automatically. Existing
+sessions may continue after commit, but they are not overlap or cutover evidence.
+Every failure after password mutation begins, including a lost commit
+acknowledgement or a failed fresh probe, is conservatively `WPR01`: the new
+credential may be active and the staged output is removed. Rerun with the same
+protected secret or perform a forward rotation. Automatic restoration of an
+unavailable prior secret is impossible.
+Keep the current Vercel value until the protected new URL and CA exist, then use
+the normal dark-stage, readiness and promotion sequence.
+The exact cross-repository materialization contract is machine-readable in
+`WEBSITE-PROJECTION-DATABASE-BACKEND-HANDOFF-V1.json` beside this runbook.

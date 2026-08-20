@@ -16,6 +16,7 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
   "config/generic-launch-foundation.prelaunch.v1.json",
   "config/generic-launch-foundation.v1.schema.json",
   "config/generic-launch-public.v2.schema.json",
+  "docs/operations/WEBSITE-PROJECTION-DATABASE-BACKEND-HANDOFF-V1.json",
   "lib/custom-launch/registry-public-manifest-v2.ts",
   "lib/data-pipeline/custom-registry-v2-event-manifest.ts",
   "lib/server/custom-launch/registry-manifest-v2.ts",
