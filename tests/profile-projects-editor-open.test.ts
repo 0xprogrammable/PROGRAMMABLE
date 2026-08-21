@@ -17,6 +17,37 @@ const project = {
 };
 
 describe("My projects editor opening", () => {
+  it("preloads every visible project with bounded concurrency", async () => {
+    const preload = (profileProjects as unknown as {
+      preloadCreatorArticlePageV1(
+        projects: readonly CreatorProjectSummaryV1[],
+        load: (candidate: CreatorProjectSummaryV1) => Promise<unknown>,
+        concurrency?: number,
+      ): Promise<void>;
+    }).preloadCreatorArticlePageV1;
+    expect(typeof preload).toBe("function");
+
+    const projects = Array.from({ length: 5 }, (_, index) => ({
+      ...project,
+      tokenAddress: `0x${String(index + 1).padStart(40, "0")}` as `0x${string}`,
+      name: `Project ${index + 1}`,
+    }));
+    let active = 0;
+    let maximumActive = 0;
+    const attempted: string[] = [];
+    await preload(projects, async (candidate) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      attempted.push(candidate.tokenAddress);
+      await Promise.resolve();
+      active -= 1;
+      if (candidate === projects[2]) throw new Error("transient");
+    }, 2);
+
+    expect(maximumActive).toBe(2);
+    expect(attempted).toEqual(projects.map(({ tokenAddress }) => tokenAddress));
+  });
+
   it("paginates verified projects by highest available market cap", () => {
     const paginate = (profileProjects as unknown as {
       paginateCreatorProjectsV1(

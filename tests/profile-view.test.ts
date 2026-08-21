@@ -423,7 +423,7 @@ describe("profile workspace loading state", () => {
 describe("fee earnings summary", () => {
   it("shows lifetime earned, available and claimed totals without a claim-history chart", () => {
     expect(profileViewSource).toContain(">Fees earned</h2>");
-    expect(profileViewSource).toContain(">Lifetime fees for this wallet</p>");
+    expect(profileViewSource).not.toContain(">Lifetime fees for this wallet</p>");
     expect(profileViewSource).toContain(">Total earned</span>");
     expect(profileViewSource).toContain("Available <b>");
     expect(profileViewSource).toContain("Claimed <b>");
@@ -727,7 +727,7 @@ describe("profile reward grouping", () => {
     );
   });
 
-  it("sorts six claimable entries before splitting them into five-row pages", () => {
+  it("sorts six claimable entries before splitting them into four-row pages", () => {
     const claimableAmounts = [1n, 9n, 3n, 7n, 5n, 2n];
     const claimTokens = claimableAmounts.map((_, index) => {
       const address = getAddress(
@@ -771,10 +771,10 @@ describe("profile reward grouping", () => {
       "C4",
       "C5",
       "C3",
-      "C6",
     ]);
     expect(secondPage).toMatchObject({ currentPage: 2, totalPages: 2 });
     expect(secondPage.items.map((entry) => entry.token.symbol)).toEqual([
+      "C6",
       "C1",
     ]);
     expect(claimTokens.map((token) => token.symbol)).toEqual([

@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import * as creatorArticleRenderer from "../components/creator-article";
 import { CreatorArticle } from "../components/creator-article";
 import { parseCreatorArticleV1 } from "../lib/creator-article/contract-v1";
 
@@ -48,5 +49,45 @@ describe("creator article public renderer", () => {
   it("renders no placeholder when the article is absent", () => {
     expect(renderToStaticMarkup(createElement(CreatorArticle, { article: null })))
       .toBe("");
+  });
+
+  it("recognizes common social providers and keeps an icon for unknown HTTPS links", () => {
+    const provider = (creatorArticleRenderer as unknown as {
+      creatorArticleLinkProviderV1(href: string): string;
+    }).creatorArticleLinkProviderV1;
+    expect(typeof provider).toBe("function");
+    expect(provider("https://github.com/0xprogrammable/programmable")).toBe("github");
+    expect(provider("https://discord.gg/programmable")).toBe("discord");
+    expect(provider("https://x.com/0xProgrammable")).toBe("x");
+    expect(provider("https://t.me/programmable")).toBe("telegram");
+    expect(provider("https://docs.programmable.gitbook.io/docs")).toBe("gitbook");
+    expect(provider("https://dune.com/0xprogrammable6098")).toBe("dune");
+    expect(provider("https://programmable.market/docs")).toBe("website");
+  });
+
+  it("renders a provider-bound icon next to a published social link", () => {
+    const githubArticle = parseCreatorArticleV1({
+      ...article,
+      document: {
+        type: "doc",
+        content: [{
+          type: "paragraph",
+          content: [{
+            type: "text",
+            text: "github.com",
+            marks: [{
+              type: "link",
+              attrs: { href: "https://github.com/0xprogrammable/programmable" },
+            }],
+          }],
+        }],
+      },
+    });
+    const html = renderToStaticMarkup(createElement(CreatorArticle, {
+      article: githubArticle,
+    }));
+    expect(html).toContain('data-creator-link-provider="github"');
+    expect(html).toContain("<svg");
+    expect(html).toContain(">github.com<");
   });
 });

@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getAddress, isAddress } from "viem";
 
 import { useWallet } from "@/components/wallet-provider";
@@ -60,10 +61,12 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
   const [projects, setProjects] = useState<readonly CreatorProjectSummaryV1[]>([]);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [editor, setEditor] = useState<EditorState | null>(null);
-  const [opening, setOpening] = useState<string | null>(null);
+  const [openingProject, setOpeningProject] = useState<CreatorProjectSummaryV1 | null>(null);
   const [projectPage, setProjectPage] = useState(1);
   const [projectError, setProjectError] = useState("");
   const editorRequestsRef = useRef(new Map<string, Promise<EditorState>>());
+  const editorTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const openRequestRef = useRef(0);
 
   const getAuthHeaders = useCallback(
     () => acquireCreatorArticleAuthHeadersV1({
@@ -130,33 +133,62 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
     void getEditorState(project).catch(() => undefined);
   }, [getEditorState]);
 
-  async function openEditor(project: CreatorProjectSummaryV1) {
-    setOpening(project.tokenAddress);
+  useEffect(() => {
+    if (phase !== "ready" || pageData.items.length === 0) return;
+    const timer = window.setTimeout(() => {
+      preloadCreatorArticleEditorModule();
+      void preloadCreatorArticlePageV1(pageData.items, getEditorState, 2);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [getEditorState, pageData.items, phase]);
+
+  const focusEditorTrigger = useCallback(() => {
+    window.requestAnimationFrame(() => editorTriggerRef.current?.focus());
+  }, []);
+
+  async function openEditor(
+    project: CreatorProjectSummaryV1,
+    trigger: HTMLButtonElement,
+  ) {
+    const requestId = ++openRequestRef.current;
+    editorTriggerRef.current = trigger;
+    setOpeningProject(project);
     setProjectError("");
     try {
       const [, nextEditor] = await Promise.all([
         loadCreatorArticleEditorModule(),
         getEditorState(project),
       ]);
+      if (openRequestRef.current !== requestId) return;
       editorRequestsRef.current.delete(project.tokenAddress.toLowerCase());
       setEditor(nextEditor);
     } catch (error) {
+      if (openRequestRef.current !== requestId) return;
       setProjectError(error instanceof Error
         ? error.message
         : "Creator article unavailable");
+      focusEditorTrigger();
     } finally {
-      setOpening(null);
+      if (openRequestRef.current === requestId) setOpeningProject(null);
     }
   }
+
+  const closeOpeningEditor = useCallback(() => {
+    openRequestRef.current += 1;
+    setOpeningProject(null);
+    focusEditorTrigger();
+  }, [focusEditorTrigger]);
+
+  const closeEditor = useCallback(() => {
+    setEditor(null);
+    focusEditorTrigger();
+  }, [focusEditorTrigger]);
 
   if (!wallet) return null;
   return (
     <section className={styles.section} aria-labelledby="my-projects-title">
       <header className={styles.heading}>
-        <div>
-          <p>Creator workspace</p>
-          <h2 id="my-projects-title">My projects</h2>
-        </div>
+        <h2 id="my-projects-title">My projects</h2>
         <div className={styles.headerActions}>
           <button
             className={styles.refresh}
@@ -226,13 +258,13 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
               <div className={styles.actions}>
                 <button
                   type="button"
-                  disabled={opening !== null}
+                  disabled={openingProject !== null}
                   onPointerEnter={() => warmEditor(project)}
                   onPointerDown={preloadCreatorArticleEditorModule}
                   onFocus={() => warmEditor(project)}
-                  onClick={() => void openEditor(project)}
+                  onClick={(event) => void openEditor(project, event.currentTarget)}
                 >
-                  {opening === project.tokenAddress
+                  {openingProject?.tokenAddress === project.tokenAddress
                     ? "Opening…"
                     : project.article ? "Edit article" : "Create article"}
                 </button>
@@ -249,7 +281,7 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
           initialArticle={editor.article}
           initialEtag={editor.etag}
           getAuthHeaders={getAuthHeaders}
-          onClose={() => setEditor(null)}
+          onClose={closeEditor}
           onPublished={(article) => {
             setProjects((current) => current.map((project) =>
               project.tokenAddress === article.tokenAddress
@@ -265,8 +297,89 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
           }}
         />
       ) : null}
+      {openingProject ? (
+        <CreatorArticleEditorOpening
+          project={openingProject}
+          onClose={closeOpeningEditor}
+        />
+      ) : null}
     </section>
   );
+}
+
+export async function preloadCreatorArticlePageV1(
+  projects: readonly CreatorProjectSummaryV1[],
+  load: (project: CreatorProjectSummaryV1) => Promise<unknown>,
+  concurrency = 2,
+): Promise<void> {
+  if (projects.length === 0) return;
+  const workerCount = Math.min(
+    projects.length,
+    Number.isSafeInteger(concurrency) && concurrency > 0 ? concurrency : 1,
+  );
+  let cursor = 0;
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (cursor < projects.length) {
+      const project = projects[cursor];
+      cursor += 1;
+      try {
+        await load(project);
+      } catch {
+        // Prewarming is best effort. An explicit open retries failed requests.
+      }
+    }
+  }));
+}
+
+function CreatorArticleEditorOpening({
+  project,
+  onClose,
+}: Readonly<{ project: CreatorProjectSummaryV1; onClose(): void }>) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previousOverflow = window.document.body.style.overflow;
+    window.document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+  return createPortal((
+    <div className={styles.openingBackdrop} role="presentation">
+      <section
+        className={styles.openingDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="opening-creator-article-title"
+      >
+        <div className={styles.openingIdentity}>
+          <div className={styles.openingArt}>
+            {project.imageUrl ? (
+              <Image src={project.imageUrl} alt="" fill sizes="48px" unoptimized />
+            ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
+          </div>
+          <div>
+            <p>{project.symbol ? `$${project.symbol}` : "Verified project"}</p>
+            <h2 id="opening-creator-article-title">Opening article…</h2>
+          </div>
+        </div>
+        <span className={styles.openingProgress} aria-label="Loading" role="status" />
+        <button ref={closeRef} type="button" aria-label="Cancel opening article" onClick={onClose}>
+          <X aria-hidden="true" size={18} />
+        </button>
+      </section>
+    </div>
+  ), document.body);
 }
 
 export function paginateCreatorProjectsV1(

@@ -246,6 +246,11 @@
   color: #0a0a0c;
 }
 
+.toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
 .linkControl {
   align-items: center;
   background: rgb(255 255 255 / 4%);
@@ -269,6 +274,16 @@
   outline: none;
 }
 
+.linkProviderIcon {
+  display: inline-flex;
+  flex: none;
+}
+
+.linkProviderIcon svg {
+  height: 0.95rem;
+  width: 0.95rem;
+}
+
 .linkControl button {
   border-block: 0;
   border-inline-end: 0;
@@ -276,6 +291,11 @@
   min-height: 2.75rem;
   padding: 0.45rem 0.7rem;
   white-space: nowrap;
+}
+
+.linkControl button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .linkControl:focus-within {

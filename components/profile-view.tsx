@@ -3249,7 +3249,7 @@ type ProfileActionStateCollections = {
   stockPaired: Record<string, StockPairedActionState>;
 };
 
-export const profileClaimPageSize = 5;
+export const profileClaimPageSize = 4;
 
 export function groupProfileRewards(
   tokens: readonly ProfileToken[],
@@ -4336,10 +4336,7 @@ function FeeEarningsPanel({
       aria-labelledby="fee-earnings-title"
     >
       <header className={styles.feePanelHeader}>
-        <div>
-          <h2 id="fee-earnings-title">Fees earned</h2>
-          <p>Lifetime fees for this wallet</p>
-        </div>
+        <h2 id="fee-earnings-title">Fees earned</h2>
       </header>
 
       <div className={styles.feeSummary}>

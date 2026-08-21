@@ -78,10 +78,24 @@
 }
 
 .link {
+  align-items: baseline;
   color: #8fc5ff;
+  display: inline-flex;
+  gap: 0.28em;
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
+}
+
+.linkIcon {
+  display: inline-flex;
+  flex: none;
+  transform: translateY(0.08em);
+}
+
+.linkIcon svg {
+  height: 0.9em;
+  width: 0.9em;
 }
 
 .link:hover {

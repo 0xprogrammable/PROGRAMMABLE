@@ -20,7 +20,6 @@ import {
   Heading3,
   ImagePlus,
   Italic,
-  Link as LinkIcon,
   List,
   ListOrdered,
   Redo2,
@@ -39,6 +38,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { CreatorArticle } from "@/components/creator-article";
+import { CreatorArticleLinkIcon } from "@/components/creator-article-link-icon";
 import type { CreatorProjectSummaryV1 } from "@/components/profile-projects";
 import {
   CREATOR_ARTICLE_DRAFT_SCHEMA_V1,
@@ -506,7 +506,7 @@ export default function CreatorArticleEditor({
     }
   }
 
-  function applyLink() {
+  function applySocial() {
     if (!editor) return;
     if (!linkValue.trim()) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
@@ -514,7 +514,15 @@ export default function CreatorArticleEditor({
     }
     try {
       const href = normalizeHttpsLinkV1(linkValue);
-      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+      if (editor.state.selection.empty) {
+        editor.chain().focus().insertContent({
+          type: "text",
+          text: displayHttpsLinkV1(href),
+          marks: [{ type: "link", attrs: { href } }],
+        }).run();
+      } else {
+        editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+      }
       setLinkValue("");
       setNotice(null);
     } catch {
@@ -565,7 +573,7 @@ export default function CreatorArticleEditor({
               )}
             </div>
             <div>
-              <p>{project.symbol ? `$${project.symbol}` : "Verified project"} · Creator workspace</p>
+              <p>{project.symbol ? `$${project.symbol}` : "Verified project"}</p>
               <h2 id="article-editor-title">{initialArticle ? "Edit article" : "Create article"}</h2>
             </div>
           </div>
@@ -580,8 +588,8 @@ export default function CreatorArticleEditor({
           <ToolbarIcon label="Heading 3" active={editor?.isActive("heading", { level: 3 }) ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}><Heading3 /></ToolbarIcon>
           <ToolbarIcon label="Bullet list" active={editor?.isActive("bulletList") ?? false} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List /></ToolbarIcon>
           <ToolbarIcon label="Numbered list" active={editor?.isActive("orderedList") ?? false} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered /></ToolbarIcon>
-          <ToolbarIcon label="Undo" onClick={() => editor?.chain().focus().undo().run()}><Undo2 /></ToolbarIcon>
-          <ToolbarIcon label="Redo" onClick={() => editor?.chain().focus().redo().run()}><Redo2 /></ToolbarIcon>
+          <ToolbarIcon label="Undo" disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()}><Undo2 /></ToolbarIcon>
+          <ToolbarIcon label="Redo" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}><Redo2 /></ToolbarIcon>
           <input ref={imageInputRef} hidden type="file" multiple accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => {
             const files = [...(event.target.files ?? [])];
             event.target.value = "";
@@ -589,18 +597,22 @@ export default function CreatorArticleEditor({
           }} />
           <ToolbarIcon label="Add image" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolbarIcon>
           <div className={styles.linkControl}>
-            <LinkIcon aria-hidden="true" size={15} />
+            <CreatorArticleLinkIcon href={linkValue} className={styles.linkProviderIcon} />
             <input
               value={linkValue}
-              aria-label="Link URL"
+              aria-label="Social URL"
               inputMode="url"
-              placeholder="Paste link"
+              placeholder="Social or website URL"
               onChange={(event) => setLinkValue(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") { event.preventDefault(); applyLink(); }
+                if (event.key === "Enter") { event.preventDefault(); applySocial(); }
               }}
             />
-            <button type="button" onClick={applyLink}>Add link</button>
+            <button
+              type="button"
+              disabled={!linkValue.trim()}
+              onClick={applySocial}
+            >Add Socials</button>
           </div>
         </div>
 
@@ -678,14 +690,22 @@ function ToolbarButton({ label, active = false, onClick }: Readonly<{
   return <button type="button" aria-pressed={active} onClick={onClick}>{label}</button>;
 }
 
-function ToolbarIcon({ label, active = false, onClick, children }: Readonly<{
+function ToolbarIcon({ label, active = false, disabled = false, onClick, children }: Readonly<{
   label: string;
   active?: boolean;
+  disabled?: boolean;
   onClick(): void;
   children: React.ReactNode;
 }>) {
   return (
-    <button type="button" aria-label={label} title={label} aria-pressed={active} onClick={onClick}>
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+    >
       {children}
     </button>
   );
@@ -753,8 +773,22 @@ export function creatorArticleEditorFingerprintV1(value: unknown) {
   return JSON.stringify({
     title: value.title,
     bannerImage: value.bannerImage,
-    document: value.document,
+    document: normalizeEditorFingerprintDocumentV1(value.document),
   });
+}
+
+function normalizeEditorFingerprintDocumentV1(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeEditorFingerprintDocumentV1);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, candidate]) => {
+    if (key !== "attrs" || value.type !== "articleImage" || !isRecord(candidate)) {
+      return [key, normalizeEditorFingerprintDocumentV1(candidate)];
+    }
+    return [key, Object.fromEntries(Object.entries(candidate).flatMap(([attribute, current]) => {
+      if (attribute === "uploadId" || (attribute === "status" && current === "ready")) return [];
+      return [[attribute, normalizeEditorFingerprintDocumentV1(current)]];
+    }))];
+  }));
 }
 
 function emptyDocument(): JSONContent {
