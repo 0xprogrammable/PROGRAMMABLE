@@ -7,6 +7,7 @@ import {
   classicV3ProfileApiError,
   fetchClassicV3ProfileRewards,
   parseClassicV3ProfileRewards,
+  prepareClassicV3RewardAction,
   validatePreparedClassicV3RewardAction,
 } from "../lib/profile/classic-v3-rewards";
 
@@ -315,6 +316,52 @@ describe("Classic V3 profile rewards", () => {
         },
       ),
     ).toThrow("not canonical");
+  });
+
+  it("retries one transient claim-preparation failure before opening the wallet", async () => {
+    const transaction = {
+      kind: "claim-classic-v3-rewards" as const,
+      chainId: 1 as const,
+      from: account,
+      to: vault,
+      data: encodeFunctionData({
+        abi: classicRewardVaultAbi,
+        functionName: "claim",
+      }),
+      value: "0",
+      gasLimit: "120000",
+    };
+    const responses = [
+      new Response(JSON.stringify({ error: "temporarily unavailable" }), {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      }),
+      new Response(JSON.stringify({
+        status: "ready",
+        action: "claim",
+        account,
+        vaultAddress: vault,
+        transaction,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ];
+    const fetcher = vi.fn(async () => responses.shift()!);
+    const wait = vi.fn(async () => undefined);
+
+    await expect(prepareClassicV3RewardAction({
+      action: "claim",
+      account,
+      vaultAddress: vault,
+      chainId: 1,
+    }, undefined, fetcher, { wait })).resolves.toMatchObject({
+      action: "claim",
+      account,
+      vaultAddress: vault,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledTimes(1);
   });
 
   it("updates payout in one step without changing claim authority", () => {

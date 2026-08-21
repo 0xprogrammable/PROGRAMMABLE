@@ -33,7 +33,7 @@ type WalletTradeBalanceState =
       status: "error";
     };
 
-export const DEFAULT_TRADE_SLIPPAGE_BPS = 100;
+export const DEFAULT_TRADE_SLIPPAGE_BPS = 500;
 export const MIN_BUY_GAS_RESERVE_WEI = parseEther("0.003");
 const BUY_GAS_RESERVE_UNITS = 500_000n;
 const BUY_GAS_RESERVE_MULTIPLIER = 150n;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  DEFAULT_CUSTOM_TRADE_SLIPPAGE_BPS,
+  customTradeSlippagePercent,
+} from "../components/custom-market-trade";
+
 import type { DiscoverableMarketTradeCapabilityV1 } from
   "../lib/custom-launch/contract-v2";
 import { parseDiscoverableMarketTradeCapabilityV1 } from
@@ -212,6 +217,15 @@ function preparation() {
 }
 
 describe("Custom market trade v1", () => {
+  it("defaults to five percent without exceeding the verified market cap", () => {
+    expect(DEFAULT_CUSTOM_TRADE_SLIPPAGE_BPS).toBe(500);
+    expect(customTradeSlippagePercent(1_000)).toBe("5");
+    expect(customTradeSlippagePercent(250)).toBe("2.5");
+    expect(customTradeSlippagePercent(250, "5")).toBe("2.5");
+    expect(customTradeSlippagePercent(1_000, "0.75")).toBe("0.75");
+    expect(customTradeSlippagePercent(1_000, "")).toBe("5");
+  });
+
   it("accepts only the complete canonical capability shape at the client boundary", () => {
     const parse = (value: unknown) => parseDiscoverableMarketTradeCapabilityV1({
       value,

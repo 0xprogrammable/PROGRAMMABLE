@@ -21,6 +21,34 @@ import styles from "./token-experience.module.css";
 
 type CustomMarket = CustomProjectExploreEntry["markets"][number];
 
+export const DEFAULT_CUSTOM_TRADE_SLIPPAGE_BPS = 500;
+
+export function customTradeSlippagePercent(
+  maximumSlippageBps: number,
+  currentPercent?: string,
+) {
+  if (!Number.isSafeInteger(maximumSlippageBps) || maximumSlippageBps < 1) {
+    throw new TypeError("Custom trade slippage policy is invalid");
+  }
+  const fallbackBps = Math.min(
+    DEFAULT_CUSTOM_TRADE_SLIPPAGE_BPS,
+    maximumSlippageBps,
+  );
+  if (currentPercent === undefined) return String(fallbackBps / 100);
+
+  const normalized = currentPercent.trim();
+  if (!/^\d+(?:\.\d{1,2})?$/u.test(normalized)) {
+    return String(fallbackBps / 100);
+  }
+  const [whole, fraction = ""] = normalized.split(".");
+  const currentBps = Number(whole) * 100
+    + Number(fraction.padEnd(2, "0"));
+  if (!Number.isSafeInteger(currentBps) || currentBps < 1) {
+    return String(fallbackBps / 100);
+  }
+  return String(Math.min(currentBps, maximumSlippageBps) / 100);
+}
+
 function assetLabel(asset: CustomMarket["baseAsset"]) {
   return asset.symbol?.trim() || asset.name?.trim() || asset.assetId;
 }
@@ -73,7 +101,10 @@ export function CustomMarketTrade({
   );
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(
-    String(Math.min(100, capability?.slippagePolicy.maximumSlippageBps ?? 100) / 100),
+    customTradeSlippagePercent(
+      capability?.slippagePolicy.maximumSlippageBps
+        ?? DEFAULT_CUSTOM_TRADE_SLIPPAGE_BPS,
+    ),
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -272,6 +303,12 @@ export function CustomMarketTrade({
           )?.tradeCapability;
           setMarketId(nextMarketId);
           setSelectedSide(nextCapability?.supportedSides[0] ?? "base-to-quote");
+          if (nextCapability) {
+            setSlippage((current) => customTradeSlippagePercent(
+              nextCapability.slippagePolicy.maximumSlippageBps,
+              current,
+            ));
+          }
           setAmount("");
           setError("");
         }}>

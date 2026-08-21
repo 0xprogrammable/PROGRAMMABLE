@@ -603,31 +603,44 @@ export async function prepareClassicV3RewardAction(
   },
   signal?: AbortSignal,
   fetcher: FetchLike = fetch,
+  options: Readonly<{
+    retryDelayMs?: number;
+    wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+  }> = {},
 ) {
   assertClassicV3ReleaseAvailable(input.chainId);
-  const response = await fetcher("/api/profile/classic-v3", {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: input.action,
-      account: input.account,
-      vaultAddress: input.vaultAddress,
-      ...(input.action === "update-payout"
-        ? {
-            allocationIndex: input.allocationIndex,
-            newPayoutAddress: input.newPayoutAddress,
-          }
-        : {}),
-      chainId: input.chainId,
-    }),
-    signal,
-  });
-  const body = await response.json();
-  if (!response.ok) {
+  const wait = options.wait ?? waitForProfileRetry;
+  const retryDelayMs = options.retryDelayMs ?? DEFAULT_PROFILE_RETRY_DELAY_MS;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const response = await fetcher("/api/profile/classic-v3", {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: input.action,
+        account: input.account,
+        vaultAddress: input.vaultAddress,
+        ...(input.action === "update-payout"
+          ? {
+              allocationIndex: input.allocationIndex,
+              newPayoutAddress: input.newPayoutAddress,
+            }
+          : {}),
+        chainId: input.chainId,
+      }),
+      signal,
+    });
+    const body = await response.json();
+    if (response.ok) {
+      return validatePreparedClassicV3RewardAction(body, input);
+    }
+    if ((response.status === 502 || response.status === 503) && attempt === 1) {
+      await wait(retryDelayMs, signal);
+      continue;
+    }
     const record =
       body && typeof body === "object" && !Array.isArray(body)
         ? (body as Record<string, unknown>)
@@ -638,7 +651,7 @@ export async function prepareClassicV3RewardAction(
         : "Classic reward action could not be prepared",
     );
   }
-  return validatePreparedClassicV3RewardAction(body, input);
+  throw new Error("Classic reward action could not be prepared");
 }
 
 export function encodeClassicV3RewardAction(input: {
