@@ -84,6 +84,31 @@ describe("creator article Blob revision store", () => {
     })).rejects.toMatchObject({ name: "CreatorArticleRevisionConflictV1" });
   });
 
+  it("returns the exact write receipt when the public pointer read is still stale", async () => {
+    const memory = memoryStore();
+    let pointerWritten = false;
+    const store = createCreatorArticleStoreV1({
+      blob: {
+        async read(pathname) {
+          if (pointerWritten && pathname.endsWith("/current.json")) return null;
+          return memory.boundary.read(pathname);
+        },
+        async write(input) {
+          const receipt = await memory.boundary.write(input);
+          if (input.pathname.endsWith("/current.json")) pointerWritten = true;
+          return receipt;
+        },
+      },
+      now: () => new Date("2026-08-21T00:00:00.000Z"),
+    });
+    const published = await store.publish({
+      draft: draft(), creatorAddress: CREATOR, expectedEtag: null,
+    });
+    expect(published.article.revision).toBe(1);
+    expect(published.etag).toMatch(/^etag-/u);
+    expect(published.contentSha256).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
   it("rejects a malformed pointer instead of selecting arbitrary content", async () => {
     const memory = memoryStore();
     memory.records.set(

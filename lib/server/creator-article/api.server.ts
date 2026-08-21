@@ -113,7 +113,9 @@ export function createCreatorArticleApiHandlersV1(input: Readonly<{
         if (Number.isFinite(contentLength) && contentLength > MAXIMUM_DRAFT_BYTES) {
           return errorResponse(413, "article_too_large");
         }
-        const ifMatch = request.headers.get("if-match");
+        const ifMatch = normalizeCreatorArticleIfMatchV1(
+          request.headers.get("if-match"),
+        );
         const ifNoneMatch = request.headers.get("if-none-match");
         if ((ifMatch === null) === (ifNoneMatch !== "*")) {
           return errorResponse(428, "article_precondition_required");
@@ -145,6 +147,12 @@ export function createCreatorArticleApiHandlersV1(input: Readonly<{
       }
     },
   });
+}
+
+export function normalizeCreatorArticleIfMatchV1(value: string | null) {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.startsWith("W/") ? trimmed.slice(2).trimStart() : trimmed;
 }
 
 let productionHandlers: CreatorArticleApiHandlersV1 | null = null;

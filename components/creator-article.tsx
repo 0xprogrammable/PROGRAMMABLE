@@ -2,12 +2,14 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 import type {
+  CreatorArticleBlockV1,
   CreatorArticleInlineV1,
   CreatorArticleMarkV1,
   CreatorArticleV1,
 } from "@/lib/creator-article/contract-v1";
 import {
   CreatorArticleLinkIcon,
+  creatorArticleLinkLabelV1,
   creatorArticleLinkProviderV1,
 } from "@/components/creator-article-link-icon";
 
@@ -15,10 +17,29 @@ import styles from "./creator-article.module.css";
 
 export { creatorArticleLinkProviderV1 };
 
-export function CreatorArticle({ article }: { article: CreatorArticleV1 | null }) {
+type CreatorArticleHeaderLinkV1 = Readonly<{
+  href: string;
+  label: string;
+}>;
+
+export function CreatorArticle({
+  article,
+  editAction = null,
+}: Readonly<{
+  article: CreatorArticleV1 | null;
+  editAction?: ReactNode;
+}>) {
   if (article === null) return null;
+  const headerContent = creatorArticleHeaderContentV1(article.document.content);
+  const updated = new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(article.updatedAt));
   return (
     <article className={styles.article} aria-labelledby="creator-article-title">
+      {editAction ? <div className={styles.actionRow}>{editAction}</div> : null}
       {article.bannerImage ? (
         <figure className={`${styles.media} ${styles.banner}`}>
           <Image
@@ -35,11 +56,38 @@ export function CreatorArticle({ article }: { article: CreatorArticleV1 | null }
         </figure>
       ) : null}
       <header className={styles.header}>
-        <p className={styles.eyebrow}>From the creator</p>
-        <h2 id="creator-article-title">{article.title}</h2>
+        <h2
+          id="creator-article-title"
+          data-single-line={article.title.trim().length <= 32 ? "true" : undefined}
+        >
+          {article.title}
+        </h2>
+        <time className={styles.updated} dateTime={article.updatedAt}>
+          Updated {updated}
+        </time>
+        {headerContent.links.length > 0 ? (
+          <nav className={styles.socials} aria-label="Project links">
+            {headerContent.links.map((link) => (
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={link.label}
+                title={link.label}
+                data-creator-link-provider={creatorArticleLinkProviderV1(link.href)}
+                key={link.href}
+              >
+                <CreatorArticleLinkIcon
+                  href={link.href}
+                  className={styles.socialIcon}
+                />
+              </a>
+            ))}
+          </nav>
+        ) : null}
       </header>
       <div className={styles.body}>
-        {article.document.content.map((block, index) => {
+        {headerContent.body.map((block, index) => {
           if (block.type === "paragraph") {
             return <p key={index}>{renderInline(block.content ?? [])}</p>;
           }
@@ -84,13 +132,46 @@ export function CreatorArticle({ article }: { article: CreatorArticleV1 | null }
           );
         })}
       </div>
-      <footer className={styles.updated}>
-        Updated {new Intl.DateTimeFormat("en", {
-          year: "numeric", month: "short", day: "numeric",
-        }).format(new Date(article.updatedAt))}
-      </footer>
     </article>
   );
+}
+
+export function creatorArticleHeaderContentV1(
+  blocks: readonly CreatorArticleBlockV1[],
+): Readonly<{
+  body: readonly CreatorArticleBlockV1[];
+  links: readonly CreatorArticleHeaderLinkV1[];
+}> {
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+    const block = blocks[blockIndex];
+    if (block?.type !== "paragraph" || !block.content) continue;
+    const links: CreatorArticleHeaderLinkV1[] = [];
+    let linkOnly = true;
+    for (const node of block.content) {
+      if (node.type === "hardBreak") continue;
+      const link = node.marks?.find((mark) => mark.type === "link");
+      if (!link) {
+        if (!/^[\s·|•,/]*$/u.test(node.text)) linkOnly = false;
+        continue;
+      }
+      if (node.text.trim() === "") continue;
+      links.push(Object.freeze({
+        href: link.attrs.href,
+        label: creatorArticleLinkLabelV1(link.attrs.href),
+      }));
+    }
+    if (!linkOnly || links.length < 2) continue;
+    const seen = new Set<string>();
+    return Object.freeze({
+      body: Object.freeze(blocks.filter((_, index) => index !== blockIndex)),
+      links: Object.freeze(links.filter(({ href }) => {
+        if (seen.has(href)) return false;
+        seen.add(href);
+        return true;
+      })),
+    });
+  }
+  return Object.freeze({ body: blocks, links: Object.freeze([]) });
 }
 
 function renderInline(nodes: readonly CreatorArticleInlineV1[]) {

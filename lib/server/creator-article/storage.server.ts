@@ -170,13 +170,15 @@ export function createCreatorArticleStoreV1(input: Readonly<{
         }
         throw error;
       }
-      const readback = await this.readCurrent(identity);
-      if (
-        readback === null
-        || readback.etag !== pointerWrite.etag
-        || readback.contentSha256 !== contentSha256
-      ) throw new TypeError("Creator article readback verification failed");
-      return readback;
+      // Vercel Blob's public pointer can remain cached briefly after an exact
+      // conditional overwrite. The immutable article bytes and the successful
+      // pointer-write receipt already bind this revision; re-reading the public
+      // URL here can only turn a completed publish into a false 503.
+      return Object.freeze({
+        article,
+        etag: pointerWrite.etag,
+        contentSha256,
+      });
     },
   });
 }

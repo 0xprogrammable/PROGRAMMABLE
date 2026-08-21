@@ -1,50 +1,155 @@
 .article {
-  --article-measure: 46rem;
+  --article-width: 70rem;
   border-top: 1px solid color-mix(in srgb, var(--color-border, #ffffff) 16%, transparent);
-  contain: layout paint style;
-  content-visibility: auto;
   margin-block-start: clamp(4rem, 8vw, 8rem);
-  padding-block: clamp(3.5rem, 7vw, 7rem) clamp(4rem, 8vw, 8rem);
+  padding-block: clamp(1.25rem, 2.5vw, 2rem) clamp(4rem, 8vw, 8rem);
 }
 
 .header,
 .body,
-.updated {
+.actionRow {
   margin-inline: auto;
-  max-width: var(--article-measure);
+  max-width: var(--article-width);
+  width: 100%;
+}
+
+.actionRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: clamp(1rem, 2vw, 1.5rem);
+}
+
+.actionRow:empty {
+  display: none;
+}
+
+.editActionGroup {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.editAction {
+  align-items: center;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 999px;
+  color: currentColor;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 620;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 44px;
+  padding-inline: 1rem;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.editAction:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border-color: color-mix(in srgb, currentColor 34%, transparent);
+  transform: translateY(-1px);
+}
+
+.editAction:focus-visible {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 3px;
+}
+
+.editAction:disabled {
+  cursor: progress;
+  opacity: 0.62;
+}
+
+.editActionError {
+  color: #ffb1aa;
+  font-size: 0.78rem;
+  margin: 0;
 }
 
 .header {
-  margin-block-end: clamp(2.5rem, 5vw, 4.5rem);
-}
-
-.eyebrow {
-  color: color-mix(in srgb, currentColor 58%, transparent);
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.16em;
-  margin: 0 0 0.8rem;
-  text-transform: uppercase;
+  margin-block-end: clamp(2.5rem, 4.5vw, 4rem);
 }
 
 .header h2 {
-  font-size: clamp(2.35rem, 6vw, 5.25rem);
+  font-size: clamp(2.7rem, 6vw, 5.1rem);
   font-weight: 520;
   letter-spacing: -0.055em;
-  line-height: 0.98;
+  line-height: 0.96;
   margin: 0;
   text-wrap: balance;
 }
 
+.updated {
+  color: color-mix(in srgb, currentColor 54%, transparent);
+  display: block;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  margin-block-start: 1rem;
+}
+
+.socials {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 1.4rem;
+}
+
+.socials a {
+  align-items: center;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 17%, transparent);
+  border-radius: 50%;
+  color: color-mix(in srgb, currentColor 82%, transparent);
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+  width: 44px;
+}
+
+.socials a:hover {
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border-color: color-mix(in srgb, currentColor 34%, transparent);
+  color: currentColor;
+  transform: translateY(-1px);
+}
+
+.socials a:focus-visible {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 3px;
+}
+
+.socialIcon,
+.socialIcon svg {
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+
 .body {
   color: color-mix(in srgb, currentColor 88%, transparent);
-  font-size: clamp(1.03rem, 1.5vw, 1.22rem);
-  line-height: 1.72;
+  font-size: clamp(1.06rem, 1.45vw, 1.24rem);
+  line-height: 1.66;
+  overflow-wrap: break-word;
 }
 
 .body > p,
 .body li > p {
-  margin: 0 0 1.45em;
+  margin: 0 0 1.5em;
+}
+
+.body > p:first-child {
+  color: currentColor;
+  font-size: clamp(1.28rem, 2.2vw, 1.65rem);
+  letter-spacing: -0.018em;
+  line-height: 1.5;
+  margin-block-end: 2.1em;
+  text-wrap: pretty;
 }
 
 .body h3,
@@ -56,9 +161,9 @@
 }
 
 .body h3 {
-  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-size: clamp(1.9rem, 3.5vw, 2.9rem);
   font-weight: 560;
-  margin: 2.4em 0 0.72em;
+  margin: 1.85em 0 0.65em;
 }
 
 .body h4 {
@@ -123,15 +228,15 @@
 }
 
 .media figcaption {
-  color: color-mix(in srgb, currentColor 52%, transparent);
-  font-size: 0.76rem;
-  line-height: 1.45;
-  margin-block-start: 0.72rem;
+  color: color-mix(in srgb, currentColor 64%, transparent);
+  font-size: clamp(0.88rem, 1.2vw, 1rem);
+  line-height: 1.5;
+  margin-block-start: 0.85rem;
 }
 
 .banner {
-  margin-block: 0 clamp(3rem, 7vw, 6.5rem);
-  max-width: 70rem;
+  margin-block: 0 clamp(1.7rem, 3.2vw, 2.75rem);
+  max-width: var(--article-width);
 }
 
 .banner img {
@@ -143,30 +248,61 @@
 }
 
 .content {
-  max-width: var(--article-measure);
+  max-width: var(--article-width);
 }
 
 .wide {
-  left: 50%;
-  max-width: 70rem;
-  position: relative;
-  transform: translateX(-50%);
-  width: min(70rem, calc(100vw - 2 * clamp(1rem, 4vw, 3rem)));
+  max-width: var(--article-width);
+  width: 100%;
 }
 
-.updated {
-  color: color-mix(in srgb, currentColor 46%, transparent);
-  font-size: 0.75rem;
-  margin-block-start: clamp(3rem, 6vw, 5rem);
+@media (min-width: 64rem) {
+  .header h2[data-single-line="true"] {
+    text-wrap: nowrap;
+    white-space: nowrap;
+  }
 }
 
 @media (max-width: 48rem) {
   .article {
     margin-block-start: 3.5rem;
-    padding-block: 3rem 4.5rem;
+    padding-block: 1.25rem 4.5rem;
   }
 
-  .wide {
-    width: calc(100vw - 2rem);
+  .actionRow {
+    margin-block-end: 1rem;
+  }
+
+  .banner {
+    margin-block-end: 1.65rem;
+  }
+
+  .header {
+    margin-block-end: 2.5rem;
+  }
+
+  .header h2 {
+    font-size: clamp(2.45rem, 12vw, 3.6rem);
+  }
+
+  .socials {
+    gap: 0.65rem;
+  }
+
+  .body {
+    font-size: 1.05rem;
+    line-height: 1.65;
+  }
+
+  .body > p:first-child {
+    font-size: 1.22rem;
+  }
+
+  .body h3 {
+    font-size: clamp(1.75rem, 9vw, 2.35rem);
+  }
+
+  .media {
+    margin-block: 2.75rem;
   }
 }

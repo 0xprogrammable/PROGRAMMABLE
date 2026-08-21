@@ -39,7 +39,8 @@ import { createPortal } from "react-dom";
 
 import { CreatorArticle } from "@/components/creator-article";
 import { CreatorArticleLinkIcon } from "@/components/creator-article-link-icon";
-import type { CreatorProjectSummaryV1 } from "@/components/profile-projects";
+import type { CreatorProjectSummaryV1 } from
+  "@/components/creator-article-editor-loader";
 import {
   CREATOR_ARTICLE_DRAFT_SCHEMA_V1,
   CREATOR_ARTICLE_SCHEMA_V1,

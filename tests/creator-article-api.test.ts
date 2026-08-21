@@ -91,6 +91,24 @@ describe("creator article authenticated APIs", () => {
     }));
   });
 
+  it("normalizes a weak HTTP ETag before the exact Blob precondition", async () => {
+    const response = await handlers.article(new Request(
+      `https://example.com/api/profile/projects/${TOKEN}/article`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "if-match": 'W/"etag-1"',
+        },
+        body: JSON.stringify(draft()),
+      },
+    ), TOKEN);
+    expect(response.status).toBe(200);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      expectedEtag: '"etag-1"',
+    }));
+  });
+
   it("does not trust a draft for another token", async () => {
     const wrong = { ...draft(), tokenAddress: "0x4444444444444444444444444444444444444444" };
     const response = await handlers.article(new Request(`https://example.com/api/profile/projects/${TOKEN}/article`, {

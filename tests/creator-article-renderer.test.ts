@@ -62,7 +62,7 @@ describe("creator article public renderer", () => {
     expect(provider("https://t.me/programmable")).toBe("telegram");
     expect(provider("https://docs.programmable.gitbook.io/docs")).toBe("gitbook");
     expect(provider("https://dune.com/0xprogrammable6098")).toBe("dune");
-    expect(provider("https://programmable.market/docs")).toBe("website");
+    expect(provider("https://programmable.market/docs")).toBe("docs");
   });
 
   it("renders a provider-bound icon next to a published social link", () => {
@@ -89,5 +89,51 @@ describe("creator article public renderer", () => {
     expect(html).toContain('data-creator-link-provider="github"');
     expect(html).toContain("<svg");
     expect(html).toContain(">github.com<");
+  });
+
+  it("lifts a social link row into an icon-only header with accessible names", () => {
+    const socialArticle = parseCreatorArticleV1({
+      ...article,
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "Website",
+                marks: [{ type: "link", attrs: { href: "https://programmable.market/" } }],
+              },
+              { type: "text", text: "   " },
+              {
+                type: "text",
+                text: "Docs",
+                marks: [{ type: "link", attrs: { href: "https://programmable.market/docs" } }],
+              },
+              { type: "text", text: "   " },
+              {
+                type: "text",
+                text: "Analytics",
+                marks: [{ type: "link", attrs: { href: "https://dune.com/0xprogrammable6098/programmable-analytics" } }],
+              },
+            ],
+          },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "The article story remains visible." }],
+          },
+        ],
+      },
+    });
+    const html = renderToStaticMarkup(createElement(CreatorArticle, {
+      article: socialArticle,
+    }));
+    expect(html).toContain('aria-label="Project links"');
+    expect(html).toContain('aria-label="Website"');
+    expect(html).toContain('aria-label="Docs"');
+    expect(html).toContain('aria-label="Dune analytics"');
+    expect(html).not.toContain(">Analytics<");
+    expect(html).toContain("The article story remains visible.");
   });
 });

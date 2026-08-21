@@ -13,6 +13,7 @@ import { WebsiteLinkIcon } from "@/components/website-link-icon";
 
 export type CreatorArticleLinkProviderV1 =
   | "discord"
+  | "docs"
   | "dune"
   | "farcaster"
   | "github"
@@ -44,7 +45,12 @@ export function creatorArticleLinkProviderV1(
   href: string,
 ): CreatorArticleLinkProviderV1 {
   try {
-    const hostname = new URL(href).hostname.toLowerCase().replace(/\.$/u, "");
+    const url = new URL(href);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/u, "");
+    if (
+      (hostname === "programmable.market" || hostname.endsWith(".programmable.market"))
+      && (url.pathname === "/docs" || url.pathname.startsWith("/docs/"))
+    ) return "docs";
     for (const [provider, domains] of providers) {
       if (domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) {
         return provider;
@@ -54,6 +60,21 @@ export function creatorArticleLinkProviderV1(
     // Invalid or incomplete editor input uses the neutral website icon.
   }
   return "website";
+}
+
+export function creatorArticleLinkLabelV1(href: string) {
+  const provider = creatorArticleLinkProviderV1(href);
+  return provider === "x" ? "X"
+    : provider === "github" ? "GitHub"
+      : provider === "discord" ? "Discord"
+        : provider === "telegram" ? "Telegram"
+          : provider === "gitbook" || provider === "docs" ? "Docs"
+            : provider === "dune" ? "Dune analytics"
+              : provider === "youtube" ? "YouTube"
+                : provider === "instagram" ? "Instagram"
+                  : provider === "linkedin" ? "LinkedIn"
+                    : provider === "farcaster" ? "Farcaster"
+                      : "Website";
 }
 
 export function CreatorArticleLinkIcon({
@@ -70,8 +91,8 @@ export function CreatorArticleLinkIcon({
       {provider === "github" ? <GitHubBrandIcon />
         : provider === "discord" ? <DiscordBrandIcon />
           : provider === "x" ? <XBrandIcon />
-            : provider === "telegram" ? <TelegramBrandIcon />
-              : provider === "gitbook" ? <BookOpen />
+              : provider === "telegram" ? <TelegramBrandIcon />
+              : provider === "gitbook" || provider === "docs" ? <BookOpen />
                 : provider === "dune" ? <DuneBrandIcon />
                   : provider === "youtube" ? <YouTubeBrandIcon />
                     : provider === "instagram" ? <InstagramBrandIcon />
