@@ -780,18 +780,20 @@ export function creatorArticleEditorFingerprintV1(value: unknown) {
 function normalizeEditorFingerprintDocumentV1(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeEditorFingerprintDocumentV1);
   if (!isRecord(value)) return value;
-  return Object.fromEntries(Object.entries(value).map(([key, candidate]) => {
-    if (key === "attrs" && value.type === "link" && isRecord(candidate)) {
-      return [key, { href: candidate.href }];
-    }
-    if (key !== "attrs" || value.type !== "articleImage" || !isRecord(candidate)) {
-      return [key, normalizeEditorFingerprintDocumentV1(candidate)];
-    }
-    return [key, Object.fromEntries(Object.entries(candidate).flatMap(([attribute, current]) => {
-      if (attribute === "uploadId" || (attribute === "status" && current === "ready")) return [];
-      return [[attribute, normalizeEditorFingerprintDocumentV1(current)]];
-    }))];
-  }));
+  return Object.fromEntries(Object.entries(value)
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, candidate]) => {
+      if (key === "attrs" && value.type === "link" && isRecord(candidate)) {
+        return [key, { href: candidate.href }];
+      }
+      if (key !== "attrs" || value.type !== "articleImage" || !isRecord(candidate)) {
+        return [key, normalizeEditorFingerprintDocumentV1(candidate)];
+      }
+      return [key, Object.fromEntries(Object.entries(candidate).flatMap(([attribute, current]) => {
+        if (attribute === "uploadId" || (attribute === "status" && current === "ready")) return [];
+        return [[attribute, normalizeEditorFingerprintDocumentV1(current)]];
+      }))];
+    }));
 }
 
 function emptyDocument(): JSONContent {

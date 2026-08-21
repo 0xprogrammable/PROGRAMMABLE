@@ -180,4 +180,26 @@ describe("creator article editor normalization", () => {
       })),
     );
   });
+
+  it("ignores semantically irrelevant editor object-key order", () => {
+    const fingerprint = (creatorArticleEditor as unknown as {
+      creatorArticleEditorFingerprintV1(input: unknown): string;
+    }).creatorArticleEditorFingerprintV1;
+    const link = { type: "link", attrs: { href: "https://programmable.market/" } };
+    const article = (content: Record<string, unknown>) => ({
+      title: "Project story",
+      bannerImage: null,
+      document: { type: "doc", content: [{ type: "paragraph", content: [content] }] },
+    });
+
+    expect(fingerprint(article({
+      type: "text",
+      text: "programmable.market",
+      marks: [link],
+    }))).toBe(fingerprint(article({
+      type: "text",
+      marks: [link],
+      text: "programmable.market",
+    })));
+  });
 });
