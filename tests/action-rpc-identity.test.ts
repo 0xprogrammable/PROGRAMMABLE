@@ -23,6 +23,12 @@ const creator = getAddress("0x1111111111111111111111111111111111111111");
 const token = getAddress("0x2222222222222222222222222222222222222222");
 const hook = getAddress("0x3333333333333333333333333333333333333333");
 const launcher = getAddress("0x4444444444444444444444444444444444444444");
+const historicalHook = getAddress(
+  "0x7777777777777777777777777777777777777777",
+);
+const historicalLauncher = getAddress(
+  "0x8888888888888888888888888888888888888888",
+);
 const blockHash = `0x${"55".repeat(32)}` as Hex;
 const launchHash = `0x${"66".repeat(32)}` as Hex;
 const poolId = computeOfficialV4PoolId({
@@ -129,13 +135,16 @@ describe("single-RPC action identity", () => {
     await expect(
       readCreatorClaimIdentityFromRpc({
         client,
-        deployment,
+        releases: [deployment],
         poolId,
         blockNumber: 20_100n,
       }),
     ).resolves.toEqual({
       tokenAddress: token,
       hookAddress: hook,
+      launcherAddress: launcher,
+      launcherRuntimeCodeHash: deployment.launcherRuntimeCodeHash,
+      hookRuntimeCodeHash: deployment.feeHookRuntimeCodeHash,
       poolId,
       creatorAddress: creator,
       totalSwapFeeBps: 100,
@@ -168,5 +177,98 @@ describe("single-RPC action identity", () => {
         blockNumber: 20_100n,
       }),
     );
+  });
+
+  it("resolves a creator claim against the exact historical release that launched the pool", async () => {
+    const historicalPoolId = computeOfficialV4PoolId({
+      currency0: ZERO,
+      currency1: token,
+      fee: 0,
+      tickSpacing: 200,
+      hooks: historicalHook,
+    });
+    const historicalDeployment: ReadyOnchainDeployment = {
+      ...deployment,
+      releaseVersion: "classic-v1",
+      launcher: historicalLauncher,
+      feeHook: historicalHook,
+      launcherRuntimeCodeHash: `0x${"99".repeat(32)}`,
+      feeHookRuntimeCodeHash: `0x${"aa".repeat(32)}`,
+      deploymentBlock: 5n,
+    };
+    const launchLog = {
+      address: historicalLauncher,
+      args: {
+        creator,
+        token,
+        poolId: historicalPoolId,
+        feeHook: historicalHook,
+        positionRecipient: creator,
+        positionTokenId: 1n,
+        totalSwapFeeBps: 100,
+        launchHash,
+      },
+      blockNumber: 50n,
+      transactionHash: `0x${"bb".repeat(32)}`,
+      transactionIndex: 0,
+      logIndex: 0,
+      removed: false,
+    };
+    const getLogs = vi.fn(
+      ({ address, fromBlock, toBlock }: {
+        address: Address;
+        fromBlock: bigint;
+        toBlock: bigint;
+      }) => Promise.resolve(
+        address === historicalLauncher &&
+          fromBlock <= launchLog.blockNumber &&
+          launchLog.blockNumber <= toBlock
+          ? [launchLog]
+          : [],
+      ),
+    );
+    const readContract = vi.fn(
+      ({ address, functionName }: { address: Address; functionName: string }) => {
+        if (address !== historicalLauncher && address !== token) {
+          throw new Error(`Unexpected release address ${address}`);
+        }
+        if (functionName === "launchHashOf") return Promise.resolve(launchHash);
+        if (functionName === "poolKey") {
+          return Promise.resolve([ZERO, token, 0, 200, historicalHook]);
+        }
+        if (functionName === "creator") {
+          return Promise.resolve(historicalLauncher);
+        }
+        throw new Error(`Unexpected function ${functionName}`);
+      },
+    );
+    const client = { getLogs, readContract } as unknown as PublicClient;
+
+    await expect(
+      readCreatorClaimIdentityFromRpc({
+        client,
+        releases: [historicalDeployment, deployment],
+        poolId: historicalPoolId,
+        blockNumber: 100n,
+      }),
+    ).resolves.toEqual({
+      tokenAddress: token,
+      hookAddress: historicalHook,
+      launcherAddress: historicalLauncher,
+      launcherRuntimeCodeHash:
+        historicalDeployment.launcherRuntimeCodeHash,
+      hookRuntimeCodeHash: historicalDeployment.feeHookRuntimeCodeHash,
+      poolId: historicalPoolId,
+      creatorAddress: creator,
+      totalSwapFeeBps: 100,
+    });
+    expect(getLogs).toHaveBeenCalledWith(expect.objectContaining({
+      address: historicalLauncher,
+      args: { poolId: historicalPoolId },
+    }));
+    expect(getLogs).toHaveBeenCalledWith(expect.objectContaining({
+      address: launcher,
+      args: { poolId: historicalPoolId },
+    }));
   });
 });

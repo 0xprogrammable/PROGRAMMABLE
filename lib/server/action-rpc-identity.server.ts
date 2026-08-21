@@ -407,6 +407,9 @@ export async function readTradeActionModelFromRpc(input: {
 export type CreatorClaimTokenIdentity = Readonly<{
   tokenAddress: Address;
   hookAddress: Address;
+  launcherAddress: Address;
+  launcherRuntimeCodeHash: Hex;
+  hookRuntimeCodeHash: Hex;
   poolId: Hex;
   creatorAddress: Address;
   totalSwapFeeBps: number;
@@ -414,32 +417,34 @@ export type CreatorClaimTokenIdentity = Readonly<{
 
 export async function readCreatorClaimIdentityFromRpc(input: {
   client: PublicClient;
-  deployment: ReadyOnchainDeployment;
+  releases: readonly ReadyOnchainDeployment[];
   poolId: Hex;
   blockNumber: bigint;
 }): Promise<CreatorClaimTokenIdentity> {
-  const logs = [];
-  for (
-    let fromBlock = input.deployment.deploymentBlock;
-    fromBlock <= input.blockNumber;
-    fromBlock += CREATOR_CLAIM_LOG_RANGE
-  ) {
-    const toBlock =
-      fromBlock + CREATOR_CLAIM_LOG_RANGE - 1n < input.blockNumber
-        ? fromBlock + CREATOR_CLAIM_LOG_RANGE - 1n
-        : input.blockNumber;
-    logs.push(...await input.client.getLogs({
-      address: input.deployment.launcher,
-      event: memeTokenLaunchedEvent,
-      args: { poolId: input.poolId },
-      fromBlock,
-      toBlock,
-      strict: true,
-    }));
-  }
-  const matches = logs.filter(
-    (log) => !log.removed && log.blockNumber !== null,
-  );
+  const matches = (await Promise.all(input.releases.map(async (release) => {
+    const logs = [];
+    for (
+      let fromBlock = release.deploymentBlock;
+      fromBlock <= input.blockNumber;
+      fromBlock += CREATOR_CLAIM_LOG_RANGE
+    ) {
+      const toBlock =
+        fromBlock + CREATOR_CLAIM_LOG_RANGE - 1n < input.blockNumber
+          ? fromBlock + CREATOR_CLAIM_LOG_RANGE - 1n
+          : input.blockNumber;
+      logs.push(...await input.client.getLogs({
+        address: release.launcher,
+        event: memeTokenLaunchedEvent,
+        args: { poolId: input.poolId },
+        fromBlock,
+        toBlock,
+        strict: true,
+      }));
+    }
+    return logs
+      .filter((log) => !log.removed && log.blockNumber !== null)
+      .map((launch) => ({ launch, release }));
+  }))).flat();
   if (matches.length === 0) {
     throw new ActionRpcIdentityError(
       "unknown-pool",
@@ -452,11 +457,11 @@ export async function readCreatorClaimIdentityFromRpc(input: {
       "The pool matches more than one canonical launch",
     );
   }
-  const launch = matches[0];
+  const { launch, release } = matches[0];
   const token = getAddress(launch.args.token);
   const hook = getAddress(launch.args.feeHook);
   const launchCreator = getAddress(launch.args.creator);
-  if (!sameHex(hook, input.deployment.feeHook)) {
+  if (!sameHex(hook, release.feeHook)) {
     throw new ActionRpcIdentityError(
       "identity-mismatch",
       "The pool does not use the canonical creator fee hook",
@@ -464,14 +469,14 @@ export async function readCreatorClaimIdentityFromRpc(input: {
   }
   const [launchHash, poolKey, tokenCreator] = await Promise.all([
     input.client.readContract({
-      address: input.deployment.launcher,
+      address: release.launcher,
       abi: classicLauncherStateAbi,
       functionName: "launchHashOf",
       args: [token],
       blockNumber: input.blockNumber,
     }),
     input.client.readContract({
-      address: input.deployment.launcher,
+      address: release.launcher,
       abi: classicLauncherStateAbi,
       functionName: "poolKey",
       args: [token],
@@ -494,7 +499,7 @@ export async function readCreatorClaimIdentityFromRpc(input: {
   if (
     !sameHex(launchHash, launch.args.launchHash) ||
     !sameHex(canonicalId, input.poolId) ||
-    !sameHex(tokenCreator, input.deployment.launcher)
+    !sameHex(tokenCreator, release.launcher)
   ) {
     throw new ActionRpcIdentityError(
       "identity-mismatch",
@@ -504,6 +509,9 @@ export async function readCreatorClaimIdentityFromRpc(input: {
   return {
     tokenAddress: token,
     hookAddress: hook,
+    launcherAddress: release.launcher,
+    launcherRuntimeCodeHash: release.launcherRuntimeCodeHash,
+    hookRuntimeCodeHash: release.feeHookRuntimeCodeHash,
     poolId: input.poolId,
     creatorAddress: launchCreator,
     totalSwapFeeBps: launch.args.totalSwapFeeBps,

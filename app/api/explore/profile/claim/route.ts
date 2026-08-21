@@ -16,6 +16,7 @@ import {
   CreatorClaimInputError,
   CreatorClaimUnavailableError,
   buildPreparedCreatorClaim,
+  getCreatorClaimOnchainDeployments,
   getWebsiteReadOnchainDeployment,
   parseCreatorClaimRequest,
 } from "../../../../../lib/onchain";
@@ -101,26 +102,22 @@ async function simulateCreatorClaim(input: {
 
 async function readCurrentClaimState(input: {
   client: PublicClient;
-  deployment: Extract<
-    ReturnType<typeof getWebsiteReadOnchainDeployment>,
-    { status: "ready" }
-  >;
   token: CreatorClaimTokenIdentity;
   blockNumber: bigint;
 }) {
-  const { client, deployment, token, blockNumber } = input;
+  const { client, token, blockNumber } = input;
   const [hookCode, launcherCode, config, disclosure] = await Promise.all([
-    client.getCode({ address: deployment.feeHook, blockNumber }),
-    client.getCode({ address: deployment.launcher, blockNumber }),
+    client.getCode({ address: token.hookAddress, blockNumber }),
+    client.getCode({ address: token.launcherAddress, blockNumber }),
     client.readContract({
-      address: deployment.feeHook,
+      address: token.hookAddress,
       abi: creatorFeeHookReadAbi,
       functionName: "poolFeeConfig",
       args: [token.poolId],
       blockNumber,
     }),
     client.readContract({
-      address: deployment.feeHook,
+      address: token.hookAddress,
       abi: creatorFeeHookReadAbi,
       functionName: "feeDisclosure",
       args: [token.poolId],
@@ -131,11 +128,11 @@ async function readCurrentClaimState(input: {
     !hookCode ||
     hookCode === "0x" ||
     keccak256(hookCode).toLowerCase() !==
-      deployment.feeHookRuntimeCodeHash.toLowerCase() ||
+      token.hookRuntimeCodeHash.toLowerCase() ||
     !launcherCode ||
     launcherCode === "0x" ||
     keccak256(launcherCode).toLowerCase() !==
-      deployment.launcherRuntimeCodeHash.toLowerCase()
+      token.launcherRuntimeCodeHash.toLowerCase()
   ) {
     throw new CreatorClaimUnavailableError(
       "runtime-mismatch",
@@ -146,7 +143,8 @@ async function readCurrentClaimState(input: {
   if (
     !registered ||
     getAddress(creator).toLowerCase() !== token.creatorAddress.toLowerCase() ||
-    getAddress(registrar).toLowerCase() !== deployment.launcher.toLowerCase() ||
+    getAddress(registrar).toLowerCase() !==
+      token.launcherAddress.toLowerCase() ||
     Number(totalSwapFeeBps) !== token.totalSwapFeeBps ||
     disclosure.some(
       (value) => !Number.isSafeInteger(Number(value)) || Number(value) < 0,
@@ -250,6 +248,15 @@ export async function POST(request: NextRequest) {
         `Switch to chain ${deployment.chainId}`,
       );
     }
+    let releases;
+    try {
+      releases = getCreatorClaimOnchainDeployments(deployment);
+    } catch {
+      throw new CreatorClaimUnavailableError(
+        "runtime-mismatch",
+        "The creator claim releases do not match their manifests",
+      );
+    }
     const response = await withOperationalRpcFailover(
       deployment,
       async (selected) => {
@@ -257,7 +264,7 @@ export async function POST(request: NextRequest) {
         const snapshot = await currentClaimSnapshot(client);
         const token = await readCreatorClaimIdentityFromRpc({
           client,
-          deployment,
+          releases,
           poolId: claimRequest.poolId,
           blockNumber: snapshot.blockNumber,
         });
@@ -272,7 +279,6 @@ export async function POST(request: NextRequest) {
         }
         const state = await readCurrentClaimState({
           client,
-          deployment,
           token,
           blockNumber: snapshot.blockNumber,
         });
@@ -291,7 +297,7 @@ export async function POST(request: NextRequest) {
         const value = 0n;
         const transaction = {
           account: claimRequest.account,
-          to: deployment.feeHook,
+          to: token.hookAddress,
           data,
           value,
         };
@@ -304,7 +310,7 @@ export async function POST(request: NextRequest) {
           account: claimRequest.account,
           poolId: claimRequest.poolId,
           tokenAddress: token.tokenAddress,
-          hookAddress: deployment.feeHook,
+          hookAddress: token.hookAddress,
           snapshotClaimableWei: claimable.toString(),
           snapshotClaimableEth: formatUnits(claimable, 18),
           snapshot: {
@@ -317,7 +323,7 @@ export async function POST(request: NextRequest) {
             kind: "claim-creator-fees" as const,
             chainId: deployment.chainId,
             from: claimRequest.account,
-            to: deployment.feeHook,
+            to: token.hookAddress,
             data,
             value: "0" as const,
           },
