@@ -3,7 +3,8 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress } from "viem";
 
 import { useWallet } from "@/components/wallet-provider";
@@ -12,10 +13,17 @@ import { parseCreatorArticleV1, type CreatorArticleV1 } from
 
 import styles from "./profile-projects.module.css";
 
+const loadCreatorArticleEditorModule = () =>
+  import("@/components/creator-article-editor");
+const preloadCreatorArticleEditorModule = () => {
+  void loadCreatorArticleEditorModule().catch(() => undefined);
+};
 const CreatorArticleEditor = dynamic(
-  () => import("@/components/creator-article-editor"),
+  loadCreatorArticleEditorModule,
   { ssr: false, loading: () => <p className={styles.loading}>Opening editor…</p> },
 );
+
+export const creatorProjectPageSize = 5;
 
 export type CreatorProjectSummaryV1 = Readonly<{
   chainId: 1;
@@ -25,6 +33,13 @@ export type CreatorProjectSummaryV1 = Readonly<{
   imageUrl: string | null;
   source: "envio-classic-v3" | "registry.custom-launched" | "official-main-token";
   article: Readonly<{ revision: number; title: string; updatedAt: string }> | null;
+}>;
+
+export type CreatorProjectMarketCapV1 = Readonly<{
+  tokenAddress: `0x${string}`;
+  usdWad: string | null;
+  ethWei: string | null;
+  label: string | null;
 }>;
 
 type EditorState = Readonly<{
@@ -38,13 +53,17 @@ type AuthHeaders = Readonly<{
   "X-Privy-Identity-Token"?: string;
 }>;
 
-export function ProfileProjects() {
+export function ProfileProjects({ marketCaps = [] }: Readonly<{
+  marketCaps?: readonly CreatorProjectMarketCapV1[];
+}>) {
   const { wallet, getAccessToken, getIdentityToken } = useWallet();
   const [projects, setProjects] = useState<readonly CreatorProjectSummaryV1[]>([]);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [projectPage, setProjectPage] = useState(1);
   const [projectError, setProjectError] = useState("");
+  const editorRequestsRef = useRef(new Map<string, Promise<EditorState>>());
 
   const getAuthHeaders = useCallback(
     () => acquireCreatorArticleAuthHeadersV1({
@@ -64,7 +83,11 @@ export function ProfileProjects() {
       });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(readError(body));
-      setProjects(parseProjectList(body));
+      const nextProjects = parseProjectList(body);
+      setProjects(nextProjects);
+      setProjectPage(1);
+      editorRequestsRef.current.clear();
+      if (nextProjects.length > 0) preloadCreatorArticleEditorModule();
       setPhase("ready");
     } catch {
       if (signal?.aborted) return;
@@ -82,11 +105,41 @@ export function ProfileProjects() {
     };
   }, [loadProjects, wallet]);
 
+  const pageData = useMemo(
+    () => paginateCreatorProjectsV1(projects, marketCaps, projectPage),
+    [marketCaps, projectPage, projects],
+  );
+  const marketCapByToken = useMemo(() => new Map(
+    marketCaps.map((marketCap) => [marketCap.tokenAddress.toLowerCase(), marketCap]),
+  ), [marketCaps]);
+
+  const getEditorState = useCallback((project: CreatorProjectSummaryV1) => {
+    const key = project.tokenAddress.toLowerCase();
+    const current = editorRequestsRef.current.get(key);
+    if (current) return current;
+    const request = loadCreatorArticleEditorV1(project, getAuthHeaders).catch((error) => {
+      editorRequestsRef.current.delete(key);
+      throw error;
+    });
+    editorRequestsRef.current.set(key, request);
+    return request;
+  }, [getAuthHeaders]);
+
+  const warmEditor = useCallback((project: CreatorProjectSummaryV1) => {
+    preloadCreatorArticleEditorModule();
+    void getEditorState(project).catch(() => undefined);
+  }, [getEditorState]);
+
   async function openEditor(project: CreatorProjectSummaryV1) {
     setOpening(project.tokenAddress);
     setProjectError("");
     try {
-      setEditor(await loadCreatorArticleEditorV1(project, getAuthHeaders));
+      const [, nextEditor] = await Promise.all([
+        loadCreatorArticleEditorModule(),
+        getEditorState(project),
+      ]);
+      editorRequestsRef.current.delete(project.tokenAddress.toLowerCase());
+      setEditor(nextEditor);
     } catch (error) {
       setProjectError(error instanceof Error
         ? error.message
@@ -104,9 +157,43 @@ export function ProfileProjects() {
           <p>Creator workspace</p>
           <h2 id="my-projects-title">My projects</h2>
         </div>
-        <button type="button" onClick={() => void loadProjects()} disabled={phase === "loading"}>
-          Refresh
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            className={styles.refresh}
+            type="button"
+            onClick={() => void loadProjects()}
+            disabled={phase === "loading"}
+          >
+            <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
+            <span>Refresh</span>
+          </button>
+          {pageData.totalPages > 1 ? (
+            <nav className={styles.pagination} aria-label="Creator project pages">
+              <button
+                type="button"
+                aria-label="Previous creator projects page"
+                disabled={pageData.currentPage === 1}
+                onClick={() => setProjectPage(Math.max(1, pageData.currentPage - 1))}
+              >
+                <ChevronLeft aria-hidden="true" size={17} strokeWidth={1.8} />
+              </button>
+              <span aria-live="polite" aria-atomic="true">
+                {pageData.currentPage} / {pageData.totalPages}
+              </span>
+              <button
+                type="button"
+                aria-label="Next creator projects page"
+                disabled={pageData.currentPage === pageData.totalPages}
+                onClick={() => setProjectPage(Math.min(
+                  pageData.totalPages,
+                  pageData.currentPage + 1,
+                ))}
+              >
+                <ChevronRight aria-hidden="true" size={17} strokeWidth={1.8} />
+              </button>
+            </nav>
+          ) : null}
+        </div>
       </header>
 
       {projectError ? <p className={styles.error} role="alert">{projectError}</p> : null}
@@ -118,8 +205,8 @@ export function ProfileProjects() {
       ) : projects.length === 0 ? (
         <p className={styles.empty}>Your verified launches will appear here.</p>
       ) : (
-        <div className={styles.grid}>
-          {projects.map((project) => (
+        <div className={styles.list}>
+          {pageData.items.map((project) => (
             <article className={styles.project} key={project.tokenAddress}>
               <div className={styles.art}>
                 {project.imageUrl ? (
@@ -129,12 +216,20 @@ export function ProfileProjects() {
               <div className={styles.copy}>
                 <strong>{project.name}</strong>
                 <span>{project.symbol ? `$${project.symbol}` : "Verified launch"}</span>
+                {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label ? (
+                  <small>
+                    Market cap {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
+                  </small>
+                ) : null}
                 {project.article ? <small>Updated {formatDate(project.article.updatedAt)}</small> : null}
               </div>
               <div className={styles.actions}>
                 <button
                   type="button"
                   disabled={opening !== null}
+                  onPointerEnter={() => warmEditor(project)}
+                  onPointerDown={preloadCreatorArticleEditorModule}
+                  onFocus={() => warmEditor(project)}
                   onClick={() => void openEditor(project)}
                 >
                   {opening === project.tokenAddress
@@ -172,6 +267,48 @@ export function ProfileProjects() {
       ) : null}
     </section>
   );
+}
+
+export function paginateCreatorProjectsV1(
+  projects: readonly CreatorProjectSummaryV1[],
+  marketCaps: readonly CreatorProjectMarketCapV1[],
+  requestedPage: number,
+) {
+  const byToken = new Map(
+    marketCaps.map((marketCap) => [marketCap.tokenAddress.toLowerCase(), marketCap]),
+  );
+  const source = projects.some((project) =>
+    unsignedMarketCap(byToken.get(project.tokenAddress.toLowerCase())?.usdWad) !== null)
+    ? "usdWad"
+    : "ethWei";
+  const ordered = [...projects].sort((first, second) => {
+    const firstCap = unsignedMarketCap(
+      byToken.get(first.tokenAddress.toLowerCase())?.[source],
+    );
+    const secondCap = unsignedMarketCap(
+      byToken.get(second.tokenAddress.toLowerCase())?.[source],
+    );
+    if (firstCap !== null && secondCap !== null && firstCap !== secondCap) {
+      return firstCap > secondCap ? -1 : 1;
+    }
+    if (firstCap !== null) return -1;
+    if (secondCap !== null) return 1;
+    const nameOrder = first.name.localeCompare(second.name);
+    return nameOrder !== 0
+      ? nameOrder
+      : first.tokenAddress.toLowerCase().localeCompare(second.tokenAddress.toLowerCase());
+  });
+  const totalPages = Math.max(1, Math.ceil(ordered.length / creatorProjectPageSize));
+  const currentPage = Math.min(
+    totalPages,
+    Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+  );
+  const offset = (currentPage - 1) * creatorProjectPageSize;
+  return Object.freeze({
+    currentPage,
+    totalPages,
+    items: Object.freeze(ordered.slice(offset, offset + creatorProjectPageSize)),
+  });
 }
 
 export async function acquireCreatorArticleAuthHeadersV1(input: Readonly<{
@@ -258,6 +395,12 @@ function readError(value: unknown) {
   return isRecord(value) && typeof value.code === "string" && value.code
     ? `${value.code[0]?.toUpperCase() ?? ""}${value.code.slice(1).replaceAll("_", " ")}`
     : "Project request failed";
+}
+
+function unsignedMarketCap(value: string | null | undefined) {
+  return value && /^(?:0|[1-9][0-9]*)$/u.test(value) && value.length <= 78
+    ? BigInt(value)
+    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
