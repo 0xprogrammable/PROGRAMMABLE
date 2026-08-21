@@ -58,7 +58,7 @@ import styles from "./creator-article-editor.module.css";
 
 type AuthHeaders = Readonly<{
   Authorization: string;
-  "X-Privy-Identity-Token": string;
+  "X-Privy-Identity-Token"?: string;
 }>;
 
 type ArticleEditorProps = Readonly<{

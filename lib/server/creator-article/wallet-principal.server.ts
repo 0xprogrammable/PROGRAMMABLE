@@ -104,19 +104,26 @@ export function createWalletPrincipalAuthenticatorFromBoundaryV1(
   return Object.freeze({
     async authenticate(request: Request): Promise<AuthenticatedWalletPrincipalV1> {
       const accessToken = bearerToken(request.headers.get("authorization"));
-      const identityToken = boundedToken(
-        request.headers.get("x-privy-identity-token"),
-        "identity_token_invalid",
-      );
+      const identityHeader = request.headers.get("x-privy-identity-token");
+      // Privy can return a current user without issuing an identity token.
+      // The access token remains mandatory and verified; when an identity
+      // token is available, bind it to the exact same user and session.
+      const identityToken = identityHeader === null
+        ? null
+        : boundedToken(identityHeader, "identity_token_invalid");
       try {
         const [access, identity] = await Promise.all([
           input.boundary.verifyAccessToken(accessToken),
-          input.boundary.verifyIdentityToken(identityToken),
+          identityToken === null
+            ? Promise.resolve(null)
+            : input.boundary.verifyIdentityToken(identityToken),
         ]);
         if (
           access.appId !== input.appId
-          || access.userId !== identity.userId
-          || access.sessionId !== identity.sessionId
+          || (identity !== null && (
+            access.userId !== identity.userId
+            || access.sessionId !== identity.sessionId
+          ))
         ) throw new TypeError("Privy token binding mismatch");
         const user = await input.boundary.getCurrentUser(access.userId);
         if (user.id !== access.userId) throw new TypeError("Privy user mismatch");

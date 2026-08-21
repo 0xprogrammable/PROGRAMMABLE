@@ -41,6 +41,20 @@ describe("My projects editor opening", () => {
     expect(events).toEqual(["identity", "access"]);
   });
 
+  it("uses the verified access token when Privy omits an identity token", async () => {
+    const acquire = (profileProjects as unknown as {
+      acquireCreatorArticleAuthHeadersV1(input: Readonly<{
+        getAccessToken: () => Promise<string | null>;
+        getIdentityToken: () => Promise<string | null>;
+      }>): Promise<Record<string, string>>;
+    }).acquireCreatorArticleAuthHeadersV1;
+
+    await expect(acquire({
+      getIdentityToken: async () => null,
+      getAccessToken: async () => "access-token",
+    })).resolves.toEqual({ Authorization: "Bearer access-token" });
+  });
+
   it("turns an API failure into a user-readable rejected action", async () => {
     const load = (profileProjects as unknown as {
       loadCreatorArticleEditorV1(
