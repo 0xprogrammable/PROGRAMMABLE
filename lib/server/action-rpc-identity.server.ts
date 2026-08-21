@@ -405,6 +405,7 @@ export async function readTradeActionModelFromRpc(input: {
 }
 
 export type CreatorClaimTokenIdentity = Readonly<{
+  releaseVersion: "classic-v1" | "classic-v2";
   tokenAddress: Address;
   hookAddress: Address;
   launcherAddress: Address;
@@ -507,6 +508,7 @@ export async function readCreatorClaimIdentityFromRpc(input: {
     );
   }
   return {
+    releaseVersion: release.releaseVersion,
     tokenAddress: token,
     hookAddress: hook,
     launcherAddress: release.launcher,
