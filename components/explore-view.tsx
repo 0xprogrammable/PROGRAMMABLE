@@ -1492,7 +1492,7 @@ export async function loadExplorePage(
   return loadExplorePayload(contentKey, new URLSearchParams(search));
 }
 
-export async function loadExploreModelDataset(
+async function loadExploreModelDatasetAttempt(
   contentKey: string,
   search: URLSearchParams,
 ) {
@@ -1634,6 +1634,34 @@ export async function loadExploreModelDataset(
     ...firstPage,
     tokens,
   };
+}
+
+function invalidateExploreModelDatasetPages(contentKey: string) {
+  abortExplorePayload(contentKey);
+  const modelPagePrefix = `${contentKey}\u0000model-page:`;
+  for (const key of resolvedExplorePayloads.keys()) {
+    if (key.startsWith(modelPagePrefix)) {
+      resolvedExplorePayloads.delete(key);
+    }
+  }
+}
+
+export async function loadExploreModelDataset(
+  contentKey: string,
+  search: URLSearchParams,
+) {
+  try {
+    return await loadExploreModelDatasetAttempt(contentKey, search);
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      error.message !== "Tokens changed while filters were loading"
+    ) {
+      throw error;
+    }
+    invalidateExploreModelDatasetPages(contentKey);
+    return loadExploreModelDatasetAttempt(contentKey, search);
+  }
 }
 
 export function paginateExploreModelDataset(
