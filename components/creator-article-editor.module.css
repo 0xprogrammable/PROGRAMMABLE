@@ -1,0 +1,381 @@
+.backdrop {
+  align-items: center;
+  background: rgb(0 0 0 / 78%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 1000;
+}
+
+.dialog {
+  background: #0b0b0f;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 1rem;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 2rem);
+  max-width: 90rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.dialogHeader,
+.dialogFooter {
+  align-items: center;
+  background: rgb(11 11 15 / 94%);
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+}
+
+.dialogHeader {
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.dialogHeader p,
+.dialogHeader h2 {
+  margin: 0;
+}
+
+.dialogHeader p {
+  color: rgb(255 255 255 / 48%);
+  font-size: 0.7rem;
+}
+
+.dialogHeader h2 {
+  font-size: 1.15rem;
+}
+
+.dialogHeader > button,
+.toolbar button,
+.dialogFooter button,
+.coverButton,
+.imageControls button {
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.55rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dialogHeader > button {
+  display: grid;
+  padding: 0.45rem;
+  place-items: center;
+}
+
+.editorLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  overflow: auto;
+}
+
+.editorLayout:has(.previewPane) {
+  grid-template-columns: minmax(28rem, 0.9fr) minmax(32rem, 1.1fr);
+}
+
+.editorPane,
+.previewPane {
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 2.5rem);
+}
+
+.previewPane {
+  border-left: 1px solid rgb(255 255 255 / 10%);
+  overflow: auto;
+}
+
+.titleField,
+.bannerField {
+  display: grid;
+  gap: 0.6rem;
+  margin-inline: auto;
+  max-width: 48rem;
+}
+
+.titleField > span,
+.bannerField > span,
+.imageFields span {
+  color: rgb(255 255 255 / 48%);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.titleField input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 16%);
+  color: inherit;
+  font: inherit;
+  font-size: clamp(1.8rem, 4vw, 3.5rem);
+  font-weight: 540;
+  letter-spacing: -0.05em;
+  outline: none;
+  padding: 0 0 0.7rem;
+}
+
+.titleField input:focus {
+  border-color: #8fc5ff;
+}
+
+.bannerField {
+  margin-block: 2rem;
+}
+
+.bannerPreview {
+  position: relative;
+}
+
+.bannerPreview img {
+  aspect-ratio: 3 / 1;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.bannerPreview button {
+  background: rgb(0 0 0 / 72%);
+  border: 0;
+  bottom: 0.75rem;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem 0.7rem;
+  position: absolute;
+  right: 0.75rem;
+}
+
+.coverButton {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  justify-self: start;
+  padding: 0.65rem 0.8rem;
+}
+
+.toolbar {
+  align-items: center;
+  backdrop-filter: blur(14px);
+  background: rgb(15 15 20 / 92%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 auto 1.2rem;
+  max-width: 48rem;
+  padding: 0.45rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.toolbar > button {
+  align-items: center;
+  display: flex;
+  min-height: 2.25rem;
+  padding: 0.42rem 0.55rem;
+}
+
+.toolbar svg {
+  height: 1rem;
+  width: 1rem;
+}
+
+.toolbar button[aria-pressed="true"] {
+  background: #f0eee8;
+  color: #0a0a0c;
+}
+
+.linkControl {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  margin-inline-start: auto;
+}
+
+.linkControl input {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  min-width: 10rem;
+  outline: none;
+}
+
+.linkControl button {
+  padding: 0.45rem 0.55rem;
+}
+
+.prose {
+  font-size: clamp(1.02rem, 1.5vw, 1.18rem);
+  line-height: 1.72;
+  margin-inline: auto;
+  max-width: 46rem;
+  min-height: 22rem;
+  outline: none;
+  padding-block: 0.5rem 5rem;
+}
+
+.prose p {
+  margin-block: 0 1.35em;
+}
+
+.prose h2,
+.prose h3 {
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+
+.prose h2 {
+  font-size: 2.2rem;
+  margin-block: 2em 0.65em;
+}
+
+.prose h3 {
+  font-size: 1.55rem;
+  margin-block: 1.8em 0.6em;
+}
+
+.prose a {
+  color: #8fc5ff;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.editorImage {
+  margin: 2.5rem auto;
+  max-width: 100%;
+}
+
+.editorImage img {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.compact { width: min(32rem, 100%); }
+.content { width: min(46rem, 100%); }
+.wide { width: 100%; }
+
+.imageSelected {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 5px;
+}
+
+.imageStatus {
+  background: rgb(255 255 255 / 5%);
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+}
+
+.imageControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-block-start: 0.6rem;
+}
+
+.imageControls button {
+  font-size: 0.7rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.imageControls button[aria-pressed="true"] {
+  background: rgb(255 255 255 / 14%);
+}
+
+.imageFields {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+  margin-block-start: 0.75rem;
+}
+
+.imageFields label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.imageFields input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 14%);
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.45rem 0;
+}
+
+.pasteHint {
+  color: rgb(255 255 255 / 42%);
+  font-size: 0.72rem;
+  margin: -3.5rem auto 2rem;
+  max-width: 46rem;
+}
+
+.dialogFooter {
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  gap: 1rem;
+}
+
+.dialogFooter p {
+  color: #ffb1b1;
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.dialogFooter div {
+  display: flex;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+.dialogFooter button {
+  padding: 0.65rem 0.9rem;
+}
+
+.dialogFooter .publish {
+  background: #f0eee8;
+  border-color: #f0eee8;
+  color: #0a0a0c;
+}
+
+.dialogFooter button:focus-visible,
+.dialogHeader button:focus-visible,
+.toolbar button:focus-visible,
+.coverButton:focus-visible,
+.imageControls button:focus-visible {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 2px;
+}
+
+@media (max-width: 64rem) {
+  .editorLayout:has(.previewPane) {
+    grid-template-columns: 1fr;
+  }
+
+  .previewPane {
+    border-left: 0;
+    border-top: 1px solid rgb(255 255 255 / 10%);
+  }
+}
+
+@media (max-width: 42rem) {
+  .backdrop { padding: 0; }
+  .dialog { border-radius: 0; max-height: 100dvh; }
+  .editorPane { padding: 1rem; }
+  .imageFields { grid-template-columns: 1fr; }
+  .dialogFooter { align-items: stretch; flex-direction: column; }
+  .dialogFooter div { margin-inline-start: 0; }
+  .dialogFooter button { flex: 1; }
+  .linkControl { margin-inline-start: 0; width: 100%; }
+  .linkControl input { flex: 1; min-width: 0; }
+}

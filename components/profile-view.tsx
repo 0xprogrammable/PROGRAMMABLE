@@ -17,6 +17,7 @@ import {
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
+import { ProfileProjects } from "@/components/profile-projects";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -3187,6 +3188,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           ) : null}
         </div>
       </section>
+
+      <ProfileProjects />
 
       <ProfileAccountWorkspace
         key={account.toLowerCase()}

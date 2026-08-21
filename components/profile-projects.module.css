@@ -1,0 +1,130 @@
+.section {
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  margin-block: clamp(3rem, 6vw, 5.5rem);
+  padding-block-start: clamp(2rem, 4vw, 3.5rem);
+}
+
+.heading {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin-block-end: 1.4rem;
+}
+
+.heading p {
+  color: rgb(255 255 255 / 48%);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+}
+
+.heading h2 {
+  font-size: clamp(1.75rem, 4vw, 2.6rem);
+  letter-spacing: -0.045em;
+  margin: 0;
+}
+
+.heading button,
+.actions button,
+.actions a {
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.65rem 0.95rem;
+  text-decoration: none;
+}
+
+.heading button:hover,
+.actions button:hover,
+.actions a:hover {
+  border-color: rgb(255 255 255 / 48%);
+}
+
+.heading button:focus-visible,
+.actions button:focus-visible,
+.actions a:focus-visible {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 3px;
+}
+
+.grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.project {
+  align-items: center;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-block: 1rem;
+}
+
+.art {
+  align-items: center;
+  background: #17171c;
+  border-radius: 0.65rem;
+  display: flex;
+  height: 3.75rem;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  width: 3.75rem;
+}
+
+.art img {
+  object-fit: cover;
+}
+
+.copy {
+  display: grid;
+  min-width: 0;
+}
+
+.copy strong {
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy span,
+.copy small,
+.loading,
+.empty,
+.error {
+  color: rgb(255 255 255 / 52%);
+  font-size: 0.78rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actions button {
+  background: #f0eee8;
+  border-color: #f0eee8;
+  color: #0a0a0c;
+}
+
+.error {
+  color: #ff9d9d;
+}
+
+@media (max-width: 42rem) {
+  .project {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+  }
+}
