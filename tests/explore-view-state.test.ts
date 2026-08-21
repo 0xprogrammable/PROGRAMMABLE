@@ -813,6 +813,44 @@ describe("Explore refresh state", () => {
     )).rejects.toThrow("Tokens changed while filters were loading");
   });
 
+  it("retries once when the launch identity changes between model pages", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "unavailable"),
+    );
+    let fetchCount = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        fetchCount += 1;
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        const firstAttempt = fetchCount <= 2;
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens: tokens.slice((page - 1) * pageSize, page * pageSize),
+          page,
+          pageSize,
+          total: tokens.length,
+          totalPages: 2,
+          catalog: {
+            ...catalogBoundary,
+            identityCount: tokens.length,
+            identityCommitment: firstAttempt && page === 2
+              ? `sha256:${"11".repeat(32)}`
+              : catalogBoundary.identityCommitment,
+          },
+        }), { status: 200 });
+      },
+    );
+
+    await expect(loadExploreModelDataset(
+      "transient-commitment-drift-model-dataset",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({ total: tokens.length, totalPages: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("accepts index progress advancing between pages when identity stays exact", async () => {
     const tokens = Array.from(
       { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
@@ -982,7 +1020,7 @@ describe("Explore refresh state", () => {
       "inconsistent-degraded-model-dataset",
       search,
     )).rejects.toThrow("Tokens changed while filters were loading");
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(8);
   });
 
   it("rejects a mixed current and transport-unavailable model dataset", async () => {
@@ -1050,7 +1088,7 @@ describe("Explore refresh state", () => {
       new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
     )).rejects.toThrow("Tokens changed while filters were loading");
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it.each(["highest-market-cap", "lowest-market-cap"])(
