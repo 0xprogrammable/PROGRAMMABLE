@@ -781,6 +781,9 @@ function normalizeEditorFingerprintDocumentV1(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeEditorFingerprintDocumentV1);
   if (!isRecord(value)) return value;
   return Object.fromEntries(Object.entries(value).map(([key, candidate]) => {
+    if (key === "attrs" && value.type === "link" && isRecord(candidate)) {
+      return [key, { href: candidate.href }];
+    }
     if (key !== "attrs" || value.type !== "articleImage" || !isRecord(candidate)) {
       return [key, normalizeEditorFingerprintDocumentV1(candidate)];
     }

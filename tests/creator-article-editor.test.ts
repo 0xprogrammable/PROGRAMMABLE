@@ -150,4 +150,34 @@ describe("creator article editor normalization", () => {
       },
     }));
   });
+
+  it("treats editor-added link attributes as the published link", () => {
+    const fingerprint = (creatorArticleEditor as unknown as {
+      creatorArticleEditorFingerprintV1(input: unknown): string;
+    }).creatorArticleEditorFingerprintV1;
+    const article = (attrs: Record<string, unknown>) => ({
+      title: "Project story",
+      bannerImage: null,
+      document: {
+        type: "doc",
+        content: [{
+          type: "paragraph",
+          content: [{
+            type: "text",
+            text: "programmable.market",
+            marks: [{ type: "link", attrs }],
+          }],
+        }],
+      },
+    });
+
+    expect(fingerprint(article({ href: "https://programmable.market/" }))).toBe(
+      fingerprint(article({
+        href: "https://programmable.market/",
+        target: "_blank",
+        rel: "noopener noreferrer nofollow",
+        class: null,
+      })),
+    );
+  });
 });
