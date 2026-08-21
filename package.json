@@ -163,12 +163,16 @@
     "perf:read-model:post-promotion": "node scripts/perf/read-model-post-promotion.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "0.5.4",
     "@metamask/delegation-abis": "1.1.0",
     "@metamask/delegation-core": "2.2.1",
     "@metamask/smart-accounts-kit": "1.7.0",
     "@privy-io/node": "^0.27.0",
     "@privy-io/react-auth": "3.35.2",
-    "@electric-sql/pglite": "0.5.4",
+    "@tiptap/core": "^3.30.2",
+    "@tiptap/extension-image": "^3.30.2",
+    "@tiptap/react": "^3.30.2",
+    "@tiptap/starter-kit": "^3.30.2",
     "@uniswap/liquidity-launcher-sdk": "1.0.1",
     "@uniswap/sdk-core": "7.19.0",
     "@uniswap/universal-router-sdk": "5.11.1",
