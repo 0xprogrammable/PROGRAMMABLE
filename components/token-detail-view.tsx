@@ -29,6 +29,7 @@ import {
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import { CreatorArticle } from "@/components/creator-article";
 import {
+  getExplorePreviewCreatorArticle,
   getExplorePreviewCustomProject,
   getExplorePreviewToken,
 } from "@/components/explore-preview-data";
@@ -2263,6 +2264,7 @@ export function TokenDetailView({
         token={previewToken}
         chainId={1}
         preview
+        creatorArticle={getExplorePreviewCreatorArticle(normalizedAddress)}
       />
     );
   }

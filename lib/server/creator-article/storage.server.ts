@@ -188,7 +188,7 @@ export function createProductionCreatorArticleStoreV1(): CreatorArticleStoreV1 {
     blob: Object.freeze({
       async read(pathname: string) {
         const result = await get(pathname, {
-          access: "private",
+          access: "public",
           token,
           useCache: false,
         });
@@ -213,7 +213,7 @@ export function createProductionCreatorArticleStoreV1(): CreatorArticleStoreV1 {
       }>) {
         try {
           const result = await put(writeInput.pathname, writeInput.text, {
-            access: "private",
+            access: "public",
             token,
             addRandomSuffix: false,
             allowOverwrite: !writeInput.immutable && writeInput.ifMatch !== null,

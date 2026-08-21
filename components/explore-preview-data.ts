@@ -2,6 +2,14 @@ import type {
   CanonicalTokenExploreEntry,
   CustomProjectExploreEntry,
 } from "@/lib/tokens";
+import {
+  CREATOR_ARTICLE_SCHEMA_V1,
+  parseCreatorArticleV1,
+} from "@/lib/creator-article/contract-v1";
+import {
+  PROGRAMMABLE_MAIN_TOKEN_ADDRESS,
+  programmableCreatorArticleExampleV1,
+} from "@/lib/creator-article/programmable-example-v1";
 
 type PreviewChartRange = "1h" | "1d" | "1w" | "all";
 
@@ -233,6 +241,16 @@ export const EXPLORE_PREVIEW_TOKENS: CanonicalTokenExploreEntry[] = [
     totalSwapFeeBps: 100,
   }),
 ];
+
+const PROGRAMMABLE_MAIN_PREVIEW_TOKEN: CanonicalTokenExploreEntry = {
+  ...EXPLORE_PREVIEW_TOKENS[0]!,
+  id: `interface-preview:${PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()}`,
+  name: "Programmable",
+  symbol: "V4",
+  description: "Launch tokens that work the way you imagine on Uniswap",
+  imageUrl: "/brand/programmable-final-x-pfp-v4-800.png",
+  tokenAddress: PROGRAMMABLE_MAIN_TOKEN_ADDRESS,
+};
 
 const CUSTOM_PREVIEW_WALLET = {
   namespace: "eip155:1",
@@ -593,9 +611,27 @@ const EXPLORE_PREVIEW_PROJECTS = new Map<string, ExplorePreviewProject>([
 ]);
 
 export function getExplorePreviewToken(address: string) {
+  if (address.toLowerCase() === PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()) {
+    return PROGRAMMABLE_MAIN_PREVIEW_TOKEN;
+  }
   return EXPLORE_PREVIEW_TOKENS.find(
     (token) => token.tokenAddress.toLowerCase() === address.toLowerCase(),
   );
+}
+
+export function getExplorePreviewCreatorArticle(address: string) {
+  if (address.toLowerCase() !== PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()) {
+    return null;
+  }
+  const draft = programmableCreatorArticleExampleV1();
+  return parseCreatorArticleV1({
+    ...draft,
+    schemaVersion: CREATOR_ARTICLE_SCHEMA_V1,
+    revision: 1,
+    status: "published",
+    createdAt: "2026-08-21T00:00:00.000Z",
+    updatedAt: "2026-08-21T00:00:00.000Z",
+  });
 }
 
 export function getExplorePreviewProject(address: string) {
