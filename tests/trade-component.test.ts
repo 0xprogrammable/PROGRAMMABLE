@@ -19,8 +19,8 @@ const OWNER = getAddress("0x5555555555555555555555555555555555555555");
 const TOKEN = getAddress("0x1111111111111111111111111111111111111111");
 
 describe("TokenTrade request construction", () => {
-  it("defaults to one percent slippage", () => {
-    expect(DEFAULT_TRADE_SLIPPAGE_BPS).toBe(100);
+  it("defaults to five percent slippage", () => {
+    expect(DEFAULT_TRADE_SLIPPAGE_BPS).toBe(500);
   });
 
   it("converts editable percentage input to basis points", () => {
