@@ -116,13 +116,15 @@ async function readCurrentClaimState(input: {
       args: [token.poolId],
       blockNumber,
     }),
-    client.readContract({
-      address: token.hookAddress,
-      abi: creatorFeeHookReadAbi,
-      functionName: "feeDisclosure",
-      args: [token.poolId],
-      blockNumber,
-    }),
+    token.releaseVersion === "classic-v2"
+      ? client.readContract({
+        address: token.hookAddress,
+        abi: creatorFeeHookReadAbi,
+        functionName: "feeDisclosure",
+        args: [token.poolId],
+        blockNumber,
+      })
+      : Promise.resolve(null),
   ]);
   if (
     !hookCode ||
@@ -146,7 +148,7 @@ async function readCurrentClaimState(input: {
     getAddress(registrar).toLowerCase() !==
       token.launcherAddress.toLowerCase() ||
     Number(totalSwapFeeBps) !== token.totalSwapFeeBps ||
-    disclosure.some(
+    disclosure?.some(
       (value) => !Number.isSafeInteger(Number(value)) || Number(value) < 0,
     )
   ) {

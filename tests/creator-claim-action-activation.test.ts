@@ -259,6 +259,7 @@ describe("creator claim action identity activation", () => {
     mocks.readLegacy.mockResolvedValue(legacyModel);
     mocks.readBitquery.mockResolvedValue(legacyModel);
     mocks.readIdentity.mockResolvedValue({
+      releaseVersion: "classic-v2",
       tokenAddress: token,
       hookAddress: hook,
       launcherAddress: launcher,
@@ -336,6 +337,7 @@ describe("creator claim action identity activation", () => {
       deployment,
     ]);
     mocks.readIdentity.mockResolvedValueOnce({
+      releaseVersion: "classic-v1",
       tokenAddress: token,
       hookAddress: historicalHook,
       launcherAddress: historicalLauncher,
@@ -370,9 +372,6 @@ describe("creator claim action identity activation", () => {
               10n ** 16n,
             ]);
           }
-          if (functionName === "feeDisclosure") {
-            return Promise.resolve([100, 100, 90, 10, 0, 0]);
-          }
           throw new Error(`Unexpected function ${functionName}`);
         },
       ),
@@ -406,6 +405,9 @@ describe("creator claim action identity activation", () => {
       releases: [historicalDeployment, deployment],
       poolId,
     }));
+    expect(client.readContract).not.toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: "feeDisclosure" }),
+    );
   });
 
   it("does not expose a private RPC identity-read failure", async () => {

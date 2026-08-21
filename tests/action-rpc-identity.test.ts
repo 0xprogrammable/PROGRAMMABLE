@@ -140,6 +140,7 @@ describe("single-RPC action identity", () => {
         blockNumber: 20_100n,
       }),
     ).resolves.toEqual({
+      releaseVersion: "classic-v2",
       tokenAddress: token,
       hookAddress: hook,
       launcherAddress: launcher,
@@ -252,6 +253,7 @@ describe("single-RPC action identity", () => {
         blockNumber: 100n,
       }),
     ).resolves.toEqual({
+      releaseVersion: "classic-v1",
       tokenAddress: token,
       hookAddress: historicalHook,
       launcherAddress: historicalLauncher,
