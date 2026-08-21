@@ -6,6 +6,7 @@ import sepoliaDependencies from "../../contracts/dependencies/ethereum-sepolia.j
 import type {
   DeploymentEnvironment,
   OnchainDeployment,
+  ReadyOnchainDeployment,
 } from "./types";
 import { productionMainnetRpcPair } from
   "./website-rpc-providers.server";
@@ -29,6 +30,18 @@ type DeploymentEntry = {
     releaseEligible?: boolean;
     requiredRelease?: string;
     independentRpcCount?: number;
+  };
+  historicalV1Deployment?: {
+    releaseVersion: "classic-v1";
+    ethCreatorFeeHook?: string | null;
+    memeLaunch?: string | null;
+    runtimeCodeHashes?: {
+      ethCreatorFeeHook?: string | null;
+      memeLaunch?: string | null;
+    };
+    deploymentBlocks?: {
+      memeLaunch?: number | null;
+    };
   };
 };
 
@@ -254,6 +267,77 @@ export function getWebsiteReadOnchainDeployment(
       secondary: rpc.secondary.provider,
     },
   };
+}
+
+export function getCreatorClaimOnchainDeployments(
+  current: ReadyOnchainDeployment,
+): readonly ReadyOnchainDeployment[] {
+  if (current.environment !== "production") return [current];
+  const production = (appDeploymentsJson as unknown as AppDeployments)
+    .production;
+  const historical = production.historicalV1Deployment;
+  const currentLauncher = asAddress(production.memeLaunch);
+  const currentHook = asAddress(production.ethCreatorFeeHook);
+  const currentLauncherHash = asBytes32(
+    production.runtimeCodeHashes?.memeLaunch,
+  );
+  const currentHookHash = asBytes32(
+    production.runtimeCodeHashes?.ethCreatorFeeHook,
+  );
+  if (
+    current.chainId !== 1 ||
+    current.releaseVersion !== "classic-v2" ||
+    !currentLauncher ||
+    !currentHook ||
+    !currentLauncherHash ||
+    !currentHookHash ||
+    current.launcher !== currentLauncher ||
+    current.feeHook !== currentHook ||
+    current.launcherRuntimeCodeHash.toLowerCase() !==
+      currentLauncherHash.toLowerCase() ||
+    current.feeHookRuntimeCodeHash.toLowerCase() !==
+      currentHookHash.toLowerCase()
+  ) {
+    throw new Error(
+      "Current creator claim deployment does not match its manifest",
+    );
+  }
+
+  const launcher = asAddress(historical?.memeLaunch);
+  const feeHook = asAddress(historical?.ethCreatorFeeHook);
+  const launcherRuntimeCodeHash = asBytes32(
+    historical?.runtimeCodeHashes?.memeLaunch,
+  );
+  const feeHookRuntimeCodeHash = asBytes32(
+    historical?.runtimeCodeHashes?.ethCreatorFeeHook,
+  );
+  const deploymentBlockValue = historical?.deploymentBlocks?.memeLaunch;
+  if (
+    historical?.releaseVersion !== "classic-v1" ||
+    !launcher ||
+    !feeHook ||
+    !launcherRuntimeCodeHash ||
+    !feeHookRuntimeCodeHash ||
+    typeof deploymentBlockValue !== "number" ||
+    !Number.isSafeInteger(deploymentBlockValue) ||
+    deploymentBlockValue < 0
+  ) {
+    throw new Error(
+      "Historical creator claim deployment is not manifest verified",
+    );
+  }
+  return [
+    {
+      ...current,
+      releaseVersion: "classic-v1",
+      launcher,
+      feeHook,
+      launcherRuntimeCodeHash,
+      feeHookRuntimeCodeHash,
+      deploymentBlock: BigInt(deploymentBlockValue),
+    },
+    current,
+  ];
 }
 
 /**

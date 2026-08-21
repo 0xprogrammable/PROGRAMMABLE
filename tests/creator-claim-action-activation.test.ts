@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   readBitquery: vi.fn(),
   readIdentity: vi.fn(),
   createPublicClient: vi.fn(),
+  getCreatorClaimOnchainDeployments: vi.fn(),
   getWebsiteReadOnchainDeployment: vi.fn(),
 }));
 
@@ -27,8 +28,16 @@ const creator = getAddress("0x1111111111111111111111111111111111111111");
 const token = getAddress("0x2222222222222222222222222222222222222222");
 const hook = getAddress("0x3333333333333333333333333333333333333333");
 const launcher = getAddress("0x4444444444444444444444444444444444444444");
+const historicalHook = getAddress(
+  "0x7777777777777777777777777777777777777777",
+);
+const historicalLauncher = getAddress(
+  "0x8888888888888888888888888888888888888888",
+);
 const hookCode = "0x6001600155" as Hex;
 const launcherCode = "0x6002600255" as Hex;
+const historicalHookCode = "0x6003600355" as Hex;
+const historicalLauncherCode = "0x6004600455" as Hex;
 const blockHash = `0x${"55".repeat(32)}` as Hex;
 const poolId = computeOfficialV4PoolId({
   currency0: "0x0000000000000000000000000000000000000000",
@@ -60,6 +69,16 @@ const deployment = {
   },
   confirmations: 12n,
   logBlockRange: 10_000n,
+};
+
+const historicalDeployment = {
+  ...deployment,
+  releaseVersion: "classic-v1" as const,
+  launcher: historicalLauncher,
+  feeHook: historicalHook,
+  launcherRuntimeCodeHash: keccak256(historicalLauncherCode),
+  feeHookRuntimeCodeHash: keccak256(historicalHookCode),
+  deploymentBlock: 1n,
 };
 
 const indexedToken = {
@@ -182,6 +201,8 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
+    getCreatorClaimOnchainDeployments:
+      mocks.getCreatorClaimOnchainDeployments,
     getWebsiteReadOnchainDeployment:
       mocks.getWebsiteReadOnchainDeployment,
     readExploreModel: mocks.readLegacy,
@@ -232,6 +253,7 @@ describe("creator claim action identity activation", () => {
     deployment.rpcUrlSecondary =
       "https://claim-node.ethereum-mainnet.quiknode.pro/quicknode-claim-key/";
     mocks.getWebsiteReadOnchainDeployment.mockReturnValue(deployment);
+    mocks.getCreatorClaimOnchainDeployments.mockReturnValue([deployment]);
     mocks.lookup.mockResolvedValue(indexedToken);
     mocks.readAlchemy.mockResolvedValue(legacyModel);
     mocks.readLegacy.mockResolvedValue(legacyModel);
@@ -239,6 +261,9 @@ describe("creator claim action identity activation", () => {
     mocks.readIdentity.mockResolvedValue({
       tokenAddress: token,
       hookAddress: hook,
+      launcherAddress: launcher,
+      launcherRuntimeCodeHash: deployment.launcherRuntimeCodeHash,
+      hookRuntimeCodeHash: deployment.feeHookRuntimeCodeHash,
       poolId,
       creatorAddress: creator,
       totalSwapFeeBps: 100,
@@ -303,6 +328,84 @@ describe("creator claim action identity activation", () => {
     });
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
     expect(mocks.readIdentity).toHaveBeenCalledTimes(1);
+  });
+
+  it("prepares a historical claim against the exact launcher and hook that created the pool", async () => {
+    mocks.getCreatorClaimOnchainDeployments.mockReturnValue([
+      historicalDeployment,
+      deployment,
+    ]);
+    mocks.readIdentity.mockResolvedValueOnce({
+      tokenAddress: token,
+      hookAddress: historicalHook,
+      launcherAddress: historicalLauncher,
+      launcherRuntimeCodeHash:
+        historicalDeployment.launcherRuntimeCodeHash,
+      hookRuntimeCodeHash: historicalDeployment.feeHookRuntimeCodeHash,
+      poolId,
+      creatorAddress: creator,
+      totalSwapFeeBps: 100,
+    });
+    const client = {
+      getBlockNumber: vi.fn().mockResolvedValue(120n),
+      getBlock: vi.fn().mockResolvedValue({ hash: blockHash }),
+      getCode: vi.fn(({ address }: { address: Address }) => {
+        if (address === historicalHook) return Promise.resolve(historicalHookCode);
+        if (address === historicalLauncher) {
+          return Promise.resolve(historicalLauncherCode);
+        }
+        throw new Error(`Unexpected runtime address ${address}`);
+      }),
+      readContract: vi.fn(
+        ({ address, functionName }: { address: Address; functionName: string }) => {
+          if (address !== historicalHook) {
+            throw new Error(`Unexpected claim hook ${address}`);
+          }
+          if (functionName === "poolFeeConfig") {
+            return Promise.resolve([
+              creator,
+              historicalLauncher,
+              100,
+              true,
+              10n ** 16n,
+            ]);
+          }
+          if (functionName === "feeDisclosure") {
+            return Promise.resolve([100, 100, 90, 10, 0, 0]);
+          }
+          throw new Error(`Unexpected function ${functionName}`);
+        },
+      ),
+      call: vi.fn(({ to }: { to: Address }) => {
+        if (to !== historicalHook) throw new Error(`Unexpected target ${to}`);
+        return Promise.resolve({ data: "0x" });
+      }),
+      estimateGas: vi.fn().mockResolvedValue(100_000n),
+      getGasPrice: vi.fn().mockResolvedValue(2_000_000_000n),
+      getBalance: vi.fn().mockResolvedValue(10n ** 18n),
+    };
+    mocks.createPublicClient.mockReturnValue(client);
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      status: "ready",
+      claim: {
+        tokenAddress: token,
+        hookAddress: historicalHook,
+        poolId,
+      },
+      transaction: {
+        to: historicalHook,
+        value: "0",
+      },
+    });
+    expect(mocks.readIdentity).toHaveBeenCalledWith(expect.objectContaining({
+      releases: [historicalDeployment, deployment],
+      poolId,
+    }));
   });
 
   it("does not expose a private RPC identity-read failure", async () => {

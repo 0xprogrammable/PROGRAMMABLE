@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 import {
+  getCreatorClaimOnchainDeployments,
   getOnchainDeployment,
   getOperationalOnchainDeployment,
   getPublicOnchainDeployment,
@@ -67,6 +68,26 @@ describe("onchain deployment manifest boundary", () => {
       launcher: "0xD240D06f8586eB799f20056054e5b527405E6bAd",
       feeHook: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
     });
+  });
+
+  it("binds creator claims to the manifest-verified historical and current releases", () => {
+    stubWebsiteRpcBindings();
+    const current = getWebsiteReadOnchainDeployment("production");
+    if (current.status !== "ready") throw new Error("production is not ready");
+
+    expect(getCreatorClaimOnchainDeployments(current)).toEqual([
+      expect.objectContaining({
+        releaseVersion: "classic-v1",
+        launcher: "0x51d702731db281EE223904A4663E05BfCA26C775",
+        feeHook: "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+        launcherRuntimeCodeHash:
+          "0xa459ee6574d8bbd40ddcf9737dc5d1063adb3abbc11d9f367350c7f2a3cf738b",
+        feeHookRuntimeCodeHash:
+          "0x60fd96af952730792036d43d806046675817a5a2de609d87c06203a8d6037650",
+        deploymentBlock: 25_622_048n,
+      }),
+      current,
+    ]);
   });
 
   it("requires dual-RPC configuration for production operations", () => {
