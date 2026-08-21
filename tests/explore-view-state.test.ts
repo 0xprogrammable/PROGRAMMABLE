@@ -881,6 +881,9 @@ describe("Explore refresh state", () => {
           evidence: {
             ...catalogBoundary.evidence,
             progressBlock: asOfBlock,
+            commitment: page === 1
+              ? catalogBoundary.evidence.commitment
+              : `sha256:${"ef".repeat(32)}`,
           },
         },
       }), { status: 200 });
