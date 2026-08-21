@@ -62,4 +62,3 @@
 - [ ] Inspect the token route's initial network graph and confirm no Tiptap/editor chunk is requested.
 - [ ] Verify desktop/mobile chart and trade interactions still load correctly and no new console error or horizontal overflow appears.
 - [ ] Record measured evidence beside the creator-article verification; do not deploy without separate publication authority.
-

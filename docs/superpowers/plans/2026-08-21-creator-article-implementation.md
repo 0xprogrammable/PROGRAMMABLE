@@ -242,4 +242,3 @@ POST /api/profile/projects/:address/article/media  multipart file=<image>
 - [ ] Capture desktop and mobile screenshots; check clipboard image paste, upload state, image sizing, formatting, link normalization, save conflict, keyboard/focus, console, network failures, and horizontal overflow.
 - [ ] Perform one focused correction pass and rerun only the affected tests plus typecheck/build if bytes changed.
 - [ ] Record final commit/tree and exact local evidence. Stop before push/deploy/public seed write unless separately authorized.
-

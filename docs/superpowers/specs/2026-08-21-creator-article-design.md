@@ -1,6 +1,6 @@
 # Creator Article Design
 
-Date: 2026-08-21  
+Date: 2026-08-21
 Status: Owner-approved design; implementation in progress
 
 ## Product decision
