@@ -61,6 +61,22 @@ paths = ['''components/docs-public-policy\.ts''']
 regexes = ['''(?i)V4_TOKEN_ADDRESS\s*=\s*"0x7987f03462200b3d8a072e02c89a8a41dcb124ee"''']
 
 [[allowlists]]
+description = "Creator articles pin the official public V4 token address"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''config/creator-article-programmable-example\.v1\.json''',
+  '''lib/creator-article/media\.ts''',
+  '''lib/creator-article/programmable-example-v1\.ts''',
+  '''lib/server/creator-article/authority\.server\.ts''',
+  '''tests/creator-article-contract\.test\.ts''',
+  '''tests/creator-article-editor\.test\.ts''',
+  '''tests/creator-article-renderer\.test\.ts''',
+  '''tests/creator-article-storage\.test\.ts''',
+]
+regexes = ['''(?i)0x7987f03462200b3d8a072e02c89a8a41dcb124ee''']
+
+[[allowlists]]
 description = "Live market golden sample pins the public Programmable token address"
 condition = "AND"
 regexTarget = "match"
