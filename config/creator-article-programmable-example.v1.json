@@ -2,10 +2,10 @@
   "schemaVersion": "programmable.creator-article-draft.v1",
   "chainId": 1,
   "tokenAddress": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
-  "title": "Programmable: tokens with something to do",
+  "title": "Shape what assets can do",
   "bannerImage": {
     "url": "https://programmable.market/brand/programmable-final-x-banner-1500x500.png",
-    "alt": "Programmable floral landscape",
+    "alt": "Programmable floral night garden",
     "caption": null,
     "width": 1500,
     "height": 500,
@@ -19,87 +19,121 @@
         "content": [
           {
             "type": "text",
-            "text": "Programmable is a launchpad for tokens with onchain behavior. Creators choose a launch model, publish a verified identity, and meet the market on the same page."
+            "text": "Website",
+            "marks": [{ "type": "link", "attrs": { "href": "https://programmable.market/" } }]
+          },
+          { "type": "text", "text": "   " },
+          {
+            "type": "text",
+            "text": "Docs",
+            "marks": [{ "type": "link", "attrs": { "href": "https://programmable.market/docs" } }]
+          },
+          { "type": "text", "text": "   " },
+          {
+            "type": "text",
+            "text": "X",
+            "marks": [{ "type": "link", "attrs": { "href": "https://x.com/0xProgrammable" } }]
+          },
+          { "type": "text", "text": "   " },
+          {
+            "type": "text",
+            "text": "GitHub",
+            "marks": [{ "type": "link", "attrs": { "href": "https://github.com/0xprogrammable" } }]
+          },
+          { "type": "text", "text": "   " },
+          {
+            "type": "text",
+            "text": "Discord",
+            "marks": [{ "type": "link", "attrs": { "href": "https://discord.com/invite/programmable" } }]
+          },
+          { "type": "text", "text": "   " },
+          {
+            "type": "text",
+            "text": "Analytics",
+            "marks": [{ "type": "link", "attrs": { "href": "https://dune.com/0xprogrammable6098/programmable-analytics" } }]
           }
         ]
+      },
+      {
+        "type": "paragraph",
+        "content": [{
+          "type": "text",
+          "text": "Most tokens begin with a name, an image and a market. We think they can begin with an idea."
+        }]
+      },
+      {
+        "type": "paragraph",
+        "content": [{
+          "type": "text",
+          "text": "Programmable is a place to launch and discover assets built to do something. A creator can start with a straightforward token, or bring a product whose rules live in a Uniswap v4 Hook. Either way, the goal is the same: turn an idea into something people can understand, use and follow in public."
+        }]
       },
       {
         "type": "heading",
         "attrs": { "level": 2 },
-        "content": [{ "type": "text", "text": "Launch, discover, trade" }]
+        "content": [{ "type": "text", "text": "A launch should feel simple" }]
       },
       {
         "type": "paragraph",
-        "content": [
-          {
-            "type": "text",
-            "text": "Each public coin page keeps verified launch identity, market context, and trading in one place. The launch record stays separate from the story a creator publishes below it."
-          }
-        ]
-      },
-      {
-        "type": "articleImage",
-        "attrs": {
-          "url": "https://programmable.market/brand/programmable-adaptive-model-post-v1-2000x1000.png",
-          "alt": "Programmable launch model artwork",
-          "caption": "A Programmable launch starts with a model and a verified creator.",
-          "width": 2000,
-          "height": 1000,
-          "size": "wide"
-        }
+        "content": [{
+          "type": "text",
+          "text": "Creating a token should not feel like assembling infrastructure. On Programmable, the important choices sit in one flow. You shape the launch, review what your wallet will sign and arrive at a page that is ready to share. The contract address stays visible, the market sits beside the story and the project has one clear home from day one."
+        }]
       },
       {
         "type": "heading",
         "attrs": { "level": 2 },
-        "content": [{ "type": "text", "text": "Built for creators" }]
+        "content": [{ "type": "text", "text": "More than a token page" }]
       },
       {
         "type": "paragraph",
-        "content": [
-          {
-            "type": "text",
-            "text": "This project story is controlled by the verified launch wallet. It can evolve as the project grows without changing the token contract, original metadata, or canonical social links."
-          }
-        ]
+        "content": [{
+          "type": "text",
+          "text": "Markets move quickly, but projects grow slowly. A token is permanent; its story is not. Creators can return to their page to explain what they are building, add images, publish changes and point people toward the places where the community lives. The token itself does not change. The context around it can become richer as the work moves forward."
+        }]
       },
       {
-        "type": "bulletList",
-        "content": [
-          {
-            "type": "listItem",
-            "content": [{
-              "type": "paragraph",
-              "content": [{ "type": "text", "text": "Launch on Ethereum with a verified public identity." }]
-            }]
-          },
-          {
-            "type": "listItem",
-            "content": [{
-              "type": "paragraph",
-              "content": [{ "type": "text", "text": "Follow the market and trade from the coin page." }]
-            }]
-          },
-          {
-            "type": "listItem",
-            "content": [{
-              "type": "paragraph",
-              "content": [{ "type": "text", "text": "Review creator rewards from the connected profile." }]
-            }]
-          }
-        ]
+        "type": "heading",
+        "attrs": { "level": 2 },
+        "content": [{ "type": "text", "text": "Hooks make room for ideas" }]
       },
       {
         "type": "paragraph",
-        "content": [
-          {
-            "type": "text",
-            "text": "programmable.market",
-            "marks": [{
-              "type": "link",
-              "attrs": { "href": "https://programmable.market/" }
-            }]
-          }
-        ]
+        "content": [{
+          "type": "text",
+          "text": "A Hook is a smart contract attached to a Uniswap v4 pool. In plain language, it gives the market rules: when a fee changes, when a reward is earned, or what may happen around a trade. Programmable exists to make those possibilities easier to explore and, over time, easier to create without asking every creator to become a Solidity engineer."
+        }]
+      },
+      {
+        "type": "heading",
+        "attrs": { "level": 2 },
+        "content": [{ "type": "text", "text": "Built in public" }]
+      },
+      {
+        "type": "paragraph",
+        "content": [{
+          "type": "text",
+          "text": "Anyone should be able to see what they are looking at. Programmable publishes supported launches only after their token, pool and creator record can be tied together. Custom products follow a separate review before they appear. Price and chart services can come and go; the identity of a real launch should not disappear with them."
+        }]
+      },
+      {
+        "type": "heading",
+        "attrs": { "level": 2 },
+        "content": [{ "type": "text", "text": "A place creators can return to" }]
+      },
+      {
+        "type": "paragraph",
+        "content": [{
+          "type": "text",
+          "text": "Launching is the beginning. From the same profile, creators can update their project story and see the rewards their work has earned. Visitors can explore the market, read the context and decide for themselves what they want to do next."
+        }]
+      },
+      {
+        "type": "paragraph",
+        "content": [{
+          "type": "text",
+          "text": "That is the whole idea behind Programmable: make the first step understandable, keep the important facts visible and leave more room for people to decide what an asset can become."
+        }]
       }
     ]
   }

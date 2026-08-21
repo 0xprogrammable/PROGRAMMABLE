@@ -28,6 +28,8 @@ import {
 } from "@/components/token-price-chart";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import { CreatorArticle } from "@/components/creator-article";
+import { CreatorArticleEditAction } from
+  "@/components/creator-article-edit-action";
 import {
   getExplorePreviewCreatorArticle,
   getExplorePreviewCustomProject,
@@ -65,6 +67,8 @@ import {
   parseCreatorArticleV1,
   type CreatorArticleV1,
 } from "@/lib/creator-article/contract-v1";
+import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
+  "@/lib/creator-article/programmable-example-v1";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import styles from "./token-experience.module.css";
 
@@ -1346,6 +1350,8 @@ function TokenDetailContent({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
+  const [publishedCreatorArticle, setPublishedCreatorArticle] =
+    useState<CreatorArticleV1 | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
   });
@@ -1370,6 +1376,45 @@ function TokenDetailContent({
   const classicSwapFeeBps = typeof defaultSwapFeeBps === "number"
     ? defaultSwapFeeBps
     : null;
+  const visibleCreatorArticle = publishedCreatorArticle
+      && (!creatorArticle || publishedCreatorArticle.revision >= creatorArticle.revision)
+    ? publishedCreatorArticle
+    : creatorArticle;
+  const creatorProject = useMemo(() => {
+    if (
+      preview
+      || chainId !== 1
+      || !token.creatorAddress
+      || !isAddress(token.creatorAddress)
+    ) return null;
+    return Object.freeze({
+      chainId: 1 as const,
+      tokenAddress: getAddress(token.tokenAddress),
+      name: token.name,
+      symbol: token.symbol || null,
+      imageUrl: token.imageUrl?.trim() || null,
+      source: token.tokenAddress.toLowerCase()
+          === PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()
+        ? "official-main-token" as const
+        : "envio-classic-v3" as const,
+      article: visibleCreatorArticle
+        ? Object.freeze({
+            revision: visibleCreatorArticle.revision,
+            title: visibleCreatorArticle.title,
+            updatedAt: visibleCreatorArticle.updatedAt,
+          })
+        : null,
+    });
+  }, [
+    chainId,
+    preview,
+    token.creatorAddress,
+    token.imageUrl,
+    token.name,
+    token.symbol,
+    token.tokenAddress,
+    visibleCreatorArticle,
+  ]);
 
   useEffect(
     () => () => {
@@ -1858,7 +1903,16 @@ function TokenDetailContent({
         ) : null}
 
       </div>
-      <CreatorArticle article={creatorArticle} />
+      <CreatorArticle
+        article={visibleCreatorArticle}
+        editAction={creatorProject && token.creatorAddress ? (
+          <CreatorArticleEditAction
+            project={creatorProject}
+            creatorAddress={getAddress(token.creatorAddress)}
+            onPublished={setPublishedCreatorArticle}
+          />
+        ) : null}
+      />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
           <p className="toast" role="alert">
@@ -1943,12 +1997,42 @@ function CustomProjectDetailContent({
   } = useWallet();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
+  const [publishedCreatorArticle, setPublishedCreatorArticle] =
+    useState<CreatorArticleV1 | null>(null);
   const copyResetTimer = useRef<number | null>(null);
   const imageUrl = project.imageUrl?.trim()
     || getFallbackTokenImage(project.tokenAddress ?? project.customProjectId);
   const imageSource = getTokenCardImageSource(imageUrl);
   const authorities = project.postLaunchAuthorityInventory.postLaunchAuthorities;
   const metrics = customMarketMetrics(project);
+  const visibleCreatorArticle = publishedCreatorArticle
+      && (!creatorArticle || publishedCreatorArticle.revision >= creatorArticle.revision)
+    ? publishedCreatorArticle
+    : creatorArticle;
+  const creatorProject = useMemo(() => {
+    if (
+      chainId !== 1
+      || !project.tokenAddress
+      || project.chainId !== "1"
+      || project.launchingWallet.namespace !== "eip155:1"
+      || !isAddress(project.launchingWallet.value)
+    ) return null;
+    return Object.freeze({
+      chainId: 1 as const,
+      tokenAddress: getAddress(project.tokenAddress),
+      name: project.name,
+      symbol: project.symbol?.trim() || null,
+      imageUrl: project.imageUrl?.trim() || null,
+      source: "registry.custom-launched" as const,
+      article: visibleCreatorArticle
+        ? Object.freeze({
+            revision: visibleCreatorArticle.revision,
+            title: visibleCreatorArticle.title,
+            updatedAt: visibleCreatorArticle.updatedAt,
+          })
+        : null,
+    });
+  }, [chainId, project, visibleCreatorArticle]);
 
   useEffect(() => () => {
     if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
@@ -2156,7 +2240,16 @@ function CustomProjectDetailContent({
           </p>
         </section>
       </div>
-      <CreatorArticle article={creatorArticle} />
+      <CreatorArticle
+        article={visibleCreatorArticle}
+        editAction={creatorProject && isAddress(project.launchingWallet.value) ? (
+          <CreatorArticleEditAction
+            project={creatorProject}
+            creatorAddress={getAddress(project.launchingWallet.value)}
+            onPublished={setPublishedCreatorArticle}
+          />
+        ) : null}
+      />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
           <p className="toast" role="alert">{copyError}</p>

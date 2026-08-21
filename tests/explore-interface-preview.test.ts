@@ -13,7 +13,7 @@ describe("Explore interface preview", () => {
     const article = getExplorePreviewCreatorArticle(
       "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
     );
-    expect(article?.title).toBe("Programmable: tokens with something to do");
+    expect(article?.title).toBe("Shape what assets can do");
     expect(getExplorePreviewCreatorArticle(EXPLORE_PREVIEW_TOKENS[0]!.tokenAddress))
       .toBeNull();
   });

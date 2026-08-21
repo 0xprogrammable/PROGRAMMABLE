@@ -8,11 +8,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAddress, isAddress } from "viem";
 
+import {
+  acquireCreatorArticleAuthHeadersV1,
+  loadCreatorArticleEditorV1,
+  type CreatorArticleEditorStateV1 as EditorState,
+  type CreatorProjectSummaryV1,
+} from "@/components/creator-article-editor-loader";
 import { useWallet } from "@/components/wallet-provider";
-import { parseCreatorArticleV1, type CreatorArticleV1 } from
-  "@/lib/creator-article/contract-v1";
 
 import styles from "./profile-projects.module.css";
+
+export {
+  acquireCreatorArticleAuthHeadersV1,
+  loadCreatorArticleEditorV1,
+} from "@/components/creator-article-editor-loader";
+export type { CreatorProjectSummaryV1 } from
+  "@/components/creator-article-editor-loader";
 
 const loadCreatorArticleEditorModule = () =>
   import("@/components/creator-article-editor");
@@ -26,32 +37,11 @@ const CreatorArticleEditor = dynamic(
 
 export const creatorProjectPageSize = 5;
 
-export type CreatorProjectSummaryV1 = Readonly<{
-  chainId: 1;
-  tokenAddress: `0x${string}`;
-  name: string;
-  symbol: string | null;
-  imageUrl: string | null;
-  source: "envio-classic-v3" | "registry.custom-launched" | "official-main-token";
-  article: Readonly<{ revision: number; title: string; updatedAt: string }> | null;
-}>;
-
 export type CreatorProjectMarketCapV1 = Readonly<{
   tokenAddress: `0x${string}`;
   usdWad: string | null;
   ethWei: string | null;
   label: string | null;
-}>;
-
-type EditorState = Readonly<{
-  project: CreatorProjectSummaryV1;
-  article: CreatorArticleV1 | null;
-  etag: string | null;
-}>;
-
-type AuthHeaders = Readonly<{
-  Authorization: string;
-  "X-Privy-Identity-Token"?: string;
 }>;
 
 export function ProfileProjects({ marketCaps = [] }: Readonly<{
@@ -421,48 +411,6 @@ export function paginateCreatorProjectsV1(
     currentPage,
     totalPages,
     items: Object.freeze(ordered.slice(offset, offset + creatorProjectPageSize)),
-  });
-}
-
-export async function acquireCreatorArticleAuthHeadersV1(input: Readonly<{
-  getAccessToken: () => Promise<string | null>;
-  getIdentityToken: () => Promise<string | null>;
-}>): Promise<AuthHeaders> {
-  // Privy refreshes the user and identity token through `/users/me`. Read the
-  // access token only after that refresh so both headers describe one current
-  // session rather than racing the refresh.
-  const identityToken = await input.getIdentityToken();
-  const accessToken = await input.getAccessToken();
-  if (!accessToken) {
-    throw new Error("Reconnect your wallet and try again");
-  }
-  return Object.freeze({
-    Authorization: `Bearer ${accessToken}`,
-    ...(identityToken
-      ? { "X-Privy-Identity-Token": identityToken }
-      : {}),
-  });
-}
-
-export async function loadCreatorArticleEditorV1(
-  project: CreatorProjectSummaryV1,
-  getAuthHeaders: () => Promise<AuthHeaders>,
-  request: typeof fetch = fetch,
-): Promise<EditorState> {
-  const response = await request(
-    `/api/profile/projects/${project.tokenAddress}/article`,
-    { headers: { Accept: "application/json", ...(await getAuthHeaders()) } },
-  );
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(readError(body));
-  const record = isRecord(body) ? body : null;
-  const article = record?.article === null
-    ? null
-    : parseCreatorArticleV1(record?.article);
-  return Object.freeze({
-    project,
-    article,
-    etag: response.headers.get("etag"),
   });
 }
 
