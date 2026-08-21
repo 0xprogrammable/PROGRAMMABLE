@@ -19,11 +19,11 @@ function draft() {
     tokenAddress: TOKEN.toLowerCase(),
     title: "Programmable, by its creators",
     bannerImage: {
-      url: "https://example.com/banner.webp",
+      url: "https://programmable.market/brand/programmable-final-x-banner-1500x500.png",
       alt: "Programmable floral landscape",
       caption: null,
-      width: 3000,
-      height: 1000,
+      width: 1500,
+      height: 500,
       size: "wide",
     },
     document: {
@@ -58,7 +58,7 @@ function draft() {
         {
           type: "articleImage",
           attrs: {
-            url: "https://example.com/article.webp",
+            url: "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/creator-article-media/v1/eip155-1/0x7987f03462200b3d8a072e02c89a8a41dcb124ee/550e8400-e29b-41d4-a716-446655440000.inline.1800x1200.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
             alt: "Programmable launch interface",
             caption: "A launch surface",
             width: 1800,
@@ -126,6 +126,37 @@ describe("creator article v1 contract", () => {
     expect(() => parseCreatorArticleDraftV1(value)).toThrow(/duplicated/u);
   });
 
+  it.each([
+    ["an external image host", "https://tracker.example/article.webp", 1800, 1200],
+    [
+      "another token's media",
+      "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/creator-article-media/v1/eip155-1/0x1111111111111111111111111111111111111111/550e8400-e29b-41d4-a716-446655440000.inline.1800x1200.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
+      1800,
+      1200,
+    ],
+    [
+      "a banner receipt used inline",
+      "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/creator-article-media/v1/eip155-1/0x7987f03462200b3d8a072e02c89a8a41dcb124ee/550e8400-e29b-41d4-a716-446655440000.banner.1800x600.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
+      1800,
+      600,
+    ],
+    [
+      "dimensions that differ from the verified media path",
+      "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/creator-article-media/v1/eip155-1/0x7987f03462200b3d8a072e02c89a8a41dcb124ee/550e8400-e29b-41d4-a716-446655440000.inline.1800x1200.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
+      1200,
+      800,
+    ],
+  ])("rejects %s", (_label, url, width, height) => {
+    const value = draft();
+    const image = value.document.content[3] as {
+      attrs: { url: string; width: number; height: number };
+    };
+    image.attrs.url = url;
+    image.attrs.width = width;
+    image.attrs.height = height;
+    expect(() => parseCreatorArticleDraftV1(value)).toThrow(/image/u);
+  });
+
   it("validates published revision and timestamps", () => {
     const value = {
       ...draft(),
@@ -145,5 +176,16 @@ describe("creator article v1 contract", () => {
     expect(isAllowedArticleHrefV1("https://programmable.market")).toBe(true);
     expect(isAllowedArticleHrefV1("http://programmable.market")).toBe(false);
     expect(isAllowedArticleHrefV1("javascript:alert(1)")).toBe(false);
+  });
+
+  it("preserves a non-empty whitespace text node emitted after an autolink", () => {
+    const value = draft();
+    const paragraph = value.document.content[0] as {
+      content: unknown[];
+    };
+    paragraph.content.push({ type: "text", text: " " });
+    const parsed = parseCreatorArticleDraftV1(value);
+    expect((parsed.document.content[0] as { content?: readonly unknown[] }).content)
+      .toHaveLength(2);
   });
 });

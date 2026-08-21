@@ -33,12 +33,18 @@ type EditorState = Readonly<{
   etag: string | null;
 }>;
 
+type AuthHeaders = Readonly<{
+  Authorization: string;
+  "X-Privy-Identity-Token": string;
+}>;
+
 export function ProfileProjects() {
   const { wallet, getAccessToken, getIdentityToken } = useWallet();
   const [projects, setProjects] = useState<readonly CreatorProjectSummaryV1[]>([]);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [projectError, setProjectError] = useState("");
 
   const getAuthHeaders = useCallback(async () => {
     const [accessToken, identityToken] = await Promise.all([
@@ -82,18 +88,13 @@ export function ProfileProjects() {
 
   async function openEditor(project: CreatorProjectSummaryV1) {
     setOpening(project.tokenAddress);
+    setProjectError("");
     try {
-      const response = await fetch(
-        `/api/profile/projects/${project.tokenAddress}/article`,
-        { headers: { Accept: "application/json", ...(await getAuthHeaders()) } },
-      );
-      const body: unknown = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readError(body));
-      const record = isRecord(body) ? body : null;
-      const article = record?.article === null
-        ? null
-        : parseCreatorArticleV1(record?.article);
-      setEditor({ project, article, etag: response.headers.get("etag") });
+      setEditor(await loadCreatorArticleEditorV1(project, getAuthHeaders));
+    } catch (error) {
+      setProjectError(error instanceof Error
+        ? error.message
+        : "Creator article unavailable");
     } finally {
       setOpening(null);
     }
@@ -111,6 +112,8 @@ export function ProfileProjects() {
           Refresh
         </button>
       </header>
+
+      {projectError ? <p className={styles.error} role="alert">{projectError}</p> : null}
 
       {phase === "loading" && projects.length === 0 ? (
         <p className={styles.loading} role="status">Loading your verified launches…</p>
@@ -135,7 +138,7 @@ export function ProfileProjects() {
               <div className={styles.actions}>
                 <button
                   type="button"
-                  disabled={opening === project.tokenAddress}
+                  disabled={opening !== null}
                   onClick={() => void openEditor(project)}
                 >
                   {opening === project.tokenAddress
@@ -173,6 +176,28 @@ export function ProfileProjects() {
       ) : null}
     </section>
   );
+}
+
+export async function loadCreatorArticleEditorV1(
+  project: CreatorProjectSummaryV1,
+  getAuthHeaders: () => Promise<AuthHeaders>,
+  request: typeof fetch = fetch,
+): Promise<EditorState> {
+  const response = await request(
+    `/api/profile/projects/${project.tokenAddress}/article`,
+    { headers: { Accept: "application/json", ...(await getAuthHeaders()) } },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(readError(body));
+  const record = isRecord(body) ? body : null;
+  const article = record?.article === null
+    ? null
+    : parseCreatorArticleV1(record?.article);
+  return Object.freeze({
+    project,
+    article,
+    etag: response.headers.get("etag"),
+  });
 }
 
 function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
@@ -214,8 +239,8 @@ function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
 }
 
 function readError(value: unknown) {
-  return isRecord(value) && typeof value.code === "string"
-    ? value.code
+  return isRecord(value) && typeof value.code === "string" && value.code
+    ? `${value.code[0]?.toUpperCase() ?? ""}${value.code.slice(1).replaceAll("_", " ")}`
     : "Project request failed";
 }
 

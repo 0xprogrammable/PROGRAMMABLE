@@ -17,6 +17,7 @@ import {
   verifyAndTransformCreatorArticleImageV1,
   type CreatorArticleMediaKindV1,
 } from "./image.server";
+import { creatorArticleMediaPathnameV1 } from "../../creator-article/media";
 import {
   createPrivyWalletPrincipalAuthenticatorV1,
   WalletPrincipalAuthenticationErrorV1,
@@ -76,7 +77,14 @@ export function createCreatorArticleMediaUploadHandlerV1(input: Readonly<{
       } catch {
         return errorResponse(400, "invalid_image");
       }
-      const pathname = `creator-article-media/v1/eip155-1/${authority.tokenAddress.toLowerCase()}/${randomUUID()}.webp`;
+      const pathname = creatorArticleMediaPathnameV1({
+        tokenAddress: authority.tokenAddress,
+        mediaId: randomUUID(),
+        kind: verified.kind,
+        width: verified.width,
+        height: verified.height,
+        contentSha256: verified.contentSha256,
+      });
       const blob = await input.media.put(pathname, verified.bytes);
       if (
         blob.pathname !== pathname

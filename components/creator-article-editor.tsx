@@ -33,8 +33,10 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { CreatorArticle } from "@/components/creator-article";
 import type { CreatorProjectSummaryV1 } from "@/components/profile-projects";
@@ -73,6 +75,11 @@ type UploadedMedia = Readonly<{
   width: number;
   height: number;
   kind: "banner" | "inline";
+}>;
+
+type EditorNotice = Readonly<{
+  tone: "error" | "success" | "warning" | "info";
+  text: string;
 }>;
 
 const ArticleImageNode = Node.create({
@@ -176,6 +183,9 @@ export default function CreatorArticleEditor({
   onPublished,
 }: ArticleEditorProps) {
   const editorRef = useRef<Editor | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const requestCloseRef = useRef<() => void>(() => undefined);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(initialArticle?.title ?? "");
@@ -188,9 +198,23 @@ export default function CreatorArticleEditor({
   const [etag, setEtag] = useState(initialEtag);
   const [linkValue, setLinkValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<EditorNotice | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [discardArmed, setDiscardArmed] = useState(false);
+  const portalTarget = useSyncExternalStore<HTMLElement | null>(
+    subscribeToDocumentBody,
+    getClientDocumentBody,
+    getServerDocumentBody,
+  );
+  const publishedFingerprintRef = useRef(creatorArticleEditorFingerprintV1({
+    title: initialArticle?.title ?? "",
+    bannerImage: initialArticle?.bannerImage ?? null,
+    document: initialArticle
+      ? JSON.parse(JSON.stringify(initialArticle.document)) as JSONContent
+      : emptyDocument(),
+  }));
 
   const uploadMedia = useCallback(async (
     file: File,
@@ -223,7 +247,8 @@ export default function CreatorArticleEditor({
   const uploadInlineImages = useCallback(async (files: readonly File[]) => {
     const activeEditor = editorRef.current;
     if (!activeEditor || files.length === 0) return;
-    setMessage("");
+    setNotice(null);
+    setDiscardArmed(false);
     for (const file of files) {
       const uploadId = crypto.randomUUID();
       activeEditor.chain().focus().insertContent({
@@ -251,7 +276,10 @@ export default function CreatorArticleEditor({
         });
       } catch (error) {
         updateImageNode(activeEditor, uploadId, { status: "error" });
-        setMessage(error instanceof Error ? error.message : "Image upload failed");
+        setNotice({
+          tone: "error",
+          text: error instanceof Error ? error.message : "Image upload failed",
+        });
       } finally {
         setUploadingCount((current) => Math.max(0, current - 1));
       }
@@ -305,7 +333,8 @@ export default function CreatorArticleEditor({
     },
     onUpdate: ({ editor: activeEditor }) => {
       setDocument(activeEditor.getJSON());
-      setMessage("");
+      setNotice(null);
+      setDiscardArmed(false);
     },
   });
   useEffect(() => {
@@ -314,6 +343,77 @@ export default function CreatorArticleEditor({
       if (editorRef.current === editor) editorRef.current = null;
     };
   }, [editor]);
+
+  const requestClose = useCallback(() => {
+    const fingerprint = creatorArticleEditorFingerprintV1({
+      title,
+      bannerImage,
+      document: editorRef.current?.getJSON() ?? document,
+    });
+    if (fingerprint === publishedFingerprintRef.current) {
+      onClose();
+      return;
+    }
+    setDiscardArmed(true);
+    setNotice({
+      tone: "warning",
+      text: "Discard your unpublished changes?",
+    });
+  }, [bannerImage, document, onClose, title]);
+  useEffect(() => {
+    requestCloseRef.current = requestClose;
+  }, [requestClose]);
+
+  useEffect(() => {
+    if (portalTarget === null) return;
+    const previouslyFocused = window.document.activeElement instanceof HTMLElement
+      ? window.document.activeElement
+      : null;
+    const previousOverflow = window.document.body.style.overflow;
+    window.document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const inertedElements: HTMLElement[] = [];
+    let activeLayer = dialogRef.current?.parentElement;
+    while (activeLayer?.parentElement && activeLayer !== window.document.body) {
+      for (const sibling of activeLayer.parentElement.children) {
+        if (sibling !== activeLayer && sibling instanceof HTMLElement && !sibling.inert) {
+          sibling.inert = true;
+          inertedElements.push(sibling);
+        }
+      }
+      activeLayer = activeLayer.parentElement;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hidden && element.getClientRects().length > 0);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && window.document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && window.document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.document.body.style.overflow = previousOverflow;
+      for (const element of inertedElements) element.inert = false;
+      window.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus({ preventScroll: true });
+    };
+  }, [portalTarget]);
 
   const preview = useMemo(() => {
     try {
@@ -335,8 +435,10 @@ export default function CreatorArticleEditor({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    setUploadingBanner(true);
     setUploadingCount((current) => current + 1);
-    setMessage("");
+    setNotice({ tone: "info", text: "Uploading cover image…" });
+    setDiscardArmed(false);
     try {
       const media = await uploadMedia(file, "banner");
       setBannerImage({
@@ -348,15 +450,20 @@ export default function CreatorArticleEditor({
         size: "wide",
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Banner upload failed");
+      setNotice({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Banner upload failed",
+      });
     } finally {
+      setUploadingBanner(false);
       setUploadingCount((current) => Math.max(0, current - 1));
     }
   }
 
   async function publish() {
     setSaving(true);
-    setMessage("");
+    setNotice(null);
+    setDiscardArmed(false);
     try {
       const draft = createDraft(project, title, bannerImage, editor?.getJSON() ?? document);
       const response = await fetch(
@@ -382,10 +489,18 @@ export default function CreatorArticleEditor({
       const nextEtag = response.headers.get("etag");
       if (!nextEtag) throw new Error("The published revision could not be verified");
       setEtag(nextEtag);
-      setMessage("Published");
+      publishedFingerprintRef.current = creatorArticleEditorFingerprintV1({
+        title,
+        bannerImage,
+        document: editor?.getJSON() ?? document,
+      });
+      setNotice({ tone: "success", text: "Published" });
       onPublished(article);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Article could not be published");
+      setNotice({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Article could not be published",
+      });
     } finally {
       setSaving(false);
     }
@@ -401,21 +516,51 @@ export default function CreatorArticleEditor({
       const href = normalizeHttpsLinkV1(linkValue);
       editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
       setLinkValue("");
-      setMessage("");
+      setNotice(null);
     } catch {
-      setMessage("Use a complete HTTPS link");
+      setNotice({ tone: "error", text: "Use a complete HTTPS link" });
     }
   }
 
-  return (
-    <div className={styles.backdrop} role="presentation">
-      <section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="article-editor-title">
+  function togglePreview() {
+    if (showPreview) {
+      setShowPreview(false);
+      return;
+    }
+    if (!preview) {
+      setNotice({
+        tone: "error",
+        text: "Add a title and article content before previewing.",
+      });
+      return;
+    }
+    setNotice(null);
+    setShowPreview(true);
+  }
+
+  if (portalTarget === null) return null;
+  return createPortal((
+    <div
+      className={styles.backdrop}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
+    >
+      <section
+        ref={dialogRef}
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="article-editor-title"
+        aria-describedby={notice ? "article-editor-notice" : undefined}
+      >
         <header className={styles.dialogHeader}>
           <div>
             <p>{project.symbol ? `$${project.symbol}` : "Verified project"}</p>
             <h2 id="article-editor-title">{initialArticle ? "Edit article" : "Create article"}</h2>
           </div>
-          <button type="button" aria-label="Close article editor" onClick={onClose}><X aria-hidden="true" /></button>
+          <button ref={closeButtonRef} type="button" aria-label="Close article editor" onClick={requestClose}><X aria-hidden="true" /></button>
         </header>
 
         <div className={styles.editorLayout}>
@@ -425,8 +570,12 @@ export default function CreatorArticleEditor({
               <input
                 value={title}
                 maxLength={120}
-                placeholder="Tell people what this project is about"
-                onChange={(event) => { setTitle(event.target.value); setMessage(""); }}
+                placeholder="Tell your project story"
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  setNotice(null);
+                  setDiscardArmed(false);
+                }}
               />
             </label>
 
@@ -439,8 +588,8 @@ export default function CreatorArticleEditor({
                 </div>
               ) : null}
               <input ref={bannerInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp,image/avif" onChange={selectBanner} />
-              <button className={styles.coverButton} type="button" onClick={() => bannerInputRef.current?.click()}>
-                <ImagePlus aria-hidden="true" size={16} /> {bannerImage ? "Replace cover" : "Add cover"}
+              <button className={styles.coverButton} type="button" disabled={uploadingBanner} onClick={() => bannerInputRef.current?.click()}>
+                <ImagePlus aria-hidden="true" size={16} /> {uploadingBanner ? "Uploading cover…" : bannerImage ? "Replace cover" : "Add cover"}
               </button>
             </div>
 
@@ -481,18 +630,29 @@ export default function CreatorArticleEditor({
         </div>
 
         <footer className={styles.dialogFooter}>
-          <p role={message && message !== "Published" ? "alert" : "status"}>{message}</p>
-          <div>
-            <button type="button" onClick={() => setShowPreview((value) => !value)}>{showPreview ? "Hide preview" : "Preview"}</button>
-            <button type="button" onClick={onClose}>Discard</button>
-            <button className={styles.publish} type="button" disabled={saving || uploadingCount > 0 || !preview} onClick={() => void publish()}>
-              {saving ? "Publishing…" : uploadingCount > 0 ? "Uploading…" : "Publish article"}
-            </button>
-          </div>
+          <p
+            id="article-editor-notice"
+            data-tone={notice?.tone}
+            role={notice?.tone === "error" || notice?.tone === "warning" ? "alert" : "status"}
+          >{notice?.text ?? ""}</p>
+          {discardArmed ? (
+            <div>
+              <button type="button" onClick={() => { setDiscardArmed(false); setNotice(null); }}>Keep editing</button>
+              <button className={styles.danger} type="button" onClick={onClose}>Discard changes</button>
+            </div>
+          ) : (
+            <div>
+              <button type="button" onClick={togglePreview}>{showPreview ? "Hide preview" : "Preview"}</button>
+              <button type="button" onClick={requestClose}>Discard</button>
+              <button className={styles.publish} type="button" disabled={saving || uploadingCount > 0 || !preview} onClick={() => void publish()}>
+                {saving ? "Publishing…" : uploadingCount > 0 ? "Uploading…" : "Publish article"}
+              </button>
+            </div>
+          )}
         </footer>
       </section>
     </div>
-  );
+  ), portalTarget);
 }
 
 function ToolbarButton({ label, active = false, onClick }: Readonly<{
@@ -528,7 +688,7 @@ function createDraft(
     tokenAddress: project.tokenAddress,
     title,
     bannerImage,
-        document: cleanCreatorArticleEditorDocumentV1(document),
+    document: cleanCreatorArticleEditorDocumentV1(document),
   });
 }
 
@@ -549,19 +709,37 @@ export function cleanCreatorArticleEditorDocumentV1(value: JSONContent): unknown
     };
   }
   const result: Record<string, unknown> = { type: value.type };
-  if (value.text !== undefined) result.text = value.text;
   if (value.attrs !== undefined) {
     result.attrs = value.type === "heading" ? { level: value.attrs.level } : value.attrs;
   }
+  let normalizedMarks: unknown[] | undefined;
   if (value.marks !== undefined) {
-    result.marks = value.marks.map((mark) => mark.type === "link"
+    normalizedMarks = value.marks.map((mark) => mark.type === "link"
       ? { type: "link", attrs: { href: mark.attrs?.href } }
       : { type: mark.type });
+    result.marks = normalizedMarks;
+  }
+  if (value.text !== undefined) {
+    result.text = readableAutolinkTextV1(value.text, normalizedMarks);
   }
   if (value.content !== undefined) {
     result.content = value.content.map(cleanCreatorArticleEditorDocumentV1);
   }
   return result;
+}
+
+export function creatorArticleEditorFingerprintV1(value: unknown) {
+  if (!isRecord(value)
+    || typeof value.title !== "string"
+    || !("bannerImage" in value)
+    || !isRecord(value.document)) {
+    throw new TypeError("Creator article editor snapshot is invalid");
+  }
+  return JSON.stringify({
+    title: value.title,
+    bannerImage: value.bannerImage,
+    document: value.document,
+  });
 }
 
 function emptyDocument(): JSONContent {
@@ -604,6 +782,23 @@ function readableFileName(value: string) {
   return name || "Project image";
 }
 
+function readableAutolinkTextV1(value: string, marks: unknown[] | undefined) {
+  if (!isAllowedArticleHrefV1(value) || !marks) return value;
+  const link = marks.find((mark) => isRecord(mark)
+    && mark.type === "link"
+    && isRecord(mark.attrs)
+    && typeof mark.attrs.href === "string");
+  if (!isRecord(link) || !isRecord(link.attrs)
+    || typeof link.attrs.href !== "string") return value;
+  try {
+    return normalizeHttpsLinkV1(value) === normalizeHttpsLinkV1(link.attrs.href)
+      ? displayHttpsLinkV1(value)
+      : value;
+  } catch {
+    return value;
+  }
+}
+
 function readApiError(value: unknown) {
   return isRecord(value) && typeof value.code === "string"
     ? value.code.replaceAll("_", " ")
@@ -612,4 +807,16 @@ function readApiError(value: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function subscribeToDocumentBody() {
+  return () => undefined;
+}
+
+function getClientDocumentBody(): HTMLElement | null {
+  return window.document.body;
+}
+
+function getServerDocumentBody(): HTMLElement | null {
+  return null;
 }

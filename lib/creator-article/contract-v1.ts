@@ -1,6 +1,10 @@
 import { getAddress, isAddress } from "viem";
 
 import { normalizeHttpsLinkV1 } from "./link";
+import {
+  assertCreatorArticleMediaBindingV1,
+  type CreatorArticleMediaKindV1,
+} from "./media";
 
 export const CREATOR_ARTICLE_SCHEMA_V1 =
   "programmable.creator-article.v1" as const;
@@ -137,7 +141,11 @@ function parsePositiveInteger(value: unknown, label: string, maximum: number) {
   return Number(value);
 }
 
-function parseImage(value: unknown): CreatorArticleImageV1 {
+function parseImage(
+  value: unknown,
+  tokenAddress: `0x${string}`,
+  kind: CreatorArticleMediaKindV1,
+): CreatorArticleImageV1 {
   if (!isRecord(value)) throw new TypeError("Article image is invalid");
   exactKeys(value, ["url", "alt", "caption", "width", "height", "size"]);
   const size = value.size;
@@ -149,14 +157,18 @@ function parseImage(value: unknown): CreatorArticleImageV1 {
     : boundedString(value.caption, "Article image caption", 1_000, {
         allowEmpty: true,
       });
+  const url = normalizeHttpsLinkV1(boundedString(value.url, "Article image URL", 2_048));
+  const width = parsePositiveInteger(value.width, "Article image width", 6_000);
+  const height = parsePositiveInteger(value.height, "Article image height", 6_000);
+  assertCreatorArticleMediaBindingV1({ url, tokenAddress, kind, width, height });
   return Object.freeze({
-    url: normalizeHttpsLinkV1(boundedString(value.url, "Article image URL", 2_048)),
+    url,
     alt: boundedString(value.alt, "Article image alt text", 480, {
       singleLine: true,
     }).trim(),
     caption: caption?.trim() || null,
-    width: parsePositiveInteger(value.width, "Article image width", 6_000),
-    height: parsePositiveInteger(value.height, "Article image height", 6_000),
+    width,
+    height,
     size,
   });
 }
@@ -212,7 +224,8 @@ function parseInline(value: unknown, budget: ParseBudget): CreatorArticleInlineV
   }
   if (value.type !== "text") throw new TypeError("Article inline node is not supported");
   exactKeys(value, ["type", "text"], ["marks"]);
-  const text = boundedString(value.text, "Article text", 20_000, { allowEmpty: false });
+  const text = boundedString(value.text, "Article text", 20_000, { allowEmpty: true });
+  if (text.length === 0) throw new TypeError("Article text is invalid");
   addBudget(budget, text);
   const marks = parseMarks(value.marks);
   return Object.freeze({
@@ -248,7 +261,11 @@ function parseParagraph(
   return Object.freeze({ type: "paragraph", ...(content ? { content } : {}) });
 }
 
-function parseBlock(value: unknown, budget: ParseBudget): CreatorArticleBlockV1 {
+function parseBlock(
+  value: unknown,
+  budget: ParseBudget,
+  tokenAddress: `0x${string}`,
+): CreatorArticleBlockV1 {
   if (!isRecord(value) || typeof value.type !== "string") {
     throw new TypeError("Article block is invalid");
   }
@@ -256,7 +273,10 @@ function parseBlock(value: unknown, budget: ParseBudget): CreatorArticleBlockV1 
   if (value.type === "articleImage") {
     exactKeys(value, ["type", "attrs"]);
     addBudget(budget);
-    return Object.freeze({ type: "articleImage", attrs: parseImage(value.attrs) });
+    return Object.freeze({
+      type: "articleImage",
+      attrs: parseImage(value.attrs, tokenAddress, "inline"),
+    });
   }
   if (value.type === "heading") {
     exactKeys(value, ["type", "attrs", "content"]);
@@ -296,7 +316,10 @@ function parseBlock(value: unknown, budget: ParseBudget): CreatorArticleBlockV1 
   throw new TypeError("Article block is not supported");
 }
 
-function parseDocument(value: unknown): CreatorArticleDocumentV1 {
+function parseDocument(
+  value: unknown,
+  tokenAddress: `0x${string}`,
+): CreatorArticleDocumentV1 {
   if (!isRecord(value) || value.type !== "doc") {
     throw new TypeError("Article document is invalid");
   }
@@ -307,7 +330,8 @@ function parseDocument(value: unknown): CreatorArticleDocumentV1 {
   const budget = { nodes: 1, textBytes: 0 };
   return Object.freeze({
     type: "doc",
-    content: Object.freeze(value.content.map((node) => parseBlock(node, budget))),
+    content: Object.freeze(value.content.map((node) =>
+      parseBlock(node, budget, tokenAddress))),
   });
 }
 
@@ -331,8 +355,10 @@ export function parseCreatorArticleDraftV1(value: unknown): CreatorArticleDraftV
     schemaVersion: CREATOR_ARTICLE_DRAFT_SCHEMA_V1,
     ...identity,
     title: boundedString(value.title, "Article title", 240, { singleLine: true }).trim(),
-    bannerImage: value.bannerImage === null ? null : parseImage(value.bannerImage),
-    document: parseDocument(value.document),
+    bannerImage: value.bannerImage === null
+      ? null
+      : parseImage(value.bannerImage, identity.tokenAddress, "banner"),
+    document: parseDocument(value.document, identity.tokenAddress),
   });
 }
 
@@ -365,8 +391,10 @@ export function parseCreatorArticleV1(value: unknown): CreatorArticleV1 {
     revision,
     status: "published",
     title: boundedString(value.title, "Article title", 240, { singleLine: true }).trim(),
-    bannerImage: value.bannerImage === null ? null : parseImage(value.bannerImage),
-    document: parseDocument(value.document),
+    bannerImage: value.bannerImage === null
+      ? null
+      : parseImage(value.bannerImage, identity.tokenAddress, "banner"),
+    document: parseDocument(value.document, identity.tokenAddress),
     createdAt,
     updatedAt,
   });
