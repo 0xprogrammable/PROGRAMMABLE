@@ -35,7 +35,7 @@ type EditorState = Readonly<{
 
 type AuthHeaders = Readonly<{
   Authorization: string;
-  "X-Privy-Identity-Token": string;
+  "X-Privy-Identity-Token"?: string;
 }>;
 
 export function ProfileProjects() {
@@ -183,12 +183,14 @@ export async function acquireCreatorArticleAuthHeadersV1(input: Readonly<{
   // session rather than racing the refresh.
   const identityToken = await input.getIdentityToken();
   const accessToken = await input.getAccessToken();
-  if (!accessToken || !identityToken) {
+  if (!accessToken) {
     throw new Error("Reconnect your wallet and try again");
   }
   return Object.freeze({
     Authorization: `Bearer ${accessToken}`,
-    "X-Privy-Identity-Token": identityToken,
+    ...(identityToken
+      ? { "X-Privy-Identity-Token": identityToken }
+      : {}),
   });
 }
 

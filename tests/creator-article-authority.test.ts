@@ -93,6 +93,36 @@ describe("creator article wallet principal", () => {
     expect(principal.wallets).toEqual([CREATOR]);
   });
 
+  it("accepts a verified access session when Privy omits the identity token", async () => {
+    const verifyIdentityToken = vi.fn();
+    const authenticator = createWalletPrincipalAuthenticatorFromBoundaryV1({
+      appId: "app",
+      boundary: {
+        verifyAccessToken: vi.fn().mockResolvedValue({
+          appId: "app", userId: "did:privy:user", sessionId: "session",
+        }),
+        verifyIdentityToken,
+        getCurrentUser: vi.fn().mockResolvedValue({
+          id: "did:privy:user",
+          linkedAccounts: [
+            { type: "wallet", chainType: "ethereum", address: CREATOR },
+          ],
+        }),
+      },
+    });
+    const accessOnlyRequest = new Request(
+      "https://programmable.market/api/profile/projects",
+      { headers: { authorization: `Bearer ${"a".repeat(32)}` } },
+    );
+
+    await expect(authenticator.authenticate(accessOnlyRequest)).resolves.toEqual({
+      privyUserId: "did:privy:user",
+      privySessionId: "session",
+      wallets: [CREATOR],
+    });
+    expect(verifyIdentityToken).not.toHaveBeenCalled();
+  });
+
   it("rejects mismatched sessions and missing Ethereum wallets", async () => {
     const base = {
       verifyAccessToken: vi.fn().mockResolvedValue({ appId: "app", userId: "u", sessionId: "s1" }),
