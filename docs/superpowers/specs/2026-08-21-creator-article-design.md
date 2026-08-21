@@ -1,7 +1,7 @@
 # Creator Article Design
 
 Date: 2026-08-21  
-Status: Owner direction captured; implementation plan pending review
+Status: Owner-approved design; implementation in progress
 
 ## Product decision
 
@@ -53,6 +53,31 @@ The editor supports a live preview, save, and discard. A successful save
 publishes the new revision immediately. Editing an existing article creates a
 new revision and never changes the token or its launch record.
 
+The writing surface behaves like a focused long-form social editor. Creators
+can use normal text, bold, italic, second- and third-level headings, ordered and
+unordered lists, links, and images. `Normal` clears emphasis so text can return
+to the quiet body style without carrying accidental formatting.
+
+Pasting actual image bytes from the operating-system clipboard with
+`Command-V` or `Control-V` inserts an uploading image placeholder at the
+cursor, authenticates and verifies the image, then replaces the placeholder
+with the stored image. Multiple clipboard images are processed in order.
+Clipboard HTML is never used to make the server fetch an arbitrary remote
+image URL. An image copied from an application such as Discord works when the
+clipboard supplies image bytes; a bare CDN URL remains a safe link.
+
+Images always preserve their decoded aspect ratio. Creators can select
+compact, reading-column, or wide presentation, including through accessible
+keyboard controls. The saved choice is semantic and responsive rather than a
+fixed desktop pixel width, so resizing the browser never stretches, crops, or
+causes horizontal overflow.
+
+HTTPS URLs are recognized while typing and on paste. A standalone raw URL is
+displayed as its human-readable hostname, without `https://` or a trailing
+slash, while its complete validated HTTPS URL remains the destination. Public
+links use the requested pale-blue treatment and a visible underline; external
+links open safely without becoming canonical token social metadata.
+
 The article editor is loaded only after the creator opens it. It is not part of
 the initial public token-page bundle or the initial profile bundle.
 
@@ -82,8 +107,9 @@ fee payment.
 
 ## Content model
 
-The article uses a bounded structured-block contract rather than arbitrary HTML
-or a general-purpose document format. The first version contains:
+The article uses a bounded Tiptap/ProseMirror JSON contract rather than
+arbitrary HTML. The editor schema and the independent server validator admit
+only the explicitly supported node and mark set. The first version contains:
 
 ```text
 CreatorArticleV1
@@ -99,10 +125,11 @@ CreatorArticleV1
   updatedAt
 ```
 
-Supported blocks are `heading`, `paragraph`, `list`, `image`, and `link-card`.
-Paragraph and list text use a small mark model for emphasis and HTTPS links.
-Raw HTML, script, iframe, embedded widgets, arbitrary CSS, data URLs, and
-javascript URLs are forbidden.
+Supported nodes are `doc`, `heading`, `paragraph`, `bulletList`, `orderedList`,
+`listItem`, `text`, `hardBreak`, and a bounded article image. Supported marks
+are `bold`, `italic`, and `link`. Links must be HTTPS. Raw HTML, script, iframe,
+embedded widgets, arbitrary CSS, data URLs, and javascript URLs are forbidden.
+The public renderer never uses `dangerouslySetInnerHTML`.
 
 Content limits are enforced in both the client and server contracts. The
 server canonicalizes the accepted document before hashing and persistence.
@@ -111,16 +138,21 @@ editor tabs cannot silently overwrite one another.
 
 ## Persistence and media
 
-Creator articles use dedicated website tables and a dedicated current-article
-read view. Existing token-project metadata and Custom launch presentation rows
-are not repurposed or mutated.
+Creator articles use a dedicated namespace in the existing Programmable Vercel
+Blob store. Existing database tables, token-project metadata, and Custom launch
+presentation rows are not repurposed or mutated. This feature introduces no
+database migration, new database role, or new storage provider.
 
-The database keeps immutable article revisions plus a single current pointer.
-The current public view returns only the latest valid published revision. All
-writes are audited with article identity, creator wallet, previous revision,
-new revision, and a content commitment; no private session material is stored.
+Every published article is written as an immutable canonical revision blob.
+A small current-pointer blob selects the visible revision. Pointer updates use
+the Blob ETag as an `ifMatch` precondition, giving the editor real optimistic
+concurrency: a stale editor cannot overwrite a newer current pointer. The
+current public read resolves and validates only the selected immutable
+revision. Revision payloads include article identity, creator wallet, previous
+revision, new revision, and a content commitment; no private session material
+is stored.
 
-Article media uses the existing Programmable Vercel Blob account through a new
+Article media uses the same existing Programmable Vercel Blob account through a new
 article-media upload boundary. The server authenticates creator authority
 before writing, verifies decoded image bytes, strips metadata, produces a
 bounded web-safe image, performs readback verification, and stores only the
