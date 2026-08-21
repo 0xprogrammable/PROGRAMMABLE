@@ -1,0 +1,158 @@
+.article {
+  --article-measure: 46rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border, #ffffff) 16%, transparent);
+  contain: layout paint style;
+  content-visibility: auto;
+  margin-block-start: clamp(4rem, 8vw, 8rem);
+  padding-block: clamp(3.5rem, 7vw, 7rem) clamp(4rem, 8vw, 8rem);
+}
+
+.header,
+.body,
+.updated {
+  margin-inline: auto;
+  max-width: var(--article-measure);
+}
+
+.header {
+  margin-block-end: clamp(2.5rem, 5vw, 4.5rem);
+}
+
+.eyebrow {
+  color: color-mix(in srgb, currentColor 58%, transparent);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  margin: 0 0 0.8rem;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  font-size: clamp(2.35rem, 6vw, 5.25rem);
+  font-weight: 520;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.body {
+  color: color-mix(in srgb, currentColor 88%, transparent);
+  font-size: clamp(1.03rem, 1.5vw, 1.22rem);
+  line-height: 1.72;
+}
+
+.body > p,
+.body li > p {
+  margin: 0 0 1.45em;
+}
+
+.body h3,
+.body h4 {
+  color: currentColor;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+.body h3 {
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 560;
+  margin: 2.4em 0 0.72em;
+}
+
+.body h4 {
+  font-size: clamp(1.28rem, 2.4vw, 1.7rem);
+  font-weight: 610;
+  margin: 2em 0 0.62em;
+}
+
+.body ul,
+.body ol {
+  margin: 0 0 2rem;
+  padding-inline-start: 1.35em;
+}
+
+.body li {
+  padding-inline-start: 0.35em;
+}
+
+.link {
+  color: #8fc5ff;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.link:hover {
+  color: #b8dcff;
+}
+
+.link:focus-visible {
+  border-radius: 0.15em;
+  outline: 2px solid #8fc5ff;
+  outline-offset: 3px;
+}
+
+.media {
+  margin-block: clamp(2.5rem, 6vw, 5.5rem);
+  margin-inline: auto;
+}
+
+.media img {
+  background: #101014;
+  display: block;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.media figcaption {
+  color: color-mix(in srgb, currentColor 52%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin-block-start: 0.72rem;
+}
+
+.banner {
+  margin-block: 0 clamp(3rem, 7vw, 6.5rem);
+  max-width: 70rem;
+}
+
+.banner img {
+  aspect-ratio: 3 / 1;
+}
+
+.compact {
+  max-width: 32rem;
+}
+
+.content {
+  max-width: var(--article-measure);
+}
+
+.wide {
+  left: 50%;
+  max-width: 70rem;
+  position: relative;
+  transform: translateX(-50%);
+  width: min(70rem, calc(100vw - 2 * clamp(1rem, 4vw, 3rem)));
+}
+
+.updated {
+  color: color-mix(in srgb, currentColor 46%, transparent);
+  font-size: 0.75rem;
+  margin-block-start: clamp(3rem, 6vw, 5rem);
+}
+
+@media (max-width: 48rem) {
+  .article {
+    margin-block-start: 3.5rem;
+    padding-block: 3rem 4.5rem;
+  }
+
+  .wide {
+    width: calc(100vw - 2rem);
+  }
+}

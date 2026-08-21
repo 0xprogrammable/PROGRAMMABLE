@@ -27,6 +27,7 @@ import {
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
+import { CreatorArticle } from "@/components/creator-article";
 import {
   getExplorePreviewCustomProject,
   getExplorePreviewToken,
@@ -59,6 +60,10 @@ import {
   type TokenLink,
   type TokenLinkKind,
 } from "@/lib/tokens";
+import {
+  parseCreatorArticleV1,
+  type CreatorArticleV1,
+} from "@/lib/creator-article/contract-v1";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import styles from "./token-experience.module.css";
 
@@ -76,6 +81,7 @@ type DetailPayload = {
   status: "ready" | "not-deployed";
   token: DetailToken | null;
   customProject: DetailCustomProject | null;
+  creatorArticle: CreatorArticleV1 | null;
   snapshot: { chainId: number } | null;
 };
 
@@ -87,12 +93,14 @@ export type DetailState =
   | {
       phase: "ready";
       token: DetailToken;
+      creatorArticle: CreatorArticleV1 | null;
       chainId: number;
       requestKey: string;
     }
   | {
       phase: "custom-ready";
       project: DetailCustomProject;
+      creatorArticle: CreatorArticleV1 | null;
       chainId: number;
       requestKey: string;
     };
@@ -692,6 +700,14 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   if (token !== null && customProject !== null) {
     throw new Error("The token registry returned conflicting launch categories");
   }
+  let creatorArticle: CreatorArticleV1 | null = null;
+  if (value.creatorArticle !== null && value.creatorArticle !== undefined) {
+    try {
+      creatorArticle = parseCreatorArticleV1(value.creatorArticle);
+    } catch {
+      creatorArticle = null;
+    }
+  }
 
   let snapshot: DetailPayload["snapshot"] = null;
   if (value.snapshot !== null) {
@@ -712,7 +728,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     throw new Error("The launch stamp does not match the snapshot network");
   }
 
-  return { status: value.status, token, customProject, snapshot };
+  return { status: value.status, token, customProject, creatorArticle, snapshot };
 }
 
 function readApiError(value: unknown) {
@@ -759,6 +775,7 @@ function detailStateFromResponse(
     return {
       phase: "custom-ready",
       project: payload.customProject,
+      creatorArticle: payload.creatorArticle,
       chainId: customChainId,
       requestKey,
     };
@@ -776,6 +793,7 @@ function detailStateFromResponse(
   return {
     phase: "ready",
     token: payload.token!,
+    creatorArticle: payload.creatorArticle,
     chainId: payload.snapshot.chainId,
     requestKey,
   };
@@ -1315,10 +1333,12 @@ function TokenDetailContent({
   token,
   chainId,
   preview,
+  creatorArticle = null,
 }: {
   token: LauncherToken;
   chainId: number;
   preview: boolean;
+  creatorArticle?: CreatorArticleV1 | null;
 }) {
   const { wallet, openWallet, readTradeBalances, sendTransaction } =
     useWallet();
@@ -1837,6 +1857,7 @@ function TokenDetailContent({
         ) : null}
 
       </div>
+      <CreatorArticle article={creatorArticle} />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
           <p className="toast" role="alert">
@@ -1906,9 +1927,11 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
 function CustomProjectDetailContent({
   project,
   chainId,
+  creatorArticle = null,
 }: {
   project: DetailCustomProject;
   chainId: number;
+  creatorArticle?: CreatorArticleV1 | null;
 }) {
   const {
     wallet,
@@ -2132,6 +2155,7 @@ function CustomProjectDetailContent({
           </p>
         </section>
       </div>
+      <CreatorArticle article={creatorArticle} />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
           <p className="toast" role="alert">{copyError}</p>
@@ -2270,6 +2294,7 @@ export function TokenDetailView({
         token={activeState.token}
         chainId={activeState.chainId}
         preview={false}
+        creatorArticle={activeState.creatorArticle}
       />
     );
   }
@@ -2279,6 +2304,7 @@ export function TokenDetailView({
       <CustomProjectDetailContent
         project={activeState.project}
         chainId={activeState.chainId}
+        creatorArticle={activeState.creatorArticle}
       />
     );
   }
