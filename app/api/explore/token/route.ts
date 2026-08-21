@@ -16,6 +16,8 @@ import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
+import { readPublicCreatorArticleV1 } from
+  "../../../../lib/server/creator-article/public-read.server";
 import type { ExploreEntry } from "../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
@@ -185,6 +187,7 @@ export async function GET(request: NextRequest) {
         status: "ready",
         token: null,
         customProject: null,
+        creatorArticle: null,
         snapshot: null,
         catalog: catalogBoundary,
       },
@@ -201,6 +204,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const creatorArticlePromise = readPublicCreatorArticleV1(
+      entry.tokenAddress!,
+    );
     const market = await readDexscreenerExploreEntriesV1([entry], {
       signal: readSignal,
       deadlineMs,
@@ -219,6 +225,7 @@ export async function GET(request: NextRequest) {
         token: publicEntry.exploreKind === "token" ? publicEntry : null,
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
+        creatorArticle: await creatorArticlePromise,
         snapshot:
           publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
         catalog: catalogBoundary,
@@ -243,12 +250,14 @@ export async function GET(request: NextRequest) {
       ...entry,
       valuation: { status: "unavailable", reason: "source-unavailable" },
     });
+    const creatorArticle = await readPublicCreatorArticleV1(entry.tokenAddress!);
     return NextResponse.json(
       {
         status: "ready",
         token: publicEntry.exploreKind === "token" ? publicEntry : null,
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
+        creatorArticle,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
         catalog: catalogBoundary,
       },

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/api/explore/token/route", () => ({ GET: vi.fn() }));
@@ -13,6 +15,14 @@ afterEach(() => {
 });
 
 describe("token detail initial server read", () => {
+  it("places the bounded detail read behind an immediate Suspense shell", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/token/[address]/page.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("<Suspense fallback={<TokenDetailShell />}> ".trim());
+    expect(source).toContain("<InitialTokenDetail address={address} />");
+  });
   it("returns at the total deadline and consumes the aborted read", async () => {
     vi.useFakeTimers();
     let readSignal: AbortSignal | undefined;

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "programmable.creator-article-draft.v1",
+  "chainId": 1,
+  "tokenAddress": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+  "title": "Programmable: tokens with something to do",
+  "bannerImage": {
+    "url": "https://programmable.market/brand/programmable-final-x-banner-1500x500.png",
+    "alt": "Programmable floral landscape",
+    "caption": null,
+    "width": 1500,
+    "height": 500,
+    "size": "wide"
+  },
+  "document": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Programmable is a launchpad for tokens with onchain behavior. Creators choose a launch model, publish a verified identity, and meet the market on the same page."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": { "level": 2 },
+        "content": [{ "type": "text", "text": "Launch, discover, trade" }]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Each public coin page keeps verified launch identity, market context, and trading in one place. The launch record stays separate from the story a creator publishes below it."
+          }
+        ]
+      },
+      {
+        "type": "articleImage",
+        "attrs": {
+          "url": "https://programmable.market/brand/programmable-adaptive-model-post-v1-2000x1000.png",
+          "alt": "Programmable launch model artwork",
+          "caption": "A Programmable launch starts with a model and a verified creator.",
+          "width": 2000,
+          "height": 1000,
+          "size": "wide"
+        }
+      },
+      {
+        "type": "heading",
+        "attrs": { "level": 2 },
+        "content": [{ "type": "text", "text": "Built for creators" }]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This project story is controlled by the verified launch wallet. It can evolve as the project grows without changing the token contract, original metadata, or canonical social links."
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [{
+              "type": "paragraph",
+              "content": [{ "type": "text", "text": "Launch on Ethereum with a verified public identity." }]
+            }]
+          },
+          {
+            "type": "listItem",
+            "content": [{
+              "type": "paragraph",
+              "content": [{ "type": "text", "text": "Follow the market and trade from the coin page." }]
+            }]
+          },
+          {
+            "type": "listItem",
+            "content": [{
+              "type": "paragraph",
+              "content": [{ "type": "text", "text": "Review creator rewards from the connected profile." }]
+            }]
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "programmable.market",
+            "marks": [{
+              "type": "link",
+              "attrs": { "href": "https://programmable.market/" }
+            }]
+          }
+        ]
+      }
+    ]
+  }
+}

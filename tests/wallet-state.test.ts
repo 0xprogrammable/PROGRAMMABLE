@@ -8,6 +8,7 @@ import { ApplicantRefreshUserUnavailableErrorV1 } from
 
 type WalletProviderContract = {
   shouldEagerLoadWalletRuntime: (pathname: string) => boolean;
+  shouldIdlePreloadWalletRuntime: (pathname: string) => boolean;
   assertExternalWalletAuthorityCurrent: (input: Readonly<{
     expectedAccount: `0x${string}`;
     expectedChainId: string;
@@ -144,10 +145,12 @@ describe("wallet recovery state", () => {
       "/launch/review",
       "/profile",
       "/profile/settings",
-      "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
     ]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(true);
     }
+    const tokenPath = "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
+    expect(subject.shouldEagerLoadWalletRuntime(tokenPath)).toBe(false);
+    expect(subject.shouldIdlePreloadWalletRuntime(tokenPath)).toBe(true);
   });
 
   it("keeps Privy behind an explicit dynamic runtime boundary", () => {

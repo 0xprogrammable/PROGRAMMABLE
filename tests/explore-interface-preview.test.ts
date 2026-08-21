@@ -3,11 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   EXPLORE_PREVIEW_TOKENS,
   getExplorePreviewChart,
+  getExplorePreviewCreatorArticle,
   getExplorePreviewProject,
 } from "../components/explore-preview-data";
 import { isInterfacePreviewHost } from "../components/interface-preview";
 
 describe("Explore interface preview", () => {
+  it("previews the exact Main-token example article only on its token page", () => {
+    const article = getExplorePreviewCreatorArticle(
+      "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+    );
+    expect(article?.title).toBe("Programmable: tokens with something to do");
+    expect(getExplorePreviewCreatorArticle(EXPLORE_PREVIEW_TOKENS[0]!.tokenAddress))
+      .toBeNull();
+  });
   it("is available only on local browser hosts", () => {
     expect(isInterfacePreviewHost("127.0.0.1")).toBe(true);
     expect(isInterfacePreviewHost("localhost")).toBe(true);
