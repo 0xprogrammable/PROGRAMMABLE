@@ -13,6 +13,34 @@ const project = {
 };
 
 describe("My projects editor opening", () => {
+  it("refreshes the Privy identity before reading the bound access token", async () => {
+    const acquire = (profileProjects as unknown as {
+      acquireCreatorArticleAuthHeadersV1(input: Readonly<{
+        getAccessToken: () => Promise<string | null>;
+        getIdentityToken: () => Promise<string | null>;
+      }>): Promise<Record<string, string>>;
+    }).acquireCreatorArticleAuthHeadersV1;
+    expect(typeof acquire).toBe("function");
+
+    let identityCurrent = false;
+    const events: string[] = [];
+    await expect(acquire({
+      getIdentityToken: async () => {
+        events.push("identity");
+        identityCurrent = true;
+        return "identity-token";
+      },
+      getAccessToken: async () => {
+        events.push("access");
+        return identityCurrent ? "access-token" : null;
+      },
+    })).resolves.toEqual({
+      Authorization: "Bearer access-token",
+      "X-Privy-Identity-Token": "identity-token",
+    });
+    expect(events).toEqual(["identity", "access"]);
+  });
+
   it("turns an API failure into a user-readable rejected action", async () => {
     const load = (profileProjects as unknown as {
       loadCreatorArticleEditorV1(

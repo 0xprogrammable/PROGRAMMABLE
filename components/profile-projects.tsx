@@ -46,17 +46,13 @@ export function ProfileProjects() {
   const [opening, setOpening] = useState<string | null>(null);
   const [projectError, setProjectError] = useState("");
 
-  const getAuthHeaders = useCallback(async () => {
-    const [accessToken, identityToken] = await Promise.all([
-      getAccessToken(),
-      getIdentityToken(),
-    ]);
-    if (!accessToken || !identityToken) throw new Error("Reconnect your wallet and try again");
-    return {
-      Authorization: `Bearer ${accessToken}`,
-      "X-Privy-Identity-Token": identityToken,
-    };
-  }, [getAccessToken, getIdentityToken]);
+  const getAuthHeaders = useCallback(
+    () => acquireCreatorArticleAuthHeadersV1({
+      getAccessToken,
+      getIdentityToken,
+    }),
+    [getAccessToken, getIdentityToken],
+  );
 
   const loadProjects = useCallback(async (signal?: AbortSignal) => {
     if (!wallet) return;
@@ -176,6 +172,24 @@ export function ProfileProjects() {
       ) : null}
     </section>
   );
+}
+
+export async function acquireCreatorArticleAuthHeadersV1(input: Readonly<{
+  getAccessToken: () => Promise<string | null>;
+  getIdentityToken: () => Promise<string | null>;
+}>): Promise<AuthHeaders> {
+  // Privy refreshes the user and identity token through `/users/me`. Read the
+  // access token only after that refresh so both headers describe one current
+  // session rather than racing the refresh.
+  const identityToken = await input.getIdentityToken();
+  const accessToken = await input.getAccessToken();
+  if (!accessToken || !identityToken) {
+    throw new Error("Reconnect your wallet and try again");
+  }
+  return Object.freeze({
+    Authorization: `Bearer ${accessToken}`,
+    "X-Privy-Identity-Token": identityToken,
+  });
 }
 
 export async function loadCreatorArticleEditorV1(
