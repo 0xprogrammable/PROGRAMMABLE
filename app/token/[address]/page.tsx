@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Suspense } from "react";
 
 import { GET as readTokenDetailResponse } from
   "@/app/api/explore/token/route";
@@ -6,6 +7,7 @@ import {
   TokenDetailView,
   type TokenDetailInitialResponse,
 } from "@/components/token-detail-view";
+import { TokenDetailShell } from "@/components/token-detail-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,14 @@ export default async function TokenPage({
   params: Promise<{ address: string }>;
 }) {
   const { address } = await params;
+  return (
+    <Suspense fallback={<TokenDetailShell />}>
+      <InitialTokenDetail address={address} />
+    </Suspense>
+  );
+}
+
+async function InitialTokenDetail({ address }: { address: string }) {
   const search = new URLSearchParams({ address });
   const initialResponse = await readInitialTokenDetailWithinDeadline(
     async (signal) => {

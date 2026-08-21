@@ -143,8 +143,11 @@ export function shouldEagerLoadWalletRuntime(pathname: string) {
   return pathname === "/launch"
     || pathname.startsWith("/launch/")
     || pathname === "/profile"
-    || pathname.startsWith("/profile/")
-    || pathname.startsWith("/token/");
+    || pathname.startsWith("/profile/");
+}
+
+export function shouldIdlePreloadWalletRuntime(pathname: string) {
+  return pathname.startsWith("/token/");
 }
 
 if (
@@ -700,6 +703,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [active, loadAttempt, runtime]);
+
+  useEffect(() => {
+    if (!privyAppId || runtime || !shouldIdlePreloadWalletRuntime(pathname)) return;
+    let cancelled = false;
+    const preload = () => {
+      if (!cancelled) void loadWalletProviderRuntime().catch(() => undefined);
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: Window["requestIdleCallback"];
+      cancelIdleCallback?: Window["cancelIdleCallback"];
+    };
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const idleId = idleWindow.requestIdleCallback(preload, { timeout: 1_500 });
+      return () => {
+        cancelled = true;
+        idleWindow.cancelIdleCallback?.(idleId);
+      };
+    }
+    const timeoutId = globalThis.setTimeout(preload, 1_200);
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(timeoutId);
+    };
+  }, [pathname, runtime]);
 
   if (!privyAppId) {
     return <UnconfiguredWalletProvider>{children}</UnconfiguredWalletProvider>;
