@@ -117,4 +117,37 @@ describe("creator article editor normalization", () => {
       document: { type: "doc", content: [{ type: "paragraph" }] },
     })).not.toBe(baseline);
   });
+
+  it("treats editor-only ready image state as the published document", () => {
+    const fingerprint = (creatorArticleEditor as unknown as {
+      creatorArticleEditorFingerprintV1(input: unknown): string;
+    }).creatorArticleEditorFingerprintV1;
+    const image = {
+      url: "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/creator-article-media/v1/eip155-1/0x7987f03462200b3d8a072e02c89a8a41dcb124ee/550e8400-e29b-41d4-a716-446655440000.inline.1200x800.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
+      alt: "Project image",
+      caption: null,
+      width: 1200,
+      height: 800,
+      size: "wide",
+    };
+
+    expect(fingerprint({
+      title: "Project story",
+      bannerImage: null,
+      document: {
+        type: "doc",
+        content: [{ type: "articleImage", attrs: image }],
+      },
+    })).toBe(fingerprint({
+      title: "Project story",
+      bannerImage: null,
+      document: {
+        type: "doc",
+        content: [{
+          type: "articleImage",
+          attrs: { ...image, uploadId: null, status: "ready" },
+        }],
+      },
+    }));
+  });
 });

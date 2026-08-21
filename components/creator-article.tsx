@@ -6,8 +6,14 @@ import type {
   CreatorArticleMarkV1,
   CreatorArticleV1,
 } from "@/lib/creator-article/contract-v1";
+import {
+  CreatorArticleLinkIcon,
+  creatorArticleLinkProviderV1,
+} from "@/components/creator-article-link-icon";
 
 import styles from "./creator-article.module.css";
+
+export { creatorArticleLinkProviderV1 };
 
 export function CreatorArticle({ article }: { article: CreatorArticleV1 | null }) {
   if (article === null) return null;
@@ -102,11 +108,13 @@ function applyMark(mark: CreatorArticleMarkV1, content: ReactNode, key: number) 
   return (
     <a
       className={styles.link}
+      data-creator-link-provider={creatorArticleLinkProviderV1(mark.attrs.href)}
       href={mark.attrs.href}
       target="_blank"
       rel="noopener noreferrer"
       key={`link-${key}`}
     >
+      <CreatorArticleLinkIcon href={mark.attrs.href} className={styles.linkIcon} />
       {content}
     </a>
   );

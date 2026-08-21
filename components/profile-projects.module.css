@@ -16,21 +16,116 @@
   min-width: 0;
 }
 
-.heading p {
-  color: var(--muted, rgb(255 255 255 / 48%));
-  font-size: 10px;
-  font-weight: 620;
-  letter-spacing: 0.12em;
-  margin: 0 0 4px;
-  text-transform: uppercase;
-}
-
 .heading h2 {
   font-size: 20px;
   font-weight: 640;
   letter-spacing: -0.026em;
   line-height: 1.1;
   margin: 0;
+}
+
+.openingBackdrop {
+  align-items: center;
+  background: rgb(0 0 0 / 78%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 1001;
+}
+
+.openingDialog {
+  align-items: center;
+  background: #0b0b0f;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 1rem;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  max-width: 32rem;
+  padding: 1rem;
+  width: 100%;
+}
+
+.openingIdentity {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.openingIdentity > div:last-child {
+  min-width: 0;
+}
+
+.openingIdentity p,
+.openingIdentity h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openingIdentity p {
+  color: rgb(255 255 255 / 48%);
+  font-size: 0.7rem;
+}
+
+.openingIdentity h2 {
+  font-size: 1rem;
+  margin-block-start: 0.15rem;
+}
+
+.openingArt {
+  align-items: center;
+  background: #17171c;
+  border-radius: 0.7rem;
+  display: flex;
+  flex: none;
+  height: 3rem;
+  justify-content: center;
+  outline: 1px solid rgb(255 255 255 / 12%);
+  outline-offset: -1px;
+  overflow: hidden;
+  position: relative;
+  width: 3rem;
+}
+
+.openingArt img {
+  object-fit: cover;
+}
+
+.openingProgress {
+  animation: opening-spin 800ms linear infinite;
+  border: 2px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  border-top-color: #f0eee8;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.openingDialog > button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.55rem;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.openingDialog > button:focus-visible {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 2px;
+}
+
+@keyframes opening-spin {
+  to { transform: rotate(360deg); }
 }
 
 .headerActions,
@@ -266,6 +361,17 @@
   .actions a {
     flex: 1;
   }
+
+  .openingBackdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .openingDialog {
+    border-radius: 1rem 1rem 0 0;
+    border-width: 1px 0 0;
+    max-width: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -275,5 +381,9 @@
   .actions button,
   .actions a {
     transition: none;
+  }
+
+  .openingProgress {
+    animation: none;
   }
 }
