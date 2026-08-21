@@ -15,7 +15,7 @@
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   max-height: calc(100dvh - 2rem);
   max-width: 90rem;
   overflow: hidden;
@@ -33,6 +33,8 @@
 
 .dialogHeader {
   border-bottom: 1px solid rgb(255 255 255 / 10%);
+  gap: 1rem;
+  padding-block: 0.75rem;
 }
 
 .dialogHeader p,
@@ -47,6 +49,49 @@
 
 .dialogHeader h2 {
   font-size: 1.15rem;
+}
+
+.dialogIdentity {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.dialogIdentity > div:last-child {
+  min-width: 0;
+}
+
+.dialogIdentity p,
+.dialogIdentity h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialogArt {
+  align-items: center;
+  background: #17171c;
+  border-radius: 0.65rem;
+  display: flex;
+  flex: none;
+  height: 2.625rem;
+  justify-content: center;
+  outline: 1px solid rgb(255 255 255 / 12%);
+  outline-offset: -1px;
+  overflow: hidden;
+  position: relative;
+  width: 2.625rem;
+}
+
+.dialogArt img {
+  object-fit: cover;
+}
+
+.dialogArt span {
+  color: rgb(255 255 255 / 68%);
+  font-size: 0.7rem;
+  font-weight: 650;
 }
 
 .dialogHeader > button,
@@ -164,25 +209,28 @@
 
 .toolbar {
   align-items: center;
-  backdrop-filter: blur(14px);
-  background: rgb(15 15 20 / 92%);
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 0.75rem;
+  background: #0e0e13;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.3rem;
-  margin: 0 auto 1.2rem;
-  max-width: 48rem;
-  padding: 0.45rem;
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 0.45rem 1rem;
+  scrollbar-width: none;
+  z-index: 3;
+}
+
+.toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .toolbar > button {
   align-items: center;
   display: flex;
   justify-content: center;
+  flex: none;
   min-height: 2.75rem;
   min-width: 2.75rem;
   padding: 0.42rem 0.55rem;
@@ -200,9 +248,14 @@
 
 .linkControl {
   align-items: center;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.55rem;
   display: flex;
+  flex: none;
   gap: 0.35rem;
   margin-inline-start: auto;
+  padding-inline-start: 0.65rem;
 }
 
 .linkControl input {
@@ -212,13 +265,17 @@
   font: inherit;
   font-size: 0.75rem;
   min-height: 2.75rem;
-  min-width: 10rem;
+  min-width: 8rem;
   outline: none;
 }
 
 .linkControl button {
+  border-block: 0;
+  border-inline-end: 0;
+  border-radius: 0 0.5rem 0.5rem 0;
   min-height: 2.75rem;
-  padding: 0.45rem 0.55rem;
+  padding: 0.45rem 0.7rem;
+  white-space: nowrap;
 }
 
 .linkControl:focus-within {
@@ -329,13 +386,6 @@
   padding: 0.45rem 0;
 }
 
-.pasteHint {
-  color: rgb(255 255 255 / 52%);
-  font-size: 0.72rem;
-  margin: -3.5rem auto 2rem;
-  max-width: 46rem;
-}
-
 .dialogFooter {
   border-top: 1px solid rgb(255 255 255 / 10%);
   gap: 1rem;
@@ -404,11 +454,14 @@
 @media (max-width: 42rem) {
   .backdrop { padding: 0; }
   .dialog { border-radius: 0; max-height: 100dvh; }
+  .dialogHeader { padding-inline: 0.75rem; }
+  .dialogIdentity p { max-width: 13rem; }
+  .toolbar { padding-inline: 0.75rem; }
   .editorPane { padding: 1rem; }
   .imageFields { grid-template-columns: 1fr; }
   .dialogFooter { align-items: stretch; flex-direction: column; }
   .dialogFooter div { margin-inline-start: 0; }
   .dialogFooter button { flex: 1; }
-  .linkControl { margin-inline-start: 0; width: 100%; }
+  .linkControl { flex: 0 0 14rem; margin-inline-start: 0; width: auto; }
   .linkControl input { flex: 1; min-width: 0; }
 }

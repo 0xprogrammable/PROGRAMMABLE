@@ -1,132 +1,279 @@
 .section {
-  border-top: 1px solid rgb(255 255 255 / 10%);
-  margin-block: clamp(3rem, 6vw, 5.5rem);
-  padding-block-start: clamp(2rem, 4vw, 3.5rem);
+  background: var(--webde-surface, var(--profile-panel, #111));
+  border: 1px solid var(--webde-line, var(--profile-line, rgb(255 255 255 / 10%)));
+  border-radius: var(--webde-radius-card, 17px);
+  margin-block: clamp(2rem, 4vw, 3.5rem) 1rem;
+  min-width: 0;
+  padding: 20px;
 }
 
 .heading {
-  align-items: end;
+  align-items: center;
   display: flex;
+  gap: 14px;
   justify-content: space-between;
-  margin-block-end: 1.4rem;
+  margin-block-end: 12px;
+  min-width: 0;
 }
 
 .heading p {
-  color: rgb(255 255 255 / 48%);
-  font-size: 0.7rem;
-  letter-spacing: 0.15em;
-  margin: 0 0 0.35rem;
+  color: var(--muted, rgb(255 255 255 / 48%));
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.12em;
+  margin: 0 0 4px;
   text-transform: uppercase;
 }
 
 .heading h2 {
-  font-size: clamp(1.75rem, 4vw, 2.6rem);
-  letter-spacing: -0.045em;
+  font-size: 20px;
+  font-weight: 640;
+  letter-spacing: -0.026em;
+  line-height: 1.1;
   margin: 0;
 }
 
-.heading button,
+.headerActions,
+.pagination,
+.refresh,
+.actions {
+  align-items: center;
+  display: flex;
+}
+
+.headerActions {
+  flex: none;
+  gap: 5px;
+  margin-inline-start: auto;
+}
+
+.refresh,
+.pagination button,
 .actions button,
 .actions a {
   background: transparent;
-  border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 999px;
-  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-soft, rgb(255 255 255 / 72%));
   cursor: pointer;
   font: inherit;
-  font-size: 0.78rem;
-  min-height: 2.75rem;
-  padding: 0.65rem 0.95rem;
+  font-size: 11px;
+  font-weight: 620;
+  min-height: 44px;
   text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease,
+    transform 120ms var(--ease-out, ease-out);
 }
 
-.heading button:hover,
-.actions button:hover,
-.actions a:hover {
-  border-color: rgb(255 255 255 / 48%);
+.refresh {
+  gap: 6px;
+  padding-inline: 10px;
 }
 
-.heading button:focus-visible,
-.actions button:focus-visible,
-.actions a:focus-visible {
-  outline: 2px solid #8fc5ff;
-  outline-offset: 3px;
+.pagination {
+  flex: none;
+  gap: 3px;
 }
 
-.grid {
+.pagination button {
+  justify-content: center;
+  padding: 0;
+  width: 44px;
+}
+
+.pagination > span {
+  color: var(--muted, rgb(255 255 255 / 52%));
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: center;
+}
+
+.refresh:disabled,
+.pagination button:disabled,
+.actions button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.list {
   display: grid;
-  gap: 0.75rem;
+  gap: 3px;
+  min-width: 0;
 }
 
 .project {
   align-items: center;
-  border-bottom: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 8px;
   display: grid;
-  gap: 1rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  padding-block: 1rem;
+  gap: 9px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  min-height: 68px;
+  min-width: 0;
+  padding: 7px 8px;
+  transition: background-color 150ms ease;
 }
 
 .art {
   align-items: center;
-  background: #17171c;
-  border-radius: 0.65rem;
+  background: var(--surface-soft, #17171c);
+  border-radius: 10px;
   display: flex;
-  height: 3.75rem;
+  height: 42px;
   justify-content: center;
+  outline: 1px solid var(--liquid-glass-border, rgb(255 255 255 / 10%));
+  outline-offset: -1px;
   overflow: hidden;
   position: relative;
-  width: 3.75rem;
+  width: 42px;
 }
 
 .art img {
   object-fit: cover;
 }
 
+.art span {
+  color: var(--text-soft, rgb(255 255 255 / 72%));
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 650;
+}
+
 .copy {
   display: grid;
+  gap: 2px;
   min-width: 0;
 }
 
-.copy strong {
-  font-size: 1rem;
+.copy strong,
+.copy span,
+.copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.copy span,
+.copy strong {
+  font-size: 13px;
+  font-weight: 640;
+  letter-spacing: -0.012em;
+}
+
+.copy span {
+  color: var(--muted, rgb(255 255 255 / 52%));
+  font-size: 12px;
+  font-weight: 540;
+}
+
 .copy small,
 .loading,
 .empty,
 .error {
-  color: rgb(255 255 255 / 52%);
-  font-size: 0.78rem;
+  color: var(--text-soft, rgb(255 255 255 / 62%));
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
 }
 
 .actions {
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.actions button,
+.actions a {
   align-items: center;
-  display: flex;
-  gap: 0.5rem;
+  border-color: var(--webde-line, rgb(255 255 255 / 14%));
+  display: inline-flex;
+  justify-content: center;
+  padding-inline: 12px;
+  white-space: nowrap;
 }
 
 .actions button {
-  background: #f0eee8;
-  border-color: #f0eee8;
+  background: var(--brand-ivory, #f0eee8);
+  border-color: var(--brand-ivory, #f0eee8);
   color: #0a0a0c;
+}
+
+.loading,
+.empty,
+.error {
+  margin: 0;
+  min-height: 92px;
+  padding: 24px 8px;
 }
 
 .error {
   color: #ff9d9d;
 }
 
+.refresh:focus-visible,
+.pagination button:focus-visible,
+.actions button:focus-visible,
+.actions a:focus-visible {
+  outline: 2px solid #8fc5ff;
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refresh:not(:disabled):hover,
+  .pagination button:not(:disabled):hover,
+  .actions a:hover {
+    background: var(--profile-subtle, rgb(255 255 255 / 6%));
+    border-color: var(--webde-line, rgb(255 255 255 / 16%));
+    color: var(--text, #fff);
+  }
+
+  .actions button:not(:disabled):hover {
+    filter: brightness(0.94);
+  }
+
+  .project:hover {
+    background: var(--profile-subtle, rgb(255 255 255 / 4%));
+  }
+}
+
 @media (max-width: 42rem) {
+  .section {
+    padding: 16px;
+  }
+
+  .heading {
+    align-items: flex-start;
+  }
+
+  .refresh span {
+    display: none;
+  }
+
   .project {
-    align-items: start;
-    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding-block: 9px;
   }
 
   .actions {
     grid-column: 1 / -1;
+  }
+
+  .actions button,
+  .actions a {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project,
+  .refresh,
+  .pagination button,
+  .actions button,
+  .actions a {
+    transition: none;
   }
 }

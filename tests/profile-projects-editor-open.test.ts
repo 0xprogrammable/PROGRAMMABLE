@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import * as profileProjects from "../components/profile-projects";
+import type {
+  CreatorProjectMarketCapV1,
+  CreatorProjectSummaryV1,
+} from "../components/profile-projects";
 
 const project = {
   chainId: 1 as const,
@@ -13,6 +17,44 @@ const project = {
 };
 
 describe("My projects editor opening", () => {
+  it("paginates verified projects by highest available market cap", () => {
+    const paginate = (profileProjects as unknown as {
+      paginateCreatorProjectsV1(
+        projects: readonly CreatorProjectSummaryV1[],
+        marketCaps: readonly CreatorProjectMarketCapV1[],
+        requestedPage: number,
+      ): Readonly<{
+        currentPage: number;
+        totalPages: number;
+        items: readonly CreatorProjectSummaryV1[];
+      }>;
+    }).paginateCreatorProjectsV1;
+    expect(typeof paginate).toBe("function");
+
+    const projects = Array.from({ length: 7 }, (_, index) => ({
+      ...project,
+      tokenAddress: `0x${String(index + 1).padStart(40, "0")}` as `0x${string}`,
+      name: `Project ${index + 1}`,
+    }));
+    const marketCaps = [100, 700, 300, 600, 200, 500, 400].map((value, index) => ({
+      tokenAddress: projects[index].tokenAddress,
+      usdWad: String(BigInt(value) * 10n ** 18n),
+      ethWei: null,
+      label: `$${value}`,
+    }));
+
+    expect(paginate(projects, marketCaps, 1)).toMatchObject({
+      currentPage: 1,
+      totalPages: 2,
+      items: [projects[1], projects[3], projects[5], projects[6], projects[2]],
+    });
+    expect(paginate(projects, marketCaps, 99)).toMatchObject({
+      currentPage: 2,
+      totalPages: 2,
+      items: [projects[4], projects[0]],
+    });
+  });
+
   it("refreshes the Privy identity before reading the bound access token", async () => {
     const acquire = (profileProjects as unknown as {
       acquireCreatorArticleAuthHeadersV1(input: Readonly<{

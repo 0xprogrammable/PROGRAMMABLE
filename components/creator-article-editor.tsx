@@ -556,12 +556,53 @@ export default function CreatorArticleEditor({
         aria-describedby={notice ? "article-editor-notice" : undefined}
       >
         <header className={styles.dialogHeader}>
-          <div>
-            <p>{project.symbol ? `$${project.symbol}` : "Verified project"}</p>
-            <h2 id="article-editor-title">{initialArticle ? "Edit article" : "Create article"}</h2>
+          <div className={styles.dialogIdentity}>
+            <div className={styles.dialogArt}>
+              {project.imageUrl ? (
+                <Image src={project.imageUrl} alt="" fill sizes="42px" unoptimized />
+              ) : (
+                <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>
+              )}
+            </div>
+            <div>
+              <p>{project.symbol ? `$${project.symbol}` : "Verified project"} · Creator workspace</p>
+              <h2 id="article-editor-title">{initialArticle ? "Edit article" : "Create article"}</h2>
+            </div>
           </div>
           <button ref={closeButtonRef} type="button" aria-label="Close article editor" onClick={requestClose}><X aria-hidden="true" /></button>
         </header>
+
+        <div className={styles.toolbar} role="toolbar" aria-label="Article formatting">
+          <ToolbarButton label="Normal" active={editor?.isActive("paragraph") ?? false} onClick={() => editor?.chain().focus().unsetAllMarks().setParagraph().run()} />
+          <ToolbarIcon label="Bold" active={editor?.isActive("bold") ?? false} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold /></ToolbarIcon>
+          <ToolbarIcon label="Italic" active={editor?.isActive("italic") ?? false} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic /></ToolbarIcon>
+          <ToolbarIcon label="Heading 2" active={editor?.isActive("heading", { level: 2 }) ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 /></ToolbarIcon>
+          <ToolbarIcon label="Heading 3" active={editor?.isActive("heading", { level: 3 }) ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}><Heading3 /></ToolbarIcon>
+          <ToolbarIcon label="Bullet list" active={editor?.isActive("bulletList") ?? false} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List /></ToolbarIcon>
+          <ToolbarIcon label="Numbered list" active={editor?.isActive("orderedList") ?? false} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered /></ToolbarIcon>
+          <ToolbarIcon label="Undo" onClick={() => editor?.chain().focus().undo().run()}><Undo2 /></ToolbarIcon>
+          <ToolbarIcon label="Redo" onClick={() => editor?.chain().focus().redo().run()}><Redo2 /></ToolbarIcon>
+          <input ref={imageInputRef} hidden type="file" multiple accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            void uploadInlineImages(files);
+          }} />
+          <ToolbarIcon label="Add image" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolbarIcon>
+          <div className={styles.linkControl}>
+            <LinkIcon aria-hidden="true" size={15} />
+            <input
+              value={linkValue}
+              aria-label="Link URL"
+              inputMode="url"
+              placeholder="Paste link"
+              onChange={(event) => setLinkValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") { event.preventDefault(); applyLink(); }
+              }}
+            />
+            <button type="button" onClick={applyLink}>Add link</button>
+          </div>
+        </div>
 
         <div className={styles.editorLayout}>
           <div className={styles.editorPane}>
@@ -593,33 +634,7 @@ export default function CreatorArticleEditor({
               </button>
             </div>
 
-            <div className={styles.toolbar} role="toolbar" aria-label="Article formatting">
-              <ToolbarButton label="Normal" active={editor?.isActive("paragraph") ?? false} onClick={() => editor?.chain().focus().unsetAllMarks().setParagraph().run()} />
-              <ToolbarIcon label="Bold" active={editor?.isActive("bold") ?? false} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold /></ToolbarIcon>
-              <ToolbarIcon label="Italic" active={editor?.isActive("italic") ?? false} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic /></ToolbarIcon>
-              <ToolbarIcon label="Heading 2" active={editor?.isActive("heading", { level: 2 }) ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 /></ToolbarIcon>
-              <ToolbarIcon label="Heading 3" active={editor?.isActive("heading", { level: 3 }) ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}><Heading3 /></ToolbarIcon>
-              <ToolbarIcon label="Bullet list" active={editor?.isActive("bulletList") ?? false} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List /></ToolbarIcon>
-              <ToolbarIcon label="Numbered list" active={editor?.isActive("orderedList") ?? false} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered /></ToolbarIcon>
-              <ToolbarIcon label="Undo" onClick={() => editor?.chain().focus().undo().run()}><Undo2 /></ToolbarIcon>
-              <ToolbarIcon label="Redo" onClick={() => editor?.chain().focus().redo().run()}><Redo2 /></ToolbarIcon>
-              <input ref={imageInputRef} hidden type="file" multiple accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => {
-                const files = [...(event.target.files ?? [])];
-                event.target.value = "";
-                void uploadInlineImages(files);
-              }} />
-              <ToolbarIcon label="Add image" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolbarIcon>
-              <div className={styles.linkControl}>
-                <LinkIcon aria-hidden="true" size={15} />
-                <input value={linkValue} inputMode="url" placeholder="https://domain.com" onChange={(event) => setLinkValue(event.target.value)} onKeyDown={(event) => {
-                  if (event.key === "Enter") { event.preventDefault(); applyLink(); }
-                }} />
-                <button type="button" onClick={applyLink}>Apply</button>
-              </div>
-            </div>
-
             <EditorContent editor={editor} />
-            <p className={styles.pasteHint}>Paste an image anywhere with CMD‑V or Ctrl‑V. Images keep their proportions on every screen.</p>
           </div>
 
           {showPreview && preview ? (

@@ -17,7 +17,10 @@ import {
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
-import { ProfileProjects } from "@/components/profile-projects";
+import {
+  ProfileProjects,
+  type CreatorProjectMarketCapV1,
+} from "@/components/profile-projects";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -1790,6 +1793,15 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       ? requestedOnchainData
       : loadingProfileData(account)
     : UNAVAILABLE_PROFILE_DATA;
+  const creatorProjectMarketCaps = useMemo<readonly CreatorProjectMarketCapV1[]>(
+    () => scopedOnchainData.tokens.map((token) => ({
+      tokenAddress: token.address,
+      usdWad: token.fdvUsdWad ?? null,
+      ethWei: token.marketCapEthWei ?? null,
+      label: profileTokenMarketCapLabel(token),
+    })),
+    [scopedOnchainData.tokens],
+  );
   const scopedClassicV3Rewards = useMemo<ClassicV3ProfileRewards>(() => {
     if (!account || !classicV3ReleaseAvailable) {
       return EMPTY_CLASSIC_V3_PROFILE;
@@ -3189,7 +3201,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         </div>
       </section>
 
-      <ProfileProjects />
+      <ProfileProjects marketCaps={creatorProjectMarketCaps} />
 
       <ProfileAccountWorkspace
         key={account.toLowerCase()}
