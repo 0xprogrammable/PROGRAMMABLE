@@ -1017,7 +1017,6 @@ function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
     scope: value.scope,
     deployment: value.evidence.deployment,
     sourceCommit: value.evidence.sourceCommit,
-    evidenceCommitment: value.evidence.commitment,
   });
 }
 
