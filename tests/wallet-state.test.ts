@@ -136,21 +136,21 @@ function applicantUser(overrides?: Partial<{
 }
 
 describe("wallet recovery state", () => {
-  it("defers the Privy runtime on read-only routes and keeps wallet routes eager", () => {
-    for (const pathname of ["/", "/explore", "/docs", "/docs/creators"]) {
-      expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(false);
-    }
+  it("hydrates the wallet session before every public route renders its wallet action", () => {
     for (const pathname of [
+      "/",
+      "/explore",
+      "/docs",
+      "/docs/creators",
       "/launch",
       "/launch/review",
       "/profile",
       "/profile/settings",
+      "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
     ]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(true);
+      expect(subject.shouldIdlePreloadWalletRuntime(pathname)).toBe(false);
     }
-    const tokenPath = "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
-    expect(subject.shouldEagerLoadWalletRuntime(tokenPath)).toBe(false);
-    expect(subject.shouldIdlePreloadWalletRuntime(tokenPath)).toBe(true);
   });
 
   it("keeps Privy behind an explicit dynamic runtime boundary", () => {
@@ -166,6 +166,8 @@ describe("wallet recovery state", () => {
     expect(provider).toContain('import("./wallet-provider-runtime")');
     expect(provider).toContain("onPointerEnter={preloadWallet}");
     expect(provider).toContain("onFocus={preloadWallet}");
+    expect(provider).toContain('? "Wallet"');
+    expect(provider).toContain(': "Loading wallet"');
     expect(provider).not.toMatch(
       /import\s*\{[\s\S]*?PrivyProvider[\s\S]*?\}\s*from\s*["']@privy-io\/react-auth["']/u,
     );

@@ -275,10 +275,10 @@ describe("profile workspace loading state", () => {
     ).toBe("loading");
   });
 
-  it("reveals verified rewards while optional sources continue loading", () => {
+  it("reveals rewards only after every active source has settled", () => {
     expect(
       getProfileWorkspacePhase(["error", "ready", "loading"], false),
-    ).toBe("ready");
+    ).toBe("loading");
     expect(
       getProfileWorkspacePhase(
         ["error", "ready", "not-deployed"],
@@ -292,7 +292,7 @@ describe("profile workspace loading state", () => {
       ),
     ).toBe("error");
     expect(profileViewSource).toMatch(
-      /if \(integrityConflict\) return "error";[\s\S]*?status === "ready"[\s\S]*?status === "loading"/,
+      /if \(integrityConflict\) return "error";[\s\S]*?status === "loading"[\s\S]*?status === "ready"/,
     );
   });
 

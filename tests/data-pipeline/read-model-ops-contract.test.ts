@@ -916,8 +916,8 @@ describe("read-model operations source contract", () => {
     [
       "profile provider provenance",
       "app/api/explore/profile/route.ts",
-      '"X-Programmable-Read-Source": "rpc"',
-      '"X-Programmable-Read-Source": "unknown"',
+      '"X-Programmable-Launch-Source": "envio-classic-v3"',
+      '"X-Programmable-Launch-Source": "unknown"',
     ],
     [
       "claim receipt binding",

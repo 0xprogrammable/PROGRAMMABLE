@@ -2136,7 +2136,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list and token detail use the validated Envio Classic V3 catalog plus bounded exact-identity Dexscreener enrichment; charts bind one exact pool through Bitquery while profile and action routes retain their commitment-bound Website RPC semantics",
+    "Explore list, token detail and creator identity use the validated Envio Classic V3 catalog; Dexscreener remains bounded exact-identity enrichment, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2147,12 +2147,16 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-profile-claim-trade-provider-boundary",
     includesEverySourceFragment(publicCreatorProfile, [
-      "readCreatorProfile",
+      "readEnvioCreatorProfile",
+      "readEnvioClassicV3CatalogV1",
+      "readEnvioClassicV2CreatorClaimsV1",
+      "LEGACY_RPC_PROFILE_FALLBACK_ENABLED: boolean = false",
       "getWebsiteReadOnchainDeployment",
       "withOperationalRpcFailover",
       "profileRpcProviderHeader",
-      '"X-Programmable-Launch-Source": "rpc"',
-      '"X-Programmable-Read-Source": "rpc"',
+      '"X-Programmable-Launch-Source": "envio-classic-v3"',
+      '? "envio-classic-v3"',
+      ': "envio-classic-v3+rpc"',
       '"X-Programmable-Rpc-Provider": result.provider',
     ]) &&
       !publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
@@ -2222,7 +2226,7 @@ export function evaluateReadModelOperationsSourceContracts(
         (route) =>
           !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
-    "Profile, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
+    "Profile identity is Envio-first and fail-closed, while the sole official Classic V2 reward read, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
   );
   check(
     "ops-staged-envio-catalog-gate",

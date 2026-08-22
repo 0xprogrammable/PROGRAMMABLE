@@ -43,6 +43,7 @@ const CONFIRMATIONS = 12n;
 const LOG_RANGE = 10_000n;
 const LOG_RANGE_CONCURRENCY = 2;
 const TOTAL_SUPPLY_RAW = "1000000000000000000000000000";
+const LEGACY_RPC_PROFILE_FALLBACK_ENABLED: boolean = false;
 
 type Release = Readonly<{
   launcher: Address;
@@ -678,56 +679,55 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const deployment = getWebsiteReadOnchainDeployment("production");
-    const result = await withOperationalRpcFailover(
-      deployment,
-      async (selected) => ({
-        profile: await readCreatorProfile(
-          getAddress(input),
-          profileClient(selected.rpcUrl),
-        ),
-        provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
-      }),
+    const result = await readEnvioCreatorProfile(
+      getAddress(input),
+      request.signal,
     );
     return NextResponse.json(result.profile, {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Launch-Source": "rpc",
-        "X-Programmable-Read-Source": "rpc",
+        "X-Programmable-Launch-Source": "envio-classic-v3",
+        "X-Programmable-Read-Source":
+          result.provider === "envio-indexer-state"
+            ? "envio-classic-v3"
+            : "envio-classic-v3+rpc",
         "X-Programmable-Rpc-Provider": result.provider,
       },
     });
   } catch (error) {
-    console.error(
-      "Creator profile RPC read failed",
-      {
-        name: error instanceof Error ? error.name : "UnknownError",
-        category: "read-failed",
-      },
-    );
-    try {
-      const fallback = await readEnvioCreatorProfile(
-        getAddress(input),
-        request.signal,
-      );
-      return NextResponse.json(fallback.profile, {
-        headers: {
-          "Cache-Control": "private, max-age=0, s-maxage=15",
-          "X-Programmable-Launch-Source": "envio-classic-v3",
-          "X-Programmable-Read-Source":
-            fallback.provider === "envio-indexer-state"
-              ? "envio-classic-v3"
-              : "envio-classic-v3+rpc",
-          "X-Programmable-Rpc-Provider": fallback.provider,
-        },
-      });
-    } catch (fallbackError) {
-      console.error("Envio creator profile fallback failed", {
-        name:
-          fallbackError instanceof Error
-            ? fallbackError.name
-            : "EnvioCreatorProfileError",
-      });
+    console.error("Envio creator profile read failed", {
+      name: error instanceof Error ? error.name : "EnvioCreatorProfileError",
+      category: "read-failed",
+    });
+    if (LEGACY_RPC_PROFILE_FALLBACK_ENABLED) {
+      try {
+        const deployment = getWebsiteReadOnchainDeployment("production");
+        const fallback = await withOperationalRpcFailover(
+          deployment,
+          async (selected) => ({
+            profile: await readCreatorProfile(
+              getAddress(input),
+              profileClient(selected.rpcUrl),
+            ),
+            provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
+          }),
+        );
+        return NextResponse.json(fallback.profile, {
+          headers: {
+            "Cache-Control": "private, max-age=0, s-maxage=15",
+            "X-Programmable-Launch-Source": "rpc",
+            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Rpc-Provider": fallback.provider,
+          },
+        });
+      } catch (fallbackError) {
+        console.error("Legacy creator profile fallback failed", {
+          name:
+            fallbackError instanceof Error
+              ? fallbackError.name
+              : "LegacyCreatorProfileError",
+        });
+      }
     }
     return NextResponse.json(creatorProfileApiError("temporary"), {
       status: 503,
