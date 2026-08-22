@@ -80,7 +80,6 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
       setProjects(nextProjects);
       setProjectPage(1);
       editorRequestsRef.current.clear();
-      if (nextProjects.length > 0) preloadCreatorArticleEditorModule();
       setPhase("ready");
     } catch {
       if (signal?.aborted) return;
@@ -122,15 +121,6 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
     preloadCreatorArticleEditorModule();
     void getEditorState(project).catch(() => undefined);
   }, [getEditorState]);
-
-  useEffect(() => {
-    if (phase !== "ready" || pageData.items.length === 0) return;
-    const timer = window.setTimeout(() => {
-      preloadCreatorArticleEditorModule();
-      void preloadCreatorArticlePageV1(pageData.items, getEditorState, 2);
-    }, 80);
-    return () => window.clearTimeout(timer);
-  }, [getEditorState, pageData.items, phase]);
 
   const focusEditorTrigger = useCallback(() => {
     window.requestAnimationFrame(() => editorTriggerRef.current?.focus());
@@ -250,7 +240,7 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
                   type="button"
                   disabled={openingProject !== null}
                   onPointerEnter={() => warmEditor(project)}
-                  onPointerDown={preloadCreatorArticleEditorModule}
+                  onPointerDown={() => warmEditor(project)}
                   onFocus={() => warmEditor(project)}
                   onClick={(event) => void openEditor(project, event.currentTarget)}
                 >
@@ -295,30 +285,6 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
       ) : null}
     </section>
   );
-}
-
-export async function preloadCreatorArticlePageV1(
-  projects: readonly CreatorProjectSummaryV1[],
-  load: (project: CreatorProjectSummaryV1) => Promise<unknown>,
-  concurrency = 2,
-): Promise<void> {
-  if (projects.length === 0) return;
-  const workerCount = Math.min(
-    projects.length,
-    Number.isSafeInteger(concurrency) && concurrency > 0 ? concurrency : 1,
-  );
-  let cursor = 0;
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (cursor < projects.length) {
-      const project = projects[cursor];
-      cursor += 1;
-      try {
-        await load(project);
-      } catch {
-        // Prewarming is best effort. An explicit open retries failed requests.
-      }
-    }
-  }));
 }
 
 function CreatorArticleEditorOpening({

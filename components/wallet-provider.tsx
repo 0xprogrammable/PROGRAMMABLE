@@ -140,7 +140,9 @@ function loadWalletProviderRuntime() {
 }
 
 export function shouldEagerLoadWalletRuntime(pathname: string) {
-  return pathname.startsWith("/");
+  return ["/launch", "/profile", "/token"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 export function shouldIdlePreloadWalletRuntime(pathname: string) {
@@ -705,7 +707,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!privyAppId || runtime || !shouldIdlePreloadWalletRuntime(pathname)) return;
     let cancelled = false;
     const preload = () => {
-      if (!cancelled) void loadWalletProviderRuntime().catch(() => undefined);
+      if (cancelled) return;
+      void loadWalletProviderRuntime().then(
+        (loadedRuntime) => {
+          if (!cancelled) setRuntime(loadedRuntime);
+        },
+        () => {
+          if (!cancelled) setLoadFailed(true);
+        },
+      );
     };
     const idleWindow = window as Window & {
       requestIdleCallback?: Window["requestIdleCallback"];
@@ -2167,6 +2177,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     wallet,
     username,
     avatarDataUrl,
+    authReady,
     authenticated,
     hasSession,
     connecting,
@@ -2215,15 +2226,17 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       ? compact
         ? "Wallet"
         : "Loading wallet"
-      : wallet
-        ? username || shortenAddress(wallet.account)
-        : authenticated
-          ? "Set up wallet"
-          : hasSession
-            ? "Reconnect"
-            : compact
-              ? "Connect"
-              : "Connect wallet";
+      : !authReady
+        ? "Wallet"
+        : wallet
+          ? username || shortenAddress(wallet.account)
+          : authenticated
+            ? "Set up wallet"
+            : hasSession
+              ? "Reconnect"
+              : compact
+                ? "Connect"
+                : "Connect wallet";
 
   const button = (
     <button

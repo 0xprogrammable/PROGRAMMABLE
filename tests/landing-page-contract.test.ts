@@ -36,8 +36,9 @@ describe("landing page contract", () => {
 
     expect(backdrop).not.toContain('"use client"');
     expect(backdrop).not.toContain("<video");
-    expect(backdrop).toContain("const TWINKLE_COUNT = 112");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 48");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 56");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 20");
+    expect(backdrop).not.toContain("atmosphere-botanicals");
     expect(backdrop).toContain('aria-hidden="true"');
     expect(finalStyles).toMatch(
       /\.atmosphere-backdrop\s*\{[^}]*background:\s*var\(--webde-canvas\);/s,
@@ -52,6 +53,7 @@ describe("landing page contract", () => {
     expect(landing).toContain(
       'src="/brand/atmosphere/programmable-floral-foreground-v1.avif"',
     );
+    expect(landing).toContain("const HERO_TWINKLE_COUNT = 88");
     expect(landing).toContain('<h1 id="landing-title">Programmable</h1>');
     expect(landing).toContain("Shape what assets can do");
     expect(landing).toContain('id="intro"');
@@ -59,7 +61,7 @@ describe("landing page contract", () => {
     expect(landing).toContain('id="what-is-programmable"');
     expect(landing).toContain('id="what-is-a-hook"');
     expect(landing).toContain('id="explore"');
-    expect(landing).toContain("<ExploreView />");
+    expect(landing).toContain("<ExploreView embedded />");
     expect(landing).toContain('href="/docs"');
     expect(landing).toContain(
       'href="https://docs.uniswap.org/contracts/v4/overview"',
@@ -73,6 +75,16 @@ describe("landing page contract", () => {
       const assetPath = join(root, "public/brand/atmosphere", asset);
       expect(existsSync(assetPath)).toBe(true);
       expect(statSync(assetPath).size).toBeLessThan(2 * 1024 * 1024);
+    }
+
+    for (const [asset, maximumBytes] of [
+      ["programmable-floral-foreground-v1.avif", 1_000_000],
+      ["programmable-floral-foreground-tablet-v1.avif", 550_000],
+      ["programmable-floral-foreground-mobile-v1.avif", 400_000],
+    ] as const) {
+      expect(
+        statSync(join(root, "public/brand/atmosphere", asset)).size,
+      ).toBeLessThan(maximumBytes);
     }
   });
 
@@ -105,7 +117,9 @@ describe("landing page contract", () => {
     );
     expect(landing).toContain('window.location.hash !== "#explore"');
     expect(landing).toContain('document.querySelector<HTMLElement>(".header-inner")');
-    expect(landing).toContain('chapter?.querySelector<HTMLElement>("h1")');
+    expect(landing).toContain(
+      'chapter?.querySelector<HTMLElement>("[data-explore-heading]")',
+    );
     expect(landing).toContain('window.scrollTo({ behavior: "auto"');
     expect(landing).toContain("data-reveal-section");
     expect(landing).not.toContain('addEventListener("wheel"');
@@ -145,8 +159,8 @@ describe("landing page contract", () => {
     const interfaceStyles = read("app/interface.css");
     const finalStyles = read("app/webde-final-ui.css");
 
-    expect(backdrop).toContain("const TWINKLE_COUNT = 112");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 48");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 56");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 20");
     expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(backdrop).toContain("Array.from({ length: LOWER_TWINKLE_COUNT }");
     expect(backdrop).toContain("const duration = 4.6");

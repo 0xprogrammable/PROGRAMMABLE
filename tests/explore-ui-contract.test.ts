@@ -36,7 +36,9 @@ describe("Explore UI contract", () => {
       'const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none")',
     );
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
-    expect(source).toContain("<h1>Explore Hooks</h1>");
+    expect(source).toContain('const Heading = embedded ? "h2" : "h1"');
+    expect(source).toContain("<Heading data-explore-heading>Explore Hooks</Heading>");
+    expect(source).toContain("const eagerImage = !embedded");
     expect(source).not.toContain("ExploreGridSkeleton");
     expect(source).toContain(
       'className={styles.loadingState} aria-busy="true"',

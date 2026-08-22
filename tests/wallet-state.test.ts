@@ -136,12 +136,8 @@ function applicantUser(overrides?: Partial<{
 }
 
 describe("wallet recovery state", () => {
-  it("hydrates the wallet session before every public route renders its wallet action", () => {
+  it("hydrates wallet-critical routes eagerly", () => {
     for (const pathname of [
-      "/",
-      "/explore",
-      "/docs",
-      "/docs/creators",
       "/launch",
       "/launch/review",
       "/profile",
@@ -150,6 +146,13 @@ describe("wallet recovery state", () => {
     ]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(true);
       expect(subject.shouldIdlePreloadWalletRuntime(pathname)).toBe(false);
+    }
+  });
+
+  it("hydrates browse-only routes during browser idle time", () => {
+    for (const pathname of ["/", "/explore", "/docs", "/docs/creators"]) {
+      expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(false);
+      expect(subject.shouldIdlePreloadWalletRuntime(pathname)).toBe(true);
     }
   });
 
@@ -166,6 +169,7 @@ describe("wallet recovery state", () => {
     expect(provider).toContain('import("./wallet-provider-runtime")');
     expect(provider).toContain("onPointerEnter={preloadWallet}");
     expect(provider).toContain("onFocus={preloadWallet}");
+    expect(provider).toContain(': !authReady');
     expect(provider).toContain('? "Wallet"');
     expect(provider).toContain(': "Loading wallet"');
     expect(provider).not.toMatch(
