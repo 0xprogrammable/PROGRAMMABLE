@@ -2088,3 +2088,139 @@
     padding: 18px;
   }
 }
+
+/* Prediction is a two-sided market, so its picker art is the product model. */
+.predictionCard {
+  grid-column: 1 / -1;
+  order: -2;
+}
+
+.predictionCard.modelCard {
+  min-height: 278px;
+}
+
+.predictionArt {
+  background: #0b1012;
+}
+
+.predictionRail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: 100%;
+  min-height: 100%;
+  position: relative;
+}
+
+.predictionSide {
+  align-content: center;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 28px clamp(24px, 4vw, 54px);
+}
+
+.predictionSide > span {
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+}
+
+.predictionSide strong {
+  font-size: clamp(56px, 7vw, 92px);
+  font-weight: 540;
+  letter-spacing: -0.07em;
+  line-height: 0.88;
+}
+
+.predictionSide small {
+  font-size: 11px;
+  opacity: 0.72;
+}
+
+.predictionYes {
+  background: #12362c;
+  color: #9ce3bd;
+  text-align: left;
+}
+
+.predictionNo {
+  background: #381527;
+  color: #f4a8cb;
+  text-align: right;
+}
+
+.predictionCondition {
+  align-content: center;
+  background: #f4eee7;
+  border: 1px solid rgb(0 0 0 / 0.18);
+  border-radius: 999px;
+  color: #111;
+  display: grid;
+  gap: 1px;
+  left: 50%;
+  min-height: 96px;
+  min-width: 142px;
+  padding: 15px 20px;
+  position: absolute;
+  text-align: center;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.predictionCondition > span,
+.predictionCondition > small {
+  font-size: 9px;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.predictionCondition strong {
+  font-size: 20px;
+  letter-spacing: -0.04em;
+}
+
+@media (min-width: 761px) {
+  .predictionCard.modelCard {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(310px, 0.65fr);
+  }
+
+  .predictionCard .predictionArt {
+    aspect-ratio: auto;
+    border-bottom: 0;
+    border-right: 1px solid var(--webde-line);
+    height: 100%;
+  }
+
+  .predictionCard .modelBody {
+    align-content: center;
+    min-height: 278px;
+    padding: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .predictionCard {
+    grid-column: auto;
+  }
+
+  .predictionArt {
+    aspect-ratio: 1.35 / 1;
+  }
+
+  .predictionSide {
+    padding: 22px 18px;
+  }
+
+  .predictionCondition {
+    min-height: 82px;
+    min-width: 118px;
+    padding: 12px 14px;
+  }
+
+  .predictionCondition strong {
+    font-size: 17px;
+  }
+}

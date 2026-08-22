@@ -42,9 +42,18 @@ function loadCustomLaunch() {
   return import("@/components/custom-launch-experience");
 }
 
+function loadPredictionMarket() {
+  return import("@/components/prediction-market-launch");
+}
+
 const LazyCustomLaunchExperience = lazy(async () => {
   const customModule = await loadCustomLaunch();
   return { default: customModule.CustomLaunchExperience };
+});
+
+const LazyPredictionMarketLaunch = lazy(async () => {
+  const predictionModule = await loadPredictionMarket();
+  return { default: predictionModule.PredictionMarketLaunch };
 });
 
 const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development"
@@ -56,6 +65,7 @@ const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development
 
 type LaunchBuilderComponent =
   (typeof import("@/components/launch-builder"))["LaunchBuilderForm"];
+type LaunchPickerChoice = LaunchModel | "custom" | "prediction";
 
 function LaunchFormLoading({
   onBack,
@@ -136,17 +146,23 @@ function LaunchExperienceRuntime({
   customLaunchPublicEnabled,
   trustedLaunchPermitSigners = [],
 }: LaunchExperienceProps) {
-  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
+  const [selectedModel, setSelectedModel] = useState<LaunchPickerChoice | null>(null);
   const [loadedLaunchBuilder, setLoadedLaunchBuilder] =
     useState<LaunchBuilderComponent | null>(null);
   const [preparingModel, setPreparingModel] = useState<LaunchModel | null>(null);
   const [modelLoadError, setModelLoadError] = useState("");
   const customLaunchButtonRef = useRef<HTMLButtonElement>(null);
-  const restoreCustomLaunchFocusRef = useRef(false);
+  const predictionButtonRef = useRef<HTMLButtonElement>(null);
+  const restorePickerFocusRef = useRef<"custom" | "prediction" | null>(null);
 
   useEffect(() => {
-    if (selectedModel !== null || !restoreCustomLaunchFocusRef.current) return;
-    restoreCustomLaunchFocusRef.current = false;
+    if (selectedModel !== null || restorePickerFocusRef.current === null) return;
+    const modelToRestore = restorePickerFocusRef.current;
+    restorePickerFocusRef.current = null;
+    if (modelToRestore === "prediction") {
+      predictionButtonRef.current?.focus();
+      return;
+    }
     customLaunchButtonRef.current?.focus();
   }, [selectedModel]);
 
@@ -154,7 +170,12 @@ function LaunchExperienceRuntime({
     void loadLaunchForm().catch(() => undefined);
   }, []);
 
-  async function chooseModel(candidate: LaunchModel | "custom") {
+  async function chooseModel(candidate: LaunchPickerChoice) {
+    if (candidate === "prediction") {
+      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+      setSelectedModel("prediction");
+      return;
+    }
     if (candidate === "custom") {
       if (!customLaunchPublicEnabled) return;
       window.scrollTo({ left: 0, top: 0, behavior: "auto" });
@@ -187,7 +208,10 @@ function LaunchExperienceRuntime({
   }
 
   function returnToModels() {
-    restoreCustomLaunchFocusRef.current = selectedModel === "custom";
+    restorePickerFocusRef.current =
+      selectedModel === "custom" || selectedModel === "prediction"
+        ? selectedModel
+        : null;
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(null);
   }
@@ -197,6 +221,7 @@ function LaunchExperienceRuntime({
       <LaunchModelPicker
         customLaunchPublicEnabled={customLaunchPublicEnabled}
         customLaunchButtonRef={customLaunchButtonRef}
+        predictionButtonRef={predictionButtonRef}
         modelLoadError={modelLoadError}
         onChoose={chooseModel}
         preparingModel={preparingModel}
@@ -211,6 +236,14 @@ function LaunchExperienceRuntime({
           onBack={returnToModels}
           trustedLaunchPermitSigners={trustedLaunchPermitSigners}
         />
+      </Suspense>
+    );
+  }
+
+  if (selectedModel === "prediction") {
+    return (
+      <Suspense fallback={<LaunchFormLoading title="Create a BTC market" onBack={returnToModels} />}>
+        <LazyPredictionMarketLaunch onBack={returnToModels} />
       </Suspense>
     );
   }
@@ -230,6 +263,7 @@ function LaunchExperienceRuntime({
 export function LaunchModelPicker({
   customLaunchPublicEnabled = false,
   customLaunchButtonRef,
+  predictionButtonRef,
   modelLoadError = "",
   onChoose,
   preparingModel = null,
@@ -240,8 +274,9 @@ export function LaunchModelPicker({
    */
   customLaunchPublicEnabled?: boolean;
   customLaunchButtonRef?: RefObject<HTMLButtonElement | null>;
+  predictionButtonRef?: RefObject<HTMLButtonElement | null>;
   modelLoadError?: string;
-  onChoose: (model: LaunchModel | "custom") => void | Promise<void>;
+  onChoose: (model: LaunchPickerChoice) => void | Promise<void>;
   preparingModel?: LaunchModel | null;
 }) {
   const preloadAvailableForm = () => {
@@ -250,6 +285,9 @@ export function LaunchModelPicker({
   const preloadCustomLaunch = () => {
     if (!customLaunchPublicEnabled) return;
     void loadCustomLaunch();
+  };
+  const preloadPredictionMarket = () => {
+    void loadPredictionMarket().catch(() => undefined);
   };
 
   const customCardContent = (
@@ -318,6 +356,73 @@ export function LaunchModelPicker({
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
+        <button
+          ref={predictionButtonRef}
+          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.predictionCard} liquid-glass-surface`}
+          data-launch-model-option="prediction"
+          data-launch-model-available="true"
+          data-launch-model-launchable="false"
+          data-launch-model-preview="true"
+          type="button"
+          aria-labelledby="launch-model-prediction-title"
+          aria-describedby="launch-model-prediction-description"
+          onPointerEnter={preloadPredictionMarket}
+          onPointerDown={preloadPredictionMarket}
+          onFocus={preloadPredictionMarket}
+          onClick={() => void onChoose("prediction")}
+        >
+          <span
+            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.predictionArt}`}
+            aria-hidden="true"
+          >
+            <span className={launchExperience.predictionRail}>
+              <span
+                className={`${launchExperience.predictionSide} ${launchExperience.predictionYes}`}
+              >
+                <span>YES</span>
+                <strong>50</strong>
+                <small>cents</small>
+              </span>
+              <span className={launchExperience.predictionCondition}>
+                <span>BTC</span>
+                <strong>&ge; $60K</strong>
+                <small>UTC close</small>
+              </span>
+              <span
+                className={`${launchExperience.predictionSide} ${launchExperience.predictionNo}`}
+              >
+                <span>NO</span>
+                <strong>50</strong>
+                <small>cents</small>
+              </span>
+            </span>
+          </span>
+          <span
+            className={`launch-model-card-body ${launchExperience.modelBody}`}
+          >
+            <span
+              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+            >
+              <strong id="launch-model-prediction-title">Prediction</strong>
+              <small data-status="preview">Technical preview</small>
+            </span>
+            <span
+              className={`launch-model-description ${launchExperience.modelDescription}`}
+              id="launch-model-prediction-description"
+            >
+              Create a BTC price market with YES and NO outcome tokens, a fixed
+              UTC result time, and a 2 USDG seed instead of a separate liquidity
+              deposit.
+            </span>
+            <span
+              className={`launch-model-action ${launchExperience.modelAction}`}
+            >
+              Design a BTC market
+              <ArrowRight aria-hidden="true" size={16} />
+            </span>
+          </span>
+        </button>
+
         <button
           ref={customLaunchButtonRef}
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
