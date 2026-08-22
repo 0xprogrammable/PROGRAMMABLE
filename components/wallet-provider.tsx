@@ -140,14 +140,11 @@ function loadWalletProviderRuntime() {
 }
 
 export function shouldEagerLoadWalletRuntime(pathname: string) {
-  return pathname === "/launch"
-    || pathname.startsWith("/launch/")
-    || pathname === "/profile"
-    || pathname.startsWith("/profile/");
+  return pathname.startsWith("/");
 }
 
 export function shouldIdlePreloadWalletRuntime(pathname: string) {
-  return pathname.startsWith("/token/");
+  return !shouldEagerLoadWalletRuntime(pathname);
 }
 
 if (
@@ -2216,8 +2213,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     ? "Disconnecting"
     : connecting
       ? compact
-        ? "Connect"
-        : "Connect wallet"
+        ? "Wallet"
+        : "Loading wallet"
       : wallet
         ? username || shortenAddress(wallet.account)
         : authenticated

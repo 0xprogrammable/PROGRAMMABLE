@@ -337,10 +337,10 @@ export function getProfileWorkspacePhase(
   integrityConflict = false,
 ): ProfileWorkspacePhase {
   if (integrityConflict) return "error";
-  if (statuses.some((status) => status === "ready")) return "ready";
   if (statuses.some((status) => status === "loading")) {
     return "loading";
   }
+  if (statuses.some((status) => status === "ready")) return "ready";
   if (!terminalErrorReady) return "loading";
   return "error";
 }

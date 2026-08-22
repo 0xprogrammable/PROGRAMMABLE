@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
       };
     },
   ),
+  readEnvioClassicV2CreatorClaimsV1: vi.fn(),
+  readEnvioClassicV3CatalogV1: vi.fn(),
   readBitqueryCreatorProfile: vi.fn(),
   readAlchemyCreatorProfile: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
@@ -141,11 +143,66 @@ vi.mock("../lib/market-data/bitquery-profile.server", () => ({
   safeBitqueryProfileError: vi.fn((error) => error),
 }));
 
+vi.mock("../lib/market-data/envio-classic-v2-creator-claims.server", () => ({
+  readEnvioClassicV2CreatorClaimsV1:
+    mocks.readEnvioClassicV2CreatorClaimsV1,
+}));
+
+vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
+  readEnvioClassicV3CatalogV1: mocks.readEnvioClassicV3CatalogV1,
+}));
+
 import { GET as creatorProfile } from "../app/api/explore/profile/route";
 import { GET as stockLaunchLookup } from "../app/api/explore/launch/stock-paired/route";
 
 const ACCOUNT = "0x1111111111111111111111111111111111111111";
 const TRANSACTION = `0x${"22".repeat(32)}`;
+const PROFILE_TOKEN = "0x3333333333333333333333333333333333333333";
+const PROFILE_POOL = `0x${"44".repeat(32)}`;
+const PROFILE_HOOK = "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC";
+const PROFILE_LAUNCHER = "0xD240D06f8586eB799f20056054e5b527405E6bAd";
+
+function profileCatalog(releaseVersion: "classic-v2" | "classic-v3" = "classic-v3") {
+  return {
+    source: "envio-classic-v3",
+    status: "current",
+    generatedAt: "2026-08-22T08:00:00.000Z",
+    asOfBlock: "25624188",
+    asOfBlockHash: `0x${"99".repeat(32)}`,
+    entries: [{
+      exploreKind: "token",
+      id: `1:${releaseVersion}:${PROFILE_TOKEN}`,
+      name: "Envio Token",
+      symbol: "ENVIO",
+      tokenAddress: PROFILE_TOKEN,
+      hookAddress: PROFILE_HOOK,
+      poolId: PROFILE_POOL,
+      creatorAddress: ACCOUNT,
+      positionRecipient: ACCOUNT,
+      positionTokenId: "7",
+      launchHash: `0x${"66".repeat(32)}`,
+      launchedAt: "2026-08-22T07:00:00.000Z",
+      totalSupply: "1000000000",
+      totalSupplyRaw: "1000000000000000000000000000",
+      tokenDecimals: 18,
+      totalSwapFeeBps: 100,
+      buyHookFeeBps: 100,
+      sellHookFeeBps: 100,
+      launchModel: "classic",
+      launchModelVersion: releaseVersion,
+      liquidityPath: "meme",
+      links: [],
+      launchCategoryProvenance: {
+        schemaVersion: "programmable.explore-launch-category-provenance.v1",
+        category: "classic",
+        source: "canonical-launch-read-model",
+        recordId: `1:${releaseVersion}:${PROFILE_TOKEN}`,
+        modelId: "classic",
+        modelVersion: releaseVersion,
+      },
+    }],
+  };
+}
 
 describe("public route coordinator wiring", () => {
   beforeEach(() => {
@@ -159,6 +216,8 @@ describe("public route coordinator wiring", () => {
     );
     rpcFixtures.client.getLogs.mockResolvedValue([]);
     mocks.createPublicClient.mockReturnValue(rpcFixtures.client);
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue(profileCatalog());
+    mocks.readEnvioClassicV2CreatorClaimsV1.mockResolvedValue([]);
     const drpc = "https://lb.drpc.live/ethereum/drpc-profile-key";
     mocks.getWebsiteReadOnchainDeployment.mockReturnValue({
       status: "ready",
@@ -169,74 +228,14 @@ describe("public route coordinator wiring", () => {
       rpcUrlSecondary:
         "https://profile-node.ethereum-mainnet.quiknode.pro/quicknode-profile-key/",
       rpcProviderIds: { primary: "drpc", secondary: "quicknode" },
+      launcher: PROFILE_LAUNCHER,
+      feeHook: PROFILE_HOOK,
+      launcherRuntimeCodeHash: rpcFixtures.runtimeCodes["0x03"],
+      feeHookRuntimeCodeHash: rpcFixtures.runtimeCodes["0x04"],
     });
   });
 
-  it("derives current, generated and claimed totals from sparse dRPC state", async () => {
-    const launcher = "0xD240D06f8586eB799f20056054e5b527405E6bAd";
-    const hook = "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC";
-    const token = "0x3333333333333333333333333333333333333333";
-    const poolId = `0x${"44".repeat(32)}`;
-    const transactionHash = `0x${"55".repeat(32)}`;
-    rpcFixtures.client.getLogs.mockImplementation(async (inputValue?: unknown) => {
-      const input = inputValue as {
-        address: string;
-        event: { name: string };
-      };
-      if (
-        input.address.toLowerCase() === launcher.toLowerCase() &&
-        input.event.name === "MemeTokenLaunched"
-      ) {
-        return [{
-          removed: false,
-          blockNumber: 25_624_150n,
-          transactionHash,
-          transactionIndex: 2,
-          logIndex: 3,
-          args: {
-            creator: ACCOUNT,
-            token,
-            poolId,
-            feeHook: hook,
-            positionRecipient: ACCOUNT,
-            positionTokenId: 7n,
-            totalSwapFeeBps: 100,
-            launchHash: `0x${"66".repeat(32)}`,
-          },
-        }];
-      }
-      if (
-        input.address.toLowerCase() === hook.toLowerCase() &&
-        input.event.name === "CreatorFeesClaimed"
-      ) {
-        return [{
-          removed: false,
-          blockNumber: 25_624_160n,
-          transactionHash: `0x${"77".repeat(32)}`,
-          transactionIndex: 1,
-          logIndex: 4,
-          args: {
-            poolId,
-            creator: ACCOUNT,
-            recipient: ACCOUNT,
-            caller: ACCOUNT,
-            amount: 40n,
-          },
-        }];
-      }
-      return [];
-    });
-    rpcFixtures.client.readContract.mockImplementation(async (input: {
-      functionName: string;
-    }) => {
-      if (input.functionName === "name") return "dRPC Token";
-      if (input.functionName === "symbol") return "DRPC";
-      if (input.functionName === "poolFeeConfig") {
-        return [ACCOUNT, launcher, 100, true, 60n];
-      }
-      throw new Error(`Unexpected read ${input.functionName}`);
-    });
-
+  it("returns verified catalog identities without a historical RPC scan", async () => {
     const response = await creatorProfile(new NextRequest(
       `http://localhost/api/explore/profile?account=${ACCOUNT}`,
     ));
@@ -245,25 +244,26 @@ describe("public route coordinator wiring", () => {
     await expect(response.json()).resolves.toMatchObject({
       status: "ready",
       account: ACCOUNT,
-      tokens: [{ tokenAddress: token, creatorFeesAccruedWei: "60" }],
+      tokens: [{ tokenAddress: PROFILE_TOKEN, launchModelVersion: "classic-v3" }],
       pools: [{
-        tokenAddress: token,
-        claimableCreatorFeesWei: "60",
-        generatedCreatorFeesWei: "100",
+        tokenAddress: PROFILE_TOKEN,
+        claimableCreatorFeesWei: "0",
+        generatedCreatorFeesWei: "0",
       }],
-      claims: [{ amountWei: "40", tokenAddress: token }],
+      claims: [],
       totals: {
-        claimableWei: "60",
-        generatedWei: "100",
-        claimedWei: "40",
+        claimableWei: "0",
+        generatedWei: "0",
+        claimedWei: "0",
       },
     });
-    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.readEnvioClassicV3CatalogV1).toHaveBeenCalledTimes(1);
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
   });
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it("reports the healthy bound primary creator profile source", async () => {
+  it("reports the healthy bound Envio creator profile source", async () => {
     const response = await creatorProfile(
       new NextRequest(
         `http://localhost/api/explore/profile?account=${ACCOUNT}`,
@@ -271,7 +271,7 @@ describe("public route coordinator wiring", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
     expect(mocks.readBitqueryCreatorProfile).not.toHaveBeenCalled();
     expect(mocks.readAlchemyCreatorProfile).not.toHaveBeenCalled();
     expect(mocks.coordinatePublicRouteRead).not.toHaveBeenCalled();
@@ -279,17 +279,27 @@ describe("public route coordinator wiring", () => {
       "private, max-age=0, s-maxage=15",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "rpc",
+      "envio-classic-v3",
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "rpc",
+      "envio-classic-v3",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "drpc-primary",
+      "envio-indexer-state",
     );
   });
 
-  it("retries the whole creator profile read on the fixed secondary after primary capacity failure", async () => {
+  it("uses bounded RPC failover only for the official Classic V2 reward state", async () => {
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue(
+      profileCatalog("classic-v2"),
+    );
+    rpcFixtures.client.readContract.mockResolvedValue([
+      ACCOUNT,
+      PROFILE_LAUNCHER,
+      100,
+      true,
+      60n,
+    ]);
     rpcFixtures.client.getBlockNumber.mockRejectedValueOnce(
       new RpcRequestError({
         body: { method: "eth_blockNumber" },
@@ -314,12 +324,15 @@ describe("public route coordinator wiring", () => {
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "quicknode-secondary",
     );
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "envio-classic-v3+rpc",
+    );
   });
 
-  it("fails closed before transport when the Website RPC binding is invalid", async () => {
-    mocks.getWebsiteReadOnchainDeployment.mockImplementationOnce(() => {
-      throw new Error("Website primary RPC binding is invalid");
-    });
+  it("fails closed without restoring historical RPC identities when Envio is unavailable", async () => {
+    mocks.readEnvioClassicV3CatalogV1.mockRejectedValueOnce(
+      new Error("Envio temporarily unavailable"),
+    );
 
     const response = await creatorProfile(
       new NextRequest(
