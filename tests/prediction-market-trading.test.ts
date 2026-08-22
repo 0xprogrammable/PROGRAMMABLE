@@ -5,6 +5,7 @@ import {
   assertPredictionConfirmedBlocksMatch,
   parsePredictionBuyAmount,
   parsePredictionSellAmount,
+  predictionMarketInternal,
   predictionMarketPageIndices,
   predictionDirectionalProtocolFee,
   predictionYesProbabilityBps,
@@ -110,5 +111,25 @@ describe("prediction market trading math", () => {
         hash: `0x${"44".repeat(32)}`,
       }),
     ).toThrow("confirmed block");
+  });
+
+  it("bounds concurrent market reads while preserving directory order", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    const values = Array.from({ length: 11 }, (_, index) => index);
+
+    const result = await predictionMarketInternal.mapPredictionMarketsInBatches(
+      values,
+      async (value) => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        active -= 1;
+        return value * 2;
+      },
+    );
+
+    expect(maximumActive).toBe(4);
+    expect(result).toEqual(values.map((value) => value * 2));
   });
 });

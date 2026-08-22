@@ -44,6 +44,7 @@ const UINT256_MAX = (1n << 256n) - 1n;
 const Q192 = 1n << 192n;
 const FACE_SCALE = 10n;
 const MAX_BUY_COLLATERAL_ATOMS = UINT128_MAX * FACE_SCALE;
+const PREDICTION_DIRECTORY_MARKET_BATCH_SIZE = 4;
 const MIN_SQRT_PRICE = 4_295_128_739n;
 const MAX_SQRT_PRICE =
   1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_342n;
@@ -629,6 +630,27 @@ export function predictionMarketPageIndices({
   } as const;
 }
 
+async function mapPredictionMarketsInBatches<Input, Output>(
+  values: readonly Input[],
+  mapper: (value: Input) => Promise<Output>,
+) {
+  const output: Output[] = [];
+  for (
+    let index = 0;
+    index < values.length;
+    index += PREDICTION_DIRECTORY_MARKET_BATCH_SIZE
+  ) {
+    output.push(
+      ...(await Promise.all(
+        values
+          .slice(index, index + PREDICTION_DIRECTORY_MARKET_BATCH_SIZE)
+          .map(mapper),
+      )),
+    );
+  }
+  return output;
+}
+
 export function formatPredictionUsdg(atoms: bigint) {
   const value = formatUnits(atoms, PREDICTION_COLLATERAL_DECIMALS);
   return `${trimDecimal(value, 6)} USDG`;
@@ -990,16 +1012,18 @@ export async function readPredictionMarketDirectory({
   );
   assertSame(keysByClient[0], keysByClient[1], "the market directory");
   const marketsByClient = await Promise.all(
-    clients.map((client) => Promise.all(keysByClient[0].map((key) =>
-      readMarketAt(
-        client,
-        config,
-        release,
-        key,
-        blockNumber,
-        account ? getAddress(account) : undefined,
+    clients.map((client) =>
+      mapPredictionMarketsInBatches(keysByClient[0], (key) =>
+        readMarketAt(
+          client,
+          config,
+          release,
+          key,
+          blockNumber,
+          account ? getAddress(account) : undefined,
+        ),
       ),
-    ))),
+    ),
   );
   assertSame(marketsByClient[0], marketsByClient[1], "the market directory state");
   return {
@@ -1592,5 +1616,6 @@ export const predictionMarketInternal = {
   checkpointAbi,
   erc20Abi,
   factoryAbi,
+  mapPredictionMarketsInBatches,
   vaultAbi,
 } as const;

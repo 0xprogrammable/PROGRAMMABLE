@@ -282,6 +282,8 @@ describe("prediction market release boundary", () => {
   const predictionQuoterRuntimeCodeHash = `0x${"de".repeat(32)}` as const;
   const predictionQuoterAddress =
     "0x7777777777777777777777777777777777777777";
+  const secondaryRpcUrl =
+    "https://robinhood-mainnet.g.alchemy.com/v2/test_api_key_1234";
   const release = {
     deploymentBlock: 900n,
     factoryAddress: factory,
@@ -290,6 +292,7 @@ describe("prediction market release boundary", () => {
     predictionQuoterRuntimeCodeHash,
     routerRuntimeCodeHash,
     runtimeCodeHash,
+    secondaryRpcUrl,
   } as const;
   const marketValidation = validatePredictionMarketDraft(
     { observationUtc: "2026-08-24T12:00", thresholdUsd: "60000" },
@@ -346,6 +349,7 @@ describe("prediction market release boundary", () => {
         predictionQuoterRuntimeCodeHash,
         routerRuntimeCodeHash,
         runtimeCodeHash,
+        secondaryRpcUrl,
       }),
     ).toEqual(release);
     expect(() =>

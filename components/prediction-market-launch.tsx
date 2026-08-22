@@ -32,6 +32,7 @@ import {
   validatePredictionMarketDraft,
   type PredictionMarketDraft,
 } from "@/lib/prediction-market";
+import { predictionMarketErrorMessage } from "@/lib/prediction-market-errors";
 
 type PredictionMarketLaunchProps = Readonly<{
   onBack: () => void;
@@ -53,7 +54,7 @@ type LaunchPhase =
   | "error";
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Market creation failed";
+  return predictionMarketErrorMessage(error, "Market creation failed");
 }
 
 function formatEthMaximum(value: bigint) {

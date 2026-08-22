@@ -3,8 +3,6 @@ import { defineChain } from "viem";
 export const ROBINHOOD_CHAIN_ID = 4_663 as const;
 export const ROBINHOOD_MAINNET_RPC_URL =
   "https://rpc.mainnet.chain.robinhood.com";
-export const ROBINHOOD_MAINNET_FALLBACK_RPC_URL =
-  "https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public";
 export const ROBINHOOD_BLOCK_EXPLORER_URL =
   "https://robinhoodchain.blockscout.com";
 export const ROBINHOOD_MULTICALL3_ADDRESS =
