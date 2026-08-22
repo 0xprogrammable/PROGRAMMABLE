@@ -9,10 +9,19 @@ import {
   defaultPredictionObservationUtc,
   encodePredictionMarketCreation,
   formatPredictionCountdown,
+  getExpectedUsdgPermitDomainSeparator,
+  parsePredictionPermitSignature,
   parseBtcUsdThreshold,
   parseUtcObservation,
+  serializeUsdgPermitTypedData,
   validatePredictionMarketDraft,
 } from "../lib/prediction-market";
+import {
+  assertPredictionLaunchSnapshot,
+  assertPredictionLaunchSnapshotsMatch,
+  parsePredictionMarketReleaseConfig,
+  type PredictionLaunchSnapshot,
+} from "../lib/prediction-market-chain";
 
 const nowMs = Date.UTC(2026, 7, 22, 12, 0, 0);
 const owner = "0x1111111111111111111111111111111111111111";
@@ -97,6 +106,42 @@ describe("BTC prediction market launch model", () => {
     ).toThrow("Permit nonce or deadline is outside uint256 bounds");
   });
 
+  it("serializes and parses the exact wallet permit without losing uint256 values", () => {
+    const typedData = buildUsdgPermitTypedData({
+      deadline: 1_800_000_000n,
+      factoryAddress: factory,
+      nonce: 7n,
+      owner,
+    });
+    const serialized = JSON.parse(serializeUsdgPermitTypedData(typedData));
+
+    expect(serialized.domain).toMatchObject({
+      chainId: 4_663,
+      name: "Global Dollar",
+      version: "1",
+    });
+    expect(serialized.message).toMatchObject({
+      deadline: "1800000000",
+      nonce: "7",
+      value: "2000000",
+    });
+    expect(getExpectedUsdgPermitDomainSeparator()).toBe(
+      "0x7a3d7400b27830f4f91c2c16a082486d67c1befecaec2f53b33f1f35d5b62036",
+    );
+
+    expect(
+      parsePredictionPermitSignature(
+        `0x${"11".repeat(32)}${"22".repeat(32)}1b`,
+        1_800_000_000n,
+      ),
+    ).toEqual({
+      deadline: 1_800_000_000n,
+      r: `0x${"11".repeat(32)}`,
+      s: `0x${"22".repeat(32)}`,
+      v: 27,
+    });
+  });
+
   it("encodes the one-transaction permit creation call", () => {
     const validation = validatePredictionMarketDraft(
       { observationUtc: "2026-08-24T12:00", thresholdUsd: "60000" },
@@ -169,5 +214,105 @@ describe("BTC prediction market launch model", () => {
         },
       }),
     ).toThrow("Prediction market or permit bounds are invalid");
+  });
+});
+
+describe("prediction market release boundary", () => {
+  const runtimeCodeHash = `0x${"ab".repeat(32)}` as const;
+  const release = {
+    factoryAddress: factory,
+    runtimeCodeHash,
+  } as const;
+  const marketValidation = validatePredictionMarketDraft(
+    { observationUtc: "2026-08-24T12:00", thresholdUsd: "60000" },
+    nowMs,
+  );
+  if (!marketValidation.ok) throw new Error("Expected valid prediction market");
+
+  const snapshot = {
+    blockNumber: 1_000n,
+    blockTimestamp: BigInt(nowMs / 1_000),
+    bootstrapCollateral: 2_000_000n,
+    collateral: ROBINHOOD_USDG_ADDRESS,
+    controller: "0x3333333333333333333333333333333333333333",
+    cutoffBeforeObservation: 60n,
+    domainSeparator: getExpectedUsdgPermitDomainSeparator(),
+    feed: "0xa2c5184bF03d373Dc9dE4876eb4Bce595B460251",
+    globalCap: 100_000_000_000n,
+    marketCheckpoint: "0x0000000000000000000000000000000000000000",
+    marketPoolId: `0x${"00".repeat(32)}`,
+    marketVault: "0x0000000000000000000000000000000000000000",
+    minimumDuration: 86_400n,
+    nonce: 4n,
+    ownerCollateralBalance: 3_000_000n,
+    runtimeCodeHash,
+    semanticKey: `0x${"44".repeat(32)}`,
+    tokenDecimals: 6,
+    tokenName: "Global Dollar",
+    totalExposure: 20_000_000n,
+  } as const satisfies PredictionLaunchSnapshot;
+
+  it("stays disabled unless address and reviewed runtime hash are both configured", () => {
+    expect(parsePredictionMarketReleaseConfig({})).toBeNull();
+    expect(
+      parsePredictionMarketReleaseConfig({
+        factoryAddress: factory,
+        runtimeCodeHash,
+      }),
+    ).toEqual(release);
+    expect(() =>
+      parsePredictionMarketReleaseConfig({ factoryAddress: factory }),
+    ).toThrow("code hash");
+  });
+
+  it("accepts a fully backed launch snapshot only when both RPCs agree", () => {
+    assertPredictionLaunchSnapshotsMatch(snapshot, { ...snapshot });
+    expect(
+      assertPredictionLaunchSnapshot({
+        config: release,
+        market: marketValidation.market,
+        snapshot,
+      }),
+    ).toMatchObject({
+      nonce: 4n,
+      semanticKey: snapshot.semanticKey,
+    });
+
+    expect(() =>
+      assertPredictionLaunchSnapshotsMatch(snapshot, {
+        ...snapshot,
+        totalExposure: snapshot.totalExposure + 1n,
+      }),
+    ).toThrow("different market state");
+  });
+
+  it("fails closed for an existing market, insufficient seed, or exhausted cap", () => {
+    expect(() =>
+      assertPredictionLaunchSnapshot({
+        config: release,
+        market: marketValidation.market,
+        snapshot: {
+          ...snapshot,
+          marketVault: "0x5555555555555555555555555555555555555555",
+        },
+      }),
+    ).toThrow("already exists");
+    expect(() =>
+      assertPredictionLaunchSnapshot({
+        config: release,
+        market: marketValidation.market,
+        snapshot: { ...snapshot, ownerCollateralBalance: 1_999_999n },
+      }),
+    ).toThrow("at least 2 USDG");
+    expect(() =>
+      assertPredictionLaunchSnapshot({
+        config: release,
+        market: marketValidation.market,
+        snapshot: {
+          ...snapshot,
+          globalCap: snapshot.totalExposure + 1_999_999n,
+        },
+      }),
+    ).toThrow("capacity is full");
   });
 });

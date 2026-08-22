@@ -79,6 +79,12 @@
   flex: 0 0 auto;
 }
 
+.releaseReady {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border-color: color-mix(in srgb, var(--success) 34%, transparent);
+  color: var(--text-soft);
+}
+
 .layout {
   align-items: start;
   display: grid;
@@ -267,8 +273,17 @@
   font-weight: 700;
   margin-top: 20px;
   min-height: 50px;
-  opacity: 0.48;
   width: 100%;
+}
+
+.createButton:not(:disabled):hover {
+  filter: brightness(1.04);
+}
+
+.createButton:focus-visible,
+.explorerLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .createButton:disabled {
@@ -283,6 +298,52 @@
   margin: 9px auto 0;
   max-width: 52ch;
   text-align: center;
+}
+
+.launchStatus {
+  align-items: flex-start;
+  color: var(--text-soft);
+  display: flex;
+  font-size: 12px;
+  gap: 7px;
+  justify-content: center;
+  line-height: 1.45;
+  margin: 10px auto 0;
+  max-width: 58ch;
+  text-align: center;
+}
+
+.launchStatus svg {
+  color: var(--success);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.launchError {
+  color: var(--danger);
+}
+
+.gasNote {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 5px 0 0;
+  text-align: center;
+}
+
+.explorerLink {
+  align-items: center;
+  color: var(--brand-pink);
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 10px;
+  text-decoration: none;
+}
+
+.explorerLink:hover {
+  text-decoration: underline;
 }
 
 .preview {

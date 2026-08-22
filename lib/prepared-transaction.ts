@@ -5,14 +5,18 @@ import {
   type Hex,
 } from "viem";
 
+import { ROBINHOOD_CHAIN_ID } from "./chains";
+
 export const ETHEREUM_MAINNET_CHAIN_ID = 1 as const;
 export const ETHEREUM_SEPOLIA_CHAIN_ID = 11_155_111 as const;
 export type PreparedTransactionChainId =
   | typeof ETHEREUM_MAINNET_CHAIN_ID
-  | typeof ETHEREUM_SEPOLIA_CHAIN_ID;
+  | typeof ETHEREUM_SEPOLIA_CHAIN_ID
+  | typeof ROBINHOOD_CHAIN_ID;
 
 export type PreparedTransactionKind =
   | "launch"
+  | "prediction-market-launch"
   | "token-to-permit2"
   | "permit2-to-router"
   | "swap"
@@ -56,6 +60,12 @@ type PreparedLaunchTransaction = PreparedTransactionBase & {
   from?: never;
 };
 
+type PreparedPredictionMarketTransaction = PreparedTransactionBase & {
+  kind: "prediction-market-launch";
+  gasLimit: string;
+  from?: never;
+};
+
 type PreparedClaimTransactionBase = PreparedTransactionBase & {
   from: Address;
   gasLimit: string;
@@ -85,6 +95,7 @@ type PreparedClaimTransaction =
 export type PreparedTransaction =
   | PreparedTradeTransaction
   | PreparedLaunchTransaction
+  | PreparedPredictionMarketTransaction
   | PreparedClaimTransaction;
 
 export type PreparedTransactionReview = {
@@ -97,6 +108,7 @@ const UINT256_MAX = (1n << 256n) - 1n;
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const kinds = new Set<PreparedTransactionKind>([
   "launch",
+  "prediction-market-launch",
   "token-to-permit2",
   "permit2-to-router",
   "swap",
@@ -208,7 +220,11 @@ export function parsePreparedTransaction(
       `The prepared transaction contains unsupported field ${unsupportedField}`,
     );
   }
-  if (
+  if (kind === "prediction-market-launch") {
+    if (record.chainId !== ROBINHOOD_CHAIN_ID) {
+      throw new Error("Prediction market launches are limited to Robinhood Chain");
+    }
+  } else if (
     record.chainId !== ETHEREUM_MAINNET_CHAIN_ID &&
     record.chainId !== ETHEREUM_SEPOLIA_CHAIN_ID
   ) {
@@ -222,7 +238,7 @@ export function parsePreparedTransaction(
     value: readUintString(record.value, "value", true),
   };
 
-  if (kind === "launch") {
+  if (kind === "launch" || kind === "prediction-market-launch") {
     return {
       ...base,
       kind,
@@ -340,6 +356,13 @@ export function getPreparedTransactionReview(
       description: "Submit the prepared token launch on Ethereum",
       buttonText: "Launch token",
       successHeader: "Launch submitted",
+    };
+  }
+  if (kind === "prediction-market-launch") {
+    return {
+      description: "Create this fully backed BTC market on Robinhood Chain",
+      buttonText: "Create market",
+      successHeader: "Market creation submitted",
     };
   }
   if (kind === "token-to-permit2") {

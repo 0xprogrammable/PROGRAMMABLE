@@ -125,7 +125,7 @@ function request(
 }
 
 describe("production wallet request lock", () => {
-  it("gates both production transaction entrypoints before wallet I/O", () => {
+  it("gates every production transaction and permit entrypoint before wallet I/O", () => {
     const provider = readFileSync(
       join(process.cwd(), "components/wallet-provider.tsx"),
       "utf8",
@@ -134,12 +134,16 @@ describe("production wallet request lock", () => {
       "const sendTransaction = useCallback",
     );
     const preparedEnd = provider.indexOf(
-      "const signLaunchMessage = useCallback",
+      "const signPredictionPermit = useCallback",
       preparedStart,
+    );
+    const predictionPermitEnd = provider.indexOf(
+      "const signLaunchMessage = useCallback",
+      preparedEnd,
     );
     const customStart = provider.indexOf(
       "const sendBrowserWalletAction = useCallback",
-      preparedEnd,
+      predictionPermitEnd,
     );
     const customEnd = provider.indexOf(
       "const readTradeBalances = useCallback",
@@ -148,14 +152,15 @@ describe("production wallet request lock", () => {
 
     expect(preparedStart).toBeGreaterThan(-1);
     expect(preparedEnd).toBeGreaterThan(preparedStart);
-    expect(customStart).toBeGreaterThan(preparedEnd);
+    expect(predictionPermitEnd).toBeGreaterThan(preparedEnd);
+    expect(customStart).toBeGreaterThan(predictionPermitEnd);
     expect(customEnd).toBeGreaterThan(customStart);
 
-    for (const entrypoint of [
-      provider.slice(preparedStart, preparedEnd),
-      provider.slice(customStart, customEnd),
-    ]) {
-      const switchChain = entrypoint.indexOf("switchChain(appChain.id)");
+    for (const [entrypoint, switchExpression] of [
+      [provider.slice(preparedStart, preparedEnd), "switchChain(target.chain.id)"],
+      [provider.slice(customStart, customEnd), "switchChain(appChain.id)"],
+    ] as const) {
+      const switchChain = entrypoint.indexOf(switchExpression);
       const postSwitchSessionCheck = entrypoint.indexOf(
         "assertCurrentSession();",
         switchChain,
@@ -171,6 +176,23 @@ describe("production wallet request lock", () => {
       ).toBeGreaterThan(lock);
       expect(entrypoint).toContain("assertCurrentSession");
     }
+
+    const predictionPermit = provider.slice(preparedEnd, predictionPermitEnd);
+    const predictionSwitch = predictionPermit.indexOf(
+      "switchChain(robinhoodChain.id)",
+    );
+    const predictionSessionCheck = predictionPermit.indexOf(
+      "assertCurrentSession();",
+      predictionSwitch,
+    );
+    const predictionLock = predictionPermit.indexOf(
+      "runWithBrowserWalletRequestLock({",
+    );
+    expect(predictionSwitch).toBeGreaterThan(-1);
+    expect(predictionSessionCheck).toBeGreaterThan(predictionSwitch);
+    expect(predictionSessionCheck).toBeLessThan(predictionLock);
+    expect(predictionPermit.indexOf('method: "eth_signTypedData_v4"'))
+      .toBeGreaterThan(predictionLock);
   });
 
   it("turns a forced same-tab double click into exactly one wallet send", async () => {

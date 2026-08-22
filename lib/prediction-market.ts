@@ -1,14 +1,20 @@
 import {
   encodeFunctionData,
   formatUnits,
+  hashDomain,
   isAddress,
   isHex,
+  parseSignature,
   parseUnits,
+  serializeTypedData,
   type Address,
   type Hex,
 } from "viem";
 
-export const ROBINHOOD_CHAIN_ID = 4_663;
+import { ROBINHOOD_CHAIN_ID } from "./chains";
+
+export { ROBINHOOD_CHAIN_ID } from "./chains";
+
 export const ROBINHOOD_USDG_ADDRESS =
   "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168" as const;
 export const ROBINHOOD_BTC_USD_FEED_ADDRESS =
@@ -84,6 +90,15 @@ export const usdgPermitTypes = {
     { name: "value", type: "uint256" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+export const usdgPermitDomainTypes = {
+  EIP712Domain: [
+    { name: "name", type: "string" },
+    { name: "version", type: "string" },
+    { name: "chainId", type: "uint256" },
+    { name: "verifyingContract", type: "address" },
   ],
 } as const;
 
@@ -259,6 +274,68 @@ export function buildUsdgPermitTypedData({
     },
     primaryType: "Permit" as const,
     types: usdgPermitTypes,
+  };
+}
+
+export function getExpectedUsdgPermitDomainSeparator() {
+  return hashDomain({
+    domain: {
+      chainId: BigInt(ROBINHOOD_CHAIN_ID),
+      name: "Global Dollar",
+      verifyingContract: ROBINHOOD_USDG_ADDRESS,
+      version: "1",
+    },
+    types: usdgPermitDomainTypes,
+  });
+}
+
+export function serializeUsdgPermitTypedData(
+  typedData: ReturnType<typeof buildUsdgPermitTypedData>,
+) {
+  const serialized = serializeTypedData({
+    ...typedData,
+    domain: {
+      ...typedData.domain,
+      chainId: BigInt(typedData.domain.chainId),
+    },
+    types: {
+      ...usdgPermitDomainTypes,
+      ...typedData.types,
+    },
+  });
+  const payload = JSON.parse(serialized) as {
+    domain: { chainId: number | string };
+  };
+  payload.domain.chainId = ROBINHOOD_CHAIN_ID;
+  return JSON.stringify(payload);
+}
+
+export function parsePredictionPermitSignature(
+  signature: Hex,
+  deadline: bigint,
+): PredictionPermitSignature {
+  if (
+    !isHex(signature, { strict: true }) ||
+    signature.length !== 132 ||
+    deadline <= 0n ||
+    deadline > UINT256_MAX
+  ) {
+    throw new Error("The wallet returned an invalid permit signature");
+  }
+
+  const parsed = parseSignature(signature);
+  const v = parsed.v === undefined
+    ? (parsed.yParity ?? -1) + 27
+    : Number(parsed.v);
+  if (v !== 27 && v !== 28) {
+    throw new Error("The wallet returned an invalid permit signature");
+  }
+
+  return {
+    deadline,
+    r: parsed.r,
+    s: parsed.s,
+    v,
   };
 }
 

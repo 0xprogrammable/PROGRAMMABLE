@@ -1,12 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Clock3, Database, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Clock3,
+  Database,
+  ExternalLink,
+  ShieldCheck,
+} from "lucide-react";
+import { formatEther } from "viem";
 
 import styles from "@/components/prediction-market-launch.module.css";
+import { useWallet } from "@/components/wallet-provider";
+import { ROBINHOOD_BLOCK_EXPLORER_URL } from "@/lib/chains";
+import {
+  createPredictionMarketPublicClients,
+  getPredictionMarketReleaseConfig,
+  preflightPredictionMarketLaunch,
+  preparePredictionMarketLaunch,
+  requestPredictionMarketSourceMatches,
+  waitForPredictionMarketCreation,
+  type ConfirmedPredictionMarket,
+} from "@/lib/prediction-market-chain";
 import {
   defaultPredictionObservationUtc,
   formatUtcObservation,
+  PREDICTION_PERMIT_DURATION_SECONDS,
   ROBINHOOD_CHAIN_ID,
   validatePredictionMarketDraft,
   type PredictionMarketDraft,
@@ -21,9 +41,54 @@ const initialDraft: PredictionMarketDraft = {
   thresholdUsd: "60000",
 };
 
+type LaunchPhase =
+  | "idle"
+  | "checking"
+  | "signing"
+  | "estimating"
+  | "submitting"
+  | "confirming"
+  | "confirmed"
+  | "error";
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Market creation failed";
+}
+
+function formatEthMaximum(value: bigint) {
+  const [whole, fraction = ""] = formatEther(value).split(".");
+  const shortFraction = fraction.slice(0, 6).replace(/0+$/, "");
+  return `${whole}${shortFraction ? `.${shortFraction}` : ""} ETH`;
+}
+
 export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) {
   const [draft, setDraft] = useState<PredictionMarketDraft>(initialDraft);
   const [nowMs, setNowMs] = useState(0);
+  const [phase, setPhase] = useState<LaunchPhase>("idle");
+  const [status, setStatus] = useState("");
+  const [maximumGasCostWei, setMaximumGasCostWei] = useState<bigint | null>(null);
+  const [confirmedMarket, setConfirmedMarket] =
+    useState<ConfirmedPredictionMarket | null>(null);
+  const {
+    connecting,
+    openWallet,
+    sendTransaction,
+    signPredictionPermit,
+    wallet,
+  } = useWallet();
+  const release = useMemo(() => {
+    try {
+      return {
+        config: getPredictionMarketReleaseConfig(),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        config: null,
+        error: getErrorMessage(error),
+      };
+    }
+  }, []);
 
   useEffect(() => {
     const syncCurrentTime = () => {
@@ -53,6 +118,117 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
   );
   const market = validation.ok ? validation.market : null;
   const errors = validation.ok ? {} : validation.errors;
+  const busy =
+    phase === "checking" ||
+    phase === "signing" ||
+    phase === "estimating" ||
+    phase === "submitting" ||
+    phase === "confirming";
+  const createButtonLabel = (() => {
+    if (!release.config) return release.error ? "Release configuration blocked" : "Deployment pending";
+    if (connecting) return "Wallet loading";
+    if (!wallet) return "Connect wallet";
+    if (phase === "checking") return "Checking both RPCs";
+    if (phase === "signing") return "Sign 2 USDG permit";
+    if (phase === "estimating") return "Simulating creation";
+    if (phase === "submitting") return "Confirm in wallet";
+    if (phase === "confirming") return "Confirming onchain";
+    if (phase === "confirmed") return "Market created";
+    return "Create market · 2 USDG";
+  })();
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!release.config || busy) return;
+    if (!wallet) {
+      openWallet();
+      return;
+    }
+    const latestValidation = validatePredictionMarketDraft(draft, Date.now());
+    if (!latestValidation.ok) {
+      setPhase("error");
+      setStatus("Fix the highlighted market details before continuing.");
+      return;
+    }
+
+    setConfirmedMarket(null);
+    setMaximumGasCostWei(null);
+    try {
+      const clients = createPredictionMarketPublicClients();
+      setPhase("checking");
+      setStatus("Checking the reviewed release against two public Robinhood RPCs…");
+      const preflight = await preflightPredictionMarketLaunch({
+        clients,
+        config: release.config,
+        market: latestValidation.market,
+        owner: wallet.account,
+      });
+      const deadline =
+        BigInt(Math.floor(Date.now() / 1_000)) +
+        BigInt(PREDICTION_PERMIT_DURATION_SECONDS);
+
+      setPhase("signing");
+      setStatus("Sign the exact 2 USDG permit. This signature alone spends no gas.");
+      const permit = await signPredictionPermit({
+        deadline,
+        factoryAddress: release.config.factoryAddress,
+        nonce: preflight.nonce,
+      });
+
+      setPhase("estimating");
+      setStatus("Rechecking state and simulating the exact market transaction…");
+      const recheck = await preflightPredictionMarketLaunch({
+        clients,
+        config: release.config,
+        market: latestValidation.market,
+        owner: wallet.account,
+      });
+      if (
+        recheck.nonce !== preflight.nonce ||
+        recheck.semanticKey.toLowerCase() !== preflight.semanticKey.toLowerCase()
+      ) {
+        throw new Error("Market state changed while signing. Start again with a fresh permit.");
+      }
+      const prepared = await preparePredictionMarketLaunch({
+        client: clients[0],
+        config: release.config,
+        expectedNonce: preflight.nonce,
+        expectedSemanticKey: preflight.semanticKey,
+        market: latestValidation.market,
+        owner: wallet.account,
+        permit,
+      });
+      setMaximumGasCostWei(prepared.maximumGasCostWei);
+
+      setPhase("submitting");
+      setStatus(
+        `Your wallet will show the market transaction. Estimated maximum gas: ${formatEthMaximum(prepared.maximumGasCostWei)}.`,
+      );
+      const transactionHash = await sendTransaction(prepared.transaction);
+
+      setPhase("confirming");
+      setStatus("Transaction submitted. Verifying the canonical market and its YES/NO contracts…");
+      const confirmed = await waitForPredictionMarketCreation({
+        client: clients[0],
+        config: release.config,
+        creator: wallet.account,
+        expectedSemanticKey: preflight.semanticKey,
+        transactionHash,
+      });
+      setConfirmedMarket(confirmed);
+      setPhase("confirmed");
+      setStatus("Market created and matched against the factory registry.");
+      const sourceMatches = await requestPredictionMarketSourceMatches(confirmed);
+      setStatus(
+        sourceMatches.every((result) => result.accepted)
+          ? "Market created. Free public source matching was requested for all four market contracts."
+          : "Market created. Public source matching is still pending for at least one market contract.",
+      );
+    } catch (error) {
+      setPhase("error");
+      setStatus(getErrorMessage(error));
+    }
+  };
 
   return (
     <div className={`launch-page page-width ${styles.page}`}>
@@ -67,14 +243,18 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
         </div>
       </header>
 
-      <p className={styles.previewNotice} role="status">
-        <strong>Technical preview</strong>
-        The contracts are not deployed. This page will not request a wallet
-        signature or transaction.
+      <p
+        className={`${styles.previewNotice} ${release.config ? styles.releaseReady : ""}`}
+        role="status"
+      >
+        <strong>{release.config ? "Zero-server launch" : "Technical preview"}</strong>
+        {release.config
+          ? "Every launch is checked against two free public RPCs. No hosted backend or monitoring subscription is required."
+          : release.error || "The reviewed contracts are not deployed. This page cannot request a signature or transaction."}
       </p>
 
       <div className={styles.layout}>
-        <form className={styles.form} onSubmit={(event) => event.preventDefault()}>
+        <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.formIntro}>
             <div>
               <span className={styles.eyebrow}>One market, two outcomes</span>
@@ -165,12 +345,48 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
             </span>
           </div>
 
-          <button className={styles.createButton} type="submit" disabled>
-            Deployment pending
+          <button
+            className={styles.createButton}
+            type="submit"
+            disabled={Boolean(
+              !release.config ||
+              busy ||
+              connecting ||
+              phase === "confirmed" ||
+              (wallet && !market),
+            )}
+          >
+            {createButtonLabel}
           </button>
-          <p className={styles.actionNote}>
-            After creation, the creator can make an optional YES or NO trade like any other trader.
-          </p>
+          {status ? (
+            <p
+              className={`${styles.launchStatus} ${phase === "error" ? styles.launchError : ""}`}
+              role={phase === "error" ? "alert" : "status"}
+            >
+              {phase === "confirmed" ? <CheckCircle2 aria-hidden="true" size={15} /> : null}
+              <span>{status}</span>
+            </p>
+          ) : (
+            <p className={styles.actionNote}>
+              After creation, the creator can make an optional YES or NO trade like any other trader.
+            </p>
+          )}
+          {maximumGasCostWei !== null && phase !== "submitting" ? (
+            <p className={styles.gasNote}>
+              Last simulated gas ceiling: {formatEthMaximum(maximumGasCostWei)}
+            </p>
+          ) : null}
+          {confirmedMarket ? (
+            <a
+              className={styles.explorerLink}
+              href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${confirmedMarket.transactionHash}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              View confirmed transaction
+              <ExternalLink aria-hidden="true" size={14} />
+            </a>
+          ) : null}
         </form>
 
         <section className={styles.preview} aria-labelledby="prediction-preview-title" aria-live="polite">

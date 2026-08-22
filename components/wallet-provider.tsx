@@ -26,7 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { mainnet, sepolia } from "viem/chains";
-import { bytesToHex, hexToBytes, type Hex } from "viem";
+import { bytesToHex, hexToBytes, type Address, type Hex } from "viem";
 
 import {
   applicantRefreshUserIsRateLimitedV1,
@@ -38,6 +38,13 @@ import {
   requestGitHubLaunchAppAuthorizationV1,
 } from "@/lib/custom-launch/github-app-authorization-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
+import { robinhoodChain } from "@/lib/chains";
+import {
+  buildUsdgPermitTypedData,
+  parsePredictionPermitSignature,
+  serializeUsdgPermitTypedData,
+  type PredictionPermitSignature,
+} from "@/lib/prediction-market";
 import {
   buildEip1193TransactionRequest,
   buildPrivyTransactionRequest,
@@ -111,6 +118,11 @@ type WalletContextValue = {
   reauthorizeGithub: () => Promise<void>;
   setUsername: (username: string) => void;
   signLaunchMessage: (signingMessageBase64Url: string) => Promise<string>;
+  signPredictionPermit: (input: Readonly<{
+    deadline: bigint;
+    factoryAddress: Address;
+    nonce: bigint;
+  }>) => Promise<PredictionPermitSignature>;
   sendBrowserWalletAction: (input: Readonly<{
     chainId: string;
     from: `0x${string}`;
@@ -167,6 +179,31 @@ const appChain =
     : mainnet;
 const appChainHex = `0x${appChain.id.toString(16)}`;
 const appNetworkName = appChain.id === sepolia.id ? "Sepolia" : "Ethereum";
+const robinhoodChainHex = `0x${robinhoodChain.id.toString(16)}`;
+
+function getWalletNetwork(expectedChainId?: string) {
+  if (!expectedChainId || expectedChainId === String(appChain.id)) {
+    return {
+      chain: appChain,
+      chainHex: appChainHex,
+      name: appNetworkName,
+    };
+  }
+  if (expectedChainId === String(robinhoodChain.id)) {
+    return {
+      chain: robinhoodChain,
+      chainHex: robinhoodChainHex,
+      name: robinhoodChain.name,
+    };
+  }
+  return null;
+}
+
+function getWalletNetworkLabel(chainId: string) {
+  if (chainId === appChainHex) return appNetworkName;
+  if (chainId === robinhoodChainHex) return robinhoodChain.name;
+  return chainId;
+}
 
 export function getWalletSessionAction(ready: boolean, authenticated: boolean) {
   if (!ready) return "wait" as const;
@@ -554,7 +591,7 @@ const privyConfig = {
       createOnLogin: "users-without-wallets",
     },
   },
-  supportedChains: [appChain],
+  supportedChains: [appChain, robinhoodChain],
   defaultChain: appChain,
 } satisfies PrivyClientConfig;
 
@@ -805,6 +842,9 @@ function DeferredWalletProvider({
       },
       setUsername: () => undefined,
       signLaunchMessage: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      signPredictionPermit: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
       sendBrowserWalletAction: async () => {
@@ -1334,9 +1374,10 @@ function PrivyWalletBridge({
     }
   }, [wallet]);
 
-  const switchToEthereum = useCallback(async (expectedChainId?: string) => {
+  const switchWalletNetwork = useCallback(async (expectedChainId?: string) => {
     if (!connectedWallet) return false;
-    if (expectedChainId && expectedChainId !== String(appChain.id)) {
+    const target = getWalletNetwork(expectedChainId);
+    if (!target) {
       setError("The approved launch network is not available in this environment.");
       return false;
     }
@@ -1345,19 +1386,19 @@ function PrivyWalletBridge({
     setError("");
 
     try {
-      await connectedWallet.switchChain(appChain.id);
+      await connectedWallet.switchChain(target.chain.id);
       const provider = await connectedWallet.getEthereumProvider();
       const connectedChainId = await provider.request({ method: "eth_chainId" });
       if (
         typeof connectedChainId !== "string"
-        || normalizeChainId(connectedChainId) !== appChainHex
+        || normalizeChainId(connectedChainId) !== target.chainHex
       ) {
-        setError(`Unable to verify ${appNetworkName}. Try again.`);
+        setError(`Unable to verify ${target.name}. Try again.`);
         return false;
       }
       return true;
     } catch {
-      setError(`Unable to switch to ${appNetworkName}. Try again.`);
+      setError(`Unable to switch to ${target.name}. Try again.`);
       return false;
     } finally {
       setSwitchingNetwork(false);
@@ -1381,9 +1422,12 @@ function PrivyWalletBridge({
         transaction,
         wallet.account,
       );
-      if (prepared.chainId !== appChain.id) {
+      const target = prepared.kind === "prediction-market-launch"
+        ? getWalletNetwork(String(robinhoodChain.id))
+        : getWalletNetwork(String(appChain.id));
+      if (!target || prepared.chainId !== target.chain.id) {
         throw new Error(
-          `The prepared transaction is not for ${appNetworkName}`,
+          `The prepared transaction is not for ${target?.name ?? "an approved network"}`,
         );
       }
       const isEmbeddedWallet =
@@ -1406,8 +1450,8 @@ function PrivyWalletBridge({
       };
 
       try {
-        if (wallet.chainId !== appChainHex) {
-          await connectedWallet.switchChain(appChain.id);
+        if (wallet.chainId !== target.chainHex) {
+          await connectedWallet.switchChain(target.chain.id);
           assertCurrentSession();
         }
 
@@ -1448,9 +1492,9 @@ function PrivyWalletBridge({
         });
         if (
           typeof providerChainId !== "string" ||
-          normalizeChainId(providerChainId) !== appChainHex
+          normalizeChainId(providerChainId) !== target.chainHex
         ) {
-          throw new Error(`The wallet is not connected to ${appNetworkName}`);
+          throw new Error(`The wallet is not connected to ${target.name}`);
         }
         assertCurrentSession();
         return await sendLocked(async () => {
@@ -1466,6 +1510,76 @@ function PrivyWalletBridge({
     },
     [connectedWallet, sendPrivyTransaction, user?.id, wallet],
   );
+
+  const signPredictionPermit = useCallback(async (input: Readonly<{
+    deadline: bigint;
+    factoryAddress: Address;
+    nonce: bigint;
+  }>) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an EVM wallet before continuing");
+    }
+    const sessionSubject = user?.id ?? null;
+    if (sessionSubject === null) {
+      throw new Error("Your wallet session expired. Reconnect and try again");
+    }
+    const expectedAccount = wallet.account.toLowerCase();
+    const assertCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      if (
+        !current.authenticated ||
+        current.privyUserId !== sessionSubject ||
+        current.account?.toLowerCase() !== expectedAccount
+      ) {
+        throw new Error("The wallet session changed. Reconnect and try again");
+      }
+    };
+    const typedData = buildUsdgPermitTypedData({
+      deadline: input.deadline,
+      factoryAddress: input.factoryAddress,
+      nonce: input.nonce,
+      owner: wallet.account,
+    });
+
+    try {
+      if (wallet.chainId !== robinhoodChainHex) {
+        await connectedWallet.switchChain(robinhoodChain.id);
+        assertCurrentSession();
+      }
+      const provider = await connectedWallet.getEthereumProvider();
+      await assertExternalWalletAuthorityCurrent({
+        expectedAccount: wallet.account,
+        expectedChainId: robinhoodChainHex,
+        networkName: robinhoodChain.name,
+        request: (method) => provider.request({ method }),
+      });
+      const signature = await runWithBrowserWalletRequestLock({
+        sessionSubject,
+        account: wallet.account,
+        chainId: String(robinhoodChain.id),
+        requestSubject: JSON.stringify([
+          "prediction-usdg-permit-v1",
+          input.factoryAddress.toLowerCase(),
+          input.nonce.toString(),
+          input.deadline.toString(),
+        ]),
+        assertCurrentSession,
+        execute: () => provider.request({
+          method: "eth_signTypedData_v4",
+          params: [wallet.account, serializeUsdgPermitTypedData(typedData)],
+        }),
+      });
+      if (
+        typeof signature !== "string" ||
+        !/^0x[0-9a-fA-F]{130}$/.test(signature)
+      ) {
+        throw new Error("The wallet returned an invalid permit signature");
+      }
+      return parsePredictionPermitSignature(signature as Hex, input.deadline);
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+  }, [connectedWallet, user?.id, wallet]);
 
   const signLaunchMessage = useCallback(async (
     signingMessageBase64Url: string,
@@ -1717,7 +1831,7 @@ function PrivyWalletBridge({
       switchingNetwork,
       preloadWallet: () => undefined,
       openWallet,
-      switchNetwork: switchToEthereum,
+      switchNetwork: switchWalletNetwork,
       disconnect,
       getAccessToken,
       getIdentityToken: getCurrentIdentityToken,
@@ -1730,6 +1844,7 @@ function PrivyWalletBridge({
       reauthorizeGithub,
       setUsername,
       signLaunchMessage,
+      signPredictionPermit,
       sendBrowserWalletAction,
       sendTransaction,
       readNativeBalance,
@@ -1758,8 +1873,9 @@ function PrivyWalletBridge({
       sendBrowserWalletAction,
       sendTransaction,
       signLaunchMessage,
+      signPredictionPermit,
       switchingNetwork,
-      switchToEthereum,
+      switchWalletNetwork,
       providerSettled,
       setUsername,
       username,
@@ -1790,7 +1906,7 @@ function PrivyWalletBridge({
             setError("");
             setDialogOpen(false);
           }}
-          onSwitchNetwork={switchToEthereum}
+          onSwitchNetwork={switchWalletNetwork}
         />
       ) : null}
     </WalletContext.Provider>
@@ -1830,6 +1946,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       },
       setUsername: () => undefined,
       signLaunchMessage: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      signPredictionPermit: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendBrowserWalletAction: async () => {
@@ -1939,7 +2058,7 @@ function WalletDialog({
                       onClick={() => onSelectWallet(candidate.account)}
                     >
                       <span>{shortenAddress(candidate.account)}</span>
-                      <small>{candidate.chainId === appChainHex ? appNetworkName : candidate.chainId}</small>
+                      <small>{getWalletNetworkLabel(candidate.chainId)}</small>
                       {active ? <Check aria-hidden="true" size={15} /> : null}
                     </button>
                   );
@@ -1948,7 +2067,7 @@ function WalletDialog({
             </div>
           ) : null}
 
-          {wallet.chainId !== appChainHex ? (
+          {wallet.chainId !== appChainHex && wallet.chainId !== robinhoodChainHex ? (
             <div className="wallet-network-warning">
               <p className="inline-notice warning-notice">
                 Programmable uses {appNetworkName} for this release
