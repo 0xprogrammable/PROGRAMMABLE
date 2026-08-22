@@ -8,7 +8,7 @@ import { ExploreView } from "@/components/explore-view";
 import styles from "@/components/landing-page.module.css";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
-const HERO_TWINKLE_COUNT = 164;
+const HERO_TWINKLE_COUNT = 88;
 
 type HeroStarStyle = CSSProperties & {
   "--hero-star-delay": string;
@@ -48,7 +48,7 @@ export function LandingPage() {
 
       const chapter = document.getElementById("explore");
       const header = document.querySelector<HTMLElement>(".header-inner");
-      const target = chapter?.querySelector<HTMLElement>("h1") ?? chapter;
+      const target = chapter?.querySelector<HTMLElement>("[data-explore-heading]") ?? chapter;
       if (!target) return;
 
       const headerHeight = header?.getBoundingClientRect().height ?? 0;
@@ -250,7 +250,7 @@ export function LandingPage() {
         id="explore"
         data-reveal-section
       >
-        <ExploreView />
+        <ExploreView embedded />
       </div>
     </article>
   );

@@ -105,10 +105,10 @@ describe("topbar and Explore hero polish", () => {
       /\.pageHeading\s*\{[^}]*justify-content:\s*center;[^}]*text-align:\s*center;/s,
     );
     expect(css).toMatch(
-      /@media \(min-width:\s*960px\)\s*\{\s*\.pageHeading h1\s*\{[^}]*white-space:\s*nowrap;/s,
+      /@media \(min-width:\s*960px\)\s*\{\s*\.pageHeading :is\(h1, h2\)\s*\{[^}]*white-space:\s*nowrap;/s,
     );
     expect(css).toMatch(
-      /@media \(max-width:\s*700px\)[\s\S]*?\.pageHeading h1\s*\{[^}]*max-width:\s*16ch;[^}]*white-space:\s*normal;/s,
+      /@media \(max-width:\s*700px\)[\s\S]*?\.pageHeading :is\(h1, h2\)\s*\{[^}]*max-width:\s*16ch;[^}]*white-space:\s*normal;/s,
     );
   });
 });

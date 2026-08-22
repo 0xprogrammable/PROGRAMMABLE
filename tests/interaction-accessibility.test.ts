@@ -65,6 +65,23 @@ describe("interaction accessibility", () => {
     );
   });
 
+  it("keeps Explore card and pagination actions at a reliable touch size", () => {
+    const exploreCss = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
+
+    expect(exploreCss).toMatch(
+      /\.runnerCopyButton\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
+    );
+    expect(exploreCss).toMatch(
+      /\.runnerSocialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
+    );
+    expect(exploreCss).toMatch(
+      /\.runnersIntro :global\(\.token-pagination > button\)\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
+    );
+  });
+
   it("removes decorative token separators and image-edge outlines", () => {
     const tokenCss = readFileSync(
       join(root, "components/token-experience.module.css"),
@@ -121,8 +138,8 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(source).toContain("const TWINKLE_COUNT = 112");
-    expect(source).toContain("const LOWER_TWINKLE_COUNT = 48");
+    expect(source).toContain("const TWINKLE_COUNT = 56");
+    expect(source).toContain("const LOWER_TWINKLE_COUNT = 20");
     expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toMatch(
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,

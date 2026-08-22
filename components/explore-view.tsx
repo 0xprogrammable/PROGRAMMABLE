@@ -2007,9 +2007,11 @@ function resultRangeLabel(payload: ExplorePayload | null) {
 export function ExploreView({
   initialResponse,
   loadingOnly = false,
+  embedded = false,
 }: Readonly<{
   initialResponse?: ExploreInitialResponse;
   loadingOnly?: boolean;
+  embedded?: boolean;
 }> = {}) {
   const preview = useInterfacePreview();
   const [query, setQuery] = useState("");
@@ -2523,6 +2525,7 @@ export function ExploreView({
           const valuationLabel = token.valuation
             ? formatMarketCapMetric(token.valuation)
             : null;
+          const eagerImage = !embedded && index < Math.min(pageSize, 4);
           const cardContent = (
             <>
               <div className={styles.runnerArt}>
@@ -2531,8 +2534,8 @@ export function ExploreView({
                   src={imageSource}
                   alt={token.usesFallbackImage ? "" : `${token.name} artwork`}
                   fill
-                  loading={index < Math.min(pageSize, 4) ? "eager" : "lazy"}
-                  priority={index < Math.min(pageSize, 4)}
+                  loading={eagerImage ? "eager" : "lazy"}
+                  priority={eagerImage}
                   sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
@@ -2644,10 +2647,12 @@ export function ExploreView({
     );
   }
 
+  const Heading = embedded ? "h2" : "h1";
+
   return (
     <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Explore Hooks</h1>
+          <Heading data-explore-heading>Explore Hooks</Heading>
         </header>
 
         <section

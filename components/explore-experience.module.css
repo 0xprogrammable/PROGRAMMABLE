@@ -32,7 +32,7 @@
   width: 100%;
 }
 
-.pageHeading h1 {
+.pageHeading :is(h1, h2) {
   align-items: center;
   color: var(--explore-ivory);
   display: flex;
@@ -651,7 +651,7 @@
 }
 
 @media (min-width: 960px) {
-  .pageHeading h1 {
+  .pageHeading :is(h1, h2) {
     white-space: nowrap;
   }
 }
@@ -681,7 +681,7 @@
     padding: 24px 0 20px;
   }
 
-  .pageHeading h1 {
+  .pageHeading :is(h1, h2) {
     font-size: clamp(40px, 11.4vw, 52px);
     letter-spacing: -0.028em;
     line-height: 0.98;
@@ -846,7 +846,7 @@
     padding-top: 24px;
   }
 
-  .pageHeading h1 {
+  .pageHeading :is(h1, h2) {
     font-size: clamp(38px, 11vw, 44px);
   }
 
@@ -893,7 +893,7 @@
 }
 
 @media (max-width: 360px) {
-  .pageHeading h1 {
+  .pageHeading :is(h1, h2) {
     font-size: 36px;
   }
 
@@ -1036,7 +1036,7 @@
   text-align: left;
 }
 
-.pageHeading h1 {
+.pageHeading :is(h1, h2) {
   display: block;
   font-size: clamp(58px, 6.5vw, 96px);
   font-weight: 520;
@@ -1117,8 +1117,8 @@
 }
 
 .runnersIntro :global(.token-pagination > button) {
-  height: 40px;
-  width: 36px;
+  height: 44px;
+  width: 44px;
 }
 
 .runnersIntro :global(.token-pagination-pages) {
@@ -1293,13 +1293,13 @@
   cursor: pointer;
   display: inline-flex;
   flex: none;
-  height: 40px;
+  height: 44px;
   justify-content: center;
   padding: 0;
   transition:
     background-color 160ms var(--webde-ease),
     color 160ms var(--webde-ease);
-  width: 32px;
+  width: 44px;
 }
 
 .runnerCopyButton[data-state="copied"] {
@@ -1310,8 +1310,8 @@
 .runnerSocialLink {
   border-radius: 7px;
   color: var(--webde-dim);
-  height: 40px;
-  width: 40px;
+  height: 44px;
+  width: 44px;
 }
 
 .messageState,
@@ -1383,7 +1383,7 @@
     padding: 0;
   }
 
-  .pageHeading h1 {
+  .pageHeading :is(h1, h2) {
     font-size: clamp(38px, 11vw, 48px);
     max-width: none;
   }
@@ -1504,8 +1504,8 @@
   }
 
   .runnerCopyButton {
-    height: 36px;
-    width: 28px;
+    height: 44px;
+    width: 44px;
   }
 
   .runnerSocials {
@@ -1517,8 +1517,8 @@
   }
 
   .runnerSocialLink {
-    height: 36px;
-    width: 30px;
+    height: 44px;
+    width: 44px;
   }
 }
 

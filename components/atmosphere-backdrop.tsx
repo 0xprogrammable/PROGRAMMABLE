@@ -1,9 +1,7 @@
-import Image from "next/image";
 import type { CSSProperties } from "react";
 
-const TWINKLE_COUNT = 112;
-const LOWER_TWINKLE_COUNT = 48;
-const PLANT_SIZES = "(max-width: 520px) 46vw, (max-width: 1500px) 22vw, 330px";
+const TWINKLE_COUNT = 56;
+const LOWER_TWINKLE_COUNT = 20;
 
 type SparkleStyle = CSSProperties & {
   "--sparkle-delay": string;
@@ -59,26 +57,6 @@ export function AtmosphereBackdrop() {
         {Array.from({ length: LOWER_TWINKLE_COUNT }, (_, index) => (
           <i key={`accent-${index}`} style={sparkleStyle(index, 47)} />
         ))}
-      </span>
-      <span className="atmosphere-botanicals">
-        <Image
-          className="atmosphere-plant atmosphere-plant-left"
-          src="/brand/atmosphere/programmable-botanical-left-v2.webp"
-          width={1024}
-          height={1536}
-          sizes={PLANT_SIZES}
-          priority
-          alt=""
-        />
-        <Image
-          className="atmosphere-plant atmosphere-plant-right"
-          src="/brand/atmosphere/programmable-botanical-right-v2.webp"
-          width={1024}
-          height={1536}
-          sizes={PLANT_SIZES}
-          priority
-          alt=""
-        />
       </span>
       <span className="atmosphere-veil" />
     </div>
