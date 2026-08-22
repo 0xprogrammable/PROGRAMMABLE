@@ -65,6 +65,9 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
     expect(navigation).toContain('if (activePath === "/docs")');
+    expect(navigation).toContain("prefetch={false}");
+    expect(navigation).toContain("warmedNavigationRoutes.has(href)");
+    expect(navigation).toContain("router.prefetch(href)");
     for (const label of ["Explore", "Create", "Profile", "Docs"]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
@@ -81,6 +84,9 @@ describe("topbar and Explore hero polish", () => {
     );
     expect(navigationCss).not.toContain("(hover: none) and (pointer: coarse)");
     expect(navigationCss).not.toContain("(hover: hover) and (pointer: fine)");
+    expect(navigationCss).toMatch(
+      /@media \(max-width: 26rem\)[\s\S]*?\.wallet-menu\)[\s\S]*?position:\s*fixed;/s,
+    );
     expect(landingCss).toMatch(
       /\.docsLink\s*\{[^}]*font-size:\s*18px;/s,
     );
@@ -93,6 +99,13 @@ describe("topbar and Explore hero polish", () => {
     expect(wallet).toContain('menuOpen ? "wallet-menu-open" : "wallet-menu-closed"');
     expect(wallet).toContain("aria-hidden={!menuOpen}");
     expect(wallet).toContain("tabIndex={menuOpen ? undefined : -1}");
+    expect(wallet).toContain('prefetch={false}');
+    expect(css).toMatch(
+      /\.header-actions \.wallet-button-compact\s*\{[^}]*width:\s*154px;/s,
+    );
+    expect(css).toMatch(
+      /\.wallet-button-hydrating > span\s*\{[^}]*height:\s*7px;[^}]*width:\s*64px;/s,
+    );
     expect(css).toMatch(
       /\.wallet-menu\.wallet-menu-open\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*translate3d\(0, 0, 0\) scale\(1\);/s,
     );

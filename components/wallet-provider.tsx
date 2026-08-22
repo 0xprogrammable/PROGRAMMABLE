@@ -145,7 +145,7 @@ export function shouldEagerLoadWalletRuntime(pathname: string) {
   );
 }
 
-export function shouldIdlePreloadWalletRuntime(pathname: string) {
+export function shouldBackgroundLoadWalletRuntime(pathname: string) {
   return !shouldEagerLoadWalletRuntime(pathname);
 }
 
@@ -704,7 +704,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [active, loadAttempt, runtime]);
 
   useEffect(() => {
-    if (!privyAppId || runtime || !shouldIdlePreloadWalletRuntime(pathname)) return;
+    if (!privyAppId || runtime || !shouldBackgroundLoadWalletRuntime(pathname)) return;
     let cancelled = false;
     const preload = () => {
       if (cancelled) return;
@@ -717,18 +717,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
       );
     };
-    const idleWindow = window as Window & {
-      requestIdleCallback?: Window["requestIdleCallback"];
-      cancelIdleCallback?: Window["cancelIdleCallback"];
-    };
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      const idleId = idleWindow.requestIdleCallback(preload, { timeout: 1_500 });
-      return () => {
-        cancelled = true;
-        idleWindow.cancelIdleCallback?.(idleId);
-      };
-    }
-    const timeoutId = globalThis.setTimeout(preload, 1_200);
+    const timeoutId = globalThis.setTimeout(preload, 0);
     return () => {
       cancelled = true;
       globalThis.clearTimeout(timeoutId);
@@ -2192,6 +2181,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCopied, setMenuCopied] = useState(false);
   const [menuError, setMenuError] = useState("");
+  const hydrationPending = connecting || !authReady;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -2222,29 +2212,29 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
 
   const label = disconnecting
     ? "Disconnecting"
-    : connecting
-      ? compact
-        ? "Wallet"
-        : "Loading wallet"
-      : !authReady
-        ? "Wallet"
-        : wallet
-          ? username || shortenAddress(wallet.account)
-          : authenticated
-            ? "Set up wallet"
-            : hasSession
-              ? "Reconnect"
-              : compact
-                ? "Connect"
-                : "Connect wallet";
+    : hydrationPending
+      ? "Loading wallet"
+      : wallet
+        ? username || shortenAddress(wallet.account)
+        : authenticated
+          ? "Set up wallet"
+          : hasSession
+            ? "Reconnect"
+            : compact
+              ? "Connect"
+              : "Connect wallet";
 
   const button = (
     <button
       ref={menuButtonRef}
       className={
         compact
-          ? "wallet-button wallet-button-compact liquid-glass-control"
-          : "wallet-button liquid-glass-control"
+          ? `wallet-button wallet-button-compact liquid-glass-control${
+              hydrationPending ? " wallet-button-hydrating" : ""
+            }`
+          : `wallet-button liquid-glass-control${
+              hydrationPending ? " wallet-button-hydrating" : ""
+            }`
       }
       type="button"
       disabled={connecting || disconnecting}
@@ -2279,7 +2269,9 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       ) : (
         <Wallet aria-hidden="true" size={16} />
       )}
-      <span>{label}</span>
+      <span aria-hidden={hydrationPending ? "true" : undefined}>
+        {hydrationPending ? null : label}
+      </span>
       {wallet ? (
         <ChevronDown
           className="wallet-button-chevron"
@@ -2326,6 +2318,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         </div>
         <Link
           href="/profile"
+          prefetch={false}
           tabIndex={menuOpen ? undefined : -1}
           onClick={() => setMenuOpen(false)}
         >

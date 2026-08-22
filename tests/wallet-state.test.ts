@@ -8,7 +8,7 @@ import { ApplicantRefreshUserUnavailableErrorV1 } from
 
 type WalletProviderContract = {
   shouldEagerLoadWalletRuntime: (pathname: string) => boolean;
-  shouldIdlePreloadWalletRuntime: (pathname: string) => boolean;
+  shouldBackgroundLoadWalletRuntime: (pathname: string) => boolean;
   assertExternalWalletAuthorityCurrent: (input: Readonly<{
     expectedAccount: `0x${string}`;
     expectedChainId: string;
@@ -145,14 +145,14 @@ describe("wallet recovery state", () => {
       "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
     ]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(true);
-      expect(subject.shouldIdlePreloadWalletRuntime(pathname)).toBe(false);
+      expect(subject.shouldBackgroundLoadWalletRuntime(pathname)).toBe(false);
     }
   });
 
-  it("hydrates browse-only routes during browser idle time", () => {
+  it("hydrates browse-only routes in the background after first render", () => {
     for (const pathname of ["/", "/explore", "/docs", "/docs/creators"]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(false);
-      expect(subject.shouldIdlePreloadWalletRuntime(pathname)).toBe(true);
+      expect(subject.shouldBackgroundLoadWalletRuntime(pathname)).toBe(true);
     }
   });
 
@@ -169,9 +169,13 @@ describe("wallet recovery state", () => {
     expect(provider).toContain('import("./wallet-provider-runtime")');
     expect(provider).toContain("onPointerEnter={preloadWallet}");
     expect(provider).toContain("onFocus={preloadWallet}");
-    expect(provider).toContain(': !authReady');
-    expect(provider).toContain('? "Wallet"');
-    expect(provider).toContain(': "Loading wallet"');
+    expect(provider).toContain("globalThis.setTimeout(preload, 0)");
+    expect(provider).toContain(
+      "const hydrationPending = connecting || !authReady",
+    );
+    expect(provider).toMatch(/hydrationPending\s*\?\s*"Loading wallet"/u);
+    expect(provider).toContain("wallet-button-hydrating");
+    expect(provider).not.toContain("requestIdleCallback");
     expect(provider).not.toMatch(
       /import\s*\{[\s\S]*?PrivyProvider[\s\S]*?\}\s*from\s*["']@privy-io\/react-auth["']/u,
     );

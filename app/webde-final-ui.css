@@ -329,6 +329,18 @@ body:has([data-docs-shell]) .site-header::before {
     text-shadow 240ms ease;
 }
 
+.header-actions .wallet-button-compact {
+  width: 154px;
+}
+
+.wallet-button-hydrating > span {
+  background: rgb(247 241 234 / 0.24);
+  border-radius: 999px;
+  display: block;
+  height: 7px;
+  width: 64px;
+}
+
 .wallet-menu {
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
