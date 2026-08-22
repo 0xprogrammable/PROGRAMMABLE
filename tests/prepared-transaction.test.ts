@@ -104,6 +104,68 @@ describe("prepared transaction boundary", () => {
     ).toThrow("kind");
   });
 
+  it("isolates prediction creation to its one Robinhood transaction kind", () => {
+    expect(
+      parsePreparedTransaction({
+        kind: "prediction-market-launch",
+        chainId: 4_663,
+        to: TO,
+        data: DATA,
+        value: "0",
+        gasLimit: "7000000",
+      }),
+    ).toMatchObject({
+      kind: "prediction-market-launch",
+      chainId: 4_663,
+    });
+    expect(() =>
+      parsePreparedTransaction({
+        kind: "prediction-market-launch",
+        chainId: 1,
+        to: TO,
+        data: DATA,
+        value: "0",
+        gasLimit: "7000000",
+      }),
+    ).toThrow("limited to Robinhood Chain");
+    expect(() =>
+      parsePreparedTransaction({
+        kind: "launch",
+        chainId: 4_663,
+        to: TO,
+        data: DATA,
+        value: "0",
+        gasLimit: "7000000",
+      }),
+    ).toThrow("Ethereum Mainnet or Sepolia");
+  });
+
+  it("isolates prediction actions to Robinhood Chain", () => {
+    expect(
+      parsePreparedTransaction({
+        kind: "prediction-market-action",
+        chainId: 4_663,
+        to: TO,
+        data: DATA,
+        value: "0",
+        gasLimit: "250000",
+      }),
+    ).toMatchObject({
+      kind: "prediction-market-action",
+      chainId: 4_663,
+    });
+    expect(() =>
+      parsePreparedTransaction({
+        kind: "prediction-market-action",
+        chainId: 1,
+        to: TO,
+        data: DATA,
+        value: "0",
+        gasLimit: "250000",
+      }),
+    ).toThrow("limited to Robinhood Chain");
+  });
+
   it("requires server gas limits for launch, claim and swap but lets Privy estimate approval gas", () => {
     expect(() =>
       parsePreparedTransaction({

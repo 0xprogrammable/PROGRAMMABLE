@@ -175,8 +175,22 @@ describe("unreleased launch model gating", () => {
       }),
     );
 
-    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(3);
     expect(html).toContain("<h1>Choose a launch model</h1>");
+    expect(html).toContain('data-launch-model-option="prediction"');
+    const predictionCard = html.match(
+      /<button[^>]*data-launch-model-option="prediction"[^>]*>/,
+    )?.[0];
+    expect(predictionCard).toContain('data-launch-model-available="true"');
+    expect(predictionCard).toContain('data-launch-model-launchable="false"');
+    expect(predictionCard).toContain('data-launch-model-preview="true"');
+    expect(predictionCard).not.toContain("disabled");
+    expect(html).toContain(
+      'id="launch-model-prediction-title">Prediction</strong>',
+    );
+    expect(html).toContain('data-status="preview">Technical preview</small>');
+    expect(html).toContain("Design a BTC market");
+    expect(html).toContain("2 USDG seed instead of a separate liquidity deposit");
     expect(html).toContain('data-launch-model-option="classic"');
     const classicCard = html.match(
       /<button[^>]*data-launch-model-option="classic"[^>]*>/,
@@ -225,7 +239,8 @@ describe("unreleased launch model gating", () => {
         onChoose: () => undefined,
       }),
     );
-    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(3);
+    expect(html).toContain('data-launch-model-option="prediction"');
     expect(html).toContain('data-launch-model-option="custom"');
     expect(html).toContain('id="launch-model-custom-title"');
     expect(html).toContain('data-launch-model-available="false"');
