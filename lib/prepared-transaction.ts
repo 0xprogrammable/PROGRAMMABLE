@@ -17,6 +17,7 @@ export type PreparedTransactionChainId =
 export type PreparedTransactionKind =
   | "launch"
   | "prediction-market-launch"
+  | "prediction-market-action"
   | "token-to-permit2"
   | "permit2-to-router"
   | "swap"
@@ -61,7 +62,7 @@ type PreparedLaunchTransaction = PreparedTransactionBase & {
 };
 
 type PreparedPredictionMarketTransaction = PreparedTransactionBase & {
-  kind: "prediction-market-launch";
+  kind: "prediction-market-launch" | "prediction-market-action";
   gasLimit: string;
   from?: never;
 };
@@ -109,6 +110,7 @@ const zeroAddress = "0x0000000000000000000000000000000000000000";
 const kinds = new Set<PreparedTransactionKind>([
   "launch",
   "prediction-market-launch",
+  "prediction-market-action",
   "token-to-permit2",
   "permit2-to-router",
   "swap",
@@ -220,7 +222,10 @@ export function parsePreparedTransaction(
       `The prepared transaction contains unsupported field ${unsupportedField}`,
     );
   }
-  if (kind === "prediction-market-launch") {
+  if (
+    kind === "prediction-market-launch" ||
+    kind === "prediction-market-action"
+  ) {
     if (record.chainId !== ROBINHOOD_CHAIN_ID) {
       throw new Error("Prediction market launches are limited to Robinhood Chain");
     }
@@ -238,7 +243,11 @@ export function parsePreparedTransaction(
     value: readUintString(record.value, "value", true),
   };
 
-  if (kind === "launch" || kind === "prediction-market-launch") {
+  if (
+    kind === "launch" ||
+    kind === "prediction-market-launch" ||
+    kind === "prediction-market-action"
+  ) {
     return {
       ...base,
       kind,
@@ -363,6 +372,13 @@ export function getPreparedTransactionReview(
       description: "Create this fully backed BTC market on Robinhood Chain",
       buttonText: "Create market",
       successHeader: "Market creation submitted",
+    };
+  }
+  if (kind === "prediction-market-action") {
+    return {
+      description: "Submit this prediction-market action on Robinhood Chain",
+      buttonText: "Confirm action",
+      successHeader: "Market action submitted",
     };
   }
   if (kind === "token-to-permit2") {

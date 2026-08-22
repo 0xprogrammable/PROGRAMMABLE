@@ -281,7 +281,8 @@
 }
 
 .createButton:focus-visible,
-.explorerLink:focus-visible {
+.explorerLink:focus-visible,
+.marketLink:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
@@ -339,6 +340,29 @@
   gap: 6px;
   justify-content: center;
   margin-top: 10px;
+  text-decoration: none;
+}
+
+.confirmedLinks {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.confirmedLinks .explorerLink {
+  margin-top: 0;
+}
+
+.marketLink {
+  background: var(--accent);
+  border-radius: 999px;
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 680;
+  padding: 8px 13px;
   text-decoration: none;
 }
 

@@ -21,6 +21,7 @@ import {
   ProfileProjects,
   type CreatorProjectMarketCapV1,
 } from "@/components/profile-projects";
+import { PredictionMarketPortfolio } from "@/components/prediction-market-portfolio";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -3202,6 +3203,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       </section>
 
       <ProfileProjects marketCaps={creatorProjectMarketCaps} />
+      <PredictionMarketPortfolio />
 
       <ProfileAccountWorkspace
         key={account.toLowerCase()}

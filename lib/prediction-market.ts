@@ -21,6 +21,7 @@ export const ROBINHOOD_BTC_USD_FEED_ADDRESS =
   "0xa2c5184bF03d373Dc9dE4876eb4Bce595B460251" as const;
 export const PREDICTION_BOOTSTRAP_USDG_ATOMS = 2_000_000n;
 export const PREDICTION_MINIMUM_DURATION_SECONDS = 24 * 60 * 60;
+export const PREDICTION_MAXIMUM_DURATION_SECONDS = 30 * 24 * 60 * 60;
 export const PREDICTION_TRADING_CUTOFF_SECONDS = 60;
 export const PREDICTION_PRICE_DECIMALS = 8;
 export const PREDICTION_PERMIT_DURATION_SECONDS = 20 * 60;
@@ -61,6 +62,16 @@ export type PredictionPermitSignature = Readonly<{
   r: Hex;
   s: Hex;
   v: number;
+}>;
+
+export type PredictionPermitTypedDataInput = Readonly<{
+  deadline: bigint;
+  nonce: bigint;
+  owner: Address;
+  spender: Address;
+  tokenAddress: Address;
+  tokenName: string;
+  value: bigint;
 }>;
 
 export const predictionMarketFactoryAbi = [
@@ -162,12 +173,26 @@ export function formatPredictionThreshold(thresholdAtoms: bigint) {
 
 export function formatUtcObservation(observationTime: number) {
   const date = new Date(observationTime * 1_000);
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = months[date.getUTCMonth()];
+  const day = date.getUTCDate();
   const hour = String(date.getUTCHours()).padStart(2, "0");
   const minute = String(date.getUTCMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day} ${hour}:${minute} UTC`;
+  return `${month} ${day}, ${year} at ${hour}:${minute} UTC`;
 }
 
 export function formatPredictionCountdown(
@@ -199,6 +224,8 @@ export function validatePredictionMarketDraft(
   const observationTime = parseUtcObservation(draft.observationUtc);
   const minimumObservationTime =
     Math.floor(nowMs / 1_000) + PREDICTION_MINIMUM_DURATION_SECONDS;
+  const maximumObservationTime =
+    Math.floor(nowMs / 1_000) + PREDICTION_MAXIMUM_DURATION_SECONDS;
   const errors: {
     observationUtc?: string;
     thresholdUsd?: string;
@@ -213,6 +240,9 @@ export function validatePredictionMarketDraft(
   } else if (observationTime <= minimumObservationTime) {
     errors.observationUtc =
       "The result time must be more than 24 hours from now.";
+  } else if (observationTime > maximumObservationTime) {
+    errors.observationUtc =
+      "The result time must be no more than 30 days from now.";
   }
 
   if (thresholdAtoms === null || observationTime === null || Object.keys(errors).length > 0) {
@@ -226,7 +256,7 @@ export function validatePredictionMarketDraft(
     market: {
       cutoffTime: observationTime - PREDICTION_TRADING_CUTOFF_SECONDS,
       countdownLabel: formatPredictionCountdown(observationTime, nowMs),
-      marketTitle: `Will BTC/USD be at or above ${thresholdLabel} at ${observationLabel}?`,
+      marketTitle: `Will BTC be at or above ${thresholdLabel} on ${observationLabel}?`,
       observationLabel,
       observationTime,
       thresholdAtoms,
@@ -246,9 +276,6 @@ export function buildUsdgPermitTypedData({
   nonce: bigint;
   owner: Address;
 }) {
-  if (!isAddress(owner) || !isAddress(factoryAddress)) {
-    throw new Error("Permit owner and factory must be valid addresses");
-  }
   if (
     nonce < 0n ||
     nonce > UINT256_MAX ||
@@ -257,20 +284,60 @@ export function buildUsdgPermitTypedData({
   ) {
     throw new Error("Permit nonce or deadline is outside uint256 bounds");
   }
+  return buildPredictionPermitTypedData({
+    deadline,
+    nonce,
+    owner,
+    spender: factoryAddress,
+    tokenAddress: ROBINHOOD_USDG_ADDRESS,
+    tokenName: "Global Dollar",
+    value: PREDICTION_BOOTSTRAP_USDG_ATOMS,
+  });
+}
+
+export function buildPredictionPermitTypedData({
+  deadline,
+  nonce,
+  owner,
+  spender,
+  tokenAddress,
+  tokenName,
+  value,
+}: PredictionPermitTypedDataInput) {
+  if (
+    !isAddress(owner) ||
+    !isAddress(spender) ||
+    !isAddress(tokenAddress)
+  ) {
+    throw new Error("Permit owner, spender, and token must be valid addresses");
+  }
+  if (!tokenName.trim() || tokenName.length > 256) {
+    throw new Error("Permit token name is invalid");
+  }
+  if (
+    nonce < 0n ||
+    nonce > UINT256_MAX ||
+    value <= 0n ||
+    value > UINT256_MAX ||
+    deadline <= 0n ||
+    deadline > UINT256_MAX
+  ) {
+    throw new Error("Permit value, nonce, or deadline is outside uint256 bounds");
+  }
 
   return {
     domain: {
       chainId: ROBINHOOD_CHAIN_ID,
-      name: "Global Dollar",
-      verifyingContract: ROBINHOOD_USDG_ADDRESS,
+      name: tokenName,
+      verifyingContract: tokenAddress,
       version: "1",
     },
     message: {
       deadline,
       nonce,
       owner,
-      spender: factoryAddress,
-      value: PREDICTION_BOOTSTRAP_USDG_ATOMS,
+      spender,
+      value,
     },
     primaryType: "Permit" as const,
     types: usdgPermitTypes,
@@ -291,6 +358,12 @@ export function getExpectedUsdgPermitDomainSeparator() {
 
 export function serializeUsdgPermitTypedData(
   typedData: ReturnType<typeof buildUsdgPermitTypedData>,
+) {
+  return serializePredictionPermitTypedData(typedData);
+}
+
+export function serializePredictionPermitTypedData(
+  typedData: ReturnType<typeof buildPredictionPermitTypedData>,
 ) {
   const serialized = serializeTypedData({
     ...typedData,

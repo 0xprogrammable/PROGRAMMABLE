@@ -40,8 +40,10 @@ import {
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
 import {
+  buildPredictionPermitTypedData,
   buildUsdgPermitTypedData,
   parsePredictionPermitSignature,
+  serializePredictionPermitTypedData,
   serializeUsdgPermitTypedData,
   type PredictionPermitSignature,
 } from "@/lib/prediction-market";
@@ -123,6 +125,14 @@ type WalletContextValue = {
     factoryAddress: Address;
     nonce: bigint;
   }>) => Promise<PredictionPermitSignature>;
+  signPredictionTokenPermit: (input: Readonly<{
+    deadline: bigint;
+    nonce: bigint;
+    spender: Address;
+    tokenAddress: Address;
+    tokenName: string;
+    value: bigint;
+  }>) => Promise<PredictionPermitSignature>;
   sendBrowserWalletAction: (input: Readonly<{
     chainId: string;
     from: `0x${string}`;
@@ -152,7 +162,7 @@ function loadWalletProviderRuntime() {
 }
 
 export function shouldEagerLoadWalletRuntime(pathname: string) {
-  return ["/launch", "/profile", "/token"].some(
+  return ["/launch", "/markets", "/profile", "/token"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -847,6 +857,9 @@ function DeferredWalletProvider({
       signPredictionPermit: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
+      signPredictionTokenPermit: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
       sendBrowserWalletAction: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
@@ -1422,7 +1435,9 @@ function PrivyWalletBridge({
         transaction,
         wallet.account,
       );
-      const target = prepared.kind === "prediction-market-launch"
+      const target =
+        prepared.kind === "prediction-market-launch" ||
+        prepared.kind === "prediction-market-action"
         ? getWalletNetwork(String(robinhoodChain.id))
         : getWalletNetwork(String(appChain.id));
       if (!target || prepared.chainId !== target.chain.id) {
@@ -1567,6 +1582,82 @@ function PrivyWalletBridge({
         execute: () => provider.request({
           method: "eth_signTypedData_v4",
           params: [wallet.account, serializeUsdgPermitTypedData(typedData)],
+        }),
+      });
+      if (
+        typeof signature !== "string" ||
+        !/^0x[0-9a-fA-F]{130}$/.test(signature)
+      ) {
+        throw new Error("The wallet returned an invalid permit signature");
+      }
+      return parsePredictionPermitSignature(signature as Hex, input.deadline);
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+  }, [connectedWallet, user?.id, wallet]);
+
+  const signPredictionTokenPermit = useCallback(async (input: Readonly<{
+    deadline: bigint;
+    nonce: bigint;
+    spender: Address;
+    tokenAddress: Address;
+    tokenName: string;
+    value: bigint;
+  }>) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an EVM wallet before continuing");
+    }
+    const sessionSubject = user?.id ?? null;
+    if (sessionSubject === null) {
+      throw new Error("Your wallet session expired. Reconnect and try again");
+    }
+    const expectedAccount = wallet.account.toLowerCase();
+    const assertCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      if (
+        !current.authenticated ||
+        current.privyUserId !== sessionSubject ||
+        current.account?.toLowerCase() !== expectedAccount
+      ) {
+        throw new Error("The wallet session changed. Reconnect and try again");
+      }
+    };
+    const typedData = buildPredictionPermitTypedData({
+      ...input,
+      owner: wallet.account,
+    });
+
+    try {
+      if (wallet.chainId !== robinhoodChainHex) {
+        await connectedWallet.switchChain(robinhoodChain.id);
+        assertCurrentSession();
+      }
+      const provider = await connectedWallet.getEthereumProvider();
+      await assertExternalWalletAuthorityCurrent({
+        expectedAccount: wallet.account,
+        expectedChainId: robinhoodChainHex,
+        networkName: robinhoodChain.name,
+        request: (method) => provider.request({ method }),
+      });
+      const signature = await runWithBrowserWalletRequestLock({
+        sessionSubject,
+        account: wallet.account,
+        chainId: String(robinhoodChain.id),
+        requestSubject: JSON.stringify([
+          "prediction-token-permit-v1",
+          input.tokenAddress.toLowerCase(),
+          input.spender.toLowerCase(),
+          input.value.toString(),
+          input.nonce.toString(),
+          input.deadline.toString(),
+        ]),
+        assertCurrentSession,
+        execute: () => provider.request({
+          method: "eth_signTypedData_v4",
+          params: [
+            wallet.account,
+            serializePredictionPermitTypedData(typedData),
+          ],
         }),
       });
       if (
@@ -1845,6 +1936,7 @@ function PrivyWalletBridge({
       setUsername,
       signLaunchMessage,
       signPredictionPermit,
+      signPredictionTokenPermit,
       sendBrowserWalletAction,
       sendTransaction,
       readNativeBalance,
@@ -1874,6 +1966,7 @@ function PrivyWalletBridge({
       sendTransaction,
       signLaunchMessage,
       signPredictionPermit,
+      signPredictionTokenPermit,
       switchingNetwork,
       switchWalletNetwork,
       providerSettled,
@@ -1949,6 +2042,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       signPredictionPermit: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      signPredictionTokenPermit: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendBrowserWalletAction: async () => {

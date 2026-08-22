@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -209,7 +210,7 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
       setPhase("confirming");
       setStatus("Transaction submitted. Verifying the canonical market and its YES/NO contracts…");
       const confirmed = await waitForPredictionMarketCreation({
-        client: clients[0],
+        clients,
         config: release.config,
         creator: wallet.account,
         expectedSemanticKey: preflight.semanticKey,
@@ -270,7 +271,7 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
             <span className={styles.bitcoinMark} aria-hidden="true">₿</span>
             <span>
               <strong>Bitcoin</strong>
-              <small>BTC/USD</small>
+              <small>BTC</small>
             </span>
             <span className={styles.fixedLabel}>Fixed for V1</span>
           </div>
@@ -313,6 +314,20 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
                 aria-describedby={errors.observationUtc ? "prediction-time-error" : "prediction-time-help"}
                 aria-invalid={Boolean(errors.observationUtc)}
                 name="observationUtc"
+                min={
+                  nowMs
+                    ? new Date(
+                        nowMs + (24 * 60 * 60 + 60) * 1_000,
+                      ).toISOString().slice(0, 16)
+                    : undefined
+                }
+                max={
+                  nowMs
+                    ? new Date(
+                        nowMs + 30 * 24 * 60 * 60 * 1_000,
+                      ).toISOString().slice(0, 16)
+                    : undefined
+                }
                 onChange={(event) =>
                   setDraft((currentDraft) => ({
                     ...currentDraft,
@@ -380,15 +395,23 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
             </p>
           ) : null}
           {confirmedMarket ? (
-            <a
-              className={styles.explorerLink}
-              href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${confirmedMarket.transactionHash}`}
-              rel="noreferrer"
-              target="_blank"
-            >
-              View confirmed transaction
-              <ExternalLink aria-hidden="true" size={14} />
-            </a>
+            <div className={styles.confirmedLinks}>
+              <Link
+                className={styles.marketLink}
+                href={`/markets/${confirmedMarket.semanticKey}`}
+              >
+                Open market
+              </Link>
+              <a
+                className={styles.explorerLink}
+                href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${confirmedMarket.transactionHash}`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Confirmed transaction
+                <ExternalLink aria-hidden="true" size={14} />
+              </a>
+            </div>
           ) : null}
         </form>
 
@@ -423,7 +446,7 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
             </div>
             <div>
               <dt><Database aria-hidden="true" size={16} />Result source</dt>
-              <dd>Official Chainlink BTC/USD round at or immediately before the UTC result time</dd>
+              <dd>Last completed Chainlink BTC/USD round at or before the UTC result time, proven by the next adjacent round</dd>
             </div>
             <div>
               <dt><ShieldCheck aria-hidden="true" size={16} />Invalid result</dt>
@@ -434,7 +457,7 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
           <details className={styles.details}>
             <summary>Exact resolution rule</summary>
             <p>
-              Anyone can submit the adjacent Chainlink rounds that bracket the result time. The earlier completed round decides the market. Stale, malformed, or unprovable data fails closed; it cannot pick a convenient price.
+              Anyone can submit the adjacent Chainlink rounds that bracket the result time. The earlier completed round decides the market and must be no more than 25 hours old; the following round must arrive within 25 hours. Otherwise the market settles neutrally at 0.50 USDG per side.
             </p>
           </details>
         </section>

@@ -25,6 +25,7 @@ import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
+  { href: "/markets", label: "Markets" },
   { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
