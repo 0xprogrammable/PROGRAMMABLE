@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import {
+  programmableSiteStructuredData,
+  serializeStructuredData,
+} from "@/lib/site-structured-data";
 import "./globals.css";
 import "./programmable-experience.css";
 import "./interface.css";
@@ -107,6 +111,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth" data-theme="dark">
+      <head>
+        <link
+          href="/openapi.json"
+          rel="service-desc"
+          type="application/vnd.oai.openapi+json"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: serializeStructuredData(programmableSiteStructuredData),
+          }}
+          type="application/ld+json"
+        />
+      </head>
       <body className={`${instrumentSans.variable} ${plexMono.variable}`}>
         <AppShell>{children}</AppShell>
       </body>
