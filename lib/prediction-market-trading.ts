@@ -504,6 +504,36 @@ function assertSame(primary: unknown, secondary: unknown, label: string) {
   }
 }
 
+type PredictionConfirmedBlock = Readonly<{
+  hash: Hex | null;
+  number: bigint | null;
+  parentHash: Hex;
+  timestamp: bigint;
+}>;
+
+function predictionConfirmedBlockIdentity(block: PredictionConfirmedBlock) {
+  if (block.hash === null || block.number === null) {
+    throw new Error("The confirmed Robinhood block has no canonical identity");
+  }
+  return {
+    hash: block.hash,
+    number: block.number,
+    parentHash: block.parentHash,
+    timestamp: block.timestamp,
+  };
+}
+
+export function assertPredictionConfirmedBlocksMatch(
+  primary: PredictionConfirmedBlock,
+  secondary: PredictionConfirmedBlock,
+) {
+  assertSame(
+    predictionConfirmedBlockIdentity(primary),
+    predictionConfirmedBlockIdentity(secondary),
+    "the confirmed block",
+  );
+}
+
 function stateName(value: number): PredictionMarketState {
   const states = ["OPEN", "FINAL_YES", "FINAL_NO", "FINAL_INVALID"] as const;
   if (!Number.isInteger(value) || value < 0 || value >= states.length) {
@@ -944,7 +974,7 @@ export async function readPredictionMarketDirectory({
     Promise.all(clients.map((client) => client.getBlock({ blockNumber }))),
     Promise.all(clients.map((client) => client.readContract({ address: config.factoryAddress, abi: factoryAbi, blockNumber, functionName: "marketCount" }))),
   ]);
-  assertSame(blocks[0], blocks[1], "the confirmed block");
+  assertPredictionConfirmedBlocksMatch(blocks[0], blocks[1]);
   assertSame(counts[0], counts[1], "the market count");
   const marketCount = counts[0];
   const page = predictionMarketPageIndices({ cursor, limit, marketCount });
