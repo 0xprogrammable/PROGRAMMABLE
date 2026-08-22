@@ -51,6 +51,7 @@ import {
   PREDICTION_PERMIT_DURATION_SECONDS,
   ROBINHOOD_USDG_ADDRESS,
 } from "@/lib/prediction-market";
+import { predictionMarketErrorMessage } from "@/lib/prediction-market-errors";
 
 type MarketLoadState =
   | { kind: "loading" }
@@ -80,7 +81,7 @@ function quoteDepthLabel(priceImpactBps: number) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "The market action failed";
+  return predictionMarketErrorMessage(error, "The market action failed");
 }
 
 function probabilityLabel(bps: number) {

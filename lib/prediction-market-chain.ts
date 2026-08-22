@@ -10,7 +10,6 @@ import {
 } from "viem";
 
 import {
-  ROBINHOOD_MAINNET_FALLBACK_RPC_URL,
   ROBINHOOD_MAINNET_RPC_URL,
   ROBINHOOD_MULTICALL3_ADDRESS,
   ROBINHOOD_MULTICALL3_RUNTIME_CODE_HASH,
@@ -36,6 +35,8 @@ const PREDICTION_RPC_CONFIRMATIONS = 3n;
 const PREDICTION_MAX_RPC_HEAD_DIVERGENCE = 300n;
 const PREDICTION_GAS_BUFFER_PERCENT = 120n;
 const PREDICTION_MAX_GAS_LIMIT = 10_000_000n;
+const PREDICTION_MULTICALL_BATCH_SIZE = 64;
+const PREDICTION_SECONDARY_RPC_HOST = "robinhood-mainnet.g.alchemy.com";
 const UINT256_MAX = (1n << 256n) - 1n;
 
 export const ROBINHOOD_V4_POOL_MANAGER_ADDRESS =
@@ -59,6 +60,7 @@ export type PredictionMarketReleaseConfig = Readonly<{
   predictionQuoterRuntimeCodeHash: Hex;
   routerRuntimeCodeHash: Hex;
   runtimeCodeHash: Hex;
+  secondaryRpcUrl: string;
 }>;
 
 export type PredictionMarketReleaseConfigInput = Readonly<{
@@ -69,6 +71,7 @@ export type PredictionMarketReleaseConfigInput = Readonly<{
   predictionQuoterRuntimeCodeHash?: string;
   routerRuntimeCodeHash?: string;
   runtimeCodeHash?: string;
+  secondaryRpcUrl?: string;
 }>;
 
 export type PredictionLaunchSnapshot = Readonly<{
@@ -362,6 +365,7 @@ export function parsePredictionMarketReleaseConfig(
     input.predictionQuoterRuntimeCodeHash?.trim() ?? "";
   const routerRuntimeCodeHash = input.routerRuntimeCodeHash?.trim() ?? "";
   const runtimeCodeHash = input.runtimeCodeHash?.trim() ?? "";
+  const secondaryRpcUrl = input.secondaryRpcUrl?.trim() ?? "";
   if (
     !deploymentBlock &&
     !factoryAddress &&
@@ -369,7 +373,8 @@ export function parsePredictionMarketReleaseConfig(
     !predictionQuoterAddress &&
     !predictionQuoterRuntimeCodeHash &&
     !routerRuntimeCodeHash &&
-    !runtimeCodeHash
+    !runtimeCodeHash &&
+    !secondaryRpcUrl
   ) {
     return null;
   }
@@ -394,6 +399,25 @@ export function parsePredictionMarketReleaseConfig(
     }
   }
 
+  let parsedSecondaryRpcUrl: URL;
+  try {
+    parsedSecondaryRpcUrl = new URL(secondaryRpcUrl);
+  } catch {
+    throw new Error("The configured prediction secondary RPC URL is invalid");
+  }
+  if (
+    parsedSecondaryRpcUrl.protocol !== "https:" ||
+    parsedSecondaryRpcUrl.hostname !== PREDICTION_SECONDARY_RPC_HOST ||
+    parsedSecondaryRpcUrl.port ||
+    parsedSecondaryRpcUrl.username ||
+    parsedSecondaryRpcUrl.password ||
+    parsedSecondaryRpcUrl.search ||
+    parsedSecondaryRpcUrl.hash ||
+    !/^\/v2\/[A-Za-z0-9_-]{16,}$/u.test(parsedSecondaryRpcUrl.pathname)
+  ) {
+    throw new Error("The configured prediction secondary RPC URL is invalid");
+  }
+
   return {
     deploymentBlock: BigInt(deploymentBlock),
     factoryAddress: getAddress(factoryAddress),
@@ -403,6 +427,7 @@ export function parsePredictionMarketReleaseConfig(
       predictionQuoterRuntimeCodeHash.toLowerCase() as Hex,
     routerRuntimeCodeHash: routerRuntimeCodeHash.toLowerCase() as Hex,
     runtimeCodeHash: runtimeCodeHash.toLowerCase() as Hex,
+    secondaryRpcUrl: parsedSecondaryRpcUrl.toString(),
   };
 }
 
@@ -422,13 +447,25 @@ export function getPredictionMarketReleaseConfig() {
       process.env.NEXT_PUBLIC_PROGRAMMABLE_PREDICTION_ROUTER_RUNTIME_CODE_HASH,
     runtimeCodeHash:
       process.env.NEXT_PUBLIC_PROGRAMMABLE_PREDICTION_FACTORY_RUNTIME_CODE_HASH,
+    secondaryRpcUrl:
+      process.env.NEXT_PUBLIC_PROGRAMMABLE_PREDICTION_SECONDARY_RPC_URL,
   });
 }
 
-export function createPredictionMarketPublicClients() {
+export function createPredictionMarketPublicClients(
+  config = getPredictionMarketReleaseConfig(),
+) {
+  if (!config) {
+    throw new Error("The prediction market release is not configured");
+  }
   return [
     createPublicClient({
-      batch: { multicall: true },
+      batch: {
+        multicall: {
+          batchSize: PREDICTION_MULTICALL_BATCH_SIZE,
+          wait: 0,
+        },
+      },
       chain: robinhoodChain,
       transport: http(ROBINHOOD_MAINNET_RPC_URL, {
         retryCount: 1,
@@ -436,9 +473,14 @@ export function createPredictionMarketPublicClients() {
       }),
     }),
     createPublicClient({
-      batch: { multicall: true },
+      batch: {
+        multicall: {
+          batchSize: PREDICTION_MULTICALL_BATCH_SIZE,
+          wait: 0,
+        },
+      },
       chain: robinhoodChain,
-      transport: http(ROBINHOOD_MAINNET_FALLBACK_RPC_URL, {
+      transport: http(config.secondaryRpcUrl, {
         retryCount: 1,
         timeout: 10_000,
       }),

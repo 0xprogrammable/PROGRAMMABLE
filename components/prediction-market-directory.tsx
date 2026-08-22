@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "@/components/prediction-market-experience.module.css";
 import { predictionPreviewMarkets } from "@/components/prediction-market-preview";
 import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain";
+import { predictionMarketErrorMessage } from "@/lib/prediction-market-errors";
 import {
   formatPredictionUsdg,
   readPredictionMarketDirectory,
@@ -28,7 +29,7 @@ type DirectoryState =
 const DIRECTORY_PAGE_SIZE = 12;
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Markets are temporarily unavailable";
+  return predictionMarketErrorMessage(error, "Markets are temporarily unavailable");
 }
 
 function countdown(target: bigint, now: bigint) {

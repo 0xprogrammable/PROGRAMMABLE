@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "@/components/prediction-market-experience.module.css";
 import { useWallet } from "@/components/wallet-provider";
 import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain";
+import { predictionMarketErrorMessage } from "@/lib/prediction-market-errors";
 import {
   formatPredictionOutcome,
   readPredictionMarketDirectory,
@@ -27,7 +28,7 @@ type PortfolioState =
 const PORTFOLIO_SCAN_PAGE_SIZE = 24;
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Prediction positions are unavailable";
+  return predictionMarketErrorMessage(error, "Prediction positions are unavailable");
 }
 
 export function PredictionMarketPortfolio() {
