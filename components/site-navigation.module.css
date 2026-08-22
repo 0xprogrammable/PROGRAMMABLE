@@ -32,6 +32,7 @@
     max-width: min(124px, 38vw);
     min-width: 44px;
     padding-inline: 9px;
+    width: min(124px, 38vw);
   }
 
   .headerActions.headerActions :global(.wallet-button-compact > span) {
@@ -244,6 +245,15 @@
 
   .mobileSocials :global(.header-social-logo) {
     filter: grayscale(1) contrast(12) brightness(1.25);
+  }
+}
+
+@media (max-width: 26rem) {
+  .headerActions.headerActions :global(.wallet-menu) {
+    inset-inline: 14px;
+    min-width: 0;
+    position: fixed;
+    top: calc(76px + env(safe-area-inset-top));
   }
 }
 

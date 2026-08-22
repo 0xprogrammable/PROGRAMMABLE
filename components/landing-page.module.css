@@ -1,19 +1,22 @@
 :global(body .app-frame):has(.page) {
   height: auto;
   min-height: 100svh;
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 :global(body .app-frame):has(.page) > :global(main) {
   height: auto;
   min-height: 0;
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 :global(body .app-frame):has(.page) :global(.route-transition) {
   height: auto;
   min-height: 0;
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .page {

@@ -245,6 +245,7 @@ html {
   color-scheme: light;
   max-width: 100%;
   min-width: 0;
+  overflow-x: clip;
   scroll-padding-top: calc(var(--header-height) + 20px);
   scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
@@ -349,6 +350,7 @@ body {
   margin: 0;
   max-width: 100%;
   min-width: 0;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -494,6 +496,7 @@ textarea {
   isolation: isolate;
   min-height: 100svh;
   min-width: 0;
+  overflow-x: clip;
   position: relative;
   width: 100%;
 }

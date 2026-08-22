@@ -9,7 +9,7 @@ import {
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   DiscordBrandIcon,
   DuneBrandIcon,
@@ -31,6 +31,16 @@ const desktopNavItems = [
 ];
 
 const mobileNavItems = desktopNavItems;
+const warmedNavigationRoutes = new Set<string>();
+
+function warmNavigationRoute(
+  router: ReturnType<typeof useRouter>,
+  href: string,
+) {
+  if (warmedNavigationRoutes.has(href)) return;
+  warmedNavigationRoutes.add(href);
+  router.prefetch(href);
+}
 
 function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
   return (
@@ -110,6 +120,7 @@ function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -165,6 +176,7 @@ export function SiteHeader() {
           <Link
             className="wordmark"
             href="/"
+            prefetch={false}
             aria-label="Programmable home"
             onClick={restartHome}
           >
@@ -186,7 +198,10 @@ export function SiteHeader() {
               key={item.href}
               className={isCurrent(pathname, item) ? "active" : undefined}
               href={item.href}
+              prefetch={false}
               aria-current={isCurrent(pathname, item) ? "page" : undefined}
+              onFocus={() => warmNavigationRoute(router, item.href)}
+              onPointerEnter={() => warmNavigationRoute(router, item.href)}
             >
               {item.label}
             </Link>
@@ -248,6 +263,7 @@ export function MobileNavigation({
   onNavigate,
 }: MobileNavigationProps = {}) {
   const pathname = usePathname();
+  const router = useRouter();
 
   // AppShell retains this export for compatibility. The responsive navigation
   // is rendered inside SiteHeader so its visual and keyboard order stay at the
@@ -263,8 +279,11 @@ export function MobileNavigation({
             key={item.href}
             className={current ? "active" : undefined}
             href={item.href}
+            prefetch={false}
             aria-current={current ? "page" : undefined}
             tabIndex={open ? undefined : -1}
+            onFocus={() => warmNavigationRoute(router, item.href)}
+            onPointerEnter={() => warmNavigationRoute(router, item.href)}
             onClick={onNavigate}
           >
             <span>{item.label}</span>
