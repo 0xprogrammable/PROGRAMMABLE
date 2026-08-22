@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
@@ -144,16 +146,20 @@ describe("agent-readable public surface", () => {
     );
   });
 
-  it("rewrites direct Markdown requests and varies both representations on Accept", () => {
+  it("serves direct Markdown requests and varies both representations on Accept", async () => {
     const markdownResponse = proxy(
       new NextRequest(`${ORIGIN}/`, {
         headers: { Accept: "text/markdown" },
       }),
     );
     expect(markdownResponse.status).toBe(200);
-    expect(markdownResponse.headers.get("vary")).toContain("Accept");
-    expect(markdownResponse.headers.get("x-middleware-rewrite")).toBe(
-      `${ORIGIN}/index.md`,
+    expect(markdownResponse.headers.get("content-type")).toContain(
+      "text/markdown",
+    );
+    expect(markdownResponse.headers.get("vary")).toBe("Accept");
+    expect(markdownResponse.headers.get("x-middleware-rewrite")).toBeNull();
+    expect((await markdownResponse.text()).startsWith("# Programmable")).toBe(
+      true,
     );
 
     const htmlResponse = proxy(
@@ -171,6 +177,29 @@ describe("agent-readable public surface", () => {
     );
     expect(unacceptableResponse.status).toBe(406);
     expect(unacceptableResponse.headers.get("vary")).toBe("Accept");
+  });
+
+  it("keeps Accept and the Next RSC keys in the public CDN variation", () => {
+    const config = JSON.parse(
+      readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
+    ) as {
+      headers: Array<{
+        source: string;
+        headers: Array<{ key: string; value: string }>;
+      }>;
+    };
+    const root = config.headers.find(({ source }) => source === "/");
+    const vary = root?.headers.find(({ key }) => key === "Vary")?.value ?? "";
+    expect(vary.split(/,\s*/u)).toEqual(
+      expect.arrayContaining([
+        "Accept",
+        "Accept-Encoding",
+        "RSC",
+        "Next-Router-State-Tree",
+        "Next-Router-Prefetch",
+        "Next-Router-Segment-Prefetch",
+      ]),
+    );
   });
 
   it("serves compact Markdown documents with canonical HTML alternates", async () => {

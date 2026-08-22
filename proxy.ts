@@ -2,9 +2,9 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { negotiatePageRepresentation } from "@/lib/content-negotiation";
+import { buildProgrammableHomeMarkdown } from "@/lib/developer-docs-content";
 
 const MARKDOWN_DESTINATIONS = new Map([
-  ["/", "/index.md"],
   ["/docs/developers", "/docs/developers.md"],
 ]);
 
@@ -18,6 +18,17 @@ function withAcceptVariation(response: NextResponse): NextResponse {
   values.add("Accept");
   response.headers.set("Vary", [...values].join(", "));
   return response;
+}
+
+function homeMarkdownResponse(): NextResponse {
+  return new NextResponse(buildProgrammableHomeMarkdown(), {
+    headers: {
+      "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+      "Content-Type": "text/markdown; charset=utf-8",
+      Link: '<https://programmable.market/>; rel="canonical"; type="text/html"',
+      Vary: "Accept",
+    },
+  });
 }
 
 export function proxy(request: NextRequest) {
@@ -42,6 +53,9 @@ export function proxy(request: NextRequest) {
     );
   }
   if (representation === "markdown") {
+    if (request.nextUrl.pathname === "/") {
+      return homeMarkdownResponse();
+    }
     const destination = MARKDOWN_DESTINATIONS.get(request.nextUrl.pathname);
     if (destination !== undefined) {
       return withAcceptVariation(
