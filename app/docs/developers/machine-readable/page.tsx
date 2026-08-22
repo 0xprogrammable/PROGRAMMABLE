@@ -46,6 +46,15 @@ export default function MachineReadableDocsPage() {
 
         <ul className={styles.linkList}>
           <li>
+            <a href="/openapi.json">
+              <code>/openapi.json</code>
+            </a>
+            <span>
+              The stable, unauthenticated public read API for verified launch
+              discovery and exact token lookup.
+            </span>
+          </li>
+          <li>
             <a href="/docs/developers.md">
               <code>/docs/developers.md</code>
             </a>

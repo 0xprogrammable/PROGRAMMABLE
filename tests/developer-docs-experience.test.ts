@@ -225,7 +225,7 @@ describe("Developer documentation experience", () => {
     expect(developerDocsMarkdown).not.toContain("unruggable");
   });
 
-  it("keeps the Markdown and agent routes local, static and Router-first", () => {
+  it("keeps the Markdown and agent routes local, static and product-first", () => {
     for (const route of [markdownRoute, llmsRoute, llmsFullRoute]) {
       expect(route).toContain('dynamic = "force-static"');
       expect(route).not.toContain("resolveCustomRegistryPublicManifestV1");
@@ -234,11 +234,17 @@ describe("Developer documentation experience", () => {
     expect(llmsRoute).toContain("buildProgrammableLlmsIndex()");
     expect(llmsFullRoute).toContain("buildProgrammableLlmsFullFallback()");
     expect(llmsFullRoute).not.toContain("fetch(");
+    expect(programmableLlmsIndex).toMatch(/^# Programmable\n/u);
+    expect(programmableLlmsIndex).toContain("## When to use Programmable");
     expect(programmableLlmsIndex).toContain("Canonical read-only provenance");
+    expect(programmableLlmsIndex).not.toMatch(
+      /^# Programmable Launch Stamp Router$/mu,
+    );
     expect(programmableLlmsFullFallback).toContain("## Finalized PCAN vector");
     expect(machineReadablePage).toContain('<a href="/docs/developers.md">');
     expect(machineReadablePage).toContain('<a href="/llms.txt">');
     expect(machineReadablePage).toContain('<a href="/llms-full.txt">');
+    expect(machineReadablePage).toContain('<a href="/openapi.json">');
   });
 
   it("wraps long values and makes the indexing table horizontally reachable", () => {

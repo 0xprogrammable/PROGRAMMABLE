@@ -1,13 +1,13 @@
-import { buildDeveloperDocsMarkdown } from "@/lib/developer-docs-content";
+import { buildProgrammableHomeMarkdown } from "@/lib/developer-docs-content";
 
 export const dynamic = "force-static";
 
 export function GET() {
-  return new Response(buildDeveloperDocsMarkdown(), {
+  return new Response(buildProgrammableHomeMarkdown(), {
     headers: {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
       "Content-Type": "text/markdown; charset=utf-8",
-      Link: '<https://programmable.market/docs/developers>; rel="canonical"; type="text/html"',
+      Link: '<https://programmable.market/>; rel="canonical"; type="text/html"',
       Vary: "Accept",
     },
   });
