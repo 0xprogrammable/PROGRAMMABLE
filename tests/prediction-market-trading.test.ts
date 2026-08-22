@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPredictionSlippageFloor,
+  assertPredictionConfirmedBlocksMatch,
   parsePredictionBuyAmount,
   parsePredictionSellAmount,
   predictionMarketPageIndices,
@@ -80,5 +81,34 @@ describe("prediction market trading math", () => {
       12n, 11n, 10n, 9n, 8n, 7n, 6n, 5n, 4n, 3n, 2n, 1n,
     ]);
     expect(last).toEqual({ indices: [0n], nextCursor: 0n });
+  });
+
+  it("reconciles canonical block identity without comparing provider-shaped transaction fields", () => {
+    const canonical = {
+      hash: `0x${"11".repeat(32)}`,
+      number: 43_457_445n,
+      parentHash: `0x${"22".repeat(32)}`,
+      timestamp: 1_787_433_219n,
+    } as const;
+    const official = {
+      ...canonical,
+      transactions: [`0x${"33".repeat(32)}`],
+      l1BlockNumber: 25_813_295n,
+    };
+    const independent = {
+      ...canonical,
+      blobGasUsed: null,
+      transactions: [],
+    };
+
+    expect(() =>
+      assertPredictionConfirmedBlocksMatch(official, independent),
+    ).not.toThrow();
+    expect(() =>
+      assertPredictionConfirmedBlocksMatch(official, {
+        ...independent,
+        hash: `0x${"44".repeat(32)}`,
+      }),
+    ).toThrow("confirmed block");
   });
 });
