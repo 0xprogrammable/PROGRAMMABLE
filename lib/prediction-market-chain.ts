@@ -95,10 +95,23 @@ export type ConfirmedPredictionMarket = Readonly<{
 }>;
 
 export type PredictionSourceMatchRequest = Readonly<{
-  accepted: boolean;
   address: Address;
-  status: number | null;
+  lookupStatus: number | null;
+  match: string | null;
+  requestAccepted: boolean | null;
+  requestStatus: number | null;
+  verified: boolean;
 }>;
+
+type PredictionSourceMatchOptions = Readonly<{
+  fetcher?: typeof fetch;
+  maxWaitMs?: number;
+  now?: () => number;
+  pollIntervalMs?: number;
+  sleep?: (milliseconds: number) => Promise<void>;
+}>;
+
+const SOURCIFY_SERVER_URL = "https://sourcify.dev/server";
 
 const factoryReadAbi = [
   {
@@ -753,9 +766,96 @@ export async function waitForPredictionMarketCreation({
   };
 }
 
+async function readPredictionSourceMatch(address: Address, fetcher: typeof fetch) {
+  try {
+    const response = await fetcher(
+      `${SOURCIFY_SERVER_URL}/v2/contract/${robinhoodChain.id}/${address}`,
+      {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    const text = await response.text();
+    let body: { match?: unknown } = {};
+    try {
+      body = text ? (JSON.parse(text) as { match?: unknown }) : {};
+    } catch {
+      body = {};
+    }
+    const match = typeof body.match === "string" ? body.match : null;
+    return {
+      address,
+      lookupStatus: response.status,
+      match,
+      verified:
+        response.ok && (match === "match" || match === "exact_match"),
+    };
+  } catch {
+    return { address, lookupStatus: null, match: null, verified: false };
+  }
+}
+
+async function submitPredictionSourceMatch(
+  address: Address,
+  transactionHash: Hex,
+  fetcher: typeof fetch,
+) {
+  try {
+    const response = await fetcher(
+      `${SOURCIFY_SERVER_URL}/v2/verify/similarity/${robinhoodChain.id}/${address}`,
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ creationTransactionHash: transactionHash }),
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    const text = await response.text();
+    let customCode: string | null = null;
+    try {
+      const body = text ? (JSON.parse(text) as { customCode?: unknown }) : {};
+      customCode = typeof body.customCode === "string" ? body.customCode : null;
+    } catch {
+      customCode = null;
+    }
+    const alreadyVerified =
+      response.status === 409 && customCode === "already_verified";
+    const duplicate =
+      response.status === 429 && customCode === "duplicate_verification_request";
+    return {
+      accepted: response.status === 202 || alreadyVerified || duplicate,
+      alreadyVerified,
+      status: response.status,
+    };
+  } catch {
+    return { accepted: false, alreadyVerified: false, status: null };
+  }
+}
+
 export async function requestPredictionMarketSourceMatches(
   market: ConfirmedPredictionMarket,
+  {
+    fetcher = fetch,
+    maxWaitMs = 12_000,
+    now = Date.now,
+    pollIntervalMs = 2_000,
+    sleep = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  }: PredictionSourceMatchOptions = {},
 ): Promise<readonly PredictionSourceMatchRequest[]> {
+  if (!Number.isSafeInteger(maxWaitMs) || maxWaitMs < 0 || maxWaitMs > 30_000) {
+    throw new Error("Source verification wait must be between 0 and 30000ms");
+  }
+  if (
+    !Number.isSafeInteger(pollIntervalMs) ||
+    pollIntervalMs < 100 ||
+    pollIntervalMs > 10_000
+  ) {
+    throw new Error("Source verification polling must be between 100 and 10000ms");
+  }
   const addresses = [
     market.vault,
     market.checkpoint,
@@ -763,39 +863,46 @@ export async function requestPredictionMarketSourceMatches(
     market.noToken,
   ] as const;
 
-  return Promise.all(
-    addresses.map(async (address) => {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 8_000);
-      try {
-        const response = await fetch(
-          `https://sourcify.dev/server/v2/verify/similarity/${robinhoodChain.id}/${address}`,
-          {
-            method: "POST",
-            headers: {
-              accept: "application/json",
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              creationTransactionHash: market.transactionHash,
-            }),
-            signal: controller.signal,
-          },
-        );
-        return {
-          accepted: response.ok || response.status === 202,
-          address,
-          status: response.status,
-        };
-      } catch {
-        return {
-          accepted: false,
-          address,
-          status: null,
-        };
-      } finally {
-        window.clearTimeout(timeout);
-      }
+  let lookups = await Promise.all(
+    addresses.map((address) => readPredictionSourceMatch(address, fetcher)),
+  );
+  const requests = new Map<
+    Address,
+    Awaited<ReturnType<typeof submitPredictionSourceMatch>>
+  >();
+  await Promise.all(
+    lookups.map(async (lookup) => {
+      if (lookup.verified) return;
+      requests.set(
+        lookup.address,
+        await submitPredictionSourceMatch(
+          lookup.address,
+          market.transactionHash,
+          fetcher,
+        ),
+      );
     }),
   );
+
+  const startedAt = now();
+  while (!lookups.every((lookup) => lookup.verified)) {
+    const elapsedMs = Math.max(0, now() - startedAt);
+    if (elapsedMs >= maxWaitMs) break;
+    await sleep(Math.min(pollIntervalMs, maxWaitMs - elapsedMs));
+    lookups = await Promise.all(
+      addresses.map((address) => readPredictionSourceMatch(address, fetcher)),
+    );
+  }
+
+  return lookups.map((lookup) => {
+    const request = requests.get(lookup.address);
+    return {
+      address: lookup.address,
+      lookupStatus: lookup.lookupStatus,
+      match: lookup.match,
+      requestAccepted: request?.accepted ?? null,
+      requestStatus: request?.status ?? null,
+      verified: lookup.verified,
+    };
+  });
 }

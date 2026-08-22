@@ -20,6 +20,7 @@ import {
   assertPredictionLaunchSnapshot,
   assertPredictionLaunchSnapshotsMatch,
   parsePredictionMarketReleaseConfig,
+  requestPredictionMarketSourceMatches,
   type PredictionLaunchSnapshot,
 } from "../lib/prediction-market-chain";
 
@@ -314,5 +315,79 @@ describe("prediction market release boundary", () => {
         },
       }),
     ).toThrow("capacity is full");
+  });
+});
+
+describe("prediction market public source reconciliation", () => {
+  const confirmedMarket = {
+    blockNumber: 1_000n,
+    checkpoint: "0x3333333333333333333333333333333333333333",
+    noToken: "0x5555555555555555555555555555555555555555",
+    poolId: `0x${"66".repeat(32)}`,
+    semanticKey: `0x${"77".repeat(32)}`,
+    transactionHash: `0x${"88".repeat(32)}`,
+    vault: "0x2222222222222222222222222222222222222222",
+    yesToken: "0x4444444444444444444444444444444444444444",
+  } as const;
+
+  it("does not mistake an accepted similarity request for verified source", async () => {
+    const results = await requestPredictionMarketSourceMatches(confirmedMarket, {
+      fetcher: (async (_url, init) =>
+        init?.method === "POST"
+          ? new Response(JSON.stringify({ verificationId: "queued" }), {
+              status: 202,
+            })
+          : new Response("{}", { status: 404 })) as typeof fetch,
+      maxWaitMs: 0,
+    });
+
+    expect(results).toHaveLength(4);
+    expect(results.every((result) => result.requestAccepted)).toBe(true);
+    expect(results.every((result) => !result.verified)).toBe(true);
+  });
+
+  it("requires a public lookup match even when a similarity request says already verified", async () => {
+    const results = await requestPredictionMarketSourceMatches(confirmedMarket, {
+      fetcher: (async (_url, init) =>
+        init?.method === "POST"
+          ? new Response(JSON.stringify({ customCode: "already_verified" }), {
+              status: 409,
+            })
+          : new Response("{}", { status: 404 })) as typeof fetch,
+      maxWaitMs: 0,
+    });
+
+    expect(results.every((result) => result.requestAccepted)).toBe(true);
+    expect(results.every((result) => result.requestStatus === 409)).toBe(true);
+    expect(results.every((result) => !result.verified)).toBe(true);
+  });
+
+  it("polls the public lookup endpoint until all four contracts are verified", async () => {
+    let getCalls = 0;
+    let nowMs = 1_000;
+    const fetcher = (async (_url, init) => {
+      if (init?.method === "POST") {
+        return new Response(JSON.stringify({ verificationId: "queued" }), {
+          status: 202,
+        });
+      }
+      getCalls += 1;
+      return getCalls <= 4
+        ? new Response("{}", { status: 404 })
+        : new Response(JSON.stringify({ match: "match" }));
+    }) as typeof fetch;
+
+    const results = await requestPredictionMarketSourceMatches(confirmedMarket, {
+      fetcher,
+      maxWaitMs: 1_000,
+      now: () => nowMs,
+      pollIntervalMs: 100,
+      sleep: async (milliseconds) => {
+        nowMs += milliseconds;
+      },
+    });
+
+    expect(results.every((result) => result.verified)).toBe(true);
+    expect(results.every((result) => result.match === "match")).toBe(true);
   });
 });

@@ -219,10 +219,13 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
       setPhase("confirmed");
       setStatus("Market created and matched against the factory registry.");
       const sourceMatches = await requestPredictionMarketSourceMatches(confirmed);
+      const verifiedSourceCount = sourceMatches.filter(
+        (result) => result.verified,
+      ).length;
       setStatus(
-        sourceMatches.every((result) => result.accepted)
-          ? "Market created. Free public source matching was requested for all four market contracts."
-          : "Market created. Public source matching is still pending for at least one market contract.",
+        verifiedSourceCount === sourceMatches.length
+          ? "Market created. All four market contracts are publicly source-verified."
+          : `Market created. Public source verification is pending or temporarily unavailable (${verifiedSourceCount}/4 verified).`,
       );
     } catch (error) {
       setPhase("error");
