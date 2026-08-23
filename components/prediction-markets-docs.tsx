@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { DocsExternalLink } from "@/components/docs-external-link";
-import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
@@ -43,7 +42,7 @@ export function PredictionMarketsDocs() {
             Open Prediction Markets
           </DocsExternalLink>
           <DocsExternalLink
-            href={PROGRAMMABLE_PUBLIC_REPOSITORIES.predictionMarkets}
+            href="https://github.com/0xprogrammable/programmable-prediction-markets"
             variant="chip"
           >
             Current source and release details
