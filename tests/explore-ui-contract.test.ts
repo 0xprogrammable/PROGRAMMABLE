@@ -59,6 +59,14 @@ describe("Explore UI contract", () => {
       join(root, "components/prediction-market-directory.tsx"),
       "utf8",
     );
+    const predictionStyles = readFileSync(
+      join(root, "components/prediction-market-experience.module.css"),
+      "utf8",
+    );
+    const predictionLaunchSource = readFileSync(
+      join(root, "components/prediction-market-launch.tsx"),
+      "utf8",
+    );
     const exploreStyles = readFileSync(
       join(root, "components/explore-experience.module.css"),
       "utf8",
@@ -73,6 +81,28 @@ describe("Explore UI contract", () => {
     expect(switchSource).toContain('aria-label="Explore categories"');
     expect(predictionSource).toContain('<h1>Explore</h1>');
     expect(predictionSource).toContain('<ExploreModeSwitch active="prediction" />');
+    expect(predictionSource).toContain("styles.marketGrid");
+    expect(predictionSource).toContain(
+      "Will BTC be at or above ${formatPredictionPriceAtoms(market.thresholdAtoms)}?",
+    );
+    expect(predictionSource).not.toContain("PREDICTION MARKETS · ROBINHOOD CHAIN");
+    expect(predictionSource).not.toContain("Market system status");
+    expect(predictionSource).not.toContain("VISIBLE BACKING");
+    expect(predictionSource).not.toContain("LIVE · BLOCK");
+    expect(predictionStyles).toMatch(
+      /\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s,
+    );
+    expect(predictionStyles).toMatch(
+      /@media \(max-width: 900px\)[\s\S]*?\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
+    );
+    expect(predictionLaunchSource).toContain("Create a prediction");
+    expect(predictionLaunchSource).toContain(
+      "Set the BTC price and result time",
+    );
+    expect(predictionLaunchSource).not.toContain("Technical preview");
+    expect(predictionLaunchSource).not.toContain("Robinhood Chain ·");
+    expect(predictionLaunchSource).not.toContain("1 signature");
+    expect(predictionLaunchSource).not.toContain("1 transaction");
     expect(exploreStyles).toMatch(
       /@media \(min-width: 1101px\)[\s\S]*?\.runnersIntro\s*\{[^}]*pointer-events:\s*none;[^}]*\}[\s\S]*?\.runnersIntro :global\(\.token-section-heading\)\s*\{[^}]*pointer-events:\s*auto;/s,
     );

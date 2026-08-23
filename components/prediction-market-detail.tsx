@@ -6,10 +6,8 @@ import {
   CheckCircle2,
   Clock3,
   ExternalLink,
-  Info,
   LockKeyhole,
   RefreshCw,
-  ShieldCheck,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -264,7 +262,7 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   async function handleQuote() {
     if (!market || busy) return;
     setPhase("quoting");
-    setMessage(preview ? "Calculating the interface preview…" : "Reconciling the exact route across two RPCs and the official v4 Quoter…");
+    setMessage(preview ? "Checking the preview price…" : "Finding your price…");
     try {
       if (preview || !release.config) {
         setShownQuote(previewQuote(market, mode, outcome, amount));
@@ -457,18 +455,25 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   }
 
   if (loadState.kind === "loading") {
-    return <main className={`page-width ${styles.detailPage}`}><div className={styles.detailLoading}>Verifying the market across both Robinhood RPCs…</div></main>;
+    return (
+      <main className={`page-width ${styles.detailPage}`}>
+        <div className={styles.detailLoading}>Loading market…</div>
+      </main>
+    );
   }
   if (loadState.kind === "error" || !market) {
     return (
       <main className={`page-width ${styles.detailPage}`}>
-        <Link className={styles.detailBack} href="/markets"><ArrowLeft size={15} /> Markets</Link>
+        <Link className={styles.detailBack} href="/markets">
+          <ArrowLeft aria-hidden="true" size={15} /> Predictions
+        </Link>
         <div className={styles.detailError}><strong>Market unavailable</strong><p>{loadState.kind === "error" ? loadState.message : "Unknown market"}</p></div>
       </main>
     );
   }
 
   const tradingOpen = market.state === "OPEN" && market.blockTimestamp < market.cutoff;
+  const displayTitle = `Will BTC be at or above ${formatPredictionPriceAtoms(market.thresholdAtoms)}?`;
   const selectedBalance = outcome === "YES" ? market.yesBalanceAtoms : market.noBalanceAtoms;
   const selectedProtocolFee = liveQuote
     ? predictionDirectionalProtocolFee(liveQuote.value.swap.protocolFee, liveQuote.value.zeroForOne)
@@ -485,22 +490,29 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
 
   return (
     <main className={`page-width ${styles.detailPage}`}>
-      <Link className={styles.detailBack} href="/markets"><ArrowLeft aria-hidden="true" size={15} /> All markets</Link>
+      <Link className={styles.detailBack} href="/markets">
+        <ArrowLeft aria-hidden="true" size={15} /> Predictions
+      </Link>
       {preview ? (
-        <p className={styles.previewBanner}><strong>Interface preview.</strong> Values below are sample data; signatures and transactions are disabled.</p>
+        <p className={styles.previewBanner}>
+          <strong>Preview data.</strong> No wallet signatures or transactions.
+        </p>
       ) : null}
-      {release.error ? <p className={styles.errorBanner}>{release.error}</p> : null}
 
       <div className={styles.detailLayout}>
         <section className={styles.marketCanvas}>
-          <span className={styles.detailEyebrow}>BTC · PRICE AT UTC SNAPSHOT</span>
-          <h1>{market.title}</h1>
+          <h1>{displayTitle}</h1>
           <div className={styles.detailMeta}>
             <span className={tradingOpen ? styles.openBadge : styles.closedBadge}>
-              {tradingOpen ? "Trading open" : market.state === "OPEN" ? "Trading closed" : market.state.replaceAll("_", " ")}
+              {tradingOpen ? "Open" : "Closed"}
             </span>
-            <span><Clock3 aria-hidden="true" size={14} /> {utcDate(market.observationTime)}</span>
-            <span>{countdown(market.observationTime, market.blockTimestamp)}</span>
+            <span>
+              <Clock3 aria-hidden="true" size={15} />
+              {tradingOpen
+                ? `Closes in ${countdown(market.cutoff, market.blockTimestamp)}`
+                : "Trading closed"}
+            </span>
+            <span>Resolves {utcDate(market.observationTime)}</span>
           </div>
 
           <div className={styles.heroProbability}>
@@ -517,39 +529,38 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
             </span>
           </div>
 
-          <div className={styles.marketFacts}>
-            <div><span className={styles.factLabel}>BACKING</span><strong>{formatPredictionUsdg(market.accountedLiabilityAtoms)}</strong><small>held by this market vault</small></div>
-            <div><span className={styles.factLabel}>POOL</span><strong>Uniswap v4</strong><small>native YES / NO pair</small></div>
-            <div><span className={styles.factLabel}>LP FEE</span><strong>2 bps</strong><small>no app trading fee</small></div>
-            <div><span className={styles.factLabel}>RESULT</span><strong>{market.state === "OPEN" ? "Chainlink" : formatPredictionPriceAtoms(market.resolvedPriceAtoms)}</strong><small>last completed round at or before T</small></div>
-          </div>
-
-          <section className={styles.rulesPanel}>
-            <header><ShieldCheck aria-hidden="true" size={18} /><strong>One rule. No human vote.</strong></header>
-            <p>
-              YES wins when the last completed Chainlink BTC/USD round at or before
-              {` ${utcDate(market.observationTime)} `}
-              is at least {formatPredictionPriceAtoms(market.thresholdAtoms)}. The next
-              adjacent round proves the boundary. Invalid oracle evidence pays both
-              sides 0.50 USDG.
-            </p>
-          </section>
-
-          {!preview ? (
-            <div className={styles.contractLinks}>
-              <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/address/${market.vault}`} target="_blank" rel="noreferrer">Vault <ExternalLink size={12} /></a>
-              <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/address/${market.yesToken}`} target="_blank" rel="noreferrer">YES token <ExternalLink size={12} /></a>
-              <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/address/${market.noToken}`} target="_blank" rel="noreferrer">NO token <ExternalLink size={12} /></a>
+          <details className={styles.marketInfo}>
+            <summary>
+              <span>How this market resolves</span>
+              <i aria-hidden="true" />
+            </summary>
+            <div className={styles.marketInfoBody}>
+              <p>
+                <strong>YES wins</strong> if BTC is {formatPredictionPriceAtoms(market.thresholdAtoms)}
+                {" "}or higher at {utcDate(market.observationTime)}.
+              </p>
+              <p>
+                The result uses Chainlink&apos;s last completed BTC/USD price at or
+                before that time. If no valid result can be proven, YES and NO
+                each redeem for 0.50 USDG.
+              </p>
+              {!preview ? (
+                <div className={styles.contractLinks}>
+                  <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/address/${market.vault}`} target="_blank" rel="noreferrer">Market contract <ExternalLink size={12} /></a>
+                  <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/address/${market.yesToken}`} target="_blank" rel="noreferrer">YES token <ExternalLink size={12} /></a>
+                  <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/address/${market.noToken}`} target="_blank" rel="noreferrer">NO token <ExternalLink size={12} /></a>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </details>
         </section>
 
         <aside className={styles.tradeTerminal} aria-label="Prediction market trade terminal">
           {tradingOpen ? (
             <>
               <div className={styles.terminalTopline}>
-                <span className={styles.terminalLabel}>EXECUTE</span>
-                <span><span className={preview ? styles.previewDot : styles.liveDot} /> {preview ? "PREVIEW" : `BLOCK ${market.blockNumber}`}</span>
+                <h2>Trade</h2>
+                {preview ? <span>Preview</span> : null}
               </div>
               <div className={styles.modeTabs} role="tablist" aria-label="Trade direction">
                 {(["BUY", "SELL"] as const).map((value) => (
@@ -572,13 +583,17 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
               {shownQuote ? (
                 <div className={styles.quoteReceipt} aria-live="polite">
                   <div><span>You receive</span><strong>{shownQuote.outputLabel}</strong></div>
-                  <div><span>Minimum at {PREDICTION_DEFAULT_SLIPPAGE_BPS / 100}% slippage</span><strong>{shownQuote.minimumLabel}</strong></div>
+                  <div><span>Minimum received</span><strong>{shownQuote.minimumLabel}</strong></div>
                   <div><span>Average price</span><strong>{centsLabel(shownQuote.averagePriceBps)}</strong></div>
-                  <div><span>Probability</span><strong>{probabilityLabel(market.probabilityYesBps)} → {probabilityLabel(shownQuote.afterYesBps)} YES</strong></div>
-                  <div><span>Price impact</span><strong>{probabilityLabel(shownQuote.priceImpactBps)}</strong></div>
-                  <div><span>Depth</span><strong>{shownQuote.depthLabel}</strong></div>
-                  {shownQuote.refundLabel ? <div><span>Residual refund</span><strong>{shownQuote.refundLabel}</strong></div> : null}
-                  <div><span>Fees</span><strong>2 bps LP{selectedProtocolFee ? ` + ${selectedProtocolFee / 100} bps protocol` : " · 0 app"}</strong></div>
+                  <div><span>Trading fee</span><strong>0.02%{selectedProtocolFee ? ` + ${selectedProtocolFee / 100} bps protocol` : ""}</strong></div>
+                  <details className={styles.quoteDetails}>
+                    <summary>Price details</summary>
+                    <div><span>YES chance after trade</span><strong>{probabilityLabel(shownQuote.afterYesBps)}</strong></div>
+                    <div><span>Price impact</span><strong>{probabilityLabel(shownQuote.priceImpactBps)}</strong></div>
+                    <div><span>Market depth</span><strong>{shownQuote.depthLabel}</strong></div>
+                    {shownQuote.refundLabel ? <div><span>Refund</span><strong>{shownQuote.refundLabel}</strong></div> : null}
+                    <div><span>Slippage limit</span><strong>{PREDICTION_DEFAULT_SLIPPAGE_BPS / 100}%</strong></div>
+                  </details>
                 </div>
               ) : null}
 
@@ -593,18 +608,21 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
                 }}
               >
                 {busy
-                  ? phase === "signing" ? "Sign exact permit" : phase === "confirming" ? "Confirming onchain" : "Checking quote"
-                  : !shownQuote ? preview ? "Preview quote" : "Get executable quote"
-                  : preview ? "Refresh preview"
+                  ? phase === "signing" ? "Sign in wallet" : phase === "confirming" ? "Confirming" : "Getting price"
+                  : !shownQuote ? preview ? "Preview price" : "Review price"
+                  : preview ? "Update preview"
                   : !wallet ? "Connect wallet"
                   : `${mode} ${outcome}`}
               </button>
-              <p className={styles.terminalNote}><Info aria-hidden="true" size={13} /> Quotes must match both public RPCs and the official Uniswap v4 Quoter. Gas is shown separately by your wallet.</p>
+              <p className={styles.terminalNote}>
+                Your wallet shows the final amount and network fee before you
+                confirm.
+              </p>
             </>
           ) : market.state !== "OPEN" ? (
             <div className={styles.settlementTerminal}>
               <CheckCircle2 aria-hidden="true" size={24} />
-              <span className={styles.terminalLabel}>MARKET FINAL</span>
+              <span className={styles.terminalLabel}>Market resolved</span>
               <h2>{market.state === "FINAL_INVALID" ? "Neutral payout" : market.state === "FINAL_YES" ? "YES won" : "NO won"}</h2>
               <p>{market.state === "FINAL_INVALID" ? "Every YES and NO token redeems for 0.50 USDG." : "Each winning token redeems for 1 USDG. Losing tokens redeem for zero."}</p>
               {wallet ? <div className={styles.balancePair}><span>YES <strong>{formatPredictionOutcome(market.yesBalanceAtoms)}</strong></span><span>NO <strong>{formatPredictionOutcome(market.noBalanceAtoms)}</strong></span></div> : null}
@@ -615,21 +633,21 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
           ) : (
             <div className={styles.settlementTerminal}>
               <LockKeyhole aria-hidden="true" size={24} />
-              <span className={styles.terminalLabel}>TRADING CLOSED</span>
+              <span className={styles.terminalLabel}>Trading closed</span>
               <h2>{market.blockTimestamp <= market.observationTime ? "Waiting for result time" : "Ready to resolve"}</h2>
-              <p>{market.blockTimestamp <= market.observationTime ? `Trading stopped one minute before the snapshot. Resolution opens after ${utcDate(market.observationTime)}.` : "Anyone can submit the unique adjacent Chainlink rounds. No keeper or admin is required."}</p>
+              <p>{market.blockTimestamp <= market.observationTime ? `Trading stopped one minute before the result time. The result can be checked after ${utcDate(market.observationTime)}.` : "The result can now be checked from Chainlink. Anyone can finish the market."}</p>
               {market.blockTimestamp > market.observationTime ? (
-                <button className={styles.terminalAction} disabled={busy} type="button" onClick={() => preview ? setMessage("Preview only. Resolution will be permissionless after deployment.") : wallet ? void handleLifecycle("RESOLVE") : openWallet()}>{busy ? "Checking Chainlink rounds" : !wallet ? "Connect to resolve" : "Resolve market"}</button>
+                <button className={styles.terminalAction} disabled={busy} type="button" onClick={() => preview ? setMessage("Preview only. No wallet request will be made.") : wallet ? void handleLifecycle("RESOLVE") : openWallet()}>{busy ? "Checking result" : !wallet ? "Connect to resolve" : "Resolve market"}</button>
               ) : null}
               {lifecycleAction && market.blockTimestamp > market.observationTime ? (
                 <button className={styles.secondaryTerminalAction} disabled={busy} type="button" onClick={() => preview ? setMessage("Preview only.") : wallet ? void handleLifecycle(lifecycleAction) : openWallet()}>
-                  {lifecycleAction === "FINALIZE_CHECKPOINT" ? "Apply resolved checkpoint" : lifecycleAction === "FINALIZE_UNAVAILABLE" ? "Try neutral unavailable exit" : lifecycleAction === "REQUEST_UNPROVEN_FALLBACK" ? "Start 72h neutral challenge" : "Finalize neutral fallback"}
+                  {lifecycleAction === "FINALIZE_CHECKPOINT" ? "Use confirmed result" : lifecycleAction === "FINALIZE_UNAVAILABLE" ? "Close as neutral" : lifecycleAction === "REQUEST_UNPROVEN_FALLBACK" ? "Start neutral fallback" : "Finish neutral fallback"}
                 </button>
               ) : null}
             </div>
           )}
           {message ? <p className={styles.terminalStatus} role="status">{message}</p> : null}
-          <button className={styles.refreshMarket} type="button" disabled={busy} onClick={() => void refresh()}><RefreshCw aria-hidden="true" size={13} /> Refresh confirmed state</button>
+          <button className={styles.refreshMarket} type="button" disabled={busy} onClick={() => void refresh()}><RefreshCw aria-hidden="true" size={13} /> Refresh market</button>
         </aside>
       </div>
     </main>

@@ -41,77 +41,65 @@
   text-align: center;
 }
 
-.heading > span,
-.eyebrow,
 .previewTopline {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 670;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .heading h1 {
-  font-size: clamp(28px, 3.4vw, 42px);
+  font-size: clamp(30px, 3.4vw, 44px);
   font-weight: 570;
   letter-spacing: -0.04em;
   line-height: 1;
-  margin: 5px 0 0;
+  margin: 0;
 }
 
 .previewNotice {
   align-items: center;
-  background: color-mix(in srgb, var(--warning-background) 76%, transparent);
-  border: 1px solid var(--warning-border);
-  border-radius: 14px;
-  color: var(--warning-text);
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-muted);
   display: flex;
-  font-size: 12px;
+  font-size: 13px;
   gap: 9px;
   line-height: 1.45;
   margin: 12px auto 16px;
-  max-width: 930px;
+  max-width: 1060px;
   min-height: 44px;
-  padding: 10px 13px;
+  padding: 10px 14px;
 }
 
 .previewNotice strong {
+  color: var(--webde-ink);
   flex: 0 0 auto;
-}
-
-.releaseReady {
-  background: color-mix(in srgb, var(--success) 10%, transparent);
-  border-color: color-mix(in srgb, var(--success) 34%, transparent);
-  color: var(--text-soft);
 }
 
 .layout {
   align-items: start;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1.03fr) minmax(340px, 0.97fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
   margin-inline: auto;
   max-width: 1060px;
 }
 
 .form,
 .preview {
-  background: var(--liquid-glass-surface-background);
-  border: 1px solid var(--liquid-glass-border);
-  border-radius: 24px;
-  box-shadow: 0 24px 68px rgb(1 1 3 / 0.22);
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
   min-width: 0;
 }
 
 .form {
-  padding: 24px;
+  padding: 28px;
 }
 
 .formIntro {
-  align-items: start;
-  display: flex;
-  gap: 20px;
-  justify-content: space-between;
+  display: block;
 }
 
 .formIntro h2,
@@ -123,71 +111,23 @@
 }
 
 .formIntro h2 {
-  font-size: 22px;
+  font-size: 26px;
   line-height: 1.16;
+  margin: 0;
 }
 
-.chainBadge,
-.fixedLabel {
-  background: var(--accent-soft);
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 999px;
-  color: var(--text-soft);
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 630;
-  padding: 7px 9px;
-}
-
-.fixedAsset {
-  align-items: center;
-  background: var(--liquid-glass-inner-background);
-  border: 1px solid var(--liquid-glass-border);
-  border-radius: 17px;
-  display: grid;
-  gap: 11px;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  margin-top: 21px;
-  min-height: 66px;
-  padding: 10px 12px;
-}
-
-.bitcoinMark {
-  align-items: center;
-  background: #f7931a;
-  border-radius: 50%;
-  color: #17100a;
-  display: inline-flex;
-  font-size: 23px;
-  font-weight: 760;
-  height: 42px;
-  justify-content: center;
-  width: 42px;
-}
-
-.fixedAsset > span:nth-child(2) {
-  display: grid;
-  gap: 2px;
-}
-
-.fixedAsset strong {
-  font-size: 14px;
-}
-
-.fixedAsset small,
 .field small,
-.costRow small,
-.actionNote {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
+.costRow small {
+  color: var(--webde-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .fields {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-  margin-top: 18px;
+  margin-top: 26px;
 }
 
 .field {
@@ -197,19 +137,19 @@
 }
 
 .field > span:first-child {
-  color: var(--text-soft);
-  font-size: 12px;
+  color: var(--webde-ink);
+  font-size: 14px;
   font-weight: 650;
 }
 
 .field input {
-  background: var(--liquid-glass-control-background);
-  border: 1px solid var(--liquid-glass-border);
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
   border-radius: 13px;
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  height: 50px;
+  font-size: 16px;
+  height: 56px;
   min-width: 0;
   padding: 0 13px;
   width: 100%;
@@ -228,7 +168,7 @@
 
 .priceInput > span {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 680;
   left: 14px;
   pointer-events: none;
@@ -245,22 +185,29 @@
 }
 
 .costRow {
-  border-top: 1px solid var(--panel-border-soft);
+  align-items: baseline;
+  border-top: 1px solid var(--webde-line);
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 20px;
-  padding-top: 17px;
+  gap: 6px 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 24px;
+  padding-top: 18px;
 }
 
 .costRow > span {
-  display: grid;
-  gap: 3px;
+  color: var(--webde-muted);
+  font-size: 13px;
 }
 
 .costRow strong {
-  font-size: 13px;
-  font-weight: 680;
+  color: var(--webde-ink);
+  font-size: 14px;
+  font-weight: 650;
+  text-align: right;
+}
+
+.costRow small {
+  grid-column: 1 / -1;
 }
 
 .createButton {
@@ -274,6 +221,14 @@
   margin-top: 20px;
   min-height: 50px;
   width: 100%;
+}
+
+:global([data-theme="dark"]) .createButton:not(:disabled) {
+  color: #0b141d;
+}
+
+:global([data-theme="light"]) .createButton:not(:disabled) {
+  color: #fffafc;
 }
 
 .createButton:not(:disabled):hover {
@@ -293,12 +248,6 @@
   color: var(--text-soft);
   cursor: not-allowed;
   opacity: 1;
-}
-
-.actionNote {
-  margin: 9px auto 0;
-  max-width: 52ch;
-  text-align: center;
 }
 
 .launchStatus {
@@ -372,7 +321,7 @@
 
 .preview {
   overflow: hidden;
-  padding: 24px;
+  padding: 28px;
 }
 
 .previewTopline {
@@ -386,17 +335,25 @@
 }
 
 .preview h2 {
-  font-size: clamp(22px, 2.4vw, 29px);
-  line-height: 1.16;
-  min-height: 100px;
+  font-size: clamp(27px, 3vw, 36px);
+  line-height: 1.08;
+  min-height: 0;
+  margin-top: 20px;
   text-wrap: balance;
+}
+
+.previewTime {
+  color: var(--webde-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 12px 0 0;
 }
 
 .outcomes {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 18px;
+  margin-top: 26px;
 }
 
 .outcomes > div {
@@ -404,18 +361,18 @@
   border-radius: 16px;
   display: grid;
   gap: 3px;
-  min-height: 92px;
-  padding: 14px;
+  min-height: 116px;
+  padding: 16px;
 }
 
 .outcomes span {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 740;
   letter-spacing: 0.055em;
 }
 
 .outcomes strong {
-  font-size: 31px;
+  font-size: 40px;
   font-weight: 590;
   letter-spacing: -0.04em;
 }
@@ -430,49 +387,20 @@
   color: var(--brand-pink);
 }
 
-.facts {
-  display: grid;
-  gap: 0;
-  margin: 18px 0 0;
-}
-
-.facts > div {
-  border-top: 1px solid var(--panel-border-soft);
-  display: grid;
-  gap: 4px;
-  padding: 13px 0;
-}
-
-.facts dt {
-  align-items: center;
-  color: var(--text-soft);
-  display: flex;
-  font-size: 12px;
-  font-weight: 670;
-  gap: 7px;
-}
-
-.facts dd {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.48;
-  margin: 0;
-  padding-left: 23px;
-}
-
 .details {
-  border-top: 1px solid var(--panel-border-soft);
-  padding-top: 4px;
+  border-top: 1px solid var(--webde-line);
+  margin-top: 24px;
+  padding-top: 5px;
 }
 
 .details summary {
   align-items: center;
   color: var(--text-soft);
   display: flex;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
   list-style: none;
-  min-height: 44px;
+  min-height: 48px;
 }
 
 .details summary::-webkit-details-marker {
@@ -491,10 +419,10 @@
 }
 
 .details p {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--webde-muted);
+  font-size: 14px;
   line-height: 1.55;
-  margin: 2px 0 10px;
+  margin: 4px 0 12px;
 }
 
 @media (max-width: 860px) {
@@ -521,10 +449,6 @@
     padding-right: 44px;
   }
 
-  .heading > span {
-    display: none;
-  }
-
   .heading h1 {
     font-size: 25px;
     margin-top: 0;
@@ -542,22 +466,8 @@
     padding: 19px;
   }
 
-  .formIntro {
-    display: grid;
-    gap: 12px;
-  }
-
-  .chainBadge {
-    justify-self: start;
-  }
-
-  .fields,
-  .costRow {
+  .fields {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .costRow > span {
-    grid-template-columns: 110px minmax(0, 1fr);
   }
 }
 
@@ -575,11 +485,4 @@
     font-size: 22px;
   }
 
-  .fixedLabel {
-    display: none;
-  }
-
-  .fixedAsset {
-    grid-template-columns: 42px minmax(0, 1fr);
-  }
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowRight, Clock3, Plus, ShieldCheck } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ExploreModeSwitch } from "@/components/explore-mode-switch";
@@ -10,7 +11,7 @@ import { predictionPreviewMarkets } from "@/components/prediction-market-preview
 import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain";
 import { predictionMarketErrorMessage } from "@/lib/prediction-market-errors";
 import {
-  formatPredictionUsdg,
+  formatPredictionPriceAtoms,
   readPredictionMarketDirectory,
   type PredictionMarketView,
 } from "@/lib/prediction-market-trading";
@@ -20,8 +21,6 @@ type DirectoryState =
   | { kind: "preview"; markets: readonly PredictionMarketView[] }
   | {
       kind: "live";
-      blockNumber: bigint;
-      marketCount: bigint;
       markets: readonly PredictionMarketView[];
       nextCursor: bigint;
     }
@@ -43,40 +42,66 @@ function countdown(target: bigint, now: bigint) {
   return `${minutes}m`;
 }
 
-function MarketRow({ market, preview }: { market: PredictionMarketView; preview: boolean }) {
+function MarketCard({
+  market,
+  preview,
+}: {
+  market: PredictionMarketView;
+  preview: boolean;
+}) {
   const yes = market.probabilityYesBps / 100;
   const no = 100 - yes;
-  const tradingOpen = market.state === "OPEN" && market.blockTimestamp < market.cutoff;
+  const cardTitle = `Will BTC be at or above ${formatPredictionPriceAtoms(market.thresholdAtoms)}?`;
+  const tradingOpen =
+    market.state === "OPEN" && market.blockTimestamp < market.cutoff;
+  const marketStatus = tradingOpen
+    ? `Closes in ${countdown(market.cutoff, market.blockTimestamp)}`
+    : market.state === "OPEN"
+      ? "Trading closed"
+      : market.state === "FINAL_YES"
+        ? "YES won"
+        : market.state === "FINAL_NO"
+          ? "NO won"
+          : market.state === "FINAL_INVALID"
+            ? "Neutral result"
+            : "Closed";
+
   return (
-    <Link
-      className={styles.marketRow}
-      href={`/markets/${market.semanticKey}`}
-      aria-label={`${market.title}, YES ${yes.toFixed(0)} percent`}
-    >
-      <span className={styles.assetMark} aria-hidden="true">₿</span>
-      <span className={styles.marketIdentity}>
-        <span className={styles.marketMeta}>
-          <span>{tradingOpen ? "TRADING" : market.state.replaceAll("_", " ")}</span>
-          <span>BTC</span>
-          {preview ? <span>PREVIEW</span> : null}
+    <article className={styles.marketCard}>
+      <Link
+        className={styles.marketCardLink}
+        href={`/markets/${market.semanticKey}`}
+        aria-label={`${market.title}, YES ${yes.toFixed(0)} percent`}
+      >
+        <span
+          className={styles.marketCardArt}
+          style={{ "--yes-share": `${yes}%` } as CSSProperties}
+          aria-hidden="true"
+        >
+          <span className={styles.marketCardChance}>
+            <strong>{yes.toFixed(0)}%</strong>
+            <span>YES chance</span>
+          </span>
+          <span className={styles.marketCardPrices}>
+            <span>YES {yes.toFixed(0)}¢</span>
+            <span>NO {no.toFixed(0)}¢</span>
+          </span>
         </span>
-        <strong>{market.title}</strong>
-        <span className={styles.marketFoot}>
-          <span><Clock3 aria-hidden="true" size={13} /> {countdown(market.observationTime, market.blockTimestamp)}</span>
-          <span>{formatPredictionUsdg(market.accountedLiabilityAtoms)} backed</span>
+
+        <span className={styles.marketCardBody}>
+          <strong>{cardTitle}</strong>
         </span>
-      </span>
-      <span className={styles.marketProbability}>
-        <span className={styles.probabilityNumbers}>
-          <span><small>YES</small><strong>{yes.toFixed(0)}¢</strong></span>
-          <span><small>NO</small><strong>{no.toFixed(0)}¢</strong></span>
+
+        <span className={styles.marketCardMeta}>
+          <span>
+            <i data-open={tradingOpen ? "true" : undefined} />
+            {marketStatus}
+          </span>
+          {preview ? <span>Preview</span> : null}
+          <ArrowRight aria-hidden="true" size={17} />
         </span>
-        <span className={styles.probabilityRail} aria-hidden="true">
-          <span style={{ width: `${yes}%` }} />
-        </span>
-      </span>
-      <ArrowRight className={styles.rowArrow} aria-hidden="true" size={20} />
-    </Link>
+      </Link>
+    </article>
   );
 }
 
@@ -115,8 +140,6 @@ export function PredictionMarketDirectoryView() {
         if (active) {
           setState({
             kind: "live",
-            blockNumber: directory.blockNumber,
-            marketCount: directory.marketCount,
             markets: directory.markets,
             nextCursor: directory.nextCursor,
           });
@@ -145,7 +168,6 @@ export function PredictionMarketDirectoryView() {
         const known = new Set(current.markets.map((market) => market.semanticKey.toLowerCase()));
         return {
           ...current,
-          blockNumber: directory.blockNumber,
           markets: [
             ...current.markets,
             ...directory.markets.filter(
@@ -163,13 +185,6 @@ export function PredictionMarketDirectoryView() {
   }
 
   const markets = "markets" in state ? state.markets : [];
-  const totalBacking = markets.reduce(
-    (total, market) => total + market.accountedLiabilityAtoms,
-    0n,
-  );
-  const openMarkets = markets.filter(
-    (market) => market.state === "OPEN" && market.blockTimestamp < market.cutoff,
-  ).length;
 
   return (
     <main className={`page-width ${styles.directoryPage}`}>
@@ -178,58 +193,17 @@ export function PredictionMarketDirectoryView() {
         <ExploreModeSwitch active="prediction" />
       </header>
 
-      <section
-        className={styles.directoryHero}
-        aria-labelledby="prediction-intro-title"
-      >
-        <div className={styles.heroCopy}>
-          <span className={styles.kicker}>PREDICTION MARKETS · ROBINHOOD CHAIN</span>
-          <h2 id="prediction-intro-title">Trade the outcome.<br />Keep the rules onchain.</h2>
-          <p>
-            Permissionless BTC markets, fully backed by USDG and priced through
-            a native Uniswap v4 YES/NO pool.
-          </p>
-        </div>
+      <div className={styles.directoryToolbar}>
         <Link className={styles.createMarketLink} href="/launch">
           <Plus aria-hidden="true" size={17} />
           Create market
         </Link>
-      </section>
-
-      <section className={styles.marketStatusStrip} aria-label="Market system status">
-        <div>
-          <Activity aria-hidden="true" size={17} />
-          <span><small>OPEN IN VIEW</small><strong>{state.kind === "loading" ? "—" : openMarkets}</strong></span>
-        </div>
-        <div>
-          <ShieldCheck aria-hidden="true" size={17} />
-          <span><small>VISIBLE BACKING</small><strong>{state.kind === "loading" ? "—" : formatPredictionUsdg(totalBacking)}</strong></span>
-        </div>
-        <div>
-          <span className={styles.v4Glyph}>v4</span>
-          <span><small>POOL FEE</small><strong>2 bps</strong></span>
-        </div>
-        <div className={styles.systemMode}>
-          <span className={state.kind === "live" ? styles.liveDot : styles.previewDot} />
-          <span>
-            <small>SYSTEM</small>
-            <strong>
-              {state.kind === "live"
-                ? `LIVE · BLOCK ${state.blockNumber}`
-                : state.kind === "preview"
-                  ? "TECHNICAL PREVIEW"
-                  : state.kind === "error"
-                    ? "READS BLOCKED"
-                    : "CHECKING"}
-            </strong>
-          </span>
-        </div>
-      </section>
+      </div>
 
       {state.kind === "preview" ? (
         <p className={styles.previewBanner} role="status">
-          <strong>Interface preview.</strong> The reviewed release is not configured,
-          so these sample markets cannot request signatures or transactions.
+          <strong>Preview data.</strong> These sample markets never request a
+          wallet signature.
         </p>
       ) : null}
       {release.error ? <p className={styles.errorBanner}>{release.error}</p> : null}
@@ -237,24 +211,15 @@ export function PredictionMarketDirectoryView() {
         <p className={styles.errorBanner} role="alert">{state.message}</p>
       ) : null}
 
-      <section className={styles.directoryList} aria-labelledby="open-markets-title">
-        <header>
-          <div>
-            <span className={styles.sectionIndex}>01</span>
-            <h2 id="open-markets-title">Markets</h2>
-          </div>
-          <span>
-            {state.kind === "live"
-              ? `Showing ${markets.length} of ${state.marketCount.toString()} · probability · UTC`
-              : "Probability · backing · UTC result time"}
-          </span>
-        </header>
+      <section className={styles.directoryList} aria-label="Prediction markets">
         {state.kind === "loading" ? (
-          <div className={styles.marketLoading} aria-live="polite">Checking both public Robinhood RPCs…</div>
+          <div className={styles.marketLoading} aria-live="polite">
+            Loading predictions…
+          </div>
         ) : markets.length ? (
-          <div className={styles.marketRows}>
+          <div className={styles.marketGrid}>
             {markets.map((market) => (
-              <MarketRow
+              <MarketCard
                 key={market.semanticKey}
                 market={market}
                 preview={state.kind === "preview"}
@@ -263,7 +228,8 @@ export function PredictionMarketDirectoryView() {
           </div>
         ) : state.kind === "live" ? (
           <div className={styles.marketLoading}>
-            No market exists yet. The first creator can launch one for 2 USDG plus gas.
+            <strong>No predictions yet</strong>
+            <span>Create the first market.</span>
           </div>
         ) : null}
         {state.kind === "live" && state.nextCursor > 0n ? (
@@ -273,7 +239,7 @@ export function PredictionMarketDirectoryView() {
             onClick={() => void loadOlderMarkets()}
             type="button"
           >
-            {loadingOlder ? "Checking both RPCs…" : "Load older markets"}
+            {loadingOlder ? "Loading…" : "Show more"}
           </button>
         ) : null}
         {olderError ? <p className={styles.errorBanner} role="alert">{olderError}</p> : null}
