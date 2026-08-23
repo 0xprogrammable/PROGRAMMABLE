@@ -697,10 +697,15 @@ jobs:
             maximumBytes: 4 * 1024 * 1024,
             label: "staged Envio catalog probe",
           }));
+          const expectedLaunchSource =
+            body?.catalog?.completeness?.custom === "current"
+              ? "envio-classic-v3+registry.custom-launched"
+              : "envio-classic-v3";
           if (
             response.status !== 200 ||
             body?.status !== "ready" ||
             body?.catalog?.source !== "envio-classic-v3" ||
+            body.catalog.launchSource !== expectedLaunchSource ||
             body.catalog.completeness?.stock !== "excluded" ||
             body.catalog.evidence?.kind !== "envio-indexer-state" ||
             body.catalog.evidence?.progressBlock !== body.catalog.asOfBlock ||
@@ -712,7 +717,7 @@ jobs:
             body.tokens[0]?.launchModel !== "classic" ||
             body.tokens[0]?.launchModelVersion !== "classic-v3" ||
             response.headers.get("x-programmable-launch-source") !==
-              "envio-classic-v3"
+              expectedLaunchSource
           ) {
             throw new Error("staged Envio Classic V3 catalog probe is invalid");
           }
