@@ -25,7 +25,6 @@ import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
-  { href: "/markets", label: "Markets" },
   { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
@@ -113,6 +112,14 @@ function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
 function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
   const activePath = "activePath" in item ? item.activePath : item.href;
 
+  if (activePath === "/explore") {
+    return (
+      pathname === "/explore" ||
+      pathname.startsWith("/explore/") ||
+      pathname === "/markets" ||
+      pathname.startsWith("/markets/")
+    );
+  }
   if (activePath === "/docs") {
     return pathname === "/docs" || pathname.startsWith("/docs/");
   }

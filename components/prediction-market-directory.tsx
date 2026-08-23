@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Activity, ArrowRight, Clock3, Plus, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { ExploreModeSwitch } from "@/components/explore-mode-switch";
 import styles from "@/components/prediction-market-experience.module.css";
 import { predictionPreviewMarkets } from "@/components/prediction-market-preview";
 import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain";
@@ -172,10 +173,18 @@ export function PredictionMarketDirectoryView() {
 
   return (
     <main className={`page-width ${styles.directoryPage}`}>
-      <section className={styles.directoryHero} aria-labelledby="markets-title">
+      <header className={styles.exploreHeader}>
+        <h1>Explore</h1>
+        <ExploreModeSwitch active="prediction" />
+      </header>
+
+      <section
+        className={styles.directoryHero}
+        aria-labelledby="prediction-intro-title"
+      >
         <div className={styles.heroCopy}>
           <span className={styles.kicker}>PREDICTION MARKETS · ROBINHOOD CHAIN</span>
-          <h1 id="markets-title">Trade the outcome.<br />Keep the rules onchain.</h1>
+          <h2 id="prediction-intro-title">Trade the outcome.<br />Keep the rules onchain.</h2>
           <p>
             Permissionless BTC markets, fully backed by USDG and priced through
             a native Uniswap v4 YES/NO pool.

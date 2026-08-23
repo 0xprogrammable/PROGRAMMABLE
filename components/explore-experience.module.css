@@ -1029,6 +1029,7 @@
 
 .pageHeading {
   align-items: flex-start;
+  gap: 24px;
   margin: 0;
   max-width: none;
   min-height: 102px;
@@ -1379,6 +1380,7 @@
   }
 
   .pageHeading {
+    gap: 18px;
     min-height: 0;
     padding: 0;
   }
