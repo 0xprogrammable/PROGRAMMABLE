@@ -188,9 +188,9 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'id="launch-model-prediction-title">Prediction</strong>',
     );
-    expect(html).toContain('data-status="preview">Technical preview</small>');
-    expect(html).toContain("Design a BTC market");
-    expect(html).toContain("2 USDG seed instead of a separate liquidity deposit");
+    expect(html).toContain('data-status="preview">Beta</small>');
+    expect(html).toContain("Create a prediction");
+    expect(html).toContain("Create a BTC prediction with YES and NO.");
     expect(html).toContain('data-launch-model-option="classic"');
     const classicCard = html.match(
       /<button[^>]*data-launch-model-option="classic"[^>]*>/,
@@ -215,6 +215,12 @@ describe("unreleased launch model gating", () => {
       "Launch an approved GitHub revision through your browser wallet, then follow it to its public record.",
     );
     expect(html).toContain("Open approved Custom launch");
+    expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
+      html.indexOf('data-launch-model-option="custom"'),
+    );
+    expect(html.indexOf('data-launch-model-option="custom"')).toBeLessThan(
+      html.indexOf('data-launch-model-option="prediction"'),
+    );
     for (const marker of removedPartnerMarkers) {
       expect(html).not.toContain(marker);
     }

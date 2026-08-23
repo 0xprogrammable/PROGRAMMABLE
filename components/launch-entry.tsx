@@ -242,7 +242,7 @@ function LaunchExperienceRuntime({
 
   if (selectedModel === "prediction") {
     return (
-      <Suspense fallback={<LaunchFormLoading title="Create a BTC market" onBack={returnToModels} />}>
+      <Suspense fallback={<LaunchFormLoading title="Create a prediction" onBack={returnToModels} />}>
         <LazyPredictionMarketLaunch onBack={returnToModels} />
       </Suspense>
     );
@@ -357,96 +357,6 @@ export function LaunchModelPicker({
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
         <button
-          ref={predictionButtonRef}
-          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.predictionCard} liquid-glass-surface`}
-          data-launch-model-option="prediction"
-          data-launch-model-available="true"
-          data-launch-model-launchable="false"
-          data-launch-model-preview="true"
-          type="button"
-          aria-labelledby="launch-model-prediction-title"
-          aria-describedby="launch-model-prediction-description"
-          onPointerEnter={preloadPredictionMarket}
-          onPointerDown={preloadPredictionMarket}
-          onFocus={preloadPredictionMarket}
-          onClick={() => void onChoose("prediction")}
-        >
-          <span
-            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.predictionArt}`}
-            aria-hidden="true"
-          >
-            <span className={launchExperience.predictionRail}>
-              <span
-                className={`${launchExperience.predictionSide} ${launchExperience.predictionYes}`}
-              >
-                <span>YES</span>
-                <strong>50</strong>
-                <small>cents</small>
-              </span>
-              <span className={launchExperience.predictionCondition}>
-                <span>BTC</span>
-                <strong>&ge; $60K</strong>
-                <small>UTC close</small>
-              </span>
-              <span
-                className={`${launchExperience.predictionSide} ${launchExperience.predictionNo}`}
-              >
-                <span>NO</span>
-                <strong>50</strong>
-                <small>cents</small>
-              </span>
-            </span>
-          </span>
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong id="launch-model-prediction-title">Prediction</strong>
-              <small data-status="preview">Technical preview</small>
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-prediction-description"
-            >
-              Create a BTC price market with YES and NO outcome tokens, a fixed
-              UTC result time, and a 2 USDG seed instead of a separate liquidity
-              deposit.
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              Design a BTC market
-              <ArrowRight aria-hidden="true" size={16} />
-            </span>
-          </span>
-        </button>
-
-        <button
-          ref={customLaunchButtonRef}
-          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-          data-launch-model-option="custom"
-          data-launch-model-available={customLaunchPublicEnabled}
-          data-launch-model-launchable={customLaunchPublicEnabled}
-          type="button"
-          disabled={!customLaunchPublicEnabled}
-          aria-labelledby="launch-model-custom-title"
-          aria-describedby="launch-model-custom-description"
-          onPointerEnter={
-            customLaunchPublicEnabled ? preloadCustomLaunch : undefined
-          }
-          onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
-          onClick={
-            customLaunchPublicEnabled
-              ? () => void onChoose("custom")
-              : undefined
-          }
-        >
-          {customCardContent}
-        </button>
-
-        <button
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="classic"
           data-launch-model-available={classicV3LaunchAvailable}
@@ -516,6 +426,91 @@ export function LaunchModelPicker({
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}
+          </span>
+        </button>
+
+        <button
+          ref={customLaunchButtonRef}
+          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
+          data-launch-model-option="custom"
+          data-launch-model-available={customLaunchPublicEnabled}
+          data-launch-model-launchable={customLaunchPublicEnabled}
+          type="button"
+          disabled={!customLaunchPublicEnabled}
+          aria-labelledby="launch-model-custom-title"
+          aria-describedby="launch-model-custom-description"
+          onPointerEnter={
+            customLaunchPublicEnabled ? preloadCustomLaunch : undefined
+          }
+          onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
+          onClick={
+            customLaunchPublicEnabled
+              ? () => void onChoose("custom")
+              : undefined
+          }
+        >
+          {customCardContent}
+        </button>
+
+        <button
+          ref={predictionButtonRef}
+          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.predictionCard} liquid-glass-surface`}
+          data-launch-model-option="prediction"
+          data-launch-model-available="true"
+          data-launch-model-launchable="false"
+          data-launch-model-preview="true"
+          type="button"
+          aria-labelledby="launch-model-prediction-title"
+          aria-describedby="launch-model-prediction-description"
+          onPointerEnter={preloadPredictionMarket}
+          onPointerDown={preloadPredictionMarket}
+          onFocus={preloadPredictionMarket}
+          onClick={() => void onChoose("prediction")}
+        >
+          <span
+            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.predictionArt}`}
+            aria-hidden="true"
+          >
+            <span className={launchExperience.predictionRail}>
+              <span
+                className={`${launchExperience.predictionSide} ${launchExperience.predictionYes}`}
+              >
+                <span>YES</span>
+                <strong>50¢</strong>
+              </span>
+              <span className={launchExperience.predictionCondition}>
+                <span>BTC</span>
+                <strong>&ge; $60K</strong>
+              </span>
+              <span
+                className={`${launchExperience.predictionSide} ${launchExperience.predictionNo}`}
+              >
+                <span>NO</span>
+                <strong>50¢</strong>
+              </span>
+            </span>
+          </span>
+          <span
+            className={`launch-model-card-body ${launchExperience.modelBody}`}
+          >
+            <span
+              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+            >
+              <strong id="launch-model-prediction-title">Prediction</strong>
+              <small data-status="preview">Beta</small>
+            </span>
+            <span
+              className={`launch-model-description ${launchExperience.modelDescription}`}
+              id="launch-model-prediction-description"
+            >
+              Create a BTC prediction with YES and NO.
+            </span>
+            <span
+              className={`launch-model-action ${launchExperience.modelAction}`}
+            >
+              Create a prediction
+              <ArrowRight aria-hidden="true" size={16} />
+            </span>
           </span>
         </button>
 

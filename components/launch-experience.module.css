@@ -1977,10 +1977,6 @@
   padding: 0;
 }
 
-.modelCard[data-launch-model-option="classic"] {
-  order: -1;
-}
-
 .modelCard.modelCard:disabled {
   cursor: default;
   opacity: 0.56;
@@ -2092,11 +2088,10 @@
 /* Prediction is a two-sided market, so its picker art is the product model. */
 .predictionCard {
   grid-column: 1 / -1;
-  order: -2;
 }
 
 .predictionCard.modelCard {
-  min-height: 278px;
+  min-height: 244px;
 }
 
 .predictionArt {
@@ -2114,38 +2109,33 @@
 .predictionSide {
   align-content: center;
   display: grid;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
   padding: 28px clamp(24px, 4vw, 54px);
 }
 
 .predictionSide > span {
-  font-size: 12px;
-  font-weight: 760;
-  letter-spacing: 0.08em;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .predictionSide strong {
-  font-size: clamp(56px, 7vw, 92px);
+  font-size: clamp(56px, 6vw, 82px);
   font-weight: 540;
   letter-spacing: -0.07em;
   line-height: 0.88;
 }
 
-.predictionSide small {
-  font-size: 11px;
-  opacity: 0.72;
-}
-
 .predictionYes {
-  background: #12362c;
-  color: #9ce3bd;
+  background: linear-gradient(135deg, #12372d, #173f33);
+  color: #b1eccb;
   text-align: left;
 }
 
 .predictionNo {
-  background: #381527;
-  color: #f4a8cb;
+  background: linear-gradient(225deg, #3d172a, #321321);
+  color: #f3b4d1;
   text-align: right;
 }
 
@@ -2153,14 +2143,14 @@
   align-content: center;
   background: #f4eee7;
   border: 1px solid rgb(0 0 0 / 0.18);
-  border-radius: 999px;
+  border-radius: 14px;
   color: #111;
   display: grid;
-  gap: 1px;
+  gap: 3px;
   left: 50%;
-  min-height: 96px;
-  min-width: 142px;
-  padding: 15px 20px;
+  min-height: 82px;
+  min-width: 150px;
+  padding: 14px 20px;
   position: absolute;
   text-align: center;
   top: 50%;
@@ -2170,21 +2160,41 @@
 
 .predictionCondition > span,
 .predictionCondition > small {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 720;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .predictionCondition strong {
-  font-size: 20px;
+  font-size: 22px;
   letter-spacing: -0.04em;
+}
+
+.predictionCard .modelHeading small {
+  background: var(--webde-control);
+  border-radius: 999px;
+  color: var(--webde-muted);
+  padding: 5px 9px;
+}
+
+.predictionCard .modelAction {
+  align-items: center;
+  align-self: start;
+  background: var(--webde-ink);
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-canvas);
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 15px;
 }
 
 @media (min-width: 761px) {
   .predictionCard.modelCard {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(310px, 0.65fr);
+    grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.55fr);
   }
 
   .predictionCard .predictionArt {
@@ -2196,7 +2206,7 @@
 
   .predictionCard .modelBody {
     align-content: center;
-    min-height: 278px;
+    min-height: 244px;
     padding: 28px;
   }
 }
@@ -2207,7 +2217,7 @@
   }
 
   .predictionArt {
-    aspect-ratio: 1.35 / 1;
+    aspect-ratio: 1.7 / 1;
   }
 
   .predictionSide {
@@ -2215,12 +2225,12 @@
   }
 
   .predictionCondition {
-    min-height: 82px;
-    min-width: 118px;
+    min-height: 72px;
+    min-width: 116px;
     padding: 12px 14px;
   }
 
   .predictionCondition strong {
-    font-size: 17px;
+    font-size: 18px;
   }
 }
