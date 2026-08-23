@@ -124,6 +124,11 @@ describe("Custom launch public readiness", () => {
     expect(isCustomLaunchRegistryPublicReadEnabled({
       PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "false",
       PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
+    })).toBe(true);
+    expect(isCustomLaunchPublicEnabled({
+      ...configured,
+      PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "false",
+      PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED: "true",
     })).toBe(false);
     expect(isCustomLaunchRegistryPublicReadEnabled({
       ...configured,
