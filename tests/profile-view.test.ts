@@ -21,6 +21,7 @@ import {
   paginateProfileClaimableEntries,
   profileClaimableWei,
   profileClaimActionCount,
+  profileClaimSubmissionAllowed,
   profileCreatorClaimErrorMessage,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
@@ -327,6 +328,21 @@ describe("profile workspace loading state", () => {
     );
     expect(profileViewSource).toContain(
       "PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000",
+    );
+  });
+
+  it("allows new claims only from current verified reward data", () => {
+    expect(profileClaimSubmissionAllowed("current")).toBe(true);
+    expect(profileClaimSubmissionAllowed("stale")).toBe(false);
+    expect(profileClaimSubmissionAllowed("partial")).toBe(false);
+    expect(profileViewSource).toContain(
+      "profileClaimSubmissionAllowed(\n    rewardDataQuality,",
+    );
+    expect(profileViewSource).toContain(
+      "const claimableEntries = claimSubmissionAllowed",
+    );
+    expect(profileViewSource).toContain(
+      "nativeEarned={claimSubmissionAllowed ? nativeEarned : null}",
     );
   });
 

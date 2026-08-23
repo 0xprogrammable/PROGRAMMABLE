@@ -367,6 +367,12 @@ export function getProfileRewardDataQuality(
   return "current";
 }
 
+export function profileClaimSubmissionAllowed(
+  quality: ProfileRewardDataQuality,
+) {
+  return quality === "current";
+}
+
 export function resolveCreatorProfileReadFailure(
   current: ProfileOnchainData,
   account: string,
@@ -4193,18 +4199,6 @@ function ProfileAccountWorkspace({
     0n,
   );
   const nativeEarned = nativeClaimed + nativeClaimable;
-  const claimableEntries = sortProfileClaimableEntries(
-    entries.filter((entry) =>
-      profileEntryHasActionableReward(entry, account, actionStates),
-    ),
-    account,
-    actionStates,
-  );
-  const claimPageData = paginateProfileClaimableEntries(
-    claimableEntries,
-    claimPage,
-  );
-  const routerLaunchEntries = profileRouterLaunchEntries(entries);
   const nativeRewardSourceStatuses = [
     data.status,
     classicV3Rewards.status,
@@ -4215,6 +4209,23 @@ function ProfileAccountWorkspace({
     classicV3SourceState.quality,
     data.sourceQuality ?? "current",
   );
+  const claimSubmissionAllowed = profileClaimSubmissionAllowed(
+    rewardDataQuality,
+  );
+  const claimableEntries = claimSubmissionAllowed
+    ? sortProfileClaimableEntries(
+        entries.filter((entry) =>
+          profileEntryHasActionableReward(entry, account, actionStates),
+        ),
+        account,
+        actionStates,
+      )
+    : [];
+  const claimPageData = paginateProfileClaimableEntries(
+    claimableEntries,
+    claimPage,
+  );
+  const routerLaunchEntries = profileRouterLaunchEntries(entries);
   const emptyState =
     rewardDataQuality === "current"
       ? {
@@ -4243,11 +4254,9 @@ function ProfileAccountWorkspace({
         className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
         <FeeEarningsPanel
-          nativeEarned={rewardDataQuality === "partial" ? null : nativeEarned}
-          nativeClaimable={
-            rewardDataQuality === "partial" ? null : nativeClaimable
-          }
-          nativeClaimed={rewardDataQuality === "partial" ? null : nativeClaimed}
+          nativeEarned={claimSubmissionAllowed ? nativeEarned : null}
+          nativeClaimable={claimSubmissionAllowed ? nativeClaimable : null}
+          nativeClaimed={claimSubmissionAllowed ? nativeClaimed : null}
         />
 
         <section
