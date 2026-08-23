@@ -26,6 +26,7 @@ import {
   formatPredictionThreshold,
   type PredictionPermitSignature,
 } from "./prediction-market";
+import { predictionMarketErrorMessage } from "./prediction-market-errors";
 import {
   ROBINHOOD_MULTICALL3_ADDRESS,
   ROBINHOOD_MULTICALL3_RUNTIME_CODE_HASH,
@@ -107,6 +108,24 @@ export type PredictionMarketDirectory = Readonly<{
   marketCount: bigint;
   markets: readonly PredictionMarketView[];
   nextCursor: bigint;
+}>;
+
+export type PredictionMarketSnapshot = Readonly<{
+  blockNumber: bigint;
+  blockTimestamp: bigint;
+  marketCount: bigint;
+  router: Address;
+}>;
+
+export type PredictionMarketBatchFailure = Readonly<{
+  reason: string;
+  semanticKey: Hex;
+}>;
+
+export type PredictionMarketBatchRead = Readonly<{
+  failures: readonly PredictionMarketBatchFailure[];
+  markets: readonly PredictionMarketView[];
+  snapshot: PredictionMarketSnapshot;
 }>;
 
 export type PredictionSwapQuote = Readonly<{
@@ -778,6 +797,38 @@ async function confirmedBlock(
   return blockNumber;
 }
 
+export async function readPredictionMarketSnapshot({
+  clients = createPredictionMarketPublicClients(),
+  config,
+}: {
+  clients?: ReturnType<typeof createPredictionMarketPublicClients>;
+  config: PredictionMarketReleaseConfig;
+}): Promise<PredictionMarketSnapshot> {
+  const blockNumber = await confirmedBlock(clients, config);
+  const [release, blocks, counts] = await Promise.all([
+    verifiedRelease(clients, config, blockNumber),
+    Promise.all(clients.map((client) => client.getBlock({ blockNumber }))),
+    Promise.all(
+      clients.map((client) =>
+        client.readContract({
+          address: config.factoryAddress,
+          abi: factoryAbi,
+          blockNumber,
+          functionName: "marketCount",
+        }),
+      ),
+    ),
+  ]);
+  assertPredictionConfirmedBlocksMatch(blocks[0], blocks[1]);
+  assertSame(counts[0], counts[1], "the market count");
+  return {
+    blockNumber,
+    blockTimestamp: blocks[0].timestamp,
+    marketCount: counts[0],
+    router: release.router,
+  };
+}
+
 async function readReleaseBindings(
   client: PredictionMarketPublicClient,
   config: PredictionMarketReleaseConfig,
@@ -1001,6 +1052,93 @@ async function readVerifiedMarket(
   );
   assertSame(markets[0], markets[1], "the market state");
   return markets[0];
+}
+
+export async function readPredictionMarketsAtSnapshot({
+  account,
+  clients = createPredictionMarketPublicClients(),
+  config,
+  semanticKeys,
+  snapshot,
+}: {
+  account: Address;
+  clients?: ReturnType<typeof createPredictionMarketPublicClients>;
+  config: PredictionMarketReleaseConfig;
+  semanticKeys: readonly string[];
+  snapshot: PredictionMarketSnapshot;
+}): Promise<PredictionMarketBatchRead> {
+  if (!isAddress(account)) throw new Error("The wallet address is invalid");
+  if (
+    snapshot.blockNumber < config.deploymentBlock ||
+    snapshot.blockTimestamp <= 0n ||
+    snapshot.marketCount < 0n ||
+    !isAddress(snapshot.router)
+  ) {
+    throw new Error("The prediction market snapshot is invalid");
+  }
+  const keys = [...new Set(semanticKeys.map(requireSemanticKey))];
+  const [release, blocks] = await Promise.all([
+    verifiedRelease(clients, config, snapshot.blockNumber),
+    Promise.all(
+      clients.map((client) =>
+        client.getBlock({ blockNumber: snapshot.blockNumber }),
+      ),
+    ),
+  ]);
+  assertPredictionConfirmedBlocksMatch(blocks[0], blocks[1]);
+  assertSame(
+    {
+      blockNumber: blocks[0].number,
+      blockTimestamp: blocks[0].timestamp,
+      marketCount: snapshot.marketCount,
+      router: release.router,
+    },
+    snapshot,
+    "the portfolio snapshot",
+  );
+
+  const normalizedAccount = getAddress(account);
+  const results = await mapPredictionMarketsInBatches(keys, async (semanticKey) => {
+    try {
+      const markets = await Promise.all(
+        clients.map((client) =>
+          readMarketAt(
+            client,
+            config,
+            release,
+            semanticKey,
+            snapshot.blockNumber,
+            normalizedAccount,
+          ),
+        ),
+      );
+      assertSame(markets[0], markets[1], "the market state");
+      return { kind: "market", market: markets[0] } as const;
+    } catch (error) {
+      return {
+        kind: "failure",
+        failure: {
+          reason: predictionMarketErrorMessage(
+            error,
+            "Canonical market verification failed",
+          ),
+          semanticKey,
+        },
+      } as const;
+    }
+  });
+
+  const failures: PredictionMarketBatchFailure[] = [];
+  const markets: PredictionMarketView[] = [];
+  for (const result of results) {
+    if (result.kind === "failure") failures.push(result.failure);
+    if (result.kind === "market") markets.push(result.market);
+  }
+  return {
+    failures,
+    markets,
+    snapshot,
+  };
 }
 
 function requireSemanticKey(value: string) {
