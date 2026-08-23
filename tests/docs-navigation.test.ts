@@ -284,12 +284,14 @@ describe("Docs navigation state", () => {
     const stockResults = getDocsSearchResults("stock");
     const classicResults = getDocsSearchResults("classic");
     const customResults = getDocsSearchResults("custom");
+    const predictionResults = getDocsSearchResults("prediction");
 
     expect(deepResults).toEqual([]);
     expect(stockResults[0]?.title).toBe("Stock-Paired");
     expect(getDocsSearchResults("stock paired")[0]?.title).toBe("Stock-Paired");
     expect(classicResults[0]?.title).toBe("Classic");
     expect(customResults[0]?.title).toBe("Custom hooks");
+    expect(predictionResults[0]?.title).toBe("Prediction Markets");
     expect(
       customResults.some(
         (result) => result.title === "Classic and Custom launch kinds",

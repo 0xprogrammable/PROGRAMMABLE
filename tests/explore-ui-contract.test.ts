@@ -67,6 +67,10 @@ describe("Explore UI contract", () => {
       join(root, "components/prediction-market-launch.tsx"),
       "utf8",
     );
+    const predictionLaunchStyles = readFileSync(
+      join(root, "components/prediction-market-launch.module.css"),
+      "utf8",
+    );
     const exploreStyles = readFileSync(
       join(root, "components/explore-experience.module.css"),
       "utf8",
@@ -74,21 +78,32 @@ describe("Explore UI contract", () => {
 
     expect(navigation).not.toContain('{ href: "/markets", label: "Markets" }');
     expect(navigation).toContain('pathname.startsWith("/markets/")');
-    expect(switchSource).toContain('{ id: "token", href: "/explore", label: "Token" }');
+    expect(switchSource).toContain(
+      '{ id: "token", href: "/explore", label: "Token" }',
+    );
     expect(switchSource).toContain(
       '{ id: "prediction", href: "/markets", label: "Prediction" }',
     );
     expect(switchSource).toContain('aria-label="Explore categories"');
-    expect(predictionSource).toContain('<h1>Explore</h1>');
-    expect(predictionSource).toContain('<ExploreModeSwitch active="prediction" />');
+    expect(predictionSource).toContain("<h1>Explore</h1>");
+    expect(predictionSource).toContain(
+      '<ExploreModeSwitch active="prediction" />',
+    );
     expect(predictionSource).toContain("styles.marketGrid");
     expect(predictionSource).toContain(
       "Will BTC be at or above ${formatPredictionPriceAtoms(market.thresholdAtoms)}?",
     );
-    expect(predictionSource).not.toContain("PREDICTION MARKETS · ROBINHOOD CHAIN");
+    expect(predictionSource).not.toContain(
+      "PREDICTION MARKETS · ROBINHOOD CHAIN",
+    );
     expect(predictionSource).not.toContain("Market system status");
     expect(predictionSource).not.toContain("VISIBLE BACKING");
     expect(predictionSource).not.toContain("LIVE · BLOCK");
+    expect(predictionSource).not.toContain("<i data-open=");
+    expect(predictionSource).not.toContain("aria-label={`${market.title}");
+    expect(predictionSource).toContain(
+      "Closes ${compactUtcDate(market.cutoff)}",
+    );
     expect(predictionStyles).toMatch(
       /\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s,
     );
@@ -106,6 +121,24 @@ describe("Explore UI contract", () => {
     expect(predictionLaunchSource).not.toContain("Robinhood Chain ·");
     expect(predictionLaunchSource).not.toContain("1 signature");
     expect(predictionLaunchSource).not.toContain("1 transaction");
+    expect(predictionLaunchSource).not.toContain(
+      "YES wins at this price or higher.",
+    );
+    expect(predictionLaunchSource).not.toContain("Shown and resolved in UTC.");
+    expect(predictionLaunchSource).not.toContain("How this market resolves");
+    expect(predictionLaunchSource).not.toContain("Trades close 1 min early");
+    expect(predictionLaunchSource).not.toContain("styles.rulesLink");
+    expect(predictionLaunchSource).toContain("styles.fieldFeedback");
+    expect(predictionLaunchSource).toContain(
+      'market ? `Result: ${market.observationLabel}` : "\\u00a0"',
+    );
+    expect(predictionStyles).not.toContain(".marketCardMeta i");
+    expect(predictionLaunchStyles).toMatch(
+      /\.header\s*\{[^}]*max-width:\s*1060px;[^}]*width:\s*100%;/s,
+    );
+    expect(predictionLaunchStyles).toMatch(
+      /\.layout\s*\{[^}]*align-items:\s*stretch;/s,
+    );
     expect(exploreStyles).toMatch(
       /@media \(min-width: 1101px\)[\s\S]*?\.runnersIntro\s*\{[^}]*pointer-events:\s*none;[^}]*\}[\s\S]*?\.runnersIntro :global\(\.token-section-heading\)\s*\{[^}]*pointer-events:\s*auto;/s,
     );
@@ -116,6 +149,7 @@ describe("Explore UI contract", () => {
       join(root, "components/prediction-market-detail.tsx"),
       "utf8",
     );
+    const normalized = source.replace(/\s+/g, " ");
 
     expect(source).toContain("Potential payout");
     expect(source).toContain("Potential profit");
@@ -123,16 +157,39 @@ describe("Explore UI contract", () => {
     expect(source).toContain("This order if");
     expect(source).toContain("based on the current quote");
     expect(source).toContain("network fee excluded");
-    expect(source).toContain('shownQuote.buyPayout ? "Shares received" : "Estimated proceeds"');
-    expect(source).toContain('shownQuote.buyPayout ? "Minimum shares" : "Minimum proceeds"');
-    expect(source).toContain('role="group" aria-label="Trade direction"');
-    expect(source).toContain('role="group" aria-label="Outcome"');
+    expect(source).toMatch(
+      /shownQuote\.buyPayout\s*\?\s*"Shares received"\s*:\s*"Estimated proceeds"/s,
+    );
+    expect(source).toMatch(
+      /shownQuote\.buyPayout\s*\?\s*"Minimum shares"\s*:\s*"Minimum proceeds"/s,
+    );
+    expect(normalized).toContain('role="group" aria-label="Trade direction"');
+    expect(normalized).toContain('role="group" aria-label="Outcome"');
     expect(source).toContain("aria-pressed={mode === value}");
     expect(source).toContain("aria-pressed={outcome === value}");
     expect(source).toContain("const requestId = ++quoteRequestId.current");
-    expect(source.match(/requestId !== quoteRequestId\.current/gu)).toHaveLength(2);
-    expect(source).not.toContain('className={styles.orderPreview} aria-live="polite"');
-    expect(source).toContain('className="sr-only" role="status" aria-live="polite"');
+    expect(
+      source.match(/requestId !== quoteRequestId\.current/gu),
+    ).toHaveLength(2);
+    expect(source).toContain(
+      "const requestedSelectionKey = currentQuoteSelectionKey",
+    );
+    expect(source).toContain("quotedSelectionKey === currentQuoteSelectionKey");
+    expect(source).toContain(
+      "const liveQuote = quoteSelectionIsCurrent ? storedLiveQuote : null",
+    );
+    expect(source).toContain(
+      "const shownQuote = quoteSelectionIsCurrent ? storedShownQuote : null",
+    );
+    expect(source).toContain("setQuotedSelectionKey(requestedSelectionKey)");
+    expect(normalized).not.toContain(
+      'className={styles.orderPreview} aria-live="polite"',
+    );
+    expect(normalized).toContain(
+      'className="sr-only" role="status" aria-live="polite"',
+    );
+    expect(source).toContain("<span>Rules</span>");
+    expect(source).not.toContain("How this market resolves");
   });
 
   it("keeps sort, socials and model choices in one persistent disclosure", () => {
@@ -245,7 +302,9 @@ describe("Explore UI contract", () => {
     expect(source).toMatch(
       /\{valuationLabel \? \([\s\S]*?<small>Market cap<\/small>[\s\S]*?\) : null\}/,
     );
-    expect(source).not.toContain("exploreUnavailableFdvLabel(token.marketStatus)");
+    expect(source).not.toContain(
+      "exploreUnavailableFdvLabel(token.marketStatus)",
+    );
     expect(source).toContain("Copy ${token.name} contract address");
     expect(source).not.toContain("runnerMarketStatus");
   });

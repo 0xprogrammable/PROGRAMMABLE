@@ -20,6 +20,7 @@ export type DocsNavigationGroup = {
 const tokenModelPaths = [
   "/docs/models/classic",
   "/docs/models/custom",
+  "/docs/models/prediction-markets",
   "/docs/models/stock-paired",
 ] as const;
 
@@ -80,6 +81,11 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       },
       { depth: 1, href: "/docs/models/classic", label: "Classic" },
       { depth: 1, href: "/docs/models/custom", label: "Custom hooks" },
+      {
+        depth: 1,
+        href: "/docs/models/prediction-markets",
+        label: "Prediction Markets",
+      },
       {
         depth: 1,
         href: "/docs/models/stock-paired",
@@ -171,15 +177,13 @@ export const docsSearchItems: DocsSearchItem[] = [
   },
   {
     title: "Creator earnings",
-    description:
-      "Compare Classic rewards and public template shares.",
+    description: "Compare Classic rewards and public template shares.",
     href: "/docs/creators/earnings",
     keywords: ["fees", "rewards", "revenue"],
   },
   {
     title: "Creator programs",
-    description:
-      "Find partnerships and contribution opportunities.",
+    description: "Find partnerships and contribution opportunities.",
     href: "/docs/creators/programs",
     keywords: ["partnership", "grant", "bounty"],
   },
@@ -226,6 +230,13 @@ export const docsSearchItems: DocsSearchItem[] = [
     title: "Custom hooks",
     description: "Understand launches that use an individual Uniswap v4 hook.",
     href: "/docs/models/custom",
+  },
+  {
+    title: "Prediction Markets",
+    description:
+      "Open the Uniswap v4 outcome-market model and its current release source.",
+    href: "/docs/models/prediction-markets",
+    keywords: ["prediction", "outcome", "YES NO", "Uniswap v4"],
   },
   {
     title: "Stock-Paired",

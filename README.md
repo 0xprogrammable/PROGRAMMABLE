@@ -19,7 +19,7 @@
 <h3 align="center">Shape what assets can do</h3>
 
 <p align="center">
-  The public product, contracts, read model and release evidence for Programmable on Ethereum.
+  The public application, Ethereum contracts, read model and maintained product documentation for Programmable.
 </p>
 
 <p align="center">
@@ -40,21 +40,26 @@ Programmable is a launch platform for Uniswap v4 products. This repository conta
 contract workspace, the public read model and the evidence that binds what the product shows to deployed code.
 
 Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
-rewards. Custom is the reviewed path for products that need their own hook, application logic or execution graph. In
-both models, the connected wallet reviews and signs its own Ethereum transaction.
+rewards. Custom is the reviewed path for products that need their own hook, application logic or execution graph.
+Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
+capabilities, contracts and release evidence live in the public
+[`programmable-prediction-markets`](https://github.com/0xprogrammable/programmable-prediction-markets) repository.
+Each release defines its funding and signing path. User-funded flows keep the connected wallet in control of its own
+transaction.
 
 ## Launch models
 
-| Model       | What it creates                                                       | Access                                                    |
-| ----------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
-| **Classic** | A fixed supply token with configurable buy and sell transaction fees  | Open through [Create](https://programmable.market/launch) |
-| **Custom**  | A token or application with an individually reviewed hook and release | Accepted and activated revisions only                     |
+| Model                  | What it creates                                                       | Access                                                    |
+| ---------------------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Classic**            | A fixed supply token with configurable buy and sell transaction fees  | Open through [Create](https://programmable.market/launch) |
+| **Custom**             | A token or application with an individually reviewed hook and release | Accepted and activated revisions only                     |
+| **Prediction Markets** | Onchain outcome markets powered by Uniswap v4                         | Open through [Create](https://programmable.market/launch) |
 
 A hook is a smart contract attached to a Uniswap v4 pool. The pool calls it at defined points in a transaction, which
 lets the product apply behavior at the pool level. A hook can change fees, accounting, access or other pool behavior,
 but the word hook does not establish safety, compatibility or launch approval.
 
-[Compare Classic and Custom](https://programmable.market/docs/tokens)
+[Compare the launch models](https://programmable.market/docs/tokens)
 
 <p align="center">
   <img
@@ -66,10 +71,11 @@ but the word hook does not establish safety, compatibility or launch approval.
 
 ## How public state is built
 
-1. A creator configures Classic or prepares one exact reviewed Custom release.
-2. The connected wallet checks the network, destination, calldata and value before signing.
-3. Ethereum confirms the transaction and the launch reaches the required finality.
-4. The read model publishes the canonical token, pool and launch identity.
+1. A launch request is normalized under the active Classic, Custom or Prediction Markets release.
+2. The active release authenticates and submits the required transaction under its published signer and funding
+   policy.
+3. The required network confirms the transaction and the launch reaches the required finality.
+4. The product read layer publishes the canonical token, pool or prediction market identity.
 5. Optional price, chart and liquidity data are attached only when their providers return current evidence.
 
 Canonical launch identity remains visible when optional market data is unavailable. The application does not invent
@@ -124,22 +130,25 @@ provider availability or onchain lifecycle completion.
 | ------------------- | -------------------------------------------------------------------------------------------------------- |
 | Product             | [programmable.market](https://programmable.market)                                                       |
 | Explore             | [programmable.market/explore](https://programmable.market/explore)                                       |
+| Prediction Markets  | [programmable.market/markets](https://programmable.market/markets)                                       |
 | Documentation       | [programmable.market/docs](https://programmable.market/docs)                                             |
 | Developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Service status      | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
 
-Contract addresses and integration data should come from the versioned manifest rather than screenshots, token names
-or third-party metadata.
+Ethereum contract addresses and integration data should come from the versioned manifest rather than screenshots,
+token names or third-party metadata. For Prediction Markets, use the canonical repository for the current networks,
+supported market types, economics, resolution rules, contract addresses and release evidence.
 
 ## Related repositories
 
-| Repository                                                             | Responsibility                                                            |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)         | Agent Skill and local tools for building reproducible Uniswap v4 projects |
-| [`submit-launch`](https://github.com/0xprogrammable/submit-launch)     | Exact-revision intake and public review records for one completed project |
-| [`submit-template`](https://github.com/0xprogrammable/submit-template) | Requirements and version binding for reusable hook templates              |
-| [`developers`](https://github.com/0xprogrammable/developers)           | Discovery manifests, API contracts and direct verification rules          |
+| Repository                                                                                             | Responsibility                                                              |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)                                         | Agent Skill and local tools for building reproducible Uniswap v4 projects   |
+| [`submit-launch`](https://github.com/0xprogrammable/submit-launch)                                     | Exact-revision intake and public review records for one completed project   |
+| [`submit-template`](https://github.com/0xprogrammable/submit-template)                                 | Requirements and version binding for reusable hook templates                |
+| [`developers`](https://github.com/0xprogrammable/developers)                                           | Discovery manifests, API contracts and direct verification rules            |
+| [`programmable-prediction-markets`](https://github.com/0xprogrammable/programmable-prediction-markets) | Prediction market contracts, release specifications and deployment evidence |
 
 ## Release and security boundaries
 

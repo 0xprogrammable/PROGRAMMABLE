@@ -131,12 +131,11 @@
 .marketCardArt {
   align-items: center;
   aspect-ratio: 2.42 / 1;
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--market-green) 24%, #101614) 0 var(--yes-share),
-      color-mix(in srgb, var(--market-red) 22%, #171114) var(--yes-share) 100%
-    );
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--market-green) 24%, #101614) 0 var(--yes-share),
+    color-mix(in srgb, var(--market-red) 22%, #171114) var(--yes-share) 100%
+  );
   border-bottom: 1px solid var(--webde-line);
   display: flex;
   justify-content: center;
@@ -213,7 +212,8 @@
   border-top: 1px solid var(--webde-line);
   color: var(--webde-dim);
   display: flex;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   gap: 10px;
   min-height: 48px;
   padding: 0 14px;
@@ -223,18 +223,6 @@
   align-items: center;
   display: inline-flex;
   gap: 7px;
-}
-
-.marketCardMeta i {
-  background: var(--webde-dim);
-  border-radius: 50%;
-  display: block;
-  height: 6px;
-  width: 6px;
-}
-
-.marketCardMeta i[data-open="true"] {
-  background: var(--market-green);
 }
 
 .marketCardMeta svg {
@@ -373,7 +361,8 @@
 
 .heroProbability > div {
   background: color-mix(in srgb, var(--market-green) 10%, var(--webde-surface));
-  border: 1px solid color-mix(in srgb, var(--market-green) 28%, var(--webde-line));
+  border: 1px solid
+    color-mix(in srgb, var(--market-green) 28%, var(--webde-line));
   border-radius: var(--webde-radius-card);
   display: grid;
   gap: 7px;
@@ -1022,7 +1011,10 @@
 }
 
 .portfolioTabs {
-  background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
+  background: var(
+    --profile-subtle,
+    var(--webde-surface-raised, var(--surface-soft))
+  );
   border-radius: 12px;
   display: grid;
   gap: 4px;
@@ -1089,7 +1081,10 @@
 
 .portfolioCard {
   align-items: center;
-  background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
+  background: var(
+    --profile-subtle,
+    var(--webde-surface-raised, var(--surface-soft))
+  );
   border-radius: 13px;
   box-shadow: 0 0 0 1px var(--webde-line, var(--profile-line, var(--border)));
   display: grid;
@@ -1292,7 +1287,8 @@
 }
 
 .portfolioMetrics > div {
-  border-inline-start: 1px solid var(--webde-line, var(--profile-line, var(--border)));
+  border-inline-start: 1px solid
+    var(--webde-line, var(--profile-line, var(--border)));
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1394,7 +1390,10 @@
 
 .portfolioEmptyIcon {
   align-items: center;
-  background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
+  background: var(
+    --profile-subtle,
+    var(--webde-surface-raised, var(--surface-soft))
+  );
   border-radius: 10px;
   color: var(--text-soft, rgb(255 255 255 / 68%));
   display: inline-flex !important;
@@ -1488,13 +1487,19 @@
   .portfolioSecondaryAction:hover,
   .portfolioInlineError button:hover,
   .portfolioCardActions a[data-tone="quiet"]:hover {
-    background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
+    background: var(
+      --profile-subtle,
+      var(--webde-surface-raised, var(--surface-soft))
+    );
     border-color: var(--border-strong, rgb(255 255 255 / 18%));
     color: var(--text, #fff);
   }
 
   .portfolioShowMore:hover {
-    background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
+    background: var(
+      --profile-subtle,
+      var(--webde-surface-raised, var(--surface-soft))
+    );
     border-color: var(--border-strong, rgb(255 255 255 / 18%));
     color: var(--text, #fff);
   }
@@ -1529,7 +1534,6 @@
       transform 120ms ease-out;
   }
 
-
   .portfolioShowMore {
     transition:
       background-color 150ms ease,
@@ -1546,7 +1550,6 @@
   .portfolioCardActions a:active {
     transform: scale(0.96);
   }
-
 
   .portfolioShowMore:active {
     transform: scale(0.96);
@@ -1580,7 +1583,6 @@
   .tradeTerminal {
     position: static;
   }
-
 }
 
 @media (max-width: 52rem) {
@@ -1684,7 +1686,7 @@
   .marketCardMeta {
     align-items: flex-start;
     flex-direction: column;
-    font-size: 10px;
+    font-size: 12px;
     gap: 3px;
     justify-content: center;
     min-height: 58px;

@@ -22,7 +22,9 @@ When a fact can drift, link readers to the live status endpoint, developer manif
 
 ## Product terminology
 
-Use “Programmable” with this capitalization. Use “Classic” and “Custom” for the documented launch models. Use “Custom project” when referring to a project submitted through the public Custom Launch intake. Use “hook” only when the technical mechanism matters, and explain it in plain English when it first appears on a reader facing page.
+Use “Programmable” with this capitalization. Use “Classic”, “Custom” and “Prediction Markets” for the documented launch models. Use “Custom project” when referring to a project submitted through the public Custom Launch intake. Use “hook” only when the technical mechanism matters, and explain it in plain English when it first appears on a reader facing page.
+
+The canonical Prediction Markets repository owns current networks, supported markets, collateral and activation rules, fees and creator rewards, resolution rules, contract addresses and security or release evidence. Do not duplicate those release-specific facts in these docs; link to the canonical repository instead.
 
 Identify a token by contract address when identity matters. Distinguish a token contract from its pool, hook, launcher, Registry record, price record and liquidity record.
 
