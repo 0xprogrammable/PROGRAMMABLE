@@ -136,7 +136,6 @@ const MAX_CLASSIC_V3_PROFILE_CACHE_ENTRIES = 8;
 type ClassicV3ProfileSourceQuality =
   | "idle"
   | "current"
-  | "partial"
   | "stale"
   | "unavailable"
   | "integrity";
@@ -184,7 +183,7 @@ function readCachedClassicV3Profile(account: string) {
 }
 
 function cacheClassicV3Profile(data: ClassicV3ProfileRewards) {
-  if (data.status !== "ready" || data.quality === "partial") return null;
+  if (data.status !== "ready") return null;
   const key = data.account.toLowerCase();
   const verifiedAt = Date.now();
   classicV3ProfileCache.delete(key);
@@ -360,7 +359,6 @@ export function getProfileRewardDataQuality(
     return "stale";
   }
   if (
-    classicQuality === "partial" ||
     classicQuality === "unavailable" ||
     statuses.some((status) => status === "error")
   ) {
@@ -1437,10 +1435,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           const verifiedAt = cacheClassicV3Profile(data);
           setClassicV3SourceState({
             account,
-            quality:
-              data.status === "ready"
-                ? data.quality ?? "current"
-                : "current",
+            quality: "current",
             ...(verifiedAt ? { verifiedAt } : {}),
           });
         }
