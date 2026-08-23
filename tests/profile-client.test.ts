@@ -347,6 +347,33 @@ describe("profile API client", () => {
     );
   });
 
+  it("accepts token decimals without Classic V3 initial buy data", () => {
+    const response = profileResponse();
+    response.tokens[0] = {
+      ...response.tokens[0],
+      launchModel: "classic",
+      tokenDecimals: 18,
+    } as (typeof response.tokens)[number];
+
+    const profile = mapCreatorProfileResponse(response, account);
+
+    expect(profile.tokens[0]?.initialBuy).toBeUndefined();
+  });
+
+  it("rejects a partial initial buy payload", () => {
+    const response = profileResponse();
+    response.tokens[0] = {
+      ...response.tokens[0],
+      launchModel: "classic",
+      tokenDecimals: 18,
+      initialBuyEthAmountWei: "50000000000000000",
+    } as (typeof response.tokens)[number];
+
+    expect(() => mapCreatorProfileResponse(response, account)).toThrow(
+      "incomplete initial buy data",
+    );
+  });
+
   it("keeps verified launches that use a model-specific reward route", () => {
     const response = profileResponse();
     const stockToken = {

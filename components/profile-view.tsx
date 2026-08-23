@@ -3227,6 +3227,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       </section>
 
       <ProfileProjects
+        key={account?.toLowerCase() ?? "disconnected"}
         initialBuys={creatorProjectInitialBuys}
         marketCaps={creatorProjectMarketCaps}
         walletProjects={creatorWalletProjects}

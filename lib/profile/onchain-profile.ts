@@ -444,16 +444,21 @@ function parseInitialBuy(
   launchModel: ProfileToken["launchModel"],
   launchedAt: string,
 ): ProfileInitialBuy | undefined {
-  const rawValues = [
+  const initialBuyValues = [
     token.initialBuyEthAmountWei,
     token.initialBuyTokenAmountRaw,
     token.initialBuyCustody,
-    token.tokenDecimals,
   ];
-  if (rawValues.every((value) => value === undefined || value === null)) {
+  if (
+    initialBuyValues.every((value) => value === undefined || value === null)
+  ) {
     return undefined;
   }
-  if (rawValues.some((value) => value === undefined || value === null)) {
+  if (
+    initialBuyValues.some((value) => value === undefined || value === null) ||
+    token.tokenDecimals === undefined ||
+    token.tokenDecimals === null
+  ) {
     throw new ProfileResponseError("Profile token contains incomplete initial buy data");
   }
   if (launchModel !== "classic") {

@@ -35,6 +35,17 @@ describe("My projects editor opening", () => {
     expect(source).toContain("onFocus={() => warmEditor(project)}");
   });
 
+  it("remounts authenticated projects when the connected wallet changes", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-view.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      'key={account?.toLowerCase() ?? "disconnected"}',
+    );
+  });
+
   it("paginates verified projects by highest available market cap", () => {
     const paginate = (profileProjects as unknown as {
       paginateCreatorProjectsV1(
