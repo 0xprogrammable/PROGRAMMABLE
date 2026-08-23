@@ -7,6 +7,7 @@
 /* The full navigation stops fitting comfortably below this content breakpoint. */
 @media (max-width: 60rem) {
   .siteHeader.siteHeader {
+    background-color: var(--webde-canvas, #000);
     height: calc(72px + env(safe-area-inset-top));
     min-height: calc(72px + env(safe-area-inset-top));
     padding-top: env(safe-area-inset-top);

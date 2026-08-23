@@ -17,6 +17,14 @@ describe("topbar and Explore hero polish", () => {
     );
   });
 
+  it("masks scrolling content below the sticky mobile navigation", () => {
+    const css = read("components/site-navigation.module.css");
+
+    expect(css).toMatch(
+      /@media \(max-width: 60rem\)[\s\S]*?\.siteHeader\.siteHeader\s*\{[^}]*background-color:\s*var\(--webde-canvas, #000\);/s,
+    );
+  });
+
   it("uses large white navigation text without an active underline", () => {
     const css = read("app/webde-final-ui.css");
 
