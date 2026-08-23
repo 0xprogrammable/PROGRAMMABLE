@@ -46,6 +46,20 @@ describe("My projects editor opening", () => {
     );
   });
 
+  it("exposes article controls only after a current authenticated read", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+
+    expect(source).toMatch(
+      /phase === "ready" &&\s*editableTokens\.has\(project\.tokenAddress\.toLowerCase\(\)\)/u,
+    );
+    expect(source).toContain(
+      "Article controls are temporarily unavailable. Refresh to try again.",
+    );
+  });
+
   it("paginates verified projects by highest available market cap", () => {
     const paginate = (profileProjects as unknown as {
       paginateCreatorProjectsV1(

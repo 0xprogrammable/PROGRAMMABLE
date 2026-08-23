@@ -53,12 +53,7 @@ export function createCreatorArticleApiHandlersV1(input: Readonly<{
           signal: request.signal,
         });
         const rows = await Promise.all(projects.map(async (project) => {
-          let article = null;
-          try {
-            article = await input.store.readCurrent(project);
-          } catch {
-            article = null;
-          }
+          const article = await input.store.readCurrent(project);
           return Object.freeze({
             chainId: project.chainId,
             tokenAddress: project.tokenAddress,

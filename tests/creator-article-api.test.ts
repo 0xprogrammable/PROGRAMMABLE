@@ -70,6 +70,20 @@ describe("creator article authenticated APIs", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("fails closed when an article read cannot distinguish absence from outage", async () => {
+    readCurrent.mockRejectedValueOnce(new Error("Blob read failed"));
+    const response = await handlers.listProjects(new Request(
+      "https://example.com/api/profile/projects",
+      { headers: { accept: "application/json" } },
+    ));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      schemaVersion: "programmable.creator-article-error.v1",
+      code: "creator_article_unavailable",
+    });
+  });
+
   it("requires create/update preconditions and publishes the canonical draft", async () => {
     const missing = await handlers.article(new Request(`https://example.com/api/profile/projects/${TOKEN}/article`, {
       method: "PUT",

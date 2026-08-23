@@ -247,6 +247,11 @@ export function ProfileProjects({
       </header>
 
       {projectError ? <p className={styles.error} role="alert">{projectError}</p> : null}
+      {phase === "error" && visibleProjects.length > 0 ? (
+        <p className={styles.error} role="alert">
+          Article controls are temporarily unavailable. Refresh to try again.
+        </p>
+      ) : null}
 
       {phase === "loading" && visibleProjects.length === 0 ? (
         <p className={styles.loading} role="status">Loading your verified launches…</p>
@@ -292,7 +297,8 @@ export function ProfileProjects({
                 ) : null}
               </div>
               <div className={styles.actions}>
-                {editableTokens.has(project.tokenAddress.toLowerCase()) ? (
+                {phase === "ready" &&
+                editableTokens.has(project.tokenAddress.toLowerCase()) ? (
                   <button
                     type="button"
                     disabled={openingProject !== null}
