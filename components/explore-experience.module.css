@@ -1056,6 +1056,16 @@
   max-width: none;
 }
 
+@media (min-width: 1101px) {
+  .runnersIntro {
+    pointer-events: none;
+  }
+
+  .runnersIntro :global(.token-section-heading) {
+    pointer-events: auto;
+  }
+}
+
 .runnersIntro :global(.token-section-heading),
 .runnersIntro :global(.token-toolbar) {
   align-items: center;
