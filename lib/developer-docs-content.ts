@@ -4,7 +4,10 @@ import {
   PROGRAMMABLE_LAUNCH_STAMP_RESOURCES,
   PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI,
 } from "@/components/launch-stamp-docs-contract";
-import { V4_TOKEN_ADDRESS } from "@/components/docs-public-policy";
+import {
+  PROGRAMMABLE_PUBLIC_REPOSITORIES,
+  V4_TOKEN_ADDRESS,
+} from "@/components/docs-public-policy";
 
 export const developerDocsPath = "/docs/developers";
 export const developerDocsMarkdownPath = "/docs/developers.md";
@@ -187,7 +190,7 @@ export function buildProgrammableHomeMarkdown(): string {
   return [
     "# Programmable",
     "",
-    "> Discover verified launches, understand what their Uniswap v4 hooks do, and use the website to create or interact with tokens on Ethereum.",
+    "> Discover verified launches, understand what their Uniswap v4 hooks do, and use the website to create or interact with token and outcome markets.",
     "",
     "Programmable brings token discovery, launch creation, market context, creator pages, trading preparation, profiles, and reward claims into one website. Human-facing wallet actions still require an explicit user confirmation.",
     "",
@@ -204,10 +207,17 @@ export function buildProgrammableHomeMarkdown(): string {
     "## Main destinations",
     "",
     "- Explore: https://programmable.market/explore",
+    "- Prediction Markets: https://programmable.market/markets",
     "- Create: https://programmable.market/launch",
     "- Profile, projects, and rewards: https://programmable.market/profile",
     "- Documentation: https://programmable.market/docs",
     "- Developer documentation: https://programmable.market/docs/developers",
+    "",
+    "## Prediction Markets",
+    "",
+    "Prediction Markets is separately versioned. Use its canonical repository for current networks, market types, economics, resolution rules, contract addresses, and release status instead of copying release constants into this product overview.",
+    "",
+    `- Canonical source and releases: ${PROGRAMMABLE_PUBLIC_REPOSITORIES.predictionMarkets}`,
     "",
     "## Machine-readable resources",
     "",
@@ -229,11 +239,12 @@ export function buildProgrammableLlmsIndex(): string {
   return [
     "# Programmable",
     "",
-    "> Agent guide for discovering verified Programmable launches and selecting the correct public read-only resource on Ethereum.",
+    "> Agent guide for discovering verified Programmable launches and selecting the correct public read-only resource for each product.",
     "",
     "## When to use Programmable",
     "",
     "- Discover verified Classic V3 launches and Registry-verified Custom launches.",
+    "- Open the current Prediction Markets product and its separately versioned canonical release record.",
     "- Look up one displayed token by Ethereum address without depending on optional market enrichment for identity.",
     "- Understand the public scope, creator information, launch provenance, and available market context before directing a user to the website.",
     "- Integrate a read-only terminal, wallet, scanner, catalog, or research tool with the documented public endpoints.",
@@ -244,6 +255,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Safety, endorsement, audit coverage, liquidity, price accuracy, tradability, or future value from a verified identity.",
     "- Public eligibility for Classic V1, other Classic V2 launches, any Stock family, or a Custom launch that has not passed Registry verification.",
     "- Transaction authority. The public OpenAPI description intentionally excludes launch, trade, claim, profile-write, and wallet-signing actions.",
+    "- Sponsored or autonomous Prediction Market creation unless the active canonical release explicitly enables it and publishes the required service boundary.",
     "",
     "## Public identity scope",
     "",
@@ -252,12 +264,15 @@ export function buildProgrammableLlmsIndex(): string {
     "- Excluded: all other Classic V1 or V2 launches, every Stock family, and unverified Custom launches.",
     "- Router records are provenance evidence and identity-mapping details, not a public category.",
     "- Dexscreener is optional market enrichment. An enrichment outage must not hide an already verified token identity.",
+    `- Prediction Markets uses separate versioned release records. Current source and release status: ${PROGRAMMABLE_PUBLIC_REPOSITORIES.predictionMarkets}.`,
     "",
     "## Public machine-readable resources",
     "",
     "- OpenAPI: https://programmable.market/openapi.json",
     "- API index: https://programmable.market/api",
     "- Explore catalog: https://programmable.market/api/explore",
+    "- Prediction Markets: https://programmable.market/markets",
+    `- Prediction Markets source and releases: ${PROGRAMMABLE_PUBLIC_REPOSITORIES.predictionMarkets}`,
     "- Token lookup: https://programmable.market/api/explore/token?address=0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
     "- Custom Registry readiness: https://programmable.market/api/custom-launch/registry/v2/readiness",
     "- Custom Registry manifest: https://programmable.market/api/custom-launch/registry/v2/manifest",
