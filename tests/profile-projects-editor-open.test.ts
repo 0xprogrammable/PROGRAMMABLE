@@ -72,6 +72,25 @@ describe("My projects editor opening", () => {
     });
   });
 
+  it("keeps verified wallet launches visible and lets authenticated data override them", () => {
+    const merge = (profileProjects as unknown as {
+      mergeCreatorWalletProjectsV1(
+        walletProjects: readonly CreatorProjectSummaryV1[],
+        authenticatedProjects: readonly CreatorProjectSummaryV1[],
+      ): readonly CreatorProjectSummaryV1[];
+    }).mergeCreatorWalletProjectsV1;
+    const article = {
+      revision: 2,
+      title: "Updated project",
+      updatedAt: "2026-08-23T00:00:00.000Z",
+    };
+
+    expect(merge([project], [])).toEqual([project]);
+    expect(merge([project], [{ ...project, article }])).toEqual([
+      { ...project, article },
+    ]);
+  });
+
   it("refreshes the Privy identity before reading the bound access token", async () => {
     const acquire = (profileProjects as unknown as {
       acquireCreatorArticleAuthHeadersV1(input: Readonly<{
