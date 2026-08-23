@@ -35,6 +35,7 @@
   justify-content: flex-end;
   margin: -62px 0 0 auto;
   position: relative;
+  width: fit-content;
   z-index: 1;
 }
 

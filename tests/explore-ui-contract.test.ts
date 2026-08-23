@@ -95,6 +95,9 @@ describe("Explore UI contract", () => {
     expect(predictionStyles).toMatch(
       /@media \(max-width: 900px\)[\s\S]*?\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
     );
+    expect(predictionStyles).toMatch(
+      /\.directoryToolbar\s*\{[^}]*width:\s*fit-content;/s,
+    );
     expect(predictionLaunchSource).toContain("Create a prediction");
     expect(predictionLaunchSource).toContain(
       "Set the BTC price and result time",
