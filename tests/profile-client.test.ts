@@ -297,6 +297,56 @@ describe("profile API client", () => {
       .toBe(true);
   });
 
+  it("maps an exactly bound initial buy lock into the creator profile", () => {
+    const response = profileResponse();
+    response.tokens[0] = {
+      ...response.tokens[0],
+      launchModel: "classic",
+      tokenDecimals: 18,
+      initialBuyEthAmountWei: "50000000000000000",
+      initialBuyTokenAmountRaw: "34883942100954326694409764",
+      initialBuyCustody: {
+        custodyAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        mode: "fixed-lock",
+        durationDays: 30,
+        cliffDays: 0,
+        configurationHash: `0x${"ab".repeat(32)}`,
+        cliffTimestamp: "2026-08-25T12:00:00.000Z",
+        releaseTimestamp: "2026-08-25T12:00:00.000Z",
+      },
+    } as (typeof response.tokens)[number];
+
+    const profile = mapCreatorProfileResponse(response, account);
+
+    expect(profile.tokens[0]?.initialBuy).toEqual({
+      ethAmountWei: "50000000000000000",
+      tokenAmountRaw: "34883942100954326694409764",
+      tokenDecimals: 18,
+      custodyAddress: getAddress(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ),
+      custodyMode: "fixed-lock",
+      durationDays: 30,
+      cliffDays: 0,
+      cliffAt: "2026-08-25T12:00:00.000Z",
+      releaseAt: "2026-08-25T12:00:00.000Z",
+    });
+
+    const initialBuyCustody = (
+      response.tokens[0] as Record<string, unknown>
+    ).initialBuyCustody as Record<string, unknown>;
+    response.tokens[0] = {
+      ...response.tokens[0],
+      initialBuyCustody: {
+        ...initialBuyCustody,
+        releaseTimestamp: "2026-08-26T12:00:00.000Z",
+      },
+    } as (typeof response.tokens)[number];
+    expect(() => mapCreatorProfileResponse(response, account)).toThrow(
+      "custody dates do not match",
+    );
+  });
+
   it("keeps verified launches that use a model-specific reward route", () => {
     const response = profileResponse();
     const stockToken = {

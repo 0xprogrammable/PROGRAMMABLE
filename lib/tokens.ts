@@ -415,6 +415,17 @@ export type LauncherToken = {
   tokenDecimals?: number;
   tokenLiquidityAmountRaw?: string;
   lockedTokenDustRaw?: string;
+  initialBuyEthAmountWei?: string;
+  initialBuyTokenAmountRaw?: string;
+  initialBuyCustody?: Readonly<{
+    custodyAddress: `0x${string}` | null;
+    mode: "unlocked" | "fixed-lock" | "linear" | "cliff-linear";
+    durationDays: number;
+    cliffDays: number;
+    configurationHash: `0x${string}`;
+    cliffTimestamp: string;
+    releaseTimestamp: string;
+  }>;
   tokenPriceEth?: string;
   tokenPriceEthWei?: string;
   tokenPriceUsdWad?: string;

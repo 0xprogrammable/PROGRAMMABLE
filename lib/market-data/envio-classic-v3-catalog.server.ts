@@ -104,6 +104,9 @@ const CLASSIC_V3_LAUNCH_QUERY = `
       tickLower
       tickUpper
       lpFeePips
+      initialBuyQuoteAmount
+      initialBuyTokenAmount
+      initialBuyEthAmount
       launchOccurrenceId
       liquidityOccurrenceId
       initialBuyOccurrenceId
@@ -177,6 +180,9 @@ const LAUNCH_KEYS = [
   "tickLower",
   "tickUpper",
   "lpFeePips",
+  "initialBuyQuoteAmount",
+  "initialBuyTokenAmount",
+  "initialBuyEthAmount",
   "launchOccurrenceId",
   "liquidityOccurrenceId",
   "initialBuyOccurrenceId",
@@ -266,7 +272,10 @@ type EnvioClassicV3LaunchRow = Readonly<{
   tickLower: number;
   tickUpper: number;
   lpFeePips: number;
+  initialBuyQuoteAmount: string;
+  initialBuyTokenAmount: string;
   launchOccurrenceId: string;
+  custodyOccurrenceId: string;
   updatedBlock: string;
 }>;
 
@@ -279,6 +288,26 @@ type EnvioClassicV3LaunchEvent = Readonly<{
   transactionIndex: number;
   blockGlobalLogIndex: number;
   decodedPayload: Readonly<Record<string, string>>;
+}>;
+
+type EnvioClassicV3CustodyEvent = Readonly<{
+  id: string;
+  blockNumber: string;
+  blockHash: Hex;
+  blockTimestamp: string;
+  transactionHash: Hex;
+  transactionIndex: number;
+  blockGlobalLogIndex: number;
+  decodedPayload: Readonly<{
+    cliffDays: string;
+    configurationHash: string;
+    custody: string;
+    deployer: string;
+    durationDays: string;
+    launchHash: string;
+    mode: string;
+    token: string;
+  }>;
 }>;
 
 type OfficialMainTokenLaunchRow = Readonly<{
@@ -528,6 +557,11 @@ function parseLaunchRow(
     /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
     "launch occurrence",
   );
+  const custodyOccurrenceId = exactString(
+    value.custodyOccurrenceId,
+    /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
+    "custody occurrence",
+  );
   const requiredFlags = [
     value.hasLaunchEvent,
     value.hasLiquidityEvent,
@@ -544,6 +578,7 @@ function parseLaunchRow(
     value.model !== "classic" ||
     value.releaseVersion !== "classic-v3" ||
     value.quoteAsset !== null ||
+    value.initialBuyEthAmount !== null ||
     value.totalSwapFeeBps !== null ||
     value.quoteConfigurationHash !== null ||
     value.coordinatorOccurrenceId !== null ||
@@ -553,7 +588,7 @@ function parseLaunchRow(
     requiredFlags.some((flag) => flag !== true) ||
     typeof value.liquidityOccurrenceId !== "string" ||
     typeof value.initialBuyOccurrenceId !== "string" ||
-    typeof value.custodyOccurrenceId !== "string"
+    custodyOccurrenceId === launchOccurrenceId
   ) {
     throw new Error(`Envio Classic V3 launch ${id} failed release validation`);
   }
@@ -569,6 +604,20 @@ function parseLaunchRow(
     10_000,
     "sell swap fee",
   );
+  const initialBuyQuoteAmount = unsignedText(
+    value.initialBuyQuoteAmount,
+    "initial buy quote amount",
+  );
+  const initialBuyTokenAmount = unsignedText(
+    value.initialBuyTokenAmount,
+    "initial buy token amount",
+  );
+  if (
+    BigInt(initialBuyQuoteAmount) === 0n ||
+    BigInt(initialBuyTokenAmount) === 0n
+  ) {
+    throw new Error(`Envio Classic V3 launch ${id} has an empty initial buy`);
+  }
   return Object.freeze({
     id,
     launchHash,
@@ -597,7 +646,10 @@ function parseLaunchRow(
     tickLower: boundedInteger(value.tickLower, -887_272, 887_272, "tick lower"),
     tickUpper: boundedInteger(value.tickUpper, -887_272, 887_272, "tick upper"),
     lpFeePips: boundedInteger(value.lpFeePips, 0, 1_000_000, "LP fee"),
+    initialBuyQuoteAmount,
+    initialBuyTokenAmount,
     launchOccurrenceId,
+    custodyOccurrenceId,
     updatedBlock: unsignedText(value.updatedBlock, "updated block"),
   });
 }
@@ -716,6 +768,134 @@ function assertLaunchEventBinding(
   ) {
     throw new Error(`Envio Classic V3 launch ${launch.id} payload binding failed`);
   }
+}
+
+function parseCustodyEvent(
+  value: unknown,
+  expectedOccurrenceId: string,
+  release: DataPipelineReleaseBinding,
+): EnvioClassicV3CustodyEvent {
+  if (!isRecord(value) || !hasOnlyKeys(value, EVENT_KEYS)) {
+    throw new Error("Envio Classic V3 custody event shape drifted");
+  }
+  const sources = launchSourceBindings(release);
+  const id = exactString(
+    value.id,
+    /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
+    "custody event id",
+  );
+  const blockHash = bytes32(value.blockHash, "custody event block hash");
+  const transactionHash = bytes32(
+    value.transactionHash,
+    "custody event transaction hash",
+  );
+  const blockGlobalLogIndex = safeUnsignedInteger(
+    value.blockGlobalLogIndex,
+    "custody event log index",
+  );
+  if (
+    value.downstreamLogicalId !== null ||
+    value.receiptLogOrdinal !== null ||
+    typeof value.decodedPayload !== "string"
+  ) {
+    throw new Error(`Envio Classic V3 custody event ${id} has invalid source semantics`);
+  }
+  bytes32(value.payloadHash, "custody event payload hash");
+  let decodedPayload: unknown;
+  try {
+    decodedPayload = JSON.parse(value.decodedPayload);
+  } catch {
+    throw new Error(`Envio Classic V3 custody event ${id} payload is invalid`);
+  }
+  const payloadKeys = [
+    "cliffDays",
+    "configurationHash",
+    "custody",
+    "deployer",
+    "durationDays",
+    "launchHash",
+    "mode",
+    "token",
+  ] as const;
+  if (
+    !isRecord(decodedPayload) ||
+    !hasOnlyKeys(decodedPayload, payloadKeys) ||
+    Object.values(decodedPayload).some((item) => typeof item !== "string")
+  ) {
+    throw new Error(`Envio Classic V3 custody event ${id} payload shape drifted`);
+  }
+  if (
+    id !== expectedOccurrenceId ||
+    value.chainId !== 1 ||
+    value.model !== "classic" ||
+    value.releaseVersion !== "classic-v3" ||
+    value.contractName !== "ClassicV3Launcher" ||
+    value.eventName !== "MemeCreatorInitialBuyCustodyV2" ||
+    address(value.sourceAddress, "custody event source").toLowerCase() !==
+      sources.launcher.address.toLowerCase() ||
+    id !== `1:${blockHash}:${transactionHash}:${blockGlobalLogIndex}`
+  ) {
+    throw new Error(`Envio Classic V3 custody event ${id} failed occurrence validation`);
+  }
+  return Object.freeze({
+    id,
+    blockNumber: unsignedText(value.blockNumber, "custody event block number"),
+    blockHash,
+    blockTimestamp: unsignedText(
+      value.blockTimestamp,
+      "custody event block timestamp",
+    ),
+    transactionHash,
+    transactionIndex: safeUnsignedInteger(
+      value.transactionIndex,
+      "custody event transaction index",
+    ),
+    blockGlobalLogIndex,
+    decodedPayload: decodedPayload as EnvioClassicV3CustodyEvent["decodedPayload"],
+  });
+}
+
+function assertCustodyEventBinding(
+  launch: EnvioClassicV3LaunchRow,
+  launchEvent: EnvioClassicV3LaunchEvent,
+  custodyEvent: EnvioClassicV3CustodyEvent,
+) {
+  const payload = custodyEvent.decodedPayload;
+  const custody = address(payload.custody, "initial buy custody");
+  const mode = safeUnsignedInteger(payload.mode, "initial buy custody mode");
+  const durationDays = safeUnsignedInteger(
+    payload.durationDays,
+    "initial buy custody duration",
+  );
+  const cliffDays = safeUnsignedInteger(
+    payload.cliffDays,
+    "initial buy custody cliff",
+  );
+  const validSchedule = mode === 0
+    ? durationDays === 0 && cliffDays === 0 && custody === NATIVE_CURRENCY_ADDRESS
+    : mode === 1 || mode === 2
+      ? durationDays >= 1 && durationDays <= 3_650 && cliffDays === 0 &&
+        custody !== NATIVE_CURRENCY_ADDRESS
+      : mode === 3
+        ? durationDays >= 2 && durationDays <= 3_650 && cliffDays >= 1 &&
+          cliffDays < durationDays && custody !== NATIVE_CURRENCY_ADDRESS
+        : false;
+  if (
+    !validSchedule ||
+    custodyEvent.blockNumber !== launchEvent.blockNumber ||
+    custodyEvent.blockHash.toLowerCase() !== launchEvent.blockHash.toLowerCase() ||
+    custodyEvent.blockTimestamp !== launchEvent.blockTimestamp ||
+    custodyEvent.transactionHash.toLowerCase() !==
+      launchEvent.transactionHash.toLowerCase() ||
+    custodyEvent.transactionIndex !== launchEvent.transactionIndex ||
+    custodyEvent.blockGlobalLogIndex <= launchEvent.blockGlobalLogIndex ||
+    payload.deployer.toLowerCase() !== launch.creator.toLowerCase() ||
+    payload.token.toLowerCase() !== launch.token.toLowerCase() ||
+    payload.launchHash.toLowerCase() !== launch.launchHash.toLowerCase()
+  ) {
+    throw new Error(`Envio Classic V3 launch ${launch.id} custody binding failed`);
+  }
+  bytes32(payload.configurationHash, "initial buy custody configuration hash");
 }
 
 function parseOfficialMainTokenLaunch(
@@ -981,6 +1161,7 @@ async function readClassicV3Rows(
 ) {
   const launches: EnvioClassicV3LaunchRow[] = [];
   const events = new Map<string, EnvioClassicV3LaunchEvent>();
+  const custodyEvents = new Map<string, EnvioClassicV3CustodyEvent>();
   let afterId = "";
   while (true) {
     const launchResponse = await graphqlRequest(release, {
@@ -1006,7 +1187,9 @@ async function readClassicV3Rows(
       throw new Error("Envio Classic V3 catalog exceeded its safety bound");
     }
     if (page.length > 0) {
-      const ids = page.map((launch) => launch.launchOccurrenceId);
+      const launchIds = page.map((launch) => launch.launchOccurrenceId);
+      const custodyIds = page.map((launch) => launch.custodyOccurrenceId);
+      const ids = [...launchIds, ...custodyIds];
       const eventResponse = await graphqlRequest(release, {
         query: CLASSIC_V3_LAUNCH_EVENTS_QUERY,
         variables: { ids },
@@ -1021,11 +1204,17 @@ async function readClassicV3Rows(
         if (typeof rawId !== "string" || !expected.delete(rawId)) {
           throw new Error("Envio Classic V3 occurrence set drifted");
         }
-        const event = parseLaunchEvent(rawEvent, rawId, release);
+        const event = launchIds.includes(rawId)
+          ? parseLaunchEvent(rawEvent, rawId, release)
+          : parseCustodyEvent(rawEvent, rawId, release);
         if (BigInt(event.blockNumber) > BigInt(anchorBlock)) {
           throw new Error("Envio Classic V3 occurrence exceeds progress");
         }
-        events.set(event.id, event);
+        if (launchIds.includes(rawId)) {
+          events.set(event.id, event as EnvioClassicV3LaunchEvent);
+        } else {
+          custodyEvents.set(event.id, event as EnvioClassicV3CustodyEvent);
+        }
       }
       if (expected.size !== 0) {
         throw new Error("Envio Classic V3 occurrence coverage is incomplete");
@@ -1035,7 +1224,12 @@ async function readClassicV3Rows(
         if (!event) {
           throw new Error("Envio Classic V3 occurrence coverage is incomplete");
         }
+        const custodyEvent = custodyEvents.get(launch.custodyOccurrenceId);
+        if (!custodyEvent) {
+          throw new Error("Envio Classic V3 custody coverage is incomplete");
+        }
         assertLaunchEventBinding(launch, event, release);
+        assertCustodyEventBinding(launch, event, custodyEvent);
       }
     }
     if (page.length < LAUNCH_PAGE_SIZE) break;
@@ -1066,6 +1260,7 @@ async function readClassicV3Rows(
   return Object.freeze({
     launches: Object.freeze(launches),
     events,
+    custodyEvents,
   });
 }
 
@@ -1274,9 +1469,54 @@ async function defaultReadRpcSnapshot(input: Readonly<{
   });
 }
 
+function buildInitialBuyCustody(
+  event: EnvioClassicV3CustodyEvent,
+): NonNullable<LauncherToken["initialBuyCustody"]> {
+  const payload = event.decodedPayload;
+  const modeCode = safeUnsignedInteger(payload.mode, "initial buy custody mode");
+  const mode = ([
+    "unlocked",
+    "fixed-lock",
+    "linear",
+    "cliff-linear",
+  ] as const)[modeCode];
+  if (!mode) throw new Error("Envio initial buy custody mode is unsupported");
+  const durationDays = safeUnsignedInteger(
+    payload.durationDays,
+    "initial buy custody duration",
+  );
+  const cliffDays = safeUnsignedInteger(
+    payload.cliffDays,
+    "initial buy custody cliff",
+  );
+  const launchTimestamp = BigInt(event.blockTimestamp);
+  const releaseTimestamp = launchTimestamp + BigInt(durationDays) * 86_400n;
+  const cliffOffsetDays = mode === "fixed-lock"
+    ? durationDays
+    : mode === "cliff-linear"
+      ? cliffDays
+      : 0;
+  const cliffTimestamp = launchTimestamp + BigInt(cliffOffsetDays) * 86_400n;
+  const custodyAddress = address(payload.custody, "initial buy custody");
+  return Object.freeze({
+    custodyAddress:
+      custodyAddress === NATIVE_CURRENCY_ADDRESS ? null : custodyAddress,
+    mode,
+    durationDays,
+    cliffDays,
+    configurationHash: bytes32(
+      payload.configurationHash,
+      "initial buy custody configuration hash",
+    ),
+    cliffTimestamp: new Date(Number(cliffTimestamp) * 1_000).toISOString(),
+    releaseTimestamp: new Date(Number(releaseTimestamp) * 1_000).toISOString(),
+  });
+}
+
 function buildEntries(
   launches: readonly EnvioClassicV3LaunchRow[],
   events: ReadonlyMap<string, EnvioClassicV3LaunchEvent>,
+  custodyEvents: ReadonlyMap<string, EnvioClassicV3CustodyEvent>,
   official: Readonly<{
     launch: OfficialMainTokenLaunchRow;
     event: OfficialMainTokenLaunchEvent;
@@ -1285,8 +1525,9 @@ function buildEntries(
 ) {
   const classicEntries = launches.map((launch) => {
     const event = events.get(launch.launchOccurrenceId);
+    const custodyEvent = custodyEvents.get(launch.custodyOccurrenceId);
     const tokenMetadata = metadata.get(launch.token.toLowerCase());
-    if (!event || !tokenMetadata) {
+    if (!event || !custodyEvent || !tokenMetadata) {
       throw new Error(`Envio Classic V3 launch ${launch.id} is not hydrated`);
     }
     const totalSwapFeeBps = Math.max(
@@ -1323,6 +1564,9 @@ function buildEntries(
       tokenDecimals: tokenMetadata.decimals,
       tokenLiquidityAmountRaw: launch.tokenLiquidityAmount,
       lockedTokenDustRaw: launch.lockedTokenDust,
+      initialBuyEthAmountWei: launch.initialBuyQuoteAmount,
+      initialBuyTokenAmountRaw: launch.initialBuyTokenAmount,
+      initialBuyCustody: buildInitialBuyCustody(custodyEvent),
       quoteAssetAddress: NATIVE_CURRENCY_ADDRESS,
       quoteAssetSymbol: "ETH",
       quoteAssetName: "Ether",
@@ -1456,7 +1700,13 @@ async function readUncached(
   const generatedAt = new Date(
     Number(BigInt(rpc.anchorBlockTimestamp)) * 1_000,
   ).toISOString();
-  const entries = buildEntries(rows.launches, rows.events, official, rpc.metadata);
+  const entries = buildEntries(
+    rows.launches,
+    rows.events,
+    rows.custodyEvents,
+    official,
+    rpc.metadata,
+  );
   const evidenceCore = {
     deployment: progress.deployment,
     sourceCommit: release.envio.sourceCommit,

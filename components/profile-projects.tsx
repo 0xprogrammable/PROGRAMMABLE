@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAddress, isAddress } from "viem";
+import { formatUnits, getAddress, isAddress } from "viem";
 
 import {
   acquireCreatorArticleAuthHeadersV1,
@@ -44,11 +44,26 @@ export type CreatorProjectMarketCapV1 = Readonly<{
   label: string | null;
 }>;
 
+export type CreatorProjectInitialBuyV1 = Readonly<{
+  tokenAddress: `0x${string}`;
+  ethAmountWei: string;
+  tokenAmountRaw: string;
+  tokenDecimals: number;
+  custodyAddress: `0x${string}` | null;
+  custodyMode: "unlocked" | "fixed-lock" | "linear" | "cliff-linear";
+  durationDays: number;
+  cliffDays: number;
+  cliffAt: string;
+  releaseAt: string;
+}>;
+
 export function ProfileProjects({
+  initialBuys = [],
   marketCaps = [],
   onRefresh,
   walletProjects = [],
 }: Readonly<{
+  initialBuys?: readonly CreatorProjectInitialBuyV1[];
   marketCaps?: readonly CreatorProjectMarketCapV1[];
   onRefresh?: () => void;
   walletProjects?: readonly CreatorProjectSummaryV1[];
@@ -118,6 +133,12 @@ export function ProfileProjects({
   const marketCapByToken = useMemo(() => new Map(
     marketCaps.map((marketCap) => [marketCap.tokenAddress.toLowerCase(), marketCap]),
   ), [marketCaps]);
+  const initialBuyByToken = useMemo(() => new Map(
+    initialBuys.map((initialBuy) => [
+      initialBuy.tokenAddress.toLowerCase(),
+      initialBuy,
+    ]),
+  ), [initialBuys]);
 
   const getEditorState = useCallback((project: CreatorProjectSummaryV1) => {
     const key = project.tokenAddress.toLowerCase();
@@ -235,7 +256,14 @@ export function ProfileProjects({
         <p className={styles.empty}>Your verified launches will appear here.</p>
       ) : (
         <div className={styles.list}>
-          {pageData.items.map((project) => (
+          {pageData.items.map((project) => {
+            const initialBuy = initialBuyByToken.get(
+              project.tokenAddress.toLowerCase(),
+            );
+            const initialBuyLabel = initialBuy
+              ? formatCreatorProjectInitialBuyV1(initialBuy, project.symbol)
+              : null;
+            return (
             <article className={styles.project} key={project.tokenAddress}>
               <div className={styles.art}>
                 {project.imageUrl ? (
@@ -251,6 +279,17 @@ export function ProfileProjects({
                   </small>
                 ) : null}
                 {project.article ? <small>Updated {formatDate(project.article.updatedAt)}</small> : null}
+                {initialBuyLabel ? (
+                  <div className={styles.initialBuy}>
+                    <small>{initialBuyLabel.amount}</small>
+                    <small
+                      className={styles.initialBuyStatus}
+                      data-state={initialBuyLabel.state}
+                    >
+                      {initialBuyLabel.status}
+                    </small>
+                  </div>
+                ) : null}
               </div>
               <div className={styles.actions}>
                 {editableTokens.has(project.tokenAddress.toLowerCase()) ? (
@@ -270,7 +309,8 @@ export function ProfileProjects({
                 <Link href={`/token/${project.tokenAddress}`}>View token</Link>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -411,6 +451,70 @@ export function mergeCreatorWalletProjectsV1(
     byToken.set(project.tokenAddress.toLowerCase(), project);
   }
   return Object.freeze([...byToken.values()]);
+}
+
+export function formatCreatorProjectInitialBuyV1(
+  initialBuy: CreatorProjectInitialBuyV1,
+  symbol: string | null,
+  now = Date.now(),
+) {
+  const ethAmount = Number(formatUnits(BigInt(initialBuy.ethAmountWei), 18));
+  const tokenAmount = Number(formatUnits(
+    BigInt(initialBuy.tokenAmountRaw),
+    initialBuy.tokenDecimals,
+  ));
+  const ethLabel = Number.isFinite(ethAmount)
+    ? new Intl.NumberFormat("en-US", { maximumSignificantDigits: 6 }).format(ethAmount)
+    : formatUnits(BigInt(initialBuy.ethAmountWei), 18);
+  const tokenLabel = Number.isFinite(tokenAmount)
+    ? new Intl.NumberFormat("en-US", {
+        compactDisplay: "short",
+        maximumFractionDigits: 2,
+        notation: "compact",
+      }).format(tokenAmount)
+    : formatUnits(BigInt(initialBuy.tokenAmountRaw), initialBuy.tokenDecimals);
+  const ticker = symbol ? `$${symbol}` : "tokens";
+  const date = (value: string) => new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric",
+  }).format(new Date(value));
+  const releaseTime = Date.parse(initialBuy.releaseAt);
+  const cliffTime = Date.parse(initialBuy.cliffAt);
+  if (initialBuy.custodyMode === "unlocked") {
+    return Object.freeze({
+      amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
+      status: "Unlocked at launch",
+      state: "unlocked" as const,
+    });
+  }
+  if (initialBuy.custodyMode === "fixed-lock") {
+    return Object.freeze({
+      amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
+      status: now < releaseTime
+        ? `Locked until ${date(initialBuy.releaseAt)}`
+        : `Lock ended ${date(initialBuy.releaseAt)}`,
+      state: now < releaseTime ? "locked" as const : "complete" as const,
+    });
+  }
+  if (
+    initialBuy.custodyMode === "cliff-linear" &&
+    now < cliffTime
+  ) {
+    return Object.freeze({
+      amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
+      status: `Cliff until ${date(initialBuy.cliffAt)} · vests by ${date(initialBuy.releaseAt)}`,
+      state: "locked" as const,
+    });
+  }
+  return Object.freeze({
+    amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
+    status: now < releaseTime
+      ? `Vesting until ${date(initialBuy.releaseAt)}`
+      : `Vesting ended ${date(initialBuy.releaseAt)}`,
+    state: now < releaseTime ? "vesting" as const : "complete" as const,
+  });
 }
 
 function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
