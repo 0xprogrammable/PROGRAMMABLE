@@ -20,6 +20,7 @@ import { useWallet } from "@/components/wallet-provider";
 import {
   ProfileProjects,
   type CreatorProjectMarketCapV1,
+  type CreatorProjectSummaryV1,
 } from "@/components/profile-projects";
 import { PredictionMarketPortfolio } from "@/components/prediction-market-portfolio";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
@@ -71,6 +72,8 @@ import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
+import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
+  "@/lib/creator-article/programmable-example-v1";
 import {
   getProfileStorageKey,
   getProfileUsernameError,
@@ -1803,6 +1806,20 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     })),
     [scopedOnchainData.tokens],
   );
+  const creatorWalletProjects = useMemo<readonly CreatorProjectSummaryV1[]>(
+    () => scopedOnchainData.tokens.map((token) => ({
+      chainId: 1 as const,
+      tokenAddress: token.address,
+      name: token.name,
+      symbol: token.symbol || null,
+      imageUrl: token.imageUrl ?? null,
+      source: token.address.toLowerCase() === PROGRAMMABLE_MAIN_TOKEN_ADDRESS
+        ? "official-main-token" as const
+        : "envio-classic-v3" as const,
+      article: null,
+    })),
+    [scopedOnchainData.tokens],
+  );
   const scopedClassicV3Rewards = useMemo<ClassicV3ProfileRewards>(() => {
     if (!account || !classicV3ReleaseAvailable) {
       return EMPTY_CLASSIC_V3_PROFILE;
@@ -3202,7 +3219,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         </div>
       </section>
 
-      <ProfileProjects marketCaps={creatorProjectMarketCaps} />
+      <ProfileProjects
+        marketCaps={creatorProjectMarketCaps}
+        walletProjects={creatorWalletProjects}
+        onRefresh={retryProfileData}
+      />
       <PredictionMarketPortfolio />
 
       <ProfileAccountWorkspace

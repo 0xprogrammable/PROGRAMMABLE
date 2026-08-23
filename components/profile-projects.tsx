@@ -44,8 +44,14 @@ export type CreatorProjectMarketCapV1 = Readonly<{
   label: string | null;
 }>;
 
-export function ProfileProjects({ marketCaps = [] }: Readonly<{
+export function ProfileProjects({
+  marketCaps = [],
+  onRefresh,
+  walletProjects = [],
+}: Readonly<{
   marketCaps?: readonly CreatorProjectMarketCapV1[];
+  onRefresh?: () => void;
+  walletProjects?: readonly CreatorProjectSummaryV1[];
 }>) {
   const { wallet, getAccessToken, getIdentityToken } = useWallet();
   const [projects, setProjects] = useState<readonly CreatorProjectSummaryV1[]>([]);
@@ -97,9 +103,17 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
     };
   }, [loadProjects, wallet]);
 
+  const visibleProjects = useMemo(
+    () => mergeCreatorWalletProjectsV1(walletProjects, projects),
+    [projects, walletProjects],
+  );
+  const editableTokens = useMemo(
+    () => new Set(projects.map((project) => project.tokenAddress.toLowerCase())),
+    [projects],
+  );
   const pageData = useMemo(
-    () => paginateCreatorProjectsV1(projects, marketCaps, projectPage),
-    [marketCaps, projectPage, projects],
+    () => paginateCreatorProjectsV1(visibleProjects, marketCaps, projectPage),
+    [marketCaps, projectPage, visibleProjects],
   );
   const marketCapByToken = useMemo(() => new Map(
     marketCaps.map((marketCap) => [marketCap.tokenAddress.toLowerCase(), marketCap]),
@@ -173,7 +187,10 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
           <button
             className={styles.refresh}
             type="button"
-            onClick={() => void loadProjects()}
+            onClick={() => {
+              onRefresh?.();
+              void loadProjects();
+            }}
             disabled={phase === "loading"}
           >
             <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
@@ -210,11 +227,11 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
 
       {projectError ? <p className={styles.error} role="alert">{projectError}</p> : null}
 
-      {phase === "loading" && projects.length === 0 ? (
+      {phase === "loading" && visibleProjects.length === 0 ? (
         <p className={styles.loading} role="status">Loading your verified launches…</p>
-      ) : phase === "error" ? (
+      ) : phase === "error" && visibleProjects.length === 0 ? (
         <p className={styles.error} role="alert">Your projects could not be verified right now.</p>
-      ) : projects.length === 0 ? (
+      ) : visibleProjects.length === 0 ? (
         <p className={styles.empty}>Your verified launches will appear here.</p>
       ) : (
         <div className={styles.list}>
@@ -236,18 +253,20 @@ export function ProfileProjects({ marketCaps = [] }: Readonly<{
                 {project.article ? <small>Updated {formatDate(project.article.updatedAt)}</small> : null}
               </div>
               <div className={styles.actions}>
-                <button
-                  type="button"
-                  disabled={openingProject !== null}
-                  onPointerEnter={() => warmEditor(project)}
-                  onPointerDown={() => warmEditor(project)}
-                  onFocus={() => warmEditor(project)}
-                  onClick={(event) => void openEditor(project, event.currentTarget)}
-                >
-                  {openingProject?.tokenAddress === project.tokenAddress
-                    ? "Opening…"
-                    : project.article ? "Edit article" : "Create article"}
-                </button>
+                {editableTokens.has(project.tokenAddress.toLowerCase()) ? (
+                  <button
+                    type="button"
+                    disabled={openingProject !== null}
+                    onPointerEnter={() => warmEditor(project)}
+                    onPointerDown={() => warmEditor(project)}
+                    onFocus={() => warmEditor(project)}
+                    onClick={(event) => void openEditor(project, event.currentTarget)}
+                  >
+                    {openingProject?.tokenAddress === project.tokenAddress
+                      ? "Opening…"
+                      : project.article ? "Edit article" : "Create article"}
+                  </button>
+                ) : null}
                 <Link href={`/token/${project.tokenAddress}`}>View token</Link>
               </div>
             </article>
@@ -378,6 +397,20 @@ export function paginateCreatorProjectsV1(
     totalPages,
     items: Object.freeze(ordered.slice(offset, offset + creatorProjectPageSize)),
   });
+}
+
+export function mergeCreatorWalletProjectsV1(
+  walletProjects: readonly CreatorProjectSummaryV1[],
+  authenticatedProjects: readonly CreatorProjectSummaryV1[],
+) {
+  const byToken = new Map<string, CreatorProjectSummaryV1>();
+  for (const project of walletProjects) {
+    byToken.set(project.tokenAddress.toLowerCase(), project);
+  }
+  for (const project of authenticatedProjects) {
+    byToken.set(project.tokenAddress.toLowerCase(), project);
+  }
+  return Object.freeze([...byToken.values()]);
 }
 
 function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
