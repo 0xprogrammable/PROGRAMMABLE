@@ -7,6 +7,7 @@ import {
 
 import {
   PREDICTION_V2_ASSET_REGISTRY_ABI,
+  PREDICTION_V2_CHECKPOINT_ABI,
   PREDICTION_V2_EXPOSURE_CONTROLLER_ABI,
   PREDICTION_V2_FACTORY_ABI,
   PREDICTION_V2_QUOTER_ABI,
@@ -66,6 +67,8 @@ describe("Protocol V2 exact ABI and fail-closed decoders", () => {
 
   it("pins the Registry policy, Quoter tuples, finalize(bytes), and create selector", () => {
     const latestSnapshot = functionEntry(PREDICTION_V2_ASSET_REGISTRY_ABI, "latestSnapshot");
+    expect(functionEntry(PREDICTION_V2_ASSET_REGISTRY_ABI, "getSnapshot").inputs)
+      .toHaveLength(2);
     const snapshot = latestSnapshot.outputs[0];
     const policy = (snapshot.components as readonly { name: string; components?: readonly unknown[] }[])
       .find(({ name }) => name === "policy");
@@ -77,16 +80,22 @@ describe("Protocol V2 exact ABI and fail-closed decoders", () => {
       .toHaveLength(9);
     expect(functionEntry(PREDICTION_V2_QUOTER_ABI, "quoteSellOptimal").outputs[0].components)
       .toHaveLength(8);
+    const createWithPermitSignature =
+      "createMarketWithPermit((bytes32,bytes32,bytes32,bytes32),uint32,int192,bytes32,uint256,uint8,bytes32,bytes32)";
+    expect(toFunctionSelector(createWithPermitSignature)).toBe("0xf6bc6d85");
     expect(toFunctionSelector(PREDICTION_V2_FACTORY_ABI.find((item) =>
       item.type === "function" && item.name === "createMarketWithPermit"
-    )!)).toBe(toFunctionSelector(
-      "createMarketWithPermit((bytes32,bytes32,bytes32,bytes32),uint32,int192,uint256,uint8,bytes32,bytes32)",
-    ));
+    )!)).toBe(toFunctionSelector(createWithPermitSignature));
     expect(toFunctionSelector(PREDICTION_V2_VAULT_ABI.find((item) =>
       item.type === "function" && item.name === "finalize"
     )!)).toBe(
       toFunctionSelector("finalize(bytes)"),
     );
+    expect(toFunctionSelector(PREDICTION_V2_VAULT_ABI.find((item) =>
+      item.type === "function" && item.name === "finalizeAndRedeem"
+    )!)).toBe(toFunctionSelector("finalizeAndRedeem(bytes,uint256,uint256,address)"));
+    expect(functionEntry(PREDICTION_V2_CHECKPOINT_ABI, "resolve").stateMutability)
+      .toBe("payable");
     const capacity = functionEntry(
       PREDICTION_V2_EXPOSURE_CONTROLLER_ABI,
       "requireIncreaseCapacity",
@@ -173,6 +182,17 @@ describe("Protocol V2 exact ABI and fail-closed decoders", () => {
       result: snapshot,
     });
     expect(decodePredictionV2RegistrySnapshot(data, "requireActiveAsset")).toEqual(snapshot);
+
+    const historical = encodeFunctionResult({
+      abi: PREDICTION_V2_ASSET_REGISTRY_ABI,
+      functionName: "getSnapshot",
+      result: snapshot,
+    });
+    expect(decodePredictionV2RegistrySnapshot(historical, "getSnapshot")).toEqual(snapshot);
+    expect(() => decodePredictionV2RegistrySnapshot(
+      `${historical}00`,
+      "getSnapshot",
+    )).toThrow("result canonicality");
 
     const wrongKey = encodeFunctionResult({
       abi: PREDICTION_V2_ASSET_REGISTRY_ABI,

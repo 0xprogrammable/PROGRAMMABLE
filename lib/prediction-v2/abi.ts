@@ -91,6 +91,13 @@ export const PREDICTION_V2_FACTORY_ABI = [
   },
   {
     type: "function",
+    name: "manager",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
     name: "markets",
     stateMutability: "view",
     inputs: [{ name: "economicKey", type: "bytes32" }],
@@ -163,6 +170,7 @@ export const PREDICTION_V2_FACTORY_ABI = [
       { name: "identity", type: "tuple", components: assetIdentityComponents },
       { name: "observationTime", type: "uint32" },
       { name: "threshold", type: "int192" },
+      { name: "expectedMarketId", type: "bytes32" },
       { name: "permitDeadline", type: "uint256" },
       { name: "v", type: "uint8" },
       { name: "r", type: "bytes32" },
@@ -202,6 +210,18 @@ export const PREDICTION_V2_ASSET_REGISTRY_ABI = [
     name: "latestSnapshot",
     stateMutability: "view",
     inputs: [{ name: "assetKey", type: "bytes32" }],
+    outputs: [
+      { name: "snapshot", type: "tuple", components: registrySnapshotComponents },
+    ],
+  },
+  {
+    type: "function",
+    name: "getSnapshot",
+    stateMutability: "view",
+    inputs: [
+      { name: "assetKey", type: "bytes32" },
+      { name: "revision", type: "uint64" },
+    ],
     outputs: [
       { name: "snapshot", type: "tuple", components: registrySnapshotComponents },
     ],
@@ -328,6 +348,48 @@ export const PREDICTION_V2_EXPOSURE_CONTROLLER_ABI = [
 export const PREDICTION_V2_VAULT_ABI = [
   {
     type: "function",
+    name: "collateral",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "checkpoint",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "factory",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "router",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "yesToken",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "noToken",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
     name: "exposureController",
     stateMutability: "view",
     inputs: [],
@@ -335,10 +397,236 @@ export const PREDICTION_V2_VAULT_ABI = [
   },
   {
     type: "function",
+    name: "cutoff",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint64" }],
+  },
+  {
+    type: "function",
+    name: "threshold",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "int192" }],
+  },
+  {
+    type: "function",
+    name: "economicKey",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "marketId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "assetKey",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "registryRevision",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint64" }],
+  },
+  {
+    type: "function",
+    name: "registrySnapshotHash",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "oraclePolicyHash",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "state",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "accountedLiability",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "canonicalPoolId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
     name: "finalize",
     stateMutability: "payable",
     inputs: [{ name: "proof", type: "bytes" }],
     outputs: [{ name: "finalState", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "finalizeAndRedeem",
+    stateMutability: "payable",
+    inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "yesAtoms", type: "uint256" },
+      { name: "noAtoms", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [
+      { name: "finalState", type: "uint8" },
+      { name: "collateralAtoms", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "finalizeUnavailable",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ name: "finalState", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "requestUnprovenFallback",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ name: "challengeDeadline", type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "finalizeUnproven",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ name: "finalState", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "finalizeResolved",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ name: "finalState", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "redeem",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "yesAtoms", type: "uint256" },
+      { name: "noAtoms", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [{ name: "collateralAtoms", type: "uint256" }],
+  },
+] as const satisfies Abi;
+
+/** Adapter-neutral lifecycle reads exposed by every Protocol V2 checkpoint. */
+export const PREDICTION_V2_CHECKPOINT_ABI = [
+  {
+    type: "function",
+    name: "status",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "resolvedPrice",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "int192" }],
+  },
+  {
+    type: "function",
+    name: "observationTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "resolutionDeadline",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "hardResolutionDeadline",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "fallbackRequestedAt",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "fallbackChallengeDeadline",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "policyHash",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "priceDecimals",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "isTradingHealthy",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "resolve",
+    stateMutability: "payable",
+    inputs: [{ name: "proof", type: "bytes" }],
+    outputs: [{ name: "terminalStatus", type: "uint8" }],
+  },
+] as const satisfies Abi;
+
+/**
+ * PoolManager exposes raw storage through Extsload. Protocol V2 derives the
+ * canonical v4 pool state slot locally and binds the returned word verbatim.
+ */
+export const PREDICTION_V2_POOL_MANAGER_STATE_ABI = [
+  {
+    type: "function",
+    name: "extsload",
+    stateMutability: "view",
+    inputs: [{ name: "slot", type: "bytes32" }],
+    outputs: [{ name: "", type: "bytes32" }],
   },
 ] as const satisfies Abi;
 

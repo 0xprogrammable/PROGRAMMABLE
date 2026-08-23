@@ -1,6 +1,7 @@
 import {
   decodeFunctionResult,
   encodeAbiParameters,
+  encodeFunctionResult,
   isAddress,
   keccak256,
   parseAbiParameters,
@@ -588,13 +589,21 @@ export function predictionV2RegistrySnapshotHash(
 
 export function decodePredictionV2RegistrySnapshot(
   data: Hex,
-  functionName: "latestSnapshot" | "requireActiveAsset",
+  functionName: "getSnapshot" | "latestSnapshot" | "requireActiveAsset",
 ): PredictionV2RegistrySnapshot {
   const snapshot = validatePredictionV2RegistrySnapshot(decodeFunctionResult({
     abi: PREDICTION_V2_ASSET_REGISTRY_ABI,
     functionName,
     data,
   }));
+  const canonical = encodeFunctionResult({
+    abi: PREDICTION_V2_ASSET_REGISTRY_ABI,
+    functionName,
+    result: snapshot,
+  });
+  if (canonical.toLowerCase() !== data.toLowerCase()) {
+    invalid("registry snapshot result canonicality");
+  }
   if (functionName === "requireActiveAsset" && !snapshot.policy.active) {
     invalid("active registry snapshot");
   }

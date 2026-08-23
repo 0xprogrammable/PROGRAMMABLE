@@ -115,7 +115,8 @@ export const PREDICTION_MARKET_DRAFT_SCHEMA_V2 = Object.freeze({
 
 export type PredictionAssetSnapshotBindingV2 = Readonly<{
   assetKey: PredictionBytes32V2;
-  revision: number;
+  /** Canonical nonzero Solidity uint64 encoded as decimal JSON text. */
+  revision: string;
   snapshotHash: PredictionBytes32V2;
 }>;
 
@@ -191,6 +192,8 @@ const ZERO_BYTES32_V2 = `0x${"0".repeat(64)}`;
 const SOLANA_BASE58_PATTERN = /^[1-9A-HJ-NP-Za-km-z]+$/u;
 const SOLANA_BASE58_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const NONZERO_UINT64_DECIMAL_PATTERN_V2 = /^[1-9][0-9]{0,19}$/u;
+const MAX_UINT64_V2 = (1n << 64n) - 1n;
 
 function bytes32TextV2(value: string) {
   return stringToHex(value, { size: 32 }) as PredictionBytes32V2;
@@ -245,6 +248,22 @@ function isBytes32V2(candidate: unknown): candidate is PredictionBytes32V2 {
 
 function isNonzeroBytes32V2(candidate: unknown): candidate is PredictionBytes32V2 {
   return isBytes32V2(candidate) && candidate !== ZERO_BYTES32_V2;
+}
+
+function parseNonzeroUint64DecimalV2(candidate: unknown): bigint | null {
+  if (
+    typeof candidate !== "string" ||
+    !NONZERO_UINT64_DECIMAL_PATTERN_V2.test(candidate)
+  ) return null;
+  const revision = BigInt(candidate);
+  return revision <= MAX_UINT64_V2 ? revision : null;
+}
+
+/** Convert a validated serialized Registry revision only when constructing ABI arguments. */
+export function predictionAssetRevisionForAbiV2(revision: string): bigint {
+  const parsed = parseNonzeroUint64DecimalV2(revision);
+  if (parsed === null) throw new TypeError("Invalid prediction asset Registry revision");
+  return parsed;
 }
 
 function samePredictionAssetIdentityV2(
@@ -454,8 +473,7 @@ function isPredictionAssetSnapshotBindingV2(
   return isPlainRecord(candidate) &&
     hasExactKeysV2(candidate, ["assetKey", "revision", "snapshotHash"]) &&
     candidate.assetKey === onchainAssetKey &&
-    Number.isSafeInteger(candidate.revision) &&
-    Number(candidate.revision) > 0 &&
+    parseNonzeroUint64DecimalV2(candidate.revision) !== null &&
     isNonzeroBytes32V2(candidate.snapshotHash);
 }
 
@@ -665,9 +683,15 @@ export function formatPredictionAssetUsdV2(
       maximumFractionDigits: 2,
     }).format(value);
   }
+  if (value > 0 && value < 1e-18) {
+    return "<$0.000000000000000001";
+  }
+  const maximumFractionDigits = value > 0 && value < 1
+    ? Math.min(18, Math.max(6, Math.ceil(-Math.log10(value)) + 3))
+    : 2;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: value < 1 ? 6 : 2,
+    maximumFractionDigits,
   }).format(value);
 }

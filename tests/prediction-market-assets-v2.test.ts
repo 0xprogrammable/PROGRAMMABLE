@@ -12,6 +12,7 @@ import {
   isSolanaPredictionAssetLocatorV2,
   predictionAssetIdentityCandidatesV2,
   predictionAssetMarketStateV2,
+  predictionAssetRevisionForAbiV2,
   predictionAssetSelectionKeyV2,
   predictionAssetSnapshotMatchesSelectionV2,
   predictionOnchainAssetKeyV2,
@@ -47,7 +48,7 @@ function entryFor(
   return {
     ...base,
     oracleStatus,
-    snapshot: { assetKey: onchainAssetKey, revision: 1, snapshotHash: SNAPSHOT_HASH },
+    snapshot: { assetKey: onchainAssetKey, revision: "1", snapshotHash: SNAPSHOT_HASH },
     release: { id: "protocol-v2", oraclePolicyId: "btc-usd-checkpoint-v2" },
   };
 }
@@ -229,6 +230,60 @@ describe("prediction market V2 asset model", () => {
       ...registry([ready]),
       entries: [{ ...ready, snapshot: { ...ready.snapshot, assetKey: `0x${"12".repeat(32)}` } }],
     })).toBe(false);
+  });
+
+  it("keeps the full nonzero uint64 Registry revision exact as canonical decimal text", () => {
+    const selection = { mode: "preset", presetId: "btc" } as const;
+    const ready = entryFor(selection, "ready");
+    if (ready.oracleStatus !== "ready") throw new Error("expected ready entry");
+    const withRevision = (revision: unknown) => ({
+      ...registry([ready]),
+      entries: [{
+        ...ready,
+        snapshot: { ...ready.snapshot, revision },
+      }],
+    });
+
+    const aboveSafeInteger = withRevision("9007199254740993");
+    if (!isPredictionAssetReleaseRegistryV2(aboveSafeInteger)) {
+      throw new Error("expected revision above Number.MAX_SAFE_INTEGER to be valid");
+    }
+    const [aboveSafeIntegerEntry] = aboveSafeInteger.entries;
+    if (!aboveSafeIntegerEntry.snapshot) throw new Error("expected released snapshot");
+    expect(predictionAssetRevisionForAbiV2(aboveSafeIntegerEntry.snapshot.revision)).toBe(
+      9_007_199_254_740_993n,
+    );
+
+    const maxUint64 = withRevision("18446744073709551615");
+    if (!isPredictionAssetReleaseRegistryV2(maxUint64)) {
+      throw new Error("expected max uint64 revision to be valid");
+    }
+    const [maxEntry] = maxUint64.entries;
+    if (!maxEntry.snapshot) throw new Error("expected released snapshot");
+    expect(maxEntry.snapshot.revision).toBe("18446744073709551615");
+    expect(predictionAssetRevisionForAbiV2(maxEntry.snapshot.revision)).toBe(
+      18_446_744_073_709_551_615n,
+    );
+
+    for (const revision of [
+      "18446744073709551616",
+      "0",
+      "00",
+      "01",
+      "+1",
+      "-1",
+      " 1",
+      "1 ",
+      "1.0",
+      "1e3",
+      "",
+      1,
+      1n,
+    ]) {
+      expect(isPredictionAssetReleaseRegistryV2(withRevision(revision))).toBe(false);
+    }
+    expect(() => predictionAssetRevisionForAbiV2("0")).toThrow(TypeError);
+    expect(() => predictionAssetRevisionForAbiV2("18446744073709551616")).toThrow(TypeError);
   });
 
   it("rejects ambiguous release configuration", () => {

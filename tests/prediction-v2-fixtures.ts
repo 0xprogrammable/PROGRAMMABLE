@@ -1,10 +1,25 @@
-import { stringToHex, type Address } from "viem";
+import { encodeFunctionResult, stringToHex, toHex, type Address } from "viem";
 
 import {
   PREDICTION_PRESET_ASSETS_V2,
   predictionOnchainAssetKeyV2,
 } from "../lib/prediction-market-assets-v2";
-import type { PredictionV2PoolKey } from "../lib/prediction-v2/abi";
+import {
+  PREDICTION_V2_POOL_MANAGER_STATE_ABI,
+  PREDICTION_V2_CHECKPOINT_ABI,
+  PREDICTION_V2_VAULT_ABI,
+  type PredictionV2PoolKey,
+} from "../lib/prediction-v2/abi";
+import {
+  bindPredictionV2MarketState,
+  encodePredictionV2CheckpointTradingHealthCall,
+  encodePredictionV2PoolSlot0Call,
+  encodePredictionV2VaultCheckpointCall,
+  encodePredictionV2VaultNoTokenCall,
+  encodePredictionV2VaultYesTokenCall,
+  predictionV2PoolId,
+  predictionV2PoolStateSlot,
+} from "../lib/prediction-v2/accounting";
 import type {
   PredictionV2BuyQuote,
   PredictionV2SellQuote,
@@ -36,6 +51,107 @@ export const POOL_KEY: PredictionV2PoolKey = {
   tickSpacing: 10,
   hooks: ADDRESS_3,
 };
+
+export function packedPredictionV2Slot0(input: Readonly<{
+  sqrtPriceX96?: bigint;
+  tick?: number;
+  poolManagerProtocolFee?: number;
+  lpFee?: number;
+}> = {}) {
+  const sqrtPriceX96 = input.sqrtPriceX96 ?? Q96;
+  const tick = input.tick ?? 0;
+  const poolManagerProtocolFee = input.poolManagerProtocolFee ?? ((321 << 12) | 123);
+  const lpFee = input.lpFee ?? 200;
+  const packed = sqrtPriceX96 |
+    (BigInt.asUintN(24, BigInt(tick)) << 160n) |
+    (BigInt(poolManagerProtocolFee) << 184n) |
+    (BigInt(lpFee) << 208n);
+  return toHex(packed, { size: 32 });
+}
+
+export function boundPredictionV2MarketState(input: Readonly<{
+  vault?: Address;
+  poolManager?: Address;
+  poolKey?: PredictionV2PoolKey;
+  yesToken?: Address;
+  noToken?: Address;
+  checkpoint?: Address;
+  checkpointTradingHealthy?: boolean;
+  sqrtPriceX96?: bigint;
+  tick?: number;
+  poolManagerProtocolFee?: number;
+  lpFee?: number;
+  observedBlockNumber?: bigint;
+  observedBlockHash?: typeof HASH_11;
+}> = {}) {
+  const vault = input.vault ?? ADDRESS_1;
+  const poolManager = input.poolManager ?? ADDRESS_4;
+  const poolKey = input.poolKey ?? POOL_KEY;
+  const yesToken = input.yesToken ?? poolKey.currency0;
+  const noToken = input.noToken ?? poolKey.currency1;
+  const checkpoint = input.checkpoint ?? ADDRESS_5;
+  const checkpointTradingHealthy = input.checkpointTradingHealthy ?? true;
+  const sqrtPriceX96 = input.sqrtPriceX96 ?? Q96;
+  const tick = input.tick ?? 0;
+  const poolManagerProtocolFee = input.poolManagerProtocolFee ?? ((321 << 12) | 123);
+  const lpFee = input.lpFee ?? 200;
+  return bindPredictionV2MarketState({
+    chainId: 4_663,
+    vault,
+    poolManager,
+    poolKey,
+    poolId: predictionV2PoolId(poolKey),
+    poolStateSlot: predictionV2PoolStateSlot(poolKey),
+    checkpoint,
+    checkpointTradingHealthy,
+    yesToken,
+    noToken,
+    currentSqrtPriceX96: sqrtPriceX96,
+    currentTick: tick,
+    poolManagerProtocolFee,
+    lpFee,
+    observedBlockNumber: input.observedBlockNumber ?? 10_000n,
+    observedBlockHash: input.observedBlockHash ?? HASH_11,
+    checkpointCall: { to: vault, data: encodePredictionV2VaultCheckpointCall() },
+    checkpointResult: encodeFunctionResult({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName: "checkpoint",
+      result: checkpoint,
+    }),
+    checkpointTradingHealthCall: {
+      to: checkpoint,
+      data: encodePredictionV2CheckpointTradingHealthCall(),
+    },
+    checkpointTradingHealthResult: encodeFunctionResult({
+      abi: PREDICTION_V2_CHECKPOINT_ABI,
+      functionName: "isTradingHealthy",
+      result: checkpointTradingHealthy,
+    }),
+    yesTokenCall: { to: vault, data: encodePredictionV2VaultYesTokenCall() },
+    yesTokenResult: encodeFunctionResult({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName: "yesToken",
+      result: yesToken,
+    }),
+    noTokenCall: { to: vault, data: encodePredictionV2VaultNoTokenCall() },
+    noTokenResult: encodeFunctionResult({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName: "noToken",
+      result: noToken,
+    }),
+    slot0Call: { to: poolManager, data: encodePredictionV2PoolSlot0Call(poolKey) },
+    slot0Result: encodeFunctionResult({
+      abi: PREDICTION_V2_POOL_MANAGER_STATE_ABI,
+      functionName: "extsload",
+      result: packedPredictionV2Slot0({
+        sqrtPriceX96,
+        tick,
+        poolManagerProtocolFee,
+        lpFee,
+      }),
+    }),
+  });
+}
 
 export const BUY_QUOTE: PredictionV2BuyQuote = {
   requestedCollateralAtoms: 1_000_000n,

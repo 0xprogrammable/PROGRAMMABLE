@@ -2,6 +2,7 @@ import {
   decodeFunctionResult,
   encodeAbiParameters,
   encodeFunctionData,
+  encodeFunctionResult,
   isAddress,
   parseAbiParameters,
   zeroAddress,
@@ -26,7 +27,14 @@ import {
   type PredictionV2PoolKey,
   type PredictionV2RegistrySnapshot,
 } from "./abi";
-import { predictionV2SlippageFloor } from "./accounting";
+import {
+  bindPredictionV2MarketState,
+  predictionV2BuyPreview,
+  predictionV2SellPreview,
+  predictionV2SlippageFloor,
+  requirePredictionV2PriceImpactConfirmation,
+  type PredictionV2BoundMarketState,
+} from "./accounting";
 import {
   PREDICTION_V2_BOOTSTRAP_COLLATERAL_ATOMS,
   PREDICTION_V2_LP_FEE_PIPS,
@@ -59,6 +67,7 @@ export type PredictionV2PermitSignature = Readonly<{
 }>;
 
 export type PredictionV2PreparedTransaction = Readonly<{
+  chainId: 4_663;
   to: Address;
   data: Hex;
   value: 0n;
@@ -69,6 +78,7 @@ export type PredictionV2PreparedCreate = PredictionV2PreparedTransaction & Reado
   onchainAssetKey: PredictionBytes32V2;
   registryRevision: bigint;
   registrySnapshotHash: PredictionBytes32V2;
+  expectedMarketId: PredictionBytes32V2;
   registrySnapshot: PredictionV2RegistrySnapshot;
 }>;
 
@@ -80,10 +90,12 @@ type PredictionV2QuoteContextBase = Readonly<{
   sqrtPriceLimitX96: bigint;
   observedBlockNumber: bigint;
   observedBlockHash: PredictionBytes32V2;
+  marketState: PredictionV2BoundMarketState;
 }>;
 
 export type PredictionV2BuyQuoteIntent = Readonly<{
   quoter: Address;
+  poolManager: Address;
   vault: Address;
   poolKey: PredictionV2PoolKey;
   buyYes: boolean;
@@ -93,6 +105,7 @@ export type PredictionV2BuyQuoteIntent = Readonly<{
 
 export type PredictionV2SellQuoteIntent = Readonly<{
   quoter: Address;
+  poolManager: Address;
   vault: Address;
   poolKey: PredictionV2PoolKey;
   sellYes: boolean;
@@ -103,12 +116,16 @@ export type PredictionV2SellQuoteIntent = Readonly<{
 export type PredictionV2BoundBuyQuote = PredictionV2QuoteContextBase & Readonly<{
   buyYes: boolean;
   requestedCollateralAtoms: bigint;
+  quoteCall: Readonly<{ to: Address; data: Hex }>;
+  quoteResult: Hex;
   quote: PredictionV2BuyQuote;
 }>;
 
 export type PredictionV2BoundSellQuote = PredictionV2QuoteContextBase & Readonly<{
   sellYes: boolean;
   outcomeAtoms: bigint;
+  quoteCall: Readonly<{ to: Address; data: Hex }>;
+  quoteResult: Hex;
   quote: PredictionV2SellQuote;
 }>;
 
@@ -187,6 +204,7 @@ function validateQuoteBlock(input: Readonly<{
   const observedBlockHash = nonzeroBytes32(input.observedBlockHash, "quote block hash");
   if (
     input.observedBlockNumber <= 0n || input.latestConfirmedBlockNumber < input.observedBlockNumber ||
+    !Number.isInteger(input.maximumQuoteAgeBlocks) || input.maximumQuoteAgeBlocks < 0 ||
     input.maximumQuoteAgeBlocks > 10 ||
     input.latestConfirmedBlockNumber - input.observedBlockNumber > BigInt(input.maximumQuoteAgeBlocks)
   ) fail("quote freshness");
@@ -279,11 +297,18 @@ export function encodePredictionV2VaultExposureControllerCall(): Hex {
 export function decodePredictionV2VaultExposureController(
   data: Hex,
 ): Address {
-  return nonzeroAddress(decodeFunctionResult({
-    abi: PREDICTION_V2_VAULT_ABI,
-    functionName: "exposureController",
-    data,
-  }), "vault exposure controller");
+  if (!/^0x0{24}[0-9a-fA-F]{40}$/u.test(data)) {
+    fail("vault exposure controller result");
+  }
+  try {
+    return nonzeroAddress(decodeFunctionResult({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName: "exposureController",
+      data,
+    }), "vault exposure controller");
+  } catch {
+    fail("vault exposure controller result");
+  }
 }
 
 export function encodePredictionV2RequireIncreaseCapacityCall(input: Readonly<{
@@ -309,7 +334,9 @@ export function bindPredictionV2BuyQuote(input: Readonly<{
   sqrtPriceLimitX96: bigint;
   observedBlockNumber: bigint;
   observedBlockHash: PredictionBytes32V2;
-  quote: PredictionV2BuyQuote;
+  marketState: PredictionV2BoundMarketState;
+  quoteCall: Readonly<{ to: Address; data: Hex }>;
+  quoteResult: Hex;
 }>): PredictionV2BoundBuyQuote {
   if (input.chainId !== 4_663) fail("quote chain");
   const quoter = nonzeroAddress(input.quoter, "quoter");
@@ -318,12 +345,50 @@ export function bindPredictionV2BuyQuote(input: Readonly<{
   validateSqrtPriceLimit(input.sqrtPriceLimitX96);
   if (input.observedBlockNumber <= 0n) fail("quote block number");
   const observedBlockHash = nonzeroBytes32(input.observedBlockHash, "quote block hash");
-  const quote = validatePredictionV2BuyQuote(input.quote);
+  const marketState = bindPredictionV2MarketState(input.marketState);
+  if (
+    marketState.chainId !== input.chainId ||
+    marketState.vault.toLowerCase() !== vault.toLowerCase() ||
+    !samePoolKey(marketState.poolKey, poolKey) ||
+    marketState.observedBlockNumber !== input.observedBlockNumber ||
+    marketState.observedBlockHash !== observedBlockHash
+  ) fail("buy quote/market-state binding");
+  const expectedQuoteCall = encodePredictionV2BuyQuoteCall({
+    vault,
+    poolKey,
+    buyYes: input.buyYes,
+    requestedCollateralAtoms: input.requestedCollateralAtoms,
+    sqrtPriceLimitX96: input.sqrtPriceLimitX96,
+  });
+  const quoteCallTarget = nonzeroAddress(input.quoteCall.to, "buy quote call target");
+  if (
+    quoteCallTarget.toLowerCase() !== quoter.toLowerCase() ||
+    input.quoteCall.data !== expectedQuoteCall
+  ) fail("buy quote call binding");
+  let decodedQuote: unknown;
+  try {
+    decodedQuote = decodeFunctionResult({
+      abi: PREDICTION_V2_QUOTER_ABI,
+      functionName: "quoteBuy",
+      data: input.quoteResult,
+    });
+  } catch {
+    fail("buy quote result");
+  }
+  const quote = validatePredictionV2BuyQuote(decodedQuote);
+  const canonicalQuoteResult = encodeFunctionResult({
+    abi: PREDICTION_V2_QUOTER_ABI,
+    functionName: "quoteBuy",
+    result: quote,
+  });
+  if (canonicalQuoteResult.toLowerCase() !== input.quoteResult.toLowerCase()) {
+    fail("buy quote result canonicality");
+  }
   if (
     input.requestedCollateralAtoms !== quote.requestedCollateralAtoms ||
     input.requestedCollateralAtoms <= 0n
   ) fail("buy quote amount binding");
-  return {
+  const boundQuote: PredictionV2BoundBuyQuote = {
     chainId: 4_663,
     quoter,
     vault,
@@ -333,8 +398,13 @@ export function bindPredictionV2BuyQuote(input: Readonly<{
     sqrtPriceLimitX96: input.sqrtPriceLimitX96,
     observedBlockNumber: input.observedBlockNumber,
     observedBlockHash,
+    marketState,
+    quoteCall: { to: quoteCallTarget, data: input.quoteCall.data },
+    quoteResult: input.quoteResult,
     quote,
   };
+  predictionV2BuyPreview({ boundQuote, slippageBps: 1 });
+  return boundQuote;
 }
 
 export function bindPredictionV2SellQuote(input: Readonly<{
@@ -347,7 +417,9 @@ export function bindPredictionV2SellQuote(input: Readonly<{
   sqrtPriceLimitX96: bigint;
   observedBlockNumber: bigint;
   observedBlockHash: PredictionBytes32V2;
-  quote: PredictionV2SellQuote;
+  marketState: PredictionV2BoundMarketState;
+  quoteCall: Readonly<{ to: Address; data: Hex }>;
+  quoteResult: Hex;
 }>): PredictionV2BoundSellQuote {
   if (input.chainId !== 4_663) fail("quote chain");
   const quoter = nonzeroAddress(input.quoter, "quoter");
@@ -356,11 +428,49 @@ export function bindPredictionV2SellQuote(input: Readonly<{
   validateSqrtPriceLimit(input.sqrtPriceLimitX96);
   if (input.observedBlockNumber <= 0n) fail("quote block number");
   const observedBlockHash = nonzeroBytes32(input.observedBlockHash, "quote block hash");
-  const quote = validatePredictionV2SellQuote(input.quote);
+  const marketState = bindPredictionV2MarketState(input.marketState);
+  if (
+    marketState.chainId !== input.chainId ||
+    marketState.vault.toLowerCase() !== vault.toLowerCase() ||
+    !samePoolKey(marketState.poolKey, poolKey) ||
+    marketState.observedBlockNumber !== input.observedBlockNumber ||
+    marketState.observedBlockHash !== observedBlockHash
+  ) fail("sell quote/market-state binding");
+  const expectedQuoteCall = encodePredictionV2SellQuoteCall({
+    vault,
+    poolKey,
+    sellYes: input.sellYes,
+    outcomeAtoms: input.outcomeAtoms,
+    sqrtPriceLimitX96: input.sqrtPriceLimitX96,
+  });
+  const quoteCallTarget = nonzeroAddress(input.quoteCall.to, "sell quote call target");
+  if (
+    quoteCallTarget.toLowerCase() !== quoter.toLowerCase() ||
+    input.quoteCall.data !== expectedQuoteCall
+  ) fail("sell quote call binding");
+  let decodedQuote: unknown;
+  try {
+    decodedQuote = decodeFunctionResult({
+      abi: PREDICTION_V2_QUOTER_ABI,
+      functionName: "quoteSellOptimal",
+      data: input.quoteResult,
+    });
+  } catch {
+    fail("sell quote result");
+  }
+  const quote = validatePredictionV2SellQuote(decodedQuote);
+  const canonicalQuoteResult = encodeFunctionResult({
+    abi: PREDICTION_V2_QUOTER_ABI,
+    functionName: "quoteSellOptimal",
+    result: quote,
+  });
+  if (canonicalQuoteResult.toLowerCase() !== input.quoteResult.toLowerCase()) {
+    fail("sell quote result canonicality");
+  }
   if (input.outcomeAtoms !== quote.outcomeInAtoms || input.outcomeAtoms <= 0n) {
     fail("sell quote amount binding");
   }
-  return {
+  const boundQuote: PredictionV2BoundSellQuote = {
     chainId: 4_663,
     quoter,
     vault,
@@ -370,8 +480,13 @@ export function bindPredictionV2SellQuote(input: Readonly<{
     sqrtPriceLimitX96: input.sqrtPriceLimitX96,
     observedBlockNumber: input.observedBlockNumber,
     observedBlockHash,
+    marketState,
+    quoteCall: { to: quoteCallTarget, data: input.quoteCall.data },
+    quoteResult: input.quoteResult,
     quote,
   };
+  predictionV2SellPreview({ boundQuote, slippageBps: 1 });
+  return boundQuote;
 }
 
 /**
@@ -389,6 +504,9 @@ export function bindPredictionV2BuyCapacityPreflight(input: Readonly<{
   capacityResult: Hex;
 }>): PredictionV2BoundBuyCapacityPreflight {
   const boundQuote = bindPredictionV2BuyQuote(input.boundQuote);
+  if (!boundQuote.marketState.checkpointTradingHealthy) {
+    fail("checkpoint trading health");
+  }
   const observedBlockHash = nonzeroBytes32(input.observedBlockHash, "capacity block hash");
   if (
     input.observedBlockNumber !== boundQuote.observedBlockNumber ||
@@ -448,6 +566,7 @@ export function preparePredictionV2BuyWithPermit(input: Readonly<{
   slippageBps: number;
   tradeDeadline: bigint;
   permit: PredictionV2PermitSignature;
+  explicitlyConfirmedHighPriceImpact: boolean;
   nowUnixSeconds: bigint;
 }>): PredictionV2PreparedTransaction {
   validateNow(input.nowUnixSeconds);
@@ -474,12 +593,14 @@ export function preparePredictionV2BuyWithPermit(input: Readonly<{
   const intent = {
     ...input.intent,
     quoter: nonzeroAddress(input.intent.quoter, "intended quoter"),
+    poolManager: nonzeroAddress(input.intent.poolManager, "intended PoolManager"),
     vault: nonzeroAddress(input.intent.vault, "intended vault"),
     poolKey: validatePredictionV2PoolKey(input.intent.poolKey),
   };
   validateSqrtPriceLimit(intent.sqrtPriceLimitX96);
   if (
     boundQuote.quoter.toLowerCase() !== intent.quoter.toLowerCase() ||
+    boundQuote.marketState.poolManager.toLowerCase() !== intent.poolManager.toLowerCase() ||
     boundQuote.vault.toLowerCase() !== intent.vault.toLowerCase() ||
     !samePoolKey(boundQuote.poolKey, intent.poolKey) ||
     boundQuote.buyYes !== intent.buyYes ||
@@ -501,7 +622,13 @@ export function preparePredictionV2BuyWithPermit(input: Readonly<{
     input.tradeDeadline,
   );
   const minOutcomeAtoms = predictionV2SlippageFloor(quote.outcomeAtoms, input.slippageBps);
+  const preview = predictionV2BuyPreview({ boundQuote, slippageBps: input.slippageBps });
+  requirePredictionV2PriceImpactConfirmation(
+    preview.priceImpact.probabilityPointMagnitudeBps,
+    input.explicitlyConfirmedHighPriceImpact,
+  );
   return {
+    chainId: 4_663,
     to: router,
     value: 0n,
     data: encodeFunctionData({
@@ -535,20 +662,26 @@ export function preparePredictionV2SellWithPermit(input: Readonly<{
   slippageBps: number;
   tradeDeadline: bigint;
   permit: PredictionV2PermitSignature;
+  explicitlyConfirmedHighPriceImpact: boolean;
   nowUnixSeconds: bigint;
 }>): PredictionV2PreparedTransaction {
   validateNow(input.nowUnixSeconds);
   const router = nonzeroAddress(input.router, "router");
   const boundQuote = bindPredictionV2SellQuote(input.boundQuote);
+  if (!boundQuote.marketState.checkpointTradingHealthy) {
+    fail("checkpoint trading health");
+  }
   const intent = {
     ...input.intent,
     quoter: nonzeroAddress(input.intent.quoter, "intended quoter"),
+    poolManager: nonzeroAddress(input.intent.poolManager, "intended PoolManager"),
     vault: nonzeroAddress(input.intent.vault, "intended vault"),
     poolKey: validatePredictionV2PoolKey(input.intent.poolKey),
   };
   validateSqrtPriceLimit(intent.sqrtPriceLimitX96);
   if (
     boundQuote.quoter.toLowerCase() !== intent.quoter.toLowerCase() ||
+    boundQuote.marketState.poolManager.toLowerCase() !== intent.poolManager.toLowerCase() ||
     boundQuote.vault.toLowerCase() !== intent.vault.toLowerCase() ||
     !samePoolKey(boundQuote.poolKey, intent.poolKey) ||
     boundQuote.sellYes !== intent.sellYes ||
@@ -573,7 +706,13 @@ export function preparePredictionV2SellWithPermit(input: Readonly<{
     quote.netCollateralAtoms,
     input.slippageBps,
   );
+  const preview = predictionV2SellPreview({ boundQuote, slippageBps: input.slippageBps });
+  requirePredictionV2PriceImpactConfirmation(
+    preview.priceImpact.probabilityPointMagnitudeBps,
+    input.explicitlyConfirmedHighPriceImpact,
+  );
   return {
+    chainId: 4_663,
     to: router,
     value: 0n,
     data: encodeFunctionData({
@@ -609,6 +748,10 @@ export function preparePredictionV2CreateWithPermit(input: Readonly<{
   registryHashSnapshotResult: PredictionBytes32V2;
   /** Snapshot hash returned by Factory.activeMarketId for these create parameters. */
   factoryActiveSnapshotHash: PredictionBytes32V2;
+  /** Market id returned by that same Factory.activeMarketId call. */
+  factoryActiveMarketId: PredictionBytes32V2;
+  /** Registry revision returned by that same Factory.activeMarketId call. */
+  factoryActiveRegistryRevision: bigint;
   /** Snapshot hash pinned by the UI release registry. */
   releaseRegistrySnapshotHash: PredictionBytes32V2;
   observationTime: bigint;
@@ -645,10 +788,15 @@ export function preparePredictionV2CreateWithPermit(input: Readonly<{
     input.releaseRegistrySnapshotHash,
     "release Registry snapshot hash",
   );
+  const factoryActiveMarketId = nonzeroBytes32(
+    input.factoryActiveMarketId,
+    "Factory active market id",
+  );
   if (
     registryHashSnapshotResult !== computedSnapshotHash ||
     factoryActiveSnapshotHash !== computedSnapshotHash ||
-    releaseRegistrySnapshotHash !== computedSnapshotHash
+    releaseRegistrySnapshotHash !== computedSnapshotHash ||
+    input.factoryActiveRegistryRevision !== registrySnapshot.revision
   ) fail("Registry snapshot hash binding");
   if (
     input.observationTime <= input.nowUnixSeconds + MINIMUM_MARKET_DURATION_SECONDS ||
@@ -663,12 +811,14 @@ export function preparePredictionV2CreateWithPermit(input: Readonly<{
     input.nowUnixSeconds,
   );
   return {
+    chainId: 4_663,
     to: factory,
     value: 0n,
     selectionKey,
     onchainAssetKey,
     registryRevision: registrySnapshot.revision,
     registrySnapshotHash: computedSnapshotHash,
+    expectedMarketId: factoryActiveMarketId,
     registrySnapshot,
     data: encodeFunctionData({
       abi: PREDICTION_V2_FACTORY_ABI,
@@ -677,6 +827,7 @@ export function preparePredictionV2CreateWithPermit(input: Readonly<{
         identity,
         Number(input.observationTime),
         input.threshold,
+        factoryActiveMarketId,
         permit.deadline,
         permit.v,
         permit.r,
@@ -690,10 +841,17 @@ export function encodePredictionV2ChainlinkRoundProof(input: Readonly<{
   beforeRoundId: bigint;
   afterRoundId: bigint;
 }>): Hex {
+  const beforePhase = input.beforeRoundId >> 64n;
+  const afterPhase = input.afterRoundId >> 64n;
+  const beforeAggregatorRound = input.beforeRoundId & ((1n << 64n) - 1n);
+  const afterAggregatorRound = input.afterRoundId & ((1n << 64n) - 1n);
+  const samePhaseAdjacent = afterPhase === beforePhase &&
+    afterAggregatorRound === beforeAggregatorRound + 1n;
   if (
     input.beforeRoundId <= 0n || input.beforeRoundId > MAX_UINT80 ||
     input.afterRoundId <= 0n || input.afterRoundId > MAX_UINT80 ||
-    input.afterRoundId !== input.beforeRoundId + 1n
+    beforePhase === 0n || beforeAggregatorRound === 0n ||
+    !samePhaseAdjacent
   ) fail("Chainlink round proof");
   return encodeAbiParameters(
     parseAbiParameters("uint80 beforeRoundId, uint80 afterRoundId"),
@@ -709,12 +867,112 @@ export function preparePredictionV2FinalizeWithChainlinkRounds(input: Readonly<{
   const vault = nonzeroAddress(input.vault, "finalize vault");
   const proof = encodePredictionV2ChainlinkRoundProof(input);
   return {
+    chainId: 4_663,
     to: vault,
     value: 0n,
     data: encodeFunctionData({
       abi: PREDICTION_V2_VAULT_ABI,
       functionName: "finalize",
       args: [proof],
+    }),
+  };
+}
+
+function preparePredictionV2VaultNoArg(
+  vaultInput: Address,
+  functionName:
+    | "finalizeUnavailable"
+    | "requestUnprovenFallback"
+    | "finalizeUnproven"
+    | "finalizeResolved",
+): PredictionV2PreparedTransaction {
+  const vault = nonzeroAddress(vaultInput, `${functionName} vault`);
+  return {
+    chainId: 4_663,
+    to: vault,
+    value: 0n,
+    data: encodeFunctionData({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName,
+    }),
+  };
+}
+
+export function preparePredictionV2FinalizeUnavailable(
+  vault: Address,
+): PredictionV2PreparedTransaction {
+  return preparePredictionV2VaultNoArg(vault, "finalizeUnavailable");
+}
+
+export function preparePredictionV2RequestUnprovenFallback(
+  vault: Address,
+): PredictionV2PreparedTransaction {
+  return preparePredictionV2VaultNoArg(vault, "requestUnprovenFallback");
+}
+
+export function preparePredictionV2FinalizeUnproven(
+  vault: Address,
+): PredictionV2PreparedTransaction {
+  return preparePredictionV2VaultNoArg(vault, "finalizeUnproven");
+}
+
+export function preparePredictionV2FinalizeResolved(
+  vault: Address,
+): PredictionV2PreparedTransaction {
+  return preparePredictionV2VaultNoArg(vault, "finalizeResolved");
+}
+
+function validateRedemption(input: Readonly<{
+  yesAtoms: bigint;
+  noAtoms: bigint;
+  recipient: Address;
+}>) {
+  if (input.yesAtoms < 0n || input.noAtoms < 0n ||
+    (input.yesAtoms === 0n && input.noAtoms === 0n)) fail("redemption amount");
+  return nonzeroAddress(input.recipient, "redemption recipient");
+}
+
+export function preparePredictionV2Redeem(input: Readonly<{
+  vault: Address;
+  yesAtoms: bigint;
+  noAtoms: bigint;
+  recipient: Address;
+}>): PredictionV2PreparedTransaction {
+  const vault = nonzeroAddress(input.vault, "redeem vault");
+  const recipient = validateRedemption(input);
+  return {
+    chainId: 4_663,
+    to: vault,
+    value: 0n,
+    data: encodeFunctionData({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName: "redeem",
+      args: [input.yesAtoms, input.noAtoms, recipient],
+    }),
+  };
+}
+
+export function preparePredictionV2FinalizeAndRedeemWithChainlinkRounds(
+  input: Readonly<{
+    vault: Address;
+    beforeRoundId: bigint;
+    afterRoundId: bigint;
+    yesAtoms: bigint;
+    noAtoms: bigint;
+    recipient: Address;
+  }>,
+): PredictionV2PreparedTransaction {
+  const vault = nonzeroAddress(input.vault, "finalize and redeem vault");
+  const recipient = validateRedemption(input);
+  const proof = encodePredictionV2ChainlinkRoundProof(input);
+  return {
+    chainId: 4_663,
+    to: vault,
+    value: 0n,
+    data: encodeFunctionData({
+      abi: PREDICTION_V2_VAULT_ABI,
+      functionName: "finalizeAndRedeem",
+      args: [proof, input.yesAtoms, input.noAtoms, recipient],
     }),
   };
 }

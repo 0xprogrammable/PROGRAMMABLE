@@ -42,6 +42,12 @@ const feeRows = [
     treatment: PROGRAMMABLE_FEE_TABLE.standardCustom.chargeMode,
   },
   {
+    path: "Prediction Markets",
+    total: "Defined by the active protocol release",
+    split: "Fees, recipients and creator rewards are release-specific.",
+    treatment: "Separately versioned",
+  },
+  {
     path: "Public template",
     total: formatBps(PROGRAMMABLE_FEE_TABLE.publicTemplate.totalBps),
     split: `${formatBps(PROGRAMMABLE_FEE_TABLE.publicTemplate.creatorBps)} to the template creator and ${formatBps(PROGRAMMABLE_FEE_TABLE.publicTemplate.programmableBps)} to Programmable.`,
@@ -112,7 +118,13 @@ export default function EconomicsDocsPage() {
             The policy describes the split; the matching release and public
             record determine whether a particular launch, template or recipient
             can use it. Public template intake is controlled by the repository
-            instructions. This policy page is not an execution receipt.
+            instructions. Prediction Markets keeps its current economics in the{" "}
+            <DocsExternalLink
+              href={PROGRAMMABLE_PUBLIC_REPOSITORIES.predictionMarkets}
+            >
+              canonical Prediction Markets repository
+            </DocsExternalLink>
+            . This policy page is not an execution receipt.
           </p>
         </div>
       </section>

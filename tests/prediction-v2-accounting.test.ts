@@ -4,9 +4,11 @@ import {
   predictionV2BuyPreview,
   predictionV2DirectionalPoolManagerFeePips,
   predictionV2PriceImpact,
+  predictionV2PriceImpactRiskState,
   predictionV2SellPreview,
   predictionV2SlippageFloor,
   predictionV2YesProbabilityBps,
+  requirePredictionV2PriceImpactConfirmation,
 } from "../lib/prediction-v2/accounting";
 import {
   PREDICTION_V2_MAX_SQRT_PRICE_X96,
@@ -14,10 +16,48 @@ import {
   validatePredictionV2SellQuote,
 } from "../lib/prediction-v2/codec";
 import {
+  ADDRESS_1,
+  ADDRESS_2,
   BUY_QUOTE,
+  POOL_KEY,
   Q96,
   SELL_QUOTE,
+  boundPredictionV2MarketState,
 } from "./prediction-v2-fixtures";
+
+function boundBuy(
+  quote = BUY_QUOTE,
+  buyYes = true,
+  marketState = boundPredictionV2MarketState(),
+) {
+  return {
+    chainId: 4_663 as const,
+    vault: ADDRESS_1,
+    poolKey: POOL_KEY,
+    buyYes,
+    observedBlockNumber: marketState.observedBlockNumber,
+    observedBlockHash: marketState.observedBlockHash,
+    marketState,
+    quote,
+  } as const;
+}
+
+function boundSell(
+  quote = SELL_QUOTE,
+  sellYes = true,
+  marketState = boundPredictionV2MarketState(),
+) {
+  return {
+    chainId: 4_663 as const,
+    vault: ADDRESS_1,
+    poolKey: POOL_KEY,
+    sellYes,
+    observedBlockNumber: marketState.observedBlockNumber,
+    observedBlockHash: marketState.observedBlockHash,
+    marketState,
+    quote,
+  } as const;
+}
 
 describe("Protocol V2 fee-aware payout and price-impact preview", () => {
   it("maps the live v4 price to YES/NO probabilities and both impact units", () => {
@@ -55,13 +95,8 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
 
   it("shows maximum and actual fee-inclusive payment, receive bounds, payout and signed profit", () => {
     const preview = predictionV2BuyPreview({
-      quote: BUY_QUOTE,
+      boundQuote: boundBuy(),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: true,
-      outcome: "YES",
-      liquidityEvidence: "factory-backstop-only",
     });
     expect(preview).toMatchObject({
       requestedCollateralAtoms: 1_000_000n,
@@ -78,10 +113,12 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
       maximumLossAtoms: 1_001_000n,
       neutralPayoutAtoms: 950_000n,
       lpFeePips: 200,
-      poolManagerProtocolFeePips: 123,
+      poolManagerProtocolFeePips: 321,
       liquidity: {
         depth: "thin",
         riskState: "explicit-confirmation-required",
+        priceImpactRiskState: "explicit-confirmation-required",
+        partialFill: true,
         warning: { code: "backstop-only" },
       },
     });
@@ -106,13 +143,8 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
       },
     } as const;
     const preview = predictionV2BuyPreview({
-      quote: expensiveQuote,
+      boundQuote: boundBuy(expensiveQuote),
       slippageBps: 1_000,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: true,
-      outcome: "YES",
-      liquidityEvidence: "verified-live-depth",
     });
     expect(preview.minimumOutcomeAtoms).toBe(90_000n);
     expect(preview.minimumNetProfitAtoms).toBe(-101_000n);
@@ -133,22 +165,19 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
         ...BUY_QUOTE.swap,
         actualInput: 10_000n,
         amountOut: 10_000n,
-        sqrtPriceX96After: Q96,
+        sqrtPriceX96After: Q96 + 1n,
       },
     } as const;
     const preview = predictionV2BuyPreview({
-      quote: smallQuote,
+      boundQuote: boundBuy(smallQuote),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: true,
-      outcome: "YES",
-      liquidityEvidence: "factory-backstop-only",
     });
     expect(preview.priceImpact.probabilityPointMagnitudeBps).toBe(0);
     expect(preview.liquidity).toEqual({
       depth: "thin",
       riskState: "warning",
+      priceImpactRiskState: "normal",
+      partialFill: false,
       warning: {
         code: "backstop-only",
         message: "Only the 2 USDG protocol backstop is currently evidenced for this market.",
@@ -156,7 +185,22 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
     });
   });
 
-  it("warns from 2pp and requires explicit confirmation from 5pp", () => {
+  it("classifies exact 199/200/499/500 bps boundaries and requires confirmation at 500", () => {
+    expect(predictionV2PriceImpactRiskState(199)).toBe("normal");
+    expect(predictionV2PriceImpactRiskState(200)).toBe("warning");
+    expect(predictionV2PriceImpactRiskState(499)).toBe("warning");
+    expect(predictionV2PriceImpactRiskState(500)).toBe("explicit-confirmation-required");
+    expect(() => requirePredictionV2PriceImpactConfirmation(499, false)).not.toThrow();
+    expect(() => requirePredictionV2PriceImpactConfirmation(500, false))
+      .toThrow("explicit price-impact confirmation");
+    expect(() => requirePredictionV2PriceImpactConfirmation(
+      500,
+      "yes" as unknown as boolean,
+    )).toThrow("explicit price-impact confirmation");
+    expect(() => requirePredictionV2PriceImpactConfirmation(500, true)).not.toThrow();
+  });
+
+  it("warns from 2pp and reports explicit confirmation from 5pp", () => {
     const fullQuote = {
       requestedCollateralAtoms: 100_000n,
       maximumPaymentAtoms: 100_100n,
@@ -173,61 +217,50 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
       },
     } as const;
     const warning = predictionV2BuyPreview({
-      quote: {
+      boundQuote: boundBuy({
         ...fullQuote,
         swap: { ...fullQuote.swap, sqrtPriceX96After: Q96 * 105n / 100n },
-      },
+      }),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: true,
-      outcome: "YES",
-      liquidityEvidence: "verified-live-depth",
     });
     expect(warning.priceImpact.probabilityPointMagnitudeBps).toBeGreaterThanOrEqual(200);
     expect(warning.priceImpact.probabilityPointMagnitudeBps).toBeLessThan(500);
     expect(warning.liquidity).toEqual({
-      depth: "low",
+      depth: "thin",
       riskState: "warning",
+      priceImpactRiskState: "warning",
+      partialFill: false,
       warning: {
-        code: "price-impact-warning",
-        message: "This trade moves the quoted probability by at least 2 percentage points.",
+        code: "backstop-only",
+        message: "Only the 2 USDG protocol backstop is currently evidenced for this market.",
       },
     });
 
     const explicit = predictionV2BuyPreview({
-      quote: {
+      boundQuote: boundBuy({
         ...fullQuote,
         swap: { ...fullQuote.swap, sqrtPriceX96After: Q96 * 111n / 100n },
-      },
+      }),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: true,
-      outcome: "YES",
-      liquidityEvidence: "verified-live-depth",
     });
     expect(explicit.priceImpact.probabilityPointMagnitudeBps).toBeGreaterThanOrEqual(500);
     expect(explicit.liquidity).toEqual({
       depth: "thin",
       riskState: "explicit-confirmation-required",
+      priceImpactRiskState: "explicit-confirmation-required",
+      partialFill: false,
       warning: {
-        code: "large-price-impact",
-        message: "This trade moves the quoted probability by at least 5 percentage points.",
+        code: "backstop-only",
+        message: "Only the 2 USDG protocol backstop is currently evidenced for this market.",
       },
     });
 
     const backstopExplicit = predictionV2BuyPreview({
-      quote: {
+      boundQuote: boundBuy({
         ...fullQuote,
         swap: { ...fullQuote.swap, sqrtPriceX96After: Q96 * 111n / 100n },
-      },
+      }),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: true,
-      outcome: "YES",
-      liquidityEvidence: "factory-backstop-only",
     });
     expect(backstopExplicit.liquidity).toMatchObject({
       depth: "thin",
@@ -238,13 +271,8 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
 
   it("uses net sell proceeds for the minimum and avoids a misleading refund-adjusted average", () => {
     const preview = predictionV2SellPreview({
-      quote: SELL_QUOTE,
+      boundQuote: boundSell(),
       slippageBps: 100,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: false,
-      outcome: "YES",
-      liquidityEvidence: "verified-live-depth",
     });
     expect(preview).toMatchObject({
       grossProceedsAtoms: 520_000n,
@@ -252,7 +280,7 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
       netProceedsAtoms: 519_480n,
       minimumNetProceedsAtoms: 514_285n,
       averageNetCashExitPriceBps: 5_195,
-      poolManagerProtocolFeePips: 321,
+      poolManagerProtocolFeePips: 123,
     });
 
     const quoteWithSoldRefund = validatePredictionV2SellQuote({
@@ -270,13 +298,8 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
       },
     });
     const soldRefundPreview = predictionV2SellPreview({
-      quote: quoteWithSoldRefund,
+      boundQuote: boundSell(quoteWithSoldRefund),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: false,
-      outcome: "YES",
-      liquidityEvidence: "verified-live-depth",
     });
     expect(soldRefundPreview.soldOutcomeRefundAtoms).toBe(10_000n);
     expect(soldRefundPreview.averageNetCashExitPriceBps).toBe(5_550);
@@ -296,15 +319,70 @@ describe("Protocol V2 fee-aware payout and price-impact preview", () => {
       },
     });
     const complementRefundPreview = predictionV2SellPreview({
-      quote: quoteWithComplementRefund,
+      boundQuote: boundSell(quoteWithComplementRefund),
       slippageBps: 50,
-      currentSqrtPriceX96: Q96,
-      yesIsCurrency0: true,
-      zeroForOne: false,
-      outcome: "YES",
-      liquidityEvidence: "verified-live-depth",
     });
     expect(complementRefundPreview.complementOutcomeRefundAtoms).toBe(10_000n);
     expect(complementRefundPreview.averageNetCashExitPriceBps).toBeNull();
+  });
+
+  it("derives side and direction from the bound pool and cannot accept unverified depth", () => {
+    const noBuyQuote = {
+      ...BUY_QUOTE,
+      swap: {
+        ...BUY_QUOTE.swap,
+        sqrtPriceX96After: Q96 / 2n,
+        tickAfter: -13_864,
+      },
+    } as const;
+    const noBuy = predictionV2BuyPreview({
+      boundQuote: boundBuy(noBuyQuote, false),
+      slippageBps: 50,
+    });
+    expect(noBuy.poolManagerProtocolFeePips).toBe(123);
+
+    const marketState = boundPredictionV2MarketState();
+    expect(() => predictionV2BuyPreview({
+      boundQuote: boundBuy(BUY_QUOTE, true, {
+        ...marketState,
+        yesToken: ADDRESS_2,
+        noToken: ADDRESS_1,
+      }),
+      slippageBps: 50,
+    })).toThrow("decoded market-state binding");
+    expect(() => predictionV2SellPreview({
+      boundQuote: boundSell(SELL_QUOTE, true, {
+        ...marketState,
+        currentSqrtPriceX96: Q96 * 2n,
+      }),
+      slippageBps: 50,
+    })).toThrow("decoded market-state binding");
+
+    expect(() => predictionV2BuyPreview({
+      boundQuote: boundBuy({
+        ...BUY_QUOTE,
+        swap: { ...BUY_QUOTE.swap, sqrtPriceX96After: Q96 / 2n },
+      }),
+      slippageBps: 50,
+    })).toThrow("buy selected-probability direction");
+    expect(() => predictionV2SellPreview({
+      boundQuote: boundSell({
+        ...SELL_QUOTE,
+        swap: { ...SELL_QUOTE.swap, sqrtPriceX96After: Q96 * 2n },
+      }),
+      slippageBps: 50,
+    })).toThrow("sell selected-probability direction");
+
+    const spoofedInput = {
+      boundQuote: boundBuy(),
+      slippageBps: 50,
+      liquidityEvidence: "verified-live-depth",
+    } as Parameters<typeof predictionV2BuyPreview>[0] & {
+      liquidityEvidence: "verified-live-depth";
+    };
+    expect(predictionV2BuyPreview(spoofedInput).liquidity).toMatchObject({
+      depth: "thin",
+      warning: { code: "backstop-only" },
+    });
   });
 });

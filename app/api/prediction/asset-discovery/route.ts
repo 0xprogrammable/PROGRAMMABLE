@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { readPredictionAssetDiscoveryV2 } from
-  "@/lib/market-data/prediction-asset-discovery-v2.server";
 import { isPredictionSourceNetworkIdV2 } from
   "@/lib/prediction-market-assets-v2";
+import { getPredictionV2ReleaseBinding } from
+  "@/lib/prediction-v2/release-binding.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,7 +29,24 @@ function invalidQuery() {
   );
 }
 
+function unavailableRelease() {
+  return NextResponse.json(
+    { error: "Not found" },
+    {
+      status: 404,
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    },
+  );
+}
+
 export async function GET(request: NextRequest) {
+  if (getPredictionV2ReleaseBinding().status === "disabled") {
+    return unavailableRelease();
+  }
+
   const search = request.nextUrl.searchParams;
   if (
     [...search.keys()].some((key) => !QUERY_PARAMETERS.has(key)) ||
@@ -49,6 +66,9 @@ export async function GET(request: NextRequest) {
     return invalidQuery();
   }
 
+  const { readPredictionAssetDiscoveryV2 } = await import(
+    "@/lib/market-data/prediction-asset-discovery-v2.server"
+  );
   const result = await readPredictionAssetDiscoveryV2(
     { mode: "custom", sourceNetwork: network, assetLocator: locator },
     { signal: request.signal },

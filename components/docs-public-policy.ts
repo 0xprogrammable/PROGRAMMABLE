@@ -16,6 +16,8 @@ export type DocsProductState = Readonly<{
 export const PROGRAMMABLE_PUBLIC_REPOSITORIES = {
   developers: "https://github.com/0xprogrammable/developers",
   hookbuilder: "https://github.com/0xprogrammable/hookbuilder",
+  predictionMarkets:
+    "https://github.com/0xprogrammable/programmable-prediction-markets",
   product: "https://github.com/0xprogrammable/programmable",
   productIssues: "https://github.com/0xprogrammable/programmable/issues",
   submitLaunch: "https://github.com/0xprogrammable/submit-launch",
