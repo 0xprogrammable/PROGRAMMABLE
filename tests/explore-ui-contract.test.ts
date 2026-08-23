@@ -59,6 +59,10 @@ describe("Explore UI contract", () => {
       join(root, "components/prediction-market-directory.tsx"),
       "utf8",
     );
+    const exploreStyles = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
 
     expect(navigation).not.toContain('{ href: "/markets", label: "Markets" }');
     expect(navigation).toContain('pathname.startsWith("/markets/")');
@@ -69,6 +73,9 @@ describe("Explore UI contract", () => {
     expect(switchSource).toContain('aria-label="Explore categories"');
     expect(predictionSource).toContain('<h1>Explore</h1>');
     expect(predictionSource).toContain('<ExploreModeSwitch active="prediction" />');
+    expect(exploreStyles).toMatch(
+      /@media \(min-width: 1101px\)[\s\S]*?\.runnersIntro\s*\{[^}]*pointer-events:\s*none;[^}]*\}[\s\S]*?\.runnersIntro :global\(\.token-section-heading\)\s*\{[^}]*pointer-events:\s*auto;/s,
+    );
   });
 
   it("keeps sort, socials and model choices in one persistent disclosure", () => {
