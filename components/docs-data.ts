@@ -20,7 +20,7 @@ export type DocsNavigationGroup = {
 const tokenModelPaths = [
   "/docs/models/classic",
   "/docs/models/custom",
-  "/docs/models/prediction-markets",
+  "/docs/tokens/prediction-markets",
   "/docs/models/stock-paired",
 ] as const;
 
@@ -83,7 +83,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       { depth: 1, href: "/docs/models/custom", label: "Custom hooks" },
       {
         depth: 1,
-        href: "/docs/models/prediction-markets",
+        href: "/docs/tokens/prediction-markets",
         label: "Prediction Markets",
       },
       {
@@ -235,7 +235,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     title: "Prediction Markets",
     description:
       "Open the Uniswap v4 outcome-market model and its current release source.",
-    href: "/docs/models/prediction-markets",
+    href: "/docs/tokens/prediction-markets",
     keywords: ["prediction", "outcome", "YES NO", "Uniswap v4"],
   },
   {

@@ -14,6 +14,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/models/prediction-markets",
+      "destination": "/docs/tokens/prediction-markets",
+      "permanent": true
+    },
+    {
       "source": "/sites/site_V93gQ",
       "destination": "/docs",
       "permanent": true

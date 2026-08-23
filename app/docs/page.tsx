@@ -63,7 +63,7 @@ const launchTypes = [
   {
     description:
       "Create and trade onchain outcome markets through a separately versioned Uniswap v4 release.",
-    href: "/docs/models/prediction-markets",
+    href: "/docs/tokens/prediction-markets",
     label: "Prediction Markets",
   },
   {

@@ -39,7 +39,7 @@ const launchTypes = [
   {
     feePath:
       "Current fees, recipients and creator rewards are defined by the active release in the canonical Prediction Markets repository.",
-    href: "/docs/models/prediction-markets",
+    href: "/docs/tokens/prediction-markets",
     label: "Prediction Markets",
     market:
       "Onchain outcome markets powered by a separately versioned Uniswap v4 release.",
