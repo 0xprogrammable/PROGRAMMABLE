@@ -15,6 +15,18 @@ import {
 export type ProfileDataStatus =
   "unavailable" | "not-deployed" | "loading" | "ready" | "error";
 
+export type ProfileInitialBuy = Readonly<{
+  ethAmountWei: string;
+  tokenAmountRaw: string;
+  tokenDecimals: number;
+  custodyAddress: Address | null;
+  custodyMode: "unlocked" | "fixed-lock" | "linear" | "cliff-linear";
+  durationDays: number;
+  cliffDays: number;
+  cliffAt: string;
+  releaseAt: string;
+}>;
+
 export type ProfileToken = {
   address: Address;
   name: string;
@@ -33,6 +45,7 @@ export type ProfileToken = {
     | "stock-paired"
     | "custom-graph";
   launchProvenance?: "canonical-router";
+  initialBuy?: ProfileInitialBuy;
 };
 
 export type ProfilePosition = {
@@ -426,6 +439,138 @@ function tokenHref(address: Address) {
   return `/token/${address}`;
 }
 
+function parseInitialBuy(
+  token: Record<string, unknown>,
+  launchModel: ProfileToken["launchModel"],
+  launchedAt: string,
+): ProfileInitialBuy | undefined {
+  const rawValues = [
+    token.initialBuyEthAmountWei,
+    token.initialBuyTokenAmountRaw,
+    token.initialBuyCustody,
+    token.tokenDecimals,
+  ];
+  if (rawValues.every((value) => value === undefined || value === null)) {
+    return undefined;
+  }
+  if (rawValues.some((value) => value === undefined || value === null)) {
+    throw new ProfileResponseError("Profile token contains incomplete initial buy data");
+  }
+  if (launchModel !== "classic") {
+    throw new ProfileResponseError("Initial buy data is not bound to a Classic launch");
+  }
+  const ethAmountWei = readIntegerString(
+    token,
+    "initialBuyEthAmountWei",
+    "initial buy ETH amount",
+  );
+  const tokenAmountRaw = readIntegerString(
+    token,
+    "initialBuyTokenAmountRaw",
+    "initial buy token amount",
+  );
+  const tokenDecimals = readSafeInteger(
+    token,
+    "tokenDecimals",
+    "initial buy token decimals",
+  );
+  if (
+    BigInt(ethAmountWei) === 0n ||
+    BigInt(tokenAmountRaw) === 0n ||
+    tokenDecimals > 255
+  ) {
+    throw new ProfileResponseError("Profile token contains invalid initial buy amounts");
+  }
+  const custody = asRecord(token.initialBuyCustody, "initial buy custody");
+  const custodyKeys = Object.keys(custody).sort();
+  const expectedCustodyKeys = [
+    "cliffDays",
+    "cliffTimestamp",
+    "configurationHash",
+    "custodyAddress",
+    "durationDays",
+    "mode",
+    "releaseTimestamp",
+  ].sort();
+  if (
+    custodyKeys.length !== expectedCustodyKeys.length ||
+    custodyKeys.some((key, index) => key !== expectedCustodyKeys[index])
+  ) {
+    throw new ProfileResponseError("Invalid initial buy custody shape");
+  }
+  const custodyMode = custody.mode;
+  if (
+    custodyMode !== "unlocked" &&
+    custodyMode !== "fixed-lock" &&
+    custodyMode !== "linear" &&
+    custodyMode !== "cliff-linear"
+  ) {
+    throw new ProfileResponseError("Invalid initial buy custody mode");
+  }
+  const durationDays = readSafeInteger(
+    custody,
+    "durationDays",
+    "initial buy custody duration",
+  );
+  const cliffDays = readSafeInteger(
+    custody,
+    "cliffDays",
+    "initial buy custody cliff",
+  );
+  readHex(
+    custody,
+    "configurationHash",
+    "initial buy custody configuration hash",
+    32,
+  );
+  const custodyAddress = custody.custodyAddress === null
+    ? null
+    : readAddress(custody, "custodyAddress", "initial buy custody address");
+  const validSchedule = custodyMode === "unlocked"
+    ? durationDays === 0 && cliffDays === 0 && custodyAddress === null
+    : custodyMode === "fixed-lock" || custodyMode === "linear"
+      ? durationDays >= 1 && durationDays <= 3_650 && cliffDays === 0 &&
+        custodyAddress !== null
+      : durationDays >= 2 && durationDays <= 3_650 && cliffDays >= 1 &&
+        cliffDays < durationDays && custodyAddress !== null;
+  if (!validSchedule) {
+    throw new ProfileResponseError("Invalid initial buy custody schedule");
+  }
+  const cliffAt = readTimestamp(
+    custody,
+    "cliffTimestamp",
+    "initial buy custody cliff time",
+  );
+  const releaseAt = readTimestamp(
+    custody,
+    "releaseTimestamp",
+    "initial buy custody release time",
+  );
+  const launchedAtMs = Date.parse(launchedAt);
+  const expectedCliffDays = custodyMode === "fixed-lock"
+    ? durationDays
+    : custodyMode === "cliff-linear"
+      ? cliffDays
+      : 0;
+  if (
+    Date.parse(cliffAt) !== launchedAtMs + expectedCliffDays * 86_400_000 ||
+    Date.parse(releaseAt) !== launchedAtMs + durationDays * 86_400_000
+  ) {
+    throw new ProfileResponseError("Initial buy custody dates do not match the launch");
+  }
+  return Object.freeze({
+    ethAmountWei,
+    tokenAmountRaw,
+    tokenDecimals,
+    custodyAddress,
+    custodyMode,
+    durationDays,
+    cliffDays,
+    cliffAt,
+    releaseAt,
+  });
+}
+
 function formatActivityDate(timestamp: string) {
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
@@ -483,6 +628,8 @@ function parseToken(
     token.launchModel === "custom-graph"
       ? token.launchModel
       : undefined;
+  const launchedAt = readTimestamp(token, "launchedAt", "launch timestamp");
+  const initialBuy = parseInitialBuy(token, launchModel, launchedAt);
   const launchStampProvenance = readLaunchStampProvenance(token, {
     tokenAddress: address,
     hookAddress,
@@ -549,7 +696,7 @@ function parseToken(
     address,
     name: readString(token, "name", "token name"),
     symbol: readString(token, "symbol", "token symbol"),
-    launchedAt: readTimestamp(token, "launchedAt", "launch timestamp"),
+    launchedAt,
     href: tokenHref(address),
     ...(imageUrl ? { imageUrl } : {}),
     ...(marketCapEthWei ? { marketCapEthWei } : {}),
@@ -557,6 +704,7 @@ function parseToken(
     ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
     ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
     ...(launchModel ? { launchModel } : {}),
+    ...(initialBuy ? { initialBuy } : {}),
     poolId,
     hookAddress,
     creatorAddress,
@@ -859,6 +1007,7 @@ export function mapCreatorProfileResponse(
       quoteAssetSymbol,
       launchModel,
       launchStampProvenance,
+      initialBuy,
     }) => ({
       address,
       name,
@@ -871,6 +1020,7 @@ export function mapCreatorProfileResponse(
       ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
       ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
       ...(launchModel ? { launchModel } : {}),
+      ...(initialBuy ? { initialBuy } : {}),
       ...(launchStampProvenance
         ? { launchProvenance: "canonical-router" as const }
         : {}),

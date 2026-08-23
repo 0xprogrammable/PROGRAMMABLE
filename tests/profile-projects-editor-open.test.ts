@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import * as profileProjects from "../components/profile-projects";
 import type {
+  CreatorProjectInitialBuyV1,
   CreatorProjectMarketCapV1,
   CreatorProjectSummaryV1,
 } from "../components/profile-projects";
@@ -89,6 +90,40 @@ describe("My projects editor opening", () => {
     expect(merge([project], [{ ...project, article }])).toEqual([
       { ...project, article },
     ]);
+  });
+
+  it("shows the initial buy amount and immutable custody schedule", () => {
+    const format = (profileProjects as unknown as {
+      formatCreatorProjectInitialBuyV1(
+        initialBuy: CreatorProjectInitialBuyV1,
+        symbol: string | null,
+        now: number,
+      ): Readonly<{ amount: string; status: string; state: string }>;
+    }).formatCreatorProjectInitialBuyV1;
+    const lock = {
+      tokenAddress: project.tokenAddress,
+      ethAmountWei: "50000000000000000",
+      tokenAmountRaw: "34883942100954326694409764",
+      tokenDecimals: 18,
+      custodyAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const,
+      custodyMode: "fixed-lock" as const,
+      durationDays: 360,
+      cliffDays: 0,
+      cliffAt: "2027-08-18T08:32:59.000Z",
+      releaseAt: "2027-08-18T08:32:59.000Z",
+    };
+
+    expect(format(lock, "DIGITALCAT", Date.parse("2026-08-23T12:00:00Z")))
+      .toEqual({
+        amount: "Initial buy 0.05 ETH → 34.88M $DIGITALCAT",
+        status: "Locked until Aug 18, 2027",
+        state: "locked",
+      });
+    expect(format(
+      { ...lock, custodyAddress: null, custodyMode: "unlocked", durationDays: 0 },
+      "DIGITALCAT",
+      Date.parse("2026-08-23T12:00:00Z"),
+    )).toMatchObject({ status: "Unlocked at launch", state: "unlocked" });
   });
 
   it("refreshes the Privy identity before reading the bound access token", async () => {

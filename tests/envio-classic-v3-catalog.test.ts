@@ -74,6 +74,8 @@ function launchFixture(index: number, overrides: Record<string, unknown> = {}) {
   const blockHash = hex32(10_000 + index);
   const transactionHash = hex32(20_000 + index);
   const occurrenceId = `1:${blockHash}:${transactionHash}:${index}`;
+  const custodyOccurrenceId =
+    `1:${blockHash}:${transactionHash}:${5_000 + index}`;
   return {
     id: `1:classic-v3:${launchHash}`,
     chainId: 1,
@@ -100,10 +102,13 @@ function launchFixture(index: number, overrides: Record<string, unknown> = {}) {
     tickLower: -200,
     tickUpper: 200,
     lpFeePips: 10_000,
+    initialBuyQuoteAmount: "50000000000000000",
+    initialBuyTokenAmount: "34883942100954326694409764",
+    initialBuyEthAmount: null,
     launchOccurrenceId: occurrenceId,
     liquidityOccurrenceId: `${occurrenceId}:liquidity`,
     initialBuyOccurrenceId: `${occurrenceId}:buy`,
-    custodyOccurrenceId: `${occurrenceId}:custody`,
+    custodyOccurrenceId,
     coordinatorOccurrenceId: null,
     hasLaunchEvent: true,
     hasLiquidityEvent: true,
@@ -117,6 +122,43 @@ function launchFixture(index: number, overrides: Record<string, unknown> = {}) {
     isComplete: true,
     updatedBlock: String(ANCHOR_BLOCK),
     ...overrides,
+  };
+}
+
+function custodyEventFixture(launch: ReturnType<typeof launchFixture>) {
+  const classicV3Launcher = release.sources.find(
+    (source) => source.contractName === "ClassicV3Launcher",
+  )!.address;
+  const [, blockHash, transactionHash, logIndex] = String(
+    launch.custodyOccurrenceId,
+  ).split(":");
+  return {
+    id: launch.custodyOccurrenceId,
+    downstreamLogicalId: null,
+    receiptLogOrdinal: null,
+    chainId: 1,
+    blockNumber: String(EVENT_BLOCK),
+    blockHash,
+    blockTimestamp: "1785480000",
+    transactionHash,
+    transactionIndex: "1",
+    blockGlobalLogIndex: logIndex,
+    sourceAddress: classicV3Launcher,
+    contractName: "ClassicV3Launcher",
+    eventName: "MemeCreatorInitialBuyCustodyV2",
+    model: "classic",
+    releaseVersion: "classic-v3",
+    decodedPayload: JSON.stringify({
+      cliffDays: "0",
+      configurationHash: hex32(80_000 + Number(logIndex)),
+      custody: address(8_000 + Number(logIndex)),
+      deployer: launch.creator,
+      durationDays: "30",
+      launchHash: launch.launchHash,
+      mode: "1",
+      token: launch.token,
+    }),
+    payloadHash: hex32(90_000 + Number(logIndex)),
   };
 }
 
@@ -190,6 +232,9 @@ function officialLaunchFixture() {
     tickLower: -887200,
     tickUpper: 204200,
     lpFeePips: 0,
+    initialBuyQuoteAmount: "2000000000000000",
+    initialBuyTokenAmount: "1458415534058453948045650",
+    initialBuyEthAmount: null,
     launchOccurrenceId: OFFICIAL_OCCURRENCE,
     liquidityOccurrenceId: `${OFFICIAL_OCCURRENCE}:liquidity`,
     initialBuyOccurrenceId: `${OFFICIAL_OCCURRENCE}:buy`,
@@ -255,8 +300,8 @@ function json(value: unknown, status = 200) {
 function harness(input: {
   launches?: ReturnType<typeof launchFixture>[];
   mutateEvents?: (
-    events: ReturnType<typeof eventFixture>[],
-  ) => ReturnType<typeof eventFixture>[];
+    events: Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>,
+  ) => Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>;
 } = {}) {
   const launches = [...(input.launches ?? [launchFixture(1)])]
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
@@ -279,8 +324,14 @@ function harness(input: {
     }
     if (request.query.includes("ProgrammableClassicV3LaunchEvents")) {
       const ids = request.variables.ids as string[];
-      let events = launches.filter((row) => ids.includes(String(row.launchOccurrenceId)))
-        .map(eventFixture);
+      let events = launches.flatMap((row) => [
+        ...(ids.includes(String(row.launchOccurrenceId))
+          ? [eventFixture(row)]
+          : []),
+        ...(ids.includes(String(row.custodyOccurrenceId))
+          ? [custodyEventFixture(row)]
+          : []),
+      ]);
       events = input.mutateEvents?.(events) ?? events;
       return json({ data: { ChainEvent: events } });
     }
@@ -381,6 +432,15 @@ describe("Envio Classic V3 public catalog", () => {
         entry.sellHookFeeBps ?? 0,
       )
     )).toBe(true);
+    expect(classicV3Entries[0]).toMatchObject({
+      initialBuyEthAmountWei: "50000000000000000",
+      initialBuyTokenAmountRaw: "34883942100954326694409764",
+      initialBuyCustody: {
+        mode: "fixed-lock",
+        durationDays: 30,
+        cliffDays: 0,
+      },
+    });
     expect(catalog.entries.find((entry) =>
       entry.exploreKind === "token" &&
       entry.tokenAddress.toLowerCase() === PROGRAMMABLE_MAIN_ASSET_ADDRESS
