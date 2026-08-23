@@ -23,7 +23,8 @@ describe("prediction portfolio position view model", () => {
       { outcome: "YES", shares: "0.824" },
       { outcome: "NO", shares: "0.375" },
     ]);
-    expect(view.payoutLabel).toBe("Not settled");
+    expect(view.metricLabel).toBe("Potential payout");
+    expect(view.payoutLabel).toBe("0.824 USDG");
     expect(view.actionLabel).toBe("Trade");
   });
 
@@ -33,7 +34,8 @@ describe("prediction portfolio position view model", () => {
     }));
 
     expect(view.statusLabel).toBe("Awaiting result");
-    expect(view.payoutLabel).toBe("Awaiting result");
+    expect(view.metricLabel).toBe("Potential payout");
+    expect(view.payoutLabel).toBe("0.824 USDG");
     expect(view.actionLabel).toBe("View market");
     expect(view.actionTone).toBe("quiet");
   });
@@ -47,7 +49,8 @@ describe("prediction portfolio position view model", () => {
     }));
 
     expect(view.statusLabel).toBe("Won");
-    expect(view.payoutLabel).toBe("Redeemable");
+    expect(view.metricLabel).toBe("Final payout");
+    expect(view.payoutLabel).toBe("1.25 USDG");
     expect(view.payoutDetail).toContain("1 USDG per share");
     expect(view.actionLabel).toBe("Redeem payout");
     expect(view.actionTone).toBe("primary");
@@ -62,7 +65,7 @@ describe("prediction portfolio position view model", () => {
     }));
 
     expect(view.statusLabel).toBe("Lost");
-    expect(view.payoutLabel).toBe("Settled");
+    expect(view.payoutLabel).toBe("0 USDG");
     expect(view.actionLabel).toBe("View market");
     expect(view.payoutDetail).toContain("settles at zero");
     expect(`${view.payoutLabel} ${view.payoutDetail}`).not.toMatch(/profit|P&L/iu);
@@ -77,7 +80,7 @@ describe("prediction portfolio position view model", () => {
     }));
 
     expect(view.statusLabel).toBe("Neutral");
-    expect(view.payoutLabel).toBe("Redeemable");
+    expect(view.payoutLabel).toBe("0.375 USDG");
     expect(view.payoutDetail).toContain("0.50 USDG per share");
     expect(view.actionLabel).toBe("Redeem payout");
   });
@@ -96,7 +99,7 @@ describe("prediction portfolio position view model", () => {
 
     expect(view).toMatchObject({
       actionLabel: "Redeem payout",
-      payoutLabel: "Redeemable",
+      payoutLabel: "1.25 USDG",
       statusLabel: "Won",
     });
   });

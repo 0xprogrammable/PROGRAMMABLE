@@ -23,9 +23,19 @@ import styles from "@/components/prediction-market-experience.module.css";
 import { useWallet } from "@/components/wallet-provider";
 import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain";
 import {
+  PredictionPortfolioReadError,
+  createPredictionPortfolioRequest,
+  isPredictionPortfolioRequestCurrent,
+  readPredictionMarketPortfolio,
+  type PredictionMarketPortfolio as PredictionMarketPortfolioData,
+  type PredictionPortfolioCreatedMarket,
+  type PredictionPortfolioHistoryEntry,
+  type PredictionPortfolioRequest,
+} from "@/lib/prediction-market-portfolio";
+import {
   formatPredictionMarketObservation,
   formatPredictionOutcome,
-  readPredictionMarketDirectory,
+  formatPredictionUsdg,
   type PredictionMarketView,
   type PredictionOutcome,
 } from "@/lib/prediction-market-trading";
@@ -60,6 +70,7 @@ export type PredictionPortfolioItemViewModelV1 = Readonly<{
   artworkLabel: string;
   href: string;
   id: string;
+  metricLabel: string;
   payoutDetail: string;
   payoutLabel: string;
   payoutTone: "pending" | "ready" | "settled";
@@ -79,12 +90,9 @@ export type PredictionPortfolioItemViewModelV1 = Readonly<{
  * all three arrays without changing the panel or card layout.
  */
 export type PredictionPortfolioViewModelV1 = Readonly<{
-  canLoadMorePositions: boolean;
   created: readonly PredictionPortfolioItemViewModelV1[];
   errorMessage: string | null;
   history: readonly PredictionPortfolioItemViewModelV1[];
-  loadMoreErrorMessage: string | null;
-  loadingMorePositions: boolean;
   phase: PredictionPortfolioPhaseV1;
   positions: readonly PredictionPortfolioItemViewModelV1[];
   refreshing: boolean;
@@ -92,7 +100,6 @@ export type PredictionPortfolioViewModelV1 = Readonly<{
 }>;
 
 export type PredictionMarketPortfolioProps = Readonly<{
-  onLoadMorePositions?: () => void | Promise<void>;
   onRefresh?: () => void | Promise<void>;
   onRetry?: () => void | Promise<void>;
   viewModel?: PredictionPortfolioViewModelV1;
@@ -100,48 +107,29 @@ export type PredictionMarketPortfolioProps = Readonly<{
 
 type InternalPortfolioState = Readonly<{
   accountKey: string | null;
+  data: PredictionMarketPortfolioData | null;
   errorMessage: string;
-  markets: readonly PredictionMarketView[];
-  nextCursor: bigint;
   phase: "idle" | PredictionPortfolioPhaseV1;
-}>;
-
-type InternalPortfolioRequest = Readonly<{
-  accountKey: string;
-  requestKey: string;
 }>;
 
 const INITIAL_INTERNAL_STATE: InternalPortfolioState = Object.freeze({
   accountKey: null,
+  data: null,
   errorMessage: "",
-  markets: Object.freeze([]),
-  nextCursor: 0n,
   phase: "idle",
 });
 
-const PORTFOLIO_SCAN_PAGE_SIZE = 24;
 const OUTCOME_FACE_SCALE = 10n;
 const PORTFOLIO_ERROR =
   "Unable to load your prediction activity. Check your connection and try again.";
-const PORTFOLIO_OLDER_ERROR =
-  "Unable to load older positions. Check your connection and try again.";
+const PORTFOLIO_PARTIAL_ERROR =
+  "Some markets could not be verified. Refresh to try them again.";
 
 const PORTFOLIO_TABS = [
   { id: "positions", label: "Positions" },
   { id: "created", label: "Created" },
   { id: "history", label: "History" },
 ] as const;
-
-function isInternalPortfolioRequestCurrent(
-  candidate: InternalPortfolioRequest,
-  current: InternalPortfolioRequest | null,
-) {
-  return Boolean(
-    current
-    && candidate.accountKey === current.accountKey
-    && candidate.requestKey === current.requestKey,
-  );
-}
 
 function clampProbability(probabilityYesBps: number) {
   return Math.min(100, Math.max(0, probabilityYesBps / 100));
@@ -179,6 +167,13 @@ export function predictionPortfolioPositionViewModelV1(
     : []);
   const resultTime = resultTimeLabel(market.observationTime);
   const tradingOpen = source.lifecycle === "open" && !source.tradingClosed;
+  const maximumPayoutAtoms = (source.yesAtoms > source.noAtoms
+    ? source.yesAtoms
+    : source.noAtoms) * OUTCOME_FACE_SCALE;
+  const potentialPayoutLabel = formatPredictionUsdg(maximumPayoutAtoms);
+  const potentialPayoutDetail = source.yesAtoms > 0n && source.noAtoms > 0n
+    ? "The winning side pays 1 USDG per share; a neutral result pays 0.50 per YES and NO share."
+    : "Pays 1 USDG per share if your held side wins; a neutral result pays 0.50 per share.";
 
   if (tradingOpen) {
     return Object.freeze({
@@ -187,8 +182,9 @@ export function predictionPortfolioPositionViewModelV1(
       artworkLabel: "BTC",
       href: `/markets/${market.semanticKey}`,
       id: market.semanticKey,
-      payoutDetail: "Payout is available after the result is final.",
-      payoutLabel: "Not settled",
+      metricLabel: "Potential payout",
+      payoutDetail: potentialPayoutDetail,
+      payoutLabel: potentialPayoutLabel,
       payoutTone: "pending",
       positionLabel: "Open position",
       probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
@@ -208,8 +204,9 @@ export function predictionPortfolioPositionViewModelV1(
       artworkLabel: "BTC",
       href: `/markets/${market.semanticKey}`,
       id: market.semanticKey,
-      payoutDetail: "Payout is available when the result is final.",
-      payoutLabel: "Awaiting result",
+      metricLabel: "Potential payout",
+      payoutDetail: potentialPayoutDetail,
+      payoutLabel: potentialPayoutLabel,
       payoutTone: "pending",
       positionLabel: "Position held",
       probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
@@ -231,9 +228,9 @@ export function predictionPortfolioPositionViewModelV1(
       ? "Lost"
       : "Neutral";
   const payoutDetail = invalid
-    ? "YES and NO each redeem for 0.50 USDG per share."
+    ? `${redeemable ? "Redeemable now. " : ""}YES and NO each redeem for 0.50 USDG per share.`
     : source.result === "won"
-      ? `${winningOutcome} redeems for 1 USDG per share; the other side settles at zero.`
+      ? `Redeemable now. ${winningOutcome} redeems for 1 USDG per share; the other side settles at zero.`
       : `${winningOutcome} won; your held side settles at zero.`;
 
   return Object.freeze({
@@ -242,8 +239,9 @@ export function predictionPortfolioPositionViewModelV1(
     artworkLabel: "BTC",
     href: `/markets/${market.semanticKey}`,
     id: market.semanticKey,
+    metricLabel: "Final payout",
     payoutDetail,
-    payoutLabel: redeemable ? "Redeemable" : "Settled",
+    payoutLabel: formatPredictionUsdg(source.redeemableAtoms),
     payoutTone: redeemable ? "ready" : "settled",
     positionLabel: "Final position",
     probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
@@ -310,6 +308,167 @@ function predictionPortfolioPositionSourceV1(
   };
 }
 
+function marketLifecycleSummary(market: PredictionMarketView) {
+  const resultTime = resultTimeLabel(market.observationTime);
+  if (market.state === "FINAL_YES") {
+    return {
+      statusLabel: "YES won",
+      statusTone: "final" as const,
+      timeLabel: `Result ${resultTime}`,
+    };
+  }
+  if (market.state === "FINAL_NO") {
+    return {
+      statusLabel: "NO won",
+      statusTone: "final" as const,
+      timeLabel: `Result ${resultTime}`,
+    };
+  }
+  if (market.state === "FINAL_INVALID") {
+    return {
+      statusLabel: "Neutral result",
+      statusTone: "final" as const,
+      timeLabel: `Result ${resultTime}`,
+    };
+  }
+  if (market.blockTimestamp >= market.cutoff) {
+    return {
+      statusLabel: "Awaiting result",
+      statusTone: "pending" as const,
+      timeLabel: `Result ${resultTime}`,
+    };
+  }
+  return {
+    statusLabel: "Trading open",
+    statusTone: "open" as const,
+    timeLabel: `Closes in ${countdown(market.cutoff, market.blockTimestamp)}`,
+  };
+}
+
+export function predictionPortfolioCreatedViewModelV1(
+  entry: PredictionPortfolioCreatedMarket,
+): PredictionPortfolioItemViewModelV1 {
+  const market = entry.market;
+  const probabilityYesPercent = clampProbability(market.probabilityYesBps);
+  const lifecycle = marketLifecycleSummary(market);
+  return Object.freeze({
+    actionLabel: "View market",
+    actionTone: "quiet",
+    artworkLabel: "BTC",
+    href: `/markets/${market.semanticKey}`,
+    id: `created:${market.semanticKey}:${entry.transactionHash}:${entry.logIndex}`,
+    metricLabel: "Position",
+    payoutDetail: "Creating a market does not add YES or NO shares.",
+    payoutLabel: "No shares",
+    payoutTone: "pending",
+    positionLabel: "Created market",
+    probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
+    probabilityYesPercent,
+    sides: Object.freeze([]),
+    ...lifecycle,
+    title: market.title,
+  });
+}
+
+function historySides(
+  entry: PredictionPortfolioHistoryEntry,
+): readonly PredictionPortfolioSideViewModelV1[] {
+  if (entry.kind === "bought" || entry.kind === "sold" || entry.kind === "transfer") {
+    return Object.freeze([{
+      outcome: entry.outcome,
+      shares: formatPredictionOutcome(entry.outcomeAtoms),
+    }]);
+  }
+  if (entry.kind === "redeemed") {
+    return Object.freeze(([
+      ["YES", entry.yesAtoms],
+      ["NO", entry.noAtoms],
+    ] as const).flatMap(([outcome, atoms]) => atoms > 0n
+      ? [{ outcome, shares: formatPredictionOutcome(atoms) }]
+      : []));
+  }
+  return Object.freeze([]);
+}
+
+function historyPresentation(entry: PredictionPortfolioHistoryEntry) {
+  if (entry.kind === "created") {
+    return {
+      metricLabel: "Activity",
+      payoutDetail: "Market created by this wallet.",
+      payoutLabel: "Created",
+      payoutTone: "pending" as const,
+      statusLabel: "Market created",
+      statusTone: "pending" as const,
+    };
+  }
+  if (entry.kind === "bought") {
+    const spent = entry.collateralInAtoms - entry.collateralRefundAtoms;
+    return {
+      metricLabel: "Spent",
+      payoutDetail: `${formatPredictionOutcome(entry.outcomeAtoms)} ${entry.outcome} shares received.`,
+      payoutLabel: formatPredictionUsdg(spent),
+      payoutTone: "pending" as const,
+      statusLabel: `Bought ${entry.outcome}`,
+      statusTone: "open" as const,
+    };
+  }
+  if (entry.kind === "sold") {
+    return {
+      metricLabel: "Received",
+      payoutDetail: `${formatPredictionOutcome(entry.outcomeAtoms)} ${entry.outcome} shares sold.`,
+      payoutLabel: formatPredictionUsdg(entry.collateralAtoms),
+      payoutTone: "settled" as const,
+      statusLabel: `Sold ${entry.outcome}`,
+      statusTone: "pending" as const,
+    };
+  }
+  if (entry.kind === "redeemed") {
+    return {
+      metricLabel: "Payout",
+      payoutDetail: "Outcome shares redeemed onchain.",
+      payoutLabel: formatPredictionUsdg(entry.collateralAtoms),
+      payoutTone: "settled" as const,
+      statusLabel: "Payout redeemed",
+      statusTone: "final" as const,
+    };
+  }
+  const direction = entry.direction === "in"
+    ? "Received"
+    : entry.direction === "out"
+      ? "Sent"
+      : "Moved";
+  return {
+    metricLabel: "Shares",
+    payoutDetail: "Outcome shares transferred onchain.",
+    payoutLabel: `${formatPredictionOutcome(entry.outcomeAtoms)} ${entry.outcome}`,
+    payoutTone: "pending" as const,
+    statusLabel: `${direction} ${entry.outcome}`,
+    statusTone: "pending" as const,
+  };
+}
+
+export function predictionPortfolioHistoryViewModelV1(
+  entry: PredictionPortfolioHistoryEntry,
+): PredictionPortfolioItemViewModelV1 {
+  const market = entry.market;
+  const probabilityYesPercent = clampProbability(market.probabilityYesBps);
+  const presentation = historyPresentation(entry);
+  return Object.freeze({
+    actionLabel: "View market",
+    actionTone: "quiet",
+    artworkLabel: "BTC",
+    href: `/markets/${market.semanticKey}`,
+    id: `history:${entry.transactionHash}:${entry.logIndex}`,
+    positionLabel: presentation.statusLabel,
+    probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
+    probabilityYesPercent,
+    sides: historySides(entry),
+    timeLabel: "Confirmed onchain",
+    title: market.title,
+    ...presentation,
+  });
+}
+
 function tabLabel(tab: PredictionPortfolioTabV1) {
   return PORTFOLIO_TABS.find((candidate) => candidate.id === tab)?.label ?? "Prediction activity";
 }
@@ -322,7 +481,6 @@ function itemCount(
 }
 
 export function PredictionMarketPortfolio({
-  onLoadMorePositions,
   onRefresh,
   onRetry,
   viewModel,
@@ -338,24 +496,20 @@ export function PredictionMarketPortfolio({
   }, []);
   const [state, setState] = useState<InternalPortfolioState>(INITIAL_INTERNAL_STATE);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  const [olderError, setOlderError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [activeTab, setActiveTab] = useState<PredictionPortfolioTabV1>("positions");
   const requestSequenceRef = useRef(0);
-  const activeRequestRef = useRef<InternalPortfolioRequest | null>(null);
+  const activeRequestRef = useRef<PredictionPortfolioRequest | null>(null);
   const tabRefs = useRef(new Map<PredictionPortfolioTabV1, HTMLButtonElement>());
 
   const loadPortfolio = useCallback(async (mode: "initial" | "refresh" | "retry") => {
     if (!account || !release) return;
     const accountKey = account.toLowerCase();
-    const request = {
-      accountKey,
-      requestKey: `${mode}:${++requestSequenceRef.current}`,
-    } satisfies InternalPortfolioRequest;
+    const request = createPredictionPortfolioRequest(
+      account,
+      `${mode}:${++requestSequenceRef.current}`,
+    );
     activeRequestRef.current = request;
-    setOlderError("");
-    setLoadingOlder(false);
     setRefreshing(true);
     setAnnouncement(mode === "initial"
       ? "Loading prediction activity."
@@ -375,28 +529,29 @@ export function PredictionMarketPortfolio({
         : "loading",
     }));
     try {
-      const directory = await readPredictionMarketDirectory({
-        account,
+      const data = await readPredictionMarketPortfolio({
         config: release,
-        limit: PORTFOLIO_SCAN_PAGE_SIZE,
+        request,
       });
-      if (!isInternalPortfolioRequestCurrent(request, activeRequestRef.current)) return;
-      const markets = directory.markets.filter(
-        (market) => market.yesBalanceAtoms > 0n || market.noBalanceAtoms > 0n,
-      );
+      if (!isPredictionPortfolioRequestCurrent(data, activeRequestRef.current)) return;
       setState({
         accountKey,
-        errorMessage: "",
-        markets,
-        nextCursor: directory.nextCursor,
+        data,
+        errorMessage: data.failures.length > 0 ? PORTFOLIO_PARTIAL_ERROR : "",
         phase: "ready",
       });
+      const count = data.positions.length;
       setAnnouncement(mode === "initial"
-        ? `Prediction activity loaded. ${markets.length} ${markets.length === 1 ? "position" : "positions"}.`
-        : `Prediction activity refreshed. ${markets.length} ${markets.length === 1 ? "position" : "positions"}.`);
-    } catch {
-      if (!isInternalPortfolioRequestCurrent(request, activeRequestRef.current)) return;
-      setState((current) => current.accountKey === accountKey && current.phase === "ready"
+        ? `Prediction activity loaded. ${count} ${count === 1 ? "position" : "positions"}.`
+        : `Prediction activity refreshed. ${count} ${count === 1 ? "position" : "positions"}.`);
+    } catch (error) {
+      const failedRequest = error instanceof PredictionPortfolioReadError
+        ? error.request
+        : request;
+      if (!isPredictionPortfolioRequestCurrent(failedRequest, activeRequestRef.current)) return;
+      setState((current) => current.accountKey === accountKey
+        && current.phase === "ready"
+        && current.data
         ? { ...current, errorMessage: PORTFOLIO_ERROR }
         : {
             ...INITIAL_INTERNAL_STATE,
@@ -406,7 +561,7 @@ export function PredictionMarketPortfolio({
           });
       setAnnouncement("Prediction activity could not be loaded.");
     } finally {
-      if (isInternalPortfolioRequestCurrent(request, activeRequestRef.current)) {
+      if (isPredictionPortfolioRequestCurrent(request, activeRequestRef.current)) {
         setRefreshing(false);
       }
     }
@@ -417,87 +572,32 @@ export function PredictionMarketPortfolio({
     const timer = window.setTimeout(() => void loadPortfolio("initial"), 0);
     return () => {
       window.clearTimeout(timer);
-      if (activeRequestRef.current?.accountKey === account.toLowerCase()) {
+      if (activeRequestRef.current?.account.toLowerCase() === account.toLowerCase()) {
         activeRequestRef.current = null;
       }
     };
   }, [account, loadPortfolio, release, viewModel]);
 
-  const loadOlderPositions = useCallback(async () => {
-    if (
-      !account
-      || !release
-      || state.accountKey !== account.toLowerCase()
-      || state.phase !== "ready"
-      || state.nextCursor === 0n
-      || loadingOlder
-    ) return;
-    const accountKey = account.toLowerCase();
-    const request = {
-      accountKey,
-      requestKey: `older:${++requestSequenceRef.current}`,
-    } satisfies InternalPortfolioRequest;
-    activeRequestRef.current = request;
-    setLoadingOlder(true);
-    setOlderError("");
-    setAnnouncement("Loading older positions.");
-    try {
-      const directory = await readPredictionMarketDirectory({
-        account,
-        config: release,
-        cursor: state.nextCursor,
-        limit: PORTFOLIO_SCAN_PAGE_SIZE,
-      });
-      if (!isInternalPortfolioRequestCurrent(request, activeRequestRef.current)) return;
-      const markets = directory.markets.filter(
-        (market) => market.yesBalanceAtoms > 0n || market.noBalanceAtoms > 0n,
-      );
-      setState((current) => {
-        if (current.accountKey !== accountKey || current.phase !== "ready") return current;
-        const known = new Set(current.markets.map((market) => market.semanticKey.toLowerCase()));
-        return {
-          ...current,
-          markets: [
-            ...current.markets,
-            ...markets.filter((market) => !known.has(market.semanticKey.toLowerCase())),
-          ],
-          nextCursor: directory.nextCursor,
-        };
-      });
-      setAnnouncement(
-        `${markets.length} older ${markets.length === 1 ? "position" : "positions"} loaded.`,
-      );
-    } catch {
-      if (!isInternalPortfolioRequestCurrent(request, activeRequestRef.current)) return;
-      setOlderError(PORTFOLIO_OLDER_ERROR);
-      setAnnouncement("Older positions could not be loaded.");
-    } finally {
-      if (isInternalPortfolioRequestCurrent(request, activeRequestRef.current)) {
-        setLoadingOlder(false);
-      }
-    }
-  }, [account, loadingOlder, release, state.accountKey, state.nextCursor, state.phase]);
-
   const internalViewModel = useMemo<PredictionPortfolioViewModelV1>(() => {
     const accountKey = account?.toLowerCase() ?? null;
     const isCurrentAccount = state.accountKey === accountKey;
+    const data = isCurrentAccount ? state.data : null;
     return {
-      canLoadMorePositions: isCurrentAccount
-        && state.phase === "ready"
-        && state.nextCursor > 0n,
-      created: Object.freeze([]),
+      created: data
+        ? data.created.map(predictionPortfolioCreatedViewModelV1)
+        : Object.freeze([]),
       errorMessage: isCurrentAccount ? state.errorMessage || null : null,
-      history: Object.freeze([]),
-      loadMoreErrorMessage: olderError || null,
-      loadingMorePositions: loadingOlder,
+      history: data
+        ? data.history.map(predictionPortfolioHistoryViewModelV1)
+        : Object.freeze([]),
       phase: !isCurrentAccount || state.phase === "idle" ? "loading" : state.phase,
-      positions: isCurrentAccount
-        ? state.markets.map(predictionPortfolioPositionViewModelV1)
+      positions: data
+        ? data.positions.map(predictionPortfolioPositionViewModelV1)
         : Object.freeze([]),
       refreshing,
       statusMessage: announcement,
     };
-  }, [account, announcement, loadingOlder, olderError, refreshing, state]);
+  }, [account, announcement, refreshing, state]);
   const model = viewModel ?? internalViewModel;
   const accessState = viewModel
     ? "ready"
@@ -507,7 +607,7 @@ export function PredictionMarketPortfolio({
         ? "wallet"
         : "ready";
   const isBusy = accessState === "ready"
-    && (model.phase === "loading" || model.refreshing || model.loadingMorePositions);
+    && (model.phase === "loading" || model.refreshing);
   const canRefresh = viewModel
     ? Boolean(onRefresh || onRetry)
     : accessState === "ready";
@@ -542,14 +642,6 @@ export function PredictionMarketPortfolio({
     }
     void loadPortfolio("retry");
   }, [loadPortfolio, onRefresh, onRetry, runControlledAction, viewModel]);
-
-  const requestOlderPositions = useCallback(() => {
-    if (viewModel) {
-      void runControlledAction(onLoadMorePositions, "Loading older positions.");
-      return;
-    }
-    void loadOlderPositions();
-  }, [loadOlderPositions, onLoadMorePositions, runControlledAction, viewModel]);
 
   function selectTab(tab: PredictionPortfolioTabV1, moveFocus = false) {
     const count = itemCount(model, tab);
@@ -698,25 +790,6 @@ export function PredictionMarketPortfolio({
                 </>
               )}
 
-              {accessState === "ready"
-                && activeTab === "positions"
-                && model.canLoadMorePositions ? (
-                  <button
-                    className={styles.portfolioLoadMore}
-                    disabled={model.loadingMorePositions}
-                    onClick={requestOlderPositions}
-                    type="button"
-                  >
-                    {model.loadingMorePositions
-                      ? "Loading older positions"
-                      : "Show older positions"}
-                  </button>
-                ) : null}
-              {activeTab === "positions" && model.loadMoreErrorMessage ? (
-                <p className={styles.portfolioLoadMoreError} role="alert">
-                  {model.loadMoreErrorMessage}
-                </p>
-              ) : null}
             </>
           ) : null}
         </div>
@@ -761,7 +834,7 @@ function PortfolioCard({ item }: Readonly<{ item: PredictionPortfolioItemViewMod
           <dd>{item.probabilityLabel}</dd>
         </div>
         <div data-tone={item.payoutTone}>
-          <dt>Payout</dt>
+          <dt>{item.metricLabel}</dt>
           <dd>{item.payoutLabel}</dd>
           <small>{item.payoutDetail}</small>
         </div>

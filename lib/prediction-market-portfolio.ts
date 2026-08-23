@@ -538,6 +538,7 @@ function indexPredictionMarketComponents(
 
 async function readOutcomeTransferLogs({
   account,
+  addresses,
   allowedTokens,
   clients,
   direction,
@@ -545,48 +546,37 @@ async function readOutcomeTransferLogs({
   toBlock,
 }: {
   account: Address;
+  addresses: readonly Address[];
   allowedTokens: ReadonlySet<string>;
   clients: PredictionMarketClients;
   direction: "from" | "to";
   fromBlock: bigint;
   toBlock: bigint;
 }) {
-  if (direction === "from") {
-    return readPredictionPortfolioLogs({
-      clients,
-      fromBlock,
-      read: (client, range) =>
-        client
-          .getLogs({
-            args: { from: account },
-            event: outcomeTransferEvent,
-            fromBlock: range.fromBlock,
-            strict: true,
-            toBlock: range.toBlock,
-          })
-          .then((logs) =>
-            filterPredictionOutcomeLogs(logs, allowedTokens),
-          ),
-      toBlock,
-    });
+  const logs = [];
+  for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
+    logs.push(
+      ...(await readPredictionPortfolioLogs({
+        clients,
+        fromBlock,
+        read: (client, range) =>
+          client
+            .getLogs({
+              address: addressBatch,
+              args: direction === "from" ? { from: account } : { to: account },
+              event: outcomeTransferEvent,
+              fromBlock: range.fromBlock,
+              strict: true,
+              toBlock: range.toBlock,
+            })
+            .then((providerLogs) =>
+              filterPredictionOutcomeLogs(providerLogs, allowedTokens),
+            ),
+        toBlock,
+      })),
+    );
   }
-  return readPredictionPortfolioLogs({
-    clients,
-    fromBlock,
-    read: (client, range) =>
-      client
-        .getLogs({
-          args: { to: account },
-          event: outcomeTransferEvent,
-          fromBlock: range.fromBlock,
-          strict: true,
-          toBlock: range.toBlock,
-      })
-      .then((logs) =>
-        filterPredictionOutcomeLogs(logs, allowedTokens),
-      ),
-    toBlock,
-  });
+  return dedupePortfolioLogs(logs);
 }
 
 async function readPredictionRedeemedLogs({
@@ -705,6 +695,9 @@ async function readPredictionMarketPortfolioAtRequest({
   const vaultAddresses = [...componentIndex.byVault.values()].map(
     (component) => component.vault,
   );
+  const outcomeTokenAddresses = [...componentIndex.byToken.values()].map(
+    ({ component, outcome }) => outcome === "YES" ? component.yesToken : component.noToken,
+  );
   const allowedTokens = new Set(componentIndex.byToken.keys());
 
   const [createdLogs, boughtLogs, soldLogs, incomingTransfers, outgoingTransfers, redeemedLogs] =
@@ -753,6 +746,7 @@ async function readPredictionMarketPortfolioAtRequest({
       }),
       readOutcomeTransferLogs({
         account: request.account,
+        addresses: outcomeTokenAddresses,
         allowedTokens,
         clients,
         direction: "to",
@@ -761,6 +755,7 @@ async function readPredictionMarketPortfolioAtRequest({
       }),
       readOutcomeTransferLogs({
         account: request.account,
+        addresses: outcomeTokenAddresses,
         allowedTokens,
         clients,
         direction: "from",

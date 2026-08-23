@@ -204,41 +204,26 @@ describe("prediction portfolio data contract", () => {
 });
 
 describe("prediction profile regression contract", () => {
-  it("keys asynchronous reads to the normalized wallet account and rejects stale responses", () => {
+  it("keys the complete activity read to the normalized wallet and rejects stale responses", () => {
     expect(portfolioSource).toMatch(/wallet\?\.account/u);
     expect(portfolioSource).toMatch(/accountKey[\s\S]{0,180}\.toLowerCase\(\)/u);
-    expect(portfolioSource).toContain("requestKey");
-    expect(portfolioSource).toMatch(
-      /is(?:Prediction|Internal)PortfolioRequestCurrent\(/u,
-    );
+    expect(portfolioSource).toContain("createPredictionPortfolioRequest(");
+    expect(portfolioSource).toContain("readPredictionMarketPortfolio({");
+    expect(portfolioSource).toContain("isPredictionPortfolioRequestCurrent(");
+    expect(portfolioSource).not.toContain("readPredictionMarketDirectory({");
+    expect(portfolioSource).not.toContain("loadOlderPositions");
 
     const accountCapture = portfolioSource.search(
       /(?:const|let)\s+\w*(?:account|key)\w*\s*=\s*[^;]*wallet\?*\.account/iu,
     );
-    const portfolioRead = [
-      portfolioSource.indexOf("readPredictionMarketPortfolio({"),
-      portfolioSource.indexOf("readPredictionMarketDirectory({"),
-    ].find((index) => index >= 0) ?? -1;
-    const staleGuard = portfolioSource.search(
-      /is(?:Prediction|Internal)PortfolioRequestCurrent\(/u,
-    );
+    const portfolioRead = portfolioSource.indexOf("readPredictionMarketPortfolio({");
     expect(accountCapture).toBeGreaterThan(-1);
     expect(portfolioRead).toBeGreaterThan(accountCapture);
     expect(
-      portfolioSource.slice(portfolioRead).search(
-        /is(?:Prediction|Internal)PortfolioRequestCurrent\(/u,
+      portfolioSource.slice(portfolioRead).indexOf(
+        "isPredictionPortfolioRequestCurrent(",
       ),
     ).toBeGreaterThan(0);
-
-    const olderLoad = portfolioSource.slice(
-      portfolioSource.indexOf("loadOlderPositions"),
-      portfolioSource.indexOf("const internalViewModel"),
-    );
-    expect(staleGuard).toBeGreaterThan(-1);
-    expect(olderLoad).toContain("requestKey");
-    expect(olderLoad).toMatch(
-      /is(?:Prediction|Internal)PortfolioRequestCurrent\(/u,
-    );
   });
 
   it("exposes Positions, Created, and History as one accessible tab set", () => {
@@ -311,7 +296,6 @@ describe("prediction profile regression contract", () => {
       ".portfolioRefresh",
       ".portfolioPrimaryAction",
       ".portfolioSecondaryAction",
-      ".portfolioLoadMore",
       ".portfolioError button",
       ".portfolioInlineError button",
       ".portfolioCardActions a",

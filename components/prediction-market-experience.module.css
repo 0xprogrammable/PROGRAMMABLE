@@ -981,7 +981,6 @@
 .portfolioRefresh,
 .portfolioPrimaryAction,
 .portfolioSecondaryAction,
-.portfolioLoadMore,
 .portfolioError button,
 .portfolioInlineError button,
 .portfolioCardActions a {
@@ -1007,8 +1006,7 @@
   padding-inline: 11px;
 }
 
-.portfolioRefresh:disabled,
-.portfolioLoadMore:disabled {
+.portfolioRefresh:disabled {
   cursor: default;
   opacity: 0.42;
 }
@@ -1439,30 +1437,11 @@
   overflow-wrap: break-word;
 }
 
-.portfolioLoadMore {
-  background: transparent;
-  border: 1px solid var(--webde-line, var(--profile-line, var(--border)));
-  border-radius: 10px;
-  color: var(--text-soft, rgb(255 255 255 / 72%));
-  cursor: pointer;
-  margin-block-start: 10px;
-  width: 100%;
-}
-
-.portfolioLoadMoreError {
-  color: var(--danger, #ff9d9d);
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 10px 0 0;
-  text-wrap: pretty;
-}
-
 .portfolioRefresh:focus-visible,
 .portfolioTabs button:focus-visible,
 .portfolioTabPanel:focus-visible,
 .portfolioPrimaryAction:focus-visible,
 .portfolioSecondaryAction:focus-visible,
-.portfolioLoadMore:focus-visible,
 .portfolioError button:focus-visible,
 .portfolioInlineError button:focus-visible,
 .portfolioCardCopy h3 a:focus-visible,
@@ -1474,7 +1453,6 @@
 @media (hover: hover) and (pointer: fine) {
   .portfolioRefresh:not(:disabled):hover,
   .portfolioSecondaryAction:hover,
-  .portfolioLoadMore:not(:disabled):hover,
   .portfolioInlineError button:hover,
   .portfolioCardActions a[data-tone="quiet"]:hover {
     background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
@@ -1500,7 +1478,6 @@
   .portfolioRefresh,
   .portfolioPrimaryAction,
   .portfolioSecondaryAction,
-  .portfolioLoadMore,
   .portfolioError button,
   .portfolioInlineError button,
   .portfolioCardActions a {
@@ -1516,7 +1493,6 @@
   .portfolioRefresh:not(:disabled):active,
   .portfolioPrimaryAction:active,
   .portfolioSecondaryAction:active,
-  .portfolioLoadMore:not(:disabled):active,
   .portfolioError button:active,
   .portfolioInlineError button:active,
   .portfolioCardActions a:active {
