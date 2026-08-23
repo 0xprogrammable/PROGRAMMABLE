@@ -42,17 +42,18 @@ describe("PredictionMarketAssetSelectorV2", () => {
       }),
     );
 
-    expect(html).toContain("Select network");
+    expect(html).toContain("Choose network");
     expect(html).toContain("Ethereum");
     expect(html).toContain("Base");
     expect(html).toContain("BNB Chain");
     expect(html).toContain("Robinhood Chain");
     expect(html).toContain("Solana");
     expect(html).toContain("Contract address");
-    expect(html).toContain("The address alone does not identify its network");
+    expect(html).toContain("Use the token contract on the selected network");
     expect(html).toContain("0x1111111111111111111111111111111111111111");
-    expect(html).toContain("Current price · info only");
-    expect(html).toContain("Market cap · info only");
+    expect(html).toContain("Current price");
+    expect(html).toContain("Market cap");
+    expect(html).toContain("Current asset data, informational only");
     expect(html).toContain("Not available yet");
   });
 });

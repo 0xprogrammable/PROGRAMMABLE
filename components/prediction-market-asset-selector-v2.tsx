@@ -112,8 +112,8 @@ export function PredictionMarketAssetSelectorV2({
         </div>
       ) : (
         <div className={styles.customFields}>
-          <label className={styles.field} htmlFor={networkId}>
-            <span>Network</span>
+          <div className={styles.field}>
+            <label htmlFor={networkId}>Network</label>
             <select
               aria-describedby={
                 validation.errors.sourceNetwork
@@ -139,7 +139,7 @@ export function PredictionMarketAssetSelectorV2({
               }}
               value={value.sourceNetwork}
             >
-              <option value="">Select network</option>
+              <option value="">Choose network</option>
               {PREDICTION_SOURCE_NETWORKS_V2.map((network) => (
                 <option key={network.id} value={network.id}>
                   {network.label}
@@ -149,10 +149,10 @@ export function PredictionMarketAssetSelectorV2({
             <small id={`${networkId}-feedback`}>
               {validation.errors.sourceNetwork ?? "\u00a0"}
             </small>
-          </label>
+          </div>
 
-          <label className={styles.field} htmlFor={locatorId}>
-            <span>{locatorLabel}</span>
+          <div className={styles.field}>
+            <label htmlFor={locatorId}>{locatorLabel}</label>
             <input
               aria-describedby={locatorFeedbackId}
               aria-invalid={
@@ -176,17 +176,20 @@ export function PredictionMarketAssetSelectorV2({
             <small id={locatorFeedbackId}>
               {validation.errors.assetLocator ??
                 (sourceNetwork?.namespace === "solana"
-                  ? "Use the Solana mainnet token mint."
-                  : "The address alone does not identify its network.")}
+                  ? "Use the token mint on Solana mainnet."
+                  : "Use the token contract on the selected network.")}
             </small>
-          </label>
+          </div>
         </div>
       )}
 
       {matchingSnapshot ? (
-        <dl className={styles.referenceData} aria-label="Current asset data">
+        <dl
+          className={styles.referenceData}
+          aria-label="Current asset data, informational only"
+        >
           <div>
-            <dt>Current price · info only</dt>
+            <dt>Current price</dt>
             <dd>
               {formatPredictionAssetUsdV2(
                 matchingSnapshot.currentPriceUsd,
@@ -195,7 +198,7 @@ export function PredictionMarketAssetSelectorV2({
             </dd>
           </div>
           <div>
-            <dt>Market cap · info only</dt>
+            <dt>Market cap</dt>
             <dd>
               {formatPredictionAssetUsdV2(
                 matchingSnapshot.marketCapUsd,
@@ -206,14 +209,15 @@ export function PredictionMarketAssetSelectorV2({
         </dl>
       ) : null}
 
-      <div
-        className={styles.marketState}
-        data-state={marketState.state}
-        role="status"
-        aria-live="polite"
-      >
-        <strong>{marketState.title}</strong>
-        <span>{marketState.detail}</span>
+      <div className={styles.statusRegion} role="status" aria-live="polite">
+        {marketState.state === "unavailable" ? (
+          <div className={styles.marketState} data-state={marketState.state}>
+            <strong>{marketState.title}</strong>
+            <span>{marketState.detail}</span>
+          </div>
+        ) : (
+          <span className={styles.srOnly}>{marketState.detail}</span>
+        )}
       </div>
     </section>
   );

@@ -6,7 +6,7 @@
   display: grid;
   gap: 24px;
   min-width: 0;
-  padding: 28px;
+  padding: 32px;
 }
 
 .heading {
@@ -17,10 +17,10 @@
 }
 
 .heading h2 {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 590;
   letter-spacing: -0.03em;
-  line-height: 1.16;
+  line-height: 32px;
   margin: 0;
 }
 
@@ -28,14 +28,14 @@
   color: var(--webde-muted);
   font-size: 14px;
   line-height: 1.5;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   text-wrap: pretty;
 }
 
 .modeSwitch {
   background: var(--webde-control);
   border: 1px solid var(--webde-line);
-  border-radius: 15px;
+  border-radius: 16px;
   display: grid;
   flex: 0 0 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -45,10 +45,10 @@
 .modeSwitch button {
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--webde-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
   min-height: 44px;
   padding-inline: 16px;
@@ -74,7 +74,7 @@
   align-items: start;
   background: var(--webde-control);
   border: 1px solid var(--webde-line);
-  border-radius: 15px;
+  border-radius: 16px;
   color: var(--webde-muted);
   display: grid;
   font: inherit;
@@ -91,7 +91,7 @@
 
 .preset strong {
   color: var(--webde-ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 680;
   line-height: 1.2;
 }
@@ -119,7 +119,7 @@
   min-width: 0;
 }
 
-.field > span {
+.field > label {
   color: var(--webde-ink);
   font-size: 14px;
   font-weight: 650;
@@ -131,7 +131,7 @@
   appearance: none;
   background: var(--webde-control);
   border: 1px solid var(--webde-line);
-  border-radius: 13px;
+  border-radius: 12px;
   color: var(--webde-ink);
   font: inherit;
   font-size: 16px;
@@ -182,7 +182,7 @@
 
 .referenceData > div {
   background: var(--webde-control);
-  border-radius: 14px;
+  border-radius: 16px;
   display: grid;
   gap: 5px;
   padding: 14px 16px;
@@ -204,10 +204,14 @@
   margin: 0;
 }
 
+.statusRegion {
+  min-width: 0;
+}
+
 .marketState {
   background: var(--webde-control);
   border: 1px solid var(--webde-line);
-  border-radius: 15px;
+  border-radius: 16px;
   display: grid;
   gap: 4px;
   padding: 15px 16px;
@@ -227,8 +231,14 @@
   text-wrap: pretty;
 }
 
-.marketState[data-state="available"] {
-  border-color: color-mix(in srgb, var(--success) 46%, var(--webde-line));
+.srOnly {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .modeSwitch button:focus-visible,
@@ -283,7 +293,7 @@
   .root {
     border-radius: 20px;
     gap: 20px;
-    padding: 19px;
+    padding: 24px;
   }
 
   .heading {
