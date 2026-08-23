@@ -37,12 +37,38 @@ describe("Explore UI contract", () => {
     );
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain('const Heading = embedded ? "h2" : "h1"');
-    expect(source).toContain("<Heading data-explore-heading>Explore Hooks</Heading>");
+    expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
+    expect(source).toContain('<ExploreModeSwitch active="token" />');
     expect(source).toContain("const eagerImage = !embedded");
     expect(source).not.toContain("ExploreGridSkeleton");
     expect(source).toContain(
       'className={styles.loadingState} aria-busy="true"',
     );
+  });
+
+  it("keeps token and prediction discovery inside one Explore destination", () => {
+    const navigation = readFileSync(
+      join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+    const switchSource = readFileSync(
+      join(root, "components/explore-mode-switch.tsx"),
+      "utf8",
+    );
+    const predictionSource = readFileSync(
+      join(root, "components/prediction-market-directory.tsx"),
+      "utf8",
+    );
+
+    expect(navigation).not.toContain('{ href: "/markets", label: "Markets" }');
+    expect(navigation).toContain('pathname.startsWith("/markets/")');
+    expect(switchSource).toContain('{ id: "token", href: "/explore", label: "Token" }');
+    expect(switchSource).toContain(
+      '{ id: "prediction", href: "/markets", label: "Prediction" }',
+    );
+    expect(switchSource).toContain('aria-label="Explore categories"');
+    expect(predictionSource).toContain('<h1>Explore</h1>');
+    expect(predictionSource).toContain('<ExploreModeSwitch active="prediction" />');
   });
 
   it("keeps sort, socials and model choices in one persistent disclosure", () => {

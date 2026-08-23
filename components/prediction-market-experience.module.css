@@ -7,6 +7,27 @@
   padding-top: clamp(42px, 7vw, 88px);
 }
 
+.directoryPage {
+  padding-top: 34px;
+}
+
+.exploreHeader {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 56px;
+}
+
+.exploreHeader h1 {
+  color: var(--text);
+  font-size: clamp(58px, 6.5vw, 96px);
+  font-weight: 520;
+  letter-spacing: -0.062em;
+  line-height: 0.92;
+  margin: 0;
+}
+
 .directoryHero {
   align-items: flex-end;
   display: flex;
@@ -41,7 +62,7 @@
   margin-bottom: 20px;
 }
 
-.heroCopy h1 {
+.heroCopy h2 {
   color: var(--text);
   font-size: clamp(48px, 7.4vw, 98px);
   font-weight: 520;
@@ -1095,7 +1116,16 @@
     padding-top: 34px;
   }
 
-  .heroCopy h1 {
+  .exploreHeader {
+    gap: 18px;
+    padding-bottom: 48px;
+  }
+
+  .exploreHeader h1 {
+    font-size: clamp(38px, 11vw, 48px);
+  }
+
+  .heroCopy h2 {
     font-size: clamp(43px, 13vw, 64px);
     line-height: 0.94;
   }
