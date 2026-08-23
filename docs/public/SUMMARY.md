@@ -4,6 +4,7 @@
 - [Launch models](tokens.md)
   - [Classic](models/classic.md)
   - [Custom hooks](models/custom.md)
+  - [Prediction Markets](models/prediction-markets.md)
 - [Create](creators/README.md)
   - [Launch a project](creators/launch.md)
   - [Creator earnings](creators/earnings.md)

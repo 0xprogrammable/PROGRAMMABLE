@@ -2,11 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  ExternalLink,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle2, ExternalLink } from "lucide-react";
 import { formatEther } from "viem";
 
 import styles from "@/components/prediction-market-launch.module.css";
@@ -58,12 +54,16 @@ function formatEthMaximum(value: bigint) {
   return `${whole}${shortFraction ? `.${shortFraction}` : ""} ETH`;
 }
 
-export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) {
+export function PredictionMarketLaunch({
+  onBack,
+}: PredictionMarketLaunchProps) {
   const [draft, setDraft] = useState<PredictionMarketDraft>(initialDraft);
   const [nowMs, setNowMs] = useState(0);
   const [phase, setPhase] = useState<LaunchPhase>("idle");
   const [status, setStatus] = useState("");
-  const [maximumGasCostWei, setMaximumGasCostWei] = useState<bigint | null>(null);
+  const [maximumGasCostWei, setMaximumGasCostWei] = useState<bigint | null>(
+    null,
+  );
   const [confirmedMarket, setConfirmedMarket] =
     useState<ConfirmedPredictionMarket | null>(null);
   const {
@@ -176,9 +176,12 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
       });
       if (
         recheck.nonce !== preflight.nonce ||
-        recheck.semanticKey.toLowerCase() !== preflight.semanticKey.toLowerCase()
+        recheck.semanticKey.toLowerCase() !==
+          preflight.semanticKey.toLowerCase()
       ) {
-        throw new Error("The market changed while you were approving. Please try again.");
+        throw new Error(
+          "The market changed while you were approving. Please try again.",
+        );
       }
       const prepared = await preparePredictionMarketLaunch({
         client: clients[0],
@@ -209,7 +212,8 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
       setConfirmedMarket(confirmed);
       setPhase("confirmed");
       setStatus("Market created.");
-      const sourceMatches = await requestPredictionMarketSourceMatches(confirmed);
+      const sourceMatches =
+        await requestPredictionMarketSourceMatches(confirmed);
       const verifiedSourceCount = sourceMatches.filter(
         (result) => result.verified,
       ).length;
@@ -255,7 +259,11 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
               <span className={styles.priceInput}>
                 <span aria-hidden="true">$</span>
                 <input
-                  aria-describedby={errors.thresholdUsd ? "prediction-threshold-error" : "prediction-threshold-help"}
+                  aria-describedby={
+                    errors.thresholdUsd
+                      ? "prediction-threshold-error"
+                      : undefined
+                  }
                   aria-invalid={Boolean(errors.thresholdUsd)}
                   autoComplete="off"
                   inputMode="decimal"
@@ -272,33 +280,35 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
                   value={draft.thresholdUsd}
                 />
               </span>
-              {errors.thresholdUsd ? (
-                <small className={styles.error} id="prediction-threshold-error">
-                  {errors.thresholdUsd}
-                </small>
-              ) : (
-                <small id="prediction-threshold-help">YES wins at this price or higher.</small>
-              )}
+              <small
+                className={`${styles.fieldFeedback} ${errors.thresholdUsd ? styles.error : ""}`}
+                id="prediction-threshold-error"
+                aria-live="polite"
+              >
+                {errors.thresholdUsd ?? ""}
+              </small>
             </label>
 
             <label className={styles.field}>
               <span>Result time (UTC)</span>
               <input
-                aria-describedby={errors.observationUtc ? "prediction-time-error" : "prediction-time-help"}
+                aria-describedby={
+                  errors.observationUtc ? "prediction-time-error" : undefined
+                }
                 aria-invalid={Boolean(errors.observationUtc)}
                 name="observationUtc"
                 min={
                   nowMs
-                    ? new Date(
-                        nowMs + (24 * 60 * 60 + 60) * 1_000,
-                      ).toISOString().slice(0, 16)
+                    ? new Date(nowMs + (24 * 60 * 60 + 60) * 1_000)
+                        .toISOString()
+                        .slice(0, 16)
                     : undefined
                 }
                 max={
                   nowMs
-                    ? new Date(
-                        nowMs + 30 * 24 * 60 * 60 * 1_000,
-                      ).toISOString().slice(0, 16)
+                    ? new Date(nowMs + 30 * 24 * 60 * 60 * 1_000)
+                        .toISOString()
+                        .slice(0, 16)
                     : undefined
                 }
                 onChange={(event) =>
@@ -311,13 +321,13 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
                 type="datetime-local"
                 value={draft.observationUtc}
               />
-              {errors.observationUtc ? (
-                <small className={styles.error} id="prediction-time-error">
-                  {errors.observationUtc}
-                </small>
-              ) : (
-                <small id="prediction-time-help">Shown and resolved in UTC.</small>
-              )}
+              <small
+                className={`${styles.fieldFeedback} ${errors.observationUtc ? styles.error : ""}`}
+                id="prediction-time-error"
+                aria-live="polite"
+              >
+                {errors.observationUtc ?? ""}
+              </small>
             </label>
           </div>
 
@@ -345,13 +355,16 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
               className={`${styles.launchStatus} ${phase === "error" ? styles.launchError : ""}`}
               role={phase === "error" ? "alert" : "status"}
             >
-              {phase === "confirmed" ? <CheckCircle2 aria-hidden="true" size={15} /> : null}
+              {phase === "confirmed" ? (
+                <CheckCircle2 aria-hidden="true" size={15} />
+              ) : null}
               <span>{status}</span>
             </p>
           ) : null}
           {maximumGasCostWei !== null && phase !== "submitting" ? (
             <p className={styles.gasNote}>
-              Estimated maximum network fee: {formatEthMaximum(maximumGasCostWei)}
+              Estimated maximum network fee:{" "}
+              {formatEthMaximum(maximumGasCostWei)}
             </p>
           ) : null}
           {confirmedMarket ? (
@@ -375,7 +388,11 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
           ) : null}
         </form>
 
-        <section className={styles.preview} aria-labelledby="prediction-preview-title" aria-live="polite">
+        <section
+          className={styles.preview}
+          aria-labelledby="prediction-preview-title"
+          aria-live="polite"
+        >
           <div className={styles.previewTopline}>
             <span>Preview</span>
             {market ? <span>in {market.countdownLabel}</span> : null}
@@ -385,11 +402,12 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
               ? `Will BTC be at or above ${market.thresholdLabel}?`
               : "Enter a valid price and result time."}
           </h2>
-          {market ? (
-            <p className={styles.previewTime}>
-              Resolves {market.observationLabel} · Trading closes one minute earlier
-            </p>
-          ) : null}
+          <p
+            className={styles.previewTime}
+            aria-hidden={market ? undefined : "true"}
+          >
+            {market ? `Result: ${market.observationLabel}` : "\u00a0"}
+          </p>
 
           <div className={styles.outcomes} aria-label="Initial market outcomes">
             <div className={styles.yesOutcome}>
@@ -401,16 +419,6 @@ export function PredictionMarketLaunch({ onBack }: PredictionMarketLaunchProps) 
               <strong>50%</strong>
             </div>
           </div>
-
-          <details className={styles.details}>
-            <summary>How this market resolves</summary>
-            <p>
-              YES wins if BTC is at or above the chosen price at the result
-              time. Chainlink&apos;s last completed BTC/USD price at or before
-              that time is used. If no valid result can be proven, YES and NO
-              each redeem for 0.50 USDG.
-            </p>
-          </details>
         </section>
       </div>
     </div>

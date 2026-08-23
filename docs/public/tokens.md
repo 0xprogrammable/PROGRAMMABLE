@@ -1,15 +1,16 @@
 ---
-description: Compare Classic and Custom, and understand how a Uniswap v4 hook changes a pool
+description: Compare Programmable launch models and understand how their token, market and fee paths differ
 ---
 
 # Launch models
 
-Programmable separates a direct standard model from individually reviewed Custom releases. Choose the model by the behavior the product needs, not by how unusual its name or branding is.
+Programmable separates direct public models from individually reviewed Custom releases. Prediction Markets is a separately versioned launch model. Choose the model by the behavior the product needs, not by how unusual its name or branding is.
 
-| Model   | What it creates                                                            | Trading pair                                  | Access                                |
-| ------- | -------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------- |
-| Classic | Fixed supply tokens with configurable buy and sell transaction fees        | ETH on Uniswap v4                             | Open through Create                   |
-| Custom  | Tokens or applications that need an individually reviewed hook and release | The pool and route named in the exact release | Accepted and activated revisions only |
+| Model              | What it creates                                                            | Market                                        | Access                                |
+| ------------------ | -------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------- |
+| Classic            | Fixed supply tokens with configurable buy and sell transaction fees        | ETH on Uniswap v4                             | Open through Create                   |
+| Custom             | Tokens or applications that need an individually reviewed hook and release | The pool and route named in the exact release | Accepted and activated revisions only |
+| Prediction Markets | Onchain outcome markets                                                    | A separately versioned Uniswap v4 release     | Open through Create                   |
 
 ## What is a hook
 
@@ -31,4 +32,12 @@ Custom releases are for products whose behavior cannot be represented by the Cla
 
 {% content-ref url="models/custom.md" %}
 [custom.md](models/custom.md)
+{% endcontent-ref %}
+
+## Prediction Markets
+
+Prediction Markets lets a creator configure an available onchain outcome market. The [canonical Prediction Markets repository](https://github.com/0xprogrammable/programmable-prediction-markets) defines the current networks, market types, collateral and activation rules, fees and creator rewards, resolution rules, contract addresses and release evidence.
+
+{% content-ref url="models/prediction-markets.md" %}
+[prediction-markets.md](models/prediction-markets.md)
 {% endcontent-ref %}

@@ -29,17 +29,32 @@ type DirectoryState =
 const DIRECTORY_PAGE_SIZE = 12;
 
 function errorMessage(error: unknown) {
-  return predictionMarketErrorMessage(error, "Markets are temporarily unavailable");
+  return predictionMarketErrorMessage(
+    error,
+    "Markets are temporarily unavailable",
+  );
 }
 
-function countdown(target: bigint, now: bigint) {
-  const seconds = target > now ? Number(target - now) : 0;
-  const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
-  if (days) return `${days}d ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+function compactUtcDate(timestamp: bigint) {
+  const date = new Date(Number(timestamp) * 1_000);
+  if (!Number.isFinite(date.getTime())) return "Date unavailable";
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${months[date.getUTCMonth()]} ${date.getUTCDate()} · ${hour}:${minute} UTC`;
 }
 
 function MarketCard({
@@ -55,7 +70,7 @@ function MarketCard({
   const tradingOpen =
     market.state === "OPEN" && market.blockTimestamp < market.cutoff;
   const marketStatus = tradingOpen
-    ? `Closes in ${countdown(market.cutoff, market.blockTimestamp)}`
+    ? `Closes ${compactUtcDate(market.cutoff)}`
     : market.state === "OPEN"
       ? "Trading closed"
       : market.state === "FINAL_YES"
@@ -71,7 +86,6 @@ function MarketCard({
       <Link
         className={styles.marketCardLink}
         href={`/markets/${market.semanticKey}`}
-        aria-label={`${market.title}, YES ${yes.toFixed(0)} percent`}
       >
         <span
           className={styles.marketCardArt}
@@ -93,10 +107,7 @@ function MarketCard({
         </span>
 
         <span className={styles.marketCardMeta}>
-          <span>
-            <i data-open={tradingOpen ? "true" : undefined} />
-            {marketStatus}
-          </span>
+          <span>{marketStatus}</span>
           {preview ? <span>Preview</span> : null}
           <ArrowRight aria-hidden="true" size={17} />
         </span>
@@ -154,7 +165,13 @@ export function PredictionMarketDirectoryView() {
   }, [release.config]);
 
   async function loadOlderMarkets() {
-    if (!release.config || state.kind !== "live" || state.nextCursor === 0n || loadingOlder) return;
+    if (
+      !release.config ||
+      state.kind !== "live" ||
+      state.nextCursor === 0n ||
+      loadingOlder
+    )
+      return;
     setLoadingOlder(true);
     setOlderError("");
     try {
@@ -165,7 +182,9 @@ export function PredictionMarketDirectoryView() {
       });
       setState((current) => {
         if (current.kind !== "live") return current;
-        const known = new Set(current.markets.map((market) => market.semanticKey.toLowerCase()));
+        const known = new Set(
+          current.markets.map((market) => market.semanticKey.toLowerCase()),
+        );
         return {
           ...current,
           markets: [
@@ -206,9 +225,13 @@ export function PredictionMarketDirectoryView() {
           wallet signature.
         </p>
       ) : null}
-      {release.error ? <p className={styles.errorBanner}>{release.error}</p> : null}
+      {release.error ? (
+        <p className={styles.errorBanner}>{release.error}</p>
+      ) : null}
       {state.kind === "error" ? (
-        <p className={styles.errorBanner} role="alert">{state.message}</p>
+        <p className={styles.errorBanner} role="alert">
+          {state.message}
+        </p>
       ) : null}
 
       <section className={styles.directoryList} aria-label="Prediction markets">
@@ -242,7 +265,11 @@ export function PredictionMarketDirectoryView() {
             {loadingOlder ? "Loading…" : "Show more"}
           </button>
         ) : null}
-        {olderError ? <p className={styles.errorBanner} role="alert">{olderError}</p> : null}
+        {olderError ? (
+          <p className={styles.errorBanner} role="alert">
+            {olderError}
+          </p>
+        ) : null}
       </section>
     </main>
   );

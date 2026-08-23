@@ -6,6 +6,7 @@ const PUBLIC_ROUTES = [
   "",
   "/explore",
   "/launch",
+  "/markets",
   "/docs",
   "/docs/economics",
   "/docs/v4-token",
@@ -25,6 +26,7 @@ const PUBLIC_ROUTES = [
   "/docs/launch-stamps",
   "/docs/models/classic",
   "/docs/models/custom",
+  "/docs/models/prediction-markets",
   "/docs/models/stock-paired",
   "/profile",
 ] as const;
