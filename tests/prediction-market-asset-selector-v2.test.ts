@@ -33,7 +33,7 @@ describe("PredictionMarketAssetSelectorV2", () => {
         },
         onChange: () => undefined,
         discoverySnapshot: {
-          assetKey:
+          selectionKey:
             "evm:1:0x1111111111111111111111111111111111111111",
           status: "available",
           currentPriceUsd: 0.25,
@@ -50,6 +50,7 @@ describe("PredictionMarketAssetSelectorV2", () => {
     expect(html).toContain("Solana");
     expect(html).toContain("Contract address");
     expect(html).toContain("The address alone does not identify its network");
+    expect(html).toContain("0x1111111111111111111111111111111111111111");
     expect(html).toContain("Current price · info only");
     expect(html).toContain("Market cap · info only");
     expect(html).toContain("Not available yet");

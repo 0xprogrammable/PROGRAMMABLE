@@ -1,3 +1,14 @@
+import {
+  bytesToHex,
+  encodeAbiParameters,
+  keccak256,
+  numberToHex,
+  padHex,
+  parseAbiParameters,
+  stringToHex,
+  type Hex,
+} from "viem";
+
 export const PREDICTION_MARKET_TYPE_V2 = "usd-price-at-utc" as const;
 export const PREDICTION_SETTLEMENT_NETWORK_V2 = Object.freeze({
   id: "robinhood",
@@ -6,30 +17,10 @@ export const PREDICTION_SETTLEMENT_NETWORK_V2 = Object.freeze({
 } as const);
 
 export const PREDICTION_SOURCE_NETWORKS_V2 = Object.freeze([
-  {
-    id: "ethereum",
-    label: "Ethereum",
-    namespace: "evm",
-    chainReference: "1",
-  },
-  {
-    id: "base",
-    label: "Base",
-    namespace: "evm",
-    chainReference: "8453",
-  },
-  {
-    id: "bnb",
-    label: "BNB Chain",
-    namespace: "evm",
-    chainReference: "56",
-  },
-  {
-    id: "robinhood",
-    label: "Robinhood Chain",
-    namespace: "evm",
-    chainReference: "4663",
-  },
+  { id: "ethereum", label: "Ethereum", namespace: "evm", chainReference: "1" },
+  { id: "base", label: "Base", namespace: "evm", chainReference: "8453" },
+  { id: "bnb", label: "BNB Chain", namespace: "evm", chainReference: "56" },
+  { id: "robinhood", label: "Robinhood Chain", namespace: "evm", chainReference: "4663" },
   {
     id: "solana",
     label: "Solana",
@@ -41,12 +32,40 @@ export const PREDICTION_SOURCE_NETWORKS_V2 = Object.freeze([
 export type PredictionSourceNetworkV2 =
   (typeof PREDICTION_SOURCE_NETWORKS_V2)[number];
 export type PredictionSourceNetworkIdV2 = PredictionSourceNetworkV2["id"];
+export type PredictionBytes32V2 = `0x${string}`;
+
+export type PredictionAssetIdentityV2 = Readonly<{
+  sourceNamespace: PredictionBytes32V2;
+  sourceChain: PredictionBytes32V2;
+  assetIdentifier: PredictionBytes32V2;
+  assetStandard: PredictionBytes32V2;
+}>;
+
+const ASSET_KEY_DOMAIN_V2 = keccak256(
+  stringToHex("PROGRAMMABLE_ASSET_KEY_V2"),
+) as PredictionBytes32V2;
+const ASSET_KEY_PARAMETERS_V2 = parseAbiParameters(
+  "bytes32 domain, bytes32 sourceNamespace, bytes32 sourceChain, bytes32 assetIdentifier, bytes32 assetStandard",
+);
+const GLOBAL_CRYPTO_NAMESPACE_V2 = bytes32TextV2("GLOBAL_CRYPTO");
+const GLOBAL_CHAIN_V2 = bytes32TextV2("GLOBAL");
+const NATIVE_STANDARD_V2 = bytes32TextV2("NATIVE");
+const EIP155_NAMESPACE_V2 = bytes32TextV2("EIP155");
+const ERC20_STANDARD_V2 = bytes32TextV2("ERC20");
+const SOLANA_NAMESPACE_V2 = bytes32TextV2("SOLANA");
+
+export const PREDICTION_SOLANA_MAINNET_GENESIS_V2 =
+  "0x45296998a6f8e2a784db5d9f95e18fc23f70441a1039446801089879b08c7ef0" as const;
+export const PREDICTION_SOLANA_TOKEN_PROGRAM_V2 =
+  "0x06ddf6e1d765a193d9cbe146ceeb79ac1cb485ed5f5b37913a8cf5857eff00a9" as const;
+export const PREDICTION_SOLANA_TOKEN_2022_PROGRAM_V2 =
+  "0x06ddf6e1ee758fde18425dbce46ccddab61afc4d83b90d27febdf928d8a18bfc" as const;
 
 export const PREDICTION_PRESET_ASSETS_V2 = Object.freeze([
-  { id: "btc", name: "Bitcoin", symbol: "BTC" },
-  { id: "eth", name: "Ethereum", symbol: "ETH" },
-  { id: "sol", name: "Solana", symbol: "SOL" },
-  { id: "bnb", name: "BNB", symbol: "BNB" },
+  { id: "btc", name: "Bitcoin", symbol: "BTC", identity: globalPresetIdentityV2("BTC") },
+  { id: "eth", name: "Ethereum", symbol: "ETH", identity: globalPresetIdentityV2("ETH") },
+  { id: "sol", name: "Solana", symbol: "SOL", identity: globalPresetIdentityV2("SOL") },
+  { id: "bnb", name: "BNB", symbol: "BNB", identity: globalPresetIdentityV2("BNB") },
 ] as const);
 
 export type PredictionPresetAssetV2 =
@@ -60,6 +79,7 @@ export type PredictionPresetAssetSelectionV2 = Readonly<{
 
 export type PredictionCustomAssetSelectionV2 = Readonly<{
   mode: "custom";
+  /** A contract address cannot identify its EVM network, so this is explicit. */
   sourceNetwork: PredictionSourceNetworkIdV2 | "";
   assetLocator: string;
 }>;
@@ -93,38 +113,58 @@ export const PREDICTION_MARKET_DRAFT_SCHEMA_V2 = Object.freeze({
   sourceNetworks: PREDICTION_SOURCE_NETWORKS_V2.map(({ id }) => id),
 } as const);
 
-export type PredictionAssetReleaseEntryV2 = Readonly<{
-  assetKey: string;
-  marketType: typeof PREDICTION_MARKET_TYPE_V2;
-  oracleStatus: "ready" | "unknown" | "unsupported" | "paused";
-  oraclePolicyId?: string;
-  releaseId?: string;
+export type PredictionAssetSnapshotBindingV2 = Readonly<{
+  assetKey: PredictionBytes32V2;
+  revision: number;
+  snapshotHash: PredictionBytes32V2;
 }>;
+
+export type PredictionAssetReleaseBindingV2 = Readonly<{
+  id: string;
+  oraclePolicyId: string;
+}>;
+
+type PredictionAssetReleaseEntryBaseV2 = Readonly<{
+  /** UI/provider lookup identity. It is never passed to the protocol as assetKey. */
+  selectionKey: string;
+  /** Exact AssetRegistryV2 assetKey derived from identity. */
+  onchainAssetKey: PredictionBytes32V2;
+  identity: PredictionAssetIdentityV2;
+  marketType: typeof PREDICTION_MARKET_TYPE_V2;
+}>;
+
+export type PredictionAssetReleaseEntryV2 =
+  | (PredictionAssetReleaseEntryBaseV2 & Readonly<{
+    oracleStatus: "ready" | "paused";
+    snapshot: PredictionAssetSnapshotBindingV2;
+    release: PredictionAssetReleaseBindingV2;
+  }>)
+  | (PredictionAssetReleaseEntryBaseV2 & Readonly<{
+    oracleStatus: "unknown" | "unsupported";
+    snapshot: null;
+    release: null;
+  }>);
 
 export type PredictionAssetReleaseRegistryV2 = Readonly<{
   schemaVersion: 2;
-  settlementNetwork: Readonly<{
-    id: "robinhood";
-    chainId: 4_663;
-  }>;
+  settlementNetwork: Readonly<{ id: "robinhood"; chainId: 4_663 }>;
   entries: readonly PredictionAssetReleaseEntryV2[];
 }>;
 
 export type PredictionAssetDiscoverySnapshotV2 = Readonly<{
-  assetKey: string;
+  /** Informational provider lookup identity only. */
+  selectionKey: string;
   status: "available" | "unavailable";
   observedAt?: string;
   currentPriceUsd?: number;
+  /** Display-only discovery data. It never decides settlement eligibility. */
   marketCapUsd?: number;
 }>;
 
 export type PredictionAssetSelectionValidationV2 = Readonly<{
   ok: boolean;
-  errors: Readonly<{
-    sourceNetwork?: string;
-    assetLocator?: string;
-  }>;
-  assetKey?: string;
+  errors: Readonly<{ sourceNetwork?: string; assetLocator?: string }>;
+  selectionKey?: string;
 }>;
 
 export type PredictionAssetMarketStateV2 = Readonly<{
@@ -140,39 +180,81 @@ export type PredictionAssetMarketStateV2 = Readonly<{
     | "oracle-ambiguous";
   title: string;
   detail: string;
-  assetKey?: string;
+  selectionKey?: string;
+  onchainAssetKey?: PredictionBytes32V2;
 }>;
 
 const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/u;
+const ZERO_EVM_ADDRESS_V2 = `0x${"0".repeat(40)}`;
+const BYTES32_PATTERN = /^0x[0-9a-f]{64}$/u;
+const ZERO_BYTES32_V2 = `0x${"0".repeat(64)}`;
 const SOLANA_BASE58_PATTERN = /^[1-9A-HJ-NP-Za-km-z]+$/u;
 const SOLANA_BASE58_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-function decodeBase58Length(value: string) {
-  const bytes = [0];
+function bytes32TextV2(value: string) {
+  return stringToHex(value, { size: 32 }) as PredictionBytes32V2;
+}
+
+function globalPresetIdentityV2(
+  symbol: "BTC" | "ETH" | "SOL" | "BNB",
+): PredictionAssetIdentityV2 {
+  return Object.freeze({
+    sourceNamespace: GLOBAL_CRYPTO_NAMESPACE_V2,
+    sourceChain: GLOBAL_CHAIN_V2,
+    assetIdentifier: bytes32TextV2(symbol),
+    assetStandard: NATIVE_STANDARD_V2,
+  });
+}
+
+function decodeBase58Bytes(value: string): Uint8Array | null {
+  if (!value || !SOLANA_BASE58_PATTERN.test(value)) return null;
+  const littleEndian = [0];
   for (const character of value) {
     const alphabetIndex = SOLANA_BASE58_ALPHABET.indexOf(character);
-    if (alphabetIndex < 0) return -1;
+    if (alphabetIndex < 0) return null;
     let carry = alphabetIndex;
-    for (let index = 0; index < bytes.length; index += 1) {
-      carry += bytes[index] * 58;
-      bytes[index] = carry & 0xff;
+    for (let index = 0; index < littleEndian.length; index += 1) {
+      carry += littleEndian[index] * 58;
+      littleEndian[index] = carry & 0xff;
       carry >>= 8;
     }
     while (carry > 0) {
-      bytes.push(carry & 0xff);
+      littleEndian.push(carry & 0xff);
       carry >>= 8;
     }
   }
+
   let leadingZeroCount = 0;
   while (leadingZeroCount < value.length && value[leadingZeroCount] === "1") {
     leadingZeroCount += 1;
   }
-  return (
-    bytes.length +
-    leadingZeroCount -
-    (bytes.length === 1 && bytes[0] === 0 ? 1 : 0)
-  );
+  const decodedLength = littleEndian.length + leadingZeroCount -
+    (littleEndian.length === 1 && littleEndian[0] === 0 ? 1 : 0);
+  const decoded = new Uint8Array(decodedLength);
+  for (let index = 0; index < littleEndian.length; index += 1) {
+    const target = decoded.length - 1 - index;
+    if (target >= leadingZeroCount) decoded[target] = littleEndian[index];
+  }
+  return decoded;
+}
+
+function isBytes32V2(candidate: unknown): candidate is PredictionBytes32V2 {
+  return typeof candidate === "string" && BYTES32_PATTERN.test(candidate);
+}
+
+function isNonzeroBytes32V2(candidate: unknown): candidate is PredictionBytes32V2 {
+  return isBytes32V2(candidate) && candidate !== ZERO_BYTES32_V2;
+}
+
+function samePredictionAssetIdentityV2(
+  left: PredictionAssetIdentityV2,
+  right: PredictionAssetIdentityV2,
+) {
+  return left.sourceNamespace === right.sourceNamespace &&
+    left.sourceChain === right.sourceChain &&
+    left.assetIdentifier === right.assetIdentifier &&
+    left.assetStandard === right.assetStandard;
 }
 
 export function isPredictionSourceNetworkIdV2(
@@ -188,26 +270,24 @@ export function predictionSourceNetworkV2(
 }
 
 export function isEvmPredictionAssetLocatorV2(candidate: string) {
-  return EVM_ADDRESS_PATTERN.test(candidate.trim());
+  const normalized = candidate.trim();
+  return EVM_ADDRESS_PATTERN.test(normalized) &&
+    normalized.toLowerCase() !== ZERO_EVM_ADDRESS_V2;
 }
 
 export function isSolanaPredictionAssetLocatorV2(candidate: string) {
   const normalized = candidate.trim();
-  return (
-    normalized.length >= 32 &&
-    normalized.length <= 44 &&
-    SOLANA_BASE58_PATTERN.test(normalized) &&
-    decodeBase58Length(normalized) === 32
-  );
+  if (normalized.length < 32 || normalized.length > 44) return false;
+  const decoded = decodeBase58Bytes(normalized);
+  return decoded?.length === 32 && decoded.some((byte) => byte !== 0);
 }
 
-export function predictionAssetKeyV2(
+/** UI/provider lookup key. It is deliberately not the protocol bytes32 assetKey. */
+export function predictionAssetSelectionKeyV2(
   selection: PredictionAssetSelectionV2,
 ): string | null {
   if (selection.mode === "preset") {
-    return PREDICTION_PRESET_ASSETS_V2.some(
-      ({ id }) => id === selection.presetId,
-    )
+    return PREDICTION_PRESET_ASSETS_V2.some(({ id }) => id === selection.presetId)
       ? `preset:${selection.presetId}`
       : null;
   }
@@ -223,99 +303,238 @@ export function predictionAssetKeyV2(
   return `solana:${network.chainReference}:${locator}`;
 }
 
+/**
+ * Exact identities compatible with one selection. Solana has two candidates because
+ * the mint's owning Token Program is release evidence, not safe client-side inference.
+ */
+export function predictionAssetIdentityCandidatesV2(
+  selection: PredictionAssetSelectionV2,
+): readonly PredictionAssetIdentityV2[] {
+  if (selection.mode === "preset") {
+    const preset = PREDICTION_PRESET_ASSETS_V2.find(({ id }) => id === selection.presetId);
+    return preset ? [preset.identity] : [];
+  }
+
+  const network = predictionSourceNetworkV2(selection.sourceNetwork);
+  const locator = selection.assetLocator.trim();
+  if (!network) return [];
+  if (network.namespace === "evm") {
+    if (!isEvmPredictionAssetLocatorV2(locator)) return [];
+    return [{
+      sourceNamespace: EIP155_NAMESPACE_V2,
+      sourceChain: numberToHex(BigInt(network.chainReference), { size: 32 }) as PredictionBytes32V2,
+      assetIdentifier: padHex(locator.toLowerCase() as Hex, { size: 32 }) as PredictionBytes32V2,
+      assetStandard: ERC20_STANDARD_V2,
+    }];
+  }
+
+  const mintBytes = decodeBase58Bytes(locator);
+  if (
+    !mintBytes ||
+    mintBytes.length !== 32 ||
+    !mintBytes.some((byte) => byte !== 0)
+  ) return [];
+  const assetIdentifier = bytesToHex(mintBytes) as PredictionBytes32V2;
+  const sharedIdentity = {
+    sourceNamespace: SOLANA_NAMESPACE_V2,
+    sourceChain: PREDICTION_SOLANA_MAINNET_GENESIS_V2,
+    assetIdentifier,
+  } as const;
+  return [
+    { ...sharedIdentity, assetStandard: PREDICTION_SOLANA_TOKEN_PROGRAM_V2 },
+    { ...sharedIdentity, assetStandard: PREDICTION_SOLANA_TOKEN_2022_PROGRAM_V2 },
+  ];
+}
+
+export function predictionOnchainAssetKeyV2(
+  identity: PredictionAssetIdentityV2,
+) {
+  return keccak256(encodeAbiParameters(ASSET_KEY_PARAMETERS_V2, [
+    ASSET_KEY_DOMAIN_V2,
+    identity.sourceNamespace,
+    identity.sourceChain,
+    identity.assetIdentifier,
+    identity.assetStandard,
+  ])) as PredictionBytes32V2;
+}
+
 export function validatePredictionAssetSelectionV2(
   selection: PredictionAssetSelectionV2,
 ): PredictionAssetSelectionValidationV2 {
   if (selection.mode === "preset") {
-    const assetKey = predictionAssetKeyV2(selection);
-    return assetKey
-      ? { ok: true, errors: {}, assetKey }
+    const selectionKey = predictionAssetSelectionKeyV2(selection);
+    return selectionKey
+      ? { ok: true, errors: {}, selectionKey }
       : { ok: false, errors: { assetLocator: "Choose a listed asset." } };
   }
-
   if (!selection.sourceNetwork) {
-    return {
-      ok: false,
-      errors: { sourceNetwork: "Choose the token network." },
-    };
+    return { ok: false, errors: { sourceNetwork: "Choose the token network." } };
   }
-
   const network = predictionSourceNetworkV2(selection.sourceNetwork);
   if (!network) {
-    return {
-      ok: false,
-      errors: { sourceNetwork: "Choose a supported network." },
-    };
+    return { ok: false, errors: { sourceNetwork: "Choose a supported network." } };
   }
-
   if (!selection.assetLocator.trim()) {
     return {
       ok: false,
       errors: {
-        assetLocator:
-          network.namespace === "solana"
-            ? "Enter the token mint."
-            : "Enter the contract address.",
+        assetLocator: network.namespace === "solana"
+          ? "Enter the token mint."
+          : "Enter the contract address.",
       },
     };
   }
-
-  const assetKey = predictionAssetKeyV2(selection);
-  if (!assetKey) {
+  const selectionKey = predictionAssetSelectionKeyV2(selection);
+  if (!selectionKey) {
     return {
       ok: false,
       errors: {
-        assetLocator:
-          network.namespace === "solana"
-            ? "Enter a valid Solana token mint."
-            : "Enter a valid EVM contract address.",
+        assetLocator: network.namespace === "solana"
+          ? "Enter a valid Solana token mint."
+          : "Enter a valid EVM contract address.",
       },
     };
   }
-
-  return { ok: true, errors: {}, assetKey };
+  return { ok: true, errors: {}, selectionKey };
 }
 
 function isPlainRecord(candidate: unknown): candidate is Record<string, unknown> {
-  return Boolean(
-    candidate && typeof candidate === "object" && !Array.isArray(candidate),
+  return Boolean(candidate && typeof candidate === "object" && !Array.isArray(candidate));
+}
+
+function hasExactKeysV2(
+  candidate: Record<string, unknown>,
+  expected: readonly string[],
+) {
+  const keys = Object.keys(candidate);
+  return keys.length === expected.length &&
+    expected.every((key) => Object.hasOwn(candidate, key));
+}
+
+function selectionFromKeyV2(selectionKey: string): PredictionAssetSelectionV2 | null {
+  if (selectionKey.startsWith("preset:")) {
+    const presetId = selectionKey.slice("preset:".length);
+    const preset = PREDICTION_PRESET_ASSETS_V2.find(({ id }) => id === presetId);
+    return preset ? { mode: "preset", presetId: preset.id } : null;
+  }
+  const [namespace, chainReference, locator, ...extra] = selectionKey.split(":");
+  if (extra.length > 0 || !namespace || !chainReference || !locator) return null;
+  const network = PREDICTION_SOURCE_NETWORKS_V2.find((candidate) =>
+    candidate.namespace === namespace && candidate.chainReference === chainReference
   );
+  if (!network) return null;
+  const selection: PredictionCustomAssetSelectionV2 = {
+    mode: "custom",
+    sourceNetwork: network.id,
+    assetLocator: locator,
+  };
+  return predictionAssetSelectionKeyV2(selection) === selectionKey ? selection : null;
+}
+
+function isPredictionAssetIdentityV2(
+  candidate: unknown,
+): candidate is PredictionAssetIdentityV2 {
+  return isPlainRecord(candidate) &&
+    hasExactKeysV2(candidate, [
+      "sourceNamespace",
+      "sourceChain",
+      "assetIdentifier",
+      "assetStandard",
+    ]) &&
+    isNonzeroBytes32V2(candidate.sourceNamespace) &&
+    isNonzeroBytes32V2(candidate.sourceChain) &&
+    isNonzeroBytes32V2(candidate.assetIdentifier) &&
+    isNonzeroBytes32V2(candidate.assetStandard);
+}
+
+function isPredictionAssetSnapshotBindingV2(
+  candidate: unknown,
+  onchainAssetKey: PredictionBytes32V2,
+): candidate is PredictionAssetSnapshotBindingV2 {
+  return isPlainRecord(candidate) &&
+    hasExactKeysV2(candidate, ["assetKey", "revision", "snapshotHash"]) &&
+    candidate.assetKey === onchainAssetKey &&
+    Number.isSafeInteger(candidate.revision) &&
+    Number(candidate.revision) > 0 &&
+    isNonzeroBytes32V2(candidate.snapshotHash);
+}
+
+function isPredictionAssetReleaseBindingV2(
+  candidate: unknown,
+): candidate is PredictionAssetReleaseBindingV2 {
+  return isPlainRecord(candidate) &&
+    hasExactKeysV2(candidate, ["id", "oraclePolicyId"]) &&
+    typeof candidate.id === "string" &&
+    candidate.id.trim() === candidate.id &&
+    candidate.id.length > 0 &&
+    typeof candidate.oraclePolicyId === "string" &&
+    candidate.oraclePolicyId.trim() === candidate.oraclePolicyId &&
+    candidate.oraclePolicyId.length > 0;
+}
+
+function isPredictionAssetReleaseEntryV2(
+  candidate: unknown,
+): candidate is PredictionAssetReleaseEntryV2 {
+  if (
+    !isPlainRecord(candidate) ||
+    !hasExactKeysV2(candidate, [
+      "selectionKey",
+      "onchainAssetKey",
+      "identity",
+      "marketType",
+      "oracleStatus",
+      "snapshot",
+      "release",
+    ]) ||
+    typeof candidate.selectionKey !== "string" ||
+    !isNonzeroBytes32V2(candidate.onchainAssetKey) ||
+    candidate.marketType !== PREDICTION_MARKET_TYPE_V2 ||
+    !["ready", "unknown", "unsupported", "paused"].includes(String(candidate.oracleStatus))
+  ) return false;
+
+  const candidateIdentity = candidate.identity;
+  if (!isPredictionAssetIdentityV2(candidateIdentity)) return false;
+  const selection = selectionFromKeyV2(candidate.selectionKey);
+  if (!selection) return false;
+  const identityMatches = predictionAssetIdentityCandidatesV2(selection).some(
+    (identity) => samePredictionAssetIdentityV2(identity, candidateIdentity),
+  );
+  if (!identityMatches || predictionOnchainAssetKeyV2(candidateIdentity) !== candidate.onchainAssetKey) {
+    return false;
+  }
+
+  if (candidate.oracleStatus === "ready" || candidate.oracleStatus === "paused") {
+    return isPredictionAssetSnapshotBindingV2(candidate.snapshot, candidate.onchainAssetKey) &&
+      isPredictionAssetReleaseBindingV2(candidate.release);
+  }
+  return candidate.snapshot === null && candidate.release === null;
 }
 
 export function isPredictionAssetReleaseRegistryV2(
   candidate: unknown,
 ): candidate is PredictionAssetReleaseRegistryV2 {
-  if (!isPlainRecord(candidate) || candidate.schemaVersion !== 2) return false;
+  if (
+    !isPlainRecord(candidate) ||
+    !hasExactKeysV2(candidate, ["schemaVersion", "settlementNetwork", "entries"]) ||
+    candidate.schemaVersion !== 2
+  ) return false;
   const settlementNetwork = candidate.settlementNetwork;
   if (
     !isPlainRecord(settlementNetwork) ||
+    !hasExactKeysV2(settlementNetwork, ["id", "chainId"]) ||
     settlementNetwork.id !== PREDICTION_SETTLEMENT_NETWORK_V2.id ||
     settlementNetwork.chainId !== PREDICTION_SETTLEMENT_NETWORK_V2.chainId ||
-    !Array.isArray(candidate.entries)
-  ) {
-    return false;
-  }
+    !Array.isArray(candidate.entries) ||
+    !candidate.entries.every(isPredictionAssetReleaseEntryV2)
+  ) return false;
 
-  return candidate.entries.every((entry) => {
-    if (!isPlainRecord(entry)) return false;
-    if (
-      typeof entry.assetKey !== "string" ||
-      entry.assetKey.length === 0 ||
-      entry.marketType !== PREDICTION_MARKET_TYPE_V2 ||
-      !["ready", "unknown", "unsupported", "paused"].includes(
-        String(entry.oracleStatus),
-      )
-    ) {
-      return false;
-    }
-    if (entry.oracleStatus !== "ready") return true;
-    return (
-      typeof entry.oraclePolicyId === "string" &&
-      entry.oraclePolicyId.trim().length > 0 &&
-      typeof entry.releaseId === "string" &&
-      entry.releaseId.trim().length > 0
-    );
-  });
+  const selectionByOnchainAssetKey = new Map<string, string>();
+  for (const entry of candidate.entries) {
+    const priorSelection = selectionByOnchainAssetKey.get(entry.onchainAssetKey);
+    if (priorSelection && priorSelection !== entry.selectionKey) return false;
+    selectionByOnchainAssetKey.set(entry.onchainAssetKey, entry.selectionKey);
+  }
+  return true;
 }
 
 export function predictionAssetMarketStateV2(
@@ -323,19 +542,17 @@ export function predictionAssetMarketStateV2(
   registry?: PredictionAssetReleaseRegistryV2 | null,
 ): PredictionAssetMarketStateV2 {
   const validation = validatePredictionAssetSelectionV2(selection);
-  if (!validation.ok || !validation.assetKey) {
-    const sourceNetwork =
-      selection.mode === "custom"
-        ? predictionSourceNetworkV2(selection.sourceNetwork)
-        : undefined;
+  if (!validation.ok || !validation.selectionKey) {
+    const sourceNetwork = selection.mode === "custom"
+      ? predictionSourceNetworkV2(selection.sourceNetwork)
+      : undefined;
     return {
       state: "incomplete",
       code: "selection-incomplete",
       title: "Choose an asset",
-      detail:
-        sourceNetwork?.namespace === "solana"
-          ? "Enter a valid Solana token mint."
-          : "Choose a network and enter a valid contract address.",
+      detail: sourceNetwork?.namespace === "solana"
+        ? "Enter a valid Solana token mint."
+        : "Choose a network and enter a valid contract address.",
     };
   }
 
@@ -345,7 +562,7 @@ export function predictionAssetMarketStateV2(
       code: "release-unconfigured",
       title: "Not available yet",
       detail: "No released price source is configured for this asset.",
-      assetKey: validation.assetKey,
+      selectionKey: validation.selectionKey,
     };
   }
   if (!isPredictionAssetReleaseRegistryV2(registry)) {
@@ -354,14 +571,13 @@ export function predictionAssetMarketStateV2(
       code: "release-invalid",
       title: "Not available yet",
       detail: "The price source configuration could not be verified.",
-      assetKey: validation.assetKey,
+      selectionKey: validation.selectionKey,
     };
   }
 
-  const entries = registry.entries.filter(
-    (entry) =>
-      entry.assetKey === validation.assetKey &&
-      entry.marketType === PREDICTION_MARKET_TYPE_V2,
+  const entries = registry.entries.filter((entry) =>
+    entry.selectionKey === validation.selectionKey &&
+    entry.marketType === PREDICTION_MARKET_TYPE_V2
   );
   if (entries.length === 0) {
     return {
@@ -369,7 +585,7 @@ export function predictionAssetMarketStateV2(
       code: "oracle-unsupported",
       title: "Not available yet",
       detail: "This asset does not have a released price source.",
-      assetKey: validation.assetKey,
+      selectionKey: validation.selectionKey,
     };
   }
   if (entries.length !== 1) {
@@ -378,18 +594,22 @@ export function predictionAssetMarketStateV2(
       code: "oracle-ambiguous",
       title: "Not available yet",
       detail: "The price source configuration is ambiguous.",
-      assetKey: validation.assetKey,
+      selectionKey: validation.selectionKey,
     };
   }
 
   const [entry] = entries;
+  const stateIdentity = {
+    selectionKey: validation.selectionKey,
+    onchainAssetKey: entry.onchainAssetKey,
+  } as const;
   if (entry.oracleStatus === "unknown") {
     return {
       state: "unavailable",
       code: "oracle-unknown",
       title: "Not available yet",
       detail: "The price source has not been verified.",
-      assetKey: validation.assetKey,
+      ...stateIdentity,
     };
   }
   if (entry.oracleStatus === "unsupported") {
@@ -398,7 +618,7 @@ export function predictionAssetMarketStateV2(
       code: "oracle-unsupported",
       title: "Not available yet",
       detail: "This asset does not have a released price source.",
-      assetKey: validation.assetKey,
+      ...stateIdentity,
     };
   }
   if (entry.oracleStatus === "paused") {
@@ -407,16 +627,15 @@ export function predictionAssetMarketStateV2(
       code: "oracle-paused",
       title: "Temporarily unavailable",
       detail: "New markets are paused for this asset.",
-      assetKey: validation.assetKey,
+      ...stateIdentity,
     };
   }
-
   return {
     state: "available",
     code: "ready",
     title: "Ready for a price market",
     detail: "The result uses the released price source at the selected UTC time.",
-    assetKey: validation.assetKey,
+    ...stateIdentity,
   };
 }
 
@@ -424,12 +643,12 @@ export function predictionAssetSnapshotMatchesSelectionV2(
   snapshot: PredictionAssetDiscoverySnapshotV2 | null | undefined,
   selection: PredictionAssetSelectionV2,
 ) {
-  const assetKey = predictionAssetKeyV2(selection);
+  const selectionKey = predictionAssetSelectionKeyV2(selection);
   return Boolean(
     snapshot &&
       snapshot.status === "available" &&
-      assetKey &&
-      snapshot.assetKey === assetKey,
+      selectionKey &&
+      snapshot.selectionKey === selectionKey,
   );
 }
 

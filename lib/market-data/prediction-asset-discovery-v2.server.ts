@@ -4,6 +4,7 @@ import {
   isEvmPredictionAssetLocatorV2,
   isPredictionSourceNetworkIdV2,
   isSolanaPredictionAssetLocatorV2,
+  predictionAssetSelectionKeyV2,
   predictionSourceNetworkV2,
   type PredictionCustomAssetSelectionV2,
   type PredictionSourceNetworkIdV2,
@@ -223,12 +224,14 @@ function discoveryBinding(
   }
   const network = predictionSourceNetworkV2(selection.sourceNetwork);
   if (!network) return null;
+  const selectionKey = predictionAssetSelectionKeyV2(selection);
+  if (!selectionKey) return null;
   const locator = selection.assetLocator.trim();
   if (network.namespace === "evm") {
     if (!isEvmPredictionAssetLocatorV2(locator)) return null;
     const canonicalLocator = locator.toLowerCase();
     return {
-      selectionKey: `evm:${network.chainReference}:${canonicalLocator}`,
+      selectionKey,
       providerChainId:
         DEXSCREENER_CHAIN_ID_BY_SOURCE_NETWORK[selection.sourceNetwork],
       locator: canonicalLocator,
@@ -237,7 +240,7 @@ function discoveryBinding(
   }
   if (!isSolanaPredictionAssetLocatorV2(locator)) return null;
   return {
-    selectionKey: `solana:${network.chainReference}:${locator}`,
+    selectionKey,
     providerChainId:
       DEXSCREENER_CHAIN_ID_BY_SOURCE_NETWORK[selection.sourceNetwork],
     locator,
