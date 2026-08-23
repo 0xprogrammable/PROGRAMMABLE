@@ -1,6 +1,8 @@
 import {
   getAddress,
   isAddress,
+  LimitExceededRpcError,
+  ResponseBodyTooLargeError,
   type Address,
   type Hex,
 } from "viem";
@@ -13,16 +15,20 @@ import {
 } from "./prediction-market-chain";
 import { predictionMarketErrorMessage } from "./prediction-market-errors";
 import {
+  assertPredictionConfirmedBlocksMatch,
+  predictionMarketRedeemableAtoms,
   readPredictionMarketSnapshot,
   readPredictionMarketsAtSnapshot,
   type PredictionMarketBatchFailure,
+  type PredictionMarketSnapshot,
   type PredictionMarketView,
 } from "./prediction-market-trading";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
 const FACE_SCALE = 10n;
-const LOG_BLOCK_SPAN = 50_000n;
+const LOG_BLOCK_SPAN = 1_000_000n;
+const LOG_MINIMUM_BLOCK_SPAN = 1n;
 const LOG_ADDRESS_BATCH_SIZE = 32;
 
 const marketCreatedEvent = predictionMarketFactoryEventAbi[0];
@@ -68,6 +74,30 @@ const outcomeTransferEvent = {
   ],
 } as const;
 
+const predictionSplitEvent = {
+  type: "event",
+  name: "Split",
+  anonymous: false,
+  inputs: [
+    { name: "payer", type: "address", indexed: true },
+    { name: "recipient", type: "address", indexed: true },
+    { name: "outcomeAtoms", type: "uint256", indexed: false },
+    { name: "collateralAtoms", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const predictionMergedEvent = {
+  type: "event",
+  name: "Merged",
+  anonymous: false,
+  inputs: [
+    { name: "holder", type: "address", indexed: true },
+    { name: "recipient", type: "address", indexed: true },
+    { name: "outcomeAtoms", type: "uint256", indexed: false },
+    { name: "collateralAtoms", type: "uint256", indexed: false },
+  ],
+} as const;
+
 const predictionRedeemedEvent = {
   type: "event",
   name: "Redeemed",
@@ -93,7 +123,12 @@ export type PredictionPortfolioLifecycle =
   | "final_no"
   | "final_invalid";
 
-export type PredictionPortfolioResult = "pending" | "won" | "lost" | "neutral";
+export type PredictionPortfolioResult =
+  | "pending"
+  | "won"
+  | "lost"
+  | "mixed"
+  | "neutral";
 
 export type PredictionPortfolioPosition = Readonly<{
   finalOutcome: "YES" | "NO" | "INVALID" | null;
@@ -162,7 +197,29 @@ export type PredictionPortfolioHistoryEntry =
     >
   | Readonly<
       PredictionPortfolioHistoryBase & {
+        accountRole: "payer" | "recipient" | "self";
         collateralAtoms: bigint;
+        kind: "split";
+        outcomeAtoms: bigint;
+        payer: Address;
+        recipient: Address;
+      }
+    >
+  | Readonly<
+      PredictionPortfolioHistoryBase & {
+        accountRole: "holder" | "recipient" | "self";
+        collateralAtoms: bigint;
+        holder: Address;
+        kind: "merged";
+        outcomeAtoms: bigint;
+        recipient: Address;
+      }
+    >
+  | Readonly<
+      PredictionPortfolioHistoryBase & {
+        accountRole: "holder" | "recipient" | "self";
+        collateralAtoms: bigint;
+        holder: Address;
         kind: "redeemed";
         noAtoms: bigint;
         recipient: Address;
@@ -244,8 +301,8 @@ export function derivePredictionPortfolioPosition(
       lifecycle: "final_yes",
       market,
       noAtoms,
-      redeemableAtoms: yesAtoms * FACE_SCALE,
-      result: yesAtoms > 0n ? "won" : "lost",
+      redeemableAtoms: predictionMarketRedeemableAtoms(market),
+      result: yesAtoms > 0n ? noAtoms > 0n ? "mixed" : "won" : "lost",
       tradingClosed: true,
       yesAtoms,
     };
@@ -256,8 +313,8 @@ export function derivePredictionPortfolioPosition(
       lifecycle: "final_no",
       market,
       noAtoms,
-      redeemableAtoms: noAtoms * FACE_SCALE,
-      result: noAtoms > 0n ? "won" : "lost",
+      redeemableAtoms: predictionMarketRedeemableAtoms(market),
+      result: noAtoms > 0n ? yesAtoms > 0n ? "mixed" : "won" : "lost",
       tradingClosed: true,
       yesAtoms,
     };
@@ -268,7 +325,7 @@ export function derivePredictionPortfolioPosition(
       lifecycle: "final_invalid",
       market,
       noAtoms,
-      redeemableAtoms: (yesAtoms + noAtoms) * FACE_SCALE / 2n,
+      redeemableAtoms: predictionMarketRedeemableAtoms(market),
       result: "neutral",
       tradingClosed: true,
       yesAtoms,
@@ -378,11 +435,36 @@ async function readPredictionPortfolioLogs<Log extends ConfirmedPortfolioLog>({
   ) => Promise<readonly Log[]>;
   toBlock: bigint;
 }): Promise<readonly Log[]> {
-  const logs: Log[] = [];
-  for (const range of predictionPortfolioBlockRanges(fromBlock, toBlock)) {
-    const byClient = await Promise.all(
-      clients.map((client) => read(client, range)),
-    );
+  const readRange = async (
+    range: PredictionPortfolioBlockRange,
+  ): Promise<readonly Log[]> => {
+    let byClient: readonly (readonly Log[])[];
+    try {
+      byClient = await Promise.all(
+        clients.map((client) => read(client, range)),
+      );
+    } catch (error) {
+      const size = range.toBlock - range.fromBlock + 1n;
+      if (
+        size <= LOG_MINIMUM_BLOCK_SPAN ||
+        !(
+          error instanceof LimitExceededRpcError ||
+          error instanceof ResponseBodyTooLargeError
+        )
+      ) {
+        throw error;
+      }
+      const midpoint = range.fromBlock + (size / 2n) - 1n;
+      const left = await readRange({
+        fromBlock: range.fromBlock,
+        toBlock: midpoint,
+      });
+      const right = await readRange({
+        fromBlock: midpoint + 1n,
+        toBlock: range.toBlock,
+      });
+      return [...left, ...right].sort(comparePortfolioLogs);
+    }
     const normalized = byClient.map((providerLogs) =>
       [...providerLogs]
         .sort(comparePortfolioLogs)
@@ -393,9 +475,26 @@ async function readPredictionPortfolioLogs<Log extends ConfirmedPortfolioLog>({
         "The two Robinhood RPCs disagree about prediction portfolio history",
       );
     }
-    logs.push(...[...byClient[0]].sort(comparePortfolioLogs));
+    return [...byClient[0]].sort(comparePortfolioLogs);
+  };
+
+  return [...await readRange({ fromBlock, toBlock })].sort(comparePortfolioLogs);
+}
+
+async function assertPredictionPortfolioSnapshotAnchor(
+  clients: PredictionMarketClients,
+  snapshot: PredictionMarketSnapshot,
+) {
+  const blocks = await Promise.all(
+    clients.map((client) => client.getBlock({ blockNumber: snapshot.blockNumber })),
+  );
+  assertPredictionConfirmedBlocksMatch(blocks[0], blocks[1]);
+  if (
+    blocks[0].hash === null ||
+    blocks[0].hash.toLowerCase() !== snapshot.blockHash.toLowerCase()
+  ) {
+    throw new Error("The prediction portfolio snapshot changed during the history read");
   }
-  return logs;
 }
 
 function predictionPortfolioAddressBatches(
@@ -425,6 +524,25 @@ function filterPredictionOutcomeLogs<Log extends ConfirmedPortfolioLog>(
   allowedTokens: ReadonlySet<string>,
 ) {
   return logs.filter((log) => allowedTokens.has(log.address.toLowerCase()));
+}
+
+function filterNonzeroPredictionOutcomeTransfers<
+  Log extends ConfirmedPortfolioLog & Readonly<{ args: Readonly<{ value: bigint }> }>,
+>(
+  logs: readonly Log[],
+  allowedTokens: ReadonlySet<string>,
+) {
+  return filterPredictionOutcomeLogs(logs, allowedTokens).filter(
+    (log) => log.args.value > 0n,
+  );
+}
+
+function filterFundedPredictionRedemptionRecipients<
+  Log extends ConfirmedPortfolioLog & Readonly<{
+    args: Readonly<{ collateralAtoms: bigint }>;
+  }>,
+>(logs: readonly Log[]) {
+  return logs.filter((log) => log.args.collateralAtoms > 0n);
 }
 
 type PredictionMarketComponent = Readonly<{
@@ -536,6 +654,84 @@ function indexPredictionMarketComponents(
   };
 }
 
+function requirePredictionPortfolioComponent(
+  index: PredictionMarketComponentIndex,
+  address: Address,
+  errorMessage: string,
+) {
+  const component = index.byVault.get(address.toLowerCase());
+  if (!component) throw new Error(errorMessage);
+  return component;
+}
+
+function predictionPortfolioBuyAmountsAreValid({
+  collateralInAtoms,
+  collateralRefundAtoms,
+  outcomeAtoms,
+}: {
+  collateralInAtoms: bigint;
+  collateralRefundAtoms: bigint;
+  outcomeAtoms: bigint;
+}) {
+  return outcomeAtoms > 0n && collateralRefundAtoms <= collateralInAtoms;
+}
+
+function predictionPortfolioSellAmountsAreValid({
+  outcomeInAtoms,
+  soldRefundAtoms,
+}: {
+  outcomeInAtoms: bigint;
+  soldRefundAtoms: bigint;
+}) {
+  return outcomeInAtoms > 0n && soldRefundAtoms <= outcomeInAtoms;
+}
+
+function predictionPortfolioPairAmountsAreValid(
+  outcomeAtoms: bigint,
+  collateralAtoms: bigint,
+) {
+  return outcomeAtoms > 0n && collateralAtoms === outcomeAtoms * FACE_SCALE;
+}
+
+function predictionPortfolioRedemptionAmountsAreValid({
+  collateralAtoms,
+  noAtoms,
+  state,
+  yesAtoms,
+}: {
+  collateralAtoms: bigint;
+  noAtoms: bigint;
+  state: PredictionMarketView["state"];
+  yesAtoms: bigint;
+}) {
+  if (yesAtoms === 0n && noAtoms === 0n) return false;
+  const expectedCollateralAtoms = state === "FINAL_YES"
+    ? yesAtoms * FACE_SCALE
+    : state === "FINAL_NO"
+      ? noAtoms * FACE_SCALE
+      : state === "FINAL_INVALID"
+        ? (yesAtoms + noAtoms) * FACE_SCALE / 2n
+        : -1n;
+  return collateralAtoms === expectedCollateralAtoms;
+}
+
+function predictionPortfolioAccountRole<PrimaryRole extends "holder" | "payer">(
+  account: Address,
+  primary: Address,
+  recipient: Address,
+  primaryRole: PrimaryRole,
+): PrimaryRole | "recipient" | "self" | null {
+  const normalizedAccount = account.toLowerCase();
+  const primaryAccount = primary.toLowerCase() === normalizedAccount;
+  const recipientAccount = recipient.toLowerCase() === normalizedAccount;
+  if (!primaryAccount && !recipientAccount) return null;
+  return primaryAccount && recipientAccount
+    ? "self"
+    : primaryAccount
+      ? primaryRole
+      : "recipient";
+}
+
 async function readOutcomeTransferLogs({
   account,
   addresses,
@@ -570,7 +766,7 @@ async function readOutcomeTransferLogs({
               toBlock: range.toBlock,
             })
             .then((providerLogs) =>
-              filterPredictionOutcomeLogs(providerLogs, allowedTokens),
+              filterNonzeroPredictionOutcomeTransfers(providerLogs, allowedTokens),
             ),
         toBlock,
       })),
@@ -594,8 +790,8 @@ async function readPredictionRedeemedLogs({
 }) {
   const logs = [];
   for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
-    logs.push(
-      ...(await readPredictionPortfolioLogs({
+    const [holderLogs, recipientLogs] = await Promise.all([
+      readPredictionPortfolioLogs({
         clients,
         fromBlock,
         read: (client, range) =>
@@ -608,7 +804,133 @@ async function readPredictionRedeemedLogs({
             toBlock: range.toBlock,
           }),
         toBlock,
-      })),
+      }),
+      readPredictionPortfolioLogs({
+        clients,
+        fromBlock,
+        read: (client, range) =>
+          client
+            .getLogs({
+              address: addressBatch,
+              args: { recipient: account },
+              event: predictionRedeemedEvent,
+              fromBlock: range.fromBlock,
+              strict: true,
+              toBlock: range.toBlock,
+            })
+            .then(filterFundedPredictionRedemptionRecipients),
+        toBlock,
+      }),
+    ]);
+    logs.push(
+      ...holderLogs,
+      ...recipientLogs,
+    );
+  }
+  return dedupePortfolioLogs(logs);
+}
+
+async function readPredictionSplitLogs({
+  account,
+  addresses,
+  clients,
+  fromBlock,
+  toBlock,
+}: {
+  account: Address;
+  addresses: readonly Address[];
+  clients: PredictionMarketClients;
+  fromBlock: bigint;
+  toBlock: bigint;
+}) {
+  const logs = [];
+  for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
+    const [payerLogs, recipientLogs] = await Promise.all([
+      readPredictionPortfolioLogs({
+        clients,
+        fromBlock,
+        read: (client, range) =>
+          client.getLogs({
+            address: addressBatch,
+            args: { payer: account },
+            event: predictionSplitEvent,
+            fromBlock: range.fromBlock,
+            strict: true,
+            toBlock: range.toBlock,
+          }),
+        toBlock,
+      }),
+      readPredictionPortfolioLogs({
+        clients,
+        fromBlock,
+        read: (client, range) =>
+          client.getLogs({
+            address: addressBatch,
+            args: { recipient: account },
+            event: predictionSplitEvent,
+            fromBlock: range.fromBlock,
+            strict: true,
+            toBlock: range.toBlock,
+          }),
+        toBlock,
+      }),
+    ]);
+    logs.push(
+      ...payerLogs,
+      ...recipientLogs,
+    );
+  }
+  return dedupePortfolioLogs(logs);
+}
+
+async function readPredictionMergedLogs({
+  account,
+  addresses,
+  clients,
+  fromBlock,
+  toBlock,
+}: {
+  account: Address;
+  addresses: readonly Address[];
+  clients: PredictionMarketClients;
+  fromBlock: bigint;
+  toBlock: bigint;
+}) {
+  const logs = [];
+  for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
+    const [holderLogs, recipientLogs] = await Promise.all([
+      readPredictionPortfolioLogs({
+        clients,
+        fromBlock,
+        read: (client, range) =>
+          client.getLogs({
+            address: addressBatch,
+            args: { holder: account },
+            event: predictionMergedEvent,
+            fromBlock: range.fromBlock,
+            strict: true,
+            toBlock: range.toBlock,
+          }),
+        toBlock,
+      }),
+      readPredictionPortfolioLogs({
+        clients,
+        fromBlock,
+        read: (client, range) =>
+          client.getLogs({
+            address: addressBatch,
+            args: { recipient: account },
+            event: predictionMergedEvent,
+            fromBlock: range.fromBlock,
+            strict: true,
+            toBlock: range.toBlock,
+          }),
+        toBlock,
+      }),
+    ]);
+    logs.push(
+      ...holderLogs,
+      ...recipientLogs,
     );
   }
   return dedupePortfolioLogs(logs);
@@ -647,6 +969,117 @@ function historyBase(
     transactionIndex: log.transactionIndex,
     vault,
   };
+}
+
+function suppressPredictionPortfolioTransferLegs(
+  canonicalHistory: readonly PredictionPortfolioHistoryEntry[],
+) {
+  const transferLegKey = (
+    transactionHash: Hex,
+    semanticKey: Hex,
+    outcome: "YES" | "NO",
+    direction: "in" | "out",
+    outcomeAtoms: bigint,
+  ) => [
+    transactionHash.toLowerCase(),
+    semanticKey.toLowerCase(),
+    outcome,
+    direction,
+    outcomeAtoms.toString(),
+  ].join(":");
+  const expectedTransferLegs: Array<{
+    eventLogIndex: number;
+    key: string;
+  }> = [];
+  const expectTransferLeg = (
+    entry: PredictionPortfolioHistoryEntry,
+    outcome: "YES" | "NO",
+    direction: "in" | "out",
+    outcomeAtoms: bigint,
+  ) => {
+    if (outcomeAtoms <= 0n) return;
+    expectedTransferLegs.push({
+      eventLogIndex: entry.logIndex,
+      key: transferLegKey(
+        entry.transactionHash,
+        entry.semanticKey,
+        outcome,
+        direction,
+        outcomeAtoms,
+      ),
+    });
+  };
+  for (const entry of canonicalHistory) {
+    if (entry.kind === "bought") {
+      expectTransferLeg(entry, entry.outcome, "in", entry.outcomeAtoms);
+    }
+    if (entry.kind === "sold") {
+      const complement = entry.outcome === "YES" ? "NO" : "YES";
+      expectTransferLeg(entry, entry.outcome, "out", entry.outcomeAtoms);
+      expectTransferLeg(entry, entry.outcome, "in", entry.soldRefundAtoms);
+      expectTransferLeg(entry, complement, "in", entry.complementRefundAtoms);
+    }
+    if (
+      entry.kind === "split" &&
+      (entry.accountRole === "recipient" || entry.accountRole === "self")
+    ) {
+      expectTransferLeg(entry, "YES", "in", entry.outcomeAtoms);
+      expectTransferLeg(entry, "NO", "in", entry.outcomeAtoms);
+    }
+    if (
+      entry.kind === "merged" &&
+      (entry.accountRole === "holder" || entry.accountRole === "self")
+    ) {
+      expectTransferLeg(entry, "YES", "out", entry.outcomeAtoms);
+      expectTransferLeg(entry, "NO", "out", entry.outcomeAtoms);
+    }
+    if (
+      entry.kind === "redeemed" &&
+      (entry.accountRole === "holder" || entry.accountRole === "self")
+    ) {
+      expectTransferLeg(entry, "YES", "out", entry.yesAtoms);
+      expectTransferLeg(entry, "NO", "out", entry.noAtoms);
+    }
+  }
+  const transferEntries = canonicalHistory.filter(
+    (entry): entry is Extract<PredictionPortfolioHistoryEntry, { kind: "transfer" }> =>
+      entry.kind === "transfer",
+  );
+  const suppressedTransfers = new Set<string>();
+  for (const expected of expectedTransferLegs.sort(
+    (left, right) => left.eventLogIndex - right.eventLogIndex,
+  )) {
+    const matched = transferEntries
+      .filter((entry) =>
+        entry.direction !== "self" &&
+        entry.logIndex < expected.eventLogIndex &&
+        !suppressedTransfers.has(
+          `${entry.transactionHash.toLowerCase()}:${entry.logIndex}`,
+        ) &&
+        transferLegKey(
+          entry.transactionHash,
+          entry.semanticKey,
+          entry.outcome,
+          entry.direction,
+          entry.outcomeAtoms,
+        ) === expected.key,
+      )
+      .sort((left, right) => right.logIndex - left.logIndex)[0];
+    if (matched) {
+      suppressedTransfers.add(
+        `${matched.transactionHash.toLowerCase()}:${matched.logIndex}`,
+      );
+    }
+  }
+  return canonicalHistory
+    .filter(
+      (entry) =>
+        entry.kind !== "transfer" ||
+        !suppressedTransfers.has(
+          `${entry.transactionHash.toLowerCase()}:${entry.logIndex}`,
+        ),
+    )
+    .sort((left, right) => compareActivityPosition(right, left));
 }
 
 async function readPredictionMarketPortfolioAtRequest({
@@ -700,7 +1133,16 @@ async function readPredictionMarketPortfolioAtRequest({
   );
   const allowedTokens = new Set(componentIndex.byToken.keys());
 
-  const [createdLogs, boughtLogs, soldLogs, incomingTransfers, outgoingTransfers, redeemedLogs] =
+  const [
+    createdLogs,
+    boughtLogs,
+    soldLogs,
+    incomingTransfers,
+    outgoingTransfers,
+    splitLogs,
+    mergedLogs,
+    redeemedLogs,
+  ] =
     await Promise.all([
       readPredictionPortfolioLogs({
         clients,
@@ -762,6 +1204,20 @@ async function readPredictionMarketPortfolioAtRequest({
         fromBlock,
         toBlock,
       }),
+      readPredictionSplitLogs({
+        account: request.account,
+        addresses: vaultAddresses,
+        clients,
+        fromBlock,
+        toBlock,
+      }),
+      readPredictionMergedLogs({
+        account: request.account,
+        addresses: vaultAddresses,
+        clients,
+        fromBlock,
+        toBlock,
+      }),
       readPredictionRedeemedLogs({
         account: request.account,
         addresses: vaultAddresses,
@@ -788,18 +1244,37 @@ async function readPredictionMarketPortfolioAtRequest({
       candidateActivity.set(key, next);
     }
   };
-  for (const log of createdLogs) noteCandidate(log.args.semanticKey, log);
+  const knownComponentKeys = new Set([
+    ...componentIndex.bySemanticKey.keys(),
+    ...componentIndex.failures.map((failure) => failure.semanticKey.toLowerCase()),
+  ]);
+  for (const log of createdLogs) {
+    if (!knownComponentKeys.has(log.args.semanticKey.toLowerCase())) {
+      throw new Error(
+        "The prediction factory emitted creator activity without market components",
+      );
+    }
+    noteCandidate(log.args.semanticKey, log);
+  }
   for (const log of [...boughtLogs, ...soldLogs]) {
-    const component = componentIndex.byVault.get(log.args.vault.toLowerCase());
-    if (component) noteCandidate(component.semanticKey, log);
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.args.vault,
+      "The reviewed prediction router emitted activity for an unknown market",
+    );
+    noteCandidate(component.semanticKey, log);
   }
   for (const log of transferLogs) {
     const token = componentIndex.byToken.get(log.address.toLowerCase());
     if (token) noteCandidate(token.component.semanticKey, log);
   }
-  for (const log of redeemedLogs) {
-    const component = componentIndex.byVault.get(log.address.toLowerCase());
-    if (component) noteCandidate(component.semanticKey, log);
+  for (const log of [...splitLogs, ...mergedLogs, ...redeemedLogs]) {
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.address,
+      "A prediction vault emitted activity for an unknown market",
+    );
+    noteCandidate(component.semanticKey, log);
   }
 
   const semanticKeys = [...candidateActivity.entries()]
@@ -814,6 +1289,7 @@ async function readPredictionMarketPortfolioAtRequest({
         snapshot,
       })
     : { failures: [], markets: [], snapshot };
+  await assertPredictionPortfolioSnapshotAnchor(clients, snapshot);
   const marketsByKey = new Map(
     canonical.markets.map((market) => [market.semanticKey.toLowerCase(), market]),
   );
@@ -854,11 +1330,18 @@ async function readPredictionMarketPortfolioAtRequest({
     });
   }
   for (const log of boughtLogs) {
-    const component = componentIndex.byVault.get(log.args.vault.toLowerCase());
-    if (!component) continue;
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.args.vault,
+      "The reviewed prediction router buy cannot be mapped to a market",
+    );
     const market = usableMarket(component.semanticKey);
     if (!market || market.vault.toLowerCase() !== log.args.vault.toLowerCase()) {
       if (market) addFailure(component.semanticKey, "The buy event vault is not canonical");
+      continue;
+    }
+    if (!predictionPortfolioBuyAmountsAreValid(log.args)) {
+      addFailure(component.semanticKey, "The buy event amounts are invalid");
       continue;
     }
     history.push({
@@ -871,11 +1354,18 @@ async function readPredictionMarketPortfolioAtRequest({
     });
   }
   for (const log of soldLogs) {
-    const component = componentIndex.byVault.get(log.args.vault.toLowerCase());
-    if (!component) continue;
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.args.vault,
+      "The reviewed prediction router sell cannot be mapped to a market",
+    );
     const market = usableMarket(component.semanticKey);
     if (!market || market.vault.toLowerCase() !== log.args.vault.toLowerCase()) {
       if (market) addFailure(component.semanticKey, "The sell event vault is not canonical");
+      continue;
+    }
+    if (!predictionPortfolioSellAmountsAreValid(log.args)) {
+      addFailure(component.semanticKey, "The sell event amounts are invalid");
       continue;
     }
     history.push({
@@ -888,20 +1378,117 @@ async function readPredictionMarketPortfolioAtRequest({
       soldRefundAtoms: log.args.soldRefundAtoms,
     });
   }
+  for (const log of splitLogs) {
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.address,
+      "The prediction split cannot be mapped to a market",
+    );
+    const market = usableMarket(component.semanticKey);
+    if (!market || market.vault.toLowerCase() !== log.address.toLowerCase()) {
+      if (market) addFailure(component.semanticKey, "The split event vault is not canonical");
+      continue;
+    }
+    if (!predictionPortfolioPairAmountsAreValid(
+      log.args.outcomeAtoms,
+      log.args.collateralAtoms,
+    )) {
+      addFailure(component.semanticKey, "The split event amounts are invalid");
+      continue;
+    }
+    const payer = getAddress(log.args.payer);
+    const recipient = getAddress(log.args.recipient);
+    const accountRole = predictionPortfolioAccountRole(
+      request.account,
+      payer,
+      recipient,
+      "payer",
+    );
+    if (!accountRole) continue;
+    history.push({
+      ...historyBase(log, market),
+      accountRole,
+      collateralAtoms: log.args.collateralAtoms,
+      kind: "split",
+      outcomeAtoms: log.args.outcomeAtoms,
+      payer,
+      recipient,
+    });
+  }
+  for (const log of mergedLogs) {
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.address,
+      "The prediction merge cannot be mapped to a market",
+    );
+    const market = usableMarket(component.semanticKey);
+    if (!market || market.vault.toLowerCase() !== log.address.toLowerCase()) {
+      if (market) addFailure(component.semanticKey, "The merge event vault is not canonical");
+      continue;
+    }
+    if (!predictionPortfolioPairAmountsAreValid(
+      log.args.outcomeAtoms,
+      log.args.collateralAtoms,
+    )) {
+      addFailure(component.semanticKey, "The merge event amounts are invalid");
+      continue;
+    }
+    const holder = getAddress(log.args.holder);
+    const recipient = getAddress(log.args.recipient);
+    const accountRole = predictionPortfolioAccountRole(
+      request.account,
+      holder,
+      recipient,
+      "holder",
+    );
+    if (!accountRole) continue;
+    history.push({
+      ...historyBase(log, market),
+      accountRole,
+      collateralAtoms: log.args.collateralAtoms,
+      holder,
+      kind: "merged",
+      outcomeAtoms: log.args.outcomeAtoms,
+      recipient,
+    });
+  }
   for (const log of redeemedLogs) {
-    const component = componentIndex.byVault.get(log.address.toLowerCase());
-    if (!component) continue;
+    const component = requirePredictionPortfolioComponent(
+      componentIndex,
+      log.address,
+      "The prediction redemption cannot be mapped to a market",
+    );
     const market = usableMarket(component.semanticKey);
     if (!market || market.vault.toLowerCase() !== log.address.toLowerCase()) {
       if (market) addFailure(component.semanticKey, "The redemption event vault is not canonical");
       continue;
     }
+    if (!predictionPortfolioRedemptionAmountsAreValid({
+      collateralAtoms: log.args.collateralAtoms,
+      noAtoms: log.args.noAtoms,
+      state: market.state,
+      yesAtoms: log.args.yesAtoms,
+    })) {
+      addFailure(component.semanticKey, "The redemption event amounts are invalid");
+      continue;
+    }
+    const holder = getAddress(log.args.holder);
+    const recipient = getAddress(log.args.recipient);
+    const accountRole = predictionPortfolioAccountRole(
+      request.account,
+      holder,
+      recipient,
+      "holder",
+    );
+    if (!accountRole) continue;
     history.push({
       ...historyBase(log, market),
+      accountRole,
       collateralAtoms: log.args.collateralAtoms,
+      holder,
       kind: "redeemed",
       noAtoms: log.args.noAtoms,
-      recipient: getAddress(log.args.recipient),
+      recipient,
       yesAtoms: log.args.yesAtoms,
     });
   }
@@ -934,25 +1521,7 @@ async function readPredictionMarketPortfolioAtRequest({
   const canonicalHistory = history.filter(
     (entry) => !invalidHistoryKeys.has(entry.semanticKey.toLowerCase()),
   );
-  const richerTransactions = new Set(
-    canonicalHistory
-      .filter((entry) =>
-        entry.kind === "bought" || entry.kind === "sold" || entry.kind === "redeemed",
-      )
-      .map(
-        (entry) =>
-          `${entry.transactionHash.toLowerCase()}:${entry.semanticKey.toLowerCase()}`,
-      ),
-  );
-  const visibleHistory = canonicalHistory
-    .filter(
-      (entry) =>
-        entry.kind !== "transfer" ||
-        !richerTransactions.has(
-          `${entry.transactionHash.toLowerCase()}:${entry.semanticKey.toLowerCase()}`,
-        ),
-    )
-    .sort((left, right) => compareActivityPosition(right, left));
+  const visibleHistory = suppressPredictionPortfolioTransferLegs(canonicalHistory);
   const created = visibleHistory.flatMap((entry) =>
     entry.kind === "created"
       ? [{
@@ -1010,7 +1579,10 @@ export async function readPredictionMarketPortfolio({
 }
 
 export const predictionMarketPortfolioInternal = {
+  assertPredictionPortfolioSnapshotAnchor,
   dedupePortfolioLogs,
+  filterFundedPredictionRedemptionRecipients,
+  filterNonzeroPredictionOutcomeTransfers,
   filterPredictionOutcomeLogs,
   indexPredictionMarketComponents,
   marketComponentsEvent,
@@ -1018,7 +1590,16 @@ export const predictionMarketPortfolioInternal = {
   outcomeBoughtEvent,
   outcomeSoldEvent,
   outcomeTransferEvent,
+  predictionPortfolioAccountRole,
+  predictionPortfolioBuyAmountsAreValid,
+  predictionPortfolioPairAmountsAreValid,
+  predictionPortfolioRedemptionAmountsAreValid,
+  predictionPortfolioSellAmountsAreValid,
+  predictionMergedEvent,
   predictionPortfolioBlockRanges,
   predictionRedeemedEvent,
+  predictionSplitEvent,
   readPredictionPortfolioLogs,
+  requirePredictionPortfolioComponent,
+  suppressPredictionPortfolioTransferLegs,
 } as const;

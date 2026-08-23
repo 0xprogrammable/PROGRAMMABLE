@@ -59,6 +59,22 @@ export type PredictionOutcome = "YES" | "NO";
 export type PredictionMarketState = "OPEN" | "FINAL_YES" | "FINAL_NO" | "FINAL_INVALID";
 export type PredictionCheckpointStatus = "AWAITING" | "FINAL" | "INVALID";
 
+export type PredictionMarketLoadRequestV1 = Readonly<{
+  accountKey: string;
+  generation: number;
+  semanticKey: string;
+}>;
+
+export function isPredictionMarketLoadRequestCurrent(
+  candidate: PredictionMarketLoadRequestV1,
+  current: PredictionMarketLoadRequestV1 | null,
+) {
+  return current !== null
+    && candidate.accountKey === current.accountKey
+    && candidate.generation === current.generation
+    && candidate.semanticKey === current.semanticKey;
+}
+
 export type PredictionPoolKey = Readonly<{
   currency0: Address;
   currency1: Address;
@@ -111,6 +127,7 @@ export type PredictionMarketDirectory = Readonly<{
 }>;
 
 export type PredictionMarketSnapshot = Readonly<{
+  blockHash: Hex;
   blockNumber: bigint;
   blockTimestamp: bigint;
   marketCount: bigint;
@@ -691,6 +708,22 @@ export function formatPredictionOutcome(atoms: bigint, outcome?: PredictionOutco
   return outcome ? `${value} ${outcome}` : value;
 }
 
+export function predictionMarketRedeemableAtoms({
+  noBalanceAtoms,
+  state,
+  yesBalanceAtoms,
+}: Pick<PredictionMarketView, "noBalanceAtoms" | "state" | "yesBalanceAtoms">) {
+  if (yesBalanceAtoms < 0n || noBalanceAtoms < 0n) {
+    throw new Error("Prediction outcome balances cannot be negative");
+  }
+  if (state === "FINAL_YES") return yesBalanceAtoms * FACE_SCALE;
+  if (state === "FINAL_NO") return noBalanceAtoms * FACE_SCALE;
+  if (state === "FINAL_INVALID") {
+    return (yesBalanceAtoms + noBalanceAtoms) * FACE_SCALE / 2n;
+  }
+  return 0n;
+}
+
 export function predictionBuyPayoutSummary({
   collateralInAtoms,
   collateralRefundAtoms,
@@ -821,7 +854,11 @@ export async function readPredictionMarketSnapshot({
   ]);
   assertPredictionConfirmedBlocksMatch(blocks[0], blocks[1]);
   assertSame(counts[0], counts[1], "the market count");
+  if (blocks[0].hash === null) {
+    throw new Error("The confirmed Robinhood block has no canonical hash");
+  }
   return {
+    blockHash: blocks[0].hash,
     blockNumber,
     blockTimestamp: blocks[0].timestamp,
     marketCount: counts[0],
@@ -1069,6 +1106,7 @@ export async function readPredictionMarketsAtSnapshot({
 }): Promise<PredictionMarketBatchRead> {
   if (!isAddress(account)) throw new Error("The wallet address is invalid");
   if (
+    snapshot.blockHash.length !== 66 ||
     snapshot.blockNumber < config.deploymentBlock ||
     snapshot.blockTimestamp <= 0n ||
     snapshot.marketCount < 0n ||
@@ -1088,6 +1126,7 @@ export async function readPredictionMarketsAtSnapshot({
   assertPredictionConfirmedBlocksMatch(blocks[0], blocks[1]);
   assertSame(
     {
+      blockHash: blocks[0].hash,
       blockNumber: blocks[0].number,
       blockTimestamp: blocks[0].timestamp,
       marketCount: snapshot.marketCount,
@@ -1722,6 +1761,13 @@ export async function preparePredictionRedeem({
   if (market.state === "OPEN") throw new Error("The market is not final yet");
   if (yesAtoms < 0n || noAtoms < 0n || (yesAtoms === 0n && noAtoms === 0n)) {
     throw new Error("There are no outcome tokens to redeem");
+  }
+  if (predictionMarketRedeemableAtoms({
+    noBalanceAtoms: noAtoms,
+    state: market.state,
+    yesBalanceAtoms: yesAtoms,
+  }) === 0n) {
+    throw new Error("These outcome tokens have no payout to redeem");
   }
   const data = encodeFunctionData({
     abi: vaultAbi,

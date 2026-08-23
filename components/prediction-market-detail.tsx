@@ -9,7 +9,14 @@ import {
   LockKeyhole,
   RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import styles from "@/components/prediction-market-experience.module.css";
 import { predictionPreviewMarkets } from "@/components/prediction-market-preview";
@@ -27,10 +34,12 @@ import {
   formatPredictionMarketObservation,
   formatPredictionOutcome,
   formatPredictionPriceAtoms,
+  isPredictionMarketLoadRequestCurrent,
   parsePredictionBuyAmount,
   parsePredictionSellAmount,
   predictionBuyPayoutSummary,
   predictionDirectionalProtocolFee,
+  predictionMarketRedeemableAtoms,
   preparePredictionBuy,
   preparePredictionFallbackAction,
   preparePredictionRedeem,
@@ -44,6 +53,7 @@ import {
   type PredictionBuyQuote,
   type PredictionFallbackAction,
   type PredictionMarketView,
+  type PredictionMarketLoadRequestV1,
   type PredictionOutcome,
   type PredictionSellQuote,
 } from "@/lib/prediction-market-trading";
@@ -67,9 +77,9 @@ type LiveQuote =
 type DisplayBuyPayout = Readonly<{
   estimatedCostLabel: string;
   maximumLossLabel: string;
+  minimumNeutralPayoutLabel: string;
   minimumWinningProfitLabel: string;
   minimumWinningPayoutLabel: string;
-  neutralPayoutLabel: string;
   outcome: PredictionOutcome;
   potentialProfitAtoms: bigint;
   potentialProfitLabel: string;
@@ -105,17 +115,24 @@ function centsLabel(bps: number) {
   return `${(bps / 100).toFixed(1).replace(/\.0$/u, "")}¢`;
 }
 
-function traderUsdgLabel(atoms: bigint) {
+function traderUsdgLabel(
+  atoms: bigint,
+  precision: "adaptive" | "exact" = "adaptive",
+) {
   const negative = atoms < 0n;
   const absolute = negative ? -atoms : atoms;
   const collateralScale = 10n ** BigInt(PREDICTION_COLLATERAL_DECIMALS);
-  const fractionDigits = absolute >= collateralScale
-    ? 2
-    : absolute >= collateralScale / 100n
-      ? 4
-      : PREDICTION_COLLATERAL_DECIMALS;
+  const fractionDigits = precision === "exact"
+    ? PREDICTION_COLLATERAL_DECIMALS
+    : absolute >= collateralScale
+      ? 2
+      : absolute >= collateralScale / 100n
+        ? 4
+        : PREDICTION_COLLATERAL_DECIMALS;
   const roundingScale = 10n ** BigInt(PREDICTION_COLLATERAL_DECIMALS - fractionDigits);
-  const rounded = (absolute + roundingScale / 2n) / roundingScale;
+  const rounded = precision === "exact"
+    ? absolute
+    : (absolute + roundingScale / 2n) / roundingScale;
   const displayScale = 10n ** BigInt(fractionDigits);
   const whole = (rounded / displayScale).toString();
   const fraction = (rounded % displayScale)
@@ -126,9 +143,15 @@ function traderUsdgLabel(atoms: bigint) {
   return `${negative ? "−" : ""}${grouped}${fraction ? `.${fraction}` : ""} USDG`;
 }
 
-function signedUsdgLabel(atoms: bigint) {
-  if (atoms === 0n) return traderUsdgLabel(0n);
-  return `${atoms > 0n ? "+" : "−"}${traderUsdgLabel(atoms > 0n ? atoms : -atoms)}`;
+function signedUsdgLabel(
+  atoms: bigint,
+  precision: "adaptive" | "exact" = "adaptive",
+) {
+  if (atoms === 0n) return traderUsdgLabel(0n, precision);
+  return `${atoms > 0n ? "+" : "−"}${traderUsdgLabel(
+    atoms > 0n ? atoms : -atoms,
+    precision,
+  )}`;
 }
 
 function traderOutcomeLabel(atoms: bigint, outcome: PredictionOutcome) {
@@ -148,14 +171,19 @@ function displayBuyPayout(
   const payout = predictionBuyPayoutSummary(quote);
   return {
     estimatedCostLabel: traderUsdgLabel(payout.estimatedCostAtoms),
-    maximumLossLabel: traderUsdgLabel(payout.maximumLossAtoms),
+    maximumLossLabel: traderUsdgLabel(payout.maximumLossAtoms, "exact"),
     minimumWinningProfitLabel: signedUsdgLabel(
       payout.minimumWinningProfitAtoms,
+      "exact",
     ),
     minimumWinningPayoutLabel: traderUsdgLabel(
       payout.minimumWinningPayoutAtoms,
+      "exact",
     ),
-    neutralPayoutLabel: traderUsdgLabel(payout.neutralPayoutAtoms),
+    minimumNeutralPayoutLabel: traderUsdgLabel(
+      payout.minimumNeutralPayoutAtoms,
+      "exact",
+    ),
     outcome,
     potentialProfitAtoms: payout.potentialProfitAtoms,
     potentialProfitLabel: signedUsdgLabel(payout.potentialProfitAtoms),
@@ -199,17 +227,30 @@ function displayQuote(quote: LiveQuote): DisplayQuote {
         : {}),
     };
   }
+  const complement = quote.value.outcome === "YES" ? "NO" : "YES";
+  const returnedShares = [
+    quote.value.soldRefundAtoms > 0n
+      ? formatPredictionOutcome(
+          quote.value.soldRefundAtoms,
+          quote.value.outcome,
+        )
+      : null,
+    quote.value.complementRefundAtoms > 0n
+      ? formatPredictionOutcome(
+          quote.value.complementRefundAtoms,
+          complement,
+        )
+      : null,
+  ].filter((label): label is string => label !== null);
   return {
     afterYesBps: quote.value.probabilityAfterBps,
     averagePriceBps: quote.value.averagePriceBps,
     depthLabel: quoteDepthLabel(quote.value.priceImpactBps),
-    minimumLabel: traderUsdgLabel(quote.value.minCollateralAtoms),
+    minimumLabel: traderUsdgLabel(quote.value.minCollateralAtoms, "exact"),
     outputLabel: traderUsdgLabel(quote.value.collateralAtoms),
     priceImpactBps: quote.value.priceImpactBps,
-    ...(quote.value.soldRefundAtoms || quote.value.complementRefundAtoms
-      ? {
-          refundLabel: `${formatPredictionOutcome(quote.value.soldRefundAtoms)} sold + ${formatPredictionOutcome(quote.value.complementRefundAtoms)} complement`,
-        }
+    ...(returnedShares.length > 0
+      ? { refundLabel: `${returnedShares.join(" + ")} returned` }
       : {}),
   };
 }
@@ -276,7 +317,10 @@ function previewQuote(
     afterYesBps,
     averagePriceBps,
     depthLabel: quoteDepthLabel(impact),
-    minimumLabel: traderUsdgLabel(outputAtoms * 9_950n / 10_000n),
+    minimumLabel: traderUsdgLabel(
+      outputAtoms * 9_950n / 10_000n,
+      "exact",
+    ),
     outputLabel: traderUsdgLabel(outputAtoms),
     priceImpactBps: impact,
   };
@@ -292,6 +336,8 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   }, []);
   const { openWallet, sendTransaction, signPredictionTokenPermit, wallet } = useWallet();
   const walletAccount = wallet?.account;
+  const walletAccountKey = walletAccount?.toLowerCase() ?? "";
+  const normalizedSemanticKey = semanticKey.toLowerCase();
   const [loadState, setLoadState] = useState<MarketLoadState>({ kind: "loading" });
   const [mode, setMode] = useState<TradeMode>("BUY");
   const [outcome, setOutcome] = useState<PredictionOutcome>("YES");
@@ -301,21 +347,78 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   const [phase, setPhase] = useState<"idle" | "quoting" | "signing" | "submitting" | "confirming">("idle");
   const [message, setMessage] = useState("");
   const quoteRequestId = useRef(0);
+  const quotePhaseRequestId = useRef<number | null>(null);
+  const marketLoadGeneration = useRef(0);
+  const activeMarketLoadRequest = useRef<PredictionMarketLoadRequestV1 | null>(null);
+  const marketActionGeneration = useRef(0);
+  const activeMarketActionRequest = useRef<PredictionMarketLoadRequestV1 | null>(null);
+  const walletAccountKeyRef = useRef(walletAccountKey);
+  const semanticKeyRef = useRef(normalizedSemanticKey);
+
+  useLayoutEffect(() => {
+    walletAccountKeyRef.current = walletAccountKey;
+    semanticKeyRef.current = normalizedSemanticKey;
+    return () => {
+      activeMarketLoadRequest.current = null;
+      marketLoadGeneration.current += 1;
+      quoteRequestId.current += 1;
+      quotePhaseRequestId.current = null;
+      activeMarketActionRequest.current = null;
+      marketActionGeneration.current += 1;
+    };
+  }, [normalizedSemanticKey, walletAccountKey]);
+
+  function marketActionIsCurrent(request: PredictionMarketLoadRequestV1) {
+    return isPredictionMarketLoadRequestCurrent(
+      request,
+      activeMarketActionRequest.current,
+    )
+      && request.accountKey === walletAccountKeyRef.current
+      && request.semanticKey === semanticKeyRef.current;
+  }
+
+  function requireCurrentMarketAction(request: PredictionMarketLoadRequestV1) {
+    if (!marketActionIsCurrent(request)) {
+      throw new Error(
+        "The wallet or market changed. The action was stopped before submission.",
+      );
+    }
+  }
 
   const refresh = useCallback(async () => {
+    const request = {
+      accountKey: walletAccountKey,
+      generation: ++marketLoadGeneration.current,
+      semanticKey: normalizedSemanticKey,
+    } satisfies PredictionMarketLoadRequestV1;
+    activeMarketLoadRequest.current = request;
     quoteRequestId.current += 1;
+    if (quotePhaseRequestId.current !== null) {
+      quotePhaseRequestId.current = null;
+      setPhase((current) => current === "quoting" ? "idle" : current);
+    }
+    if (activeMarketActionRequest.current !== null) {
+      activeMarketActionRequest.current = null;
+      marketActionGeneration.current += 1;
+      setPhase("idle");
+    }
     setLiveQuote(null);
     setShownQuote(null);
     await Promise.resolve();
+    if (!isPredictionMarketLoadRequestCurrent(request, activeMarketLoadRequest.current)) return;
     if (!release.config) {
       const market = predictionPreviewMarkets(Math.floor(Date.now() / 1_000)).find(
         (candidate) => candidate.semanticKey.toLowerCase() === semanticKey.toLowerCase(),
       );
       if (!market) {
-        setLoadState({ kind: "error", message: "This preview market does not exist" });
+        if (isPredictionMarketLoadRequestCurrent(request, activeMarketLoadRequest.current)) {
+          setLoadState({ kind: "error", message: "This preview market does not exist" });
+        }
         return;
       }
-      setLoadState({ kind: "preview", market });
+      if (isPredictionMarketLoadRequestCurrent(request, activeMarketLoadRequest.current)) {
+        setLoadState({ kind: "preview", market });
+      }
       return;
     }
     setLoadState({ kind: "loading" });
@@ -325,17 +428,35 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
         config: release.config,
         semanticKey,
       });
-      setLoadState({ kind: "live", market });
+      if (isPredictionMarketLoadRequestCurrent(request, activeMarketLoadRequest.current)) {
+        setLoadState({ kind: "live", market });
+      }
     } catch (error) {
-      setLoadState({ kind: "error", message: getErrorMessage(error) });
+      if (isPredictionMarketLoadRequestCurrent(request, activeMarketLoadRequest.current)) {
+        setLoadState({ kind: "error", message: getErrorMessage(error) });
+      }
     }
-  }, [release.config, semanticKey, walletAccount]);
+  }, [normalizedSemanticKey, release.config, semanticKey, walletAccount, walletAccountKey]);
 
   useEffect(() => {
+    quoteRequestId.current += 1;
+    quotePhaseRequestId.current = null;
+    activeMarketActionRequest.current = null;
+    marketActionGeneration.current += 1;
     const timer = window.setTimeout(() => {
+      setPhase("idle");
+      setMessage("");
       void refresh();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      activeMarketLoadRequest.current = null;
+      marketLoadGeneration.current += 1;
+      quoteRequestId.current += 1;
+      quotePhaseRequestId.current = null;
+      activeMarketActionRequest.current = null;
+      marketActionGeneration.current += 1;
+    };
   }, [refresh]);
 
   const market = "market" in loadState ? loadState.market : null;
@@ -344,6 +465,10 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
 
   function clearQuote() {
     quoteRequestId.current += 1;
+    if (quotePhaseRequestId.current !== null) {
+      quotePhaseRequestId.current = null;
+      setPhase((current) => current === "quoting" ? "idle" : current);
+    }
     setLiveQuote(null);
     setShownQuote(null);
     setMessage("");
@@ -356,6 +481,7 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
     const requestedMarket = market;
     const requestedMode = mode;
     const requestedOutcome = outcome;
+    quotePhaseRequestId.current = requestId;
     setPhase("quoting");
     setMessage(preview ? "Checking the preview price…" : "Finding your price…");
     try {
@@ -405,7 +531,10 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
       setShownQuote(null);
       setMessage(getErrorMessage(error));
     } finally {
-      setPhase("idle");
+      if (requestId === quoteRequestId.current) {
+        quotePhaseRequestId.current = null;
+        setPhase("idle");
+      }
     }
   }
 
@@ -415,52 +544,66 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
       openWallet();
       return;
     }
+    const actionRequest = {
+      accountKey: wallet.account.toLowerCase(),
+      generation: ++marketActionGeneration.current,
+      semanticKey: semanticKey.toLowerCase(),
+    } satisfies PredictionMarketLoadRequestV1;
+    activeMarketActionRequest.current = actionRequest;
+    const requestedMarket = market;
+    const requestedQuote = liveQuote;
+    const requestedWallet = wallet;
+    const requestedMode = mode;
+    const requestedOutcome = outcome;
     const clients = createPredictionMarketPublicClients();
     const permitDeadline = BigInt(Math.floor(Date.now() / 1_000) + PREDICTION_PERMIT_DURATION_SECONDS);
-    const tokenAddress = liveQuote.kind === "BUY"
+    const tokenAddress = requestedQuote.kind === "BUY"
       ? ROBINHOOD_USDG_ADDRESS
-      : liveQuote.value.outcome === "YES"
-        ? market.yesToken
-        : market.noToken;
-    const tokenName = liveQuote.kind === "BUY"
+      : requestedQuote.value.outcome === "YES"
+        ? requestedMarket.yesToken
+        : requestedMarket.noToken;
+    const tokenName = requestedQuote.kind === "BUY"
       ? "Global Dollar"
-      : liveQuote.value.outcome === "YES"
-        ? market.yesTokenName
-        : market.noTokenName;
-    const value = liveQuote.kind === "BUY"
-      ? liveQuote.value.collateralInAtoms
-      : liveQuote.value.outcomeAtoms;
+      : requestedQuote.value.outcome === "YES"
+        ? requestedMarket.yesTokenName
+        : requestedMarket.noTokenName;
+    const value = requestedQuote.kind === "BUY"
+      ? requestedQuote.value.collateralInAtoms
+      : requestedQuote.value.outcomeAtoms;
     try {
       setPhase("signing");
-      setMessage(`Sign an exact ${mode === "BUY" ? "USDG" : outcome} permit. The signature alone spends no gas.`);
+      setMessage(`Sign an exact ${requestedMode === "BUY" ? "USDG" : requestedOutcome} permit. The signature alone spends no gas.`);
       const { nonce } = await readPredictionPermitNonceQuorum({
         clients,
         config: release.config,
-        owner: wallet.account,
+        owner: requestedWallet.account,
         token: tokenAddress,
       });
+      requireCurrentMarketAction(actionRequest);
       const permit = await signPredictionTokenPermit({
         deadline: permitDeadline,
         nonce,
-        spender: market.router,
+        spender: requestedMarket.router,
         tokenAddress,
         tokenName,
         value,
       });
+      requireCurrentMarketAction(actionRequest);
 
       setPhase("quoting");
       setMessage("Refreshing the executable quote after signature…");
       const tradeDeadline = BigInt(Math.floor(Date.now() / 1_000) + 5 * 60);
       let prepared;
-      if (liveQuote.kind === "BUY") {
+      if (requestedQuote.kind === "BUY") {
         const freshQuote = await quotePredictionBuy({
-            collateralAtoms: liveQuote.value.collateralInAtoms,
-            clients,
-            config: release.config,
-            outcome: liveQuote.value.outcome,
-            semanticKey,
-          });
-        if (freshQuote.outcomeAtoms < liveQuote.value.minOutcomeAtoms) {
+          collateralAtoms: requestedQuote.value.collateralInAtoms,
+          clients,
+          config: release.config,
+          outcome: requestedQuote.value.outcome,
+          semanticKey,
+        });
+        requireCurrentMarketAction(actionRequest);
+        if (freshQuote.outcomeAtoms < requestedQuote.value.minOutcomeAtoms) {
           setLiveQuote(null);
           setShownQuote(null);
           throw new Error("The price moved beyond the minimum you reviewed. Get a new quote before trading.");
@@ -468,22 +611,23 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
         prepared = await preparePredictionBuy({
           client: clients[0],
           deadline: tradeDeadline,
-          owner: wallet.account,
+          owner: requestedWallet.account,
           permit,
           quote: {
             ...freshQuote,
-            minOutcomeAtoms: liveQuote.value.minOutcomeAtoms,
+            minOutcomeAtoms: requestedQuote.value.minOutcomeAtoms,
           },
         });
       } else {
         const freshQuote = await quotePredictionSell({
           clients,
           config: release.config,
-          outcome: liveQuote.value.outcome,
-          outcomeAtoms: liveQuote.value.outcomeAtoms,
+          outcome: requestedQuote.value.outcome,
+          outcomeAtoms: requestedQuote.value.outcomeAtoms,
           semanticKey,
         });
-        if (freshQuote.collateralAtoms < liveQuote.value.minCollateralAtoms) {
+        requireCurrentMarketAction(actionRequest);
+        if (freshQuote.collateralAtoms < requestedQuote.value.minCollateralAtoms) {
           setLiveQuote(null);
           setShownQuote(null);
           throw new Error("The price moved beyond the minimum you reviewed. Get a new quote before trading.");
@@ -491,28 +635,40 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
         prepared = await preparePredictionSell({
           client: clients[0],
           deadline: tradeDeadline,
-          owner: wallet.account,
+          owner: requestedWallet.account,
           permit,
           quote: {
             ...freshQuote,
-            minCollateralAtoms: liveQuote.value.minCollateralAtoms,
+            minCollateralAtoms: requestedQuote.value.minCollateralAtoms,
           },
         });
       }
+      requireCurrentMarketAction(actionRequest);
       setPhase("submitting");
       setMessage("Confirm the simulated market transaction in your wallet.");
       const transactionHash = await sendTransaction(prepared);
+      if (!marketActionIsCurrent(actionRequest)) return;
       setPhase("confirming");
       setMessage("Transaction submitted. Waiting for both RPCs to confirm the same receipt…");
       await waitForPredictionAction({ clients, transactionHash });
-      setMessage("Trade confirmed onchain.");
-      setLiveQuote(null);
-      setShownQuote(null);
-      await refresh();
+      if (marketActionIsCurrent(actionRequest)) {
+        setMessage("Trade confirmed onchain.");
+        setLiveQuote(null);
+        setShownQuote(null);
+        await refresh();
+      }
     } catch (error) {
-      setMessage(getErrorMessage(error));
+      if (marketActionIsCurrent(actionRequest)) {
+        setMessage(getErrorMessage(error));
+      }
     } finally {
-      setPhase("idle");
+      if (isPredictionMarketLoadRequestCurrent(
+        actionRequest,
+        activeMarketActionRequest.current,
+      )) {
+        activeMarketActionRequest.current = null;
+        setPhase("idle");
+      }
     }
   }
 
@@ -522,40 +678,69 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
       openWallet();
       return;
     }
+    const actionRequest = {
+      accountKey: wallet.account.toLowerCase(),
+      generation: ++marketActionGeneration.current,
+      semanticKey: semanticKey.toLowerCase(),
+    } satisfies PredictionMarketLoadRequestV1;
+    activeMarketActionRequest.current = actionRequest;
+    const requestedMarket = market;
+    const requestedWallet = wallet;
     const clients = createPredictionMarketPublicClients();
     try {
       setPhase("quoting");
       setMessage(action === "RESOLVE" ? "Finding the unique adjacent Chainlink rounds across both RPCs…" : "Simulating the exact lifecycle transaction…");
-      const prepared = action === "RESOLVE"
-        ? await discoverPredictionResolutionProof({
-            clients,
-            config: release.config,
-            semanticKey,
-          }).then((proof) => preparePredictionResolution({
-            client: clients[0],
-            owner: wallet.account,
-            proof,
-          }))
-        : action === "REDEEM"
-          ? await preparePredictionRedeem({ client: clients[0], market, owner: wallet.account })
-          : await preparePredictionFallbackAction({
-              action,
-              client: clients[0],
-              market,
-              owner: wallet.account,
-            });
+      let prepared;
+      if (action === "RESOLVE") {
+        const proof = await discoverPredictionResolutionProof({
+          clients,
+          config: release.config,
+          semanticKey,
+        });
+        requireCurrentMarketAction(actionRequest);
+        prepared = await preparePredictionResolution({
+          client: clients[0],
+          owner: requestedWallet.account,
+          proof,
+        });
+      } else if (action === "REDEEM") {
+        prepared = await preparePredictionRedeem({
+          client: clients[0],
+          market: requestedMarket,
+          owner: requestedWallet.account,
+        });
+      } else {
+        prepared = await preparePredictionFallbackAction({
+          action,
+          client: clients[0],
+          market: requestedMarket,
+          owner: requestedWallet.account,
+        });
+      }
+      requireCurrentMarketAction(actionRequest);
       setPhase("submitting");
       setMessage("Confirm the simulated lifecycle transaction in your wallet.");
       const transactionHash = await sendTransaction(prepared);
+      if (!marketActionIsCurrent(actionRequest)) return;
       setPhase("confirming");
       setMessage("Waiting for both RPCs to confirm the same receipt…");
       await waitForPredictionAction({ clients, transactionHash });
-      setMessage(action === "REDEEM" ? "Payout confirmed in your wallet." : "Market state updated onchain.");
-      await refresh();
+      if (marketActionIsCurrent(actionRequest)) {
+        setMessage(action === "REDEEM" ? "Payout confirmed in your wallet." : "Market state updated onchain.");
+        await refresh();
+      }
     } catch (error) {
-      setMessage(getErrorMessage(error));
+      if (marketActionIsCurrent(actionRequest)) {
+        setMessage(getErrorMessage(error));
+      }
     } finally {
-      setPhase("idle");
+      if (isPredictionMarketLoadRequestCurrent(
+        actionRequest,
+        activeMarketActionRequest.current,
+      )) {
+        activeMarketActionRequest.current = null;
+        setPhase("idle");
+      }
     }
   }
 
@@ -580,6 +765,7 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   const tradingOpen = market.state === "OPEN" && market.blockTimestamp < market.cutoff;
   const displayTitle = `Will BTC be at or above ${formatPredictionPriceAtoms(market.thresholdAtoms)}?`;
   const selectedBalance = outcome === "YES" ? market.yesBalanceAtoms : market.noBalanceAtoms;
+  const redeemableAtoms = predictionMarketRedeemableAtoms(market);
   const selectedProtocolFee = liveQuote
     ? predictionDirectionalProtocolFee(liveQuote.value.swap.protocolFee, liveQuote.value.zeroForOne)
     : 0;
@@ -736,7 +922,7 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
                       <div><span>Market depth</span><strong>{shownQuote.depthLabel}</strong></div>
                       {shownQuote.buyPayout ? <div><span>Minimum payout</span><strong>{shownQuote.buyPayout.minimumWinningPayoutLabel}</strong></div> : null}
                       {shownQuote.buyPayout ? <div><span>Minimum profit if {shownQuote.buyPayout.outcome} wins</span><strong>{shownQuote.buyPayout.minimumWinningProfitLabel}</strong></div> : null}
-                      {shownQuote.buyPayout ? <div><span>Neutral result</span><strong>{shownQuote.buyPayout.neutralPayoutLabel}</strong></div> : null}
+                      {shownQuote.buyPayout ? <div><span>Minimum neutral payout</span><strong>{shownQuote.buyPayout.minimumNeutralPayoutLabel}</strong></div> : null}
                       {shownQuote.refundLabel ? <div><span>Estimated refund</span><strong>{shownQuote.refundLabel}</strong></div> : null}
                       {shownQuote.refundLabel && shownQuote.buyPayout ? <div><span>Estimated cost after refund</span><strong>{shownQuote.buyPayout.estimatedCostLabel}</strong></div> : null}
                       <div><span>Slippage limit</span><strong>{PREDICTION_DEFAULT_SLIPPAGE_BPS / 100}%</strong></div>
@@ -774,8 +960,8 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
               <h2>{market.state === "FINAL_INVALID" ? "Neutral payout" : market.state === "FINAL_YES" ? "YES won" : "NO won"}</h2>
               <p>{market.state === "FINAL_INVALID" ? "Every YES and NO token redeems for 0.50 USDG." : "Each winning token redeems for 1 USDG. Losing tokens redeem for zero."}</p>
               {wallet ? <div className={styles.balancePair}><span>YES <strong>{formatPredictionOutcome(market.yesBalanceAtoms)}</strong></span><span>NO <strong>{formatPredictionOutcome(market.noBalanceAtoms)}</strong></span></div> : null}
-              <button className={styles.terminalAction} disabled={busy || Boolean(wallet && market.yesBalanceAtoms === 0n && market.noBalanceAtoms === 0n)} type="button" onClick={() => preview ? setMessage("Preview only. No wallet request will be made.") : wallet ? void handleLifecycle("REDEEM") : openWallet()}>
-                {busy ? "Confirming payout" : !wallet ? "Connect to redeem" : "Redeem to wallet"}
+              <button className={styles.terminalAction} disabled={busy || Boolean(wallet && redeemableAtoms === 0n)} type="button" onClick={() => preview ? setMessage("Preview only. No wallet request will be made.") : wallet ? void handleLifecycle("REDEEM") : openWallet()}>
+                {busy ? "Confirming payout" : !wallet ? "Connect to redeem" : redeemableAtoms > 0n ? "Redeem to wallet" : "No payout available"}
               </button>
             </div>
           ) : (

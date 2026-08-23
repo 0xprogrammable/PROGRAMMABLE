@@ -25,11 +25,13 @@ import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain"
 import {
   PredictionPortfolioReadError,
   createPredictionPortfolioRequest,
+  derivePredictionPortfolioPosition,
   isPredictionPortfolioRequestCurrent,
   readPredictionMarketPortfolio,
   type PredictionMarketPortfolio as PredictionMarketPortfolioData,
   type PredictionPortfolioCreatedMarket,
   type PredictionPortfolioHistoryEntry,
+  type PredictionPortfolioPosition,
   type PredictionPortfolioRequest,
 } from "@/lib/prediction-market-portfolio";
 import {
@@ -48,21 +50,7 @@ export type PredictionPortfolioSideViewModelV1 = Readonly<{
   shares: string;
 }>;
 
-export type PredictionPortfolioPositionSourceV1 = Readonly<{
-  finalOutcome: "YES" | "NO" | "INVALID" | null;
-  lifecycle:
-    | "open"
-    | "trading_closed"
-    | "final_yes"
-    | "final_no"
-    | "final_invalid";
-  market: PredictionMarketView;
-  noAtoms: bigint;
-  redeemableAtoms: bigint;
-  result: "pending" | "won" | "lost" | "neutral";
-  tradingClosed: boolean;
-  yesAtoms: bigint;
-}>;
+export type PredictionPortfolioPositionSourceV1 = PredictionPortfolioPosition;
 
 export type PredictionPortfolioItemViewModelV1 = Readonly<{
   actionLabel: string;
@@ -76,6 +64,7 @@ export type PredictionPortfolioItemViewModelV1 = Readonly<{
   payoutTone: "pending" | "ready" | "settled";
   positionLabel: string;
   probabilityLabel: string;
+  probabilityMetricLabel: "Probability" | "Result";
   probabilityYesPercent: number;
   sides: readonly PredictionPortfolioSideViewModelV1[];
   statusLabel: string;
@@ -86,7 +75,7 @@ export type PredictionPortfolioItemViewModelV1 = Readonly<{
 
 /**
  * Stable presentation boundary for the profile activity API. The current
- * component builds this from the directory reader; a profile API can provide
+ * component builds this from the complete portfolio reader; a profile API can provide
  * all three arrays without changing the panel or card layout.
  */
 export type PredictionPortfolioViewModelV1 = Readonly<{
@@ -124,6 +113,9 @@ const PORTFOLIO_ERROR =
   "Unable to load your prediction activity. Check your connection and try again.";
 const PORTFOLIO_PARTIAL_ERROR =
   "Some markets could not be verified. Refresh to try them again.";
+const PORTFOLIO_INITIAL_VISIBLE_ITEMS = 12;
+const PORTFOLIO_VISIBLE_ITEM_STEP = 12;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 const PORTFOLIO_TABS = [
   { id: "positions", label: "Positions" },
@@ -133,6 +125,36 @@ const PORTFOLIO_TABS = [
 
 function clampProbability(probabilityYesBps: number) {
   return Math.min(100, Math.max(0, probabilityYesBps / 100));
+}
+
+function marketProbabilityPresentation(market: PredictionMarketView) {
+  if (market.state === "FINAL_YES") {
+    return {
+      probabilityLabel: "YES won",
+      probabilityMetricLabel: "Result" as const,
+      probabilityYesPercent: 100,
+    };
+  }
+  if (market.state === "FINAL_NO") {
+    return {
+      probabilityLabel: "NO won",
+      probabilityMetricLabel: "Result" as const,
+      probabilityYesPercent: 0,
+    };
+  }
+  if (market.state === "FINAL_INVALID") {
+    return {
+      probabilityLabel: "Neutral",
+      probabilityMetricLabel: "Result" as const,
+      probabilityYesPercent: 50,
+    };
+  }
+  const probabilityYesPercent = clampProbability(market.probabilityYesBps);
+  return {
+    probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
+    probabilityMetricLabel: "Probability" as const,
+    probabilityYesPercent,
+  };
 }
 
 function countdown(target: bigint, current: bigint) {
@@ -158,7 +180,7 @@ export function predictionPortfolioPositionViewModelV1(
 ): PredictionPortfolioItemViewModelV1 {
   const source = "market" in input ? input : predictionPortfolioPositionSourceV1(input);
   const market = source.market;
-  const probabilityYesPercent = clampProbability(market.probabilityYesBps);
+  const probability = marketProbabilityPresentation(market);
   const sides = ([
     ["YES", source.yesAtoms],
     ["NO", source.noAtoms],
@@ -187,8 +209,7 @@ export function predictionPortfolioPositionViewModelV1(
       payoutLabel: potentialPayoutLabel,
       payoutTone: "pending",
       positionLabel: "Open position",
-      probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
-      probabilityYesPercent,
+      ...probability,
       sides: Object.freeze(sides),
       statusLabel: "Trading open",
       statusTone: "open",
@@ -209,8 +230,7 @@ export function predictionPortfolioPositionViewModelV1(
       payoutLabel: potentialPayoutLabel,
       payoutTone: "pending",
       positionLabel: "Position held",
-      probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
-      probabilityYesPercent,
+      ...probability,
       sides: Object.freeze(sides),
       statusLabel: "Awaiting result",
       statusTone: "pending",
@@ -226,10 +246,12 @@ export function predictionPortfolioPositionViewModelV1(
     ? "Won"
     : source.result === "lost"
       ? "Lost"
-      : "Neutral";
+      : source.result === "mixed"
+        ? `${winningOutcome} won`
+        : "Neutral";
   const payoutDetail = invalid
     ? `${redeemable ? "Redeemable now. " : ""}YES and NO each redeem for 0.50 USDG per share.`
-    : source.result === "won"
+    : redeemable
       ? `Redeemable now. ${winningOutcome} redeems for 1 USDG per share; the other side settles at zero.`
       : `${winningOutcome} won; your held side settles at zero.`;
 
@@ -244,8 +266,7 @@ export function predictionPortfolioPositionViewModelV1(
     payoutLabel: formatPredictionUsdg(source.redeemableAtoms),
     payoutTone: redeemable ? "ready" : "settled",
     positionLabel: "Final position",
-    probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
-    probabilityYesPercent,
+    ...probability,
     sides: Object.freeze(sides),
     statusLabel: resultLabel,
     statusTone: "final",
@@ -257,55 +278,7 @@ export function predictionPortfolioPositionViewModelV1(
 function predictionPortfolioPositionSourceV1(
   market: PredictionMarketView,
 ): PredictionPortfolioPositionSourceV1 {
-  const yesAtoms = market.yesBalanceAtoms;
-  const noAtoms = market.noBalanceAtoms;
-  if (market.state === "FINAL_YES") {
-    return {
-      finalOutcome: "YES",
-      lifecycle: "final_yes",
-      market,
-      noAtoms,
-      redeemableAtoms: yesAtoms * OUTCOME_FACE_SCALE,
-      result: yesAtoms > 0n ? "won" : "lost",
-      tradingClosed: true,
-      yesAtoms,
-    };
-  }
-  if (market.state === "FINAL_NO") {
-    return {
-      finalOutcome: "NO",
-      lifecycle: "final_no",
-      market,
-      noAtoms,
-      redeemableAtoms: noAtoms * OUTCOME_FACE_SCALE,
-      result: noAtoms > 0n ? "won" : "lost",
-      tradingClosed: true,
-      yesAtoms,
-    };
-  }
-  if (market.state === "FINAL_INVALID") {
-    return {
-      finalOutcome: "INVALID",
-      lifecycle: "final_invalid",
-      market,
-      noAtoms,
-      redeemableAtoms: (yesAtoms + noAtoms) * OUTCOME_FACE_SCALE / 2n,
-      result: "neutral",
-      tradingClosed: true,
-      yesAtoms,
-    };
-  }
-  const tradingClosed = market.blockTimestamp >= market.cutoff;
-  return {
-    finalOutcome: null,
-    lifecycle: tradingClosed ? "trading_closed" : "open",
-    market,
-    noAtoms,
-    redeemableAtoms: 0n,
-    result: "pending",
-    tradingClosed,
-    yesAtoms,
-  };
+  return derivePredictionPortfolioPosition(market);
 }
 
 function marketLifecycleSummary(market: PredictionMarketView) {
@@ -349,7 +322,7 @@ export function predictionPortfolioCreatedViewModelV1(
   entry: PredictionPortfolioCreatedMarket,
 ): PredictionPortfolioItemViewModelV1 {
   const market = entry.market;
-  const probabilityYesPercent = clampProbability(market.probabilityYesBps);
+  const probability = marketProbabilityPresentation(market);
   const lifecycle = marketLifecycleSummary(market);
   return Object.freeze({
     actionLabel: "View market",
@@ -362,8 +335,7 @@ export function predictionPortfolioCreatedViewModelV1(
     payoutLabel: "No shares",
     payoutTone: "pending",
     positionLabel: "Created market",
-    probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
-    probabilityYesPercent,
+    ...probability,
     sides: Object.freeze([]),
     ...lifecycle,
     title: market.title,
@@ -373,18 +345,63 @@ export function predictionPortfolioCreatedViewModelV1(
 function historySides(
   entry: PredictionPortfolioHistoryEntry,
 ): readonly PredictionPortfolioSideViewModelV1[] {
-  if (entry.kind === "bought" || entry.kind === "sold" || entry.kind === "transfer") {
+  const signed = (atoms: bigint, sign: "+" | "-") =>
+    `${sign}${formatPredictionOutcome(atoms)}`;
+  if (entry.kind === "bought") {
     return Object.freeze([{
       outcome: entry.outcome,
-      shares: formatPredictionOutcome(entry.outcomeAtoms),
+      shares: signed(entry.outcomeAtoms, "+"),
     }]);
   }
+  if (entry.kind === "sold") {
+    const complement: PredictionOutcome = entry.outcome === "YES" ? "NO" : "YES";
+    const netSoldAtoms = entry.outcomeAtoms - entry.soldRefundAtoms;
+    return Object.freeze([
+      ...(netSoldAtoms > 0n
+        ? [{ outcome: entry.outcome, shares: signed(netSoldAtoms, "-") }]
+        : []),
+      ...(entry.complementRefundAtoms > 0n
+        ? [{
+            outcome: complement,
+            shares: signed(entry.complementRefundAtoms, "+"),
+          }]
+        : []),
+    ]);
+  }
+  if (entry.kind === "transfer") {
+    const sign = entry.direction === "in" ? "+" : entry.direction === "out" ? "-" : null;
+    return Object.freeze([{
+      outcome: entry.outcome,
+      shares: sign
+        ? signed(entry.outcomeAtoms, sign)
+        : formatPredictionOutcome(entry.outcomeAtoms),
+    }]);
+  }
+  if (
+    entry.kind === "split" &&
+    (entry.accountRole === "recipient" || entry.accountRole === "self")
+  ) {
+    return Object.freeze(([
+      { outcome: "YES", shares: signed(entry.outcomeAtoms, "+") },
+      { outcome: "NO", shares: signed(entry.outcomeAtoms, "+") },
+    ] as const));
+  }
+  if (
+    entry.kind === "merged" &&
+    (entry.accountRole === "holder" || entry.accountRole === "self")
+  ) {
+    return Object.freeze(([
+      { outcome: "YES", shares: signed(entry.outcomeAtoms, "-") },
+      { outcome: "NO", shares: signed(entry.outcomeAtoms, "-") },
+    ] as const));
+  }
   if (entry.kind === "redeemed") {
+    if (entry.accountRole === "recipient") return Object.freeze([]);
     return Object.freeze(([
       ["YES", entry.yesAtoms],
       ["NO", entry.noAtoms],
     ] as const).flatMap(([outcome, atoms]) => atoms > 0n
-      ? [{ outcome, shares: formatPredictionOutcome(atoms) }]
+      ? [{ outcome, shares: signed(atoms, "-") }]
       : []));
   }
   return Object.freeze([]);
@@ -413,33 +430,90 @@ function historyPresentation(entry: PredictionPortfolioHistoryEntry) {
     };
   }
   if (entry.kind === "sold") {
+    const complement = entry.outcome === "YES" ? "NO" : "YES";
+    const soldAtoms = entry.outcomeAtoms - entry.soldRefundAtoms;
+    const returned = [
+      entry.soldRefundAtoms > 0n
+        ? `${formatPredictionOutcome(entry.soldRefundAtoms)} ${entry.outcome}`
+        : null,
+      entry.complementRefundAtoms > 0n
+        ? `${formatPredictionOutcome(entry.complementRefundAtoms)} ${complement}`
+        : null,
+    ].filter((value): value is string => Boolean(value));
     return {
       metricLabel: "Received",
-      payoutDetail: `${formatPredictionOutcome(entry.outcomeAtoms)} ${entry.outcome} shares sold.`,
+      payoutDetail: `${formatPredictionOutcome(soldAtoms)} ${entry.outcome} sold.${returned.length > 0 ? ` ${returned.join(" and ")} returned.` : " No outcome shares returned."}`,
       payoutLabel: formatPredictionUsdg(entry.collateralAtoms),
       payoutTone: "settled" as const,
       statusLabel: `Sold ${entry.outcome}`,
       statusTone: "pending" as const,
     };
   }
+  if (entry.kind === "split") {
+    const shares = formatPredictionOutcome(entry.outcomeAtoms);
+    if (entry.accountRole === "recipient") {
+      return {
+        metricLabel: "Shares received",
+        payoutDetail: `Received ${shares} YES and ${shares} NO from a direct split.`,
+        payoutLabel: `${shares} each`,
+        payoutTone: "pending" as const,
+        statusLabel: "Received YES + NO",
+        statusTone: "open" as const,
+      };
+    }
+    return {
+      metricLabel: "Spent",
+      payoutDetail: entry.accountRole === "self"
+        ? `Created ${shares} YES and ${shares} NO shares.`
+        : `Created ${shares} YES and ${shares} NO for another wallet.`,
+      payoutLabel: formatPredictionUsdg(entry.collateralAtoms),
+      payoutTone: "pending" as const,
+      statusLabel: entry.accountRole === "self" ? "Split USDG" : "Funded split",
+      statusTone: "open" as const,
+    };
+  }
+  if (entry.kind === "merged") {
+    const shares = formatPredictionOutcome(entry.outcomeAtoms);
+    return {
+      metricLabel: entry.accountRole === "holder" ? "Released" : "Received",
+      payoutDetail: entry.accountRole === "self"
+        ? `Merged ${shares} YES and ${shares} NO into USDG.`
+        : entry.accountRole === "holder"
+          ? `Merged ${shares} YES and ${shares} NO; USDG went to another wallet.`
+          : "Received USDG from another wallet's direct merge.",
+      payoutLabel: formatPredictionUsdg(entry.collateralAtoms),
+      payoutTone: "settled" as const,
+      statusLabel: "Merged YES + NO",
+      statusTone: "pending" as const,
+    };
+  }
   if (entry.kind === "redeemed") {
     return {
-      metricLabel: "Payout",
-      payoutDetail: "Outcome shares redeemed onchain.",
+      metricLabel: entry.accountRole === "holder" ? "Payout sent" : "Payout",
+      payoutDetail: entry.accountRole === "self"
+        ? "Outcome shares redeemed to this wallet."
+        : entry.accountRole === "holder"
+          ? "Outcome shares redeemed; payout sent to another wallet."
+          : "Payout received from another wallet's redemption.",
       payoutLabel: formatPredictionUsdg(entry.collateralAtoms),
       payoutTone: "settled" as const,
       statusLabel: "Payout redeemed",
       statusTone: "final" as const,
     };
   }
-  const direction = entry.direction === "in"
+  const burned = entry.direction === "out" && entry.to.toLowerCase() === ZERO_ADDRESS;
+  const direction = burned
+    ? "Burned"
+    : entry.direction === "in"
     ? "Received"
     : entry.direction === "out"
       ? "Sent"
       : "Moved";
   return {
     metricLabel: "Shares",
-    payoutDetail: "Outcome shares transferred onchain.",
+    payoutDetail: burned
+      ? "Outcome shares burned onchain."
+      : "Outcome shares transferred onchain.",
     payoutLabel: `${formatPredictionOutcome(entry.outcomeAtoms)} ${entry.outcome}`,
     payoutTone: "pending" as const,
     statusLabel: `${direction} ${entry.outcome}`,
@@ -451,7 +525,7 @@ export function predictionPortfolioHistoryViewModelV1(
   entry: PredictionPortfolioHistoryEntry,
 ): PredictionPortfolioItemViewModelV1 {
   const market = entry.market;
-  const probabilityYesPercent = clampProbability(market.probabilityYesBps);
+  const probability = marketProbabilityPresentation(market);
   const presentation = historyPresentation(entry);
   return Object.freeze({
     actionLabel: "View market",
@@ -460,10 +534,9 @@ export function predictionPortfolioHistoryViewModelV1(
     href: `/markets/${market.semanticKey}`,
     id: `history:${entry.transactionHash}:${entry.logIndex}`,
     positionLabel: presentation.statusLabel,
-    probabilityLabel: `${probabilityYesPercent.toFixed(0)}% YES`,
-    probabilityYesPercent,
+    ...probability,
     sides: historySides(entry),
-    timeLabel: "Confirmed onchain",
+    timeLabel: "Observed onchain",
     title: market.title,
     ...presentation,
   });
@@ -498,6 +571,11 @@ export function PredictionMarketPortfolio({
   const [refreshing, setRefreshing] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [activeTab, setActiveTab] = useState<PredictionPortfolioTabV1>("positions");
+  const [visibleCounts, setVisibleCounts] = useState<Record<PredictionPortfolioTabV1, number>>({
+    positions: PORTFOLIO_INITIAL_VISIBLE_ITEMS,
+    created: PORTFOLIO_INITIAL_VISIBLE_ITEMS,
+    history: PORTFOLIO_INITIAL_VISIBLE_ITEMS,
+  });
   const requestSequenceRef = useRef(0);
   const activeRequestRef = useRef<PredictionPortfolioRequest | null>(null);
   const tabRefs = useRef(new Map<PredictionPortfolioTabV1, HTMLButtonElement>());
@@ -611,7 +689,9 @@ export function PredictionMarketPortfolio({
   const canRefresh = viewModel
     ? Boolean(onRefresh || onRetry)
     : accessState === "ready";
-  const visibleItems = model[activeTab];
+  const activeItems = model[activeTab];
+  const visibleItems = activeItems.slice(0, visibleCounts[activeTab]);
+  const remainingItemCount = Math.max(0, activeItems.length - visibleItems.length);
 
   const runControlledAction = useCallback(async (
     action: (() => void | Promise<void>) | undefined,
@@ -779,11 +859,39 @@ export function PredictionMarketPortfolio({
                     </div>
                   ) : null}
                   {visibleItems.length > 0 ? (
-                    <div className={styles.portfolioCards}>
-                      {visibleItems.map((item) => (
-                        <PortfolioCard item={item} key={item.id} />
-                      ))}
-                    </div>
+                    <>
+                      <div className={styles.portfolioCards}>
+                        {visibleItems.map((item) => (
+                          <PortfolioCard item={item} key={item.id} />
+                        ))}
+                      </div>
+                      {remainingItemCount > 0 ? (
+                        <button
+                          className={styles.portfolioShowMore}
+                          type="button"
+                          onClick={() => {
+                            const increment = Math.min(
+                              PORTFOLIO_VISIBLE_ITEM_STEP,
+                              remainingItemCount,
+                            );
+                            setVisibleCounts((current) => ({
+                              ...current,
+                              [activeTab]: current[activeTab] + increment,
+                            }));
+                            setAnnouncement(
+                              `${increment} more items shown in ${tabLabel(activeTab)}.`,
+                            );
+                            if (increment === remainingItemCount) {
+                              window.requestAnimationFrame(() => {
+                                tabRefs.current.get(activeTab)?.focus();
+                              });
+                            }
+                          }}
+                        >
+                          Show {Math.min(PORTFOLIO_VISIBLE_ITEM_STEP, remainingItemCount)} more
+                        </button>
+                      ) : null}
+                    </>
                   ) : (
                     <PortfolioTabEmptyState tab={activeTab} />
                   )}
@@ -818,7 +926,8 @@ function PortfolioCard({ item }: Readonly<{ item: PredictionPortfolioItemViewMod
         <h3>
           <Link href={item.href}>{item.title}</Link>
         </h3>
-        <div className={styles.portfolioHoldings} aria-label={item.positionLabel}>
+        <span className="sr-only">{item.positionLabel}: </span>
+        <div className={styles.portfolioHoldings}>
           {item.sides.length > 0 ? item.sides.map((side) => (
             <span data-outcome={side.outcome} key={side.outcome}>
               <strong>{side.outcome}</strong>
@@ -830,7 +939,7 @@ function PortfolioCard({ item }: Readonly<{ item: PredictionPortfolioItemViewMod
 
       <dl className={styles.portfolioMetrics}>
         <div>
-          <dt>Probability</dt>
+          <dt>{item.probabilityMetricLabel}</dt>
           <dd>{item.probabilityLabel}</dd>
         </div>
         <div data-tone={item.payoutTone}>
@@ -866,7 +975,7 @@ function PortfolioTabEmptyState({ tab }: Readonly<{ tab: PredictionPortfolioTabV
       <PortfolioEmptyState
         icon={<CircleDollarSign aria-hidden="true" size={21} strokeWidth={1.8} />}
         title="No prediction history yet"
-        description="Completed positions and payouts will appear here."
+        description="Trades, transfers and payouts will appear here."
         action={<Link className={styles.portfolioSecondaryAction} href="/markets">Browse markets</Link>}
       />
     );

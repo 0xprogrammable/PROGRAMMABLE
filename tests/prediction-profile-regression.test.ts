@@ -16,6 +16,10 @@ const portfolioSource = readFileSync(
   join(root, "components/prediction-market-portfolio.tsx"),
   "utf8",
 );
+const detailSource = readFileSync(
+  join(root, "components/prediction-market-detail.tsx"),
+  "utf8",
+);
 const portfolioStyles = readFileSync(
   join(root, "components/prediction-market-experience.module.css"),
   "utf8",
@@ -183,6 +187,16 @@ describe("prediction portfolio data contract", () => {
       result: "won",
       redeemableAtoms: 90n,
     });
+
+    expect(
+      derivePredictionPortfolioPosition(
+        market({ noBalanceAtoms: 90n, state: "FINAL_YES", yesBalanceAtoms: 9n }),
+      ),
+    ).toMatchObject({
+      lifecycle: "final_yes",
+      result: "mixed",
+      redeemableAtoms: 90n,
+    });
   });
 
   it("keeps an invalid resolution neutral and computes its exact half-face redemption", () => {
@@ -243,7 +257,9 @@ describe("prediction profile regression contract", () => {
   });
 
   it("does not present an OPEN market as tradable after its cutoff", () => {
-    expect(portfolioSource).toContain("trading_closed");
+    expect(portfolioSource).toMatch(
+      /source\.lifecycle\s*===\s*["']open["']\s*&&\s*!source\.tradingClosed/u,
+    );
     expect(portfolioSource).toMatch(/Trading closed|Awaiting result/u);
     expect(portfolioSource).not.toContain('market.state.replaceAll("_", " ")');
   });
@@ -252,6 +268,30 @@ describe("prediction profile regression contract", () => {
     for (const label of ["Won", "Lost", "Neutral", "Redeemable"]) {
       expect(portfolioSource).toMatch(new RegExp(label, "iu"));
     }
+  });
+
+  it("labels live reads honestly and progressively reveals long activity lists", () => {
+    expect(portfolioSource).toContain('timeLabel: "Observed onchain"');
+    expect(portfolioSource).toMatch(
+      /PORTFOLIO_INITIAL_VISIBLE_ITEMS\s*=\s*12/u,
+    );
+    expect(portfolioSource).toMatch(
+      /activeItems\.slice\(0,\s*visibleCounts\[activeTab\]\)/u,
+    );
+    expect(portfolioSource).toContain("remainingItemCount > 0");
+    expect(portfolioSource).toMatch(
+      /Show \{Math\.min\([\s\S]{0,100}remainingItemCount/u,
+    );
+    expect(portfolioSource).toContain(
+      "more items shown in ${tabLabel(activeTab)}",
+    );
+    expect(portfolioSource).toContain(
+      "tabRefs.current.get(activeTab)?.focus()",
+    );
+    expect(
+      hasTouchHeight(cssDeclarationsFor(portfolioStyles, ".portfolioShowMore")),
+      ".portfolioShowMore needs a minimum 44px touch target",
+    ).toBe(true);
   });
 
   it("offers refresh and retry without turning routine progress into an alert", () => {
@@ -292,6 +332,9 @@ describe("prediction profile regression contract", () => {
 
   it("keeps tabs, refresh, retry, and row actions at least 44px tall", () => {
     for (const selector of [
+      ".modeTabs button",
+      ".quoteDetails summary",
+      ".refreshMarket",
       ".portfolioTabs button",
       ".portfolioRefresh",
       ".portfolioPrimaryAction",
@@ -305,5 +348,42 @@ describe("prediction profile regression contract", () => {
         `${selector} needs a minimum 44px touch target`,
       ).toBe(true);
     }
+  });
+
+  it("restores a visible amount-input focus treatment around the whole field", () => {
+    const focusWithin = cssDeclarationsFor(
+      portfolioStyles,
+      ".amountField > span:nth-child(2):focus-within",
+    );
+
+    expect(focusWithin).toMatch(/border-bottom-color\s*:/u);
+    expect(focusWithin).toMatch(/box-shadow\s*:/u);
+    expect(focusWithin).toContain("var(--focus)");
+  });
+
+  it("keeps financial safety labels conservative and explicit", () => {
+    expect(detailSource).toContain("maximumLossAtoms, \"exact\"");
+    expect(detailSource).toContain("minimumWinningPayoutAtoms,");
+    expect(detailSource).toContain("minimumWinningProfitAtoms,");
+    expect(detailSource).toContain("minimumNeutralPayoutAtoms,");
+    expect(detailSource).toContain("Minimum neutral payout");
+    expect(detailSource).not.toContain("neutralPayoutLabel");
+  });
+
+  it("invalidates wallet actions before submission across wallet, market, and unmount changes", () => {
+    expect(detailSource).toContain("useLayoutEffect(() => {");
+    expect(detailSource).toContain("activeMarketActionRequest.current = null");
+    expect(detailSource).toContain("marketActionGeneration.current += 1");
+    expect(detailSource.match(/requireCurrentMarketAction\(actionRequest\)/gu)?.length)
+      .toBeGreaterThanOrEqual(5);
+    expect(detailSource.match(
+      /await sendTransaction\(prepared\);\s*if \(!marketActionIsCurrent\(actionRequest\)\) return;/gu,
+    )?.length).toBe(2);
+  });
+
+  it("never offers a gas-only redemption for a zero-payout position", () => {
+    expect(detailSource).toContain("predictionMarketRedeemableAtoms(market)");
+    expect(detailSource).toContain("redeemableAtoms === 0n");
+    expect(detailSource).toContain("No payout available");
   });
 });

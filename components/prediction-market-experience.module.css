@@ -567,7 +567,7 @@
   border-radius: 7px;
   font-size: 13px;
   font-weight: 600;
-  min-height: 42px;
+  min-height: 44px;
 }
 
 .modeTabs .activeMode {
@@ -633,6 +633,11 @@
   border-bottom: 1px solid var(--border-strong);
   display: flex;
   min-height: 60px;
+}
+
+.amountField > span:nth-child(2):focus-within {
+  border-bottom-color: var(--focus);
+  box-shadow: 0 2px 0 var(--focus);
 }
 
 .amountField input {
@@ -776,9 +781,12 @@
 }
 
 .quoteDetails summary {
+  align-items: center;
   color: var(--webde-muted);
   cursor: pointer;
+  display: flex;
   font-size: 12px;
+  min-height: 44px;
   list-style-position: inside;
 }
 
@@ -863,6 +871,8 @@
   gap: 6px;
   justify-content: center;
   margin: 14px auto 0;
+  min-height: 44px;
+  padding: 0 10px;
 }
 
 .settlementTerminal {
@@ -1223,6 +1233,24 @@
   min-width: 0;
 }
 
+.portfolioShowMore {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--profile-line, var(--border));
+  border-radius: 9px;
+  color: var(--text-soft, rgb(255 255 255 / 72%));
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  justify-content: center;
+  margin: 12px auto 0;
+  min-height: 44px;
+  padding: 0 16px;
+  width: fit-content;
+}
+
 .portfolioHoldings > span {
   align-items: baseline;
   border-inline-start: 2px solid var(--portfolio-yes);
@@ -1446,7 +1474,12 @@
 .portfolioInlineError button:focus-visible,
 .portfolioCardCopy h3 a:focus-visible,
 .portfolioCardActions a:focus-visible {
-  outline: 2px solid #8fc5ff;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.portfolioShowMore:focus-visible {
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -1455,6 +1488,12 @@
   .portfolioSecondaryAction:hover,
   .portfolioInlineError button:hover,
   .portfolioCardActions a[data-tone="quiet"]:hover {
+    background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
+    border-color: var(--border-strong, rgb(255 255 255 / 18%));
+    color: var(--text, #fff);
+  }
+
+  .portfolioShowMore:hover {
     background: var(--profile-subtle, var(--webde-surface-raised, var(--surface-soft)));
     border-color: var(--border-strong, rgb(255 255 255 / 18%));
     color: var(--text, #fff);
@@ -1490,12 +1529,26 @@
       transform 120ms ease-out;
   }
 
+
+  .portfolioShowMore {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      transform 120ms ease-out;
+  }
+
   .portfolioRefresh:not(:disabled):active,
   .portfolioPrimaryAction:active,
   .portfolioSecondaryAction:active,
   .portfolioError button:active,
   .portfolioInlineError button:active,
   .portfolioCardActions a:active {
+    transform: scale(0.96);
+  }
+
+
+  .portfolioShowMore:active {
     transform: scale(0.96);
   }
 }
