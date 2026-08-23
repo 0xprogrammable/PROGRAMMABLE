@@ -1371,6 +1371,7 @@
 .imageAction:focus-visible,
 .editAction:focus-visible,
 .usernameRow input:focus-visible,
+.bannerPositionFields input:focus-visible,
 .connectButton:focus-visible,
 .claimButton:focus-visible,
 .secondaryAction:focus-visible,
@@ -1791,7 +1792,7 @@
   isolation: isolate;
   overflow: hidden;
   position: relative;
-  touch-action: none;
+  touch-action: auto;
 }
 
 .profileBanner::after {
@@ -1804,12 +1805,16 @@
 }
 
 .profileBannerEditing {
-  cursor: grab;
   outline: 1px dashed rgb(255 255 255 / 0.24);
   outline-offset: -8px;
 }
 
-.profileBannerEditing:active {
+.profileBannerPositionable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.profileBannerPositionable:active {
   cursor: grabbing;
 }
 
@@ -1923,6 +1928,57 @@
   align-items: start;
   gap: 16px;
   grid-template-columns: minmax(190px, 0.65fr) minmax(360px, 1.35fr);
+}
+
+.bannerPositionControl {
+  border: 0;
+  grid-column: 1 / -1;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.bannerPositionControl legend {
+  margin-bottom: 7px;
+  padding: 0;
+}
+
+.bannerPositionFields {
+  align-items: center;
+  background: #111;
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  display: grid;
+  gap: 4px 18px;
+  grid-template-columns: repeat(2, minmax(190px, 1fr));
+  padding: 8px 13px 9px;
+}
+
+.bannerPositionFields label {
+  align-items: center;
+  color: var(--webde-muted);
+  display: grid;
+  font-size: 12px;
+  gap: 12px;
+  grid-template-columns: auto minmax(96px, 1fr);
+  min-height: 44px;
+  min-width: 0;
+}
+
+.bannerPositionFields input {
+  accent-color: var(--webde-ink);
+  cursor: pointer;
+  height: 44px;
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.bannerPositionStatus {
+  color: var(--webde-dim);
+  font-size: 11px;
+  grid-column: 1 / -1;
+  line-height: 1.45;
 }
 
 .bioControl,
@@ -2235,6 +2291,10 @@
 
   .editGrid,
   .profileLinkFields {
+    grid-template-columns: 1fr;
+  }
+
+  .bannerPositionFields {
     grid-template-columns: 1fr;
   }
 

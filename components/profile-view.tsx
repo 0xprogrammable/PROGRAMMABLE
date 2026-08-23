@@ -1168,6 +1168,35 @@ export function withoutClosedDeepProfileData(
   };
 }
 
+type BannerPositionAxis = "horizontal" | "vertical";
+
+export function formatBannerPositionValue(
+  axis: BannerPositionAxis,
+  value: number,
+) {
+  const roundedValue = Math.max(0, Math.min(100, Math.round(value)));
+  if (axis === "horizontal") {
+    if (roundedValue === 0) return "aligned to the left edge";
+    if (roundedValue === 50) return "centered horizontally";
+    if (roundedValue === 100) return "aligned to the right edge";
+    return `${roundedValue}% from the left`;
+  }
+  if (roundedValue === 0) return "aligned to the top edge";
+  if (roundedValue === 50) return "centered vertically";
+  if (roundedValue === 100) return "aligned to the bottom edge";
+  return `${roundedValue}% from the top`;
+}
+
+export function formatBannerPositionStatus(position: {
+  x: number;
+  y: number;
+}) {
+  return `Banner position: ${formatBannerPositionValue(
+    "horizontal",
+    position.x,
+  )}, ${formatBannerPositionValue("vertical", position.y)}.`;
+}
+
 export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const { wallet, openWallet, sendTransaction, connecting } = useWallet();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2976,6 +3005,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         <div
           className={`${styles.profileBanner} ${
             editingProfile ? styles.profileBannerEditing : ""
+          } ${
+            editingProfile && bannerDraft
+              ? styles.profileBannerPositionable
+              : ""
           }`}
           onPointerDown={startBannerDrag}
           onPointerMove={moveBannerDrag}
@@ -3023,7 +3056,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                 {preparingImage ? "Preparing…" : "Choose banner"}
               </button>
               {bannerDraft ? (
-                <span>Drag the image to choose the visible area</span>
+                <span>Drag to position · keyboard controls below</span>
               ) : (
                 <span>Choose or drop an image · 3000 × 1000 recommended</span>
               )}
@@ -3156,6 +3189,69 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                     </button>
                   </div>
                 </div>
+
+                {bannerDraft ? (
+                  <fieldset className={styles.bannerPositionControl}>
+                    <legend className={styles.fieldLabel}>
+                      Banner position
+                    </legend>
+                    <div className={styles.bannerPositionFields}>
+                      <label>
+                        <span>Horizontal position</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={Math.round(bannerPositionDraft.x)}
+                          aria-valuetext={formatBannerPositionValue(
+                            "horizontal",
+                            bannerPositionDraft.x,
+                          )}
+                          aria-describedby="profile-banner-position-status"
+                          onChange={(event) => {
+                            const x = Number(event.currentTarget.value);
+                            setBannerPositionDraft((current) => ({
+                              ...current,
+                              x,
+                            }));
+                            setSaveError("");
+                          }}
+                        />
+                      </label>
+                      <label>
+                        <span>Vertical position</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={Math.round(bannerPositionDraft.y)}
+                          aria-valuetext={formatBannerPositionValue(
+                            "vertical",
+                            bannerPositionDraft.y,
+                          )}
+                          aria-describedby="profile-banner-position-status"
+                          onChange={(event) => {
+                            const y = Number(event.currentTarget.value);
+                            setBannerPositionDraft((current) => ({
+                              ...current,
+                              y,
+                            }));
+                            setSaveError("");
+                          }}
+                        />
+                      </label>
+                      <output
+                        id="profile-banner-position-status"
+                        className={styles.bannerPositionStatus}
+                        role="status"
+                      >
+                        {formatBannerPositionStatus(bannerPositionDraft)}
+                      </output>
+                    </div>
+                  </fieldset>
+                ) : null}
 
                 <div className={styles.bioControl}>
                   <label className={styles.fieldLabel} htmlFor="profile-bio">

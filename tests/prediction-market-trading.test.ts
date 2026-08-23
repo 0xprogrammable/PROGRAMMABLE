@@ -3,12 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   applyPredictionSlippageFloor,
   assertPredictionConfirmedBlocksMatch,
+  isPredictionMarketLoadRequestCurrent,
   parsePredictionBuyAmount,
   parsePredictionSellAmount,
+  preparePredictionRedeem,
+  predictionBuyPayoutSummary,
   predictionMarketInternal,
+  predictionMarketRedeemableAtoms,
   predictionMarketPageIndices,
   predictionDirectionalProtocolFee,
   predictionYesProbabilityBps,
+  type PredictionMarketView,
 } from "../lib/prediction-market-trading";
 
 const Q96 = 1n << 96n;
@@ -17,6 +22,29 @@ const MAX_SQRT_PRICE =
   1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_342n;
 
 describe("prediction market trading math", () => {
+  it("rejects stale market reads after a wallet, market, or generation change", () => {
+    const request = {
+      accountKey: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      generation: 7,
+      semanticKey: `0x${"11".repeat(32)}`,
+    } as const;
+
+    expect(isPredictionMarketLoadRequestCurrent(request, { ...request })).toBe(true);
+    expect(isPredictionMarketLoadRequestCurrent(request, {
+      ...request,
+      accountKey: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    })).toBe(false);
+    expect(isPredictionMarketLoadRequestCurrent(request, {
+      ...request,
+      generation: 8,
+    })).toBe(false);
+    expect(isPredictionMarketLoadRequestCurrent(request, {
+      ...request,
+      semanticKey: `0x${"22".repeat(32)}`,
+    })).toBe(false);
+    expect(isPredictionMarketLoadRequestCurrent(request, null)).toBe(false);
+  });
+
   it("maps the v4 YES/NO ratio to a stable binary probability", () => {
     expect(predictionYesProbabilityBps(Q96, true)).toBe(5_000);
     expect(predictionYesProbabilityBps(Q96, false)).toBe(5_000);
@@ -60,6 +88,140 @@ describe("prediction market trading math", () => {
     const packed = (321 << 12) | 123;
     expect(predictionDirectionalProtocolFee(packed, true)).toBe(123);
     expect(predictionDirectionalProtocolFee(packed, false)).toBe(321);
+  });
+
+  it("derives payout, profit, max loss, and neutral value from the executable buy quote", () => {
+    expect(
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 100_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 19_423n,
+        outcomeAtoms: 19_521n,
+      }),
+    ).toEqual({
+      estimatedCostAtoms: 100_000n,
+      maximumLossAtoms: 100_000n,
+      minimumNeutralPayoutAtoms: 97_115n,
+      minimumWinningProfitAtoms: 94_230n,
+      minimumWinningPayoutAtoms: 194_230n,
+      neutralPayoutAtoms: 97_605n,
+      potentialProfitAtoms: 95_210n,
+      winningPayoutAtoms: 195_210n,
+    });
+  });
+
+  it("uses a quoted refund for estimated profit without understating max loss", () => {
+    expect(
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 100_000n,
+        minOutcomeAtoms: 190_000n,
+        outcomeAtoms: 200_000n,
+      }),
+    ).toEqual({
+      estimatedCostAtoms: 900_000n,
+      maximumLossAtoms: 1_000_000n,
+      minimumNeutralPayoutAtoms: 950_000n,
+      minimumWinningProfitAtoms: 900_000n,
+      minimumWinningPayoutAtoms: 1_900_000n,
+      neutralPayoutAtoms: 1_000_000n,
+      potentialProfitAtoms: 1_100_000n,
+      winningPayoutAtoms: 2_000_000n,
+    });
+  });
+
+  it("enables redemption only for outcome balances with a positive payout", () => {
+    expect(predictionMarketRedeemableAtoms({
+      noBalanceAtoms: 25n,
+      state: "FINAL_YES",
+      yesBalanceAtoms: 10n,
+    })).toBe(100n);
+    expect(predictionMarketRedeemableAtoms({
+      noBalanceAtoms: 25n,
+      state: "FINAL_YES",
+      yesBalanceAtoms: 0n,
+    })).toBe(0n);
+    expect(predictionMarketRedeemableAtoms({
+      noBalanceAtoms: 25n,
+      state: "FINAL_NO",
+      yesBalanceAtoms: 10n,
+    })).toBe(250n);
+    expect(predictionMarketRedeemableAtoms({
+      noBalanceAtoms: 25n,
+      state: "FINAL_INVALID",
+      yesBalanceAtoms: 10n,
+    })).toBe(175n);
+    expect(predictionMarketRedeemableAtoms({
+      noBalanceAtoms: 25n,
+      state: "OPEN",
+      yesBalanceAtoms: 10n,
+    })).toBe(0n);
+  });
+
+  it("stops a loser-only zero-payout redemption before RPC or wallet work", async () => {
+    await expect(preparePredictionRedeem({
+      client: null as never,
+      market: {
+        noBalanceAtoms: 25n,
+        state: "FINAL_YES",
+        yesBalanceAtoms: 0n,
+      } as PredictionMarketView,
+      owner: "0x1111111111111111111111111111111111111111",
+    })).rejects.toThrow("no payout");
+  });
+
+  it("rejects payout summaries that could misstate a malformed quote", () => {
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 1_000_001n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 100_001n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_001n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 1_000_000n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 1n << 128n,
+      }),
+    ).toThrow("payout quote");
+  });
+
+  it("keeps conservative minimum profit signed when slippage crosses cost", () => {
+    expect(
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 90_000n,
+        outcomeAtoms: 105_000n,
+      }).minimumWinningProfitAtoms,
+    ).toBe(-100_000n);
   });
 
   it("pages newest-first with a stable cursor and no gaps", () => {

@@ -323,7 +323,7 @@ const exposureReadAbi = [
   },
 ] as const;
 
-const marketCreatedEventAbi = [
+export const predictionMarketFactoryEventAbi = [
   {
     type: "event",
     name: "MarketCreated",
@@ -1045,11 +1045,11 @@ export async function waitForPredictionMarketCreation({
   }
 
   let created: Extract<
-    ReturnType<typeof decodeEventLog<typeof marketCreatedEventAbi>>,
+    ReturnType<typeof decodeEventLog<typeof predictionMarketFactoryEventAbi>>,
     { eventName: "MarketCreated" }
   > | null = null;
   let components: Extract<
-    ReturnType<typeof decodeEventLog<typeof marketCreatedEventAbi>>,
+    ReturnType<typeof decodeEventLog<typeof predictionMarketFactoryEventAbi>>,
     { eventName: "MarketComponents" }
   > | null = null;
   for (const log of receipt.logs) {
@@ -1058,7 +1058,7 @@ export async function waitForPredictionMarketCreation({
     }
     try {
       const decoded = decodeEventLog({
-        abi: marketCreatedEventAbi,
+        abi: predictionMarketFactoryEventAbi,
         data: log.data,
         topics: log.topics,
       });
