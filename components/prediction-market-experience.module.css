@@ -660,12 +660,94 @@
   text-align: right;
 }
 
+.orderPreview {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.payoutSummary {
+  --payout-accent: var(--market-green);
+  border-inline-start: 3px solid var(--payout-accent);
+  display: grid;
+  gap: 14px;
+  padding: 2px 0 2px 14px;
+}
+
+.payoutSummary[data-outcome="NO"] {
+  --payout-accent: var(--market-red);
+}
+
+.payoutHeadline {
+  display: grid;
+  gap: 5px;
+}
+
+.payoutHeadline > span {
+  color: var(--webde-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.payoutHeadline > strong {
+  color: var(--webde-ink);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.payoutHeadline > small {
+  color: var(--webde-dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.payoutMetrics {
+  border-top: 1px solid var(--webde-line);
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-top: 11px;
+}
+
+.payoutMetrics > div {
+  align-items: baseline;
+  display: flex;
+  font-size: 12px;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.payoutMetrics dt {
+  color: var(--webde-muted);
+}
+
+.payoutMetrics dd {
+  color: var(--webde-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+  text-align: right;
+}
+
+.payoutMetrics dd[data-tone="positive"] {
+  color: var(--market-green);
+}
+
+.payoutMetrics dd[data-tone="negative"] {
+  color: var(--market-red);
+}
+
 .quoteReceipt {
   border-bottom: 1px solid var(--border);
   border-top: 1px solid var(--border);
   display: grid;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 0;
   padding: 15px 0;
 }
 

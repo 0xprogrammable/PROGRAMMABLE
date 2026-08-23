@@ -5,6 +5,7 @@ import {
   assertPredictionConfirmedBlocksMatch,
   parsePredictionBuyAmount,
   parsePredictionSellAmount,
+  predictionBuyPayoutSummary,
   predictionMarketInternal,
   predictionMarketPageIndices,
   predictionDirectionalProtocolFee,
@@ -60,6 +61,100 @@ describe("prediction market trading math", () => {
     const packed = (321 << 12) | 123;
     expect(predictionDirectionalProtocolFee(packed, true)).toBe(123);
     expect(predictionDirectionalProtocolFee(packed, false)).toBe(321);
+  });
+
+  it("derives payout, profit, max loss, and neutral value from the executable buy quote", () => {
+    expect(
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 100_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 19_423n,
+        outcomeAtoms: 19_521n,
+      }),
+    ).toEqual({
+      estimatedCostAtoms: 100_000n,
+      maximumLossAtoms: 100_000n,
+      minimumNeutralPayoutAtoms: 97_115n,
+      minimumWinningProfitAtoms: 94_230n,
+      minimumWinningPayoutAtoms: 194_230n,
+      neutralPayoutAtoms: 97_605n,
+      potentialProfitAtoms: 95_210n,
+      winningPayoutAtoms: 195_210n,
+    });
+  });
+
+  it("uses a quoted refund for estimated profit without understating max loss", () => {
+    expect(
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 100_000n,
+        minOutcomeAtoms: 190_000n,
+        outcomeAtoms: 200_000n,
+      }),
+    ).toEqual({
+      estimatedCostAtoms: 900_000n,
+      maximumLossAtoms: 1_000_000n,
+      minimumNeutralPayoutAtoms: 950_000n,
+      minimumWinningProfitAtoms: 900_000n,
+      minimumWinningPayoutAtoms: 1_900_000n,
+      neutralPayoutAtoms: 1_000_000n,
+      potentialProfitAtoms: 1_100_000n,
+      winningPayoutAtoms: 2_000_000n,
+    });
+  });
+
+  it("rejects payout summaries that could misstate a malformed quote", () => {
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 1_000_001n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 100_001n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_001n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 1_000_000n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 100_000n,
+      }),
+    ).toThrow("payout quote");
+    expect(() =>
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 100_000n,
+        outcomeAtoms: 1n << 128n,
+      }),
+    ).toThrow("payout quote");
+  });
+
+  it("keeps conservative minimum profit signed when slippage crosses cost", () => {
+    expect(
+      predictionBuyPayoutSummary({
+        collateralInAtoms: 1_000_000n,
+        collateralRefundAtoms: 0n,
+        minOutcomeAtoms: 90_000n,
+        outcomeAtoms: 105_000n,
+      }).minimumWinningProfitAtoms,
+    ).toBe(-100_000n);
   });
 
   it("pages newest-first with a stable cursor and no gaps", () => {

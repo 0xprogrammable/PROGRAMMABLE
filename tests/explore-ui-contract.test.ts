@@ -111,6 +111,30 @@ describe("Explore UI contract", () => {
     );
   });
 
+  it("shows quote-derived prediction payouts without allowing stale orders", () => {
+    const source = readFileSync(
+      join(root, "components/prediction-market-detail.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("Potential payout");
+    expect(source).toContain("Potential profit");
+    expect(source).toContain("Max market loss");
+    expect(source).toContain("This order if");
+    expect(source).toContain("based on the current quote");
+    expect(source).toContain("network fee excluded");
+    expect(source).toContain('shownQuote.buyPayout ? "Shares received" : "Estimated proceeds"');
+    expect(source).toContain('shownQuote.buyPayout ? "Minimum shares" : "Minimum proceeds"');
+    expect(source).toContain('role="group" aria-label="Trade direction"');
+    expect(source).toContain('role="group" aria-label="Outcome"');
+    expect(source).toContain("aria-pressed={mode === value}");
+    expect(source).toContain("aria-pressed={outcome === value}");
+    expect(source).toContain("const requestId = ++quoteRequestId.current");
+    expect(source.match(/requestId !== quoteRequestId\.current/gu)).toHaveLength(2);
+    expect(source).not.toContain('className={styles.orderPreview} aria-live="polite"');
+    expect(source).toContain('className="sr-only" role="status" aria-live="polite"');
+  });
+
   it("keeps sort, socials and model choices in one persistent disclosure", () => {
     const source = readFileSync(
       join(root, "components/explore-view.tsx"),

@@ -134,6 +134,17 @@ export type PredictionBuyQuote = Readonly<{
   zeroForOne: boolean;
 }>;
 
+export type PredictionBuyPayoutSummary = Readonly<{
+  estimatedCostAtoms: bigint;
+  maximumLossAtoms: bigint;
+  minimumNeutralPayoutAtoms: bigint;
+  minimumWinningProfitAtoms: bigint;
+  minimumWinningPayoutAtoms: bigint;
+  neutralPayoutAtoms: bigint;
+  potentialProfitAtoms: bigint;
+  winningPayoutAtoms: bigint;
+}>;
+
 export type PredictionSellQuote = Readonly<{
   averagePriceBps: number;
   blockNumber: bigint;
@@ -659,6 +670,46 @@ export function formatPredictionUsdg(atoms: bigint) {
 export function formatPredictionOutcome(atoms: bigint, outcome?: PredictionOutcome) {
   const value = trimDecimal(formatUnits(atoms, PREDICTION_OUTCOME_DECIMALS), 5);
   return outcome ? `${value} ${outcome}` : value;
+}
+
+export function predictionBuyPayoutSummary({
+  collateralInAtoms,
+  collateralRefundAtoms,
+  minOutcomeAtoms,
+  outcomeAtoms,
+}: Pick<
+  PredictionBuyQuote,
+  "collateralInAtoms" | "collateralRefundAtoms" | "minOutcomeAtoms" | "outcomeAtoms"
+>): PredictionBuyPayoutSummary {
+  if (
+    collateralInAtoms <= 0n ||
+    collateralInAtoms > MAX_BUY_COLLATERAL_ATOMS ||
+    collateralInAtoms % FACE_SCALE !== 0n ||
+    collateralRefundAtoms < 0n ||
+    collateralRefundAtoms >= collateralInAtoms ||
+    collateralRefundAtoms % FACE_SCALE !== 0n ||
+    outcomeAtoms <= 0n ||
+    outcomeAtoms > UINT128_MAX ||
+    minOutcomeAtoms <= 0n ||
+    minOutcomeAtoms > outcomeAtoms ||
+    minOutcomeAtoms > UINT128_MAX
+  ) {
+    throw new Error("The prediction buy payout quote is invalid");
+  }
+
+  const estimatedCostAtoms = collateralInAtoms - collateralRefundAtoms;
+  const winningPayoutAtoms = outcomeAtoms * FACE_SCALE;
+  const minimumWinningPayoutAtoms = minOutcomeAtoms * FACE_SCALE;
+  return {
+    estimatedCostAtoms,
+    maximumLossAtoms: collateralInAtoms,
+    minimumNeutralPayoutAtoms: minOutcomeAtoms * FACE_SCALE / 2n,
+    minimumWinningPayoutAtoms,
+    minimumWinningProfitAtoms: minimumWinningPayoutAtoms - collateralInAtoms,
+    neutralPayoutAtoms: outcomeAtoms * FACE_SCALE / 2n,
+    potentialProfitAtoms: winningPayoutAtoms - estimatedCostAtoms,
+    winningPayoutAtoms,
+  };
 }
 
 export function formatPredictionMarketObservation(timestamp: bigint) {

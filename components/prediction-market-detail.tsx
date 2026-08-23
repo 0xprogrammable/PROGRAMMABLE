@@ -9,7 +9,7 @@ import {
   LockKeyhole,
   RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/components/prediction-market-experience.module.css";
 import { predictionPreviewMarkets } from "@/components/prediction-market-preview";
@@ -21,13 +21,15 @@ import {
 } from "@/lib/prediction-market-chain";
 import {
   PREDICTION_DEFAULT_SLIPPAGE_BPS,
+  PREDICTION_COLLATERAL_DECIMALS,
+  applyPredictionSlippageFloor,
   discoverPredictionResolutionProof,
   formatPredictionMarketObservation,
   formatPredictionOutcome,
   formatPredictionPriceAtoms,
-  formatPredictionUsdg,
   parsePredictionBuyAmount,
   parsePredictionSellAmount,
+  predictionBuyPayoutSummary,
   predictionDirectionalProtocolFee,
   preparePredictionBuy,
   preparePredictionFallbackAction,
@@ -62,9 +64,22 @@ type LiveQuote =
   | { kind: "BUY"; value: PredictionBuyQuote }
   | { kind: "SELL"; value: PredictionSellQuote };
 
+type DisplayBuyPayout = Readonly<{
+  estimatedCostLabel: string;
+  maximumLossLabel: string;
+  minimumWinningProfitLabel: string;
+  minimumWinningPayoutLabel: string;
+  neutralPayoutLabel: string;
+  outcome: PredictionOutcome;
+  potentialProfitAtoms: bigint;
+  potentialProfitLabel: string;
+  winningPayoutLabel: string;
+}>;
+
 type DisplayQuote = Readonly<{
   afterYesBps: number;
   averagePriceBps: number;
+  buyPayout?: DisplayBuyPayout;
   depthLabel: string;
   minimumLabel: string;
   outputLabel: string;
@@ -90,6 +105,64 @@ function centsLabel(bps: number) {
   return `${(bps / 100).toFixed(1).replace(/\.0$/u, "")}¢`;
 }
 
+function traderUsdgLabel(atoms: bigint) {
+  const negative = atoms < 0n;
+  const absolute = negative ? -atoms : atoms;
+  const collateralScale = 10n ** BigInt(PREDICTION_COLLATERAL_DECIMALS);
+  const fractionDigits = absolute >= collateralScale
+    ? 2
+    : absolute >= collateralScale / 100n
+      ? 4
+      : PREDICTION_COLLATERAL_DECIMALS;
+  const roundingScale = 10n ** BigInt(PREDICTION_COLLATERAL_DECIMALS - fractionDigits);
+  const rounded = (absolute + roundingScale / 2n) / roundingScale;
+  const displayScale = 10n ** BigInt(fractionDigits);
+  const whole = (rounded / displayScale).toString();
+  const fraction = (rounded % displayScale)
+    .toString()
+    .padStart(fractionDigits, "0")
+    .replace(/0+$/u, "");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+  return `${negative ? "−" : ""}${grouped}${fraction ? `.${fraction}` : ""} USDG`;
+}
+
+function signedUsdgLabel(atoms: bigint) {
+  if (atoms === 0n) return traderUsdgLabel(0n);
+  return `${atoms > 0n ? "+" : "−"}${traderUsdgLabel(atoms > 0n ? atoms : -atoms)}`;
+}
+
+function traderOutcomeLabel(atoms: bigint, outcome: PredictionOutcome) {
+  const [amount] = formatPredictionOutcome(atoms, outcome).split(" ");
+  const [whole, fraction] = amount.split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+  return `${grouped}${fraction ? `.${fraction}` : ""} ${outcome}`;
+}
+
+function displayBuyPayout(
+  quote: Pick<
+    PredictionBuyQuote,
+    "collateralInAtoms" | "collateralRefundAtoms" | "minOutcomeAtoms" | "outcomeAtoms"
+  >,
+  outcome: PredictionOutcome,
+): DisplayBuyPayout {
+  const payout = predictionBuyPayoutSummary(quote);
+  return {
+    estimatedCostLabel: traderUsdgLabel(payout.estimatedCostAtoms),
+    maximumLossLabel: traderUsdgLabel(payout.maximumLossAtoms),
+    minimumWinningProfitLabel: signedUsdgLabel(
+      payout.minimumWinningProfitAtoms,
+    ),
+    minimumWinningPayoutLabel: traderUsdgLabel(
+      payout.minimumWinningPayoutAtoms,
+    ),
+    neutralPayoutLabel: traderUsdgLabel(payout.neutralPayoutAtoms),
+    outcome,
+    potentialProfitAtoms: payout.potentialProfitAtoms,
+    potentialProfitLabel: signedUsdgLabel(payout.potentialProfitAtoms),
+    winningPayoutLabel: traderUsdgLabel(payout.winningPayoutAtoms),
+  };
+}
+
 function utcDate(timestamp: bigint) {
   return formatPredictionMarketObservation(timestamp);
 }
@@ -110,18 +183,19 @@ function displayQuote(quote: LiveQuote): DisplayQuote {
     return {
       afterYesBps: quote.value.probabilityAfterBps,
       averagePriceBps: quote.value.averagePriceBps,
+      buyPayout: displayBuyPayout(quote.value, quote.value.outcome),
       depthLabel: quoteDepthLabel(quote.value.priceImpactBps),
-      minimumLabel: formatPredictionOutcome(
+      minimumLabel: traderOutcomeLabel(
         quote.value.minOutcomeAtoms,
         quote.value.outcome,
       ),
-      outputLabel: formatPredictionOutcome(
+      outputLabel: traderOutcomeLabel(
         quote.value.outcomeAtoms,
         quote.value.outcome,
       ),
       priceImpactBps: quote.value.priceImpactBps,
       ...(quote.value.collateralRefundAtoms
-        ? { refundLabel: formatPredictionUsdg(quote.value.collateralRefundAtoms) }
+        ? { refundLabel: traderUsdgLabel(quote.value.collateralRefundAtoms) }
         : {}),
     };
   }
@@ -129,8 +203,8 @@ function displayQuote(quote: LiveQuote): DisplayQuote {
     afterYesBps: quote.value.probabilityAfterBps,
     averagePriceBps: quote.value.averagePriceBps,
     depthLabel: quoteDepthLabel(quote.value.priceImpactBps),
-    minimumLabel: formatPredictionUsdg(quote.value.minCollateralAtoms),
-    outputLabel: formatPredictionUsdg(quote.value.collateralAtoms),
+    minimumLabel: traderUsdgLabel(quote.value.minCollateralAtoms),
+    outputLabel: traderUsdgLabel(quote.value.collateralAtoms),
     priceImpactBps: quote.value.priceImpactBps,
     ...(quote.value.soldRefundAtoms || quote.value.complementRefundAtoms
       ? {
@@ -177,12 +251,23 @@ function previewQuote(
   const afterYesBps = outcome === "YES" ? selectedAfter : 10_000 - selectedAfter;
   if (mode === "BUY") {
     const outputAtoms = amountAtoms * 10_000n / (BigInt(averagePriceBps) * 10n);
+    const minOutcomeAtoms = applyPredictionSlippageFloor(
+      outputAtoms,
+      PREDICTION_DEFAULT_SLIPPAGE_BPS,
+    );
+    const payoutQuote = {
+      collateralInAtoms: amountAtoms,
+      collateralRefundAtoms: 0n,
+      minOutcomeAtoms,
+      outcomeAtoms: outputAtoms,
+    };
     return {
       afterYesBps,
       averagePriceBps,
+      buyPayout: displayBuyPayout(payoutQuote, outcome),
       depthLabel: quoteDepthLabel(impact),
-      minimumLabel: formatPredictionOutcome(outputAtoms * 9_950n / 10_000n, outcome),
-      outputLabel: formatPredictionOutcome(outputAtoms, outcome),
+      minimumLabel: traderOutcomeLabel(minOutcomeAtoms, outcome),
+      outputLabel: traderOutcomeLabel(outputAtoms, outcome),
       priceImpactBps: impact,
     };
   }
@@ -191,8 +276,8 @@ function previewQuote(
     afterYesBps,
     averagePriceBps,
     depthLabel: quoteDepthLabel(impact),
-    minimumLabel: formatPredictionUsdg(outputAtoms * 9_950n / 10_000n),
-    outputLabel: formatPredictionUsdg(outputAtoms),
+    minimumLabel: traderUsdgLabel(outputAtoms * 9_950n / 10_000n),
+    outputLabel: traderUsdgLabel(outputAtoms),
     priceImpactBps: impact,
   };
 }
@@ -215,8 +300,12 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   const [shownQuote, setShownQuote] = useState<DisplayQuote | null>(null);
   const [phase, setPhase] = useState<"idle" | "quoting" | "signing" | "submitting" | "confirming">("idle");
   const [message, setMessage] = useState("");
+  const quoteRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    quoteRequestId.current += 1;
+    setLiveQuote(null);
+    setShownQuote(null);
     await Promise.resolve();
     if (!release.config) {
       const market = predictionPreviewMarkets(Math.floor(Date.now() / 1_000)).find(
@@ -254,6 +343,7 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   const busy = phase !== "idle";
 
   function clearQuote() {
+    quoteRequestId.current += 1;
     setLiveQuote(null);
     setShownQuote(null);
     setMessage("");
@@ -261,41 +351,56 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
 
   async function handleQuote() {
     if (!market || busy) return;
+    const requestId = ++quoteRequestId.current;
+    const requestedAmount = amount;
+    const requestedMarket = market;
+    const requestedMode = mode;
+    const requestedOutcome = outcome;
     setPhase("quoting");
     setMessage(preview ? "Checking the preview price…" : "Finding your price…");
     try {
+      let nextLiveQuote: LiveQuote | null = null;
+      let nextShownQuote: DisplayQuote;
       if (preview || !release.config) {
-        setShownQuote(previewQuote(market, mode, outcome, amount));
-        setLiveQuote(null);
-      } else if (mode === "BUY") {
-        const collateralAtoms = parsePredictionBuyAmount(amount);
+        nextShownQuote = previewQuote(
+          requestedMarket,
+          requestedMode,
+          requestedOutcome,
+          requestedAmount,
+        );
+      } else if (requestedMode === "BUY") {
+        const collateralAtoms = parsePredictionBuyAmount(requestedAmount);
         if (collateralAtoms === null) throw new Error("Enter a positive USDG amount with no more than five decimals");
         const quote = await quotePredictionBuy({
           collateralAtoms,
           config: release.config,
-          outcome,
+          outcome: requestedOutcome,
           semanticKey,
         });
-        const wrapped = { kind: "BUY" as const, value: quote };
-        setLiveQuote(wrapped);
-        setShownQuote(displayQuote(wrapped));
+        nextLiveQuote = { kind: "BUY", value: quote };
+        nextShownQuote = displayQuote(nextLiveQuote);
       } else {
-        const outcomeAtoms = parsePredictionSellAmount(amount);
+        const outcomeAtoms = parsePredictionSellAmount(requestedAmount);
         if (outcomeAtoms === null) throw new Error("Enter a positive token amount with no more than five decimals");
-        const balance = outcome === "YES" ? market.yesBalanceAtoms : market.noBalanceAtoms;
-        if (wallet && outcomeAtoms > balance) throw new Error(`Your wallet does not hold enough ${outcome}`);
+        const balance = requestedOutcome === "YES"
+          ? requestedMarket.yesBalanceAtoms
+          : requestedMarket.noBalanceAtoms;
+        if (wallet && outcomeAtoms > balance) throw new Error(`Your wallet does not hold enough ${requestedOutcome}`);
         const quote = await quotePredictionSell({
           config: release.config,
-          outcome,
+          outcome: requestedOutcome,
           outcomeAtoms,
           semanticKey,
         });
-        const wrapped = { kind: "SELL" as const, value: quote };
-        setLiveQuote(wrapped);
-        setShownQuote(displayQuote(wrapped));
+        nextLiveQuote = { kind: "SELL", value: quote };
+        nextShownQuote = displayQuote(nextLiveQuote);
       }
+      if (requestId !== quoteRequestId.current) return;
+      setLiveQuote(nextLiveQuote);
+      setShownQuote(nextShownQuote);
       setMessage(preview ? "Preview only. No wallet request will be made." : "Quote reconciled at one confirmed block. Review the minimum before submitting.");
     } catch (error) {
+      if (requestId !== quoteRequestId.current) return;
       setLiveQuote(null);
       setShownQuote(null);
       setMessage(getErrorMessage(error));
@@ -478,6 +583,11 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
   const selectedProtocolFee = liveQuote
     ? predictionDirectionalProtocolFee(liveQuote.value.swap.protocolFee, liveQuote.value.zeroForOne)
     : 0;
+  const orderAnnouncement = shownQuote?.buyPayout
+    ? `Potential payout ${shownQuote.buyPayout.winningPayoutLabel} if ${shownQuote.buyPayout.outcome} wins, based on the current quote; potential profit ${shownQuote.buyPayout.potentialProfitLabel}; max market loss ${shownQuote.buyPayout.maximumLossLabel}; network fee excluded.`
+    : shownQuote
+      ? `Estimated proceeds ${shownQuote.outputLabel}; minimum proceeds ${shownQuote.minimumLabel}.`
+      : "";
   const lifecycleAction = market.checkpointStatus !== "AWAITING" && market.state === "OPEN"
     ? "FINALIZE_CHECKPOINT"
     : market.fallbackChallengeDeadline && market.blockTimestamp > market.fallbackChallengeDeadline
@@ -562,38 +672,76 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
                 <h2>Trade</h2>
                 {preview ? <span>Preview</span> : null}
               </div>
-              <div className={styles.modeTabs} role="tablist" aria-label="Trade direction">
+              <div className={styles.modeTabs} role="group" aria-label="Trade direction">
                 {(["BUY", "SELL"] as const).map((value) => (
-                  <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? styles.activeMode : ""} onClick={() => { setMode(value); clearQuote(); }}>{value}</button>
+                  <button key={value} type="button" disabled={busy} aria-pressed={mode === value} className={mode === value ? styles.activeMode : ""} onClick={() => { setMode(value); clearQuote(); }}>{value}</button>
                 ))}
               </div>
-              <div className={styles.outcomeToggle}>
+              <div className={styles.outcomeToggle} role="group" aria-label="Outcome">
                 {(["YES", "NO"] as const).map((value) => (
-                  <button key={value} type="button" className={outcome === value ? (value === "YES" ? styles.yesSelected : styles.noSelected) : ""} onClick={() => { setOutcome(value); clearQuote(); }}>
+                  <button key={value} type="button" disabled={busy} aria-pressed={outcome === value} className={outcome === value ? (value === "YES" ? styles.yesSelected : styles.noSelected) : ""} onClick={() => { setOutcome(value); clearQuote(); }}>
                     <span>{value}</span><strong>{centsLabel(value === "YES" ? market.probabilityYesBps : 10_000 - market.probabilityYesBps)}</strong>
                   </button>
                 ))}
               </div>
               <label className={styles.amountField}>
                 <span>{mode === "BUY" ? "You pay" : "You sell"}</span>
-                <span><input inputMode="decimal" value={amount} onChange={(event) => { setAmount(event.target.value); clearQuote(); }} aria-label={mode === "BUY" ? "USDG amount" : `${outcome} amount`} /><strong>{mode === "BUY" ? "USDG" : outcome}</strong></span>
+                <span><input inputMode="decimal" disabled={busy} value={amount} onChange={(event) => { setAmount(event.target.value); clearQuote(); }} aria-label={mode === "BUY" ? "USDG amount" : `${outcome} amount`} /><strong>{mode === "BUY" ? "USDG" : outcome}</strong></span>
                 {mode === "SELL" && wallet ? <small>Balance {formatPredictionOutcome(selectedBalance, outcome)}</small> : null}
               </label>
 
               {shownQuote ? (
-                <div className={styles.quoteReceipt} aria-live="polite">
-                  <div><span>You receive</span><strong>{shownQuote.outputLabel}</strong></div>
-                  <div><span>Minimum received</span><strong>{shownQuote.minimumLabel}</strong></div>
-                  <div><span>Average price</span><strong>{centsLabel(shownQuote.averagePriceBps)}</strong></div>
-                  <div><span>Trading fee</span><strong>0.02%{selectedProtocolFee ? ` + ${selectedProtocolFee / 100} bps protocol` : ""}</strong></div>
-                  <details className={styles.quoteDetails}>
-                    <summary>Price details</summary>
-                    <div><span>YES chance after trade</span><strong>{probabilityLabel(shownQuote.afterYesBps)}</strong></div>
-                    <div><span>Price impact</span><strong>{probabilityLabel(shownQuote.priceImpactBps)}</strong></div>
-                    <div><span>Market depth</span><strong>{shownQuote.depthLabel}</strong></div>
-                    {shownQuote.refundLabel ? <div><span>Refund</span><strong>{shownQuote.refundLabel}</strong></div> : null}
-                    <div><span>Slippage limit</span><strong>{PREDICTION_DEFAULT_SLIPPAGE_BPS / 100}%</strong></div>
-                  </details>
+                <div className={styles.orderPreview}>
+                  <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                    {orderAnnouncement}
+                  </p>
+                  {shownQuote.buyPayout ? (
+                    <section
+                      className={styles.payoutSummary}
+                      data-outcome={shownQuote.buyPayout.outcome}
+                      aria-label="Potential payout"
+                    >
+                      <div className={styles.payoutHeadline}>
+                        <span>Potential payout</span>
+                        <strong>{shownQuote.buyPayout.winningPayoutLabel}</strong>
+                        <small>
+                          This order if {shownQuote.buyPayout.outcome} wins, based
+                          {" "}on the current quote. Trading fees included;
+                          {" "}network fee excluded.
+                        </small>
+                      </div>
+                      <dl className={styles.payoutMetrics}>
+                        <div>
+                          <dt>Potential profit</dt>
+                          <dd data-tone={shownQuote.buyPayout.potentialProfitAtoms >= 0n ? "positive" : "negative"}>
+                            {shownQuote.buyPayout.potentialProfitLabel}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Max market loss</dt>
+                          <dd>{shownQuote.buyPayout.maximumLossLabel}</dd>
+                        </div>
+                      </dl>
+                    </section>
+                  ) : null}
+                  <div className={styles.quoteReceipt}>
+                    <div><span>{shownQuote.buyPayout ? "Shares received" : "Estimated proceeds"}</span><strong>{shownQuote.outputLabel}</strong></div>
+                    <div><span>{shownQuote.buyPayout ? "Minimum shares" : "Minimum proceeds"}</span><strong>{shownQuote.minimumLabel}</strong></div>
+                    <div><span>Average price</span><strong>{centsLabel(shownQuote.averagePriceBps)}</strong></div>
+                    <div><span>Trading fee</span><strong>0.02%{selectedProtocolFee ? ` + ${selectedProtocolFee / 100} bps protocol` : ""}</strong></div>
+                    <details className={styles.quoteDetails}>
+                      <summary>Price details</summary>
+                      <div><span>YES chance after trade</span><strong>{probabilityLabel(shownQuote.afterYesBps)}</strong></div>
+                      <div><span>Price impact</span><strong>{probabilityLabel(shownQuote.priceImpactBps)}</strong></div>
+                      <div><span>Market depth</span><strong>{shownQuote.depthLabel}</strong></div>
+                      {shownQuote.buyPayout ? <div><span>Minimum payout</span><strong>{shownQuote.buyPayout.minimumWinningPayoutLabel}</strong></div> : null}
+                      {shownQuote.buyPayout ? <div><span>Minimum profit if {shownQuote.buyPayout.outcome} wins</span><strong>{shownQuote.buyPayout.minimumWinningProfitLabel}</strong></div> : null}
+                      {shownQuote.buyPayout ? <div><span>Neutral result</span><strong>{shownQuote.buyPayout.neutralPayoutLabel}</strong></div> : null}
+                      {shownQuote.refundLabel ? <div><span>Estimated refund</span><strong>{shownQuote.refundLabel}</strong></div> : null}
+                      {shownQuote.refundLabel && shownQuote.buyPayout ? <div><span>Estimated cost after refund</span><strong>{shownQuote.buyPayout.estimatedCostLabel}</strong></div> : null}
+                      <div><span>Slippage limit</span><strong>{PREDICTION_DEFAULT_SLIPPAGE_BPS / 100}%</strong></div>
+                    </details>
+                  </div>
                 </div>
               ) : null}
 
@@ -609,7 +757,7 @@ export function PredictionMarketDetail({ semanticKey }: { semanticKey: string })
               >
                 {busy
                   ? phase === "signing" ? "Sign in wallet" : phase === "confirming" ? "Confirming" : "Getting price"
-                  : !shownQuote ? preview ? "Preview price" : "Review price"
+                  : !shownQuote ? preview ? "Preview order" : "Review order"
                   : preview ? "Update preview"
                   : !wallet ? "Connect wallet"
                   : `${mode} ${outcome}`}
