@@ -516,42 +516,51 @@ async function readRewardsFromClient(
       ? await readLaunchLogs(client, launcher, deploymentBlock, snapshotBlock)
       : [];
 
-  const relevant = (
-    await Promise.all(
-      logs.map(async (log) => {
-        if (log.removed) return null;
-        const vaultAddress = getAddress(log.args.rewardVault);
-        const [share, checkpointed, claimed] = await Promise.all([
-          client.readContract({
-            address: vaultAddress,
-            abi: classicRewardVaultAbi,
-            functionName: "shareBpsOf",
-            args: [account],
-            blockNumber: snapshotBlock,
-          }),
-          client.readContract({
-            address: vaultAddress,
-            abi: classicRewardVaultAbi,
-            functionName: "claimable",
-            args: [account],
-            blockNumber: snapshotBlock,
-          }),
-          client.readContract({
-            address: vaultAddress,
-            abi: classicRewardVaultAbi,
-            functionName: "claimedBy",
-            args: [account],
-            blockNumber: snapshotBlock,
-          }),
-        ]);
-        return share > 0 || checkpointed > 0n || claimed > 0n
-          ? { log, share, checkpointed, claimed }
-          : null;
-      }),
-    )
-  ).filter((item) => item !== null);
+  const activeLogs = logs.filter((log) => !log.removed);
+  const relevanceResults = await Promise.allSettled(
+    activeLogs.map(async (log) => {
+      const vaultAddress = getAddress(log.args.rewardVault);
+      const [share, checkpointed, claimed] = await Promise.all([
+        client.readContract({
+          address: vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "shareBpsOf",
+          args: [account],
+          blockNumber: snapshotBlock,
+        }),
+        client.readContract({
+          address: vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "claimable",
+          args: [account],
+          blockNumber: snapshotBlock,
+        }),
+        client.readContract({
+          address: vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "claimedBy",
+          args: [account],
+          blockNumber: snapshotBlock,
+        }),
+      ]);
+      return share > 0 || checkpointed > 0n || claimed > 0n
+        ? { log, share, checkpointed, claimed }
+        : null;
+    }),
+  );
+  if (
+    relevanceResults.length > 0 &&
+    relevanceResults.every((result) => result.status === "rejected")
+  ) {
+    throw (relevanceResults[0] as PromiseRejectedResult).reason;
+  }
+  const relevant = relevanceResults.flatMap((result) =>
+    result.status === "fulfilled" && result.value !== null
+      ? [result.value]
+      : []
+  );
 
-  const rewards = await Promise.all(
+  const rewardResults = await Promise.allSettled(
     relevant.map(async ({ log, share, checkpointed, claimed }) => {
       const tokenAddress = getAddress(log.args.token);
       const vaultAddress = getAddress(log.args.rewardVault);
@@ -680,11 +689,24 @@ async function readRewardsFromClient(
       };
     }),
   );
+  if (
+    rewardResults.length > 0 &&
+    rewardResults.every((result) => result.status === "rejected")
+  ) {
+    throw (rewardResults[0] as PromiseRejectedResult).reason;
+  }
+  const rewards = rewardResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : []
+  );
+  const partial =
+    relevanceResults.some((result) => result.status === "rejected") ||
+    rewardResults.some((result) => result.status === "rejected");
 
   return {
     status: "ready" as const,
     account,
     chainId: chain.id,
+    quality: partial ? "partial" as const : "current" as const,
     rewards,
   };
 }

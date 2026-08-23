@@ -253,6 +253,19 @@ describe("Classic V3 profile rewards", () => {
     ).toThrow("does not match");
   });
 
+  it("preserves an explicitly partial but entry-verified reward response", () => {
+    const profile = parseClassicV3ProfileRewards(
+      { ...rewardResponse(), quality: "partial" },
+      account,
+    );
+
+    expect(profile).toMatchObject({
+      status: "ready",
+      quality: "partial",
+      rewards: [{ vaultAddress: vault }],
+    });
+  });
+
   it("accepts consolidated wallets but rejects invalid allocation indexes", () => {
     const consolidated = rewardResponse();
     consolidated.rewards[0].beneficiaries[1].beneficiary = account;

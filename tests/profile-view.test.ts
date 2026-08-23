@@ -316,6 +316,12 @@ describe("profile workspace loading state", () => {
     expect(
       getProfileRewardDataQuality(
         ["ready", "ready", "not-deployed"],
+        "partial",
+      ),
+    ).toBe("partial");
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "ready", "not-deployed"],
         "stale",
       ),
     ).toBe("stale");
@@ -327,6 +333,9 @@ describe("profile workspace loading state", () => {
     );
     expect(profileViewSource).toContain(
       "PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000",
+    );
+    expect(profileViewSource).toContain(
+      'data.status !== "ready" || data.quality === "partial"',
     );
   });
 

@@ -56,6 +56,7 @@ export type ClassicV3ProfileRewards =
       status: "ready";
       account: Address;
       chainId: 1 | 11_155_111;
+      quality?: "current" | "partial";
       rewards: readonly ClassicV3Reward[];
     };
 
@@ -369,6 +370,13 @@ export function parseClassicV3ProfileRewards(
   if (!Array.isArray(record.rewards)) {
     throw new Error("Invalid Classic rewards");
   }
+  const quality = record.quality === undefined || record.quality === "current"
+    ? "current" as const
+    : record.quality === "partial"
+      ? "partial" as const
+      : (() => {
+          throw new Error("Invalid Classic reward quality");
+        })();
 
   const rewards = record.rewards.map((entry, rewardIndex) => {
     const reward = asRecord(entry, `Classic reward ${rewardIndex + 1}`);
@@ -470,6 +478,7 @@ export function parseClassicV3ProfileRewards(
     status: "ready",
     account,
     chainId: record.chainId,
+    quality,
     rewards,
   };
 }

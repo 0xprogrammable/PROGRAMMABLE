@@ -28,7 +28,8 @@ const mocks = vi.hoisted(() => {
         ] ?? "0x",
     ),
     getBlockNumber: vi.fn(async () => 25_639_608n),
-    getLogs: vi.fn(async () => []),
+    getLogs: vi.fn(async (): Promise<unknown[]> => []),
+    readContract: vi.fn(),
   };
   return {
     client,
@@ -74,6 +75,10 @@ import {
 
 const account = "0x1111111111111111111111111111111111111111";
 const vault = "0x2222222222222222222222222222222222222222";
+const readableVault = "0x7777777777777777777777777777777777777777";
+const readableToken = "0x8888888888888888888888888888888888888888";
+const readablePoolId = `0x${"99".repeat(32)}` as const;
+const readableTransactionHash = `0x${"aa".repeat(32)}` as const;
 const drpcRpcUrl =
   "https://lb.drpc.live/ethereum/drpc-classic-key";
 const quickNodeRpcUrl =
@@ -122,6 +127,7 @@ describe("Classic profile release gate", () => {
       status: "ready",
       account,
       chainId: 1,
+      quality: "current",
       rewards: [],
     });
   });
@@ -141,6 +147,83 @@ describe("Classic profile release gate", () => {
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "drpc-primary",
     );
+  });
+
+  it("keeps verified rewards available when an unrelated vault cannot be read", async () => {
+    mocks.client.getLogs.mockResolvedValueOnce([
+      {
+        removed: false,
+        transactionHash: `0x${"bb".repeat(32)}`,
+        args: {
+          token: "0x6666666666666666666666666666666666666666",
+          poolId: `0x${"cc".repeat(32)}`,
+          rewardVault: vault,
+          buySwapFeeBps: 300,
+          sellSwapFeeBps: 700,
+        },
+      },
+      {
+        removed: false,
+        transactionHash: readableTransactionHash,
+        args: {
+          token: readableToken,
+          poolId: readablePoolId,
+          rewardVault: readableVault,
+          buySwapFeeBps: 300,
+          sellSwapFeeBps: 700,
+        },
+      },
+    ]);
+    mocks.client.readContract.mockImplementation(async (request) => {
+      if (request.address.toLowerCase() === vault.toLowerCase()) {
+        throw new Error("unrelated vault read failed");
+      }
+      switch (request.functionName) {
+        case "shareBpsOf":
+        case "shareBpsAt":
+          return 10_000;
+        case "claimable":
+          return 2n;
+        case "claimedBy":
+          return 1n;
+        case "name":
+          return "Readable";
+        case "symbol":
+          return "READ";
+        case "beneficiaryCount":
+          return 1n;
+        case "isFactoryVault":
+          return true;
+        case "feeDisclosure":
+          return [300, 700, 290, 690, 10, 0, 0, readableVault];
+        case "poolFeeConfig":
+          return [readableVault, account, 300, 700, true, 0n];
+        case "beneficiaryAt":
+          return account;
+        default:
+          throw new Error(`Unexpected read ${request.functionName}`);
+      }
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/profile/classic-v3?account=${account}`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "ready",
+      quality: "partial",
+      rewards: [
+        {
+          tokenAddress: readableToken,
+          vaultAddress: readableVault,
+          claimableWei: "2",
+          claimedWei: "1",
+        },
+      ],
+    });
   });
 
   it("returns 503 without fallback when the sole dRPC read fails", async () => {
