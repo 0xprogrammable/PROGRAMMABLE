@@ -104,6 +104,9 @@ describe("Explore UI contract", () => {
     expect(predictionSource).toContain(
       "Closes ${compactUtcDate(market.cutoff)}",
     );
+    expect(predictionSource).toContain(
+      '<span className={styles.marketCardTime}>{marketStatus}</span>',
+    );
     expect(predictionStyles).toMatch(
       /\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s,
     );
@@ -133,6 +136,12 @@ describe("Explore UI contract", () => {
       'market ? `Result: ${market.observationLabel}` : "\\u00a0"',
     );
     expect(predictionStyles).not.toContain(".marketCardMeta i");
+    expect(predictionStyles).toMatch(
+      /\.marketCardTime\s*\{[^}]*color:\s*var\(--webde-muted\);[^}]*font-family:\s*var\(--font-instrument\), Arial, sans-serif;[^}]*font-size:\s*13\.5px;[^}]*font-variant-numeric:\s*tabular-nums slashed-zero;[^}]*font-weight:\s*600;[^}]*white-space:\s*nowrap;/s,
+    );
+    expect(predictionStyles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.marketCardTime\s*\{[^}]*font-size:\s*13px;/s,
+    );
     expect(predictionLaunchStyles).toMatch(
       /\.header\s*\{[^}]*max-width:\s*1060px;[^}]*width:\s*100%;/s,
     );

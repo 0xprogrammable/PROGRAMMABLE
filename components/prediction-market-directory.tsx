@@ -107,7 +107,7 @@ function MarketCard({
         </span>
 
         <span className={styles.marketCardMeta}>
-          <span>{marketStatus}</span>
+          <span className={styles.marketCardTime}>{marketStatus}</span>
           {preview ? <span>Preview</span> : null}
           <ArrowRight aria-hidden="true" size={17} />
         </span>
