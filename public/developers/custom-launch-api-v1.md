@@ -133,7 +133,8 @@ The platform does not:
 - An exact replay may return `200` with the original launch.
 - Reusing the key with a different body returns `409`.
 - Reusing a conflicting nonce for the bound wallet returns `409`.
-- If a prepared permit expires before platform signing, the request becomes terminal `failed` with
+- Each prepared permit is valid for at most one hour. If it expires before platform signing or before the controller
+  wallet broadcasts the authorized Router action, the request becomes terminal `failed` with
   `failure.code: "PERMIT_EXPIRED"`. Submit a new request with a new nonce and Idempotency-Key.
 
 New reservations are limited to 30 per rolling hour and 100 per rolling day for the wallet principal and route. Exact
@@ -178,8 +179,8 @@ received -> validating -> prepared -> authorized -> submitted -> finalized
 
 - `prepared`: the exact artifact, including its unsigned Router transaction template, exists; the broadcast-ready
   `walletTransaction` is still null.
-- `authorized`: the platform permit is attached and the exact wallet handoff is ready. It is not wallet-signed or
-  broadcast.
+- `authorized`: the platform permit is attached and the exact wallet handoff is ready for up to one hour. It is not
+  wallet-signed or broadcast.
 - `submitted`: a canonical Router event and same-block `launchStamp` getter record match the prepared artifact, but the
   event has fewer than 64 confirmations.
 - `finalized`: the same canonical Router evidence has at least 64 confirmations.

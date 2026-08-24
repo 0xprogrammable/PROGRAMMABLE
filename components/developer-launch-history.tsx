@@ -166,7 +166,7 @@ function statusCopy(status: LaunchStatus) {
     case "authorized": return "Ready for wallet confirmation";
     case "submitted": return "Submitted onchain";
     case "finalized": return "Finalized onchain";
-    case "failed": return "Preparation failed";
+    case "failed": return "Launch failed";
     case "cancelled": return "Cancelled";
   }
 }
