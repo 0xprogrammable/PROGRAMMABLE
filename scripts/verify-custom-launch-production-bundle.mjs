@@ -4,6 +4,7 @@ import { join, relative, resolve } from "node:path";
 const PRODUCTION_BUNDLE_ROOTS = [".next/static", ".next/server"];
 const DEVELOPMENT_ONLY_MARKERS = [
   "programmable-custom-launch-local-preview-v1",
+  "programmable-prediction-v2-local-preview-v1",
   "example-labs/approved-module",
   "local-interface-preview",
   "Local seed",
@@ -39,7 +40,7 @@ export function verifyCustomLaunchProductionBundle(root = process.cwd()) {
     }
   }
   if (findings.length > 0) {
-    throw new Error(`Development-only Custom Launch preview leaked into production:\n${findings.join("\n")}`);
+    throw new Error(`Development-only launch preview leaked into production:\n${findings.join("\n")}`);
   }
   return Object.freeze({
     schemaVersion: "programmable.custom-launch-production-bundle-scan.v1",

@@ -33,6 +33,27 @@ const LOCAL_PREVIEW_STAGES = new Set<CustomLaunchStageV1>([
   "wallet",
   "registry",
 ]);
+const PREDICTION_V2_LOCAL_PREVIEW_STATES = new Set([
+  "address",
+  "asset",
+  "prediction",
+  "review",
+  "ambiguous",
+  "error",
+] as const);
+const PREDICTION_V2_LOCAL_PREVIEW_FIXTURES = new Set([
+  "base",
+  "solana",
+] as const);
+
+type PredictionV2LocalPreviewState =
+  | "address"
+  | "asset"
+  | "prediction"
+  | "review"
+  | "ambiguous"
+  | "error";
+type PredictionV2LocalPreviewFixture = "base" | "solana";
 
 function loadLaunchForm() {
   return import("@/components/launch-builder");
@@ -60,6 +81,15 @@ const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development
   ? lazy(async () => {
       const previewModule = await import("@/components/custom-launch-local-preview");
       return { default: previewModule.CustomLaunchLocalPreview };
+    })
+  : null;
+
+const LazyDevelopmentPredictionV2Preview = process.env.NODE_ENV === "development"
+  ? lazy(async () => {
+      const previewModule = await import(
+        "@/components/prediction-market-v2-local-preview"
+      );
+      return { default: previewModule.PredictionMarketV2LocalPreview };
     })
   : null;
 
@@ -125,6 +155,35 @@ export function LaunchExperience(props: LaunchExperienceProps) {
 function DevelopmentLaunchPreviewRoute(props: LaunchExperienceProps) {
   const searchParams = useSearchParams();
   const previewCandidate = searchParams.get("localPreview");
+  if (
+    previewCandidate === "prediction-v2" &&
+    LazyDevelopmentPredictionV2Preview !== null
+  ) {
+    const stateCandidate = searchParams.get("predictionState");
+    const fixtureCandidate = searchParams.get("fixture");
+    const initialState = stateCandidate &&
+      PREDICTION_V2_LOCAL_PREVIEW_STATES.has(
+        stateCandidate as PredictionV2LocalPreviewState,
+      )
+      ? stateCandidate as PredictionV2LocalPreviewState
+      : "address";
+    const fixture = fixtureCandidate &&
+      PREDICTION_V2_LOCAL_PREVIEW_FIXTURES.has(
+        fixtureCandidate as PredictionV2LocalPreviewFixture,
+      )
+      ? fixtureCandidate as PredictionV2LocalPreviewFixture
+      : "base";
+
+    return (
+      <Suspense fallback={<LaunchFormLoading title="Create a prediction" onBack={() => undefined} />}>
+        <LazyDevelopmentPredictionV2Preview
+          fixture={fixture}
+          initialState={initialState}
+          onBack={() => window.location.assign("/launch")}
+        />
+      </Suspense>
+    );
+  }
   const localPreviewStage = previewCandidate
     && LOCAL_PREVIEW_STAGES.has(previewCandidate as CustomLaunchStageV1)
     ? previewCandidate as CustomLaunchStageV1

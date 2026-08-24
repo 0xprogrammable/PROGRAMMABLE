@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   getPredictionV2ReleaseBinding,
+  isPredictionV2ReleaseEnabled,
   parsePredictionV2ReleaseBinding,
 } from "../lib/prediction-v2/release-binding.server";
 
@@ -22,6 +23,10 @@ describe("Prediction V2 release binding", () => {
     expect(binding).not.toHaveProperty("addresses");
     expect(binding).not.toHaveProperty("deployment");
     expect(binding).not.toHaveProperty("attestation");
+  });
+
+  it("cannot authorize a public V2 route under the disabled-only V1 schema", () => {
+    expect(isPredictionV2ReleaseEnabled()).toBe(false);
   });
 
   it("accepts only the exact disabled V1 schema and copies the input", () => {

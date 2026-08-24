@@ -30,6 +30,7 @@ test("accepts a production bundle without development-only launch seeds", () => 
 test("rejects a local seed in source maps and non-JavaScript production artifacts", () => {
   for (const [path, marker] of [
     [".next/static/chunks/leak.js.map", "programmable-custom-launch-local-preview-v1"],
+    [".next/static/chunks/prediction-leak.js.map", "programmable-prediction-v2-local-preview-v1"],
     [".next/server/app/leak.rsc", "Local seed"],
   ]) {
     const root = bundleFixture();
@@ -37,7 +38,7 @@ test("rejects a local seed in source maps and non-JavaScript production artifact
       writeFileSync(join(root, path), marker, "utf8");
       assert.throws(
         () => verifyCustomLaunchProductionBundle(root),
-        /Development-only Custom Launch preview leaked into production/u,
+        /Development-only launch preview leaked into production/u,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });
