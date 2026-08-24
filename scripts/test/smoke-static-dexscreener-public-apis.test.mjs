@@ -111,6 +111,8 @@ function catalog() {
       classic: "last-known-good",
       stock: "excluded",
       custom: "unavailable",
+      registryCustom: "unavailable",
+      routerCustom: "unavailable",
     },
     scope: {
       included: [
@@ -749,7 +751,7 @@ test("staged smoke rejects health output containing provider secrets", async () 
   );
 });
 
-test("staged smoke accepts one custom-current composite catalog", async () => {
+test("staged smoke accepts Registry-current and Router-unavailable catalog", async () => {
   const project = customProject();
   const result = await runStagedStaticDexscreenerSmokeV1({
     environment: {
@@ -774,15 +776,18 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
             catalog: {
               ...body.catalog,
               launchSource: "envio-classic-v3+registry.custom-launched",
-              completeness: { ...body.catalog.completeness, custom: "current" },
+              completeness: {
+                ...body.catalog.completeness,
+                registryCustom: "current",
+              },
               identityCommitment: `sha256:${"de".repeat(32)}`,
             },
             dataQuality: {
               ...body.dataQuality,
               launchIdentity: {
                 ...body.dataQuality.launchIdentity,
-                status: "current",
-                custom: "current",
+                status: "partial",
+                custom: "unavailable",
               },
             },
           };
@@ -795,7 +800,10 @@ test("staged smoke accepts one custom-current composite catalog", async () => {
             catalog: {
               ...body.catalog,
               launchSource: "envio-classic-v3+registry.custom-launched",
-              completeness: { ...body.catalog.completeness, custom: "current" },
+              completeness: {
+                ...body.catalog.completeness,
+                registryCustom: "current",
+              },
               identityCommitment: `sha256:${"de".repeat(32)}`,
             },
           };
