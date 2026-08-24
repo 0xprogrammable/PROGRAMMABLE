@@ -15,6 +15,8 @@ import {
   VERIFY_SCOPE_JOB_NAME,
   VERIFY_WORKFLOW_PATH,
   buildProductionVerifyProofV1,
+  canonicalProductionRepository,
+  canonicalProductionWorkflowRef,
   encodeProductionVerifyProofV1,
   parseProductionVerifyProofV1,
   resolveProductionVerifyProofFromGitHubV1,
@@ -253,6 +255,27 @@ test("full production Verify proof is deterministic and exact", () => {
   );
 });
 
+test("GitHub display-case drift preserves the canonical production identity", () => {
+  assert.equal(
+    canonicalProductionRepository("0xprogrammable/PROGRAMMABLE"),
+    PRODUCTION_REPOSITORY,
+  );
+  assert.equal(
+    canonicalProductionWorkflowRef(
+      "0xprogrammable/PROGRAMMABLE/.github/workflows/verify.yml@refs/heads/production",
+    ),
+    `${PRODUCTION_REPOSITORY}/${VERIFY_WORKFLOW_PATH}@${PRODUCTION_REF}`,
+  );
+  assert.throws(() =>
+    canonicalProductionRepository("attacker/PROGRAMMABLE"));
+  assert.throws(() =>
+    canonicalProductionRepository("0xprogrammable/PROGRAMMABLE "));
+  assert.throws(() =>
+    canonicalProductionWorkflowRef(
+      "0xprogrammable/PROGRAMMABLE/.github/workflows/verify.yml@refs/heads/main",
+    ));
+});
+
 test("proof binds the path scope and distinguishes skipped lanes", () => {
   const input = validProofInput();
   input.scopeResults = {
@@ -386,6 +409,16 @@ test("resolver accepts only a fresh exact successful run and immutable artifact"
     eventName: "push",
     verificationMode: PRODUCTION_VERIFY_CHANGE_MODE,
   });
+});
+
+test("resolver accepts GitHub repository display-case drift with the exact ID", async () => {
+  const fixtures = validApiFixtures();
+  const run = fixtures.runs.workflow_runs[0];
+  run.repository.full_name = "0xprogrammable/PROGRAMMABLE";
+  run.repository.html_url = "https://github.com/0xprogrammable/PROGRAMMABLE";
+  run.head_repository.full_name = "0xprogrammable/PROGRAMMABLE";
+  run.html_url = `${run.repository.html_url}/actions/runs/${RUN_ID}`;
+  assert.equal((await resolveFixtures(fixtures)).runId, RUN_ID);
 });
 
 test("manual Custom V2 release proof binds dispatch intent and full-tree lane", async () => {
