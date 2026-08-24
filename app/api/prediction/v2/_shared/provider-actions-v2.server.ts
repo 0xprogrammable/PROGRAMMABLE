@@ -14,7 +14,7 @@ import {
   PREDICTION_V2_PUBLIC_RELEASE_HISTORICAL_SESSION_MAX_RPC_LOGICAL_CALLS,
   PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS,
   assertPredictionV2RuntimeDistributedBudgetMatchesRelease,
-  createPredictionV2PublicReleaseResolutionRpcSession,
+  createPredictionV2PublicReleaseRpcSession,
   toPredictionV2ReadBindingFromPublicReleaseV2,
   type PredictionV2EnabledPublicReleaseV2,
 } from "@/lib/prediction-v2/public-release-v2.server";
@@ -34,9 +34,9 @@ import {
 } from "@/lib/prediction-v2/resolution-action-v2.server";
 import {
   PREDICTION_V2_CANONICAL_HISTORICAL_BLOCK_VERIFICATION_RPC_LOGICAL_CALLS,
-  createPredictionV2ActionRpcQuorum,
+  createPredictionV2ActionRpcSession,
   verifyPredictionV2CanonicalHistoricalBlockV2,
-} from "@/lib/prediction-v2/rpc-quorum-v2.server";
+} from "@/lib/prediction-v2/rpc-session-v2.server";
 import { preparePredictionV2Redeem } from
   "@/lib/prediction-v2/transactions";
 import {
@@ -325,14 +325,14 @@ export async function readPredictionV2DirectoryRouteV2(input: Readonly<{
     input.release,
     input.budget,
   );
-  const readers = createPredictionV2ActionRpcQuorum({
+  const reader = createPredictionV2ActionRpcSession({
     confirmationDepth: BigInt(
       input.release.rpcCommitment.snapshotPolicy.confirmationDepth,
     ),
   });
-  const session = await createPredictionV2PublicReleaseResolutionRpcSession(
+  const session = await createPredictionV2PublicReleaseRpcSession(
     input.release,
-    readers,
+    reader,
     input.budget,
     input.signal,
     cursor
@@ -350,7 +350,7 @@ export async function readPredictionV2DirectoryRouteV2(input: Readonly<{
       session.rpcLogicalCalls !== expectedSessionCost
     ) throw new TypeError("Invalid Prediction V2 public release session cost");
     const directory = await readPredictionV2Directory({
-      readers: [session.quorum.primary, session.quorum.secondary],
+      reader: session.reader,
       binding: toPredictionV2ReadBindingFromPublicReleaseV2(input.release),
       limit: input.intent.limit,
       cursor,
@@ -402,14 +402,14 @@ export async function preparePredictionV2RedeemRouteV2(input: Readonly<{
     input.release,
     input.budget,
   );
-  const readers = createPredictionV2ActionRpcQuorum({
+  const reader = createPredictionV2ActionRpcSession({
     confirmationDepth: BigInt(
       input.release.rpcCommitment.snapshotPolicy.confirmationDepth,
     ),
   });
-  const session = await createPredictionV2PublicReleaseResolutionRpcSession(
+  const session = await createPredictionV2PublicReleaseRpcSession(
     input.release,
-    readers,
+    reader,
     input.budget,
     input.signal,
   );
@@ -420,7 +420,7 @@ export async function preparePredictionV2RedeemRouteV2(input: Readonly<{
     ) throw new TypeError("Invalid Prediction V2 public release session cost");
     if (
       PREDICTION_V2_CANONICAL_HISTORICAL_BLOCK_VERIFICATION_RPC_LOGICAL_CALLS !==
-        2
+        1
     ) throw new TypeError("Invalid Prediction V2 historical anchor cost");
     await verifyPredictionV2CanonicalHistoricalBlockV2(
       session.lease,
@@ -431,7 +431,7 @@ export async function preparePredictionV2RedeemRouteV2(input: Readonly<{
       input.signal,
     );
     const marketRead = await readPredictionV2MarketAtSnapshot({
-      readers: [session.quorum.primary, session.quorum.secondary],
+      reader: session.reader,
       binding: toPredictionV2ReadBindingFromPublicReleaseV2(input.release),
       economicKey: input.intent.economicKey,
       snapshot: session.snapshot,
@@ -502,7 +502,7 @@ export async function decidePredictionV2ResolutionRouteV2(input: Readonly<{
     input.budget,
   );
   const decision = await decidePredictionV2ResolutionActionFromPublicRelease({
-    readers: createPredictionV2ActionRpcQuorum({
+    reader: createPredictionV2ActionRpcSession({
       confirmationDepth: BigInt(
         input.release.rpcCommitment.snapshotPolicy.confirmationDepth,
       ),

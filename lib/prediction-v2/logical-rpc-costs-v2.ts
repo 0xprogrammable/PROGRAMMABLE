@@ -4,9 +4,9 @@
  * read/session/resolution algebra.
  */
 export const PREDICTION_V2_ROUTE_LOGICAL_RPC_COSTS_V2 = Object.freeze({
-  directory: 652,
-  "redeem-prepare": 144,
-  "resolution-decision": 2_296,
+  directory: 326,
+  "redeem-prepare": 72,
+  "resolution-decision": 1_148,
 } as const);
 
 export const PREDICTION_V2_DIRECTORY_ROUTE_MAX_RPC_LOGICAL_CALLS =

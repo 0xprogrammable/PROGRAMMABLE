@@ -173,12 +173,12 @@ function input(overrides: Readonly<Record<string, unknown>> = {}) {
   };
 }
 
-describe("Prediction V2 provider-independent base market view", () => {
+describe("Prediction V2 release-bound base market view", () => {
   it("keeps a provenance-bound onchain market visible without an attestor", () => {
     const view = buildPredictionV2BaseMarketView(input());
 
     expect(view).toMatchObject({
-      source: "dual-rpc-onchain",
+      source: "onchain-rpc",
       marketKey:
         `eip155:4663:${FACTORY.toLowerCase()}:0x${"21".repeat(32)}`,
       marketId: `0x${"22".repeat(32)}`,

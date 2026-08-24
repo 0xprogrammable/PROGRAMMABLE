@@ -16,15 +16,15 @@ vi.mock("../lib/prediction-v2/public-release-v2.server", async (importOriginal) 
     getPredictionV2PublicReleaseV2() {
       return productionHarness.release ?? actual.getPredictionV2PublicReleaseV2();
     },
-    createPredictionV2PublicReleaseResolutionRpcSession(
+    createPredictionV2PublicReleaseRpcSession(
       ...args: Parameters<
-        typeof actual.createPredictionV2PublicReleaseResolutionRpcSession
+        typeof actual.createPredictionV2PublicReleaseRpcSession
       >
     ) {
       if (typeof productionHarness.sessionFactory === "function") {
         return productionHarness.sessionFactory(...args);
       }
-      return actual.createPredictionV2PublicReleaseResolutionRpcSession(...args);
+      return actual.createPredictionV2PublicReleaseRpcSession(...args);
     },
     toPredictionV2ReadBindingFromPublicReleaseV2(
       ...args: Parameters<
@@ -116,12 +116,12 @@ import {
   type PredictionV2ResolutionCallRequest,
   type PredictionV2ResolutionCodeRequest,
   type PredictionV2ResolutionReleaseBinding,
-  type PredictionV2ResolutionRpcQuorum,
   type PredictionV2ResolutionRpcReader,
 } from "../lib/prediction-v2/resolution-proof-v2.server";
 import {
   PREDICTION_V2_FALLBACK_CHALLENGE_SECONDS,
   PREDICTION_V2_HARD_FALLBACK_OFFSET_SECONDS,
+  PREDICTION_V2_RESOLUTION_ACTION_MAX_PROVIDER_REQUESTS,
   PREDICTION_V2_RESOLUTION_ACTION_MAX_INVOCATION_PROVIDER_REQUESTS,
   PREDICTION_V2_RESOLUTION_BINDING_DERIVATION_MAX_PROVIDER_REQUESTS,
   PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS,
@@ -1070,15 +1070,11 @@ function countedReader(
   });
 }
 
-function quorum(
-  primaryState: FixtureState,
-  secondaryState: FixtureState = primaryState,
-  secondaryTransform?: Parameters<typeof reader>[2],
-): PredictionV2ResolutionRpcQuorum {
-  return Object.freeze({
-    primary: reader("primary", primaryState),
-    secondary: reader("secondary", secondaryState, secondaryTransform),
-  });
+function fixtureReader(
+  state: FixtureState,
+  transform?: Parameters<typeof reader>[2],
+): PredictionV2ResolutionRpcReader {
+  return reader("settlement", state, transform);
 }
 
 async function expectCode(
@@ -1092,11 +1088,11 @@ async function expectCode(
 }
 
 describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
-  it("treats updatedAt == T as before, finds the first post-T round, and prepares only after dual simulation", async () => {
+  it("treats updatedAt == T as before, finds the first post-T round, and prepares only after simulation", async () => {
     const state = baseState();
-    const rpc = quorum(state);
+    const rpc = fixtureReader(state);
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: rpc,
+      reader: rpc,
       binding: binding(),
     });
 
@@ -1115,7 +1111,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     );
 
     const prepared = await revalidateAndSimulatePredictionV2Resolution({
-      quorum: rpc,
+      reader: rpc,
       binding: binding(),
       candidate,
       sender: SENDER,
@@ -1138,7 +1134,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     const equalAfter = round(1, 103n, T + 5n);
     state.rounds.set(equalAfter.id, equalAfter);
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: quorum(state),
+      reader: fixtureReader(state),
       binding: binding(),
     });
     expect(candidate.after.localRoundId).toBe(102n);
@@ -1154,7 +1150,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     boundary.rounds.set(roundId(1, 103n), round(1, 103n, after.updatedAt + 1n));
     boundary.blocks.set(1_000n, block(1_000n, after.updatedAt + 10n));
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: quorum(boundary),
+      reader: fixtureReader(boundary),
       binding: binding(),
     });
     expect(candidate.before.updatedAt).toBe(T - 90_000n);
@@ -1166,16 +1162,16 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
       roundId(1, 101n),
       round(1, 101n, T - PREDICTION_V2_RESOLUTION_MAX_OBSERVATION_DISTANCE - 1n),
     );
-    const staleBeforeRpc = quorum(staleBefore);
+    const staleBeforeRpc = fixtureReader(staleBefore);
     const staleBeforeCandidate = await findPredictionV2ResolutionProof({
-      quorum: staleBeforeRpc,
+      reader: staleBeforeRpc,
       binding: binding(),
     });
     expect(staleBeforeCandidate.expectedCheckpointStatus).toBe("INVALID");
     staleBefore.checkpointSimulationStatus = 2n;
     staleBefore.vaultSimulationState = 3n;
     const preparedInvalid = await revalidateAndSimulatePredictionV2Resolution({
-      quorum: staleBeforeRpc,
+      reader: staleBeforeRpc,
       binding: binding(),
       candidate: staleBeforeCandidate,
       sender: SENDER,
@@ -1191,17 +1187,17 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     staleAfter.rounds.set(roundId(1, 103n), round(1, 103n, late + 1n));
     staleAfter.blocks.set(1_000n, block(1_000n, late + 10n));
     const staleAfterCandidate = await findPredictionV2ResolutionProof({
-      quorum: quorum(staleAfter),
+      reader: fixtureReader(staleAfter),
       binding: binding(),
     });
     expect(staleAfterCandidate.expectedCheckpointStatus).toBe("INVALID");
   });
 
-  it("fails closed on missing rounds and on any raw provider disagreement", async () => {
+  it("fails closed on missing rounds and sparse local-round topology", async () => {
     const missing = baseState();
     missing.rounds.delete(roundId(1, 102n));
     await expectCode(
-      findPredictionV2ResolutionProof({ quorum: quorum(missing), binding: binding() }),
+      findPredictionV2ResolutionProof({ reader: fixtureReader(missing), binding: binding() }),
       "proof-unavailable",
     );
 
@@ -1213,45 +1209,26 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     sparseMidpoint.latestRoundId = roundId(1, 107n);
     await expectCode(
       findPredictionV2ResolutionProof({
-        quorum: quorum(sparseMidpoint),
+        reader: fixtureReader(sparseMidpoint),
         binding: binding(),
       }),
       "proof-unavailable",
     );
 
-    const state = baseState();
-    const secondary = baseState();
-    secondary.rounds.set(roundId(1, 102n), round(1, 102n, T + 6n));
-    await expectCode(
-      findPredictionV2ResolutionProof({
-        quorum: quorum(state, secondary),
-        binding: binding(),
-      }),
-      "provider-disagreement",
-    );
   });
 
-  it("rejects wrong-chain readers, reused reader identity, and a reorg before broadcast", async () => {
+  it("rejects a wrong chain, an unqualified topology, and a reorg before broadcast", async () => {
     const wrongChain = baseState();
     wrongChain.chainId = 1;
     await expectCode(
-      findPredictionV2ResolutionProof({ quorum: quorum(wrongChain), binding: binding() }),
+      findPredictionV2ResolutionProof({ reader: fixtureReader(wrongChain), binding: binding() }),
       "wrong-chain",
     );
 
     const state = baseState();
-    const oneReader = reader("same", state);
     await expectCode(
       findPredictionV2ResolutionProof({
-        quorum: { primary: oneReader, secondary: oneReader },
-        binding: binding(),
-      }),
-      "invalid-input",
-    );
-
-    await expectCode(
-      findPredictionV2ResolutionProof({
-        quorum: quorum(state),
+        reader: fixtureReader(state),
         binding: {
           ...binding(),
           oracleRoundTopology: "unqualified" as
@@ -1261,15 +1238,15 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
       "invalid-input",
     );
 
-    const rpc = quorum(state);
+    const rpc = fixtureReader(state);
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: rpc,
+      reader: rpc,
       binding: binding(),
     });
     state.blocks.set(1_000n, block(1_000n, T + 1_000n, "9"));
     await expectCode(
       revalidateAndSimulatePredictionV2Resolution({
-        quorum: rpc,
+        reader: rpc,
         binding: binding(),
         candidate,
         sender: SENDER,
@@ -1282,7 +1259,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     const wrongVault = baseState();
     wrongVault.codes.set(VAULT.toLowerCase(), "0x6005600555");
     await expectCode(
-      findPredictionV2ResolutionProof({ quorum: quorum(wrongVault), binding: binding() }),
+      findPredictionV2ResolutionProof({ reader: fixtureReader(wrongVault), binding: binding() }),
       "binding-mismatch",
     );
 
@@ -1290,7 +1267,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     splitTerminal.checkpointStatus = 1n;
     await expectCode(
       findPredictionV2ResolutionProof({
-        quorum: quorum(splitTerminal),
+        reader: fixtureReader(splitTerminal),
         binding: binding(),
       }),
       "checkpoint-terminal",
@@ -1302,7 +1279,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     rollover.phaseId = 2;
     rollover.phaseAggregators.set(2, AGGREGATOR_TWO);
     await expectCode(
-      findPredictionV2ResolutionProof({ quorum: quorum(rollover), binding: binding() }),
+      findPredictionV2ResolutionProof({ reader: fixtureReader(rollover), binding: binding() }),
       "proof-unavailable",
     );
 
@@ -1312,7 +1289,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
       approvalTimestamp: T + 1n,
     });
     await expectCode(
-      findPredictionV2ResolutionProof({ quorum: quorum(lateApproval), binding: binding() }),
+      findPredictionV2ResolutionProof({ reader: fixtureReader(lateApproval), binding: binding() }),
       "proof-unavailable",
     );
 
@@ -1322,16 +1299,16 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
       minimumEligibleLocalRoundId: 103n,
     });
     await expectCode(
-      findPredictionV2ResolutionProof({ quorum: quorum(highFloor), binding: binding() }),
+      findPredictionV2ResolutionProof({ reader: fixtureReader(highFloor), binding: binding() }),
       "proof-unavailable",
     );
   });
 
   it("detects a fully approved phase change during pre-broadcast revalidation", async () => {
     const state = baseState();
-    const rpc = quorum(state);
+    const rpc = fixtureReader(state);
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: rpc,
+      reader: rpc,
       binding: binding(),
     });
 
@@ -1359,7 +1336,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
 
     await expectCode(
       revalidateAndSimulatePredictionV2Resolution({
-        quorum: rpc,
+        reader: rpc,
         binding: binding(),
         candidate,
         sender: SENDER,
@@ -1368,17 +1345,17 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     );
   });
 
-  it("fails closed when either dual simulation does not produce a winner", async () => {
+  it("fails closed when either required simulation does not produce a winner", async () => {
     const state = baseState();
-    const rpc = quorum(state);
+    const rpc = fixtureReader(state);
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: rpc,
+      reader: rpc,
       binding: binding(),
     });
     state.checkpointSimulationStatus = 2n;
     await expectCode(
       revalidateAndSimulatePredictionV2Resolution({
-        quorum: rpc,
+        reader: rpc,
         binding: binding(),
         candidate,
         sender: SENDER,
@@ -1389,7 +1366,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     state.vaultSimulationState = 3n;
     await expectCode(
       revalidateAndSimulatePredictionV2Resolution({
-        quorum: rpc,
+        reader: rpc,
         binding: binding(),
         candidate,
         sender: SENDER,
@@ -1400,9 +1377,9 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
 
   it("rejects any tampering with the snapshot-bound candidate before revalidation", async () => {
     const state = baseState();
-    const rpc = quorum(state);
+    const rpc = fixtureReader(state);
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: rpc,
+      reader: rpc,
       binding: binding(),
     });
     const tampered = Object.freeze({
@@ -1414,7 +1391,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
     });
     await expectCode(
       revalidateAndSimulatePredictionV2Resolution({
-        quorum: rpc,
+        reader: rpc,
         binding: binding(),
         candidate: tampered,
         sender: SENDER,
@@ -1440,7 +1417,7 @@ describe("Prediction V2 Chainlink adjacent-round proof finder", () => {
       return round(phase, local, local < boundary ? T : T + 1n);
     };
     const candidate = await findPredictionV2ResolutionProof({
-      quorum: quorum(state),
+      reader: fixtureReader(state),
       binding: binding(),
     });
     expect(candidate.before.localRoundId).toBe(boundary - 1n);
@@ -1463,12 +1440,12 @@ describe("Prediction V2 bounded resolution action decision", () => {
     const runtimeBudget = {} as Parameters<
       typeof decidePredictionV2ResolutionActionFromPublicRelease
     >[0]["budget"];
-    const runtimeReaders = Object.freeze([{}, {}]) as unknown as Parameters<
+    const runtimeReader = Object.freeze({}) as unknown as Parameters<
       typeof decidePredictionV2ResolutionActionFromPublicRelease
-    >[0]["readers"];
+    >[0]["reader"];
     const sessionFactory = vi.fn(async () => Object.freeze({
       lease: Object.freeze({}) as never,
-      quorum: quorum(state),
+      reader: fixtureReader(state),
       snapshot,
       rpcLogicalCalls:
         PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS,
@@ -1479,7 +1456,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     productionHarness.sessionFactory = sessionFactory;
 
     const decision = await decidePredictionV2ResolutionActionFromPublicRelease({
-      readers: runtimeReaders,
+      reader: runtimeReader,
       budget: runtimeBudget,
       economicKey: ECONOMIC_KEY,
       marketId: MARKET_ID,
@@ -1504,7 +1481,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     // block 900, because the canonical Factory deployment block is block 1.
     expect(sessionFactory).toHaveBeenCalledWith(
       productionHarness.release,
-      runtimeReaders,
+      runtimeReader,
       runtimeBudget,
       undefined,
     );
@@ -1513,13 +1490,18 @@ describe("Prediction V2 bounded resolution action decision", () => {
       PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS,
     );
     expect(PREDICTION_V2_RESOLUTION_BINDING_DERIVATION_MAX_PROVIDER_REQUESTS)
-      .toBe(42);
+      .toBe(21);
+    expect(PREDICTION_V2_RESOLUTION_MAX_PROVIDER_REQUESTS).toBe(112);
+    expect(PREDICTION_V2_RESOLUTION_ACTION_MAX_PROVIDER_REQUESTS).toBe(40);
+    expect(
+      PREDICTION_V2_RESOLUTION_ACTION_MAX_INVOCATION_PROVIDER_REQUESTS,
+    ).toBe(1_056);
     expect(
       PREDICTION_V2_PUBLIC_RELEASE_RUNTIME_PREFLIGHT_MAX_RPC_LOGICAL_CALLS,
-    ).toBe(42);
+    ).toBe(21);
     expect(
       PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS,
-    ).toBe(48);
+    ).toBe(24);
     expect(PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS).toBe(
       PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS +
         PREDICTION_V2_TARGETED_MARKET_MAX_PROVIDER_REQUESTS +
@@ -1527,7 +1509,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
         PREDICTION_V2_RESOLUTION_ACTION_MAX_INVOCATION_PROVIDER_REQUESTS,
     );
     expect(PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS).toBe(
-      2_296,
+      1_148,
     );
   });
 
@@ -1540,7 +1522,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     productionHarness.readBinding = publicReleaseReadBindingFixture();
     productionHarness.sessionFactory = vi.fn(async () => Object.freeze({
       lease: Object.freeze({}) as never,
-      quorum: quorum(state),
+      reader: fixtureReader(state),
       snapshot,
       rpcLogicalCalls:
         PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS,
@@ -1552,9 +1534,9 @@ describe("Prediction V2 bounded resolution action decision", () => {
     }));
 
     await expect(decidePredictionV2ResolutionActionFromPublicRelease({
-      readers: Object.freeze([{}, {}]) as unknown as Parameters<
+      reader: Object.freeze({}) as unknown as Parameters<
         typeof decidePredictionV2ResolutionActionFromPublicRelease
-      >[0]["readers"],
+      >[0]["reader"],
       budget: {} as Parameters<
         typeof decidePredictionV2ResolutionActionFromPublicRelease
       >[0]["budget"],
@@ -1576,7 +1558,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     productionHarness.release = publicReleaseFixture();
     productionHarness.sessionFactory = vi.fn(async () => Object.freeze({
       lease: Object.freeze({}) as never,
-      quorum: quorum(state),
+      reader: fixtureReader(state),
       snapshot,
       rpcLogicalCalls:
         PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS - 1,
@@ -1584,9 +1566,9 @@ describe("Prediction V2 bounded resolution action decision", () => {
     }));
 
     await expect(decidePredictionV2ResolutionActionFromPublicRelease({
-      readers: Object.freeze([{}, {}]) as unknown as Parameters<
+      reader: Object.freeze({}) as unknown as Parameters<
         typeof decidePredictionV2ResolutionActionFromPublicRelease
-      >[0]["readers"],
+      >[0]["reader"],
       budget: {} as Parameters<
         typeof decidePredictionV2ResolutionActionFromPublicRelease
       >[0]["budget"],
@@ -1600,7 +1582,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
   it("returns unsigned snapshot-bound FINAL and INVALID proof actions", async () => {
     const finalState = baseState();
     const finalDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(finalState),
+      reader: fixtureReader(finalState),
       binding: binding(),
       account: SENDER,
     });
@@ -1636,7 +1618,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     invalidState.checkpointSimulationStatus = 2n;
     invalidState.vaultSimulationState = 3n;
     const invalidDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(invalidState),
+      reader: fixtureReader(invalidState),
       binding: binding(),
       account: SENDER,
     });
@@ -1659,7 +1641,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, challengedState.fallbackRequestedAt + 1n),
     );
     const challengedDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(challengedState),
+      reader: fixtureReader(challengedState),
       binding: binding(),
       account: SENDER,
     });
@@ -1679,7 +1661,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     finalCheckpoint.checkpointStatus = 1n;
     finalCheckpoint.vaultSimulationState = 2n;
     const finalDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(finalCheckpoint),
+      reader: fixtureReader(finalCheckpoint),
       binding: binding(),
       account: SENDER,
     });
@@ -1693,7 +1675,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     const invalidCheckpoint = baseState();
     invalidCheckpoint.checkpointStatus = 2n;
     const invalidDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(invalidCheckpoint),
+      reader: fixtureReader(invalidCheckpoint),
       binding: binding(),
       account: SENDER,
     });
@@ -1709,7 +1691,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     inconsistentSimulation.vaultSimulationState = 3n;
     await expect(
       decidePredictionV2ResolutionAction({
-        quorum: quorum(inconsistentSimulation),
+        reader: fixtureReader(inconsistentSimulation),
         binding: binding(),
         account: SENDER,
       }),
@@ -1723,7 +1705,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     const atObservation = baseState();
     atObservation.blocks.set(1_000n, block(1_000n, T));
     const observationDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(atObservation),
+      reader: fixtureReader(atObservation),
       binding: binding(),
       account: SENDER,
     });
@@ -1740,7 +1722,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, beforeSoft.resolutionDeadline - 1n),
     );
     const beforeDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(beforeSoft),
+      reader: fixtureReader(beforeSoft),
       binding: binding(),
       account: SENDER,
     });
@@ -1756,7 +1738,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     atSoft.latestRoundId = roundId(1, 101n);
     atSoft.blocks.set(1_000n, block(1_000n, atSoft.resolutionDeadline));
     const softDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(atSoft),
+      reader: fixtureReader(atSoft),
       binding: binding(),
       account: SENDER,
     });
@@ -1776,7 +1758,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, beforeHard.hardResolutionDeadline - 1n),
     );
     const beforeDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(beforeHard),
+      reader: fixtureReader(beforeHard),
       binding: binding(),
       account: SENDER,
     });
@@ -1789,7 +1771,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     atHard.rounds.delete(roundId(1, 102n));
     atHard.blocks.set(1_000n, block(1_000n, atHard.hardResolutionDeadline));
     const visibleDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(atHard),
+      reader: fixtureReader(atHard),
       binding: binding(),
       account: SENDER,
     });
@@ -1806,7 +1788,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, unavailable.hardResolutionDeadline),
     );
     const hardDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(unavailable),
+      reader: fixtureReader(unavailable),
       binding: binding(),
       account: SENDER,
     });
@@ -1834,7 +1816,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, exactChallenge.fallbackChallengeDeadline),
     );
     const exactDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(exactChallenge),
+      reader: fixtureReader(exactChallenge),
       binding: binding(),
       account: SENDER,
     });
@@ -1853,7 +1835,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, recovered.fallbackChallengeDeadline + 1n),
     );
     const recoveredDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(recovered),
+      reader: fixtureReader(recovered),
       binding: binding(),
       account: SENDER,
     });
@@ -1874,7 +1856,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, visibleSparse.fallbackChallengeDeadline + 1n),
     );
     const visibleDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(visibleSparse),
+      reader: fixtureReader(visibleSparse),
       binding: binding(),
       account: SENDER,
     });
@@ -1893,7 +1875,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       block(1_000n, elapsed.fallbackChallengeDeadline + 1n),
     );
     const elapsedDecision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(elapsed),
+      reader: fixtureReader(elapsed),
       binding: binding(),
       account: SENDER,
     });
@@ -1910,7 +1892,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     state.vaultState = 1n;
     state.checkpointStatus = 1n;
     const decision = await decidePredictionV2ResolutionAction({
-      quorum: quorum(state),
+      reader: fixtureReader(state),
       binding: binding(),
       account: SENDER,
     });
@@ -1922,15 +1904,12 @@ describe("Prediction V2 bounded resolution action decision", () => {
     expect(decision.providerRequests).toBeGreaterThan(0);
   });
 
-  it("fails closed on runtime drift, reader disagreement, and malformed lifecycle deadlines", async () => {
+  it("fails closed on runtime drift, reverted reads, and malformed lifecycle deadlines", async () => {
     const unbranded = baseState();
     await expect(decidePredictionV2ResolutionActionFromPublicRelease({
-      readers: Object.freeze([
-        reader("unbranded-primary", unbranded),
-        reader("unbranded-secondary", unbranded),
-      ]) as Parameters<
+      reader: reader("unbranded", unbranded) as Parameters<
         typeof decidePredictionV2ResolutionActionFromPublicRelease
-      >[0]["readers"],
+      >[0]["reader"],
       budget: {} as Parameters<
         typeof decidePredictionV2ResolutionActionFromPublicRelease
       >[0]["budget"],
@@ -1946,38 +1925,13 @@ describe("Prediction V2 bounded resolution action decision", () => {
     wrongRuntime.codes.set(VAULT.toLowerCase(), "0x6005600555");
     await expect(
       decidePredictionV2ResolutionAction({
-        quorum: quorum(wrongRuntime),
+        reader: fixtureReader(wrongRuntime),
         binding: binding(),
         account: SENDER,
       }),
     ).rejects.toMatchObject({
       name: "PredictionV2ResolutionActionError",
       code: "binding-mismatch",
-    });
-
-    const disagreement = baseState();
-    await expect(
-      decidePredictionV2ResolutionAction({
-        quorum: quorum(disagreement, disagreement, (request, response) => {
-          if (request.to.toLowerCase() !== CHECKPOINT.toLowerCase()) return response;
-          const decoded = decodeFunctionData({
-            abi: PREDICTION_V2_CHAINLINK_CHECKPOINT_PROOF_ABI,
-            data: request.data,
-          });
-          return decoded.functionName === "status"
-            ? encodeResult(
-                PREDICTION_V2_CHAINLINK_CHECKPOINT_PROOF_ABI,
-                "status",
-                1n,
-              )
-            : response;
-        }),
-        binding: binding(),
-        account: SENDER,
-      }),
-    ).rejects.toMatchObject({
-      name: "PredictionV2ResolutionActionError",
-      code: "provider-disagreement",
     });
 
     const revertedGetter = baseState();
@@ -1993,10 +1947,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     };
     await expect(
       decidePredictionV2ResolutionAction({
-        quorum: {
-          primary: reader("revert-primary", revertedGetter, revertStatus),
-          secondary: reader("revert-secondary", revertedGetter, revertStatus),
-        },
+        reader: reader("revert", revertedGetter, revertStatus),
         binding: binding(),
         account: SENDER,
       }),
@@ -2009,7 +1960,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     malformedDeadlines.resolutionDeadline += 1n;
     await expect(
       decidePredictionV2ResolutionAction({
-        quorum: quorum(malformedDeadlines),
+        reader: fixtureReader(malformedDeadlines),
         binding: binding(),
         account: SENDER,
       }),
@@ -2022,7 +1973,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     impossibleTerminal.vaultState = 1n;
     await expect(
       decidePredictionV2ResolutionAction({
-        quorum: quorum(impossibleTerminal),
+        reader: fixtureReader(impossibleTerminal),
         binding: binding(),
         account: SENDER,
       }),
@@ -2052,19 +2003,18 @@ describe("Prediction V2 bounded resolution action decision", () => {
     state.blocks.set(nextBlock.number, nextBlock);
 
     const counter = { value: 0 };
-    let primarySafeReads = 0;
+    let safeReads = 0;
     let requestsAtRace = 0;
-    const primary = countedReader(reader("race-primary", state), counter, () => {
-      primarySafeReads += 1;
-      if (primarySafeReads === 3) {
+    const rpc = countedReader(reader("race", state), counter, () => {
+      safeReads += 1;
+      if (safeReads === 3) {
         requestsAtRace = counter.value;
         boundary -= 2n;
         state.safeBlockNumber = nextBlock.number;
       }
     });
-    const secondary = countedReader(reader("race-secondary", state), counter);
     const decision = await decidePredictionV2ResolutionAction({
-      quorum: { primary, secondary },
+      reader: rpc,
       binding: binding(),
       account: SENDER,
     });
@@ -2074,7 +2024,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
       action: "finalize-with-proof",
       snapshot: nextBlock,
     });
-    expect(requestsAtRace).toBeGreaterThan(180);
+    expect(requestsAtRace).toBeGreaterThan(90);
     expect(decision.providerRequests).toBe(counter.value);
     expect(decision.providerRequests).toBeGreaterThan(requestsAtRace);
     expect(decision.providerRequests).toBeLessThanOrEqual(
@@ -2099,10 +2049,7 @@ describe("Prediction V2 bounded resolution action decision", () => {
     };
     await expect(
       decidePredictionV2ResolutionAction({
-        quorum: {
-          primary: makeReorgingReader("reorg-primary"),
-          secondary: makeReorgingReader("reorg-secondary"),
-        },
+        reader: makeReorgingReader("reorg"),
         binding: binding(),
         account: SENDER,
       }),

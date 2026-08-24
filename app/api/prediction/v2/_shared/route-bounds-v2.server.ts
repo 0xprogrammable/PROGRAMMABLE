@@ -16,7 +16,7 @@ import {
 import { PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS } from
   "@/lib/prediction-v2/resolution-action-v2.server";
 import { PREDICTION_V2_CANONICAL_HISTORICAL_BLOCK_VERIFICATION_RPC_LOGICAL_CALLS } from
-  "@/lib/prediction-v2/rpc-quorum-v2.server";
+  "@/lib/prediction-v2/rpc-session-v2.server";
 
 if (
   PREDICTION_V2_DIRECTORY_ROUTE_MAX_RPC_LOGICAL_CALLS !==

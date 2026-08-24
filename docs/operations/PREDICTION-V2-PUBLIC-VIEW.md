@@ -3,10 +3,10 @@
 Prediction V2 has two deliberately separate display layers.
 
 1. The base market view is reconstructed from the application-pinned release,
-   two agreeing Robinhood Chain readers, the Factory record, Registry snapshot,
-   checkpoint and v4 pool state at one confirmed block. It is sufficient to
-   keep an existing market visible with its canonical symbol, condition,
-   lifecycle, probability and bundled fallback artwork.
+   its release-bound Robinhood settlement RPC, the Factory record, Registry
+   snapshot, checkpoint and v4 pool state at one confirmed block. It is
+   sufficient to keep an existing market visible with its canonical symbol,
+   condition, lifecycle, probability and bundled fallback artwork.
 2. Optional presentation enrichment supplies a name, owned logo snapshot,
    social links and creation-time display context. It must be signed by the
    release-pinned presentation attestor and match the base market's release,
@@ -29,4 +29,9 @@ record, never the capability. Public market cards use content-addressed owned
 artwork or a bundled fallback and never depend on the provider proxy.
 
 The public route remains disabled until the separate Protocol V2 release,
-dual-RPC, deployment-readback, lifecycle-canary and wallet gates pass.
+settlement-RPC, deployment-readback, lifecycle-canary and wallet gates pass.
+The RPC only supplies application reads and transaction preparation; Chainlink
+proofs and the onchain contracts remain settlement authority. An unavailable
+or internally inconsistent canonical read fails closed without automatic
+fallback. With one provider, a consistently false canonical view cannot be
+independently detected by the application.

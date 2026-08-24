@@ -17,8 +17,8 @@ import type { PredictionV2EnabledPublicReleaseV2 } from
 
 function lane(action: string, exactUnitsPerAction: number) {
   return Object.freeze({
-    laneId: `robinhood-rpc-quorum:${action}`,
-    provider: "robinhood-rpc-quorum",
+    laneId: `robinhood-settlement-rpc:${action}`,
+    provider: "robinhood-settlement-rpc",
     action,
     unit: "rpc-logical-call",
     exactUnitsPerAction,
@@ -75,7 +75,7 @@ describe("Prediction V2 concrete route runtime", () => {
       redeem: PREDICTION_V2_REDEEM_PREPARE_ROUTE_MAX_RPC_LOGICAL_CALLS,
       resolution:
         PREDICTION_V2_RESOLUTION_DECISION_ROUTE_MAX_RPC_LOGICAL_CALLS,
-    }).toEqual({ directory: 652, redeem: 144, resolution: 2_296 });
+    }).toEqual({ directory: 326, redeem: 72, resolution: 1_148 });
     expect(() => getPredictionV2RouteRuntimeV2(RELEASE)).not.toThrow();
   });
 

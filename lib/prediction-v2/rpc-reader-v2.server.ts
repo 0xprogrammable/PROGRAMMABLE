@@ -98,13 +98,14 @@ export type PredictionV2RpcProviderBinding = Readonly<{
 }>;
 
 export type PredictionV2RpcBindingProjection<
-  Role extends "primary" | "secondary" = "primary" | "secondary",
+  Role extends "settlement" = "settlement",
 > = Readonly<{
   role: Role;
   providerId: string;
   providerCommitment: Hex;
   vendorGroup: PredictionV2RpcVendorGroup;
   vendorCommitment: Hex;
+  endpointCommitment: Hex;
   endpointOriginCommitment: Hex;
   batchMode: PredictionV2RpcBatchMode;
 }>;
@@ -326,11 +327,11 @@ export function bindPredictionV2RpcProvider(
 }
 
 /**
- * Secret-free release projection. Endpoint URLs and their credential-bound
- * commitments deliberately remain private transport configuration.
+ * Secret-free release projection. The endpoint URL remains private, while its
+ * credential-bound commitment pins the exact configured transport endpoint.
  */
 export function predictionV2RpcBindingProjection<
-  Role extends "primary" | "secondary",
+  Role extends "settlement",
 >(
   role: Role,
   binding: PredictionV2RpcProviderBinding,
@@ -341,6 +342,7 @@ export function predictionV2RpcBindingProjection<
     providerCommitment: binding.providerCommitment,
     vendorGroup: binding.vendorGroup,
     vendorCommitment: binding.vendorCommitment,
+    endpointCommitment: binding.endpointCommitment,
     endpointOriginCommitment: binding.endpointOriginCommitment,
     batchMode: binding.batchMode,
   });

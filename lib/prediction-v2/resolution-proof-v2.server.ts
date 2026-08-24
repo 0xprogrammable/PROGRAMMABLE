@@ -20,7 +20,7 @@ import {
 
 export const PREDICTION_V2_RESOLUTION_CHAIN_ID = 4_663 as const;
 export const PREDICTION_V2_RESOLUTION_MAX_SEARCH_STEPS = 64;
-export const PREDICTION_V2_RESOLUTION_MAX_PROVIDER_REQUESTS = 224;
+export const PREDICTION_V2_RESOLUTION_MAX_PROVIDER_REQUESTS = 112;
 export const PREDICTION_V2_RESOLUTION_MAX_OBSERVATION_DISTANCE = 25n * 60n * 60n;
 export const PREDICTION_V2_CHAINLINK_RESOLUTION_POLICY_HASH =
   "0x14b51aac26efb0507bb7558c0f4860171737dba2f519f65da3d708b05b072851" as const;
@@ -90,11 +90,6 @@ export type PredictionV2ResolutionRpcReader = Readonly<{
     request: PredictionV2ResolutionCallRequest,
   ): Promise<Hex | PredictionV2ResolutionCallRevert>;
   getCode(request: PredictionV2ResolutionCodeRequest): Promise<Hex>;
-}>;
-
-export type PredictionV2ResolutionRpcQuorum = Readonly<{
-  primary: PredictionV2ResolutionRpcReader;
-  secondary: PredictionV2ResolutionRpcReader;
 }>;
 
 /** Exact release authority supplied by the disabled V2 release binding. */
@@ -176,7 +171,6 @@ export type PredictionV2ResolutionPreparedTransaction = Readonly<{
 export type PredictionV2ResolutionProofErrorCode =
   | "invalid-input"
   | "provider-failure"
-  | "provider-disagreement"
   | "request-budget-exceeded"
   | "wrong-chain"
   | "noncanonical-block"
@@ -202,7 +196,7 @@ type NormalizedCallOutcome =
   | Readonly<{ status: "reverted"; data: Hex }>;
 
 type ResolutionContext = Readonly<{
-  quorum: PredictionV2ResolutionRpcQuorum;
+  reader: PredictionV2ResolutionRpcReader;
   snapshot: PredictionV2ResolutionBlock;
   budget: RequestBudget;
   signal?: AbortSignal;
@@ -370,21 +364,17 @@ function normalizeCallOutcome(
   });
 }
 
-function normalizeQuorum(
-  value: PredictionV2ResolutionRpcQuorum,
-): PredictionV2ResolutionRpcQuorum {
+function normalizeReader(
+  value: PredictionV2ResolutionRpcReader,
+): PredictionV2ResolutionRpcReader {
   if (
-    !value?.primary ||
-    !value.secondary ||
-    typeof value.primary.readerId !== "string" ||
-    typeof value.secondary.readerId !== "string" ||
-    value.primary.readerId.trim() === "" ||
-    value.secondary.readerId.trim() === "" ||
-    value.primary.readerId === value.secondary.readerId
+    !value ||
+    typeof value.readerId !== "string" ||
+    value.readerId.trim() === ""
   ) {
     return fail(
       "invalid-input",
-      "Prediction V2 resolution requires two distinctly identified RPC readers",
+      "Prediction V2 resolution requires an identified RPC reader",
     );
   }
   return value;
@@ -463,66 +453,53 @@ function normalizeBinding(
   });
 }
 
-async function providerPair<Value>(
+async function providerRequest<Value>(
   budget: RequestBudget,
   label: string,
-  primary: () => Promise<Value>,
-  secondary: () => Promise<Value>,
-): Promise<readonly [Value, Value]> {
-  budget.consume(2);
+  request: () => Promise<Value>,
+): Promise<Value> {
+  budget.consume(1);
   try {
-    return await Promise.all([primary(), secondary()]);
+    return await request();
   } catch {
-    return fail("provider-failure", `${label} failed on at least one RPC reader`);
+    return fail("provider-failure", `${label} failed on the release-bound RPC reader`);
   }
 }
 
 async function commonBlock(
-  quorum: PredictionV2ResolutionRpcQuorum,
+  reader: PredictionV2ResolutionRpcReader,
   budget: RequestBudget,
   signal?: AbortSignal,
 ): Promise<PredictionV2ResolutionBlock> {
   signal?.throwIfAborted();
-  const [primaryChain, secondaryChain] = await providerPair(
+  const chainId = await providerRequest(
     budget,
     "Prediction V2 chain-id read",
-    () => quorum.primary.getChainId(signal),
-    () => quorum.secondary.getChainId(signal),
+    () => reader.getChainId(signal),
   );
-  if (
-    primaryChain !== PREDICTION_V2_RESOLUTION_CHAIN_ID ||
-    secondaryChain !== PREDICTION_V2_RESOLUTION_CHAIN_ID
-  ) return fail("wrong-chain", "Prediction V2 resolution RPC is not chain 4663");
+  if (chainId !== PREDICTION_V2_RESOLUTION_CHAIN_ID) {
+    return fail("wrong-chain", "Prediction V2 resolution RPC is not chain 4663");
+  }
 
-  const [primarySafeRaw, secondarySafeRaw] = await providerPair(
+  const safeRaw = await providerRequest(
     budget,
     "Prediction V2 safe-block read",
-    () => quorum.primary.getSafeBlock(signal),
-    () => quorum.secondary.getSafeBlock(signal),
+    () => reader.getSafeBlock(signal),
   );
-  const primarySafe = normalizeBlock(primarySafeRaw, "primary safe block");
-  const secondarySafe = normalizeBlock(secondarySafeRaw, "secondary safe block");
-  const number = primarySafe.number < secondarySafe.number
-    ? primarySafe.number
-    : secondarySafe.number;
-  const [primaryBlockRaw, secondaryBlockRaw] = await providerPair(
+  const safe = normalizeBlock(safeRaw, "safe block");
+  const blockRaw = await providerRequest(
     budget,
-    "Prediction V2 common-block read",
-    () => quorum.primary.getBlock(number, signal),
-    () => quorum.secondary.getBlock(number, signal),
+    "Prediction V2 confirmed-block read",
+    () => reader.getBlock(safe.number, signal),
   );
-  if (!primaryBlockRaw || !secondaryBlockRaw) {
-    return fail("noncanonical-block", "Prediction V2 common block is unavailable");
+  if (!blockRaw) {
+    return fail("noncanonical-block", "Prediction V2 confirmed block is unavailable");
   }
-  const primaryBlock = normalizeBlock(primaryBlockRaw, "primary common block");
-  const secondaryBlock = normalizeBlock(secondaryBlockRaw, "secondary common block");
-  if (!sameBlock(primaryBlock, secondaryBlock)) {
-    return fail(
-      "provider-disagreement",
-      "Prediction V2 RPC readers disagree on the common block",
-    );
+  const block = normalizeBlock(blockRaw, "confirmed block");
+  if (!sameBlock(block, safe)) {
+    return fail("noncanonical-block", "Prediction V2 confirmed block changed during selection");
   }
-  return primaryBlock;
+  return block;
 }
 
 async function assertCanonicalBlock(
@@ -530,29 +507,21 @@ async function assertCanonicalBlock(
   expected: PredictionV2ResolutionBlock = context.snapshot,
 ) {
   context.signal?.throwIfAborted();
-  const [primaryRaw, secondaryRaw] = await providerPair(
+  const raw = await providerRequest(
     context.budget,
     "Prediction V2 canonical-block revalidation",
-    () => context.quorum.primary.getBlock(expected.number, context.signal),
-    () => context.quorum.secondary.getBlock(expected.number, context.signal),
+    () => context.reader.getBlock(expected.number, context.signal),
   );
-  if (!primaryRaw || !secondaryRaw) {
+  if (!raw) {
     return fail("noncanonical-block", "Prediction V2 proof block is no longer available");
   }
-  const primary = normalizeBlock(primaryRaw, "primary revalidated block");
-  const secondary = normalizeBlock(secondaryRaw, "secondary revalidated block");
-  if (!sameBlock(primary, secondary)) {
-    return fail(
-      "provider-disagreement",
-      "Prediction V2 RPC readers disagree during block revalidation",
-    );
-  }
-  if (!sameBlock(primary, expected)) {
+  const block = normalizeBlock(raw, "revalidated block");
+  if (!sameBlock(block, expected)) {
     return fail("noncanonical-block", "Prediction V2 proof block was reorganized");
   }
 }
 
-async function dualCall(
+async function exactCall(
   context: ResolutionContext,
   request: Omit<
     PredictionV2ResolutionCallRequest,
@@ -569,21 +538,16 @@ async function dualCall(
     requireCanonical: true as const,
     ...(context.signal ? { signal: context.signal } : {}),
   });
-  const [primaryRaw, secondaryRaw] = await providerPair(
+  const raw = await providerRequest(
     context.budget,
     label,
-    () => context.quorum.primary.call(exactRequest),
-    () => context.quorum.secondary.call(exactRequest),
+    () => context.reader.call(exactRequest),
   );
-  const primary = normalizeCallOutcome(primaryRaw, `${label} primary response`);
-  const secondary = normalizeCallOutcome(secondaryRaw, `${label} secondary response`);
-  if (primary.status !== secondary.status || !sameHex(primary.data, secondary.data)) {
-    return fail("provider-disagreement", `${label} differs across RPC readers`);
+  const outcome = normalizeCallOutcome(raw, `${label} response`);
+  if (outcome.status === "reverted") {
+    return fail(revertCode, `${label} reverted at the confirmed block`);
   }
-  if (primary.status === "reverted") {
-    return fail(revertCode, `${label} reverted at the common block`);
-  }
-  return primary.data;
+  return outcome.data;
 }
 
 async function codeHashAt(
@@ -599,21 +563,16 @@ async function codeHashAt(
     requireCanonical: true as const,
     ...(context.signal ? { signal: context.signal } : {}),
   });
-  const [primaryRaw, secondaryRaw] = await providerPair(
+  const raw = await providerRequest(
     context.budget,
     `${label} code read`,
-    () => context.quorum.primary.getCode(request),
-    () => context.quorum.secondary.getCode(request),
+    () => context.reader.getCode(request),
   );
-  const primary = exactHex(primaryRaw, `${label} primary code`);
-  const secondary = exactHex(secondaryRaw, `${label} secondary code`);
-  if (!sameHex(primary, secondary)) {
-    return fail("provider-disagreement", `${label} code differs across RPC readers`);
-  }
-  if (primary === "0x") {
+  const code = exactHex(raw, `${label} code`);
+  if (code === "0x") {
     return fail("binding-mismatch", `${label} has no runtime code`);
   }
-  return keccak256(primary).toLowerCase() as PredictionV2ResolutionBytes32;
+  return keccak256(code).toLowerCase() as PredictionV2ResolutionBytes32;
 }
 
 async function contractResult(
@@ -639,7 +598,7 @@ async function contractResult(
   } catch {
     return fail("invalid-input", `${label} could not be encoded`);
   }
-  const response = await dualCall(
+  const response = await exactCall(
     context,
     {
       to,
@@ -1407,20 +1366,20 @@ async function findAtSnapshot(
 }
 
 /**
- * Finds the exact adjacent Chainlink V2 proof at one independently agreed safe
+ * Finds the exact adjacent Chainlink V2 proof at one release-bound confirmed
  * block. No provider, route, or release config is selected inside this module.
  */
 export async function findPredictionV2ResolutionProof(input: Readonly<{
-  quorum: PredictionV2ResolutionRpcQuorum;
+  reader: PredictionV2ResolutionRpcReader;
   binding: PredictionV2ResolutionReleaseBinding;
   signal?: AbortSignal;
 }>): Promise<PredictionV2ResolutionProofCandidate> {
-  const quorum = normalizeQuorum(input.quorum);
+  const reader = normalizeReader(input.reader);
   const binding = normalizeBinding(input.binding);
   const budget = new RequestBudget();
-  const snapshot = await commonBlock(quorum, budget, input.signal);
+  const snapshot = await commonBlock(reader, budget, input.signal);
   const context: ResolutionContext = Object.freeze({
-    quorum,
+    reader,
     snapshot,
     budget,
     ...(input.signal ? { signal: input.signal } : {}),
@@ -1460,21 +1419,21 @@ function assertCandidateCommitment(candidate: PredictionV2ResolutionProofCandida
 /**
  * Mandatory final gate before requesting a wallet signature. It proves the
  * discovery block is still canonical, repeats the complete proof search at a
- * fresh common safe block, requires identical evidence, and simulates both the
- * checkpoint and Vault transitions across both RPC readers.
+ * same leased confirmed block, requires identical evidence, and simulates
+ * both the checkpoint and Vault transitions through the release-bound reader.
  *
  * The returned transaction is snapshot-bound evidence, not a broadcast. A
  * caller must discard it after any delay or wallet/network change and rerun
  * this function.
  */
 export async function revalidateAndSimulatePredictionV2Resolution(input: Readonly<{
-  quorum: PredictionV2ResolutionRpcQuorum;
+  reader: PredictionV2ResolutionRpcReader;
   binding: PredictionV2ResolutionReleaseBinding;
   candidate: PredictionV2ResolutionProofCandidate;
   sender: Address;
   signal?: AbortSignal;
 }>): Promise<PredictionV2ResolutionPreparedTransaction> {
-  const quorum = normalizeQuorum(input.quorum);
+  const reader = normalizeReader(input.reader);
   const binding = normalizeBinding(input.binding);
   const sender = nonzeroAddress(input.sender, "resolution transaction sender");
   assertCandidateCommitment(input.candidate);
@@ -1484,25 +1443,23 @@ export async function revalidateAndSimulatePredictionV2Resolution(input: Readonl
 
   const historicalBudget = new RequestBudget();
   const historicalContext: ResolutionContext = Object.freeze({
-    quorum,
+    reader,
     snapshot: normalizeBlock(input.candidate.snapshot, "candidate snapshot"),
     budget: historicalBudget,
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  const [primaryChain, secondaryChain] = await providerPair(
+  const chainId = await providerRequest(
     historicalBudget,
     "Prediction V2 pre-broadcast chain-id read",
-    () => quorum.primary.getChainId(input.signal),
-    () => quorum.secondary.getChainId(input.signal),
+    () => reader.getChainId(input.signal),
   );
-  if (
-    primaryChain !== PREDICTION_V2_RESOLUTION_CHAIN_ID ||
-    secondaryChain !== PREDICTION_V2_RESOLUTION_CHAIN_ID
-  ) return fail("wrong-chain", "Prediction V2 pre-broadcast RPC is not chain 4663");
+  if (chainId !== PREDICTION_V2_RESOLUTION_CHAIN_ID) {
+    return fail("wrong-chain", "Prediction V2 pre-broadcast RPC is not chain 4663");
+  }
   await assertCanonicalBlock(historicalContext, input.candidate.snapshot);
 
   const fresh = await findPredictionV2ResolutionProof({
-    quorum,
+    reader,
     binding,
     ...(input.signal ? { signal: input.signal } : {}),
   });
@@ -1520,7 +1477,7 @@ export async function revalidateAndSimulatePredictionV2Resolution(input: Readonl
 
   const simulationBudget = new RequestBudget();
   const simulationContext: ResolutionContext = Object.freeze({
-    quorum,
+    reader,
     snapshot: fresh.snapshot,
     budget: simulationBudget,
     ...(input.signal ? { signal: input.signal } : {}),

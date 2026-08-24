@@ -19,7 +19,7 @@ const MARKET_KEY = `eip155:4663:${FACTORY}:${ECONOMIC_KEY}` as const;
 
 const BASE = Object.freeze({
   schemaVersion: 2,
-  source: "dual-rpc-onchain",
+  source: "onchain-rpc",
   marketKey: MARKET_KEY,
   marketId: MARKET_ID,
   economicKey: ECONOMIC_KEY,

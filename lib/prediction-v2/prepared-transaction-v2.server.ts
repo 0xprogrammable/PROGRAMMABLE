@@ -394,8 +394,8 @@ function assertActionCalldata(input: Readonly<{
 
 /**
  * Server-only constructor for a closed serializable response. Runtime brands
- * from the signed release parser and the release/snapshot-bound dual-RPC read
- * model are mandatory; structural clones and cross-release rows fail closed.
+ * from the signed release parser and the release/snapshot-bound settlement-RPC
+ * read model are mandatory; structural clones and cross-release rows fail closed.
  */
 export function buildPredictionV2PreparedTransactionEnvelopeV2(
   input: PredictionV2PreparedServerBindingV2,

@@ -53,7 +53,7 @@ const OPEN_LIFECYCLE = Object.freeze({
 
 const BASE_MARKET = Object.freeze({
   schemaVersion: 2,
-  source: "dual-rpc-onchain",
+  source: "onchain-rpc",
   marketKey: MARKET_KEY,
   marketId: MARKET_ID,
   economicKey: ECONOMIC_KEY,
@@ -298,7 +298,7 @@ function withLifecycle(
 }
 
 describe("PredictionMarketAssetCardV2", () => {
-  it("accepts one enriched dual-RPC view and keeps price primary", () => {
+  it("accepts one enriched settlement-RPC view and keeps price primary", () => {
     const html = renderToStaticMarkup(
       <PredictionMarketAssetCardV2 headingLevel="h2" market={ENRICHED} />,
     );

@@ -118,7 +118,7 @@ type PredictionMarketAssetCardProbabilityV2 =
 export type PredictionMarketAssetCardHeadingLevelV2 = "h2" | "h3";
 
 /**
- * The public card receives one provider-independent, dual-RPC-bound view.
+ * The public card receives one release-bound settlement-RPC view.
  * Lifecycle, probability, identity and condition cannot be supplied again.
  * Integration boundary: `market` must be the in-process server output of
  * base-view construction followed by enrichment. Never deserialize it from
@@ -566,7 +566,7 @@ function normalizePublicBaseV2(value: unknown): NormalizedPublicBaseV2 | null {
       "enrichment",
     ]) ||
       value.schemaVersion !== 2 ||
-      value.source !== "dual-rpc-onchain" ||
+      value.source !== "onchain-rpc" ||
       !isBytes32(value.marketId) ||
       !isBytes32(value.economicKey) ||
       !normalizeBaseAsset(value.asset) ||

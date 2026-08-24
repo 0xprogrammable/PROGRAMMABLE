@@ -211,7 +211,7 @@ function input(
 }
 
 describe("Prediction V2 prepared transaction transport", () => {
-  it("omits create until a real dual-RPC create preflight capability exists", () => {
+  it("omits create until a release-bound settlement-RPC preflight exists", () => {
     expect(Object.hasOwn(PREDICTION_V2_PREPARED_ACTIONS_V2, "create")).toBe(false);
     expect(Object.keys(PREDICTION_V2_PREPARED_ACTIONS_V2)).toHaveLength(8);
   });

@@ -24,12 +24,12 @@ export type PredictionV2BaseAssetView =
   }>;
 
 /**
- * Provider-independent public market core. Construction is server-only and
- * requires runtime provenance from both the signed release and dual-RPC read.
+ * Release-bound public market core. Construction is server-only and requires
+ * runtime provenance from both the signed release and its settlement-RPC read.
  */
 export type PredictionV2BaseMarketView = Readonly<{
   schemaVersion: 2;
-  source: "dual-rpc-onchain";
+  source: "onchain-rpc";
   marketKey: `eip155:4663:${string}:${PredictionBytes32V2}`;
   marketId: PredictionBytes32V2;
   economicKey: PredictionBytes32V2;

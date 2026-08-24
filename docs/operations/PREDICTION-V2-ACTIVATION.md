@@ -32,9 +32,10 @@ the following against that exact revision:
    Oracle, fee-bypass and deployment checks.
 2. Final deployment signer, admin, Registry owner, treasury, fee recipient,
    bootstrap reserve and exposure caps.
-3. Two independent, production-capable, server-only Robinhood RPC providers
-   that support historical EIP-1898 reads. Their provider, vendor and endpoint
-   origin commitments must exactly match the signed public release.
+3. One production-capable, server-only Robinhood settlement RPC that supports
+   historical EIP-1898 reads at the fixed three-confirmation policy. Its
+   provider, vendor, full endpoint, endpoint-origin and batch-mode commitments
+   must exactly match the signed public release.
 4. A durable shared atomic budget backend for provider, action and client
    limits. The in-memory adapter is test-only and can never make the release
    production-ready.
@@ -57,8 +58,8 @@ the following against that exact revision:
 1. Freeze and independently review the contract source.
 2. Deploy the shared core without enabling an asset or public application
    route.
-3. Verify every deployed runtime and one-time binding through both committed
-   RPC providers and public source readback.
+3. Verify every deployed runtime and one-time binding through the committed
+   settlement RPC and public source readback.
 4. Activate one BTC/USD Registry policy and run the complete Mainnet canary
    lifecycle.
 5. Produce and independently sign the closed public release envelope.
@@ -75,3 +76,18 @@ the following against that exact revision:
 Any missing or mismatched gate keeps the public routes at 404 and transaction
 preparation unavailable. A successful build, local test, deployment receipt,
 HTTP 200 response or wallet simulation is not by itself activation evidence.
+
+## Single-provider trust boundary
+
+The release-bound settlement RPC is only the application read and transaction-
+preparation dependency. Chainlink proofs and the deployed onchain contracts
+remain the settlement authority.
+
+One RPC removes independent provider comparison. An outage is unavailable, and
+a provider that consistently presents one false canonical view cannot be
+independently detected by this application. Missing, stale, reorged or
+internally inconsistent canonical reads fail closed; the application does not
+silently fall back to an uncommitted endpoint. This trade-off can produce a
+closed or misleading application view, failed transactions or wasted gas, but
+it cannot change the release-bound contract targets or Chainlink settlement
+rules.

@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   base: vi.fn(),
   buildPrepared: vi.fn(),
   closeSession: vi.fn(),
-  createReaders: vi.fn(),
+  createReader: vi.fn(),
   createSession: vi.fn(),
   decide: vi.fn(),
   enrich: vi.fn(),
@@ -15,10 +15,9 @@ const mocks = vi.hoisted(() => ({
   readDirectory: vi.fn(),
   readMarket: vi.fn(),
   verifyHistorical: vi.fn(),
-  readers: Object.freeze([{ readerId: "primary" }, { readerId: "secondary" }]),
+  reader: Object.freeze({ readerId: "settlement" }),
   sessionLease: Object.freeze({ leaseId: "session-lease" }),
-  sessionPrimary: Object.freeze({ readerId: "session-primary" }),
-  sessionSecondary: Object.freeze({ readerId: "session-secondary" }),
+  sessionReader: Object.freeze({ readerId: "session-settlement" }),
 }));
 
 vi.mock("@/lib/prediction-v2/base-market-view-v2.server", () => ({
@@ -30,10 +29,10 @@ vi.mock("@/lib/prediction-v2/enriched-market-view-v2", () => ({
 }));
 
 vi.mock("@/lib/prediction-v2/public-release-v2.server", () => ({
-  PREDICTION_V2_PUBLIC_RELEASE_HISTORICAL_SESSION_MAX_RPC_LOGICAL_CALLS: 50,
-  PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS: 48,
+  PREDICTION_V2_PUBLIC_RELEASE_HISTORICAL_SESSION_MAX_RPC_LOGICAL_CALLS: 25,
+  PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS: 24,
   assertPredictionV2RuntimeDistributedBudgetMatchesRelease: mocks.assertBudget,
-  createPredictionV2PublicReleaseResolutionRpcSession: mocks.createSession,
+  createPredictionV2PublicReleaseRpcSession: mocks.createSession,
   toPredictionV2PublicMarketCanonicalReleaseV2: () => Object.freeze({
     schemaVersion: 2,
     releaseId: "protocol-v2",
@@ -53,20 +52,20 @@ vi.mock("@/lib/prediction-v2/prepared-transaction-v2.server", () => ({
 
 vi.mock("@/lib/prediction-v2/read-model-v2.server", () => ({
   PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE: 8,
-  PREDICTION_V2_DIRECTORY_MAX_PROVIDER_REQUESTS: 602,
-  PREDICTION_V2_TARGETED_MARKET_MAX_PROVIDER_REQUESTS: 94,
+  PREDICTION_V2_DIRECTORY_MAX_PROVIDER_REQUESTS: 301,
+  PREDICTION_V2_TARGETED_MARKET_MAX_PROVIDER_REQUESTS: 47,
   readPredictionV2Directory: mocks.readDirectory,
   readPredictionV2MarketAtSnapshot: mocks.readMarket,
 }));
 
 vi.mock("@/lib/prediction-v2/resolution-action-v2.server", () => ({
-  PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS: 2_296,
+  PREDICTION_V2_RESOLUTION_PUBLIC_RELEASE_MAX_PROVIDER_REQUESTS: 1_148,
   decidePredictionV2ResolutionActionFromPublicRelease: mocks.decide,
 }));
 
-vi.mock("@/lib/prediction-v2/rpc-quorum-v2.server", () => ({
-  PREDICTION_V2_CANONICAL_HISTORICAL_BLOCK_VERIFICATION_RPC_LOGICAL_CALLS: 2,
-  createPredictionV2ActionRpcQuorum: mocks.createReaders,
+vi.mock("@/lib/prediction-v2/rpc-session-v2.server", () => ({
+  PREDICTION_V2_CANONICAL_HISTORICAL_BLOCK_VERIFICATION_RPC_LOGICAL_CALLS: 1,
+  createPredictionV2ActionRpcSession: mocks.createReader,
   verifyPredictionV2CanonicalHistoricalBlockV2: mocks.verifyHistorical,
 }));
 
@@ -140,7 +139,7 @@ const RELEASE = Object.freeze({
 const BUDGET = Object.freeze({}) as never;
 const BASE_VIEW = Object.freeze({
   schemaVersion: 2,
-  source: "dual-rpc-onchain",
+  source: "onchain-rpc",
   marketKey: `eip155:4663:${FACTORY}:${ECONOMIC_KEY}`,
   marketId: MARKET_ID,
   economicKey: ECONOMIC_KEY,
@@ -209,21 +208,18 @@ const BASE_VIEW = Object.freeze({
 describe("Prediction V2 provider action DTO adapters", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.createReaders.mockReturnValue(mocks.readers);
+    mocks.createReader.mockReturnValue(mocks.reader);
     mocks.createSession.mockImplementation((
       _release: unknown,
-      _readers: unknown,
+      _reader: unknown,
       _budget: unknown,
       _signal: unknown,
       historicalSnapshot?: unknown,
     ) => Object.freeze({
       lease: mocks.sessionLease,
-      quorum: Object.freeze({
-        primary: mocks.sessionPrimary,
-        secondary: mocks.sessionSecondary,
-      }),
+      reader: mocks.sessionReader,
       snapshot: BLOCK,
-      rpcLogicalCalls: historicalSnapshot ? 50 : 48,
+      rpcLogicalCalls: historicalSnapshot ? 25 : 24,
       close: mocks.closeSession,
     }));
     mocks.base.mockReturnValue(BASE_VIEW);
@@ -278,13 +274,13 @@ describe("Prediction V2 provider action DTO adapters", () => {
     );
     expect(mocks.createSession).toHaveBeenCalledWith(
       RELEASE,
-      mocks.readers,
+      mocks.reader,
       BUDGET,
       expect.any(AbortSignal),
       undefined,
     );
     expect(mocks.readDirectory).toHaveBeenCalledWith(expect.objectContaining({
-      readers: [mocks.sessionPrimary, mocks.sessionSecondary],
+      reader: mocks.sessionReader,
     }));
     expect(mocks.closeSession).toHaveBeenCalledTimes(1);
     expect(mocks.readMarket).not.toHaveBeenCalled();
@@ -317,7 +313,7 @@ describe("Prediction V2 provider action DTO adapters", () => {
     expect(mocks.createSession).toHaveBeenNthCalledWith(
       2,
       RELEASE,
-      mocks.readers,
+      mocks.reader,
       BUDGET,
       expect.any(AbortSignal),
       { number: 100n, hash: BLOCK.hash },
@@ -325,10 +321,10 @@ describe("Prediction V2 provider action DTO adapters", () => {
     expect(mocks.assertBudget).toHaveBeenCalledTimes(2);
     expect(mocks.createSession).toHaveBeenCalledTimes(2);
     expect(mocks.closeSession).toHaveBeenCalledTimes(2);
-    expect(mocks.createReaders).toHaveBeenNthCalledWith(1, {
+    expect(mocks.createReader).toHaveBeenNthCalledWith(1, {
       confirmationDepth: 3n,
     });
-    expect(mocks.createReaders).toHaveBeenNthCalledWith(2, {
+    expect(mocks.createReader).toHaveBeenNthCalledWith(2, {
       confirmationDepth: 3n,
     });
   });
@@ -342,22 +338,22 @@ describe("Prediction V2 provider action DTO adapters", () => {
     })).rejects.toThrow("Invalid Prediction V2 cursor");
 
     expect(mocks.readDirectory).not.toHaveBeenCalled();
-    expect(mocks.createReaders).not.toHaveBeenCalled();
+    expect(mocks.createReader).not.toHaveBeenCalled();
     expect(mocks.createSession).not.toHaveBeenCalled();
   });
 
   it("closes the directory session when its leased directory read fails", async () => {
-    mocks.readDirectory.mockRejectedValueOnce(new Error("provider disagreement"));
+    mocks.readDirectory.mockRejectedValueOnce(new Error("provider unavailable"));
 
     await expect(readPredictionV2DirectoryRouteV2({
       release: RELEASE,
       budget: BUDGET,
       intent: Object.freeze({ limit: 1, cursor: null }),
       signal: new AbortController().signal,
-    })).rejects.toThrow("provider disagreement");
+    })).rejects.toThrow("provider unavailable");
 
     expect(mocks.readDirectory).toHaveBeenCalledWith(expect.objectContaining({
-      readers: [mocks.sessionPrimary, mocks.sessionSecondary],
+      reader: mocks.sessionReader,
     }));
     expect(mocks.closeSession).toHaveBeenCalledTimes(1);
   });
@@ -365,12 +361,9 @@ describe("Prediction V2 provider action DTO adapters", () => {
   it("fails closed before a directory read when the session cost drifts", async () => {
     mocks.createSession.mockResolvedValueOnce(Object.freeze({
       lease: mocks.sessionLease,
-      quorum: Object.freeze({
-        primary: mocks.sessionPrimary,
-        secondary: mocks.sessionSecondary,
-      }),
+      reader: mocks.sessionReader,
       snapshot: BLOCK,
-      rpcLogicalCalls: 47,
+      rpcLogicalCalls: 23,
       close: mocks.closeSession,
     }));
 
@@ -436,7 +429,7 @@ describe("Prediction V2 provider action DTO adapters", () => {
 
     await expect(execute()).rejects.toThrow("budget mismatch");
 
-    expect(mocks.createReaders).not.toHaveBeenCalled();
+    expect(mocks.createReader).not.toHaveBeenCalled();
     expect(mocks.createSession).not.toHaveBeenCalled();
     expect(mocks.readDirectory).not.toHaveBeenCalled();
     expect(mocks.readMarket).not.toHaveBeenCalled();
@@ -465,10 +458,10 @@ describe("Prediction V2 provider action DTO adapters", () => {
       signal,
     });
 
-    expect(mocks.createReaders).toHaveBeenCalledWith({ confirmationDepth: 3n });
+    expect(mocks.createReader).toHaveBeenCalledWith({ confirmationDepth: 3n });
     expect(mocks.createSession).toHaveBeenCalledWith(
       RELEASE,
-      mocks.readers,
+      mocks.reader,
       BUDGET,
       signal,
     );
@@ -478,7 +471,7 @@ describe("Prediction V2 provider action DTO adapters", () => {
       signal,
     );
     expect(mocks.readMarket).toHaveBeenCalledWith({
-      readers: [mocks.sessionPrimary, mocks.sessionSecondary],
+      reader: mocks.sessionReader,
       binding: { factory: FACTORY },
       economicKey: ECONOMIC_KEY,
       snapshot: BLOCK,
@@ -544,7 +537,7 @@ describe("Prediction V2 provider action DTO adapters", () => {
   });
 
   it("closes the redeem session when the canonical market read fails", async () => {
-    mocks.readMarket.mockRejectedValueOnce(new Error("provider disagreement"));
+    mocks.readMarket.mockRejectedValueOnce(new Error("provider unavailable"));
 
     await expect(preparePredictionV2RedeemRouteV2({
       release: RELEASE,
@@ -564,7 +557,7 @@ describe("Prediction V2 provider action DTO adapters", () => {
         noAtoms: "0",
       }),
       signal: new AbortController().signal,
-    })).rejects.toThrow("provider disagreement");
+    })).rejects.toThrow("provider unavailable");
 
     expect(mocks.buildPrepared).not.toHaveBeenCalled();
     expect(mocks.closeSession).toHaveBeenCalledTimes(1);
@@ -604,12 +597,9 @@ describe("Prediction V2 provider action DTO adapters", () => {
   it("rejects a drifted public-session cost before the targeted read", async () => {
     mocks.createSession.mockResolvedValueOnce(Object.freeze({
       lease: mocks.sessionLease,
-      quorum: Object.freeze({
-        primary: mocks.sessionPrimary,
-        secondary: mocks.sessionSecondary,
-      }),
+      reader: mocks.sessionReader,
       snapshot: BLOCK,
-      rpcLogicalCalls: 47,
+      rpcLogicalCalls: 23,
       close: mocks.closeSession,
     }));
 

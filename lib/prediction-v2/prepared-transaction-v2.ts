@@ -16,7 +16,7 @@ export type PredictionV2PreparedTransactionKindV2 =
 
 /**
  * Create is deliberately absent. A create response cannot become wallet-sendable
- * until a real dual-RPC create-preflight capability exists.
+ * until a real release-bound settlement-RPC preflight capability exists.
  */
 export type PredictionV2PreparedActionV2 =
   | "buy"

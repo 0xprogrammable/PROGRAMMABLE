@@ -120,7 +120,7 @@ export function buildPredictionV2BaseMarketView(input: Readonly<{
     `eip155:4663:${factoryAddress}:${economicKey}` as const;
   return Object.freeze({
     schemaVersion: 2 as const,
-    source: "dual-rpc-onchain" as const,
+    source: "onchain-rpc" as const,
     marketKey,
     marketId,
     economicKey,

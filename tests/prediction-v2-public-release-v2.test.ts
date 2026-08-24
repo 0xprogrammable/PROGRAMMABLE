@@ -34,7 +34,7 @@ import {
   assertPredictionV2RuntimeDistributedBudgetMatchesRelease,
   assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease,
   assertPredictionV2VerifiedEnabledPublicReleaseV2,
-  createPredictionV2PublicReleaseResolutionRpcSession,
+  createPredictionV2PublicReleaseRpcSession,
   createPredictionV2PublicReleaseSigningMessage,
   derivePredictionV2PublicReleaseGraphCommitments,
   getPredictionV2PublicReleaseV2,
@@ -55,10 +55,11 @@ import {
 } from "../lib/prediction-v2/rpc-reader-v2.server";
 import {
   createPredictionV2ActionRpcSnapshotLease,
-  createPredictionV2ActionRpcQuorum,
+  createPredictionV2ActionRpcSession,
+  PREDICTION_V2_ACTION_CONFIRMATION_DEPTH,
   PREDICTION_V2_ACTION_SNAPSHOT_NEGOTIATION_RPC_LOGICAL_CALLS,
   predictionV2ActionRpcRuntimeProjection,
-} from "../lib/prediction-v2/rpc-quorum-v2.server";
+} from "../lib/prediction-v2/rpc-session-v2.server";
 
 const PRIVATE_KEY_DER = Buffer.from(
   `302e020100300506032b657004220420${"42".repeat(32)}`,
@@ -164,50 +165,34 @@ function unsignedEnabledFixture() {
     confirmedBlockHash: registrySnapshot.blockHash,
     snapshotPolicy: {
       kind: "action",
-      confirmationDepth: 4,
+      confirmationDepth: Number(PREDICTION_V2_ACTION_CONFIRMATION_DEPTH),
     },
     transportPolicy: { ...PREDICTION_V2_RPC_LIMITS },
-    readStrategy: "dual-eip-1898-confirmed-block-hash-v1",
+    readStrategy: "single-eip-1898-confirmed-block-hash-v1",
     requireCanonical: true,
-    requiredQuorum: 2,
-    providers: [
-      {
-        role: "primary",
-        providerId: "test-primary",
-        providerCommitment: predictionV2PublicReleaseRpcIdentityCommitment(
-          "provider",
-          "test-primary",
-        ),
-        vendorGroup: "alchemy",
-        vendorCommitment: predictionV2PublicReleaseRpcIdentityCommitment(
-          "vendor",
-          "alchemy",
-        ),
-        endpointOriginCommitment: rpcProviderCommitment(
-          "origin",
-          "https://robinhood-mainnet.g.alchemy.com",
-        ),
-        batchMode: "batch",
-      },
-      {
-        role: "secondary",
-        providerId: "test-secondary",
-        providerCommitment: predictionV2PublicReleaseRpcIdentityCommitment(
-          "provider",
-          "test-secondary",
-        ),
-        vendorGroup: "quicknode",
-        vendorCommitment: predictionV2PublicReleaseRpcIdentityCommitment(
-          "vendor",
-          "quicknode",
-        ),
-        endpointOriginCommitment: rpcProviderCommitment(
-          "origin",
-          "https://quiet-robinhood.quiknode.pro",
-        ),
-        batchMode: "batch",
-      },
-    ],
+    requiredProviderCount: 1,
+    provider: {
+      role: "settlement",
+      providerId: "test-settlement",
+      providerCommitment: predictionV2PublicReleaseRpcIdentityCommitment(
+        "provider",
+        "test-settlement",
+      ),
+      vendorGroup: "alchemy",
+      vendorCommitment: predictionV2PublicReleaseRpcIdentityCommitment(
+        "vendor",
+        "alchemy",
+      ),
+      endpointCommitment: rpcProviderCommitment(
+        "endpoint",
+        "https://robinhood-mainnet.g.alchemy.com/v2/test-settlement-secret",
+      ),
+      endpointOriginCommitment: rpcProviderCommitment(
+        "origin",
+        "https://robinhood-mainnet.g.alchemy.com",
+      ),
+      batchMode: "batch",
+    },
     evidenceSha256: fixtureSha256(303),
   };
   const distributedBudget = budgetRuntime();
@@ -310,30 +295,20 @@ function cloneFixture() {
   return structuredClone(signedEnabledFixture());
 }
 
-function actionReaders(
-  confirmationDepth = 4n,
+function actionReader(
+  confirmationDepth = PREDICTION_V2_ACTION_CONFIRMATION_DEPTH,
   fetcher = releaseRpcFetcher(),
-  secondaryFetcher = fetcher,
 ) {
-  return createPredictionV2ActionRpcQuorum({
+  return createPredictionV2ActionRpcSession({
     confirmationDepth,
-    bindings: [
-      predictionV2RpcBindingInput({
-        providerId: "test-primary",
-        vendorGroup: "alchemy",
-        endpoint:
-          "https://robinhood-mainnet.g.alchemy.com/v2/test-primary-secret",
-      }),
-      predictionV2RpcBindingInput({
-        providerId: "test-secondary",
-        vendorGroup: "quicknode",
-        endpoint:
-          "https://quiet-robinhood.quiknode.pro/test-secondary-secret/",
-      }),
-    ],
+    binding: predictionV2RpcBindingInput({
+      providerId: "test-settlement",
+      vendorGroup: "alchemy",
+      endpoint:
+        "https://robinhood-mainnet.g.alchemy.com/v2/test-settlement-secret",
+    }),
     dependencies: {
-      primary: { fetcher },
-      secondary: { fetcher: secondaryFetcher },
+      provider: { fetcher },
     },
   });
 }
@@ -458,7 +433,7 @@ function budgetRuntime() {
         PREDICTION_V2_RESOLUTION_DECISION_ROUTE_MAX_RPC_LOGICAL_CALLS,
       ],
     ].map(([action, exactUnits]) => ({
-      provider: "robinhood-rpc-quorum",
+      provider: "robinhood-settlement-rpc",
       action: String(action),
       unit: "rpc-logical-call",
       worstCaseUnits: Number(exactUnits),
@@ -516,16 +491,14 @@ function releaseRpcFetcher() {
 }
 
 describe("Prediction V2 exact-snapshot runtime dependency preflight", () => {
-  it("checks every signed runtime dependency with dual EIP-1898 reads", async () => {
+  it("checks every signed runtime dependency with exact EIP-1898 reads", async () => {
     const binding = runtimeDependencyBindingFixture();
-    const primaryRequests: PreflightRpcRequest[] = [];
-    const secondaryRequests: PreflightRpcRequest[] = [];
-    const readers = actionReaders(
+    const requests: PreflightRpcRequest[] = [];
+    const reader = actionReader(
       4n,
-      runtimePreflightFetcher(binding, primaryRequests),
-      runtimePreflightFetcher(binding, secondaryRequests),
+      runtimePreflightFetcher(binding, requests),
     );
-    const lease = await createPredictionV2ActionRpcSnapshotLease(readers);
+    const lease = await createPredictionV2ActionRpcSnapshotLease(reader);
 
     try {
       await expect(verifyPredictionV2RuntimeDependencySnapshotV2(
@@ -533,22 +506,21 @@ describe("Prediction V2 exact-snapshot runtime dependency preflight", () => {
         binding,
       )).resolves.toBeUndefined();
       expect(PREDICTION_V2_PUBLIC_RELEASE_RUNTIME_PREFLIGHT_MAX_RPC_LOGICAL_CALLS)
-        .toBe(42);
+        .toBe(21);
       expect(PREDICTION_V2_ACTION_SNAPSHOT_NEGOTIATION_RPC_LOGICAL_CALLS)
-        .toBe(6);
+        .toBe(3);
       expect(PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS)
-        .toBe(48);
+        .toBe(24);
       expect(
         PREDICTION_V2_PUBLIC_RELEASE_HISTORICAL_SESSION_MAX_RPC_LOGICAL_CALLS,
-      ).toBe(50);
-      expect(primaryRequests).toHaveLength(24);
-      expect(secondaryRequests).toHaveLength(24);
+      ).toBe(25);
+      expect(requests).toHaveLength(24);
 
       const exactBlock = {
         blockHash: PREFLIGHT_BLOCK_HASH,
         requireCanonical: true,
       };
-      for (const request of [...primaryRequests, ...secondaryRequests]) {
+      for (const request of requests) {
         if (request.method === "eth_getCode") {
           expect(request.params[1]).toEqual(exactBlock);
         } else if (request.method === "eth_getStorageAt") {
@@ -567,7 +539,7 @@ describe("Prediction V2 exact-snapshot runtime dependency preflight", () => {
     }
   });
 
-  it("fails closed on dependency drift, provider disagreement, and reorg", async () => {
+  it("fails closed on dependency drift and reorg", async () => {
     const binding = runtimeDependencyBindingFixture();
     const implementation = binding.usdgImplementation.toLowerCase();
     const proxy = binding.usdgProxy.toLowerCase();
@@ -575,68 +547,45 @@ describe("Prediction V2 exact-snapshot runtime dependency preflight", () => {
     const changedDecimals = `0x${"7".padStart(64, "0")}` as Hex;
     const cases: readonly Readonly<{
       expected: PredictionV2RuntimeDependencySnapshotErrorV2["code"];
-      primary?: PreflightFetcherOptions;
-      secondary?: PreflightFetcherOptions;
+      options?: PreflightFetcherOptions;
     }>[] = [
       {
-        expected: "provider-disagreement",
-        primary: {
-          code: (address) => address === proxy ? changedCode : PREFLIGHT_CODE,
-        },
-      },
-      {
         expected: "runtime-mismatch",
-        primary: {
-          code: (address) =>
-            address === implementation ? changedCode : PREFLIGHT_CODE,
-        },
-        secondary: {
+        options: {
           code: (address) =>
             address === implementation ? changedCode : PREFLIGHT_CODE,
         },
       },
       {
         expected: "runtime-mismatch",
-        primary: {
-          code: (address) => address === proxy ? changedCode : PREFLIGHT_CODE,
-        },
-        secondary: {
+        options: {
           code: (address) => address === proxy ? changedCode : PREFLIGHT_CODE,
         },
       },
       {
         expected: "runtime-mismatch",
-        primary: { storage: fixtureBytes32(0) },
-        secondary: { storage: fixtureBytes32(0) },
+        options: { storage: fixtureBytes32(0) },
       },
       {
         expected: "runtime-mismatch",
-        primary: { decimals: changedDecimals },
-        secondary: { decimals: changedDecimals },
+        options: { decimals: changedDecimals },
       },
       {
         expected: "runtime-mismatch",
-        primary: { domainSeparator: fixtureBytes32(9_002) },
-        secondary: { domainSeparator: fixtureBytes32(9_002) },
-      },
-      {
-        expected: "provider-disagreement",
-        secondary: { storage: fixtureBytes32(0) },
+        options: { domainSeparator: fixtureBytes32(9_002) },
       },
       {
         expected: "block-mismatch",
-        primary: { blockHashAfterNegotiation: fixtureBytes32(9_003) },
-        secondary: { blockHashAfterNegotiation: fixtureBytes32(9_003) },
+        options: { blockHashAfterNegotiation: fixtureBytes32(9_003) },
       },
     ];
 
     for (const testCase of cases) {
-      const readers = actionReaders(
+      const reader = actionReader(
         4n,
-        runtimePreflightFetcher(binding, [], testCase.primary),
-        runtimePreflightFetcher(binding, [], testCase.secondary),
+        runtimePreflightFetcher(binding, [], testCase.options),
       );
-      const lease = await createPredictionV2ActionRpcSnapshotLease(readers);
+      const lease = await createPredictionV2ActionRpcSnapshotLease(reader);
       try {
         await expect(verifyPredictionV2RuntimeDependencySnapshotV2(
           lease,
@@ -651,12 +600,11 @@ describe("Prediction V2 exact-snapshot runtime dependency preflight", () => {
   it("rejects malformed bindings before any dependency read", async () => {
     const binding = runtimeDependencyBindingFixture();
     const requests: PreflightRpcRequest[] = [];
-    const readers = actionReaders(
+    const reader = actionReader(
       4n,
       runtimePreflightFetcher(binding, requests),
-      runtimePreflightFetcher(binding, requests),
     );
-    const lease = await createPredictionV2ActionRpcSnapshotLease(readers);
+    const lease = await createPredictionV2ActionRpcSnapshotLease(reader);
     const requestsAfterNegotiation = requests.length;
     try {
       await expect(verifyPredictionV2RuntimeDependencySnapshotV2(
@@ -675,10 +623,10 @@ describe("Prediction V2 public release V2 binding", () => {
     expect(
       predictionV2PublicReleaseRpcIdentityCommitment(
         "provider",
-        "test-primary",
+        "test-settlement",
       ),
     ).toBe(
-      "0xc2aca35fb81cfb3ba4adb75feb7872c1b71fbcca9a049b7745ce236311c3dbda",
+      "0x6d6dc13700b28eaa1d196ba4969ccc55ed3b02110bdb752d1ae41603e2f44443",
     );
     expect(
       predictionV2PublicReleaseRpcIdentityCommitment("vendor", "alchemy"),
@@ -686,7 +634,7 @@ describe("Prediction V2 public release V2 binding", () => {
       "0x647e6d5bde6b04148ac4eb8d56a93a1299d48182a85f7744e97a1be85c5265a2",
     );
     for (const [scope, value] of [
-      ["provider", "test-primary"],
+      ["provider", "test-settlement"],
       ["vendor", "alchemy"],
       ["vendor", "drpc"],
       ["vendor", "quicknode"],
@@ -747,21 +695,21 @@ describe("Prediction V2 public release V2 binding", () => {
       exactUnitsPerAction: lane.exactUnitsPerAction,
     }))).toEqual([
       {
-        provider: "robinhood-rpc-quorum",
+        provider: "robinhood-settlement-rpc",
         action: "directory",
         unit: "rpc-logical-call",
         exactUnitsPerAction:
           PREDICTION_V2_DIRECTORY_ROUTE_MAX_RPC_LOGICAL_CALLS,
       },
       {
-        provider: "robinhood-rpc-quorum",
+        provider: "robinhood-settlement-rpc",
         action: "redeem-prepare",
         unit: "rpc-logical-call",
         exactUnitsPerAction:
           PREDICTION_V2_REDEEM_PREPARE_ROUTE_MAX_RPC_LOGICAL_CALLS,
       },
       {
-        provider: "robinhood-rpc-quorum",
+        provider: "robinhood-settlement-rpc",
         action: "resolution-decision",
         unit: "rpc-logical-call",
         exactUnitsPerAction:
@@ -797,12 +745,36 @@ describe("Prediction V2 public release V2 binding", () => {
     },
   );
 
-  it("binds each provider batch mode into the signed RPC graph", () => {
+  it.each([1, 4, 64])(
+    "rejects a fully re-signed confirmationDepth=%i policy",
+    (depth) => {
+      const unsigned = unsignedEnabledFixture();
+      Reflect.set(unsigned.rpcCommitment.snapshotPolicy, "confirmationDepth", depth);
+      const signed = signUncheckedUnsignedFixture(refreshFixtureGraph(unsigned));
+
+      expect(() => verifyPredictionV2PublicReleaseV2WithTrustRoot(
+        signed,
+        TEST_TRUST_ROOT,
+      )).toThrow("Invalid Prediction V2 public release binding");
+    },
+  );
+
+  it("binds the settlement endpoint and batch mode into the signed RPC graph", () => {
     const batch = unsignedEnabledFixture();
     const solo = unsignedEnabledFixture();
-    Reflect.set(solo.rpcCommitment.providers[0], "batchMode", "solo");
+    const rotatedEndpoint = unsignedEnabledFixture();
+    Reflect.set(solo.rpcCommitment.provider, "batchMode", "solo");
     refreshFixtureGraph(solo);
+    Reflect.set(
+      rotatedEndpoint.rpcCommitment.provider,
+      "endpointCommitment",
+      fixtureBytes32(9_900),
+    );
+    refreshFixtureGraph(rotatedEndpoint);
     expect(solo.graphCommitments.rpcCommitmentSha256).not.toBe(
+      batch.graphCommitments.rpcCommitmentSha256,
+    );
+    expect(rotatedEndpoint.graphCommitments.rpcCommitmentSha256).not.toBe(
       batch.graphCommitments.rpcCommitmentSha256,
     );
 
@@ -812,8 +784,7 @@ describe("Prediction V2 public release V2 binding", () => {
     );
     expect(verified.status).toBe("enabled");
     if (verified.status !== "enabled") throw new Error("unreachable");
-    expect(verified.rpcCommitment.providers[0].batchMode).toBe("solo");
-    expect(verified.rpcCommitment.providers[1].batchMode).toBe("batch");
+    expect(verified.rpcCommitment.provider.batchMode).toBe("solo");
   });
 
   it("never promotes a caller-root release into Production authority", async () => {
@@ -847,7 +818,7 @@ describe("Prediction V2 public release V2 binding", () => {
     expect(() =>
       assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease(
         release,
-        predictionV2ActionRpcRuntimeProjection(actionReaders()),
+        predictionV2ActionRpcRuntimeProjection(actionReader()),
       )
     ).toThrow(
       "Prediction V2 runtime RPC commitment does not match public release",
@@ -866,9 +837,9 @@ describe("Prediction V2 public release V2 binding", () => {
       .toThrow("Invalid Prediction V2 public release binding");
 
     const fetcher = releaseRpcFetcher();
-    await expect(createPredictionV2PublicReleaseResolutionRpcSession(
+    await expect(createPredictionV2PublicReleaseRpcSession(
       release,
-      actionReaders(4n, fetcher),
+      actionReader(4n, fetcher),
       budgetRuntime(),
     )).rejects.toThrow(
       "Prediction V2 distributed budget does not match public release",
@@ -920,7 +891,7 @@ describe("Prediction V2 public release V2 binding", () => {
       Object.assign(value.registrySnapshot, { asset: "BTC" });
     }],
     ["RPC provider", (value: MutableFixture) => {
-      Object.assign(value.rpcCommitment.providers[0], {
+      Object.assign(value.rpcCommitment.provider, {
         url: "https://example.invalid",
       });
     }],
@@ -970,6 +941,19 @@ describe("Prediction V2 public release V2 binding", () => {
   it.each([
     ["wrong settlement chain", (value: MutableFixture) => {
       value.rpcCommitment.chainId = 1;
+    }],
+    ["more than one provider", (value: MutableFixture) => {
+      Reflect.set(value.rpcCommitment, "requiredProviderCount", 2);
+    }],
+    ["dual-provider read strategy", (value: MutableFixture) => {
+      Reflect.set(
+        value.rpcCommitment,
+        "readStrategy",
+        "dual-eip-1898-confirmed-block-hash-v1",
+      );
+    }],
+    ["non-settlement provider role", (value: MutableFixture) => {
+      Reflect.set(value.rpcCommitment.provider, "role", "primary");
     }],
     ["wrong protocol repository", (value: MutableFixture) => {
       value.release.repository = "attacker/prediction-markets";
@@ -1141,7 +1125,7 @@ describe("Prediction V2 public release V2 binding", () => {
     ["extra", (value: ReturnType<typeof unsignedEnabledFixture>) => {
       const extra = structuredClone(value.distributedBudgetPolicy.lanes[2]!);
       Reflect.set(extra, "action", "z-extra");
-      Reflect.set(extra, "laneId", "robinhood-rpc-quorum:z-extra");
+      Reflect.set(extra, "laneId", "robinhood-settlement-rpc:z-extra");
       Reflect.set(extra, "exactUnitsPerAction", 1);
       Reflect.set(value.distributedBudgetPolicy, "lanes", [
         ...value.distributedBudgetPolicy.lanes,
@@ -1150,8 +1134,8 @@ describe("Prediction V2 public release V2 binding", () => {
     }],
     ["wrong provider", (value: ReturnType<typeof unsignedEnabledFixture>) => {
       for (const lane of value.distributedBudgetPolicy.lanes) {
-        Reflect.set(lane, "provider", "attacker-rpc-quorum");
-        Reflect.set(lane, "laneId", `attacker-rpc-quorum:${lane.action}`);
+        Reflect.set(lane, "provider", "attacker-settlement-rpc");
+        Reflect.set(lane, "laneId", `attacker-settlement-rpc:${lane.action}`);
       }
     }],
     ["wrong unit", (value: ReturnType<typeof unsignedEnabledFixture>) => {

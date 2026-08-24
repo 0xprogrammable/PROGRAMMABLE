@@ -60,8 +60,8 @@ function assertSignedRouteBudgetPolicy(
     const matches = lanes.filter((lane) => lane.action === action);
     if (
       matches.length !== 1 ||
-      matches[0]!.laneId !== `robinhood-rpc-quorum:${action}` ||
-      matches[0]!.provider !== "robinhood-rpc-quorum" ||
+      matches[0]!.laneId !== `robinhood-settlement-rpc:${action}` ||
+      matches[0]!.provider !== "robinhood-settlement-rpc" ||
       matches[0]!.unit !== "rpc-logical-call" ||
       matches[0]!.exactUnitsPerAction !== ROUTE_BOUNDS[action]
     ) throw new Error("Invalid Prediction V2 route budget policy");

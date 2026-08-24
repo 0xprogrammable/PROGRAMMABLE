@@ -23,21 +23,19 @@ import type { PredictionV2ReadBinding } from "./read-model-v2.server";
 import { PREDICTION_V2_ROUTE_LOGICAL_RPC_COSTS_V2 } from
   "./logical-rpc-costs-v2";
 import {
-  assertPredictionV2ProductionActionRpcQuorum,
+  assertPredictionV2ProductionActionRpcSession,
   createPredictionV2ActionRpcSnapshotLease,
+  PREDICTION_V2_ACTION_CONFIRMATION_DEPTH,
   PREDICTION_V2_ACTION_SNAPSHOT_NEGOTIATION_RPC_LOGICAL_CALLS,
   PREDICTION_V2_CANONICAL_HISTORICAL_BLOCK_VERIFICATION_RPC_LOGICAL_CALLS,
-  PREDICTION_V2_MAXIMUM_CONFIRMATION_DEPTH,
   predictionV2ActionRpcRuntimeProjection,
-  toPredictionV2ActionRpcSnapshotQuorum,
-  toPredictionV2ResolutionRpcQuorum,
-  type PredictionV2ActionRpcQuorumReaders,
+  toPredictionV2ActionRpcSnapshotReader,
+  type PredictionV2ActionRpcSessionReader,
   type PredictionV2ActionRpcHistoricalSnapshotV2,
   type PredictionV2ActionRpcSnapshotLease,
-} from "./rpc-quorum-v2.server";
+  type PredictionV2RpcSessionReader,
+} from "./rpc-session-v2.server";
 import { PREDICTION_V2_RPC_LIMITS } from "./rpc-reader-v2.server";
-import type { PredictionV2ResolutionRpcQuorum } from
-  "./resolution-proof-v2.server";
 
 export const PREDICTION_V2_PUBLIC_RELEASE_SCHEMA =
   "programmable.prediction-v2-public-release.v2" as const;
@@ -176,7 +174,7 @@ const SIGNED_BUDGET_MAXIMUM_WINDOW_MS = 86_400_000;
 const SIGNED_BUDGET_MAXIMUM_LEASE_TTL_MS = 60_000;
 const SIGNED_BUDGET_MAXIMUM_IDEMPOTENCY_TTL_MS = 172_800_000;
 const SIGNED_BUDGET_MAXIMUM_BACKEND_TIMEOUT_MS = 30_000;
-const REQUIRED_SIGNED_BUDGET_PROVIDER = "robinhood-rpc-quorum" as const;
+const REQUIRED_SIGNED_BUDGET_PROVIDER = "robinhood-settlement-rpc" as const;
 const REQUIRED_SIGNED_BUDGET_UNIT = "rpc-logical-call" as const;
 const REQUIRED_SIGNED_BUDGET_LANES = Object.freeze([
   Object.freeze({
@@ -281,29 +279,19 @@ type RpcCommitment = Readonly<{
     confirmationDepth: number;
   }>;
   transportPolicy: typeof PREDICTION_V2_RPC_LIMITS;
-  readStrategy: "dual-eip-1898-confirmed-block-hash-v1";
+  readStrategy: "single-eip-1898-confirmed-block-hash-v1";
   requireCanonical: true;
-  requiredQuorum: 2;
-  providers: readonly [
-    Readonly<{
-      role: "primary";
-      providerId: string;
-      providerCommitment: Bytes32;
-      vendorGroup: PredictionV2RpcVendorGroup;
-      vendorCommitment: Bytes32;
-      endpointOriginCommitment: Bytes32;
-      batchMode: "batch" | "solo";
-    }>,
-    Readonly<{
-      role: "secondary";
-      providerId: string;
-      providerCommitment: Bytes32;
-      vendorGroup: PredictionV2RpcVendorGroup;
-      vendorCommitment: Bytes32;
-      endpointOriginCommitment: Bytes32;
-      batchMode: "batch" | "solo";
-    }>,
-  ];
+  requiredProviderCount: 1;
+  provider: Readonly<{
+    role: "settlement";
+    providerId: string;
+    providerCommitment: Bytes32;
+    vendorGroup: PredictionV2RpcVendorGroup;
+    vendorCommitment: Bytes32;
+    endpointCommitment: Bytes32;
+    endpointOriginCommitment: Bytes32;
+    batchMode: "batch" | "solo";
+  }>;
   evidenceSha256: Sha256;
 }>;
 
@@ -311,7 +299,7 @@ export type PredictionV2RuntimeRpcCommitmentProjection = Readonly<{
   chainId: typeof PREDICTION_V2_SETTLEMENT_CHAIN_ID;
   snapshotPolicy: RpcCommitment["snapshotPolicy"];
   transportPolicy: RpcCommitment["transportPolicy"];
-  providers: RpcCommitment["providers"];
+  provider: RpcCommitment["provider"];
 }>;
 
 type ReleaseGate = Readonly<{
@@ -551,7 +539,7 @@ function positiveSafeInteger(value: unknown): number {
 
 function confirmationDepth(value: unknown): number {
   const parsed = positiveSafeInteger(value);
-  if (BigInt(parsed) > PREDICTION_V2_MAXIMUM_CONFIRMATION_DEPTH) {
+  if (BigInt(parsed) !== PREDICTION_V2_ACTION_CONFIRMATION_DEPTH) {
     return invalidPublicRelease();
   }
   return parsed;
@@ -952,16 +940,14 @@ function parseRegistrySnapshot(value: unknown, registryAddress: EvmAddress) {
   });
 }
 
-function parseRpcProvider<T extends "primary" | "secondary">(
-  value: unknown,
-  role: T,
-) {
+function parseRpcProvider(value: unknown): RpcCommitment["provider"] {
   const record = closedRecord(value, [
     "role",
     "providerId",
     "providerCommitment",
     "vendorGroup",
     "vendorCommitment",
+    "endpointCommitment",
     "endpointOriginCommitment",
     "batchMode",
   ]);
@@ -975,7 +961,7 @@ function parseRpcProvider<T extends "primary" | "secondary">(
     return invalidPublicRelease();
   }
   return Object.freeze({
-    role: exact(record.role, role),
+    role: exact(record.role, "settlement"),
     providerId,
     providerCommitment: exact(
       bytes32(record.providerCommitment),
@@ -986,30 +972,12 @@ function parseRpcProvider<T extends "primary" | "secondary">(
       bytes32(record.vendorCommitment),
       predictionV2PublicReleaseRpcIdentityCommitment("vendor", vendorGroup),
     ),
+    endpointCommitment: bytes32(record.endpointCommitment),
     endpointOriginCommitment: bytes32(record.endpointOriginCommitment),
     batchMode: record.batchMode === "batch" || record.batchMode === "solo"
       ? record.batchMode
       : invalidPublicRelease(),
   });
-}
-
-function parseRpcProviders(value: unknown): RpcCommitment["providers"] {
-  const providerInput = closedArray(value, 2);
-  const providers = Object.freeze([
-    parseRpcProvider(providerInput[0], "primary"),
-    parseRpcProvider(providerInput[1], "secondary"),
-  ] as const);
-  if (
-    providers[0].providerId === providers[1].providerId ||
-    providers[0].providerCommitment === providers[1].providerCommitment ||
-    providers[0].vendorGroup === providers[1].vendorGroup ||
-    providers[0].vendorCommitment === providers[1].vendorCommitment ||
-    providers[0].endpointOriginCommitment ===
-      providers[1].endpointOriginCommitment
-  ) {
-    return invalidPublicRelease();
-  }
-  return providers;
 }
 
 function parseRpcTransportPolicy(
@@ -1068,11 +1036,11 @@ function parseRpcCommitment(value: unknown): RpcCommitment {
     "transportPolicy",
     "readStrategy",
     "requireCanonical",
-    "requiredQuorum",
-    "providers",
+    "requiredProviderCount",
+    "provider",
     "evidenceSha256",
   ]);
-  const providers = parseRpcProviders(record.providers);
+  const provider = parseRpcProvider(record.provider);
   const snapshotPolicy = closedRecord(record.snapshotPolicy, [
     "kind",
     "confirmationDepth",
@@ -1091,11 +1059,11 @@ function parseRpcCommitment(value: unknown): RpcCommitment {
     transportPolicy: parseRpcTransportPolicy(record.transportPolicy),
     readStrategy: exact(
       record.readStrategy,
-      "dual-eip-1898-confirmed-block-hash-v1",
+      "single-eip-1898-confirmed-block-hash-v1",
     ),
     requireCanonical: exact(record.requireCanonical, true),
-    requiredQuorum: exact(record.requiredQuorum, 2),
-    providers: Object.freeze(providers),
+    requiredProviderCount: exact(record.requiredProviderCount, 1),
+    provider,
     evidenceSha256: sha256(record.evidenceSha256),
   });
 }
@@ -1452,10 +1420,10 @@ function runtimeDistributedBudgetMismatch(): never {
 }
 
 /**
- * Binds the secret-free, enumerable projection of the two live RPC readers to
- * the exact provider graph authorized by an already verified enabled release.
- * Endpoints, credentials and endpoint-level commitments remain private. The
- * complete retry/batch/concurrency/size/timeout policy is signed and matched.
+ * Binds the secret-free, enumerable projection of the live settlement RPC to
+ * the exact provider identity authorized by an already verified enabled
+ * release. Endpoint URLs and credentials remain private, while the full
+ * credential-bound endpoint commitment and transport policy are signed.
  */
 export function assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease(
   release: PredictionV2PublicReleaseV2,
@@ -1472,7 +1440,7 @@ export function assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease(
       "chainId",
       "snapshotPolicy",
       "transportPolicy",
-      "providers",
+      "provider",
     ]);
     const snapshotPolicy = closedRecord(record.snapshotPolicy, [
       "kind",
@@ -1487,7 +1455,7 @@ export function assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease(
         ),
       }),
       transportPolicy: parseRpcTransportPolicy(record.transportPolicy),
-      providers: parseRpcProviders(record.providers),
+      provider: parseRpcProvider(record.provider),
     });
   } catch {
     return runtimeRpcCommitmentMismatch();
@@ -1500,22 +1468,18 @@ export function assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease(
     canonicalizeJson(parsedProjection.transportPolicy) !==
       canonicalizeJson(release.rpcCommitment.transportPolicy)
   ) return runtimeRpcCommitmentMismatch();
-  for (let index = 0; index < 2; index += 1) {
-    const authorized = release.rpcCommitment.providers[index]!;
-    const runtime = parsedProjection.providers[index]!;
-    if (
-      runtime.role !== authorized.role ||
-      runtime.providerId !== authorized.providerId ||
-      runtime.providerCommitment !== authorized.providerCommitment ||
-      runtime.vendorGroup !== authorized.vendorGroup ||
-      runtime.vendorCommitment !== authorized.vendorCommitment ||
-      runtime.endpointOriginCommitment !==
-        authorized.endpointOriginCommitment ||
-      runtime.batchMode !== authorized.batchMode
-    ) {
-      return runtimeRpcCommitmentMismatch();
-    }
-  }
+  const authorized = release.rpcCommitment.provider;
+  const runtime = parsedProjection.provider;
+  if (
+    runtime.role !== authorized.role ||
+    runtime.providerId !== authorized.providerId ||
+    runtime.providerCommitment !== authorized.providerCommitment ||
+    runtime.vendorGroup !== authorized.vendorGroup ||
+    runtime.vendorCommitment !== authorized.vendorCommitment ||
+    runtime.endpointCommitment !== authorized.endpointCommitment ||
+    runtime.endpointOriginCommitment !== authorized.endpointOriginCommitment ||
+    runtime.batchMode !== authorized.batchMode
+  ) return runtimeRpcCommitmentMismatch();
 }
 
 /**
@@ -1563,10 +1527,10 @@ const USDG_DOMAIN_SEPARATOR_SELECTOR = "0x3644e515" as const;
 
 export const
 PREDICTION_V2_PUBLIC_RELEASE_RUNTIME_PREFLIGHT_MAX_RPC_LOGICAL_CALLS =
-  PREDICTION_V2_RUNTIME_CODE_TARGETS * 2 +
-  2 + // dual EIP-1967 implementation-slot read
-  4 + // dual decimals() and DOMAIN_SEPARATOR()
-  2; // dual exact-block revalidation
+  PREDICTION_V2_RUNTIME_CODE_TARGETS +
+  1 + // EIP-1967 implementation-slot read
+  2 + // decimals() and DOMAIN_SEPARATOR()
+  1; // exact-block revalidation
 
 export const PREDICTION_V2_PUBLIC_RELEASE_SESSION_MAX_RPC_LOGICAL_CALLS =
   PREDICTION_V2_ACTION_SNAPSHOT_NEGOTIATION_RPC_LOGICAL_CALLS +
@@ -1596,7 +1560,6 @@ export class PredictionV2RuntimeDependencySnapshotErrorV2 extends Error {
   readonly code:
     | "block-mismatch"
     | "invalid-binding"
-    | "provider-disagreement"
     | "runtime-mismatch";
 
   constructor(code: PredictionV2RuntimeDependencySnapshotErrorV2["code"]) {
@@ -1703,17 +1666,12 @@ function sameRuntimeBlock(
     left.parentHash.toLowerCase() === right.parentHash.toLowerCase();
 }
 
-function agreedRuntimeBytes(
-  primary: unknown,
-  secondary: unknown,
-): Hex {
+function runtimeBytes(value: unknown): Hex {
   if (
-    typeof primary !== "string" || typeof secondary !== "string" ||
-    !/^0x(?:[0-9a-fA-F]{2})*$/u.test(primary) ||
-    !/^0x(?:[0-9a-fA-F]{2})*$/u.test(secondary) ||
-    primary.toLowerCase() !== secondary.toLowerCase()
-  ) return runtimeDependencyFail("provider-disagreement");
-  return primary.toLowerCase() as Hex;
+    typeof value !== "string" ||
+    !/^0x(?:[0-9a-fA-F]{2})*$/u.test(value)
+  ) return runtimeDependencyFail("runtime-mismatch");
+  return value.toLowerCase() as Hex;
 }
 
 /**
@@ -1727,7 +1685,7 @@ export async function verifyPredictionV2RuntimeDependencySnapshotV2(
   signal?: AbortSignal,
 ): Promise<void> {
   const binding = normalizeRuntimeDependencySnapshotBinding(input);
-  const quorum = toPredictionV2ActionRpcSnapshotQuorum(lease);
+  const reader = toPredictionV2ActionRpcSnapshotReader(lease);
   const block = lease.snapshot;
   for (
     let start = 0;
@@ -1746,10 +1704,7 @@ export async function verifyPredictionV2RuntimeDependencySnapshotV2(
         requireCanonical: true as const,
         ...(signal ? { signal } : {}),
       });
-      const code = agreedRuntimeBytes(...await Promise.all([
-        quorum[0].getCode(request),
-        quorum[1].getCode(request),
-      ]));
+      const code = runtimeBytes(await reader.getCode(request));
       if (keccak256(code).toLowerCase() !== target.runtimeCodeHash) {
         return runtimeDependencyFail("runtime-mismatch");
       }
@@ -1764,10 +1719,7 @@ export async function verifyPredictionV2RuntimeDependencySnapshotV2(
     requireCanonical: true as const,
     ...(signal ? { signal } : {}),
   });
-  const storage = agreedRuntimeBytes(...await Promise.all([
-    quorum[0].getStorageAt(storageRequest),
-    quorum[1].getStorageAt(storageRequest),
-  ]));
+  const storage = runtimeBytes(await reader.getStorageAt(storageRequest));
   const expectedStorage =
     `0x${"0".repeat(24)}${binding.usdgImplementation.slice(2)}`;
   if (storage !== expectedStorage) return runtimeDependencyFail("runtime-mismatch");
@@ -1781,10 +1733,7 @@ export async function verifyPredictionV2RuntimeDependencySnapshotV2(
       requireCanonical: true as const,
       ...(signal ? { signal } : {}),
     });
-    return agreedRuntimeBytes(...await Promise.all([
-      quorum[0].call(request),
-      quorum[1].call(request),
-    ]));
+    return runtimeBytes(await reader.call(request));
   };
   const [decimals, domainSeparator] = await Promise.all([
     call(USDG_DECIMALS_SELECTOR),
@@ -1795,48 +1744,43 @@ export async function verifyPredictionV2RuntimeDependencySnapshotV2(
     domainSeparator !== binding.usdgDomainSeparator
   ) return runtimeDependencyFail("runtime-mismatch");
 
-  const [primaryCurrent, secondaryCurrent] = await Promise.all([
-    quorum[0].getBlock(block.number, signal),
-    quorum[1].getBlock(block.number, signal),
-  ]);
+  const current = await reader.getBlock(block.number, signal);
   if (
-    !primaryCurrent || !secondaryCurrent ||
-    !sameRuntimeBlock(block, primaryCurrent) ||
-    !sameRuntimeBlock(block, secondaryCurrent)
+    !current || !sameRuntimeBlock(block, current)
   ) return runtimeDependencyFail("block-mismatch");
 }
 
 /**
- * The only supported production Resolution adapter. It binds both the exact
+ * The only supported production RPC adapter. It binds both the exact
  * factory-proven RPC policy and the factory-proven shared distributed budget
  * to the signed release before exposing an operation-scoped reader lease.
  * The route must reserve and irreversibly mark its budget lease started before
  * calling this function; this identity boundary does not reserve units itself.
- * Production code must never assemble the quorum or budget object by hand.
+ * Production code must never assemble the reader or budget object by hand.
  */
-export type PredictionV2PublicReleaseResolutionRpcSession = Readonly<{
+export type PredictionV2PublicReleaseRpcSession = Readonly<{
   lease: PredictionV2ActionRpcSnapshotLease;
-  quorum: PredictionV2ResolutionRpcQuorum;
+  reader: PredictionV2RpcSessionReader<"action">;
   snapshot: PredictionV2ActionRpcSnapshotLease["snapshot"];
   rpcLogicalCalls: number;
   close(): void;
 }>;
 
-export async function createPredictionV2PublicReleaseResolutionRpcSession(
+export async function createPredictionV2PublicReleaseRpcSession(
   release: PredictionV2PublicReleaseV2,
-  readers: PredictionV2ActionRpcQuorumReaders,
+  rpcSession: PredictionV2ActionRpcSessionReader,
   budget: PredictionV2DistributedBudgetV2,
   signal?: AbortSignal,
   historicalSnapshot?: PredictionV2ActionRpcHistoricalSnapshotV2,
-): Promise<PredictionV2PublicReleaseResolutionRpcSession> {
+): Promise<PredictionV2PublicReleaseRpcSession> {
   assertPredictionV2RuntimeDistributedBudgetMatchesRelease(release, budget);
-  assertPredictionV2ProductionActionRpcQuorum(readers);
+  assertPredictionV2ProductionActionRpcSession(rpcSession);
   assertPredictionV2RuntimeRpcCommitmentProjectionMatchesRelease(
     release,
-    predictionV2ActionRpcRuntimeProjection(readers),
+    predictionV2ActionRpcRuntimeProjection(rpcSession),
   );
   const lease = await createPredictionV2ActionRpcSnapshotLease(
-    readers,
+    rpcSession,
     signal,
     historicalSnapshot,
   );
@@ -1846,10 +1790,10 @@ export async function createPredictionV2PublicReleaseResolutionRpcSession(
       runtimeDependencyBindingFromRelease(release),
       signal,
     );
-    const quorum = toPredictionV2ResolutionRpcQuorum(lease);
+    const reader = toPredictionV2ActionRpcSnapshotReader(lease);
     return Object.freeze({
       lease,
-      quorum,
+      reader,
       snapshot: lease.snapshot,
       rpcLogicalCalls: historicalSnapshot
         ? PREDICTION_V2_PUBLIC_RELEASE_HISTORICAL_SESSION_MAX_RPC_LOGICAL_CALLS
