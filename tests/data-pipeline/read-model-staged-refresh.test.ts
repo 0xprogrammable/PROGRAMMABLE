@@ -403,6 +403,11 @@ describe("staged Envio catalog probe source contract", () => {
         step.replace('            body?.catalog?.source !== "envio-classic-v3" ||\n', ""),
     ],
     [
+      "drops Classic catalog completeness",
+      (step: string) =>
+        step.replace('            body.catalog.completeness?.classic !== "current" ||\n', ""),
+    ],
+    [
       "allows stock families",
       (step: string) =>
         step.replace('            body.catalog.completeness?.stock !== "excluded" ||\n', ""),

@@ -2358,11 +2358,12 @@ export function evaluateReadModelOperationsSourceContracts(
         '"/api/explore?limit=1&page=1&sort=newest"',
         "response.status !== 200",
         'body?.catalog?.source !== "envio-classic-v3"',
+        'body.catalog.completeness?.classic !== "current"',
         'body.catalog.completeness?.stock !== "excluded"',
         'body.catalog.evidence?.kind !== "envio-indexer-state"',
-        'body.tokens[0]?.launchModelVersion !== "classic-v3"',
         "body.total < 1",
       ]) &&
+      !stagedCatalogProbeBlock.includes("body.tokens[0]?.launchModel") &&
       !stagedCatalogProbeBlock.includes("CRON_SECRET") &&
       !stagedCatalogProbeBlock.includes("/api/ops/index-v2") &&
       !stagedCatalogProbeBlock.includes("        if:"),
