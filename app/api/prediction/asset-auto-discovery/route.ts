@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isPredictionV2ReleaseEnabled } from
-  "@/lib/prediction-v2/release-binding.server";
+import {
+  assertPredictionV2VerifiedEnabledPublicReleaseV2,
+  getPredictionV2PublicReleaseV2,
+} from "@/lib/prediction-v2/public-release-v2.server";
+import {
+  isCanonicalPredictionAssetLogoCapabilityV2,
+  predictionDexscreenerLogoAssetIdV2,
+} from
+  "@/lib/prediction-v2/asset-logo-v2";
+import type {
+  PredictionAssetAutoDiscoveryCandidateV2,
+  PredictionAssetAutoDiscoveryResultV2,
+} from "@/lib/market-data/prediction-asset-auto-discovery-v2.server";
+import {
+  assertPredictionV2ProviderRouteReadinessV2,
+  getPredictionV2ProviderRouteReadinessV2,
+} from
+  "@/lib/market-data/prediction-v2-provider-route-readiness.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,16 +68,101 @@ function unavailableRelease() {
   );
 }
 
+function logoAssetIdForCandidate(
+  candidate: unknown,
+) {
+  if (!isPlainRecord(candidate)) return null;
+  const provenance = isPlainRecord(candidate.provenance)
+    ? candidate.provenance
+    : null;
+  const enrichment = isPlainRecord(provenance?.enrichment)
+    ? provenance.enrichment
+    : null;
+  const links = isPlainRecord(candidate.links) ? candidate.links : null;
+  return enrichment?.source === "dexscreener" && links
+    ? predictionDexscreenerLogoAssetIdV2(
+      typeof links.imageUrl === "string" ? links.imageUrl : null,
+    )
+    : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype;
+}
+
+async function attachAssetLogoCapabilities(
+  result: PredictionAssetAutoDiscoveryResultV2,
+) {
+  const candidates: readonly unknown[] = result.status === "unique"
+    ? [result.candidate]
+    : result.status === "ambiguous" || result.status === "inconclusive"
+      ? Array.isArray(result.candidates) ? result.candidates : []
+      : [];
+  const hasProviderLogo = candidates.some((candidate) =>
+    logoAssetIdForCandidate(candidate) !== null
+  );
+  let issue: ((assetId: string) => string | null) | null = null;
+  if (hasProviderLogo) {
+    try {
+      ({ createConfiguredPredictionAssetLogoCapabilityV2: issue } = await import(
+        "@/lib/market-data/prediction-asset-logo-capability-v2.server"
+      ));
+    } catch {
+      // Identity and market data remain available when optional logo transport
+      // configuration is absent. The client will use its bundled fallback.
+    }
+  }
+
+  const decorate = (candidate: PredictionAssetAutoDiscoveryCandidateV2) => {
+    const assetId = logoAssetIdForCandidate(candidate);
+    let capability: unknown = null;
+    try {
+      capability = assetId && issue ? issue(assetId) : null;
+    } catch {
+      // Optional logo issuance must never hide an independently verified token.
+    }
+    return Object.freeze({
+      ...candidate,
+      // Provider image URLs are server-private enrichment. The browser receives
+      // only an exact signed asset identifier and its transient capability.
+      links: Object.freeze({
+        websites: candidate.links?.websites ?? Object.freeze([]),
+        socials: candidate.links?.socials ?? Object.freeze([]),
+      }),
+      logoProxy: assetId &&
+          isCanonicalPredictionAssetLogoCapabilityV2(capability)
+        ? Object.freeze({ assetId, capability })
+        : null,
+    });
+  };
+
+  if (result.status === "unique") {
+    return Object.freeze({ ...result, candidate: decorate(result.candidate) });
+  }
+  if (result.status === "ambiguous" || result.status === "inconclusive") {
+    if (!Array.isArray(result.candidates)) return result;
+    return Object.freeze({
+      ...result,
+      candidates: Object.freeze(result.candidates.map(decorate)),
+    });
+  }
+  return result;
+}
+
 export async function GET(request: NextRequest) {
   // Keep a disabled release entirely dark: do not inspect the query and do not
   // load or contact the external discovery provider before this check passes.
-  let releaseEnabled = false;
   try {
-    releaseEnabled = isPredictionV2ReleaseEnabled();
+    const release = getPredictionV2PublicReleaseV2();
+    if (release.status !== "enabled") return unavailableRelease();
+    assertPredictionV2VerifiedEnabledPublicReleaseV2(release);
+    const readiness = getPredictionV2ProviderRouteReadinessV2();
+    assertPredictionV2ProviderRouteReadinessV2(readiness);
+    if (!readiness.productionReady) return unavailableRelease();
   } catch {
-    return unavailableRelease();
-  }
-  if (!releaseEnabled) {
     return unavailableRelease();
   }
 
@@ -93,7 +194,7 @@ export async function GET(request: NextRequest) {
       },
     );
   }
-  const result = controlled.result;
+  const result = await attachAssetLogoCapabilities(controlled.result);
   const status = result.status === "invalid"
     ? 400
     : result.status === "not-found"

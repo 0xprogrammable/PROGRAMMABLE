@@ -195,6 +195,47 @@ describe("production wallet request lock", () => {
       .toBeGreaterThan(predictionLock);
   });
 
+  it("keeps the branded Prediction V2 account and wallet capability inside the lock", () => {
+    const provider = readFileSync(
+      join(process.cwd(), "components/wallet-provider.tsx"),
+      "utf8",
+    );
+    const start = provider.indexOf(
+      "const sendPredictionV2Transaction = useCallback",
+    );
+    const end = provider.indexOf(
+      "const signPredictionPermit = useCallback",
+      start,
+    );
+    const entrypoint = provider.slice(start, end);
+    const lock = entrypoint.indexOf("runWithBrowserWalletRequestLock({");
+    const execute = entrypoint.indexOf("execute: async () => {");
+    const providerAccess = entrypoint.indexOf(
+      "boundWallet.getEthereumProvider()",
+    );
+    const privySubmission = entrypoint.indexOf(
+      "submitPredictionV2PrivyTransactionV2({",
+    );
+    const eip1193Submission = entrypoint.indexOf(
+      "submitPredictionV2Eip1193TransactionV2({",
+    );
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(lock).toBeGreaterThan(-1);
+    expect(execute).toBeGreaterThan(lock);
+    expect(providerAccess).toBeGreaterThan(execute);
+    expect(privySubmission).toBeGreaterThan(providerAccess);
+    expect(eip1193Submission).toBeGreaterThan(providerAccess);
+    expect(entrypoint).toContain("current.walletCapability !== boundWallet");
+    expect(entrypoint).toContain("wallet: boundWallet");
+    expect(entrypoint).toContain("submission.wallet !== boundWallet");
+    expect(entrypoint).toContain("address: submission.account");
+    expect(entrypoint).toContain("assertExternalWalletAuthorityCurrent({");
+    expect(entrypoint).not.toContain("address: wallet.account");
+    expect(entrypoint).not.toContain("switchChain(");
+  });
+
   it("turns a forced same-tab double click into exactly one wallet send", async () => {
     const hold = deferred<string>();
     const send = vi.fn(() => hold.promise);

@@ -14,6 +14,8 @@ import type {
 
 const ADDRESS = `0x${"ab".repeat(20)}`;
 const OBSERVED_AT = "2026-08-23T18:00:00.000Z";
+const IMAGE_ASSET_ID = "12".repeat(32);
+const LOGO_CAPABILITY = `v2.preview-1.1800000600.${"a".repeat(43)}`;
 
 function candidate(
   overrides: Partial<PredictionAssetAutoDiscoveryClientCandidateV2> = {},
@@ -36,6 +38,10 @@ function candidate(
     marketCapUsd: 8_000_000,
     fdvUsd: 9_500_000,
     matchingPairCount: 2,
+    logoProxy: {
+      assetId: IMAGE_ASSET_ID,
+      capability: LOGO_CAPABILITY,
+    },
     pair: {
       dexId: "uniswap",
       pairAddress: `0x${"cd".repeat(20)}`,
@@ -51,7 +57,6 @@ function candidate(
       explorerUrl: `https://basescan.org/token/${ADDRESS}`,
       name: "Example Coin",
       symbol: "EXAMPLE",
-      logoUrl: "https://cdn.example.com/example.png",
       links: [
         { kind: "website", url: "https://example.com/" },
         { kind: "x", url: "https://x.com/example" },
@@ -77,6 +82,7 @@ function identityOnlyCandidate() {
     fdvUsd: null,
     matchingPairCount: 0,
     pair: null,
+    logoProxy: null,
     provenance: {
       identity: { source: "onchain-rpc" },
       enrichment: null,
@@ -172,6 +178,11 @@ describe("PredictionMarketCreateFlowV2", () => {
     expect(html).toContain('href="https://example.com/"');
     expect(html).toContain('href="https://x.com/example"');
     expect(html).toContain('href="https://t.me/example"');
+    expect(html).toContain(
+      `src="/api/prediction/asset-logo/${IMAGE_ASSET_ID}` +
+        `?capability=${LOGO_CAPABILITY}"`,
+    );
+    expect(html).not.toContain("cdn.dexscreener.com");
     expect(html).toContain("Continue with Base");
   });
 
@@ -317,6 +328,10 @@ describe("PredictionMarketCreateFlowV2", () => {
     expect(html).toContain("Preview only");
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Preview only<\/button>/u);
     expect(html).not.toContain("Create market");
-    expect(html).not.toContain("cdn.example.com");
+    expect(html).toContain(
+      `src="/api/prediction/asset-logo/${IMAGE_ASSET_ID}` +
+        `?capability=${LOGO_CAPABILITY}"`,
+    );
+    expect(html).not.toContain("cdn.dexscreener.com");
   });
 });

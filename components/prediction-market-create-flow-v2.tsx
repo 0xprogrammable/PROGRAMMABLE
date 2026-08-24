@@ -611,7 +611,7 @@ export function PredictionMarketCreateFlowV2({
     ? predictionAssetCardImageV2({
       chainId: candidate.profile.chain.id,
       address: candidate.profile.address,
-      logoUrl: candidate.profile.logoUrl,
+      logoProxy: candidate.logoProxy,
     })
     : null,
   [candidate]);
@@ -1287,6 +1287,7 @@ export function PredictionMarketCreateFlowV2({
               <div className={styles.reviewCard}>
                 <PredictionMarketAssetPreviewCardV2
                   imageLoading="eager"
+                  logoProxy={candidate.logoProxy}
                   profile={candidate.profile}
                   review={reviewResult.review}
                 />

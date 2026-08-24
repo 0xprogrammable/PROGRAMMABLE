@@ -3,8 +3,19 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 
-import { isPredictionV2ReleaseEnabled } from
-  "@/lib/prediction-v2/release-binding.server";
+import {
+  assertPredictionV2VerifiedEnabledPublicReleaseV2,
+  getPredictionV2PublicReleaseV2,
+} from "@/lib/prediction-v2/public-release-v2.server";
+import {
+  PREDICTION_ASSET_LOGO_CAPABILITY_MAXIMUM_LENGTH_CLIENT_V2,
+  predictionAssetLogoCapabilityExpiresAtUnixSecondsV2,
+} from "@/lib/prediction-v2/asset-logo-v2";
+import {
+  assertPredictionV2ProviderRouteReadinessV2,
+  getPredictionV2ProviderRouteReadinessV2,
+} from
+  "@/lib/market-data/prediction-v2-provider-route-readiness.server";
 import { verifyTokenImageWebpV1 } from
   "@/lib/server/token-image-webp-v1";
 
@@ -17,6 +28,7 @@ const ASSET_ID_PATTERN = /^[0-9a-f]{64}$/u;
 const MAXIMUM_SOURCE_BYTES = 4_000_000;
 const MAXIMUM_SOURCE_PIXELS = 16_000_000;
 const FETCH_TIMEOUT_MS = 5_000;
+const CAPABILITY_QUERY_PARAMETER = "capability";
 export const PREDICTION_ASSET_LOGO_MAXIMUM_CONCURRENT_TRANSFORMS_V2 = 2;
 export const PREDICTION_ASSET_LOGO_NEGATIVE_CACHE_TTL_MS_V2 = 5_000;
 export const PREDICTION_ASSET_LOGO_MAXIMUM_NEGATIVE_CACHE_ENTRIES_V2 = 256;
@@ -150,7 +162,10 @@ export function createPredictionAssetLogoHandlerV2(
         !upstream.ok ||
         upstream.redirected ||
         !ACCEPTED_SOURCE_TYPES.has(contentType)
-      ) return unavailable();
+      ) {
+        await cancelResponseBody(upstream);
+        return unavailable();
+      }
 
       const bytes = await readBoundedImageBody(upstream);
       const image = sharp(bytes, {
@@ -258,7 +273,10 @@ async function readBoundedImageBody(response: Response) {
     declared !== null &&
     (!/^(?:0|[1-9][0-9]*)$/u.test(declared) ||
       BigInt(declared) > BigInt(MAXIMUM_SOURCE_BYTES))
-  ) throw new TypeError("asset image is too large");
+  ) {
+    await cancelResponseBody(response);
+    throw new TypeError("asset image is too large");
+  }
   if (!response.body) throw new TypeError("asset image is empty");
 
   const reader = response.body.getReader();
@@ -270,7 +288,7 @@ async function readBoundedImageBody(response: Response) {
       if (next.done) break;
       total += next.value.byteLength;
       if (total > MAXIMUM_SOURCE_BYTES) {
-        void reader.cancel().catch(() => undefined);
+        await reader.cancel().catch(() => undefined);
         throw new TypeError("asset image is too large");
       }
       chunks.push(next.value);
@@ -288,17 +306,108 @@ async function readBoundedImageBody(response: Response) {
   return bytes;
 }
 
-const handler = createPredictionAssetLogoHandlerV2();
+async function cancelResponseBody(response: Response) {
+  await response.body?.cancel().catch(() => undefined);
+}
+
+let handler: ReturnType<typeof createPredictionAssetLogoHandlerV2> | undefined;
+
+function routeHandler() {
+  handler ??= createPredictionAssetLogoHandlerV2();
+  return handler;
+}
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ asset: string }> },
 ) {
+  // Keep a disabled release entirely dark. Do not inspect route parameters,
+  // query capabilities, secrets or provider state before this check passes.
   try {
-    if (!isPredictionV2ReleaseEnabled()) return errorResponse(404);
+    const release = getPredictionV2PublicReleaseV2();
+    if (release.status !== "enabled") return errorResponse(404);
+    assertPredictionV2VerifiedEnabledPublicReleaseV2(release);
+    const readiness = getPredictionV2ProviderRouteReadinessV2();
+    assertPredictionV2ProviderRouteReadinessV2(readiness);
+    if (!readiness.productionReady) return errorResponse(404);
   } catch {
     return errorResponse(404);
   }
   const { asset } = await context.params;
-  return handler(asset, request.signal);
+  if (!ASSET_ID_PATTERN.test(asset)) return errorResponse(400);
+
+  let requestUrl: URL;
+  try {
+    requestUrl = new URL(request.url);
+  } catch {
+    return errorResponse(404);
+  }
+  const search = requestUrl.searchParams;
+  if (
+    [...search.keys()].some((key) => key !== CAPABILITY_QUERY_PARAMETER) ||
+    search.getAll(CAPABILITY_QUERY_PARAMETER).length !== 1
+  ) {
+    return errorResponse(404);
+  }
+  const capability = search.get(CAPABILITY_QUERY_PARAMETER) ?? "";
+  if (
+    capability.length === 0 ||
+    capability.length >
+      PREDICTION_ASSET_LOGO_CAPABILITY_MAXIMUM_LENGTH_CLIENT_V2
+  ) {
+    return errorResponse(404);
+  }
+  const canonicalPath = `/api/prediction/asset-logo/${asset}`;
+  const canonicalSearch = `?${CAPABILITY_QUERY_PARAMETER}=${capability}`;
+  if (
+    requestUrl.pathname !== canonicalPath ||
+    requestUrl.search !== canonicalSearch ||
+    requestUrl.hash !== ""
+  ) {
+    return errorResponse(404);
+  }
+  const expiresAt = predictionAssetLogoCapabilityExpiresAtUnixSecondsV2(
+    capability,
+  );
+  if (expiresAt === null) return errorResponse(404);
+
+  // Load and read the server-only HMAC key only after the release and bounded
+  // request-shape gates. A capability authorizes exactly this canonical asset.
+  let authorized = false;
+  try {
+    const { verifyConfiguredPredictionAssetLogoCapabilityV2 } = await import(
+      "@/lib/market-data/prediction-asset-logo-capability-v2.server"
+    );
+    authorized = verifyConfiguredPredictionAssetLogoCapabilityV2(
+      asset,
+      capability,
+    );
+  } catch {
+    return errorResponse(404);
+  }
+  if (!authorized) {
+    return errorResponse(404);
+  }
+  const response = await routeHandler()(asset, request.signal);
+  if (!response.ok) return response;
+
+  const remainingSeconds = Math.max(
+    0,
+    expiresAt - Math.floor(Date.now() / 1_000),
+  );
+  const headers = new Headers(response.headers);
+  // A cache must never keep serving a transient authorization beyond its
+  // explicit expiry. The provider asset itself remains immutable by asset id.
+  headers.set(
+    "Cache-Control",
+    remainingSeconds === 0
+      ? "private, max-age=0, no-store"
+      : `public, max-age=${remainingSeconds}, s-maxage=${remainingSeconds}`,
+  );
+  headers.set("Referrer-Policy", "no-referrer");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }

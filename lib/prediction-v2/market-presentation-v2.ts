@@ -15,7 +15,6 @@ import {
 } from "./asset-auto-discovery-v2";
 import {
   predictionAssetFallbackImageV2,
-  predictionDexscreenerLogoAssetIdV2,
 } from "./asset-logo-v2";
 import { assertCanonicalPredictionV2Identity } from "./codec";
 import {
@@ -283,9 +282,13 @@ export function buildPredictionMarketPresentationRecordV2(
       displayProfile.symbol !== review.assetSymbol ||
       candidate.profile.explorerUrl !== displayProfile.explorerUrl
     ) return null;
-    const imageAssetId = predictionDexscreenerLogoAssetIdV2(
-      displayProfile.logoUrl,
-    );
+    // Persist only the immutable provider asset id from the candidate-scoped
+    // projection. The transient capability and raw provider URL never enter
+    // the append-only presentation record.
+    const imageAssetId = candidate.logoProxy &&
+        IMAGE_ASSET_ID_PATTERN.test(candidate.logoProxy.assetId)
+      ? candidate.logoProxy.assetId
+      : null;
     const artwork = normalizeOwnedArtwork(
       input.artwork,
       sourceNetwork,

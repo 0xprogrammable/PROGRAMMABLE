@@ -5,15 +5,18 @@ import Link from "next/link";
 import { XBrandIcon } from "@/components/brand-icons";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { applyTokenImageFallback } from "@/lib/token-image";
-import { predictionAssetCardImageV2 } from "@/lib/prediction-v2/asset-logo-v2";
+import {
+  predictionAssetCardImageV2,
+  type PredictionAssetLogoProxyV2,
+} from "@/lib/prediction-v2/asset-logo-v2";
 import type {
   PredictionV2CreateReview,
   PredictionV2CreateSourceNetwork,
 } from "@/lib/prediction-v2/create-flow-v2";
+import type { PredictionV2EnrichedMarketView } from
+  "@/lib/prediction-v2/enriched-market-view-v2";
 import type { PredictionMarketCapCreationIntentV2 } from
   "@/lib/prediction-v2/market-presentation-v2";
-import type { PublicPredictionMarketViewV2 } from
-  "@/lib/prediction-v2/public-market-view-v2";
 import type {
   PredictionTokenProfileLinkV2,
   PredictionTokenProfileV2,
@@ -37,6 +40,21 @@ const CHAIN_BINDINGS = Object.freeze({
   PredictionV2CreateSourceNetwork,
   Readonly<{ reference: string; label: string }>
 >>);
+
+const EXPLORER_ORIGINS = Object.freeze({
+  ethereum: "https://etherscan.io",
+  base: "https://basescan.org",
+  bnb: "https://bscscan.com",
+  robinhood: "https://robinhoodchain.blockscout.com",
+  solana: "https://solscan.io",
+} as const);
+
+const PRESET_ASSET_BINDINGS = Object.freeze({
+  btc: Object.freeze({ name: "Bitcoin", symbol: "BTC" }),
+  eth: Object.freeze({ name: "Ethereum", symbol: "ETH" }),
+  sol: Object.freeze({ name: "Solana", symbol: "SOL" }),
+  bnb: Object.freeze({ name: "BNB", symbol: "BNB" }),
+} as const);
 
 const LIFECYCLE_LABELS = Object.freeze({
   open: "Open",
@@ -67,58 +85,47 @@ const PRIVATE_HOST_SUFFIXES = Object.freeze([
   ".example",
 ]);
 const PUBLIC_MARKET_ID_PATTERN = /^0x[0-9a-f]{64}$/u;
+const BYTES32_PATTERN = /^0x[0-9a-f]{64}$/u;
+const ADDRESS_PATTERN = /^0x[0-9a-f]{40}$/u;
 const ZERO_MARKET_ID = `0x${"0".repeat(64)}`;
-const OWNED_ARTWORK_PATTERN = /^\/media\/prediction\/sha256-[0-9a-f]{64}\.webp$/u;
+const ZERO_ADDRESS = `0x${"0".repeat(40)}`;
+const OWNED_ARTWORK_PATTERN = /^\/media\/prediction\/sha256-([0-9a-f]{64})\.webp$/u;
 const BUNDLED_ARTWORK_PATTERN =
   /^\/brand\/programmable-token-fallback-0[1-6]-(?:dawn|moon|sun|mint|lavender|dusk)\.webp$/u;
-const EXACT_UTC_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
-const PREDICTION_V2_SETTLEMENT_CHAIN_ID = "4663" as const;
-const CANONICAL_BLOCK_NUMBER_PATTERN = /^[1-9][0-9]{0,19}$/u;
-const BLOCK_HASH_PATTERN = /^0x[0-9a-f]{64}$/u;
-const ZERO_BLOCK_HASH = `0x${"0".repeat(64)}`;
+const BUNDLED_UNAVAILABLE_ARTWORK =
+  "/brand/programmable-token-fallback-02-moon.webp";
+const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/u;
+const CANONICAL_UINT_PATTERN = /^(?:0|[1-9][0-9]*)$/u;
+const CANONICAL_POSITIVE_UINT_PATTERN = /^[1-9][0-9]*$/u;
+const RELEASE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
+const SYMBOL_PATTERN = /^[A-Z0-9._-]{1,16}$/u;
+const SOLANA_ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u;
+const PREDICTION_V2_SETTLEMENT_CHAIN_ID = 4_663 as const;
+const PREDICTION_V2_MIN_SQRT_PRICE_X96 = 4_295_128_739n;
+const PREDICTION_V2_MAX_SQRT_PRICE_X96 =
+  1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_342n;
+const PREDICTION_V2_Q192 = 1n << 192n;
+const PREDICTION_V2_BPS_DENOMINATOR = 10_000n;
+const MAX_UINT24 = (1 << 24) - 1;
 const MAX_UINT64 = (1n << 64n) - 1n;
+const MAX_INT192 = (1n << 191n) - 1n;
 
-export type PredictionMarketAssetCardLifecycleV2 =
-  keyof typeof LIFECYCLE_LABELS;
-
-export type PredictionMarketAssetCardProbabilityV2 =
+type PredictionMarketAssetCardLifecycleV2 = keyof typeof LIFECYCLE_LABELS;
+type PredictionMarketAssetCardProbabilityV2 =
   | Readonly<{ status: "available"; yesProbabilityBps: number }>
   | Readonly<{ status: "unavailable" }>;
 
 export type PredictionMarketAssetCardHeadingLevelV2 = "h2" | "h3";
 
-export type PredictionMarketAssetCardSnapshotV2 = Readonly<{
-  settlementChainId:
-    PublicPredictionMarketViewV2["attestedProjection"]["settlementChainId"];
-  confirmedBlockNumber:
-    PublicPredictionMarketViewV2["attestedProjection"]["confirmedBlockNumber"];
-  confirmedBlockHash:
-    PublicPredictionMarketViewV2["attestedProjection"]["confirmedBlockHash"];
-}>;
-
 /**
- * One market- and block-bound runtime observation. Lifecycle and probability
- * cannot be supplied independently, so they can never be paired with another
- * card without failing the binding below.
- */
-export type PredictionMarketAssetCardStateV2 = Readonly<{
-  schemaVersion: 2;
-  marketKey: PublicPredictionMarketViewV2["marketKey"];
-  marketId: PublicPredictionMarketViewV2["marketId"];
-  snapshot: PredictionMarketAssetCardSnapshotV2;
-  lifecycle: PredictionMarketAssetCardLifecycleV2;
-  probability: PredictionMarketAssetCardProbabilityV2;
-}>;
-
-/**
- * Public cards accept only the content-hash-verified presentation DTO plus
- * one identity- and snapshot-bound runtime state. Discovery profiles and
- * create reviews belong exclusively to the preview wrapper below.
+ * The public card receives one release-bound settlement-RPC view.
+ * Lifecycle, probability, identity and condition cannot be supplied again.
+ * Integration boundary: `market` must be the in-process server output of
+ * base-view construction followed by enrichment. Never deserialize it from
+ * client input or JSON. This display component grants no transaction authority.
  */
 export type PredictionMarketAssetCardV2Props = Readonly<{
-  market: PublicPredictionMarketViewV2;
-  cardState: PredictionMarketAssetCardStateV2;
+  market: PredictionV2EnrichedMarketView;
   headingLevel?: PredictionMarketAssetCardHeadingLevelV2;
   imageLoading?: "eager" | "lazy";
   className?: string;
@@ -127,6 +134,8 @@ export type PredictionMarketAssetCardV2Props = Readonly<{
 export type PredictionMarketAssetPreviewCardV2Props = Readonly<{
   profile: PredictionTokenProfileV2;
   review: PredictionV2CreateReview;
+  /** Server-issued, create-preview-only provider image transport. */
+  logoProxy?: PredictionAssetLogoProxyV2 | null;
   headingLevel?: PredictionMarketAssetCardHeadingLevelV2;
   imageLoading?: "eager" | "lazy";
   className?: string;
@@ -166,66 +175,47 @@ type PredictionMarketAssetCardRenderModelV2 = Readonly<{
   snapshotBlock?: string;
 }>;
 
+type NormalizedLifecycleV2 = Readonly<{
+  label: Exclude<PredictionMarketAssetCardLifecycleV2, "unavailable">;
+  probabilitySource: "pool" | "yes" | "no" | "unavailable";
+}>;
+
+type NormalizedPublicBaseV2 = Readonly<{
+  market: PredictionV2EnrichedMarketView;
+  strikeUsd: string;
+  lifecycle: NormalizedLifecycleV2;
+}>;
+
+type SafeEnrichmentV2 = Readonly<{
+  name: string | null;
+  artwork: PredictionMarketAssetCardArtworkV2;
+  links: readonly PredictionTokenProfileLinkV2[];
+  creationIntent: PredictionMarketCapDisplayIntentV2 | null;
+}>;
+
 export function predictionAssetConditionLabelV2(
-  market: PublicPredictionMarketViewV2,
+  market: PredictionV2EnrichedMarketView,
 ) {
-  return priceConditionLabel(market.condition.strikeUsd);
+  const normalized = normalizePublicBaseV2(market);
+  return normalized
+    ? priceConditionLabel(normalized.strikeUsd)
+    : "Market data unavailable";
 }
 
 export function predictionAssetResultTimeLabelV2(
-  market: PublicPredictionMarketViewV2,
+  market: PredictionV2EnrichedMarketView,
 ) {
-  return formatResultTime(market.condition.observationUtc);
-}
-
-export function bindPredictionMarketAssetCardStateV2(
-  market: PublicPredictionMarketViewV2,
-  value: unknown,
-): PredictionMarketAssetCardStateV2 | null {
-  if (!exactRecordKeys(value, [
-    "schemaVersion",
-    "marketKey",
-    "marketId",
-    "snapshot",
-    "lifecycle",
-    "probability",
-  ])) return null;
-  if (
-    value.schemaVersion !== 2 ||
-    value.marketKey !== market.marketKey ||
-    value.marketId !== market.marketId ||
-    predictionMarketAssetCardHrefV2(market) === null ||
-    typeof value.lifecycle !== "string" ||
-    !Object.hasOwn(LIFECYCLE_LABELS, value.lifecycle)
-  ) return null;
-  const snapshot = normalizeCardSnapshot(value.snapshot);
-  const projectedSnapshot = publicMarketSnapshotIdentityV2(market);
-  const probability = normalizeCardProbability(value.probability);
-  if (
-    !snapshot ||
-    !projectedSnapshot ||
-    !probability ||
-    snapshot.settlementChainId !== projectedSnapshot.settlementChainId ||
-    snapshot.confirmedBlockNumber !== projectedSnapshot.confirmedBlockNumber ||
-    snapshot.confirmedBlockHash !== projectedSnapshot.confirmedBlockHash
-  ) return null;
-  return Object.freeze({
-    schemaVersion: 2,
-    marketKey: market.marketKey,
-    marketId: market.marketId,
-    snapshot,
-    lifecycle: value.lifecycle as PredictionMarketAssetCardLifecycleV2,
-    probability,
-  });
+  const normalized = normalizePublicBaseV2(market);
+  return normalized
+    ? formatResultTime(normalized.market.condition.observationUtc)
+    : "Not available";
 }
 
 export function predictionMarketAssetCardHrefV2(
-  market: PublicPredictionMarketViewV2,
+  market: PredictionV2EnrichedMarketView,
 ): `/markets/v2/0x${string}` | null {
-  return PUBLIC_MARKET_ID_PATTERN.test(market.marketId) &&
-      market.marketId !== ZERO_MARKET_ID
-    ? `/markets/v2/${market.marketId}`
-    : null;
+  const normalized = normalizePublicBaseV2(market);
+  return normalized ? marketHrefFromId(normalized.market.marketId) : null;
 }
 
 function exactRecordKeys(
@@ -244,78 +234,376 @@ function exactRecordKeys(
     keys.every((key) => Object.hasOwn(value, key));
 }
 
-function normalizeCardSnapshot(
+function isBytes32(value: unknown) {
+  return typeof value === "string" &&
+    BYTES32_PATTERN.test(value) &&
+    value !== ZERO_MARKET_ID;
+}
+
+function isCanonicalAddress(value: unknown) {
+  return typeof value === "string" &&
+    ADDRESS_PATTERN.test(value) &&
+    value !== ZERO_ADDRESS;
+}
+
+function isCanonicalUint(
   value: unknown,
-): PredictionMarketAssetCardSnapshotV2 | null {
-  if (!exactRecordKeys(value, [
-    "settlementChainId",
-    "confirmedBlockNumber",
-    "confirmedBlockHash",
-  ])) {
+  maximum: bigint,
+  positive = false,
+) {
+  const pattern = positive
+    ? CANONICAL_POSITIVE_UINT_PATTERN
+    : CANONICAL_UINT_PATTERN;
+  return typeof value === "string" &&
+    pattern.test(value) &&
+    BigInt(value) <= maximum;
+}
+
+function exactUtcMatchesUnix(value: unknown, unixSeconds: string) {
+  if (typeof value !== "string") return false;
+  const seconds = BigInt(unixSeconds);
+  if (seconds > BigInt(Math.floor(Number.MAX_SAFE_INTEGER / 1_000))) {
+    return false;
+  }
+  const date = new Date(Number(seconds) * 1_000);
+  return Number.isFinite(date.getTime()) && date.toISOString() === value;
+}
+
+function decimalFromAtoms(value: string, decimals: number) {
+  if (!CANONICAL_POSITIVE_UINT_PATTERN.test(value) || decimals !== 8) {
     return null;
   }
-  if (
-    value.settlementChainId !== PREDICTION_V2_SETTLEMENT_CHAIN_ID ||
-    typeof value.confirmedBlockNumber !== "string" ||
-    !CANONICAL_BLOCK_NUMBER_PATTERN.test(value.confirmedBlockNumber) ||
-    BigInt(value.confirmedBlockNumber) > MAX_UINT64 ||
-    typeof value.confirmedBlockHash !== "string" ||
-    !BLOCK_HASH_PATTERN.test(value.confirmedBlockHash) ||
-    value.confirmedBlockHash === ZERO_BLOCK_HASH
-  ) return null;
-  return Object.freeze({
-    settlementChainId: PREDICTION_V2_SETTLEMENT_CHAIN_ID,
-    confirmedBlockNumber: value.confirmedBlockNumber,
-    confirmedBlockHash: value.confirmedBlockHash as
-      PredictionMarketAssetCardSnapshotV2["confirmedBlockHash"],
-  });
+  const digits = value.padStart(decimals + 1, "0");
+  const split = digits.length - decimals;
+  const fraction = digits.slice(split).replace(/0+$/u, "");
+  return `${digits.slice(0, split)}${fraction ? `.${fraction}` : ""}`;
 }
 
-function publicMarketSnapshotIdentityV2(
-  market: PublicPredictionMarketViewV2,
-): PredictionMarketAssetCardSnapshotV2 | null {
-  const projection = (market as Readonly<{ attestedProjection?: unknown }>)
-    .attestedProjection;
+function normalizeBaseAsset(value: unknown) {
+  if (!exactRecordKeys(value, [
+    "kind",
+    "presetId",
+    "sourceNetwork",
+    "chainLabel",
+    "address",
+    "explorerUrl",
+    "name",
+    "symbol",
+  ]) || typeof value.symbol !== "string" ||
+    !SYMBOL_PATTERN.test(value.symbol)) return false;
+
+  if (value.kind === "preset") {
+    if (
+      typeof value.presetId !== "string" ||
+      !Object.hasOwn(PRESET_ASSET_BINDINGS, value.presetId)
+    ) return false;
+    const preset = PRESET_ASSET_BINDINGS[
+      value.presetId as keyof typeof PRESET_ASSET_BINDINGS
+    ];
+    return value.sourceNetwork === "global" &&
+      value.chainLabel === "Global crypto asset" &&
+      value.address === null &&
+      value.explorerUrl === null &&
+      value.name === preset.name &&
+      value.symbol === preset.symbol;
+  }
+
   if (
-    typeof projection !== "object" ||
-    projection === null ||
-    Array.isArray(projection)
-  ) return null;
-  const candidate = projection as Record<string, unknown>;
-  return normalizeCardSnapshot({
-    settlementChainId: candidate.settlementChainId,
-    confirmedBlockNumber: candidate.confirmedBlockNumber,
-    confirmedBlockHash: candidate.confirmedBlockHash,
-  });
+    value.kind !== "token" ||
+    value.presetId !== null ||
+    value.name !== null ||
+    typeof value.sourceNetwork !== "string" ||
+    !Object.hasOwn(CHAIN_BINDINGS, value.sourceNetwork) ||
+    typeof value.address !== "string" ||
+    typeof value.explorerUrl !== "string"
+  ) return false;
+  const network = value.sourceNetwork as PredictionV2CreateSourceNetwork;
+  const addressValid = network === "solana"
+    ? SOLANA_ADDRESS_PATTERN.test(value.address)
+    : isCanonicalAddress(value.address);
+  return addressValid &&
+    value.chainLabel === CHAIN_BINDINGS[network].label &&
+    value.explorerUrl ===
+      `${EXPLORER_ORIGINS[network]}/token/${value.address}`;
 }
 
-function normalizeCardProbability(
+function normalizeCondition(value: unknown) {
+  if (!exactRecordKeys(value, [
+    "kind",
+    "metric",
+    "comparator",
+    "quoteCurrency",
+    "strikeAtoms",
+    "priceDecimals",
+    "observationUnixSeconds",
+    "observationUtc",
+    "oracleSnapshotRule",
+  ]) ||
+    value.kind !== "usd-price-at-utc" ||
+    value.metric !== "usd-price" ||
+    value.comparator !== "greater-than-or-equal" ||
+    value.quoteCurrency !== "USD" ||
+    value.priceDecimals !== 8 ||
+    typeof value.strikeAtoms !== "string" ||
+    !isCanonicalUint(value.strikeAtoms, MAX_INT192, true) ||
+    typeof value.observationUnixSeconds !== "string" ||
+    !isCanonicalUint(value.observationUnixSeconds, MAX_UINT64, true) ||
+    !exactUtcMatchesUnix(value.observationUtc, value.observationUnixSeconds) ||
+    !exactRecordKeys(value.oracleSnapshotRule, [
+      "source",
+      "winningPrice",
+      "requiredAfterRound",
+      "maximumBeforeAgeSeconds",
+      "maximumAfterDelaySeconds",
+    ]) ||
+    value.oracleSnapshotRule.source !== "chainlink-data-feed" ||
+    value.oracleSnapshotRule.winningPrice !==
+      "latest-completed-round-at-or-before-observation" ||
+    value.oracleSnapshotRule.requiredAfterRound !==
+      "first-completed-round-after-observation" ||
+    !isCanonicalUint(
+      value.oracleSnapshotRule.maximumBeforeAgeSeconds,
+      MAX_UINT64,
+      true,
+    ) ||
+    !isCanonicalUint(
+      value.oracleSnapshotRule.maximumAfterDelaySeconds,
+      MAX_UINT64,
+      true,
+    )
+  ) return null;
+  return decimalFromAtoms(value.strikeAtoms, value.priceDecimals);
+}
+
+function normalizeLifecycle(
   value: unknown,
-): PredictionMarketAssetCardProbabilityV2 | null {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value)
+  strikeAtoms: bigint,
+): NormalizedLifecycleV2 | null {
+  if (!exactRecordKeys(value, [
+    "protocolState",
+    "checkpointStatus",
+    "tradingPhase",
+    "tradable",
+    "tradabilityReason",
+    "checkpointTradingHealthy",
+    "resolvedPrice",
+  ]) ||
+    typeof value.tradable !== "boolean" ||
+    typeof value.checkpointTradingHealthy !== "boolean" ||
+    typeof value.resolvedPrice !== "bigint" ||
+    value.resolvedPrice < 0n
   ) return null;
-  const available = "status" in value && value.status === "available";
-  if (!exactRecordKeys(
-    value,
-    available ? ["status", "yesProbabilityBps"] : ["status"],
-  )) return null;
-  if (value.status === "unavailable") {
-    return Object.freeze({ status: "unavailable" as const });
+
+  if (value.protocolState === "FINAL_YES") {
+    return value.checkpointStatus === "FINAL" &&
+        value.tradingPhase === "FINAL" &&
+        value.tradable === false &&
+        value.tradabilityReason === "market-final" &&
+        value.checkpointTradingHealthy === false &&
+        value.resolvedPrice >= strikeAtoms
+      ? { label: "resolved-yes", probabilitySource: "yes" }
+      : null;
+  }
+  if (value.protocolState === "FINAL_NO") {
+    return value.checkpointStatus === "FINAL" &&
+        value.tradingPhase === "FINAL" &&
+        value.tradable === false &&
+        value.tradabilityReason === "market-final" &&
+        value.checkpointTradingHealthy === false &&
+        value.resolvedPrice > 0n &&
+        value.resolvedPrice < strikeAtoms
+      ? { label: "resolved-no", probabilitySource: "no" }
+      : null;
+  }
+  if (value.protocolState === "FINAL_INVALID") {
+    const checkpointInvalid = value.checkpointStatus === "INVALID";
+    const nonpositiveFinal = value.checkpointStatus === "FINAL" &&
+      value.resolvedPrice === 0n;
+    return (checkpointInvalid || nonpositiveFinal) &&
+        value.tradingPhase === "FINAL" &&
+        value.tradable === false &&
+        value.tradabilityReason === "market-final" &&
+        value.checkpointTradingHealthy === false
+      ? { label: "resolved-invalid", probabilitySource: "unavailable" }
+      : null;
+  }
+  if (value.protocolState !== "OPEN") return null;
+
+  if (value.tradingPhase === "CLOSED") {
+    const terminalHealthValid = value.checkpointStatus === "AWAITING" ||
+      value.checkpointTradingHealthy === false;
+    const priceValid = value.checkpointStatus === "FINAL"
+      ? value.resolvedPrice > 0n
+      : value.resolvedPrice === 0n;
+    return value.tradable === false &&
+        value.tradabilityReason === "cutoff-reached" &&
+        terminalHealthValid &&
+        priceValid
+      ? { label: "closed", probabilitySource: "pool" }
+      : null;
   }
   if (
-    value.status !== "available" ||
+    value.tradingPhase !== "OPEN" ||
+    value.checkpointStatus !== "AWAITING" ||
+    value.resolvedPrice !== 0n
+  ) return null;
+  if (value.tradable) {
+    return value.tradabilityReason === "tradable" &&
+        value.checkpointTradingHealthy
+      ? { label: "open", probabilitySource: "pool" }
+      : null;
+  }
+  return value.tradabilityReason === "checkpoint-unhealthy" &&
+      value.checkpointTradingHealthy === false
+    ? { label: "paused", probabilitySource: "pool" }
+    : null;
+}
+
+function probabilityBpsFromSqrtPrice(
+  sqrtPriceX96: bigint,
+  yesIsCurrency0: boolean,
+) {
+  const squared = sqrtPriceX96 * sqrtPriceX96;
+  const denominator = PREDICTION_V2_Q192 + squared;
+  const numerator = yesIsCurrency0 ? squared : PREDICTION_V2_Q192;
+  return Number(
+    (numerator * PREDICTION_V2_BPS_DENOMINATOR + denominator / 2n) /
+      denominator,
+  );
+}
+
+function validPoolState(value: unknown) {
+  if (!exactRecordKeys(value, [
+    "sqrtPriceX96",
+    "tick",
+    "poolManagerProtocolFee",
+    "lpFee",
+    "yesProbabilityBps",
+  ]) ||
+    typeof value.sqrtPriceX96 !== "bigint" ||
+    value.sqrtPriceX96 < PREDICTION_V2_MIN_SQRT_PRICE_X96 ||
+    value.sqrtPriceX96 > PREDICTION_V2_MAX_SQRT_PRICE_X96 ||
+    typeof value.tick !== "number" ||
+    !Number.isInteger(value.tick) ||
+    value.tick < -887_272 ||
+    value.tick > 887_272 ||
+    typeof value.poolManagerProtocolFee !== "number" ||
+    !Number.isInteger(value.poolManagerProtocolFee) ||
+    value.poolManagerProtocolFee < 0 ||
+    value.poolManagerProtocolFee > MAX_UINT24 ||
+    typeof value.lpFee !== "number" ||
+    !Number.isInteger(value.lpFee) ||
+    value.lpFee < 0 ||
+    value.lpFee > MAX_UINT24 ||
     typeof value.yesProbabilityBps !== "number" ||
     !Number.isInteger(value.yesProbabilityBps) ||
     value.yesProbabilityBps < 0 ||
     value.yesProbabilityBps > 10_000
-  ) return null;
-  return Object.freeze({
-    status: "available" as const,
-    yesProbabilityBps: value.yesProbabilityBps,
-  });
+  ) return false;
+  return value.yesProbabilityBps === probabilityBpsFromSqrtPrice(
+    value.sqrtPriceX96,
+    true,
+  ) || value.yesProbabilityBps === probabilityBpsFromSqrtPrice(
+    value.sqrtPriceX96,
+    false,
+  );
+}
+
+function validBaseArtwork(value: unknown) {
+  return exactRecordKeys(value, ["kind", "url"]) &&
+    value.kind === "bundled-fallback" &&
+    typeof value.url === "string" &&
+    BUNDLED_ARTWORK_PATTERN.test(value.url);
+}
+
+function validOnchainBinding(value: unknown) {
+  return exactRecordKeys(value, [
+    "releaseId",
+    "settlementChainId",
+    "factoryAddress",
+    "factoryRuntimeCodeHash",
+    "assetKey",
+    "registryRevision",
+    "registrySnapshotHash",
+    "resolutionPolicyHash",
+    "vaultAddress",
+    "checkpointAddress",
+    "poolId",
+    "confirmedBlockNumber",
+    "confirmedBlockHash",
+  ]) &&
+    typeof value.releaseId === "string" &&
+    RELEASE_ID_PATTERN.test(value.releaseId) &&
+    value.settlementChainId === PREDICTION_V2_SETTLEMENT_CHAIN_ID &&
+    isCanonicalAddress(value.factoryAddress) &&
+    isBytes32(value.factoryRuntimeCodeHash) &&
+    isBytes32(value.assetKey) &&
+    isCanonicalUint(value.registryRevision, MAX_UINT64) &&
+    isBytes32(value.registrySnapshotHash) &&
+    isBytes32(value.resolutionPolicyHash) &&
+    isCanonicalAddress(value.vaultAddress) &&
+    isCanonicalAddress(value.checkpointAddress) &&
+    isBytes32(value.poolId) &&
+    isCanonicalUint(value.confirmedBlockNumber, MAX_UINT64, true) &&
+    isBytes32(value.confirmedBlockHash);
+}
+
+function normalizePublicBaseV2(value: unknown): NormalizedPublicBaseV2 | null {
+  try {
+    if (!exactRecordKeys(value, [
+      "schemaVersion",
+      "source",
+      "marketKey",
+      "marketId",
+      "economicKey",
+      "asset",
+      "condition",
+      "lifecycle",
+      "poolState",
+      "artwork",
+      "links",
+      "onchain",
+      "enrichment",
+    ]) ||
+      value.schemaVersion !== 2 ||
+      value.source !== "onchain-rpc" ||
+      !isBytes32(value.marketId) ||
+      !isBytes32(value.economicKey) ||
+      !normalizeBaseAsset(value.asset) ||
+      !validPoolState(value.poolState) ||
+      !validBaseArtwork(value.artwork) ||
+      !Array.isArray(value.links) ||
+      value.links.length !== 0 ||
+      !validOnchainBinding(value.onchain)
+    ) return null;
+    const condition = value.condition as Record<string, unknown>;
+    const strikeUsd = normalizeCondition(condition);
+    if (!strikeUsd || typeof condition.strikeAtoms !== "string") return null;
+    const lifecycle = normalizeLifecycle(
+      value.lifecycle,
+      BigInt(condition.strikeAtoms),
+    );
+    if (!lifecycle) return null;
+    const onchain = value.onchain as Record<string, unknown>;
+    if (
+      typeof value.marketKey !== "string" ||
+      value.marketKey !==
+        `eip155:4663:${onchain.factoryAddress}:${value.economicKey}`
+    ) return null;
+    return Object.freeze({
+      market: value as unknown as PredictionV2EnrichedMarketView,
+      strikeUsd,
+      lifecycle: Object.freeze(lifecycle),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function marketHrefFromId(value: string): `/markets/v2/0x${string}` | null {
+  return PUBLIC_MARKET_ID_PATTERN.test(value) && value !== ZERO_MARKET_ID
+    ? `/markets/v2/${value as `0x${string}`}`
+    : null;
 }
 
 function priceConditionLabel(strikeUsd: string) {
@@ -336,12 +624,12 @@ function formatPercentChange(value: string) {
 }
 
 function formatResultTime(value: string) {
-  if (!EXACT_UTC_PATTERN.test(value)) return value;
   const milliseconds = Date.parse(value);
-  if (
-    !Number.isSafeInteger(milliseconds) ||
-    new Date(milliseconds).toISOString().replace(".000Z", "Z") !== value
-  ) return value;
+  if (!Number.isSafeInteger(milliseconds)) return value;
+  const canonical = new Date(milliseconds).toISOString();
+  if (value !== canonical && value !== canonical.replace(".000Z", "Z")) {
+    return value;
+  }
   const date = new Date(milliseconds);
   const day = new Intl.DateTimeFormat("en-US", {
     day: "numeric",
@@ -433,33 +721,222 @@ function safeProfileLinks(
   );
 }
 
-function safePublicArtwork(market: PublicPredictionMarketViewV2) {
-  const fallback = predictionAssetCardImageV2({
-    chainId: market.asset.sourceNetwork,
-    address: market.asset.address,
-  }).source;
-  const valid = market.artwork.kind === "owned-provider-snapshot"
-    ? OWNED_ARTWORK_PATTERN.test(market.artwork.url)
-    : market.artwork.kind === "bundled-fallback" &&
-      BUNDLED_ARTWORK_PATTERN.test(market.artwork.url);
+function safeEnrichedArtwork(
+  value: unknown,
+  fallback: string,
+): PredictionMarketAssetCardArtworkV2 {
+  if (exactRecordKeys(value, [
+    "kind",
+    "url",
+    "digest",
+    "contentType",
+    "sourceAssetId",
+  ]) && value.contentType === "image/webp" &&
+    typeof value.url === "string" &&
+    typeof value.digest === "string" &&
+    SHA256_PATTERN.test(value.digest)) {
+    if (value.kind === "owned-provider-snapshot") {
+      const match = OWNED_ARTWORK_PATTERN.exec(value.url);
+      if (match && value.digest === `sha256:${match[1]}` &&
+        typeof value.sourceAssetId === "string" &&
+        /^[0-9a-f]{64}$/u.test(value.sourceAssetId)) {
+        return Object.freeze({
+          source: value.url,
+          fallback,
+          sourceKind: "owned-provider-snapshot",
+        });
+      }
+    } else if (
+      value.kind === "bundled-fallback" &&
+      BUNDLED_ARTWORK_PATTERN.test(value.url) &&
+      value.sourceAssetId === null
+    ) {
+      return Object.freeze({
+        source: value.url,
+        fallback,
+        sourceKind: "bundled-fallback",
+      });
+    }
+  }
   return Object.freeze({
-    source: valid ? market.artwork.url : fallback,
+    source: fallback,
     fallback,
-    sourceKind: valid ? market.artwork.kind : "bundled-fallback",
-  } satisfies PredictionMarketAssetCardArtworkV2);
+    sourceKind: "bundled-fallback",
+  });
+}
+
+function safeDisplayIntent(
+  value: unknown,
+  strikeUsd: string,
+): PredictionMarketCapDisplayIntentV2 | null {
+  if (!exactRecordKeys(value, [
+    "kind",
+    "settlementRole",
+    "comparator",
+    "targetUsd",
+    "template",
+    "percentChange",
+    "equivalentPriceStrikeUsd",
+    "evidence",
+  ]) ||
+    value.kind !== "market-cap-equivalent" ||
+    value.settlementRole !== "secondary-non-settlement" ||
+    value.comparator !== "greater-than-or-equal" ||
+    typeof value.targetUsd !== "string" ||
+    !/^[1-9]\d*(?:\.\d+)?$/u.test(value.targetUsd) ||
+    value.equivalentPriceStrikeUsd !== strikeUsd ||
+    (value.template !== "target" && value.template !== "percent-change") ||
+    typeof value.evidence !== "object" ||
+    value.evidence === null ||
+    Array.isArray(value.evidence)
+  ) return null;
+  if (
+    (value.template === "target" && value.percentChange !== null) ||
+    (value.template === "percent-change" &&
+      (typeof value.percentChange !== "string" ||
+        !/^[1-9]\d*(?:\.\d+)?$/u.test(value.percentChange)))
+  ) return null;
+  return Object.freeze({
+    kind: "market-cap-equivalent",
+    settlementRole: "secondary-non-settlement",
+    comparator: "greater-than-or-equal",
+    targetUsd: value.targetUsd,
+    template: value.template,
+    percentChange: value.percentChange as string | null,
+    equivalentPriceStrikeUsd: strikeUsd,
+  });
+}
+
+function safeEnrichment(
+  value: unknown,
+  fallback: string,
+  strikeUsd: string,
+): SafeEnrichmentV2 | null {
+  if (value === null) return null;
+  if (!exactRecordKeys(value, [
+    "source",
+    "name",
+    "artwork",
+    "links",
+    "creationIntent",
+    "presentationRevision",
+    "presentationRevisionHash",
+    "observedAt",
+    "attestorAddress",
+  ]) ||
+    value.source !== "release-pinned-attestation" ||
+    !isCanonicalUint(value.presentationRevision, MAX_UINT64, true) ||
+    typeof value.presentationRevisionHash !== "string" ||
+    !SHA256_PATTERN.test(value.presentationRevisionHash) ||
+    typeof value.observedAt !== "string" ||
+    !Number.isSafeInteger(Date.parse(value.observedAt)) ||
+    new Date(Date.parse(value.observedAt)).toISOString() !== value.observedAt ||
+    !isCanonicalAddress(value.attestorAddress) ||
+    !Array.isArray(value.links)
+  ) return null;
+  const links = value.links.filter((link): link is PredictionTokenProfileLinkV2 =>
+    exactRecordKeys(link, ["kind", "url"]) &&
+    (link.kind === "website" || link.kind === "x" || link.kind === "telegram") &&
+    typeof link.url === "string"
+  );
+  const name = typeof value.name === "string" &&
+      value.name.trim() === value.name &&
+      value.name.length > 0 &&
+      value.name.length <= 160
+    ? value.name
+    : null;
+  return Object.freeze({
+    name,
+    artwork: safeEnrichedArtwork(value.artwork, fallback),
+    links: Object.freeze(safeProfileLinks(links)),
+    creationIntent: value.creationIntent === null
+      ? null
+      : safeDisplayIntent(value.creationIntent, strikeUsd),
+  });
+}
+
+function probabilityFromView(
+  normalized: NormalizedPublicBaseV2,
+): PredictionMarketAssetCardProbabilityV2 {
+  if (normalized.lifecycle.probabilitySource === "yes") {
+    return { status: "available", yesProbabilityBps: 10_000 };
+  }
+  if (normalized.lifecycle.probabilitySource === "no") {
+    return { status: "available", yesProbabilityBps: 0 };
+  }
+  if (normalized.lifecycle.probabilitySource === "unavailable") {
+    return { status: "unavailable" };
+  }
+  return {
+    status: "available",
+    yesProbabilityBps: normalized.market.poolState.yesProbabilityBps,
+  };
 }
 
 function probabilityLabel(state: PredictionMarketAssetCardProbabilityV2) {
-  if (
-    state.status !== "available" ||
-    !Number.isInteger(state.yesProbabilityBps) ||
-    state.yesProbabilityBps < 0 ||
-    state.yesProbabilityBps > 10_000
-  ) return "Not available";
+  if (state.status !== "available") return "Not available";
   const percent = state.yesProbabilityBps / 100;
   return `${new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2,
   }).format(percent)}%`;
+}
+
+function unavailablePublicModel(): PredictionMarketAssetCardRenderModelV2 {
+  return Object.freeze({
+    name: "Market unavailable",
+    symbol: "",
+    chainLabel: "Unavailable",
+    condition: "Market data unavailable",
+    secondaryIntent: null,
+    resultTime: "Not available",
+    artwork: Object.freeze({
+      source: BUNDLED_UNAVAILABLE_ARTWORK,
+      fallback: BUNDLED_UNAVAILABLE_ARTWORK,
+      sourceKind: "bundled-fallback" as const,
+    }),
+    links: Object.freeze([]),
+    href: null,
+    status: LIFECYCLE_LABELS.unavailable,
+    probability: "Not available",
+    runtimeBinding: "unavailable",
+  });
+}
+
+function publicCardModel(
+  market: PredictionV2EnrichedMarketView,
+): PredictionMarketAssetCardRenderModelV2 {
+  const normalized = normalizePublicBaseV2(market);
+  if (!normalized) return unavailablePublicModel();
+  const fallback = normalized.market.artwork.url;
+  const enrichment = safeEnrichment(
+    normalized.market.enrichment,
+    fallback,
+    normalized.strikeUsd,
+  );
+  const name = enrichment?.name ??
+    normalized.market.asset.name ??
+    normalized.market.asset.symbol;
+  return Object.freeze({
+    name,
+    symbol: normalized.market.asset.symbol,
+    chainLabel: normalized.market.asset.chainLabel,
+    condition: priceConditionLabel(normalized.strikeUsd),
+    secondaryIntent: secondaryIntentLabel(
+      enrichment?.creationIntent ?? null,
+    ),
+    resultTime: formatResultTime(normalized.market.condition.observationUtc),
+    artwork: enrichment?.artwork ?? Object.freeze({
+      source: fallback,
+      fallback,
+      sourceKind: "bundled-fallback" as const,
+    }),
+    links: enrichment?.links ?? Object.freeze([]),
+    href: marketHrefFromId(normalized.market.marketId),
+    status: LIFECYCLE_LABELS[normalized.lifecycle.label],
+    probability: probabilityLabel(probabilityFromView(normalized)),
+    runtimeBinding: "bound",
+    snapshotBlock: normalized.market.onchain.confirmedBlockNumber,
+  });
 }
 
 function socialLabel(kind: PredictionTokenProfileLinkV2["kind"]) {
@@ -607,37 +1084,16 @@ function PredictionMarketAssetCardFrameV2({
 
 export function PredictionMarketAssetCardV2({
   market,
-  cardState,
   headingLevel = "h3",
   imageLoading = "lazy",
   className,
 }: PredictionMarketAssetCardV2Props) {
-  const boundState = bindPredictionMarketAssetCardStateV2(market, cardState);
-  const model = Object.freeze({
-    name: market.asset.name,
-    symbol: market.asset.symbol,
-    chainLabel: market.asset.chainLabel,
-    condition: predictionAssetConditionLabelV2(market),
-    secondaryIntent: secondaryIntentLabel(market.creationIntent),
-    resultTime: predictionAssetResultTimeLabelV2(market),
-    artwork: safePublicArtwork(market),
-    links: Object.freeze(safeProfileLinks(market.links)),
-    href: boundState ? predictionMarketAssetCardHrefV2(market) : null,
-    status: boundState
-      ? LIFECYCLE_LABELS[boundState.lifecycle]
-      : LIFECYCLE_LABELS.unavailable,
-    probability: boundState
-      ? probabilityLabel(boundState.probability)
-      : "Not available",
-    runtimeBinding: boundState ? "bound" : "unavailable",
-    snapshotBlock: boundState?.snapshot.confirmedBlockNumber,
-  } satisfies PredictionMarketAssetCardRenderModelV2);
   return (
     <PredictionMarketAssetCardFrameV2
       className={className}
       headingLevel={headingLevel}
       imageLoading={imageLoading}
-      model={model}
+      model={publicCardModel(market)}
       variant="public"
     />
   );
@@ -650,6 +1106,7 @@ export function PredictionMarketAssetCardV2({
 export function PredictionMarketAssetPreviewCardV2({
   profile,
   review,
+  logoProxy,
   headingLevel = "h3",
   imageLoading = "lazy",
   className,
@@ -663,6 +1120,7 @@ export function PredictionMarketAssetPreviewCardV2({
     chainId: review.asset.sourceNetwork,
     address: review.asset.address,
     logoUrl: profileBound ? profile.logoUrl : undefined,
+    logoProxy: profileBound ? logoProxy : null,
   });
   const previewIntent = review.selectedMetric === "market-cap"
     ? Object.freeze({

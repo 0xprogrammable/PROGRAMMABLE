@@ -77,7 +77,6 @@ function record() {
         pairCreatedAt: Date.parse("2026-08-20T18:00:00.000Z"),
       },
       links: {
-        imageUrl: null,
         websites: [{ label: "Website", url: "https://token.example.com" }],
         socials: [],
       },

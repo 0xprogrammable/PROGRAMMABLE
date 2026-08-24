@@ -19,6 +19,7 @@ import {
 
 const ASSET = "ab".repeat(32);
 const OTHER_ASSET = "cd".repeat(32);
+const CAPABILITY = `v2.preview-1.1800000600.${"a".repeat(43)}`;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -49,7 +50,7 @@ describe("Prediction V2 asset logos", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("reduces only the fixed DEX Screener image origin to an internal route", () => {
+  it("uses only the server-derived projection to build an internal route", () => {
     const providerUrl =
       `https://cdn.dexscreener.com/cms/images/${ASSET}` +
       "?width=800&height=800&quality=95&format=auto";
@@ -57,11 +58,31 @@ describe("Prediction V2 asset logos", () => {
     expect(predictionAssetCardImageV2({
       chainId: "base",
       address: `0x${"12".repeat(20)}`,
-      logoUrl: providerUrl,
+      logoUrl: "https://attacker.example/ignored.png",
+      logoProxy: { assetId: ASSET, capability: CAPABILITY },
     })).toEqual({
-      source: `/api/prediction/asset-logo/${ASSET}`,
+      source: `/api/prediction/asset-logo/${ASSET}?capability=${CAPABILITY}`,
       usesProviderLogo: true,
     });
+    expect(predictionAssetCardImageV2({
+      chainId: "base",
+      address: `0x${"12".repeat(20)}`,
+      logoUrl: providerUrl,
+    }).usesProviderLogo).toBe(false);
+    expect(predictionAssetCardImageV2({
+      chainId: "base",
+      address: `0x${"12".repeat(20)}`,
+      logoUrl: providerUrl,
+      logoProxy: { assetId: OTHER_ASSET.toUpperCase(), capability: CAPABILITY },
+    }).usesProviderLogo).toBe(false);
+    expect(predictionAssetCardImageV2({
+      chainId: "base",
+      address: `0x${"12".repeat(20)}`,
+      logoProxy: {
+        assetId: ASSET,
+        capability: `v1.preview-1.${"a".repeat(43)}`,
+      },
+    }).usesProviderLogo).toBe(false);
     expect(predictionDexscreenerLogoAssetIdV2(
       `https://cdn.dexscreener.com.example.com/cms/images/${ASSET}`,
     )).toBeNull();

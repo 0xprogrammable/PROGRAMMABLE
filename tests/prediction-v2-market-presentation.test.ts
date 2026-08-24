@@ -45,6 +45,7 @@ const POOL_ID = `0x${"27".repeat(32)}` as const;
 const RESOLUTION_POLICY_HASH = `0x${"28".repeat(32)}` as const;
 const DEXSCREENER_IMAGE_ID = "25".repeat(32);
 const OWNED_ARTWORK_DIGEST = "26".repeat(32);
+const LOGO_CAPABILITY = `v2.preview-1.1800000600.${"a".repeat(43)}`;
 
 function discovery(input: Readonly<{
   observedAt?: string;
@@ -89,9 +90,11 @@ function discovery(input: Readonly<{
         volume24hUsd: 75_000,
         pairCreatedAt: Date.parse("2026-08-21T18:00:00.000Z"),
       },
+      logoProxy: {
+        assetId: DEXSCREENER_IMAGE_ID,
+        capability: LOGO_CAPABILITY,
+      },
       links: {
-        imageUrl:
-          `https://cdn.dexscreener.com/cms/images/${DEXSCREENER_IMAGE_ID}`,
         websites: [{ label: "Website", url: "https://token.example.com" }],
         socials: [
           { type: "twitter", url: "https://twitter.com/example?s=20" },
@@ -304,6 +307,7 @@ describe("Prediction V2 append-only presentation record", () => {
     expect(parsePredictionMarketPresentationRecordV2(record)).toEqual(record);
     expect(JSON.stringify(record)).not.toContain("sourceLogoUrl");
     expect(JSON.stringify(record)).not.toContain("currentPriceUsd");
+    expect(JSON.stringify(record)).not.toContain(LOGO_CAPABILITY);
     expect(Object.isFrozen(record)).toBe(true);
   });
 
@@ -535,8 +539,8 @@ describe("Prediction V2 append-only presentation record", () => {
           fdvUsd: null,
           matchingPairCount: 0,
           pair: null,
+          logoProxy: null,
           links: {
-            imageUrl: null,
             websites: [],
             socials: [],
           },
