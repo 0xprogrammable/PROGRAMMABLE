@@ -1,5 +1,7 @@
 import type { Address, Hex } from "viem";
 
+import type { RouterCustomCreatorClaimProfileCapabilityV1 } from
+  "../profile/router-custom-creator-claim";
 import type { LauncherToken } from "../tokens";
 
 export type DeploymentEnvironment = "production" | "rehearsal";
@@ -190,8 +192,9 @@ export type CreatorProfilePool = {
   symbol: string;
   poolId: Hex;
   totalSwapFeeBps: number;
-  launchModel: "classic" | "adaptive" | "deep";
+  launchModel: "classic" | "adaptive" | "deep" | "custom-graph";
   adaptiveCurveHash?: Hex;
+  claimCapability?: RouterCustomCreatorClaimProfileCapabilityV1;
   claimableCreatorFeesWei: string;
   claimableCreatorFeesEth: string;
   generatedCreatorFeesWei: string;

@@ -40,6 +40,12 @@ import {
   readFinalizedRouterCustomExploreEntriesV1,
   ROUTER_CUSTOM_LAUNCH_SOURCE,
 } from "@/lib/alchemy/router-custom-public.server";
+import {
+  projectRouterCustomCreatorClaimProfileV1,
+} from "@/lib/profile/router-custom-creator-claim.server";
+import {
+  resolveRouterCustomCreatorClaimCapabilityV1,
+} from "@/lib/profile/router-custom-creator-claim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -704,6 +710,9 @@ export async function GET(request: NextRequest) {
     ]);
     let profile = result.profile;
     let routerStatus = routerResult.status;
+    let routerClaimStatus: "not-applicable" | "current" | "unavailable" =
+      "not-applicable";
+    let rpcProvider = result.provider;
     if (routerStatus === "current") {
       try {
         profile = mergeRouterCustomCreatorProfileV1(
@@ -711,6 +720,45 @@ export async function GET(request: NextRequest) {
           account,
           routerResult.entries,
         );
+        const hasReviewedClaim = routerResult.entries.some((entry) => {
+          const capability = resolveRouterCustomCreatorClaimCapabilityV1(entry);
+          return capability !== null &&
+            capability.creatorAddress.toLowerCase() === account.toLowerCase() &&
+            profile.snapshot !== null &&
+            BigInt(entry.launchStampProvenance!.finalizedAtBlockNumber) <=
+              BigInt(profile.snapshot.blockNumber);
+        });
+        if (hasReviewedClaim) {
+          try {
+            const deployment = getWebsiteReadOnchainDeployment("production");
+            if (deployment.status !== "ready" || deployment.chainId !== 1) {
+              throw new Error("Router Custom creator claims are not deployed");
+            }
+            const projected = await withOperationalRpcFailover(
+              deployment,
+              async (selected) => ({
+                profile: await projectRouterCustomCreatorClaimProfileV1({
+                  profile,
+                  account,
+                  entries: routerResult.entries,
+                  client: profileClient(selected.rpcUrl),
+                }),
+                provider: profileRpcProviderHeader(
+                  deployment,
+                  selected.rpcUrl,
+                ),
+              }),
+            );
+            profile = projected.profile;
+            rpcProvider = projected.provider;
+            routerClaimStatus = "current";
+          } catch {
+            console.error("Creator profile Router Custom claim read unavailable", {
+              name: "RouterCustomCreatorClaimReadError",
+            });
+            routerClaimStatus = "unavailable";
+          }
+        }
       } catch {
         console.error("Creator profile Router Custom merge unavailable", {
           name: "RouterCustomIdentityError",
@@ -721,7 +769,9 @@ export async function GET(request: NextRequest) {
     const launchSource = routerStatus === "current"
       ? `envio-classic-v3+${ROUTER_CUSTOM_LAUNCH_SOURCE}`
       : "envio-classic-v3";
-    const readSource = result.provider === "envio-indexer-state"
+    const usesRpc = result.provider !== "envio-indexer-state" ||
+      routerClaimStatus === "current";
+    const readSource = !usesRpc
       ? launchSource
       : `${launchSource}+rpc`;
     return NextResponse.json(profile, {
@@ -732,7 +782,8 @@ export async function GET(request: NextRequest) {
           : "envio-classic-v3",
         "X-Programmable-Read-Source": readSource,
         "X-Programmable-Router-Read-Status": routerStatus,
-        "X-Programmable-Rpc-Provider": result.provider,
+        "X-Programmable-Router-Claim-Read-Status": routerClaimStatus,
+        "X-Programmable-Rpc-Provider": rpcProvider,
       },
     });
   } catch (error) {
