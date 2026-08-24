@@ -91,6 +91,16 @@ paths = ['''lib/profile/router-custom-creator-claim\.ts''']
 regexes = ['''(?i)tokenAddress:\s*"0x69d278968abf120f878f2e1e016ab615d3686c19"''']
 
 [[allowlists]]
+description = "Private claim console demo pins public FADE and PCAN token addresses"
+condition = "AND"
+regexTarget = "match"
+paths = ['''ops/protocol-fee-claim/app\.js''']
+regexes = [
+  '''(?i)0x69d278968abf120f878f2e1e016ab615d3686c19''',
+  '''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''',
+]
+
+[[allowlists]]
 description = "FADE trade capability pins public onchain identifiers and runtime hashes"
 condition = "AND"
 regexTarget = "match"

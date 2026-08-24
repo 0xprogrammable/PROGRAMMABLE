@@ -21,6 +21,7 @@ const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
 const reads = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI;
 const events = Object.values(router.events);
+const CLAIM_CONSOLE_MAX_FINALIZED_SPREAD_BLOCKS = 32;
 
 const indexingSections = [
   { id: "scope", label: "When to index" },
@@ -178,6 +179,13 @@ export default function IndexLaunchesPage() {
           <li>
             Read bounded <code>eth_getLogs</code> chunks from{" "}
             <code>{router.startBlock}</code> through a finalized boundary.
+            For a fee-claim inventory, require the Wallet RPC and two
+            independent public RPCs to report finalized views no more than{" "}
+            <code>{CLAIM_CONSOLE_MAX_FINALIZED_SPREAD_BLOCKS}</code> blocks apart.
+            Use the oldest view as the safe boundary, require all three RPCs to
+            return its exact block hash, then compare the complete raw log
+            tuples through that boundary. Any disagreement is{" "}
+            <code>INDETERMINATE</code> and must block execution.
           </li>
           <li>
             Require the exact Router emitter and published topic signatures,
@@ -291,19 +299,31 @@ export default function IndexLaunchesPage() {
             version hook; the legacy V1 aggregate hook remains a separate row.
           </li>
           <li>
-            Custom V1 replays the complete Registry history, then verifies each
-            current launch state, runtime, recipient, fee policy and accrued
-            amount at one block. Every future finalized standard 5 or 10 bps
-            source is discovered without editing a coin list.
+            The complete Registry history remains available for audit, but
+            Custom Registry V1 is retired as a live discovery or claim source.
+          </li>
+          <li>
+            Router-stamped Custom launches come from a bounded common
+            consensus-finalized checkpoint and raw-log replay agreed by the
+            Wallet RPC and two independent public RPCs. Each candidate is
+            reproduced through the Router record, identity lookup, component
+            proof, runtime and displayed claim balance at that same checkpoint.
+          </li>
+          <li>
+            A Custom claim requires an exact reviewed profile bound to its
+            launch ID, fee source and runtime. FADE uses its native accumulator;
+            PCAN redeems both PoolManager currencies in one call. Unknown
+            profiles stay visible and block the combined claim instead of
+            guessing calldata.
           </li>
           <li>
             Stock claims use the published fixed release asset set. New Stock
             assets are not inferred or silently added.
           </li>
           <li>
-            Custom V2 sources remain unavailable until an exact deployed,
-            finalized release binding exists. Unknown, revoked, mismatched or
-            unverified sources block execution instead of being omitted.
+            Custom V2 remains unavailable until an exact deployed, finalized
+            release binding exists. Unknown, revoked, mismatched or unverified
+            sources block execution instead of being omitted.
           </li>
         </ul>
 
@@ -314,7 +334,9 @@ export default function IndexLaunchesPage() {
           </a>
           . The page rescans before every claim and sends positive verified
           entries only as one wallet-declared atomic batch from the fixed reward
-          wallet.
+          wallet. Its immediate latest simulation can include fees accrued after
+          the displayed finalized balance. The current safe limit is 64 calls;
+          overflow blocks instead of silently dropping a claim.
         </p>
       </section>
 
