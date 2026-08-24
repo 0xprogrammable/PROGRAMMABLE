@@ -60,7 +60,9 @@ const MARKET_CHART = {
 
 describe("token price chart inspection", () => {
   it("keeps small and changing prices compact without changing their unit", () => {
-    expect(formatPrice(0.0000000014549053, "ETH")).toBe("1.45491e-9 ETH");
+    expect(formatPrice(0.0000000014549053, "ETH")).toBe(
+      "0.00000000145491 ETH",
+    );
     expect(formatPrice(0.00026512345, "ETH")).toBe("0.000265123 ETH");
     expect(formatPrice(12.3456789, "USD")).toBe("$12.3457");
     expect(formatPrice(Number.NaN, "ETH")).toBe("Unavailable");

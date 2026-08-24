@@ -81,7 +81,7 @@ export function CustomMarketTrade({
   onConnect,
   onSubmit,
 }: {
-  project: CustomProjectExploreEntry;
+  project: Pick<CustomProjectExploreEntry, "customProjectId" | "markets">;
   chainId: number;
   owner: Address | null;
   readNativeBalance(): Promise<WalletNativeBalance>;

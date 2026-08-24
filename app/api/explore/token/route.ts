@@ -22,6 +22,8 @@ import {
 } from "../../../../lib/alchemy/router-custom-public.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
+import { routerTradeProjectForEntryV1 } from
+  "../../../../lib/custom-launch/router-trade-adapter-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
 import { readPublicCreatorArticleV1 } from
@@ -298,6 +300,7 @@ export async function GET(request: NextRequest) {
         status: "ready",
         token: null,
         customProject: null,
+        routerTradeProject: null,
         creatorArticle: null,
         snapshot: null,
         catalog: catalogBoundary,
@@ -314,6 +317,10 @@ export async function GET(request: NextRequest) {
       },
     );
   }
+
+  const routerTradeProject = entry.exploreKind === "token"
+    ? routerTradeProjectForEntryV1(entry)
+    : null;
 
   try {
     const creatorArticlePromise = readPublicCreatorArticleV1(
@@ -337,6 +344,7 @@ export async function GET(request: NextRequest) {
         token: publicEntry.exploreKind === "token" ? publicEntry : null,
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
+        routerTradeProject,
         creatorArticle: await creatorArticlePromise,
         snapshot:
           publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
@@ -370,6 +378,7 @@ export async function GET(request: NextRequest) {
         token: publicEntry.exploreKind === "token" ? publicEntry : null,
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
+        routerTradeProject,
         creatorArticle,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
         catalog: catalogBoundary,

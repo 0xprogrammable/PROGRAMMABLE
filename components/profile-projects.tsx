@@ -201,9 +201,9 @@ export function ProfileProjects({
 
   if (!wallet) return null;
   return (
-    <section className={styles.section} aria-labelledby="my-projects-title">
+    <section className={styles.section} aria-labelledby="profile-launches-title">
       <header className={styles.heading}>
-        <h2 id="my-projects-title">My projects</h2>
+        <h2 id="profile-launches-title">Launches</h2>
         <div className={styles.headerActions}>
           <button
             className={styles.refresh}
@@ -254,7 +254,7 @@ export function ProfileProjects({
       ) : null}
 
       {phase === "loading" && visibleProjects.length === 0 ? (
-        <p className={styles.loading} role="status">Loading your verified launches…</p>
+        <ProfileProjectsSkeleton />
       ) : phase === "error" && visibleProjects.length === 0 ? (
         <p className={styles.error} role="alert">Your projects could not be verified right now.</p>
       ) : visibleProjects.length === 0 ? (
@@ -268,6 +268,11 @@ export function ProfileProjects({
             const initialBuyLabel = initialBuy
               ? formatCreatorProjectInitialBuyV1(initialBuy, project.symbol)
               : null;
+            const launchType =
+              project.source === "registry.custom-launched" ||
+              project.source === "canonical-launch-stamp-router"
+                ? "Custom"
+                : "Classic";
             return (
             <article className={styles.project} key={project.tokenAddress}>
               <div className={styles.art}>
@@ -277,7 +282,10 @@ export function ProfileProjects({
               </div>
               <div className={styles.copy}>
                 <strong>{project.name}</strong>
-                <span>{project.symbol ? `$${project.symbol}` : "Verified launch"}</span>
+                <span>
+                  {project.symbol ? `$${project.symbol}` : "Verified launch"}
+                  <small className={styles.launchType}>{launchType}</small>
+                </span>
                 {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label ? (
                   <small>
                     Market cap {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
@@ -349,6 +357,26 @@ export function ProfileProjects({
         />
       ) : null}
     </section>
+  );
+}
+
+function ProfileProjectsSkeleton() {
+  return (
+    <div className={styles.skeletonList} aria-busy="true">
+      <span className={styles.visuallyHidden} role="status">
+        Loading launches
+      </span>
+      {[0, 1, 2].map((item) => (
+        <div className={styles.skeletonProject} aria-hidden="true" key={item}>
+          <span className={styles.skeletonArt} />
+          <span className={styles.skeletonCopy}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.skeletonAction} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -534,7 +562,12 @@ function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
       || typeof candidate.name !== "string"
       || (candidate.symbol !== null && typeof candidate.symbol !== "string")
       || (candidate.imageUrl !== null && typeof candidate.imageUrl !== "string")
-      || !["envio-classic-v3", "registry.custom-launched", "official-main-token"].includes(String(candidate.source))) {
+      || ![
+        "envio-classic-v3",
+        "registry.custom-launched",
+        "canonical-launch-stamp-router",
+        "official-main-token",
+      ].includes(String(candidate.source))) {
       throw new Error("Invalid project record");
     }
     let article: CreatorProjectSummaryV1["article"] = null;

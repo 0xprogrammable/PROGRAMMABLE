@@ -1,7 +1,5 @@
 import { readFileSync } from "node:fs";
 
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
 
@@ -9,6 +7,7 @@ import {
   actionCanCheckStatus,
   actionLabel,
   actionPending,
+  actionSettling,
   buildProfilePortfolio,
   clearConfirmedProfileActionStates,
   getProfileSessionView,
@@ -25,14 +24,15 @@ import {
   profileCreatorClaimErrorMessage,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
+  profileNativeClaimMeetsVisibilityThreshold,
   profileRouterLaunchEntries,
-  ProfileRouterLaunches,
   profileRewardsForAccount,
   profileRewardActionErrorMessage,
   profileTokenMarketCapLabel,
   profileTransactionPollAttempts,
   reflectedConfirmedProfileTransactions,
   resolveCreatorProfileReadFailure,
+  resolveProfileNotFoundTransaction,
   preserveInterruptedTransactionStates,
   removePendingProfileTransactionRecord,
   resolveStockPairedReceiptGate,
@@ -416,7 +416,7 @@ describe("profile workspace loading state", () => {
 
   it("reveals the profile shell while reward sources load progressively", () => {
     expect(profileViewSource).toContain(
-      'className={styles.profileLoadingState}',
+      'className={styles.profileSkeleton}',
     );
     expect(profileViewSource).toContain(
       'if (phase === "loading")',
@@ -427,12 +427,12 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).not.toContain("styles.sessionLoadingWorkspace");
     expect(profileViewSource).not.toContain("styles.loadingPanelTitle");
     expect(profileExperienceCss).toMatch(
-      /\.profileLoadingState\s*\{[^}]*min-height:/s,
+      /\.profileSkeleton\s*\{[^}]*min-height:/s,
     );
     expect(profileExperienceCss).toMatch(
       /\.profileReveal\s*\{[^}]*animation: profile-content-reveal/s,
     );
-    expect(profileExperienceCss).not.toContain("profile-skeleton-pulse");
+    expect(profileExperienceCss).toContain("profile-skeleton-pulse");
   });
 });
 
@@ -945,22 +945,19 @@ describe("profile reward grouping", () => {
       /@media \(max-width: 820px\)[\s\S]*\.claimablePanelEmpty\s*\{[^}]*min-height:\s*0;[\s\S]*\.claimablePanelEmpty \.claimEmpty\s*\{[^}]*min-height:\s*0;/,
     );
 
-    const html = renderToStaticMarkup(
-      createElement(ProfileRouterLaunches, {
-        entries: profileRouterLaunchEntries(portfolio),
-      }),
+    expect(profileViewSource).not.toContain(
+      "<ProfileRouterLaunches entries={routerLaunchEntries}",
     );
-    expect(html).toContain("Launches");
-    expect(html).not.toContain("Tokens launched from this wallet.");
-    expect(html).toContain("Custom Graph");
-    expect(html).toContain("$GRAPH");
-    expect(html).toContain(`href="/token/${routerCustom.address}"`);
-    expect(html).toContain("Custom");
-    expect(html).not.toContain("Router record");
-    expect(html).not.toContain('aria-label="Open Custom Graph"');
-    expect(html).not.toMatch(/>\s*Claim\s*</i);
-    expect(html).not.toContain("permanently locked");
-    expect(html).not.toContain("positionTokenId");
+    expect(profileViewSource).toContain(
+      'token.launchProvenance === "canonical-router"',
+    );
+  });
+
+  it("hides native dust below 0.0001 ETH at the presentation boundary", () => {
+    expect(profileNativeClaimMeetsVisibilityThreshold(99_999_999_999_999n))
+      .toBe(false);
+    expect(profileNativeClaimMeetsVisibilityThreshold(100_000_000_000_000n))
+      .toBe(true);
   });
 });
 
@@ -1011,7 +1008,55 @@ describe("profile transaction status", () => {
         message: "Still pending on Ethereum",
         transactionHash,
       }),
+    ).toBe(false);
+    expect(
+      actionSettling({
+        account: firstAddress,
+        status: "pending",
+        message: "Still pending on Ethereum",
+        transactionHash,
+      }),
     ).toBe(true);
+  });
+
+  it("preserves a not-found hash as a checkable non-busy state", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ status: "not-found" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(waitForTransaction(transactionHash, 1, {
+      maxAttempts: 1,
+      fetcher,
+    })).resolves.toBe("not-found");
+    const state = {
+      account: firstAddress,
+      status: "not-found" as const,
+      message: "Transaction not found",
+      transactionHash,
+    };
+    expect(actionCanCheckStatus(state)).toBe(true);
+    expect(actionLabel(state)).toBe("Rechecking");
+    expect(actionPending(state)).toBe(false);
+    expect(actionSettling(state)).toBe(true);
+  });
+
+  it("releases a repeatedly missing hash so the next claim can retry", () => {
+    expect(resolveProfileNotFoundTransaction(false)).toEqual({
+      release: false,
+      status: "not-found",
+      message: "Transaction not found. Check your wallet activity.",
+    });
+    expect(resolveProfileNotFoundTransaction(true)).toEqual({
+      release: true,
+      status: "error",
+      message: "Transaction not found. You can try again.",
+    });
+    expect(profileViewSource).toMatch(
+      /if \(resolution\.release\) \{\s*forgetPendingProfileTransaction\(pendingTransaction\);/s,
+    );
   });
 
   it("uses one receipt request for a manual status check", async () => {

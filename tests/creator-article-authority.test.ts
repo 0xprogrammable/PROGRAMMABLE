@@ -12,6 +12,11 @@ import {
   createWalletPrincipalAuthenticatorFromBoundaryV1,
 } from "../lib/server/creator-article/wallet-principal.server";
 import type { ExploreEntry } from "../lib/tokens";
+import {
+  customGraphExploreEntry,
+  launchStampProvenance,
+  STAMP_TOKEN,
+} from "./launch-stamp-surface-fixture";
 
 const CREATOR = "0x1111111111111111111111111111111111111111" as const;
 const OTHER = "0x2222222222222222222222222222222222222222" as const;
@@ -151,6 +156,7 @@ describe("creator article launch authority", () => {
     const reader = createCreatorArticleAuthorityReaderV1({
       readClassic: vi.fn().mockResolvedValue([classic()]),
       readCustom: vi.fn().mockResolvedValue([custom()]),
+      readRouter: vi.fn().mockResolvedValue([]),
     });
     expect((await listCreatorArticleAuthoritiesV1({
       reader, principal, signal: new AbortController().signal,
@@ -164,6 +170,7 @@ describe("creator article launch authority", () => {
     const reader = createCreatorArticleAuthorityReaderV1({
       readClassic: vi.fn().mockResolvedValue([classic()]),
       readCustom: vi.fn().mockRejectedValue(new Error("Registry unavailable")),
+      readRouter: vi.fn().mockRejectedValue(new Error("Router read unavailable")),
     });
     await expect(requireCreatorArticleAuthorityV1({
       reader, principal, tokenAddress: CUSTOM, signal: new AbortController().signal,
@@ -174,5 +181,98 @@ describe("creator article launch authority", () => {
       tokenAddress: TOKEN,
       signal: new AbortController().signal,
     })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("uses the validated Router stamp wallet instead of the display creator", async () => {
+    const routerEntry = {
+      ...customGraphExploreEntry,
+      creatorAddress: OTHER,
+    } satisfies ExploreEntry;
+    const routerPrincipal = {
+      ...principal,
+      wallets: [launchStampProvenance.launchWallet],
+    };
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockResolvedValue([]),
+      readCustom: vi.fn().mockResolvedValue([]),
+      readRouter: vi.fn().mockResolvedValue([routerEntry]),
+    });
+
+    await expect(requireCreatorArticleAuthorityV1({
+      reader,
+      principal: routerPrincipal,
+      tokenAddress: STAMP_TOKEN,
+      signal: new AbortController().signal,
+    })).resolves.toMatchObject({
+      tokenAddress: STAMP_TOKEN,
+      creatorAddress: launchStampProvenance.launchWallet,
+      source: "canonical-launch-stamp-router",
+    });
+    await expect(requireCreatorArticleAuthorityV1({
+      reader,
+      principal: { ...principal, wallets: [OTHER] },
+      tokenAddress: STAMP_TOKEN,
+      signal: new AbortController().signal,
+    })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("keeps Router article authority available during a Classic read outage", async () => {
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockRejectedValue(new Error("Classic unavailable")),
+      readCustom: vi.fn().mockResolvedValue([]),
+      readRouter: vi.fn().mockResolvedValue([customGraphExploreEntry]),
+    });
+
+    await expect(requireCreatorArticleAuthorityV1({
+      reader,
+      principal: {
+        ...principal,
+        wallets: [launchStampProvenance.launchWallet],
+      },
+      tokenAddress: STAMP_TOKEN,
+      signal: new AbortController().signal,
+    })).resolves.toMatchObject({
+      creatorAddress: launchStampProvenance.launchWallet,
+      source: "canonical-launch-stamp-router",
+    });
+  });
+
+  it("fails closed when Router authority is duplicated", async () => {
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockResolvedValue([]),
+      readCustom: vi.fn().mockResolvedValue([]),
+      readRouter: vi.fn().mockResolvedValue([
+        customGraphExploreEntry,
+        customGraphExploreEntry,
+      ]),
+    });
+
+    await expect(listCreatorArticleAuthoritiesV1({
+      reader,
+      principal: { ...principal, wallets: [launchStampProvenance.launchWallet] },
+      signal: new AbortController().signal,
+    })).rejects.toThrow("Creator article token authority is ambiguous");
+  });
+
+  it("rejects a Router row whose launch stamp is not valid", async () => {
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockResolvedValue([]),
+      readCustom: vi.fn().mockResolvedValue([]),
+      readRouter: vi.fn().mockResolvedValue([{
+        ...customGraphExploreEntry,
+        creatorAddress: CREATOR,
+        launchStampProvenance: {
+          ...launchStampProvenance,
+          launchWallet: "0x0000000000000000000000000000000000000000" as const,
+        },
+      } satisfies ExploreEntry]),
+    });
+
+    await expect(requireCreatorArticleAuthorityV1({
+      reader,
+      principal,
+      tokenAddress: STAMP_TOKEN,
+      signal: new AbortController().signal,
+    })).rejects.toMatchObject({ status: 404 });
   });
 });

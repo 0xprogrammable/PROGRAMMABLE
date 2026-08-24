@@ -26,6 +26,7 @@ import {
   TokenPriceChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
+import { TokenDetailShell } from "@/components/token-detail-shell";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import { CreatorArticle } from "@/components/creator-article";
 import { CreatorArticleEditAction } from
@@ -82,10 +83,16 @@ type DetailCustomProject = CustomProjectExploreEntry & Readonly<{
   marketData?: TokenMarketDataV1;
 }>;
 
+type RouterTradeProject = Pick<
+  CustomProjectExploreEntry,
+  "customProjectId" | "markets"
+>;
+
 type DetailPayload = {
   status: "ready" | "not-deployed";
   token: DetailToken | null;
   customProject: DetailCustomProject | null;
+  routerTradeProject: RouterTradeProject | null;
   creatorArticle: CreatorArticleV1 | null;
   snapshot: { chainId: number } | null;
 };
@@ -98,6 +105,7 @@ export type DetailState =
   | {
       phase: "ready";
       token: DetailToken;
+      routerTradeProject: RouterTradeProject | null;
       creatorArticle: CreatorArticleV1 | null;
       chainId: number;
       requestKey: string;
@@ -681,6 +689,105 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
   };
 }
 
+function parseRouterTradeProject(
+  value: unknown,
+  token: DetailToken,
+): RouterTradeProject | null {
+  if (
+    !isRecord(value) ||
+    typeof value.customProjectId !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.customProjectId) ||
+    !Array.isArray(value.markets) ||
+    token.launchStampProvenance?.kind !== "custom-graph"
+  ) {
+    return null;
+  }
+
+  type CustomMarket = CustomProjectExploreEntry["markets"][number];
+  const markets: CustomMarket[] = [];
+  for (const candidate of value.markets) {
+    if (
+      !isRecord(candidate) ||
+      typeof candidate.marketId !== "string" ||
+      typeof candidate.kind !== "string" ||
+      !["active", "paused", "closed", "verification_pending"].includes(
+        String(candidate.status),
+      ) ||
+      (candidate.poolId !== undefined && !isBytes32(candidate.poolId))
+    ) {
+      return null;
+    }
+    const asset = (assetValue: unknown) => {
+      if (
+        !isRecord(assetValue) ||
+        typeof assetValue.assetId !== "string" ||
+        !isRecord(assetValue.identity) ||
+        typeof assetValue.identity.namespace !== "string" ||
+        typeof assetValue.identity.value !== "string" ||
+        (assetValue.decimals !== undefined &&
+          (!Number.isSafeInteger(assetValue.decimals) ||
+            Number(assetValue.decimals) < 0 ||
+            Number(assetValue.decimals) > 255))
+      ) {
+        return null;
+      }
+      return {
+        assetId: assetValue.assetId,
+        identity: {
+          namespace: assetValue.identity.namespace,
+          value: assetValue.identity.value,
+        },
+        ...(typeof assetValue.name === "string"
+          ? { name: assetValue.name }
+          : {}),
+        ...(typeof assetValue.symbol === "string"
+          ? { symbol: assetValue.symbol }
+          : {}),
+        ...(assetValue.decimals === undefined
+          ? {}
+          : { decimals: Number(assetValue.decimals) }),
+      };
+    };
+    const baseAsset = asset(candidate.baseAsset);
+    const quoteAsset = asset(candidate.quoteAsset);
+    if (baseAsset === null || quoteAsset === null) return null;
+    const capability = parseDiscoverableMarketTradeCapabilityV1({
+      value: candidate.tradeCapability,
+      chainId: String(token.launchStampProvenance.chainId),
+      marketId: candidate.marketId,
+      baseAssetId: baseAsset.assetId,
+      quoteAssetId: quoteAsset.assetId,
+      ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+    });
+    if (capability === null) return null;
+    markets.push({
+      marketId: candidate.marketId,
+      kind: candidate.kind,
+      status: candidate.status as CustomMarket["status"],
+      ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+      baseAsset,
+      quoteAsset,
+      tradeCapability: capability,
+    });
+  }
+
+  const exactMarket = markets.find(
+    (market) =>
+      market.status === "active" &&
+      market.poolId?.toLowerCase() === token.poolId.toLowerCase() &&
+      market.baseAsset.identity.value.toLowerCase() ===
+        token.tokenAddress.toLowerCase() &&
+      market.quoteAsset.identity.value.toLowerCase() ===
+        "0x0000000000000000000000000000000000000000",
+  );
+  if (!exactMarket) return null;
+
+  return Object.freeze({
+    customProjectId: value.customProjectId as `sha256:${string}`,
+    markets: Object.freeze(markets),
+  });
+}
+
 export function parseDetailPayload(value: unknown): DetailPayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -704,6 +811,19 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   }
   if (token !== null && customProject !== null) {
     throw new Error("The token registry returned conflicting launch categories");
+  }
+  const routerTradeProject =
+    value.routerTradeProject === null ||
+    value.routerTradeProject === undefined ||
+    token === null
+      ? null
+      : parseRouterTradeProject(value.routerTradeProject, token);
+  if (
+    value.routerTradeProject !== null &&
+    value.routerTradeProject !== undefined &&
+    routerTradeProject === null
+  ) {
+    throw new Error("The token registry returned an invalid Router trade route");
   }
   let creatorArticle: CreatorArticleV1 | null = null;
   if (value.creatorArticle !== null && value.creatorArticle !== undefined) {
@@ -733,7 +853,14 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     throw new Error("The launch stamp does not match the snapshot network");
   }
 
-  return { status: value.status, token, customProject, creatorArticle, snapshot };
+  return {
+    status: value.status,
+    token,
+    customProject,
+    routerTradeProject,
+    creatorArticle,
+    snapshot,
+  };
 }
 
 function readApiError(value: unknown) {
@@ -795,10 +922,11 @@ function detailStateFromResponse(
     throw new Error("The token registry returned no verified snapshot");
   }
 
-  return {
-    phase: "ready",
-    token: payload.token!,
-    creatorArticle: payload.creatorArticle,
+    return {
+      phase: "ready",
+      token: payload.token!,
+      routerTradeProject: payload.routerTradeProject,
+      creatorArticle: payload.creatorArticle,
     chainId: payload.snapshot.chainId,
     requestKey,
   };
@@ -1045,7 +1173,7 @@ export function buildTokenDetailMetrics(
   const values: Array<TokenMetric | null> = [
     {
       label: getValuationMetricLabel(valuation),
-      value: formattedFdv ?? "",
+      value: formattedFdv ?? "Not available yet",
     },
     {
       label: "Category",
@@ -1056,12 +1184,12 @@ export function buildTokenDetailMetrics(
     },
     token.launchStampProvenance !== undefined && token.currentTick !== undefined
       ? {
-          label: "Pool state",
+          label: "Market",
           value:
             token.activeLiquidity !== undefined &&
             /^(?:0|[1-9]\d*)$/u.test(token.activeLiquidity) &&
             BigInt(token.activeLiquidity) > 0n
-              ? "Initialized · active liquidity"
+              ? "Live liquidity"
               : "Initialized",
         }
       : null,
@@ -1339,14 +1467,21 @@ function TokenDetailContent({
   chainId,
   preview,
   creatorArticle = null,
+  routerTradeProject = null,
 }: {
   token: LauncherToken;
   chainId: number;
   preview: boolean;
   creatorArticle?: CreatorArticleV1 | null;
+  routerTradeProject?: RouterTradeProject | null;
 }) {
-  const { wallet, openWallet, readTradeBalances, sendTransaction } =
-    useWallet();
+  const {
+    wallet,
+    openWallet,
+    readNativeBalance,
+    readTradeBalances,
+    sendTransaction,
+  } = useWallet();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
@@ -1368,6 +1503,16 @@ function TokenDetailContent({
       ? token.tokenDecimals
       : 18;
   const isRouterStamped = token.launchStampProvenance !== undefined;
+  const routerTradeAvailable =
+    isRouterStamped &&
+    routerTradeProject !== null &&
+    routerTradeProject.markets.some(
+      ({ status, tradeCapability }) =>
+        status === "active" && tradeCapability !== undefined,
+    );
+  const creatorAddress = isRouterStamped
+    ? token.launchStampProvenance?.launchWallet
+    : token.creatorAddress;
   const canUseClassicTrade = canUseClassicTokenTrade(token);
   const classicTradeLaunchModel = token.launchModel === "custom-graph"
     ? undefined
@@ -1384,8 +1529,8 @@ function TokenDetailContent({
     if (
       preview
       || chainId !== 1
-      || !token.creatorAddress
-      || !isAddress(token.creatorAddress)
+      || !creatorAddress
+      || !isAddress(creatorAddress)
     ) return null;
     return Object.freeze({
       chainId: 1 as const,
@@ -1396,7 +1541,9 @@ function TokenDetailContent({
       source: token.tokenAddress.toLowerCase()
           === PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()
         ? "official-main-token" as const
-        : "envio-classic-v3" as const,
+        : isRouterStamped
+          ? "canonical-launch-stamp-router" as const
+          : "envio-classic-v3" as const,
       article: visibleCreatorArticle
         ? Object.freeze({
             revision: visibleCreatorArticle.revision,
@@ -1408,11 +1555,12 @@ function TokenDetailContent({
   }, [
     chainId,
     preview,
-    token.creatorAddress,
+    creatorAddress,
     token.imageUrl,
     token.name,
     token.symbol,
     token.tokenAddress,
+    isRouterStamped,
     visibleCreatorArticle,
   ]);
 
@@ -1741,15 +1889,27 @@ function TokenDetailContent({
 
         <aside
           className={`${styles.tradeShell} ${
-            isRouterStamped ? styles.routerNoticeShell : ""
+            isRouterStamped && !routerTradeAvailable
+              ? styles.routerNoticeShell
+              : ""
           } liquid-glass-surface`}
           aria-label={
-            isRouterStamped
+            isRouterStamped && !routerTradeAvailable
               ? `${token.name} market availability`
               : `${token.name} trade`
           }
         >
-          {isRouterStamped ? (
+          {routerTradeAvailable && routerTradeProject ? (
+            <CustomMarketTrade
+              project={routerTradeProject}
+              chainId={chainId}
+              owner={wallet ? getAddress(wallet.account) : null}
+              readNativeBalance={readNativeBalance}
+              readBalances={readTradeBalances}
+              onConnect={openWallet}
+              onSubmit={(transaction) => sendTransaction(transaction)}
+            />
+          ) : isRouterStamped ? (
             <div className={styles.routerNotice} role="status">
               <strong>Router launch</strong>
               <p>
@@ -1905,10 +2065,10 @@ function TokenDetailContent({
       </div>
       <CreatorArticle
         article={visibleCreatorArticle}
-        editAction={creatorProject && token.creatorAddress ? (
+        editAction={creatorProject && creatorAddress ? (
           <CreatorArticleEditAction
             project={creatorProject}
-            creatorAddress={getAddress(token.creatorAddress)}
+            creatorAddress={getAddress(creatorAddress)}
             onPublished={setPublishedCreatorArticle}
           />
         ) : null}
@@ -2389,6 +2549,7 @@ export function TokenDetailView({
         token={activeState.token}
         chainId={activeState.chainId}
         preview={false}
+        routerTradeProject={activeState.routerTradeProject}
         creatorArticle={activeState.creatorArticle}
       />
     );
@@ -2405,21 +2566,7 @@ export function TokenDetailView({
   }
 
   if (activeState.phase === "loading") {
-    return (
-      <div className={`${styles.page} page-width`}>
-        <Link className={styles.back} href="/explore">
-          <ArrowLeft aria-hidden="true" size={16} />
-          Explore
-        </Link>
-        <div
-          className={styles.loadingState}
-          role="status"
-          aria-live="polite"
-        >
-          Loading
-        </div>
-      </div>
-    );
+    return <TokenDetailShell />;
   }
 
   const message =

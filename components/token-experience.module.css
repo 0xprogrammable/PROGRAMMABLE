@@ -2106,3 +2106,102 @@
     border-radius: 12px;
   }
 }
+
+.detailSkeleton {
+  pointer-events: none;
+}
+
+.detailSkeletonArt {
+  background: var(--skeleton-base);
+}
+
+.detailSkeletonLine {
+  border-radius: 999px;
+  display: block;
+}
+
+.detailSkeletonSymbol {
+  height: 13px;
+  width: 54px;
+}
+
+.detailSkeletonName {
+  border-radius: 12px;
+  height: 52px;
+  margin-top: 8px;
+  width: min(64%, 360px);
+}
+
+.detailSkeletonAddress {
+  border-radius: 10px;
+  height: 44px;
+  width: min(100%, 320px);
+}
+
+.detailSkeletonChart {
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  min-height: 320px;
+  width: 100%;
+}
+
+.detailSkeletonMetricLabel {
+  height: 12px;
+  width: 64px;
+}
+
+.detailSkeletonMetricValue {
+  height: 20px;
+  margin-top: 6px;
+  width: min(78%, 120px);
+}
+
+.detailSkeletonTradeBody {
+  display: grid;
+  gap: 12px;
+  grid-template-rows: auto auto 1fr auto auto;
+  min-height: 356px;
+  width: 100%;
+}
+
+.detailSkeletonTradeHeading {
+  height: 22px;
+  width: 42%;
+}
+
+.detailSkeletonTradeBalance {
+  height: 12px;
+  width: 64%;
+}
+
+.detailSkeletonTradeControl {
+  border-radius: 10px;
+  min-height: 112px;
+  width: 100%;
+}
+
+.detailSkeletonTradeControlCompact {
+  min-height: 48px;
+}
+
+.detailSkeletonTradeAction {
+  border-radius: var(--webde-radius-control);
+  height: 48px;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .detailSkeletonName {
+    height: 34px;
+    width: 74%;
+  }
+
+  .detailSkeletonSymbol {
+    height: 11px;
+    width: 44px;
+  }
+
+  .detailSkeletonAddress {
+    width: 100%;
+  }
+}

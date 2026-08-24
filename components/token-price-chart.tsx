@@ -297,10 +297,12 @@ const PLOT_BOTTOM = VIEWBOX_HEIGHT - 9;
 
 function formatPriceMagnitude(value: number) {
   if (value > 0 && value < 0.000001) {
+    const magnitude = Math.floor(Math.log10(value));
+    const decimalPlaces = Math.min(18, Math.max(6, -magnitude + 5));
     return value
-      .toExponential(5)
-      .replace(/\.0+(?=e)/, "")
-      .replace(/(\.\d*?[1-9])0+(?=e)/, "$1");
+      .toFixed(decimalPlaces)
+      .replace(/0+$/u, "")
+      .replace(/\.$/u, "");
   }
 
   return new Intl.NumberFormat("en-US", {
@@ -696,8 +698,6 @@ export function TokenPriceChart({
     () => createChartGeometry(chartPoints, chartMetric),
     [chartMetric, chartPoints],
   );
-  const hasLimitedHistory = payload?.status === "partial";
-
   const emptyMessage = chartMetric === "market-cap"
     ? ""
     : getPriceHistoryEmptyMessage(
@@ -803,13 +803,13 @@ export function TokenPriceChart({
           <p className={styles.eyebrow}>
             {chartMetric === "market-cap"
               ? "Market cap"
-              : hasLimitedHistory
-                ? "Last verified price"
-                : "Price"}
+              : "Last verified price"}
           </p>
           <p className={styles.value}>
             {chart && displayedPrice !== undefined
-              ? formatChartValue(displayedPrice, chart.unit, chartMetric)
+              ? `${formatChartValue(displayedPrice, chart.unit, chartMetric)}${
+                  chartMetric === "price" ? ` per ${tokenName}` : ""
+                }`
               : !loading || launchModel === "stock-paired"
                 ? chartMetric === "market-cap"
                   ? ""

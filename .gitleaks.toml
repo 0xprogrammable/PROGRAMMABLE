@@ -91,6 +91,20 @@ paths = ['''lib/profile/router-custom-creator-claim\.ts''']
 regexes = ['''(?i)tokenAddress:\s*"0x69d278968abf120f878f2e1e016ab615d3686c19"''']
 
 [[allowlists]]
+description = "FADE trade capability pins public onchain identifiers and runtime hashes"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''lib/custom-launch/router-trade-adapter-v1\.ts''',
+  '''tests/fade-router-trade-fixture\.ts''',
+]
+regexes = [
+  '''(?i)0x69d278968abf120f878f2e1e016ab615d3686c19''',
+  '''(?i)0xe48c3827d558866b3d761d78b7d29416f24d277120ef1a7ce6a360962b917596''',
+  '''(?i)0x171e45dee03686a5fb5b737fb688bed60401c209b5034a09112f7a0bddf8d799''',
+]
+
+[[allowlists]]
 description = "Launch stamp docs pin the public PCAN canary token address"
 condition = "AND"
 regexTarget = "match"
