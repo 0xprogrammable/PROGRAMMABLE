@@ -178,7 +178,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     store: Object.freeze({
       path: "lib/alchemy/launch-registry.server.ts",
       sha256:
-        "349896552268e09949974546991dfb77ea88878470b6ea969dafdd5f446cde09",
+        "8010bdbce557cbb9999e26d6c6ca036b537abfe723d57aadd1535399152316a7",
     }),
     routerReader: Object.freeze({
       path: "lib/alchemy/launch-stamp.server.ts",

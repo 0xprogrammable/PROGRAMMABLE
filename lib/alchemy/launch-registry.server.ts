@@ -23,6 +23,7 @@ const SCHEMA_VERSION = "programmable-alchemy-launch-registry-v2";
 const ROUTER_SLICE_SCHEMA_VERSION =
   "programmable-launch-stamp-router-registry-v1";
 const REPOSITORY_COMMIT = /^[0-9a-f]{40}$/u;
+const VERCEL_BLOB_STRONG_ETAG = /^"[0-9a-f]{32}"$/iu;
 
 export const LAUNCH_STAMP_ROUTER_BINDING = Object.freeze({
   chainId: CANONICAL_LAUNCH_STAMP_V1.chainId,
@@ -95,6 +96,14 @@ function requiredRepositoryCommit(
 
 function registryPath(repositoryCommit: string) {
   return `${ALCHEMY_LAUNCH_REGISTRY_DIRECTORY}/${repositoryCommit}.json`;
+}
+
+function normalizeVercelBlobEtag(value: string) {
+  const normalized = value.trim().replace(/^W\//u, "");
+  if (!VERCEL_BLOB_STRONG_ETAG.test(normalized)) {
+    throw new Error("Alchemy launch registry ETag is invalid");
+  }
+  return normalized;
 }
 
 function validLaunchToken(value: unknown, cursorBlock: bigint) {
@@ -531,7 +540,7 @@ export async function readAlchemyLaunchRegistry(
     JSON.parse(await new Response(result.stream).text()),
     deployment,
   );
-  return { registry, etag: result.blob.etag };
+  return { registry, etag: normalizeVercelBlobEtag(result.blob.etag) };
 }
 
 export async function writeAlchemyLaunchRegistry(
