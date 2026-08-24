@@ -48,6 +48,32 @@ const MAX_PROOF_BYTES = 64 * 1024;
 const GITHUB_REQUEST_TIMEOUT_MS = 15_000;
 const EXPECTED_GITHUB_API_URL = "https://api.github.com";
 
+function isProductionRepository(value) {
+  return typeof value === "string"
+    && value.toLowerCase() === PRODUCTION_REPOSITORY;
+}
+
+export function canonicalProductionRepository(value, name = "repository") {
+  if (!isProductionRepository(value)) {
+    throw new Error(`${name} does not match the closed production binding.`);
+  }
+  return PRODUCTION_REPOSITORY;
+}
+
+export function canonicalProductionWorkflowRef(value) {
+  const suffix = `/${VERIFY_WORKFLOW_PATH}@${PRODUCTION_REF}`;
+  if (typeof value !== "string" || !value.endsWith(suffix)) {
+    throw new Error(
+      "Actions workflow ref does not match the closed production binding.",
+    );
+  }
+  canonicalProductionRepository(
+    value.slice(0, -suffix.length),
+    "Actions workflow repository",
+  );
+  return `${PRODUCTION_REPOSITORY}${suffix}`;
+}
+
 export function buildProductionVerifyProofV1(input) {
   requireExact(input.repository, PRODUCTION_REPOSITORY, "repository");
   requireExactInteger(
@@ -402,9 +428,9 @@ function selectLatestExactVerifyRun(response, expected) {
     || run.head_commit?.id !== expected.commitSha
     || run.head_commit?.tree_id !== expected.treeSha
     || run.repository?.id !== PRODUCTION_REPOSITORY_ID
-    || run.repository?.full_name !== PRODUCTION_REPOSITORY
+    || !isProductionRepository(run.repository?.full_name)
     || run.head_repository?.id !== PRODUCTION_REPOSITORY_ID
-    || run.head_repository?.full_name !== PRODUCTION_REPOSITORY
+    || !isProductionRepository(run.head_repository?.full_name)
     || run.html_url !== `${run.repository.html_url}/actions/runs/${run.id}`
   ) {
     throw new Error("Latest production Verify run is canceled, incomplete, or mismatched.");
@@ -548,7 +574,10 @@ function repositoryContext(repositoryRoot) {
   requirePattern(commitSha, COMMIT, "checkout commit");
   requirePattern(treeSha, COMMIT, "checkout tree");
   requireExact(commitSha, process.env.GITHUB_SHA, "checkout/Actions commit");
-  requireExact(process.env.GITHUB_REPOSITORY, PRODUCTION_REPOSITORY, "Actions repository");
+  const repository = canonicalProductionRepository(
+    process.env.GITHUB_REPOSITORY,
+    "Actions repository",
+  );
   requireExactInteger(
     parsePositiveInteger(process.env.GITHUB_REPOSITORY_ID, "Actions repository ID"),
     PRODUCTION_REPOSITORY_ID,
@@ -558,7 +587,13 @@ function repositoryContext(repositoryRoot) {
   const workflowFileSha256 = prefixedSha256(
     readFileSync(resolve(root, VERIFY_WORKFLOW_PATH)),
   );
-  return Object.freeze({ root, commitSha, treeSha, workflowFileSha256 });
+  return Object.freeze({
+    root,
+    commitSha,
+    treeSha,
+    workflowFileSha256,
+    repository,
+  });
 }
 
 async function runCli() {
@@ -588,14 +623,12 @@ async function runCli() {
     const output = requiredArgument(argumentsByName, "output");
     const verificationMode = process.env.PRODUCTION_VERIFY_MODE;
     validateVerificationMode(verificationMode, process.env.GITHUB_EVENT_NAME);
-    requireExact(
+    const workflowRef = canonicalProductionWorkflowRef(
       process.env.GITHUB_WORKFLOW_REF,
-      `${PRODUCTION_REPOSITORY}/${VERIFY_WORKFLOW_PATH}@${PRODUCTION_REF}`,
-      "Actions workflow ref",
     );
     requireExact(process.env.GITHUB_WORKFLOW_SHA, context.commitSha, "Actions workflow commit");
     const proof = buildProductionVerifyProofV1({
-      repository: process.env.GITHUB_REPOSITORY,
+      repository: context.repository,
       repositoryId: parsePositiveInteger(
         process.env.GITHUB_REPOSITORY_ID,
         "Actions repository ID",
@@ -604,7 +637,7 @@ async function runCli() {
       commitSha: context.commitSha,
       treeSha: context.treeSha,
       workflowPath: VERIFY_WORKFLOW_PATH,
-      workflowRef: process.env.GITHUB_WORKFLOW_REF,
+      workflowRef,
       workflowSha: process.env.GITHUB_WORKFLOW_SHA,
       workflowFileSha256: context.workflowFileSha256,
       runId: parsePositiveInteger(process.env.GITHUB_RUN_ID, "Actions run ID"),
@@ -642,7 +675,7 @@ async function runCli() {
     );
     const eventName = verificationEventForMode(verificationMode);
     const resolution = await resolveProductionVerifyProofFromGitHubV1({
-      repository: process.env.GITHUB_REPOSITORY,
+      repository: context.repository,
       repositoryId: parsePositiveInteger(
         process.env.GITHUB_REPOSITORY_ID,
         "Actions repository ID",
