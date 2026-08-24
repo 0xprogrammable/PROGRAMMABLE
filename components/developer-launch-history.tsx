@@ -336,8 +336,8 @@ export function DeveloperLaunchHistory({
       </div>
       <p className={styles.intro}>
         Wallet-owned preparation records. A request is only onchain after the
-        controller wallet signs and broadcasts it. Check one request to refresh
-        its exact onchain state.
+        controller wallet signs and broadcasts it. Open a pending request to
+        load its prepared transaction and refresh its exact onchain state.
       </p>
 
       {state === "loading" ? <HistorySkeleton /> : null}
@@ -416,8 +416,8 @@ export function DeveloperLaunchHistory({
                     onClick={() => void checkOnchainStatus(launch)}
                   >
                     {checkingId === launch.requestId
-                      ? "Checking onchain status"
-                      : "Check onchain status"}
+                      ? "Loading launch details"
+                      : "Open launch details"}
                   </button>
                 ) : null}
               </li>

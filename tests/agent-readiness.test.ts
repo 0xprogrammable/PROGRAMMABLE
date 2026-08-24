@@ -135,7 +135,10 @@ describe("agent-readable public surface", () => {
     ).toEqual(["get", "post"]);
     expect(
       programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
-    ).toContain("does not perform per-launch chain reconciliation");
+    ).toContain("pending rows receive bounded best-effort chain reconciliation");
+    expect(
+      programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
+    ).toContain("output is always null");
     expect(
       Object.keys(
         programmablePublicOpenApi.paths["/v1/custom-launches/{launchId}"],

@@ -154,8 +154,9 @@ curl --fail-with-body \
 
 The collection returns only requests owned by the API key's exact wallet principal, newest first. `limit` defaults to
 10 and is bounded to 25. When `nextCursor` is non-null, pass that opaque value as `cursor` without modifying it. The
-collection preserves each request's current `status`, `output`, prepared wallet transaction and separate
-`requestId`/`onchainLaunchId` fields. It does not perform per-launch chain reconciliation.
+collection returns bounded summaries and omits the potentially large prepared artifact, so `output` is always null in
+this response. It performs bounded best-effort reconciliation for pending requests without hiding durable history when
+an RPC is unavailable. Read the single-request route for the full prepared wallet transaction and exact launch output.
 
 ## Read launch status
 

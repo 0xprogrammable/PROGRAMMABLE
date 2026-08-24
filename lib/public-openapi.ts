@@ -214,7 +214,7 @@ export const programmablePublicOpenApi = {
         operationId: "listCustomLaunches",
         summary: "List your Custom launch requests",
         description:
-          "Returns newest-first durable requests for the exact wallet bound to the API key. Pagination is bounded and keyset-based. This collection read does not perform per-launch chain reconciliation; poll the single-resource route after wallet broadcast when current onchain state is required.",
+          "Returns newest-first bounded summaries for the exact wallet bound to the API key. Pagination is keyset-based, output is always null, and pending rows receive bounded best-effort chain reconciliation without hiding durable history on RPC failure. Read the single-resource route for the full prepared artifact and exact output.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -1245,7 +1245,7 @@ export const programmablePublicOpenApi = {
       CustomLaunchListPage: {
         type: "object",
         description:
-          "Newest-first wallet-owned API request page. launchId remains the legacy alias of requestId; neither should be confused with onchainLaunchId.",
+          "Newest-first wallet-owned summary page. Each item uses the CustomLaunchResource shape but always has output=null; use the single-resource route for the prepared artifact. launchId remains the legacy alias of requestId; neither should be confused with onchainLaunchId.",
         required: ["schemaVersion", "launches", "nextCursor"],
         properties: {
           schemaVersion: { const: "programmable.custom-launch-list.v1" },
