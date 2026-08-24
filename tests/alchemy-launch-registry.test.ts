@@ -13,6 +13,7 @@ vi.mock("@vercel/blob", () => blobMocks);
 import {
   LAUNCH_STAMP_ROUTER_BINDING,
   LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+  readAlchemyLaunchRegistry,
   validateAlchemyLaunchRegistryEnvelope,
   writeAlchemyLaunchRegistry,
   type AlchemyLaunchRegistry,
@@ -406,6 +407,21 @@ describe("Alchemy incremental launch registry", () => {
         ifMatch: "exact-etag",
       }),
     );
+  });
+
+  it("normalizes the private Blob weak ETag before a conditional update", async () => {
+    blobMocks.get.mockResolvedValueOnce({
+      statusCode: 200,
+      stream: new Response(JSON.stringify(envelope())).body,
+      blob: { etag: 'W/"8e8ed5b7c65cfe481ae32dc684e98710"' },
+    });
+
+    await expect(
+      readAlchemyLaunchRegistry(deployment, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR),
+    ).resolves.toMatchObject({
+      etag: '"8e8ed5b7c65cfe481ae32dc684e98710"',
+      registry: { launchStampRouter: { tokens: [{ name: "Stamped" }] } },
+    });
   });
 
   it("reports a retryable conflict when another writer wins initial creation", async () => {
