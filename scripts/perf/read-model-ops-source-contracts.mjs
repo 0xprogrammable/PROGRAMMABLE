@@ -173,7 +173,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     runtime: Object.freeze({
       path: "lib/alchemy/explore.server.ts",
       sha256:
-        "06ed5879f453628d5da656a9494aab3485528249ea915de6a88888126cd40fe3",
+        "9e05971ef410de2b368def0ea2a78c863e6dc4ebb996eec9dd45f715a41d9db8",
     }),
     store: Object.freeze({
       path: "lib/alchemy/launch-registry.server.ts",
@@ -1315,7 +1315,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, { expire: 0 })",
       ) &&
       routerRefresherRuntime.includes(
-        'advanceExploreLaunchDiscovery(\n    deployment,\n    cursorModel,\n    "confirmed",',
+        'const confirmed = hasDurableClassicBase\n    ? await advanceExploreLaunchDiscovery(\n      deployment,\n      cursorModel,\n      "confirmed",\n    )\n    : cursorModel;',
       ) &&
       routerRefresherRuntime.includes("await writeAlchemyLaunchRegistry(") &&
       routerRefresherRuntime.includes(

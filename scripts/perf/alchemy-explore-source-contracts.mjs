@@ -152,11 +152,14 @@ export function evaluateAlchemyExploreSourceContracts(
     "alchemy-durable-registry",
     runtimeSource.includes("readDurableExploreModel(") &&
       runtimeSource.includes("Number.MAX_SAFE_INTEGER") &&
+      runtimeSource.includes("durableOrRouterBootstrapModel(") &&
+      runtimeSource.includes('read.reason === "missing"') &&
+      runtimeSource.includes("hasDurableClassicBase") &&
       runtimeSource.includes("readAlchemyLaunchRegistry(") &&
       runtimeSource.includes("advanceExploreLaunchDiscovery(") &&
       !runtimeSource.includes("readExploreModel(") &&
       !runtimeSource.includes("readLiveExploreModel"),
-    "the request path starts from the verified durable registry and advances only its separate launch overlay",
+    "the request path preserves the verified durable Classic base when present and can independently bootstrap the bounded Router slice when that retired snapshot is absent",
   );
   check(
     "alchemy-launch-registry-cas",
