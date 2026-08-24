@@ -17,7 +17,10 @@ import type {
   ReadyOnchainDeployment,
 } from "../onchain/types";
 import type { LauncherToken } from "../tokens";
-import { advanceLaunchStampRouterSlice } from "./launch-stamp.server";
+import {
+  advanceLaunchStampRouterSlice,
+  LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+} from "./launch-stamp.server";
 import {
   readAlchemyLaunchRegistry,
   writeAlchemyLaunchRegistry,
@@ -138,11 +141,26 @@ type AlchemyRegistryRefreshOptions = Readonly<{
 
 type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
 
-function durableReadyModel(
+function durableOrRouterBootstrapModel(
   deployment: ReadyOnchainDeployment,
   read: Awaited<ReturnType<typeof readDurableExploreModel>>,
 ): ReadyExploreModel {
   if (read.status !== "ready") {
+    if (read.reason === "missing") {
+      return {
+        status: "ready",
+        tokens: [],
+        snapshot: {
+          chainId: deployment.chainId,
+          blockNumber: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockNumber,
+          blockHash: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockHash,
+          confirmations: Number(deployment.confirmations),
+        },
+        creatorClaims: [],
+        launcherFeesAccruedWei: "0",
+        launcherFeesAccruedEth: "0",
+      };
+    }
     throw new Error(
       `Durable Alchemy registry is ${read.reason}: ${read.detail}`,
     );
@@ -346,7 +364,8 @@ async function refreshAlchemyExploreRegistryOnce(
     deployment,
     Number.MAX_SAFE_INTEGER,
   );
-  const base = durableReadyModel(deployment, durable);
+  const hasDurableClassicBase = durable.status === "ready";
+  const base = durableOrRouterBootstrapModel(deployment, durable);
   const initialCursor: AlchemyLaunchCursor = {
     blockNumber: base.snapshot.blockNumber,
     blockHash: base.snapshot.blockHash,
@@ -372,11 +391,13 @@ async function refreshAlchemyExploreRegistryOnce(
       blockHash: cursor.blockHash,
     },
   };
-  const confirmed = await advanceExploreLaunchDiscovery(
-    deployment,
-    cursorModel,
-    "confirmed",
-  );
+  const confirmed = hasDurableClassicBase
+    ? await advanceExploreLaunchDiscovery(
+      deployment,
+      cursorModel,
+      "confirmed",
+    )
+    : cursorModel;
   const routerAdvance = await advanceLaunchStampRouterSlice(
     deployment,
     {
@@ -430,7 +451,8 @@ async function refreshAlchemyExploreRegistryOnce(
       console.warn("Alchemy registry persistence failed", safeAlchemyError(error));
     }
   }
-  const servedCursorModel = options.includeLatest === false
+  const servedCursorModel = options.includeLatest === false ||
+      !hasDurableClassicBase
     ? confirmed
     : await advanceExploreLaunchDiscovery(deployment, confirmed, "latest");
   const classicModel: ReadyExploreModel = {

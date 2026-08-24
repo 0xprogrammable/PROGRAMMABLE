@@ -26,6 +26,11 @@ vi.mock("../lib/onchain/read-model", () => ({
 }));
 vi.mock("../lib/alchemy/launch-stamp.server", () => ({
   advanceLaunchStampRouterSlice: mocks.advanceLaunchStampRouterSlice,
+  LAUNCH_STAMP_ROUTER_INITIAL_CURSOR: {
+    blockNumber: "25717611",
+    blockHash:
+      "0x2d42bd6f5cea0a09b7a76c5ca51569ac69e677cef0498b12730d6f1f7a979a5e",
+  },
 }));
 vi.mock("../lib/alchemy/launch-registry.server", () => ({
   readAlchemyLaunchRegistry: mocks.readAlchemyLaunchRegistry,
@@ -35,7 +40,10 @@ vi.mock("../lib/alchemy/launch-registry.server", () => ({
 import { refreshAlchemyExploreRegistry } from "../lib/alchemy/explore.server";
 import { canonicalTokenExploreEntryV1 } from "../lib/explore-entry-v1";
 import type { LauncherToken } from "../lib/tokens";
-import { stampedClassicToken } from "./launch-stamp-surface-fixture";
+import {
+  customGraphToken,
+  stampedClassicToken,
+} from "./launch-stamp-surface-fixture";
 
 const deployment = {
   environment: "production",
@@ -330,6 +338,62 @@ describe("Alchemy launch overlay refresh", () => {
       "registry-etag",
     );
     expect(result.launchStampRouterBlockNumber).toBe("25717680");
+  });
+
+  it("bootstraps the Router slice without the retired Classic snapshot", async () => {
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "unavailable",
+      reason: "missing",
+      detail: "No durable index snapshot exists",
+    });
+    mocks.advanceLaunchStampRouterSlice.mockResolvedValueOnce({
+      slice: {
+        cursor: {
+          blockNumber: "25718017",
+          blockHash: `0x${"cd".repeat(32)}`,
+        },
+        tokens: [customGraphToken],
+      },
+      scannedFromBlock: "25717612",
+      scannedToBlock: "25718017",
+      discovered: 1,
+      hydrated: 1,
+      rebuiltAfterReorg: false,
+    });
+
+    const result = await refreshAlchemyExploreRegistry({
+      includeLatest: true,
+    });
+
+    expect(mocks.readAlchemyLaunchRegistry).toHaveBeenCalledWith(
+      deployment,
+      expect.objectContaining({ blockNumber: "25717611" }),
+    );
+    expect(mocks.advanceExploreLaunchDiscovery).not.toHaveBeenCalled();
+    expect(mocks.writeAlchemyLaunchRegistry).toHaveBeenCalledWith(
+      deployment,
+      expect.objectContaining({
+        cursor: expect.objectContaining({ blockNumber: "25717611" }),
+        tokens: [],
+        launchStampRouter: expect.objectContaining({
+          cursor: expect.objectContaining({ blockNumber: "25718017" }),
+          tokens: [customGraphToken],
+        }),
+      }),
+      "registry-etag",
+    );
+    expect(result).toMatchObject({
+      baseBlockNumber: "25717611",
+      confirmedBlockNumber: "25717611",
+      servedBlockNumber: "25717611",
+      launchStampRouterBlockNumber: "25718017",
+    });
+    expect(result.model.tokens).toEqual([
+      expect.objectContaining({
+        tokenAddress: customGraphToken.tokenAddress,
+        launchDiscoverySource: "operational-launch-overlay",
+      }),
+    ]);
   });
 
   it("persists a Router cursor hash replacement even without block progress", async () => {
