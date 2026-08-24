@@ -12,6 +12,10 @@ const TOKEN = "0x1111111111111111111111111111111111111111";
 const CREATOR = "0x2222222222222222222222222222222222222222";
 const POOL = `0x${"33".repeat(32)}`;
 const CUSTOM_TOKEN = "0x9999999999999999999999999999999999999999";
+const ROUTER_TOKEN = "0x6969696969696969696969696969696969696969";
+const ROUTER_LAUNCH_ID = `0x${"ab".repeat(32)}`;
+const ROUTER_STAMP_HASH = `0x${"cd".repeat(32)}`;
+const POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
 
 function entry(index) {
   const tokenAddress = index === 0
@@ -94,6 +98,50 @@ function customProject() {
     ],
     launchCategoryProvenance: {},
     valuation: { status: "unavailable", reason: "source-unavailable" },
+  };
+}
+
+function routerCustomEntry() {
+  return {
+    ...entry(0),
+    id: `1:${ROUTER_TOKEN}`,
+    tokenAddress: ROUTER_TOKEN,
+    launchModel: "custom-graph",
+    launchModelVersion: "programmable-launch-stamp-router-v1",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "custom",
+      source: "canonical-launch-stamp-router",
+      launchId: ROUTER_LAUNCH_ID,
+      stampHash: ROUTER_STAMP_HASH,
+    },
+    launchStampProvenance: {
+      schemaVersion: "programmable.launch-stamp-provenance.v1",
+      chainId: 1,
+      kind: "custom-graph",
+      launchId: ROUTER_LAUNCH_ID,
+      stampHash: ROUTER_STAMP_HASH,
+      poolManagerAddress: POOL_MANAGER,
+      poolId: POOL,
+      poolKey: {
+        currency0: "0x0000000000000000000000000000000000000000",
+        currency1: ROUTER_TOKEN,
+        fee: 8_388_608,
+        tickSpacing: 10,
+        hooks: "0xd7451a039373f54e493deE42A751fEcBfAFBa0cc",
+      },
+      tokenProof: {
+        tokenAddress: ROUTER_TOKEN,
+        launchId: ROUTER_LAUNCH_ID,
+        stampHash: ROUTER_STAMP_HASH,
+      },
+      poolProof: {
+        poolManagerAddress: POOL_MANAGER,
+        poolId: POOL,
+        launchId: ROUTER_LAUNCH_ID,
+        stampHash: ROUTER_STAMP_HASH,
+      },
+    },
   };
 }
 
@@ -313,6 +361,74 @@ function stagedFetch(
   };
 }
 
+function routerCustomStagedFetch(mutate = (value) => value) {
+  const launchSource =
+    "envio-classic-v3+canonical-launch-stamp-router";
+  return stagedFetch(
+    ({ body, url }) => {
+      if (url.pathname === "/api/explore") {
+        return {
+          ...body,
+          tokens: [mutate(routerCustomEntry()), entry(1)],
+          catalog: {
+            ...body.catalog,
+            launchSource,
+            completeness: {
+              ...body.catalog.completeness,
+              routerCustom: "current",
+            },
+            scope: {
+              ...body.catalog.scope,
+              included: [
+                ...body.catalog.scope.included,
+                "canonical-launch-stamp-router",
+              ],
+            },
+          },
+        };
+      }
+      if (url.pathname === "/api/explore/token") {
+        return {
+          ...body,
+          token: mutate(routerCustomEntry()),
+          catalog: {
+            ...body.catalog,
+            launchSource,
+            completeness: {
+              ...body.catalog.completeness,
+              routerCustom: "current",
+            },
+            scope: {
+              ...body.catalog.scope,
+              included: [
+                ...body.catalog.scope.included,
+                "canonical-launch-stamp-router",
+              ],
+            },
+          },
+        };
+      }
+      return body;
+    },
+    ({ extraHeaders, omittedHeaders, url }) => ({
+      extraHeaders: [
+        "/api/explore",
+        "/api/explore/token",
+        "/api/explore/token/chart",
+      ].includes(url.pathname)
+        ? {
+            ...extraHeaders,
+            "x-programmable-launch-source": launchSource,
+            "x-programmable-read-source": url.pathname.endsWith("/chart")
+              ? `${launchSource}+bitquery`
+              : `${launchSource}+dexscreener`,
+          }
+        : extraHeaders,
+      omittedHeaders,
+    }),
+  );
+}
+
 function pagedCatalogTransform(allEntries, options = {}) {
   return ({ body, url }) => {
     if (url.pathname === "/api/explore") {
@@ -439,6 +555,120 @@ test("staged smoke accepts identity-only Explore and token responses", async () 
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
   assert.equal(output.length, 1);
   assert.match(output[0][1], /market_read_status=unavailable/u);
+});
+
+test("staged smoke accepts an exact Router Custom token identity", async () => {
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: routerCustomStagedFetch(),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.tokenAddress, ROUTER_TOKEN);
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+});
+
+test("staged smoke rejects malformed Router Custom identity provenance", async () => {
+  const scenarios = [
+    (value) => ({ ...value, launchModelVersion: "classic-v3" }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        schemaVersion: "programmable.launch-stamp-provenance.v2",
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        poolId: `0x${"fe".repeat(32)}`,
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchCategoryProvenance: {
+        ...value.launchCategoryProvenance,
+        source: "registry.custom-launched",
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchCategoryProvenance: {
+        ...value.launchCategoryProvenance,
+        launchId: `0x${"fe".repeat(32)}`,
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        tokenProof: {
+          ...value.launchStampProvenance.tokenProof,
+          tokenAddress: TOKEN,
+        },
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        tokenProof: {
+          ...value.launchStampProvenance.tokenProof,
+          stampHash: `0x${"fe".repeat(32)}`,
+        },
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        poolProof: {
+          ...value.launchStampProvenance.poolProof,
+          poolManagerAddress: TOKEN,
+        },
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        poolProof: {
+          ...value.launchStampProvenance.poolProof,
+          poolId: `0x${"fe".repeat(32)}`,
+        },
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchStampProvenance: {
+        ...value.launchStampProvenance,
+        poolProof: {
+          ...value.launchStampProvenance.poolProof,
+          launchId: `0x${"fe".repeat(32)}`,
+        },
+      },
+    }),
+  ];
+
+  for (const mutate of scenarios) {
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: routerCustomStagedFetch(mutate),
+        appendOutput: () => undefined,
+      }),
+      /Explore identity set is malformed or duplicated/u,
+    );
+  }
 });
 
 test("staged smoke accepts monotonic Envio progress with stable identities", async () => {
