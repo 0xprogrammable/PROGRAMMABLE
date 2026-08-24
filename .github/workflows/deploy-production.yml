@@ -697,15 +697,27 @@ jobs:
             maximumBytes: 4 * 1024 * 1024,
             label: "staged Envio catalog probe",
           }));
-          const expectedLaunchSource =
-            body?.catalog?.completeness?.custom === "current"
-              ? "envio-classic-v3+registry.custom-launched"
+          const registryCustomCurrent =
+            body?.catalog?.completeness?.registryCustom === "current";
+          const routerCustomCurrent =
+            body?.catalog?.completeness?.routerCustom === "current";
+          const expectedLaunchSource = registryCustomCurrent
+            ? routerCustomCurrent
+              ? "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
+              : "envio-classic-v3+registry.custom-launched"
+            : routerCustomCurrent
+              ? "envio-classic-v3+canonical-launch-stamp-router"
               : "envio-classic-v3";
+          const expectedCustomStatus =
+            registryCustomCurrent && routerCustomCurrent
+              ? "current"
+              : "unavailable";
           if (
             response.status !== 200 ||
             body?.status !== "ready" ||
             body?.catalog?.source !== "envio-classic-v3" ||
             body.catalog.launchSource !== expectedLaunchSource ||
+            body.catalog.completeness?.custom !== expectedCustomStatus ||
             body.catalog.completeness?.stock !== "excluded" ||
             body.catalog.evidence?.kind !== "envio-indexer-state" ||
             body.catalog.evidence?.progressBlock !== body.catalog.asOfBlock ||
