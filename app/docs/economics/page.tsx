@@ -117,8 +117,8 @@ export default function EconomicsDocsPage() {
           <p>
             The policy describes the split; the matching release and public
             record determine whether a particular launch, template or recipient
-            can use it. Public template intake is controlled by the repository
-            instructions. Prediction Markets keeps its current economics in the{" "}
+            can use it. Public template intake is not active. Prediction Markets
+            keeps its current economics in the{" "}
             <DocsExternalLink
               href={PROGRAMMABLE_PUBLIC_REPOSITORIES.predictionMarkets}
             >
@@ -138,9 +138,9 @@ export default function EconomicsDocsPage() {
           separately documented payout path is active.
         </p>
         <p>
-          Earnings depend on actual qualifying activity. A review, listing or
-          template publication does not promise trading volume or a fixed
-          payment.
+          Earnings depend on actual qualifying activity. API preparation,
+          listing or template publication does not promise trading volume or a
+          fixed payment.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/earnings">Read the creator guide</Link>

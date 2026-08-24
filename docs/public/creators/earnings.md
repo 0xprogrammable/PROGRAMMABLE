@@ -10,4 +10,4 @@ Rewards accrue in ETH and follow the recipient configuration recorded at launch.
 
 The published public template policy describes a 0.2% total transaction fee. It assigns 0.1% to the template creator and 0.1% to Programmable. That policy is not active until public template intake and the exact payout route are activated.
 
-Earnings depend on actual qualifying activity. A review, listing, template record or visible token page does not promise volume, revenue or a fixed payment.
+Earnings depend on actual qualifying activity. API preparation, listing, a template record or a visible token page does not promise volume, revenue or a fixed payment.

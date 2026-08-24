@@ -52,6 +52,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "Programmable read endpoints: no authentication",
     "Custom Launch API: wallet-bound pm_live_ API key",
     "Ethereum RPC authentication: provider-specific",
+    "Read-only Developer API: https://developers.programmable.family",
     "",
     "## API-first Custom launches",
     "",
@@ -267,7 +268,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "It does not establish safety, tradability, current liquidity or pool state, audit coverage, review status, approval, endorsement, permission to launch, or terminal support. It does not automatically list or label a launch in GMGN, Axiom, FOMO, or any other terminal; each consumer must implement the published verification procedure.",
     "",
-    `Router verification is read-only. Launch access is a separate product path from verification: create a wallet-bound key at ${apiKeysUrl} and use ${customLaunchApiOrigin}/v1/custom-launches, or check https://programmable.market/docs/creators/launch for other current launch paths. The provenance reference alone grants neither access nor launch authorization.`,
+    `Router verification and the Developer API are read-only. Custom launch preparation is the separate authenticated write path: create a wallet-bound key at ${apiKeysUrl} and use ${customLaunchApiOrigin}/v1/custom-launches. The provenance reference alone grants neither access nor launch authorization.`,
   ].join("\n");
 }
 
@@ -407,7 +408,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Protocol fee claim discovery is a separate index: complete Classic Launcher and Custom Registry scans plus the fixed Stock release set. Unknown or unverified sources fail closed, and Custom V2 stays unavailable until its exact deployed release is finalized.",
     "- The live claim boundary is published at https://claimhazard.vercel.app/claim-discovery.json and requires one wallet-declared atomic batch from the fixed reward wallet.",
     "- A Router record establishes provenance only after the required address, runtime, binding, lookup, and cross-check verification passes. It does not establish safety, tradability, current liquidity, audit coverage, endorsement, terminal support, or launch authorization.",
-    `- Launch access is a separate product path from this provenance reference. Use ${apiKeysUrl} for API-first Custom launch access or check https://programmable.market/docs/creators/launch for other current paths; the provenance reference alone grants neither access nor launch authorization.`,
+    `- Launch access is a separate authenticated write path from this read-only provenance reference. Use ${apiKeysUrl} for API-first Custom launch access and ${customLaunchApiOrigin}/v1/custom-launches for launch preparation; the provenance reference alone grants neither access nor launch authorization.`,
   ].join("\n");
 }
 

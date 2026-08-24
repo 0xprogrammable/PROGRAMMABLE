@@ -108,15 +108,16 @@ export default function CreatorLaunchDocsPage() {
       <section id="submit">
         <h2>Submit the bundle</h2>
         <p>
-          Send the source descriptor and executable graph bundle to the Custom
-          Launch API with the key as a Bearer credential. The API validates the
-          declared manifest commitment, wallet binding, graph, hook permissions
-          and launch constraints before it prepares an action. It does not
-          compile or simulate the submitted project.
+          Send the source descriptor and executable graph bundle to{" "}
+          <code>https://api.programmable.market/v1/custom-launches</code> with
+          the key as a Bearer credential. The API validates the declared
+          manifest commitment, wallet binding, graph, hook permissions and
+          launch constraints before it prepares an action. It does not compile
+          or simulate the submitted project.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/docs/developers/machine-readable">
-            Read the machine-readable API guide
+          <Link href="/developers/custom-launch-api-v1.md">
+            Read the Custom Launch API guide
           </Link>
         </p>
       </section>
@@ -157,7 +158,7 @@ export default function CreatorLaunchDocsPage() {
           </li>
           <li>
             Treat a new contract version or materially changed control path as a
-            new review target.
+            new launch subject.
           </li>
         </ul>
       </section>

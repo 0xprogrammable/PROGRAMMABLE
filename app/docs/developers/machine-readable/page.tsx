@@ -234,8 +234,8 @@ export default function MachineReadableDocsPage() {
             no authentication.
           </li>
           <li>
-            <code>api.programmable.market/v1/custom-launches</code> requires a
-            wallet-bound <code>pm_live_</code> Bearer key.
+            <code>https://api.programmable.market/v1/custom-launches</code>{" "}
+            requires a wallet-bound <code>pm_live_</code> Bearer key.
           </li>
           <li>
             Keys default to 90 days, are capped at 366 days and are limited to

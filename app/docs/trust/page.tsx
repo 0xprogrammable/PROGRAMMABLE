@@ -8,13 +8,13 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Trust · Programmable",
   description:
-    "Understand what source review, launch activation, wallet execution and Router provenance prove.",
+    "Understand what bundle evidence, API preparation, wallet execution and Router provenance prove.",
   alternates: { canonical: "/docs/trust" },
 };
 
 const sections = [
   { id: "layers", label: "Evidence layers" },
-  { id: "review", label: "Review and approval" },
+  { id: "review", label: "Checks and preparation" },
   { id: "router", label: "Router provenance" },
   { id: "roles", label: "Roles and controls" },
   { id: "audits", label: "Independent review" },
@@ -25,7 +25,7 @@ export default function TrustDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/trust"
-      description="Programmable separates source review, launch authority, wallet execution and public onchain verification."
+      description="Programmable separates caller evidence, API preparation, wallet execution and public onchain verification."
       sections={sections}
       title="Trust"
     >
@@ -37,17 +37,17 @@ export default function TrustDocsPage() {
         </p>
         <ol className={docsStyles.steps}>
           <li>
-            <strong>Source review</strong>
+            <strong>Agent evidence</strong>
             <span>
-              Did the exact source revision and its evidence pass the published
-              review gates?
+              Which checks did the agent attest it ran for the exact graph
+              bundle?
             </span>
           </li>
           <li>
-            <strong>Launch activation</strong>
+            <strong>API preparation</strong>
             <span>
-              Is the matching execution profile active for the named revision,
-              wallet and chain?
+              Did the platform validate the declared manifest, graph, evidence
+              digests and wallet binding and return an exact action?
             </span>
           </li>
           <li>
@@ -80,29 +80,31 @@ export default function TrustDocsPage() {
       </section>
 
       <section id="review">
-        <h2>Review and approval</h2>
+        <h2>Checks and preparation</h2>
         <p>
-          A review applies to one exact source revision and evidence set. A
-          later commit is a different target, even when its project name is
-          unchanged.
+          Each Custom request binds one source descriptor, manifest digest,
+          graph bundle and set of agent evidence digests. A changed bundle is a
+          new launch subject, even when its project name is unchanged.
         </p>
         <div className={docsStyles.factGrid}>
           <div className={docsStyles.fact}>
-            <span>Accepted revision</span>
-            <strong>Passed the defined review gates</strong>
+            <span>Agent evidence</span>
+            <strong>Caller-declared digests for checks on the exact graph</strong>
           </div>
           <div className={docsStyles.fact}>
-            <span>Changes requested</span>
-            <strong>Needs a specific correction and a new review target</strong>
+            <span>Prepared</span>
+            <strong>The exact wallet action exists but is not signed</strong>
           </div>
           <div className={docsStyles.fact}>
-            <span>Pending</span>
-            <strong>Required evidence is incomplete or unavailable</strong>
+            <span>Failed</span>
+            <strong>The request did not satisfy a required binding or constraint</strong>
           </div>
         </div>
         <p>
-          Acceptance is technical readiness for the named scope. It is not an
-          external audit, endorsement, price opinion or promise that a launch
+          The platform validates shapes, digests and graph bindings. It does not
+          fetch the evidence, reproduce the build, compile or simulate the
+          project, audit it or adopt the agent&apos;s claims. A prepared result is
+          not an approval, endorsement, price opinion or promise that a launch
           will trade.
         </p>
       </section>

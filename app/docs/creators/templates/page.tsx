@@ -1,19 +1,18 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
 import {
   formatBps,
   PROGRAMMABLE_FEE_TABLE,
-  PROGRAMMABLE_PUBLIC_REPOSITORIES,
 } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
-  title: "Publish a template · Programmable",
+  title: "Public templates · Programmable",
   description:
-    "Publish reusable hook logic with clear version binding, attribution and creator fees.",
+    "Understand the planned reusable hook versioning, attribution and creator fee policy.",
   alternates: { canonical: "/docs/creators/templates" },
 };
 
@@ -23,7 +22,7 @@ const sections = [
   { id: "economics", label: "Template economics" },
   { id: "version", label: "Version and attribution" },
   { id: "requirements", label: "What a template needs" },
-  { id: "next", label: "Repository reference" },
+  { id: "next", label: "Current status" },
 ] as const;
 
 export default function CreatorTemplateDocsPage() {
@@ -36,34 +35,27 @@ export default function CreatorTemplateDocsPage() {
       parentHref="/docs/creators"
       parentLabel="Creators"
       sections={sections}
-      title="Publish a template"
+      title="Public templates"
     >
       <section id="overview">
         <h2>Template model</h2>
         <p>
           A template is reusable hook logic with a defined parameter range. Each
-          version is reviewed and attributed separately so creators can see
+          version would be bound and attributed separately so creators can see
           exactly which code their launches use.
         </p>
         <p>
-          Use Submit a Template for reusable logic. A concrete token and project
-          belong in the Custom Launch API, while Hook Builder remains the skill
-          and tooling layer for creating both.
+          A concrete token and project belong in the Custom Launch API. A public
+          template would be a separately versioned product for other creators to
+          select, but that submission path is not active.
         </p>
         <div className={docsStyles.callout}>
-          <strong>Follow the Submit a Template repository.</strong>
+          <strong>Public template intake is closed.</strong>
           <p>
-            The repository is the source for the schema, examples and intake
-            rules. Its current instructions do not accept public template
-            applications. Read the repository before opening a pull request; the
-            repository controls when that changes.
+            Do not open a repository application or send a reusable template to
+            the Custom Launch API. Use the API only for one concrete project and
+            token bundle.
           </p>
-          <DocsExternalLink
-            href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitTemplate}
-            variant="chip"
-          >
-            Open Submit a Template
-          </DocsExternalLink>
         </div>
       </section>
 
@@ -94,7 +86,7 @@ export default function CreatorTemplateDocsPage() {
                 </td>
               </tr>
               <tr>
-                <th scope="row">Review target</th>
+                <th scope="row">Version target</th>
                 <td data-label="Project launch">
                   One source revision and launch configuration.
                 </td>
@@ -109,7 +101,7 @@ export default function CreatorTemplateDocsPage() {
                   Launch from the bound wallet.
                 </td>
                 <td data-label="Public template">
-                  Publish a version for future official launches.
+                  No public submission while the program is inactive.
                 </td>
               </tr>
               <tr>
@@ -118,7 +110,7 @@ export default function CreatorTemplateDocsPage() {
                   Defined by the project market.
                 </td>
                 <td data-label="Public template">
-                  10 bps from qualifying official template usage.
+                  Planned 10 bps from qualifying official template usage.
                 </td>
               </tr>
             </tbody>
@@ -176,18 +168,14 @@ export default function CreatorTemplateDocsPage() {
       </section>
 
       <section id="next">
-        <h2>Repository reference</h2>
+        <h2>Current status</h2>
         <p>
-          Submit a Template contains the schema, examples and review process for
-          this path. Use the repository as the source for current intake
-          instructions.
+          Public template submissions and fee share activation are not active.
+          For a concrete Custom project, use the current API-first launch path.
         </p>
-        <DocsExternalLink
-          href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitTemplate}
-          variant="chip"
-        >
-          Follow Submit a Template
-        </DocsExternalLink>
+        <p className={styles.inlineAction}>
+          <Link href="/developers/api-keys">Create a Custom launch API key</Link>
+        </p>
       </section>
     </DocsShell>
   );

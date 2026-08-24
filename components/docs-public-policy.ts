@@ -20,8 +20,7 @@ export const PROGRAMMABLE_PUBLIC_REPOSITORIES = {
     "https://github.com/0xprogrammable/programmable-prediction-markets",
   product: "https://github.com/0xprogrammable/programmable",
   productIssues: "https://github.com/0xprogrammable/programmable/issues",
-  submitLaunch: "https://github.com/0xprogrammable/submit-launch",
-  submitTemplate: "https://github.com/0xprogrammable/submit-template",
+  launchPolicy: "https://github.com/0xprogrammable/launch-policy",
 } as const;
 
 export const PROGRAMMABLE_PRODUCT_STATES = {
@@ -32,9 +31,9 @@ export const PROGRAMMABLE_PRODUCT_STATES = {
     lifecycle: "Live",
   },
   custom: {
-    availability: "Gated",
+    availability: "Open",
     detail:
-      "Custom releases are enabled individually after review and release binding.",
+      "Custom launch preparation uses a wallet-bound API key, and the controller wallet signs separately.",
     label: "Custom hooks",
     lifecycle: "Live",
   },

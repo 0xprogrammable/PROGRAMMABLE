@@ -9,7 +9,7 @@ Costs and fee paths depend on the transaction that actually executes. A launch m
 | Path               | Share                                                    | How it works                                                     |
 | ------------------ | -------------------------------------------------------- | ---------------------------------------------------------------- |
 | Classic            | 0.1% of the gross ETH amount exchanged                   | Included in the selected buy or sell transaction fee             |
-| Standard Custom    | 0.1% of the gross amount exchanged on the approved route | Defined by the exact accepted release                            |
+| Standard Custom    | 0.1% of the gross amount exchanged on the supported route | Defined by the exact release used by the graph                   |
 | Prediction Markets | Defined by the active protocol release                   | Current rates, recipients and creator rewards live in its source |
 | Public template    | Intended 0.1% share inside a 0.2% total transaction fee  | Not active while public template intake remains closed           |
 
@@ -21,7 +21,7 @@ Classic creators select buy and sell transaction fees from 1% through 10%. Progr
 
 ## Custom releases
 
-Custom fees are specific to each release. The only accepted production policy assigns 0.1% of the gross amount exchanged on the exact reviewed market path to Programmable. A release without a qualifying market has no fee legs. Every other Custom fee mode fails closed.
+Custom fees are specific to each release. The published standard production policy assigns 0.1% of the gross amount exchanged on the verified supported market path to Programmable. A release without a qualifying market has no fee legs. Every other Custom fee mode fails closed.
 
 ## Prediction Markets
 

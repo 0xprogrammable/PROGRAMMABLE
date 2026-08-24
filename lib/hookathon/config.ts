@@ -3,6 +3,8 @@ export type HookathonPrize = Readonly<{
   amountUsd: number;
 }>;
 
+// Immutable historical fixture for the retired Hookathon route. The public route
+// returns 404; this repository URL and label are not current launch intake.
 export type HookathonConfig = Readonly<{
   name: "Hookathon";
   confirmationIso: string;

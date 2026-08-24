@@ -9,15 +9,15 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Creators · Programmable",
   description:
-    "Prepare a Custom launch through the API, publish reusable hook logic and understand how creators earn.",
+    "Prepare a Custom launch through the API and understand current creator paths and earnings.",
   alternates: { canonical: "/docs/creators" },
 };
 
 const sections = [
   { id: "paths", label: "Choose a creator path" },
   { id: "project", label: "Launch a project" },
-  { id: "template", label: "Publish a template" },
-  { id: "review", label: "Checks and activation" },
+  { id: "template", label: "Public templates" },
+  { id: "review", label: "Checks and wallet action" },
   { id: "earn", label: "How creators earn" },
   { id: "tools", label: "Tools and programs" },
 ] as const;
@@ -26,16 +26,16 @@ export default function CreatorsDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators"
-      description="Prepare a Custom launch through the API, publish reusable hook logic or work with Programmable through a creator program."
+      description="Prepare a Custom launch through the API, understand the planned template policy or work with Programmable through a creator program."
       sections={sections}
       title="Create with Programmable"
     >
       <section id="paths">
         <h2>Choose a creator path</h2>
         <p>
-          A project launch and a reusable template are different products. A
-          launch creates one token and market. A template is reviewed for other
-          people to use in future launches.
+          Custom project launches are available through the API. A reusable
+          template would be a different product for other people to use in
+          future launches, and its public intake is not open.
         </p>
 
         <div className={styles.pathGrid}>
@@ -48,12 +48,11 @@ export default function CreatorsDocsPage() {
             </small>
           </Link>
           <Link className={styles.pathCard} href="/docs/creators/templates">
-            <span>Submit a Template</span>
-            <strong>Publish reusable logic</strong>
+            <span>Planned</span>
+            <strong>Understand public templates</strong>
             <small>
-              Submit a reusable hook template that other creators can use in
-              their own official launches. The repository currently does not
-              accept public template applications.
+              Read the planned versioning, attribution and fee policy. Public
+              template submissions are not active.
             </small>
           </Link>
           <a
@@ -66,8 +65,7 @@ export default function CreatorsDocsPage() {
             <strong>Build with the skill and tools</strong>
             <small>
               Use the Hook Builder skill to create a reproducible Uniswap v4
-              project before packaging it for the Custom Launch API or Submit a
-              Template.
+              project before packaging it for the Custom Launch API.
             </small>
             <span className="sr-only">Opens Hook Builder on GitHub</span>
           </a>
@@ -95,16 +93,17 @@ export default function CreatorsDocsPage() {
       </section>
 
       <section id="template">
-        <h2>Publish a template</h2>
+        <h2>Public templates are planned</h2>
         <p>
           A public template uses one 20 bps fee: 10 bps goes to the template
           creator and 10 bps goes to Programmable. The share is tied to the
           exact template version and its official payout path; no share accrues
-          before the repository, registry and recipient path are activated.
+          before the program, registry and recipient path are activated.
         </p>
         <p>
-          Submit a Template is the separate path for reusable hook logic. Do not
-          send reusable template applications through the Custom Launch API.
+          Public template intake is not active. The Custom Launch API accepts
+          one concrete project and token bundle; it does not publish reusable
+          templates.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/templates">Read the template model</Link>
@@ -112,17 +111,17 @@ export default function CreatorsDocsPage() {
       </section>
 
       <section id="review">
-        <h2>Checks and activation</h2>
+        <h2>Checks and wallet action</h2>
         <p>
           The Custom Launch API checks one deterministic bundle and prepares an
-          exact wallet action. Template Reviewer separately checks one reusable
-          template version, its parameter range and payout identity.
+          exact wallet action. A future template program would separately bind
+          one reusable version, parameter range and payout identity.
         </p>
         <p>
-          Preparation and activation are separate. An API result does not
+          Preparation and wallet execution are separate. An API result does not
           authorize the controller wallet, sign a transaction or broadcast it.
-          The matching wallet action and release record must provide those
-          separate bindings.
+          The matching wallet action and final onchain record provide those
+          separate results.
         </p>
       </section>
 
@@ -134,8 +133,8 @@ export default function CreatorsDocsPage() {
           their separately documented payout path is active.
         </p>
         <p>
-          Revenue depends on qualifying activity. Review, publication and
-          listing do not promise volume or a fixed payment.
+          Revenue depends on qualifying activity. API preparation, publication
+          and listing do not promise volume or a fixed payment.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/earnings">Compare creator earnings</Link>

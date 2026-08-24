@@ -56,7 +56,7 @@ export const docsCategories = [
     relatedPaths: programmablePaths,
   },
   {
-    description: "Launch, publish and earn",
+    description: "Launch and earn",
     href: "/docs/creators",
     label: "Creators",
     relatedPaths: creatorPaths,
@@ -115,7 +115,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       {
         depth: 1,
         href: "/docs/creators/templates",
-        label: "Publish a template",
+        label: "Public template policy",
       },
       { depth: 1, href: "/docs/creators/earnings", label: "Earnings" },
       { depth: 1, href: "/docs/creators/programs", label: "Programs" },
@@ -169,9 +169,9 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/creators/launch",
   },
   {
-    title: "Publish a template",
+    title: "Public template policy",
     description:
-      "Publish reusable hook logic with clear version binding and attribution.",
+      "Understand the planned version binding, attribution and fee model.",
     href: "/docs/creators/templates",
     keywords: ["template", "royalty", "fee share"],
   },
@@ -203,7 +203,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Trust",
     description:
-      "Understand what reviews, launch stamps and public records prove.",
+      "Understand what bundle checks, launch stamps and public records prove.",
     href: "/docs/trust",
     keywords: ["security", "audit", "approval"],
   },

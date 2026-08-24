@@ -4,7 +4,7 @@
 
 Programmable documentation serves token creators, hook developers, integrators, researchers and people verifying a launch. A reader should be able to understand what is public now, what an interface does, where a fact comes from and which action still belongs to a wallet or maintainer.
 
-The documentation explains the product without turning technical evidence into a marketing claim. It separates source availability, review, release activation, wallet execution, chain finality, indexing, price data and liquidity data because those states prove different things.
+The documentation explains the product without turning technical evidence into a marketing claim. It separates caller-declared source evidence, API preparation, wallet execution, chain finality, indexing, price data and liquidity data because those states prove different things.
 
 ## Voice
 
@@ -22,7 +22,7 @@ When a fact can drift, link readers to the live status endpoint, developer manif
 
 ## Product terminology
 
-Use “Programmable” with this capitalization. Use “Classic”, “Custom” and “Prediction Markets” for the documented launch models. Use “Custom project” when referring to a project submitted through the public Custom Launch intake. Use “hook” only when the technical mechanism matters, and explain it in plain English when it first appears on a reader facing page.
+Use “Programmable” with this capitalization. Use “Classic”, “Custom” and “Prediction Markets” for the documented launch models. Use “Custom project” for one concrete project and token bundle prepared through the authenticated Custom Launch API. Use “hook” only when the technical mechanism matters, and explain it in plain English when it first appears on a reader facing page.
 
 The canonical Prediction Markets repository owns current networks, supported markets, collateral and activation rules, fees and creator rewards, resolution rules, contract addresses and security or release evidence. Do not duplicate those release-specific facts in these docs; link to the canonical repository instead.
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { DocsAddress } from "@/components/docs-address";
@@ -25,11 +26,11 @@ const classicSections = [
 
 const customSections = [
   { id: "overview", label: "What Custom is" },
-  { id: "release-scope", label: "Release-specific behavior" },
-  { id: "release-requirements", label: "Release requirements" },
+  { id: "release-scope", label: "Bundle-specific behavior" },
+  { id: "release-requirements", label: "Bundle requirements" },
   { id: "launch-information", label: "Launch information" },
   { id: "router-provenance", label: "Router provenance" },
-  { id: "project-presentation", label: "What activation does not prove" },
+  { id: "project-presentation", label: "What preparation does not prove" },
 ] as const;
 
 const stockPairedSections = [
@@ -53,7 +54,7 @@ const modelMetadata: Record<ModelSlug, { description: string; title: string }> =
     custom: {
       title: "Custom hooks",
       description:
-        "Requirements and provenance for releases that use individual Uniswap v4 hooks.",
+        "API preparation requirements and provenance for individual Uniswap v4 hook graphs.",
     },
     "prediction-markets": {
       title: "Prediction Markets",
@@ -376,7 +377,7 @@ function CustomDocs() {
       currentPath="/docs/models/custom"
       kicker="Launch model · Ethereum"
       title="Custom hooks"
-      description="Custom launches use Uniswap v4 hook logic with behavior and controls defined by each release."
+      description="Custom launches use deterministic Uniswap v4 hook graphs prepared through the wallet-bound API."
       sections={customSections}
     >
       <section id="overview">
@@ -387,9 +388,12 @@ function CustomDocs() {
           liquidity or other permitted callbacks work.
         </p>
         <p>
-          Each release defines its own review target, execution profile and
-          activation record. Use those records and the program instructions for
-          the launch path you are evaluating.
+          Each request binds one source descriptor, manifest digest, graph
+          bundle and controller wallet. The authenticated API prepares the exact
+          wallet action without signing or broadcasting it.
+        </p>
+        <p className={styles.inlineAction}>
+          <Link href="/developers/api-keys">Create a Custom launch API key</Link>
         </p>
       </section>
 
@@ -403,15 +407,15 @@ function CustomDocs() {
       </section>
 
       <section id="release-requirements">
-        <h2>Release requirements</h2>
+        <h2>Bundle requirements</h2>
         <p>
-          Before activation, a release must define the following information.
+          Before submission, a bundle must define the following information.
         </p>
         <ul className={styles.contentList}>
           <li>The allowed token and pool configuration.</li>
           <li>The fee path, reward recipients and mutable controls.</li>
           <li>Liquidity custody and every withdrawal path.</li>
-          <li>Transaction preparation, simulation and wallet validation.</li>
+          <li>Transaction construction, graph bindings and controller wallet.</li>
           <li>
             Deployment records, runtime verification and supported network.
           </li>
@@ -443,13 +447,13 @@ function CustomDocs() {
       </section>
 
       <section id="project-presentation">
-        <h2>What activation does not prove</h2>
+        <h2>What preparation does not prove</h2>
         <p>
-          Activation makes the configured release path available. It does not
-          establish current tradability, liquidity, price, pool state, support
-          in an external terminal or the behavior of an interface outside the
-          release. Project artwork, descriptions and links do not verify the
-          hook or make another launch path available.
+          A prepared action does not establish current tradability, liquidity,
+          price, pool state, audit coverage, support in an external terminal or
+          the behavior of an interface outside the submitted graph. Project
+          artwork, descriptions and links do not verify the hook or make another
+          launch path available.
         </p>
       </section>
     </DocsShell>

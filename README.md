@@ -40,7 +40,9 @@ Programmable is a launch platform for Uniswap v4 products. This repository conta
 contract workspace, the public read model and the evidence that binds what the product shows to deployed code.
 
 Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
-rewards. Custom is the reviewed path for products that need their own hook, application logic or execution graph.
+rewards. Custom is the API-first path for products that need their own hook, application logic or execution graph.
+An authenticated request binds one deterministic bundle to the controller wallet, and the wallet separately reviews
+and signs the prepared transaction.
 Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
 capabilities, contracts and release evidence live in the public
 [`programmable-prediction-markets`](https://github.com/0xprogrammable/programmable-prediction-markets) repository.
@@ -52,7 +54,7 @@ transaction.
 | Model                  | What it creates                                                       | Access                                                    |
 | ---------------------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
 | **Classic**            | A fixed supply token with configurable buy and sell transaction fees  | Open through [Create](https://programmable.market/launch) |
-| **Custom**             | A token or application with an individually reviewed hook and release | Accepted and activated revisions only                     |
+| **Custom**             | A token or application with its own deterministic hook graph          | Wallet-bound [Custom Launch API](https://programmable.market/developers/api-keys) |
 | **Prediction Markets** | Onchain outcome markets powered by Uniswap v4                         | Open through [Create](https://programmable.market/launch) |
 
 A hook is a smart contract attached to a Uniswap v4 pool. The pool calls it at defined points in a transaction, which
@@ -126,15 +128,17 @@ provider availability or onchain lifecycle completion.
 
 ## Public interfaces
 
-| Surface             | Canonical location                                                                                       |
-| ------------------- | -------------------------------------------------------------------------------------------------------- |
-| Product             | [programmable.market](https://programmable.market)                                                       |
-| Explore             | [programmable.market/explore](https://programmable.market/explore)                                       |
-| Prediction Markets  | [programmable.market/markets](https://programmable.market/markets)                                       |
-| Documentation       | [programmable.market/docs](https://programmable.market/docs)                                             |
-| Developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
-| Service status      | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
-| Deployment manifest | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
+| Surface                      | Canonical location                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Product                      | [programmable.market](https://programmable.market)                                                       |
+| Explore                      | [programmable.market/explore](https://programmable.market/explore)                                       |
+| Prediction Markets           | [programmable.market/markets](https://programmable.market/markets)                                       |
+| Documentation                | [programmable.market/docs](https://programmable.market/docs)                                             |
+| Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
+| Authenticated Custom writes  | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
+| Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
+| Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
+| Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
 
 Ethereum contract addresses and integration data should come from the versioned manifest rather than screenshots,
 token names or third-party metadata. For Prediction Markets, use the canonical repository for the current networks,
@@ -145,9 +149,8 @@ supported market types, economics, resolution rules, contract addresses and rele
 | Repository                                                                                             | Responsibility                                                              |
 | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)                                         | Agent Skill and local tools for building reproducible Uniswap v4 projects   |
-| [`submit-launch`](https://github.com/0xprogrammable/submit-launch)                                     | Exact-revision intake and public review records for one completed project   |
-| [`submit-template`](https://github.com/0xprogrammable/submit-template)                                 | Requirements and version binding for reusable hook templates                |
-| [`developers`](https://github.com/0xprogrammable/developers)                                           | Discovery manifests, API contracts and direct verification rules            |
+| [`launch-policy`](https://github.com/0xprogrammable/launch-policy)                                     | Versioned Custom launch requirements, policies and schemas                  |
+| [`developers`](https://github.com/0xprogrammable/developers)                                           | Read-only discovery manifests, API contracts and verification rules         |
 | [`programmable-prediction-markets`](https://github.com/0xprogrammable/programmable-prediction-markets) | Prediction market contracts, release specifications and deployment evidence |
 
 ## Release and security boundaries
@@ -155,8 +158,8 @@ supported market types, economics, resolution rules, contract addresses and rele
 `production` is the canonical full-product branch and the only source for website releases. `main` preserves public
 contract and release-evidence history. Feature branches merge through reviewed pull requests.
 
-Source verification, passing tests, a Registry record, a review result or a visible token page are not an external
-audit, a safety guarantee, proof of liquidity or launch authorization. Deployment, activation, finality and public
+Source verification, passing tests, a Registry record, a prepared action or a visible token page are not an external
+audit, a safety guarantee, proof of liquidity or wallet authorization. Deployment, activation, finality and public
 availability require separate evidence.
 
 The smart contracts in this repository have not undergone an external audit or public security contest.

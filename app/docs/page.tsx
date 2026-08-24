@@ -4,13 +4,12 @@ import { ArrowRight } from "lucide-react";
 
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
-import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Documentation · Programmable",
   description:
-    "Understand Programmable, launch a project, publish a template or integrate verified launch data.",
+    "Understand Programmable, prepare a Custom launch through the API or integrate verified launch data.",
   alternates: { canonical: "/docs" },
 };
 
@@ -33,7 +32,7 @@ const paths = [
   },
   {
     description:
-      "Build a project, follow the review path and understand how creators earn.",
+      "Build a project, prepare it through the API and understand how creators earn.",
     href: "/docs/creators",
     label: "Create with Programmable",
     meta: "Creators",
@@ -112,8 +111,8 @@ export default function DocsIndexPage() {
           <div>
             <h3>Creators</h3>
             <p>
-              Build a concrete project or publish reusable hook logic, then
-              understand the review, attribution and fee path before launch.
+              Build a concrete project, prepare it through the Custom Launch API
+              and review the exact wallet action before launch.
             </p>
           </div>
           <div>
@@ -121,7 +120,7 @@ export default function DocsIndexPage() {
             <p>
               Use Hook Builder as the skill and tooling layer. It produces the
               reproducible project that can become a deterministic Custom
-              Launch API bundle or a reusable template submission.
+              Launch API bundle.
             </p>
           </div>
           <div>
@@ -137,8 +136,8 @@ export default function DocsIndexPage() {
       <section id="system">
         <h2>How the system fits together</h2>
         <p>
-          Programmable separates creation, review, execution and verification.
-          Each step has its own evidence and its own result.
+          Programmable separates creation, API preparation, wallet execution and
+          verification. Each step has its own evidence and its own result.
         </p>
 
         <div className={docsStyles.flow}>
@@ -163,7 +162,7 @@ export default function DocsIndexPage() {
         <p>
           Bundle checks and transaction preparation do not sign or broadcast a
           launch. The controller wallet still reviews the exact action and
-          authorizes any transaction. Public applications can then verify the
+          authorizes any transaction. Public integrations can then verify the
           resulting onchain record.
         </p>
       </section>
@@ -230,8 +229,8 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Trust and verification</strong>
                 <small>
-                  Understand what review, activation and Router provenance
-                  establish.
+                  Understand what bundle checks, wallet execution and Router
+                  provenance establish.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
@@ -242,8 +241,8 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Creator paths</strong>
                 <small>
-                  Choose Hook Builder, the Custom Launch API or Submit a
-                  Template.
+                  Use Hook Builder and the Custom Launch API. The public template
+                  program remains separate and is not open for submissions.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
@@ -262,21 +261,16 @@ export default function DocsIndexPage() {
             </Link>
           </li>
           <li>
-            <a
-              href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitTemplate}
-              rel="noreferrer"
-              target="_blank"
-            >
+            <Link href="/docs/creators/templates">
               <span>
-                <strong>Submit a Template</strong>
+                <strong>Public template policy</strong>
                 <small>
-                  Read the requirements; submit only when the repository accepts
-                  applications.
+                  Understand the planned versioning and fee model. Public
+                  template intake is not open.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
-              <span className="sr-only">Opens GitHub in a new tab</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </section>
