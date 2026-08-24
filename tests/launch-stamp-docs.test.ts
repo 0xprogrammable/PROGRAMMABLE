@@ -472,7 +472,9 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("supplied handoff digests");
     expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
-    expect(page).toMatch(/Custom releases\s+use a review and activation path/);
+    expect(page).toMatch(
+      /Custom launch\s+preparation uses a wallet-bound key and the authenticated API/,
+    );
     expect(page).toContain('href="/docs/trust"');
     expect(page).toContain('href="/docs/creators/launch"');
     expect(page).not.toContain("Classic onchain canary passed");
