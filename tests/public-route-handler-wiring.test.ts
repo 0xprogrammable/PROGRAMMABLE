@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   readBitqueryCreatorProfile: vi.fn(),
   readAlchemyCreatorProfile: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
+  readRouter: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -118,6 +119,34 @@ vi.mock("../lib/alchemy/explore.server", () => ({
   safeAlchemyError: mocks.safeAlchemyError,
 }));
 
+vi.mock("../lib/alchemy/router-custom-public.server", () => ({
+  ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
+  readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  mergeRouterCustomCreatorProfileV1: (
+    profile: Readonly<{
+      status: string;
+      tokens: readonly unknown[];
+      snapshot: Readonly<{ blockNumber: string }> | null;
+    }>,
+    account: string,
+    entries: readonly Readonly<{
+      creatorAddress?: string;
+      launchStampProvenance?: Readonly<{ finalizedAtBlockNumber: string }>;
+    }>[],
+  ) => ({
+    ...profile,
+    tokens: [
+      ...profile.tokens,
+      ...entries.filter((entry) =>
+        entry.creatorAddress?.toLowerCase() === account.toLowerCase() &&
+        profile.snapshot !== null &&
+        BigInt(entry.launchStampProvenance?.finalizedAtBlockNumber ?? -1) <=
+          BigInt(profile.snapshot.blockNumber)
+      ),
+    ],
+  }),
+}));
+
 vi.mock("../lib/onchain/config", () => ({
   getWebsiteChartOnchainDeployment:
     mocks.getWebsiteChartOnchainDeployment,
@@ -154,6 +183,7 @@ vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
 
 import { GET as creatorProfile } from "../app/api/explore/profile/route";
 import { GET as stockLaunchLookup } from "../app/api/explore/launch/stock-paired/route";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const ACCOUNT = "0x1111111111111111111111111111111111111111";
 const TRANSACTION = `0x${"22".repeat(32)}`;
@@ -218,6 +248,7 @@ describe("public route coordinator wiring", () => {
     mocks.createPublicClient.mockReturnValue(rpcFixtures.client);
     mocks.readEnvioClassicV3CatalogV1.mockResolvedValue(profileCatalog());
     mocks.readEnvioClassicV2CreatorClaimsV1.mockResolvedValue([]);
+    mocks.readRouter.mockResolvedValue([]);
     const drpc = "https://lb.drpc.live/ethereum/drpc-profile-key";
     mocks.getWebsiteReadOnchainDeployment.mockReturnValue({
       status: "ready",
@@ -279,13 +310,62 @@ describe("public route coordinator wiring", () => {
       "private, max-age=0, s-maxage=15",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "envio-classic-v3",
+      "envio-classic-v3+canonical-launch-stamp-router",
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "envio-classic-v3",
+      "envio-classic-v3+canonical-launch-stamp-router",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "envio-indexer-state",
+    );
+    expect(response.headers.get("X-Programmable-Router-Read-Status")).toBe(
+      "current",
+    );
+  });
+
+  it("adds wallet-owned finalized Router Custom launches without inventing claims", async () => {
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue({
+      ...profileCatalog(),
+      asOfBlock: "25740000",
+      asOfBlockHash: `0x${"98".repeat(32)}`,
+    });
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    const response = await creatorProfile(new NextRequest(
+      `http://localhost/api/explore/profile?account=${customGraphExploreEntry.creatorAddress}`,
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tokens).toEqual([
+      expect.objectContaining({
+        tokenAddress: customGraphExploreEntry.tokenAddress,
+        launchModel: "custom-graph",
+      }),
+    ]);
+    expect(body.pools).toEqual([]);
+    expect(body.claims).toEqual([]);
+    expect(body.totals).toMatchObject({
+      claimableWei: "0",
+      generatedWei: "0",
+      claimedWei: "0",
+    });
+  });
+
+  it("keeps the Envio profile visible when Router discovery fails", async () => {
+    mocks.readRouter.mockRejectedValue(new Error("router unavailable"));
+    const response = await creatorProfile(new NextRequest(
+      `http://localhost/api/explore/profile?account=${ACCOUNT}`,
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tokens: [{ tokenAddress: PROFILE_TOKEN }],
+    });
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "envio-classic-v3",
+    );
+    expect(response.headers.get("X-Programmable-Router-Read-Status")).toBe(
+      "unavailable",
     );
   });
 
@@ -325,7 +405,7 @@ describe("public route coordinator wiring", () => {
       "quicknode-secondary",
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "envio-classic-v3+rpc",
+      "envio-classic-v3+canonical-launch-stamp-router+rpc",
     );
   });
 

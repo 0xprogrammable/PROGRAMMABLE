@@ -301,9 +301,29 @@ function exactCatalogSnapshot(response) {
   const generatedAt = catalog?.lastIndexedAt;
   const launchIdentity = response.body?.dataQuality?.launchIdentity;
   const customStatus = catalog?.completeness?.custom;
-  const launchSource = customStatus === "current"
-    ? `${source}+registry.custom-launched`
-    : source;
+  const registryCustomStatus = catalog?.completeness?.registryCustom;
+  const routerCustomStatus = catalog?.completeness?.routerCustom;
+  const launchSource = [
+    source,
+    ...(registryCustomStatus === "current"
+      ? ["registry.custom-launched"]
+      : []),
+    ...(routerCustomStatus === "current"
+      ? ["canonical-launch-stamp-router"]
+      : []),
+  ].join("+");
+  const expectedCustomStatus =
+    registryCustomStatus === "current" && routerCustomStatus === "current"
+      ? "current"
+      : "unavailable";
+  const expectedIncluded = [
+    "classic-v3",
+    "official-main-token",
+    "registry.custom-launched",
+    ...(routerCustomStatus === "current"
+      ? ["canonical-launch-stamp-router"]
+      : []),
+  ];
   if (!(
     CATALOG_SOURCES.has(source) &&
     CATALOG_STATUSES.has(catalog?.status) &&
@@ -313,12 +333,11 @@ function exactCatalogSnapshot(response) {
     catalog.launchSource === launchSource &&
     ["current", "last-known-good"].includes(catalog.completeness?.classic) &&
     catalog.completeness?.stock === "excluded" &&
-    ["current", "unavailable"].includes(customStatus) &&
-    JSON.stringify(catalog.scope?.included) === JSON.stringify([
-      "classic-v3",
-      "official-main-token",
-      "registry.custom-launched",
-    ]) &&
+    customStatus === expectedCustomStatus &&
+    ["current", "unavailable"].includes(registryCustomStatus) &&
+    ["current", "unavailable"].includes(routerCustomStatus) &&
+    JSON.stringify(catalog.scope?.included) ===
+      JSON.stringify(expectedIncluded) &&
     JSON.stringify(catalog.scope?.excluded) === JSON.stringify([
       "classic-v1",
       "classic-v2",

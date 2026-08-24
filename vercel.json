@@ -53,6 +53,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/ops/alchemy-launch-refresh",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/ops/custom-launch/generic-v2-projector",
       "schedule": "* * * * *"
     }

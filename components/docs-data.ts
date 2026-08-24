@@ -158,14 +158,14 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Creator overview",
     description:
-      "Launch a project, understand earnings and publish reusable hook logic.",
+      "Prepare a Custom launch, understand earnings and publish reusable hook logic.",
     href: "/docs/creators",
     keywords: ["creator", "earn", "launch"],
   },
   {
     title: "Launch a project",
     description:
-      "Build, submit, review, launch and verify one exact project revision.",
+      "Create an API key, submit a deterministic bundle for checks and review the prepared launch.",
     href: "/docs/creators/launch",
   },
   {

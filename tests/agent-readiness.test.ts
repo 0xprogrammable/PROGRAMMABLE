@@ -21,6 +21,7 @@ import {
 import { proxy } from "../proxy";
 
 const ORIGIN = "https://programmable.market";
+const CUSTOM_LAUNCH_API_ORIGIN = "https://api.programmable.market";
 
 describe("agent-readable public surface", () => {
   it("makes llms.txt product-first and states the exact public identity boundary", () => {
@@ -33,10 +34,10 @@ describe("agent-readable public surface", () => {
       "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
     );
     expect(programmableLlmsIndex).toContain(
-      "Router records are provenance evidence and identity-mapping details, not a public category.",
+      "Finalized Router records can surface as provenance-only Custom entries after 64 confirmations.",
     );
     expect(programmableLlmsIndex).toContain(
-      "every Stock family, and unverified Custom launches",
+      "every Stock family, and Custom launches without a verified Registry record or finalized Router stamp",
     );
     expect(programmableLlmsIndex).not.toMatch(
       /^# Programmable Launch Stamp Router$/mu,
@@ -57,6 +58,8 @@ describe("agent-readable public surface", () => {
       "/api/explore",
       "/api/explore/token",
       "/openapi.json",
+      "/v1/custom-launches",
+      "/v1/custom-launches/{launchId}",
     ]);
 
     const operations = Object.values(programmablePublicOpenApi.paths).flatMap(
@@ -69,9 +72,41 @@ describe("agent-readable public surface", () => {
         operation.description || operation.summary
       ),
     ).toBe(true);
+    const readOnlyPaths = [
+      "/api",
+      "/api/custom-launch/registry/v2/manifest",
+      "/api/custom-launch/registry/v2/readiness",
+      "/api/explore",
+      "/api/explore/token",
+      "/openapi.json",
+    ] as const;
+    for (const path of readOnlyPaths) {
+      const operation = Object.values(programmablePublicOpenApi.paths[path])[0];
+      expect(operation?.security).toEqual([]);
+    }
+
+    const customLaunchCollection =
+      programmablePublicOpenApi.paths["/v1/custom-launches"];
+    const listCustomLaunches = customLaunchCollection.get;
+    const createCustomLaunch = customLaunchCollection.post;
+    const getCustomLaunch =
+      programmablePublicOpenApi.paths["/v1/custom-launches/{launchId}"].get;
+    for (const operation of [
+      listCustomLaunches,
+      createCustomLaunch,
+      getCustomLaunch,
+    ]) {
+      expect(operation.servers).toEqual([
+        {
+          url: CUSTOM_LAUNCH_API_ORIGIN,
+          description: "Programmable Custom Launch API",
+        },
+      ]);
+      expect(operation.security).toEqual([{ CustomLaunchApiKey: [] }]);
+    }
     expect(
-      operations.every((operation) => operation.security.length === 0),
-    ).toBe(true);
+      programmablePublicOpenApi.components.securitySchemes.CustomLaunchApiKey,
+    ).toMatchObject({ type: "http", scheme: "bearer" });
 
     const response = getOpenApi();
     expect(response.status).toBe(200);
@@ -80,10 +115,9 @@ describe("agent-readable public surface", () => {
     await expect(response.json()).resolves.toEqual(programmablePublicOpenApi);
   });
 
-  it("keeps signing and write actions outside the documented path set", () => {
+  it("limits writes to Custom launch preparation without granting wallet authority", () => {
     const prohibitedSegments = new Set([
       "claim",
-      "launch",
       "profile",
       "trade",
       "wallet",
@@ -94,8 +128,57 @@ describe("agent-readable public surface", () => {
       ),
     ).toBe(true);
     expect(programmablePublicOpenApi["x-programmable-boundary"].actions).toContain(
-      "No launch, trade, claim",
+      "API keys never sign, broadcast",
     );
+    expect(
+      Object.keys(programmablePublicOpenApi.paths["/v1/custom-launches"]),
+    ).toEqual(["get", "post"]);
+    expect(
+      programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
+    ).toContain("pending rows receive bounded best-effort chain reconciliation");
+    expect(
+      programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
+    ).toContain("output is always null");
+    expect(
+      Object.keys(
+        programmablePublicOpenApi.paths["/v1/custom-launches/{launchId}"],
+      ),
+    ).toEqual(["get"]);
+    expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
+      "fees:claim": { state: "reserved-disabled" },
+      "buybacks:manage": { state: "reserved-disabled" },
+    });
+  });
+
+  it("publishes typed and unambiguous Custom launch lifecycle identifiers", () => {
+    const schemas = programmablePublicOpenApi.components.schemas;
+    expect(schemas.CustomLaunchResource.required).toEqual(
+      expect.arrayContaining([
+        "launchId",
+        "requestId",
+        "onchainLaunchId",
+        "status",
+        "output",
+      ]),
+    );
+    expect(schemas.CustomLaunchOutput.oneOf).toEqual([
+      { $ref: "#/components/schemas/CustomLaunchPreparedOutput" },
+      { $ref: "#/components/schemas/CustomLaunchAuthorizedOutput" },
+    ]);
+    expect(
+      schemas.CustomLaunchOnchainEvidence.properties.requiredConfirmationDepth,
+    ).toEqual({ const: "64" });
+    expect(programmablePublicOpenApi["x-programmable-boundary"].market).toContain(
+      "not active liquidity or tradability",
+    );
+
+    const standaloneSource = readFileSync(
+      new URL("../public/openapi/custom-launch-v1.json", import.meta.url),
+      "utf8",
+    );
+    expect(() => JSON.parse(standaloneSource)).not.toThrow();
+    expect(standaloneSource).toContain('"code": "IDEMPOTENCY_CONFLICT"');
+    expect(standaloneSource).not.toContain("IDEMPOTENCY_KEY_REUSED");
   });
 
   it("returns a discoverable API index and structured JSON for unknown API paths", async () => {

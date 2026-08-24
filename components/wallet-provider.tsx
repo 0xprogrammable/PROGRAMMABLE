@@ -174,7 +174,7 @@ function loadWalletProviderRuntime() {
 }
 
 export function shouldEagerLoadWalletRuntime(pathname: string) {
-  return ["/launch", "/markets", "/profile", "/token"].some(
+  return ["/launch", "/markets", "/profile", "/token", "/developers/api-keys"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -2671,6 +2671,14 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           onClick={() => setMenuOpen(false)}
         >
           Profile
+        </Link>
+        <Link
+          href="/developers/api-keys"
+          prefetch={false}
+          tabIndex={menuOpen ? undefined : -1}
+          onClick={() => setMenuOpen(false)}
+        >
+          API keys
         </Link>
         <button
           type="button"

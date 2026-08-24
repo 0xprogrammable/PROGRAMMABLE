@@ -279,6 +279,19 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(probe, /\/api\/explore\?limit=1&page=1&sort=newest/u);
   assert.match(probe, /catalog\?\.source !== "envio-classic-v3"/u);
   assert.match(probe, /completeness\?\.stock !== "excluded"/u);
+  assert.match(
+    probe,
+    /completeness\?\.registryCustom === "current"/u,
+  );
+  assert.match(
+    probe,
+    /completeness\?\.routerCustom === "current"/u,
+  );
+  assert.match(
+    probe,
+    /envio-classic-v3\+registry\.custom-launched\+canonical-launch-stamp-router/u,
+  );
+  assert.match(probe, /expectedCustomStatus/u);
   assert.match(probe, /launchModelVersion !== "classic-v3"/u);
   assert.match(probe, /body\.total < 1/u);
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);

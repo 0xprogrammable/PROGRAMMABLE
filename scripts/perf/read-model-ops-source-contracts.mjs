@@ -155,6 +155,37 @@ const APPROVED_OPERATIONS = Object.freeze({
         "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8",
     }),
   }),
+  routerLaunchRefresher: Object.freeze({
+    path: "/api/ops/alchemy-launch-refresh",
+    schedule: "* * * * *",
+    authEnvironment: "CRON_SECRET",
+    maxDurationSeconds: 60,
+    forcePersist: true,
+    includeLatest: false,
+    requirePersistence: true,
+    finalityConfirmations: 64,
+    maximumCatchUpBlocks: 50_000,
+    route: Object.freeze({
+      path: "app/api/ops/alchemy-launch-refresh/route.ts",
+      sha256:
+        "9734a0498cb75773c08d3427e3bc9ffe957c3e94378756bb81bb6d459a99108d",
+    }),
+    runtime: Object.freeze({
+      path: "lib/alchemy/explore.server.ts",
+      sha256:
+        "9e05971ef410de2b368def0ea2a78c863e6dc4ebb996eec9dd45f715a41d9db8",
+    }),
+    store: Object.freeze({
+      path: "lib/alchemy/launch-registry.server.ts",
+      sha256:
+        "349896552268e09949974546991dfb77ea88878470b6ea969dafdd5f446cde09",
+    }),
+    routerReader: Object.freeze({
+      path: "lib/alchemy/launch-stamp.server.ts",
+      sha256:
+        "159d0be7fd708d0e91d5bf0c0a9494ef47ff3a8cda905286edf468f211305f81",
+    }),
+  }),
   independentCrons: Object.freeze([
     Object.freeze({
       id: "protocol-revenue",
@@ -1135,6 +1166,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const releaseGates = operations?.releaseGates;
   const postPromotionContract = operations?.postPromotion;
   const customLaunchReconciler = operations?.customLaunchReconciler;
+  const routerLaunchRefresher = operations?.routerLaunchRefresher;
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
@@ -1142,6 +1174,10 @@ export function evaluateReadModelOperationsSourceContracts(
     [
       APPROVED_OPERATIONS.customLaunchReconciler.path,
       APPROVED_OPERATIONS.customLaunchReconciler.schedule,
+    ],
+    [
+      APPROVED_OPERATIONS.routerLaunchRefresher.path,
+      APPROVED_OPERATIONS.routerLaunchRefresher.schedule,
     ],
     ...APPROVED_OPERATIONS.workers.map((worker) => [
       worker.path,
@@ -1160,6 +1196,10 @@ export function evaluateReadModelOperationsSourceContracts(
       exactJson(
         customLaunchReconciler,
         APPROVED_OPERATIONS.customLaunchReconciler,
+      ) &&
+      exactJson(
+        routerLaunchRefresher,
+        APPROVED_OPERATIONS.routerLaunchRefresher,
       ) &&
       exactJson(workers, APPROVED_OPERATIONS.workers) &&
       exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers) &&
@@ -1236,6 +1276,57 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       customReconcilerRoute.includes(`limit: ${customReconciler.batchLimit}`),
     "Custom Launch V2 public reads fail closed on the reviewed lifecycle age and bounded sweep",
+  );
+  const routerRefresher = APPROVED_OPERATIONS.routerLaunchRefresher;
+  const routerRefresherRoute = source(routerRefresher.route.path);
+  const routerRefresherRuntime = source(routerRefresher.runtime.path);
+  const routerRefresherReader = source(routerRefresher.routerReader.path);
+  check(
+    "ops-router-launch-refresher-schedule",
+    crons?.get(routerRefresher.path) === routerRefresher.schedule,
+    "the confirmed Launch Stamp Router registry refreshes every minute",
+  );
+  check(
+    "ops-router-launch-refresher-source-digests",
+    [
+      routerRefresher.route,
+      routerRefresher.runtime,
+      routerRefresher.store,
+      routerRefresher.routerReader,
+    ].every((binding) =>
+      sourceBindingMatches(source, binding, expectedSha256Overrides),
+    ),
+    "the Router refresh is byte-bound to its route, runtime, durable store and canonical reader",
+  );
+  check(
+    "ops-router-launch-refresher-route-auth",
+    routeIsAuthenticatedAndFailClosed(routerRefresherRoute),
+    "the Router refresh requires the bounded timing-safe cron secret and fails closed",
+  );
+  check(
+    "ops-router-launch-refresher-execution",
+    routerRefresherRoute.includes(
+      `export const maxDuration = ${routerRefresher.maxDurationSeconds};`,
+    ) &&
+      routerRefresherRoute.includes("forcePersist: true") &&
+      routerRefresherRoute.includes("includeLatest: false") &&
+      routerRefresherRoute.includes("requirePersistence: true") &&
+      routerRefresherRoute.includes(
+        "revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, { expire: 0 })",
+      ) &&
+      routerRefresherRuntime.includes(
+        'const confirmed = hasDurableClassicBase\n    ? await advanceExploreLaunchDiscovery(\n      deployment,\n      cursorModel,\n      "confirmed",\n    )\n    : cursorModel;',
+      ) &&
+      routerRefresherRuntime.includes("await writeAlchemyLaunchRegistry(") &&
+      routerRefresherRuntime.includes(
+        "if (options.requirePersistence) throw error",
+      ) &&
+      routerRefresherReader.includes(
+        `LAUNCH_STAMP_FINALITY_CONFIRMATIONS = ${routerRefresher.finalityConfirmations}n`,
+      ) &&
+      routerRefresher.maximumCatchUpBlocks === 50_000 &&
+      routerRefresherReader.includes("MAXIMUM_CATCH_UP_BLOCKS = 50_000n"),
+    "the Router refresh persists only confirmed canonical evidence before invalidating Explore",
   );
   check(
     "ops-cron-exact-set",
@@ -1834,6 +1925,8 @@ export function evaluateReadModelOperationsSourceContracts(
   const publicExplore = source("app/api/explore/route.ts") ?? "";
   const publicToken = source("app/api/explore/token/route.ts") ?? "";
   const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
+  const routerCustomPublic =
+    source("lib/alchemy/router-custom-public.server.ts") ?? "";
   const envioClassicV3Catalog =
     source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
   const dexscreenerExplore =
@@ -2083,11 +2176,15 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
+      "readFinalizedRouterCustomExploreEntriesV1({",
+      "const [registryCustom, routerCustom] = await Promise.all([",
       "mergeEnvioClassicV3CatalogEntriesV1(",
+      "mergeRouterCustomExploreEntriesV1(",
+      "routerCustomEntriesAtOrBeforeBlockV1(",
       "envioClassicV3IdentityCommitmentV1(",
       "readDexscreenerExploreEntriesV1(filtered, {",
       "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
-      'let customStatus: "current" | "unavailable" = "unavailable"',
+      'registryCustomStatus === "current" && routerCustomStatus === "current"',
       'requested: "fdv" as const',
       'applied: rankingStatus === "complete"',
       '"qualified-fdv-then-launch-order" as const',
@@ -2095,6 +2192,7 @@ export function evaluateReadModelOperationsSourceContracts(
       '"X-Programmable-Launch-Source": launchSource',
       '"X-Programmable-Read-Source": `${launchSource}+dexscreener`',
       '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Router-Read-Status": routerCustomStatus',
       '"X-Programmable-Identity-Last-Indexed-At": catalog.generatedAt',
     ]) &&
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
@@ -2103,13 +2201,18 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicToken, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
+      "readFinalizedRouterCustomExploreEntriesV1({",
+      "const [registryReadResult, routerReadResult] = await Promise.all([",
       "mergeEnvioClassicV3CatalogEntriesV1(",
+      "mergeRouterCustomExploreEntriesV1(",
+      "routerCustomEntriesAtOrBeforeBlockV1(",
       "envioClassicV3IdentityCommitmentV1(",
-      "const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(",
+      "const entry: ExploreEntry | null = identityEntries.find(",
       "readDexscreenerExploreEntriesV1([entry], {",
       '"X-Programmable-Launch-Source": input.launchSource',
       '"X-Programmable-Read-Source": `${input.launchSource}+dexscreener`',
       '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Router-Read-Status": input.routerStatus',
       'valuation: { status: "unavailable", reason: "source-unavailable" }',
     ]) &&
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
@@ -2132,7 +2235,17 @@ export function evaluateReadModelOperationsSourceContracts(
     ]) &&
     !/readPrimaryRpcExploreEntriesV1|productionMainnetRpcPrimary/iu.test(
       publicChart,
-    );
+    ) &&
+    includesEverySourceFragment(routerCustomPublic, [
+      "canonicalTokenExploreEntryV1",
+      'token.launchStampProvenance?.kind === "custom-graph"',
+      "readAlchemyExploreModel",
+      "suppressRouterBoundCustomProjectDuplicates",
+      "routerCustomEntriesAtOrBeforeBlockV1",
+      "mergeRouterCustomCreatorProfileV1",
+      "BigInt(stamp.finalizedAtBlockNumber) > snapshotBlock",
+      'entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE',
+    ]);
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
@@ -2150,13 +2263,17 @@ export function evaluateReadModelOperationsSourceContracts(
       "readEnvioCreatorProfile",
       "readEnvioClassicV3CatalogV1",
       "readEnvioClassicV2CreatorClaimsV1",
+      "readFinalizedRouterCustomExploreEntriesV1",
+      "mergeRouterCustomCreatorProfileV1",
       "LEGACY_RPC_PROFILE_FALLBACK_ENABLED: boolean = false",
       "getWebsiteReadOnchainDeployment",
       "withOperationalRpcFailover",
       "profileRpcProviderHeader",
-      '"X-Programmable-Launch-Source": "envio-classic-v3"',
-      '? "envio-classic-v3"',
-      ': "envio-classic-v3+rpc"',
+      "const [result, routerResult] = await Promise.all([",
+      'const launchSource = routerStatus === "current"',
+      ': "envio-classic-v3"',
+      ': `${launchSource}+rpc`',
+      '"X-Programmable-Router-Read-Status": routerStatus',
       '"X-Programmable-Rpc-Provider": result.provider',
     ]) &&
       !publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
