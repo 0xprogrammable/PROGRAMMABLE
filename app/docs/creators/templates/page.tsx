@@ -47,8 +47,8 @@ export default function CreatorTemplateDocsPage() {
         </p>
         <p>
           Use Submit a Template for reusable logic. A concrete token and project
-          belong in Submit a Launch, while Hook Builder remains the skill and
-          tooling layer for creating both.
+          belong in the Custom Launch API, while Hook Builder remains the skill
+          and tooling layer for creating both.
         </p>
         <div className={docsStyles.callout}>
           <strong>Follow the Submit a Template repository.</strong>

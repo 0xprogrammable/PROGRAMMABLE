@@ -21,6 +21,7 @@ import {
 import { proxy } from "../proxy";
 
 const ORIGIN = "https://programmable.market";
+const CUSTOM_LAUNCH_API_ORIGIN = "https://api.programmable.market";
 
 describe("agent-readable public surface", () => {
   it("makes llms.txt product-first and states the exact public identity boundary", () => {
@@ -57,6 +58,8 @@ describe("agent-readable public surface", () => {
       "/api/explore",
       "/api/explore/token",
       "/openapi.json",
+      "/v1/custom-launches",
+      "/v1/custom-launches/{launchId}",
     ]);
 
     const operations = Object.values(programmablePublicOpenApi.paths).flatMap(
@@ -69,9 +72,35 @@ describe("agent-readable public surface", () => {
         operation.description || operation.summary
       ),
     ).toBe(true);
+    const readOnlyPaths = [
+      "/api",
+      "/api/custom-launch/registry/v2/manifest",
+      "/api/custom-launch/registry/v2/readiness",
+      "/api/explore",
+      "/api/explore/token",
+      "/openapi.json",
+    ] as const;
+    for (const path of readOnlyPaths) {
+      const operation = Object.values(programmablePublicOpenApi.paths[path])[0];
+      expect(operation?.security).toEqual([]);
+    }
+
+    const createCustomLaunch =
+      programmablePublicOpenApi.paths["/v1/custom-launches"].post;
+    const getCustomLaunch =
+      programmablePublicOpenApi.paths["/v1/custom-launches/{launchId}"].get;
+    for (const operation of [createCustomLaunch, getCustomLaunch]) {
+      expect(operation.servers).toEqual([
+        {
+          url: CUSTOM_LAUNCH_API_ORIGIN,
+          description: "Programmable Custom Launch API",
+        },
+      ]);
+      expect(operation.security).toEqual([{ CustomLaunchApiKey: [] }]);
+    }
     expect(
-      operations.every((operation) => operation.security.length === 0),
-    ).toBe(true);
+      programmablePublicOpenApi.components.securitySchemes.CustomLaunchApiKey,
+    ).toMatchObject({ type: "http", scheme: "bearer" });
 
     const response = getOpenApi();
     expect(response.status).toBe(200);
@@ -80,10 +109,9 @@ describe("agent-readable public surface", () => {
     await expect(response.json()).resolves.toEqual(programmablePublicOpenApi);
   });
 
-  it("keeps signing and write actions outside the documented path set", () => {
+  it("limits writes to Custom launch preparation without granting wallet authority", () => {
     const prohibitedSegments = new Set([
       "claim",
-      "launch",
       "profile",
       "trade",
       "wallet",
@@ -94,8 +122,20 @@ describe("agent-readable public surface", () => {
       ),
     ).toBe(true);
     expect(programmablePublicOpenApi["x-programmable-boundary"].actions).toContain(
-      "No launch, trade, claim",
+      "API keys never sign, broadcast",
     );
+    expect(
+      Object.keys(programmablePublicOpenApi.paths["/v1/custom-launches"]),
+    ).toEqual(["post"]);
+    expect(
+      Object.keys(
+        programmablePublicOpenApi.paths["/v1/custom-launches/{launchId}"],
+      ),
+    ).toEqual(["get"]);
+    expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
+      "fees:claim": { state: "reserved-disabled" },
+      "buybacks:manage": { state: "reserved-disabled" },
+    });
   });
 
   it("returns a discoverable API index and structured JSON for unknown API paths", async () => {

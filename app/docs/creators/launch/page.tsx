@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
@@ -9,16 +10,17 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Launch a project · Programmable",
   description:
-    "Follow the path from a reproducible hook project to review, wallet launch and public verification.",
+    "Use a wallet-bound API key to check a Custom launch bundle and prepare the exact wallet action.",
   alternates: { canonical: "/docs/creators/launch" },
 };
 
 const sections = [
   { id: "access", label: "Start here" },
   { id: "prepare", label: "Prepare the project" },
-  { id: "submit", label: "Submit one revision" },
-  { id: "review", label: "Review" },
-  { id: "launch", label: "Launch" },
+  { id: "key", label: "Create an API key" },
+  { id: "submit", label: "Submit the bundle" },
+  { id: "prepared", label: "Prepared launch" },
+  { id: "launch", label: "Wallet confirmation" },
   { id: "after", label: "After launch" },
 ] as const;
 
@@ -26,7 +28,7 @@ export default function CreatorLaunchDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators/launch"
-      description="Build one exact project revision, submit it for review and launch it from the wallet bound to that release."
+      description="Create a wallet-bound API key, submit one deterministic bundle for checks and review the prepared launch in your wallet."
       parentHref="/docs/creators"
       parentLabel="Creators"
       sections={sections}
@@ -35,17 +37,16 @@ export default function CreatorLaunchDocsPage() {
       <section id="access">
         <h2>Start here</h2>
         <p>
-          Use Hook Builder to create the project. When Submit a Launch accepts
-          applications, it packages the exact revision for review. The
-          submission repository defines the request format and required files.
+          Custom launch access is API-first. Connect the controller wallet,
+          create a scoped API key and give it only to the agent or workflow that
+          should prepare launches for that wallet.
         </p>
         <div className={docsStyles.callout}>
-          <strong>Use the repository instructions.</strong>
+          <strong>The API does not control your wallet.</strong>
           <p>
-            Intake rules can change with the review system. Read the current
-            Submit a Launch README before creating a pull request; do not invent
-            a submission format or open a manual PR while the README keeps the
-            intake in prelaunch review.
+            An API key can submit and read launch preparations. It cannot sign
+            or broadcast the prepared transaction. The controller wallet must
+            review and confirm the final action separately.
           </p>
         </div>
       </section>
@@ -54,24 +55,25 @@ export default function CreatorLaunchDocsPage() {
         <h2>Prepare the project</h2>
         <ol className={docsStyles.steps}>
           <li>
-            <strong>Build with a clean source repository.</strong>
+            <strong>Build a deterministic source bundle.</strong>
             <span>
               Keep contracts, tests, deployment logic and public project data
-              together at one reviewable revision.
+              together in the bundle described by the API schema.
             </span>
           </li>
           <li>
-            <strong>Run the project gates.</strong>
+            <strong>Run the project checks.</strong>
             <span>
-              Compile, test and reproduce the artifacts on the exact commit you
-              intend to submit.
+              Compile, test and verify the graph bundle before sending it to the
+              API. The API rechecks the declared manifest digest and exact graph
+              bindings, but does not reproduce your build.
             </span>
           </li>
           <li>
-            <strong>Choose the launch wallet.</strong>
+            <strong>Bind the controller wallet.</strong>
             <span>
-              The GitHub identity, source revision and wallet must match the
-              application.
+              The bundle&apos;s controller wallet and launch wallet must match the
+              wallet that owns the API key.
             </span>
           </li>
           <li>
@@ -90,69 +92,51 @@ export default function CreatorLaunchDocsPage() {
         </DocsExternalLink>
       </section>
 
-      <section id="submit">
-        <h2>Submit one revision</h2>
+      <section id="key">
+        <h2>Create an API key</h2>
         <p>
-          A submission identifies one source repository, commit, tree, launch
-          wallet and requested launch path. Changing any of those values creates
-          a new review target.
+          Connect the wallet that will control the launch and create a scoped
+          key. The key receives only <code>custom-launch:create</code> and
+          <code>custom-launch:read</code>. Save the secret when it is shown and
+          keep it out of source control and public chats.
         </p>
-        <p>
-          Submit a Launch is the public home for this workflow when its README
-          accepts applications. Its README defines the intake rules and the
-          files to provide.
+        <p className={styles.inlineAction}>
+          <Link href="/developers/api-keys">Create a Custom launch API key</Link>
         </p>
-        <p>
-          This repository is for one concrete project and token. Reusable hook
-          logic belongs in Submit a Template, not in a project submission.
-        </p>
-        <DocsExternalLink
-          href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitLaunch}
-          variant="chip"
-        >
-          Open Submit a Launch
-        </DocsExternalLink>
       </section>
 
-      <section id="review">
-        <h2>Review</h2>
+      <section id="submit">
+        <h2>Submit the bundle</h2>
         <p>
-          Review checks the exact source revision, behavior, evidence and launch
-          compatibility. A reviewer can accept the revision, request specific
-          changes or keep the result pending when required evidence is missing.
+          Send the source descriptor and executable graph bundle to the Custom
+          Launch API with the key as a Bearer credential. The API validates the
+          declared manifest commitment, wallet binding, graph, hook permissions
+          and launch constraints before it prepares an action. It does not
+          compile or simulate the submitted project.
         </p>
-        <dl className={styles.definitionList}>
-          <div>
-            <dt>Changes requested</dt>
-            <dd>
-              The submission names the smallest complete correction. Push a new
-              revision and let the checks run again.
-            </dd>
-          </div>
-          <div>
-            <dt>Approved revision</dt>
-            <dd>
-              The named revision passed the review gates. This is not a safety
-              guarantee or a launch transaction.
-            </dd>
-          </div>
-          <div>
-            <dt>Pending</dt>
-            <dd>
-              Evidence or an external dependency is incomplete. Pending does not
-              mean that the project is unsafe.
-            </dd>
-          </div>
-        </dl>
+        <p className={styles.inlineAction}>
+          <Link href="/docs/developers/machine-readable">
+            Read the machine-readable API guide
+          </Link>
+        </p>
+      </section>
+
+      <section id="prepared">
+        <h2>Prepared launch</h2>
+        <p>
+          A <code>prepared</code> result means the exact launch artifact exists.
+          It is not a signed transaction, a broadcast, an approval, an audit or
+          a safety claim. Read the launch status with the same API key and stop
+          on any failed or mismatched check.
+        </p>
       </section>
 
       <section id="launch">
-        <h2>Launch</h2>
+        <h2>Wallet confirmation</h2>
         <p>
-          When the approved revision has an active execution path, the bound
-          creator wallet can open Launch, review the final transaction and sign
-          it. The connected wallet is the only party that can submit that user
-          transaction.
+          Review the exact prepared action with the controller wallet. Only that
+          wallet, or an agent separately authorized to use it, can sign and
+          broadcast the transaction. The API key alone cannot do either.
         </p>
         <p>
           The launch is not complete when a transaction is merely submitted. It

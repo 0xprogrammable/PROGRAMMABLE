@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   lazy,
@@ -210,7 +211,7 @@ function LaunchExperienceRuntime({
     useState<LaunchBuilderComponent | null>(null);
   const [preparingModel, setPreparingModel] = useState<LaunchModel | null>(null);
   const [modelLoadError, setModelLoadError] = useState("");
-  const customLaunchButtonRef = useRef<HTMLButtonElement>(null);
+  const customLaunchButtonRef = useRef<HTMLAnchorElement>(null);
   const predictionButtonRef = useRef<HTMLButtonElement>(null);
   const restorePickerFocusRef = useRef<"custom" | "prediction" | null>(null);
 
@@ -320,19 +321,15 @@ function LaunchExperienceRuntime({
 }
 
 export function LaunchModelPicker({
-  customLaunchPublicEnabled = false,
   customLaunchButtonRef,
   predictionButtonRef,
   modelLoadError = "",
   onChoose,
   preparingModel = null,
 }: {
-  /**
-   * This is the same closed-world gate used by the generic Custom Launch API.
-   * The picker must never infer launchability from a legacy/manual flag.
-   */
+  /** Retained for callers that also host the internal legacy launch runtime. */
   customLaunchPublicEnabled?: boolean;
-  customLaunchButtonRef?: RefObject<HTMLButtonElement | null>;
+  customLaunchButtonRef?: RefObject<HTMLAnchorElement | null>;
   predictionButtonRef?: RefObject<HTMLButtonElement | null>;
   modelLoadError?: string;
   onChoose: (model: LaunchPickerChoice) => void | Promise<void>;
@@ -340,10 +337,6 @@ export function LaunchModelPicker({
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
-  };
-  const preloadCustomLaunch = () => {
-    if (!customLaunchPublicEnabled) return;
-    void loadCustomLaunch();
   };
   const preloadPredictionMarket = () => {
     void loadPredictionMarket().catch(() => undefined);
@@ -380,26 +373,22 @@ export function LaunchModelPicker({
           className={`launch-model-card-heading ${launchExperience.modelHeading}`}
         >
           <strong id="launch-model-custom-title">Custom</strong>
-          {!customLaunchPublicEnabled ? (
-            <small data-status="pending">Soon</small>
-          ) : null}
+          <small data-status="api">API</small>
         </span>
         <span
           className={`launch-model-description ${launchExperience.modelDescription}`}
           id="launch-model-custom-description"
         >
-          {customLaunchPublicEnabled
-            ? "Launch an approved GitHub revision through your browser wallet, then follow it to its public record."
-            : "Custom launch models are coming soon."}
+          Create an API key, submit a deterministic bundle for checks, then
+          receive a prepared launch for your wallet to review. The API cannot
+          sign or broadcast.
         </span>
-        {customLaunchPublicEnabled ? (
-          <span
-            className={`launch-model-action ${launchExperience.modelAction}`}
-          >
-            Open approved Custom launch
-            <ArrowRight aria-hidden="true" size={16} />
-          </span>
-        ) : null}
+        <span
+          className={`launch-model-action ${launchExperience.modelAction}`}
+        >
+          Create a Custom launch API key
+          <ArrowRight aria-hidden="true" size={16} />
+        </span>
       </span>
     </>
   );
@@ -488,28 +477,19 @@ export function LaunchModelPicker({
           </span>
         </button>
 
-        <button
+        <Link
           ref={customLaunchButtonRef}
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="custom"
-          data-launch-model-available={customLaunchPublicEnabled}
-          data-launch-model-launchable={customLaunchPublicEnabled}
-          type="button"
-          disabled={!customLaunchPublicEnabled}
+          data-launch-model-available="true"
+          data-launch-model-entry="api-first"
+          data-launch-model-launchable="false"
+          href="/developers/api-keys"
           aria-labelledby="launch-model-custom-title"
           aria-describedby="launch-model-custom-description"
-          onPointerEnter={
-            customLaunchPublicEnabled ? preloadCustomLaunch : undefined
-          }
-          onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
-          onClick={
-            customLaunchPublicEnabled
-              ? () => void onChoose("custom")
-              : undefined
-          }
         >
           {customCardContent}
-        </button>
+        </Link>
 
         <button
           ref={predictionButtonRef}

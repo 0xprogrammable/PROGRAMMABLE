@@ -9,7 +9,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Creators · Programmable",
   description:
-    "Build a project, publish reusable hook logic and understand how creators earn.",
+    "Prepare a Custom launch through the API, publish reusable hook logic and understand how creators earn.",
   alternates: { canonical: "/docs/creators" },
 };
 
@@ -17,7 +17,7 @@ const sections = [
   { id: "paths", label: "Choose a creator path" },
   { id: "project", label: "Launch a project" },
   { id: "template", label: "Publish a template" },
-  { id: "review", label: "Review and activation" },
+  { id: "review", label: "Checks and activation" },
   { id: "earn", label: "How creators earn" },
   { id: "tools", label: "Tools and programs" },
 ] as const;
@@ -26,7 +26,7 @@ export default function CreatorsDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators"
-      description="Build a project, publish reusable hook logic or work with Programmable through a creator program."
+      description="Prepare a Custom launch through the API, publish reusable hook logic or work with Programmable through a creator program."
       sections={sections}
       title="Create with Programmable"
     >
@@ -40,11 +40,11 @@ export default function CreatorsDocsPage() {
 
         <div className={styles.pathGrid}>
           <Link className={styles.pathCard} href="/docs/creators/launch">
-            <span>Submit a Launch</span>
-            <strong>Launch one project</strong>
+            <span>Custom Launch API</span>
+            <strong>Prepare one Custom launch</strong>
             <small>
-              Submit one token and hook configuration for review. The approved
-              revision is tied to one source commit and launch wallet.
+              Create a wallet-bound API key, submit one deterministic bundle for
+              checks and receive a prepared wallet action.
             </small>
           </Link>
           <Link className={styles.pathCard} href="/docs/creators/templates">
@@ -66,7 +66,8 @@ export default function CreatorsDocsPage() {
             <strong>Build with the skill and tools</strong>
             <small>
               Use the Hook Builder skill to create a reproducible Uniswap v4
-              project before sending it to Submit a Launch or Submit a Template.
+              project before packaging it for the Custom Launch API or Submit a
+              Template.
             </small>
             <span className="sr-only">Opens Hook Builder on GitHub</span>
           </a>
@@ -76,13 +77,15 @@ export default function CreatorsDocsPage() {
       <section id="project">
         <h2>Launch a project</h2>
         <p>
-          Start with Hook Builder, freeze the source revision you want reviewed,
-          then submit the application through Submit a Launch. Review applies
-          only to that revision and the launch wallet named in the request.
+          Start with Hook Builder, create a deterministic source and graph
+          bundle, then submit it through the Custom Launch API with a
+          wallet-bound key. The API validates its declared commitments and graph
+          bindings, then prepares the exact wallet action without reproducing
+          the build.
         </p>
         <p>
-          Submit a Launch is for one concrete project, token and hook. Do not
-          send a reusable template to that repository.
+          The API key cannot sign or broadcast. The controller wallet must
+          review and confirm the prepared launch separately.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/launch">
@@ -101,7 +104,7 @@ export default function CreatorsDocsPage() {
         </p>
         <p>
           Submit a Template is the separate path for reusable hook logic. Do not
-          submit template applications to Hook Builder or Submit a Launch.
+          send reusable template applications through the Custom Launch API.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/templates">Read the template model</Link>
@@ -109,18 +112,17 @@ export default function CreatorsDocsPage() {
       </section>
 
       <section id="review">
-        <h2>Review and activation</h2>
+        <h2>Checks and activation</h2>
         <p>
-          Launch Reviewer checks one concrete project revision. Template
-          Reviewer checks one reusable template version, its parameter range and
-          its payout identity. Both reviewers bind their result to the exact
-          source and artifacts they examined.
+          The Custom Launch API checks one deterministic bundle and prepares an
+          exact wallet action. Template Reviewer separately checks one reusable
+          template version, its parameter range and payout identity.
         </p>
         <p>
-          Authority and activation are separate from review. A review result
-          does not itself deploy a contract, authorize a wallet transaction or
-          create a fee recipient. The matching release record must provide that
-          binding before a launch can use it.
+          Preparation and activation are separate. An API result does not
+          authorize the controller wallet, sign a transaction or broadcast it.
+          The matching wallet action and release record must provide those
+          separate bindings.
         </p>
       </section>
 
