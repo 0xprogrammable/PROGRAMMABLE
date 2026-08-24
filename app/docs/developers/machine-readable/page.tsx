@@ -65,8 +65,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="/docs/developers/custom-launch-api-v1.md">
-              <code>/docs/developers/custom-launch-api-v1.md</code>
+            <a href="/developers/custom-launch-api-v1.md">
+              <code>/developers/custom-launch-api-v1.md</code>
             </a>
             <span>
               Concise agent guide for required bundle evidence, idempotency and
@@ -238,9 +238,49 @@ export default function MachineReadableDocsPage() {
             wallet-bound <code>pm_live_</code> Bearer key.
           </li>
           <li>
+            Keys default to 90 days, are capped at 366 days and are limited to
+            10 active keys per wallet. New launch reservations are limited to
+            30 per rolling hour and 100 per rolling day; exact idempotent replays
+            bypass launch quota.
+          </li>
+          <li>
             The platform validates manifest digest, graph, required agent
             evidence digests and permit bindings. It does not compile source,
             simulate the transaction, audit the project or attest safety.
+          </li>
+          <li>
+            The API key is not wallet signing authority. The bound wallet, or
+            an agent with separate wallet authority, signs and broadcasts the
+            prepared Router action.
+          </li>
+          <li>
+            <code>GET /v1/custom-launches</code> returns a wallet-owned,
+            cursor-paginated snapshot. It does not run per-launch chain reads;
+            only the exact single-launch GET reconciles current onchain state.
+          </li>
+          <li>
+            After broadcast, poll the single-launch status route. It reconciles
+            the canonical Router event and getter on demand; there is no
+            background reconciliation timer. Finality requires 64 confirmations.
+          </li>
+          <li>
+            The API request UUID is returned as <code>requestId</code> and the
+            legacy <code>launchId</code> alias. The distinct bytes32
+            <code>onchainLaunchId</code> identifies the Router launch.
+          </li>
+          <li>
+            Finalized Router launches are eligible for Explore and Profile
+            discovery after refresh. Third-party discovery and listing remain
+            consumer-controlled.
+          </li>
+          <li>
+            Router verification proves initialization and fixed runtime and pool
+            bindings, not active liquidity or tradability. Source evidence and
+            agent checks remain caller-declared and are not an audit.
+          </li>
+          <li>
+            Fee claims and automated buybacks are not active Custom Launch API
+            operations in V1.
           </li>
           <li>Ethereum RPC authentication depends on your provider.</li>
           <li>

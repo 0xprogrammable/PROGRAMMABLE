@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   ]),
   customEnabled: vi.fn(() => false),
   readCustom: vi.fn(),
+  readRouter: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -34,8 +35,27 @@ vi.mock("../lib/server/custom-launch/public-readiness", () => ({
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.readCustom,
 }));
+vi.mock("../lib/alchemy/router-custom-public.server", () => ({
+  ROUTER_CUSTOM_FINALITY_CONFIRMATIONS: 64,
+  ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
+  readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  routerCustomEntriesAtOrBeforeBlockV1: (entries: readonly unknown[]) => entries,
+  mergeRouterCustomExploreEntriesV1: (
+    existing: readonly unknown[],
+    router: readonly unknown[],
+  ) => [...existing, ...router],
+  publicLaunchSourceV1: (input: Readonly<{
+    registryCustomCurrent: boolean;
+    routerCustomCurrent: boolean;
+  }>) => [
+    "envio-classic-v3",
+    ...(input.registryCustomCurrent ? ["registry.custom-launched"] : []),
+    ...(input.routerCustomCurrent ? ["canonical-launch-stamp-router"] : []),
+  ].join("+"),
+}));
 
 import { GET } from "../app/api/explore/route";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
 const TOKEN_COUNT = 36;
@@ -204,6 +224,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.readCatalog.mockResolvedValue(catalog());
     mocks.customEnabled.mockReturnValue(false);
     mocks.readCustom.mockResolvedValue([]);
+    mocks.readRouter.mockResolvedValue([]);
     mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
       entries: valued(input),
       marketRead: marketRead({ requested: input.length, qualified: input.length }),
@@ -224,7 +245,56 @@ describe("Explore static identity and Dexscreener market contract", () => {
     });
     expect(body.dataQuality.launchIdentity.custom).toBe("current");
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "envio-classic-v3+registry.custom-launched",
+      "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router",
+    );
+  });
+
+  it("projects finalized Router Custom identities into Explore", async () => {
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT + 1);
+    expect(body.tokens).toContainEqual(expect.objectContaining({
+      tokenAddress: customGraphExploreEntry.tokenAddress,
+      launchModel: "custom-graph",
+      launchCategoryProvenance: expect.objectContaining({
+        source: "canonical-launch-stamp-router",
+      }),
+    }));
+    expect(body.catalog).toMatchObject({
+      launchSource: "envio-classic-v3+canonical-launch-stamp-router",
+      completeness: {
+        registryCustom: "unavailable",
+        routerCustom: "current",
+        custom: "unavailable",
+      },
+      routerStamp: {
+        status: "current",
+        finalityConfirmations: 64,
+        verifiedIdentityCount: 1,
+        projectedIdentityCount: 1,
+      },
+    });
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "current",
+    );
+  });
+
+  it("keeps Envio identities visible when the Router lane fails", async () => {
+    mocks.readRouter.mockRejectedValue(new Error("router unavailable"));
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT);
+    expect(body.catalog.completeness.routerCustom).toBe("unavailable");
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "envio-classic-v3",
+    );
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "unavailable",
     );
   });
 
@@ -304,10 +374,10 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(body.tokens[0].valuation.source).toBe("dexscreener");
     expect(body.tokens[0].valuation.freshness).toBe("provider-recent");
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "envio-classic-v3",
+      "envio-classic-v3+canonical-launch-stamp-router",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "envio-classic-v3+dexscreener",
+      "envio-classic-v3+canonical-launch-stamp-router+dexscreener",
     );
     expect(response.headers.get("x-programmable-market-provider")).toBe(
       "dexscreener",

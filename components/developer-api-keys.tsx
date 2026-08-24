@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -11,6 +12,7 @@ import {
 } from "react";
 
 import styles from "@/components/developer-api-keys.module.css";
+import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
 import { useWallet } from "@/components/wallet-provider";
 
 type ApiKeySummary = Readonly<{
@@ -250,13 +252,14 @@ function DeveloperApiKeysView({
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const revokeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmRevokeRef = useRef<HTMLButtonElement>(null);
+  const createInFlightRef = useRef(false);
 
   const getAuthHeaders = useCallback(
     async (json = false) => {
-      const [accessToken, identityToken] = await Promise.all([
-        getAccessToken(),
-        getIdentityToken().catch(() => null),
-      ]);
+      // Privy may refresh the identity session while resolving this token.
+      // Read the access token afterwards so both headers describe one session.
+      const identityToken = await getIdentityToken().catch(() => null);
+      const accessToken = await getAccessToken();
       if (!accessToken) {
         throw new Error(
           "Your wallet session expired. Reconnect your wallet and try again.",
@@ -343,7 +346,12 @@ function DeveloperApiKeysView({
 
   const createApiKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!account || createState === "creating") return;
+    if (!account || createState === "creating" || createInFlightRef.current) return;
+    if (createdApiKey) {
+      setStatusMessage("Save the visible API key before creating another.");
+      revealRef.current?.focus();
+      return;
+    }
 
     const cleanLabel = label.trim();
     if (!cleanLabel) {
@@ -360,6 +368,7 @@ function DeveloperApiKeysView({
     setLabelError("");
     setCreateError("");
     setCopyState("idle");
+    createInFlightRef.current = true;
     setCreateState("creating");
     try {
       const headers = await getAuthHeaders(true);
@@ -397,6 +406,7 @@ function DeveloperApiKeysView({
           : "Unable to create the API key.",
       );
     } finally {
+      createInFlightRef.current = false;
       setCreateState("idle");
     }
   };
@@ -556,9 +566,12 @@ function DeveloperApiKeysView({
               <span className={styles.accountLabel}>Key owner</span>
               <code title={account}>{shortenAddress(account)}</code>
             </div>
-            <p>
-              {activeCount} active {activeCount === 1 ? "key" : "keys"}
-            </p>
+            <div className={styles.accountActions}>
+              <p>
+                {activeCount} active {activeCount === 1 ? "key" : "keys"}
+              </p>
+              <Link href="/profile">View finalized launches</Link>
+            </div>
           </div>
 
           {createdApiKey ? (
@@ -697,10 +710,14 @@ function DeveloperApiKeysView({
                 <button
                   ref={createButtonRef}
                   className={styles.primaryButton}
-                  disabled={createState === "creating"}
+                  disabled={createState === "creating" || Boolean(createdApiKey)}
                   type="submit"
                 >
-                  {createState === "creating" ? "Creating key" : "Create key"}
+                  {createState === "creating"
+                    ? "Creating key"
+                    : createdApiKey
+                      ? "Save current key first"
+                      : "Create key"}
                 </button>
               </form>
             </section>
@@ -868,6 +885,12 @@ function DeveloperApiKeysView({
               ) : null}
             </section>
           </div>
+
+          <DeveloperLaunchHistory
+            account={account}
+            getAccessToken={getAccessToken}
+            getIdentityToken={getIdentityToken}
+          />
         </>
       )}
     </div>

@@ -1834,6 +1834,8 @@ export function evaluateReadModelOperationsSourceContracts(
   const publicExplore = source("app/api/explore/route.ts") ?? "";
   const publicToken = source("app/api/explore/token/route.ts") ?? "";
   const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
+  const routerCustomPublic =
+    source("lib/alchemy/router-custom-public.server.ts") ?? "";
   const envioClassicV3Catalog =
     source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
   const dexscreenerExplore =
@@ -2083,11 +2085,15 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
+      "readFinalizedRouterCustomExploreEntriesV1({",
+      "const [registryCustom, routerCustom] = await Promise.all([",
       "mergeEnvioClassicV3CatalogEntriesV1(",
+      "mergeRouterCustomExploreEntriesV1(",
+      "routerCustomEntriesAtOrBeforeBlockV1(",
       "envioClassicV3IdentityCommitmentV1(",
       "readDexscreenerExploreEntriesV1(filtered, {",
       "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
-      'let customStatus: "current" | "unavailable" = "unavailable"',
+      'registryCustomStatus === "current" && routerCustomStatus === "current"',
       'requested: "fdv" as const',
       'applied: rankingStatus === "complete"',
       '"qualified-fdv-then-launch-order" as const',
@@ -2095,6 +2101,7 @@ export function evaluateReadModelOperationsSourceContracts(
       '"X-Programmable-Launch-Source": launchSource',
       '"X-Programmable-Read-Source": `${launchSource}+dexscreener`',
       '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Router-Read-Status": routerCustomStatus',
       '"X-Programmable-Identity-Last-Indexed-At": catalog.generatedAt',
     ]) &&
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
@@ -2103,13 +2110,18 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicToken, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
+      "readFinalizedRouterCustomExploreEntriesV1({",
+      "const [registryReadResult, routerReadResult] = await Promise.all([",
       "mergeEnvioClassicV3CatalogEntriesV1(",
+      "mergeRouterCustomExploreEntriesV1(",
+      "routerCustomEntriesAtOrBeforeBlockV1(",
       "envioClassicV3IdentityCommitmentV1(",
-      "const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(",
+      "const entry: ExploreEntry | null = identityEntries.find(",
       "readDexscreenerExploreEntriesV1([entry], {",
       '"X-Programmable-Launch-Source": input.launchSource',
       '"X-Programmable-Read-Source": `${input.launchSource}+dexscreener`',
       '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Router-Read-Status": input.routerStatus',
       'valuation: { status: "unavailable", reason: "source-unavailable" }',
     ]) &&
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
@@ -2132,7 +2144,17 @@ export function evaluateReadModelOperationsSourceContracts(
     ]) &&
     !/readPrimaryRpcExploreEntriesV1|productionMainnetRpcPrimary/iu.test(
       publicChart,
-    );
+    ) &&
+    includesEverySourceFragment(routerCustomPublic, [
+      "canonicalTokenExploreEntryV1",
+      'token.launchStampProvenance?.kind === "custom-graph"',
+      "readAlchemyExploreModel",
+      "suppressRouterBoundCustomProjectDuplicates",
+      "routerCustomEntriesAtOrBeforeBlockV1",
+      "mergeRouterCustomCreatorProfileV1",
+      "BigInt(stamp.finalizedAtBlockNumber) > snapshotBlock",
+      'entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE',
+    ]);
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
@@ -2150,13 +2172,17 @@ export function evaluateReadModelOperationsSourceContracts(
       "readEnvioCreatorProfile",
       "readEnvioClassicV3CatalogV1",
       "readEnvioClassicV2CreatorClaimsV1",
+      "readFinalizedRouterCustomExploreEntriesV1",
+      "mergeRouterCustomCreatorProfileV1",
       "LEGACY_RPC_PROFILE_FALLBACK_ENABLED: boolean = false",
       "getWebsiteReadOnchainDeployment",
       "withOperationalRpcFailover",
       "profileRpcProviderHeader",
-      '"X-Programmable-Launch-Source": "envio-classic-v3"',
-      '? "envio-classic-v3"',
-      ': "envio-classic-v3+rpc"',
+      "const [result, routerResult] = await Promise.all([",
+      'const launchSource = routerStatus === "current"',
+      ': "envio-classic-v3"',
+      ': `${launchSource}+rpc`',
+      '"X-Programmable-Router-Read-Status": routerStatus',
       '"X-Programmable-Rpc-Provider": result.provider',
     ]) &&
       !publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
