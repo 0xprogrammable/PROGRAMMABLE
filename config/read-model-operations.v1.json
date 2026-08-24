@@ -132,6 +132,33 @@
       "sha256": "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8"
     }
   },
+  "routerLaunchRefresher": {
+    "path": "/api/ops/alchemy-launch-refresh",
+    "schedule": "* * * * *",
+    "authEnvironment": "CRON_SECRET",
+    "maxDurationSeconds": 60,
+    "forcePersist": true,
+    "includeLatest": false,
+    "requirePersistence": true,
+    "finalityConfirmations": 64,
+    "maximumCatchUpBlocks": 50000,
+    "route": {
+      "path": "app/api/ops/alchemy-launch-refresh/route.ts",
+      "sha256": "9734a0498cb75773c08d3427e3bc9ffe957c3e94378756bb81bb6d459a99108d"
+    },
+    "runtime": {
+      "path": "lib/alchemy/explore.server.ts",
+      "sha256": "06ed5879f453628d5da656a9494aab3485528249ea915de6a88888126cd40fe3"
+    },
+    "store": {
+      "path": "lib/alchemy/launch-registry.server.ts",
+      "sha256": "349896552268e09949974546991dfb77ea88878470b6ea969dafdd5f446cde09"
+    },
+    "routerReader": {
+      "path": "lib/alchemy/launch-stamp.server.ts",
+      "sha256": "159d0be7fd708d0e91d5bf0c0a9494ef47ff3a8cda905286edf468f211305f81"
+    }
+  },
   "workers": [
     {
       "id": "source-projector",

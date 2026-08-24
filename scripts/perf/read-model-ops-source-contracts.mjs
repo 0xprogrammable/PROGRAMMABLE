@@ -155,6 +155,37 @@ const APPROVED_OPERATIONS = Object.freeze({
         "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8",
     }),
   }),
+  routerLaunchRefresher: Object.freeze({
+    path: "/api/ops/alchemy-launch-refresh",
+    schedule: "* * * * *",
+    authEnvironment: "CRON_SECRET",
+    maxDurationSeconds: 60,
+    forcePersist: true,
+    includeLatest: false,
+    requirePersistence: true,
+    finalityConfirmations: 64,
+    maximumCatchUpBlocks: 50_000,
+    route: Object.freeze({
+      path: "app/api/ops/alchemy-launch-refresh/route.ts",
+      sha256:
+        "9734a0498cb75773c08d3427e3bc9ffe957c3e94378756bb81bb6d459a99108d",
+    }),
+    runtime: Object.freeze({
+      path: "lib/alchemy/explore.server.ts",
+      sha256:
+        "06ed5879f453628d5da656a9494aab3485528249ea915de6a88888126cd40fe3",
+    }),
+    store: Object.freeze({
+      path: "lib/alchemy/launch-registry.server.ts",
+      sha256:
+        "349896552268e09949974546991dfb77ea88878470b6ea969dafdd5f446cde09",
+    }),
+    routerReader: Object.freeze({
+      path: "lib/alchemy/launch-stamp.server.ts",
+      sha256:
+        "159d0be7fd708d0e91d5bf0c0a9494ef47ff3a8cda905286edf468f211305f81",
+    }),
+  }),
   independentCrons: Object.freeze([
     Object.freeze({
       id: "protocol-revenue",
@@ -1135,6 +1166,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const releaseGates = operations?.releaseGates;
   const postPromotionContract = operations?.postPromotion;
   const customLaunchReconciler = operations?.customLaunchReconciler;
+  const routerLaunchRefresher = operations?.routerLaunchRefresher;
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
@@ -1142,6 +1174,10 @@ export function evaluateReadModelOperationsSourceContracts(
     [
       APPROVED_OPERATIONS.customLaunchReconciler.path,
       APPROVED_OPERATIONS.customLaunchReconciler.schedule,
+    ],
+    [
+      APPROVED_OPERATIONS.routerLaunchRefresher.path,
+      APPROVED_OPERATIONS.routerLaunchRefresher.schedule,
     ],
     ...APPROVED_OPERATIONS.workers.map((worker) => [
       worker.path,
@@ -1160,6 +1196,10 @@ export function evaluateReadModelOperationsSourceContracts(
       exactJson(
         customLaunchReconciler,
         APPROVED_OPERATIONS.customLaunchReconciler,
+      ) &&
+      exactJson(
+        routerLaunchRefresher,
+        APPROVED_OPERATIONS.routerLaunchRefresher,
       ) &&
       exactJson(workers, APPROVED_OPERATIONS.workers) &&
       exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers) &&
@@ -1236,6 +1276,57 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       customReconcilerRoute.includes(`limit: ${customReconciler.batchLimit}`),
     "Custom Launch V2 public reads fail closed on the reviewed lifecycle age and bounded sweep",
+  );
+  const routerRefresher = APPROVED_OPERATIONS.routerLaunchRefresher;
+  const routerRefresherRoute = source(routerRefresher.route.path);
+  const routerRefresherRuntime = source(routerRefresher.runtime.path);
+  const routerRefresherReader = source(routerRefresher.routerReader.path);
+  check(
+    "ops-router-launch-refresher-schedule",
+    crons?.get(routerRefresher.path) === routerRefresher.schedule,
+    "the confirmed Launch Stamp Router registry refreshes every minute",
+  );
+  check(
+    "ops-router-launch-refresher-source-digests",
+    [
+      routerRefresher.route,
+      routerRefresher.runtime,
+      routerRefresher.store,
+      routerRefresher.routerReader,
+    ].every((binding) =>
+      sourceBindingMatches(source, binding, expectedSha256Overrides),
+    ),
+    "the Router refresh is byte-bound to its route, runtime, durable store and canonical reader",
+  );
+  check(
+    "ops-router-launch-refresher-route-auth",
+    routeIsAuthenticatedAndFailClosed(routerRefresherRoute),
+    "the Router refresh requires the bounded timing-safe cron secret and fails closed",
+  );
+  check(
+    "ops-router-launch-refresher-execution",
+    routerRefresherRoute.includes(
+      `export const maxDuration = ${routerRefresher.maxDurationSeconds};`,
+    ) &&
+      routerRefresherRoute.includes("forcePersist: true") &&
+      routerRefresherRoute.includes("includeLatest: false") &&
+      routerRefresherRoute.includes("requirePersistence: true") &&
+      routerRefresherRoute.includes(
+        "revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, { expire: 0 })",
+      ) &&
+      routerRefresherRuntime.includes(
+        'advanceExploreLaunchDiscovery(\n    deployment,\n    cursorModel,\n    "confirmed",',
+      ) &&
+      routerRefresherRuntime.includes("await writeAlchemyLaunchRegistry(") &&
+      routerRefresherRuntime.includes(
+        "if (options.requirePersistence) throw error",
+      ) &&
+      routerRefresherReader.includes(
+        `LAUNCH_STAMP_FINALITY_CONFIRMATIONS = ${routerRefresher.finalityConfirmations}n`,
+      ) &&
+      routerRefresher.maximumCatchUpBlocks === 50_000 &&
+      routerRefresherReader.includes("MAXIMUM_CATCH_UP_BLOCKS = 50_000n"),
+    "the Router refresh persists only confirmed canonical evidence before invalidating Explore",
   );
   check(
     "ops-cron-exact-set",
