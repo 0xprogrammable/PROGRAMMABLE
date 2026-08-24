@@ -34,6 +34,18 @@ import {
   errorChainIncludesData,
   safeServerErrorSummary,
 } from "../../../../../lib/server/safe-error";
+import {
+  readFinalizedRouterCustomExploreEntriesV1,
+} from "../../../../../lib/alchemy/router-custom-public.server";
+import {
+  encodeRouterCustomCreatorClaimV1,
+  readRouterCustomCreatorClaimStateV1,
+  requireRouterCustomCreatorClaimEntryV1,
+  RouterCustomCreatorClaimError,
+} from "../../../../../lib/profile/router-custom-creator-claim.server";
+import {
+  routerCustomCreatorClaimCapabilityForPoolV1,
+} from "../../../../../lib/profile/router-custom-creator-claim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -250,56 +262,109 @@ export async function POST(request: NextRequest) {
         `Switch to chain ${deployment.chainId}`,
       );
     }
-    let releases;
-    try {
-      releases = getCreatorClaimOnchainDeployments(deployment);
-    } catch {
-      throw new CreatorClaimUnavailableError(
-        "runtime-mismatch",
-        "The creator claim releases do not match their manifests",
+    const reviewedCustomCapability =
+      routerCustomCreatorClaimCapabilityForPoolV1(
+        claimRequest.chainId,
+        claimRequest.poolId,
       );
+    let reviewedCustomEntry: ReturnType<
+      typeof requireRouterCustomCreatorClaimEntryV1
+    > | null = null;
+    if (reviewedCustomCapability) {
+      try {
+        const entries = await readFinalizedRouterCustomExploreEntriesV1({
+          signal: request.signal,
+          deadlineMs: Date.now() + 7_500,
+        });
+        reviewedCustomEntry = requireRouterCustomCreatorClaimEntryV1({
+          entries,
+          chainId: claimRequest.chainId,
+          poolId: claimRequest.poolId,
+        });
+      } catch (error) {
+        if (error instanceof RouterCustomCreatorClaimError) {
+          throw new CreatorClaimUnavailableError(error.code, error.message);
+        }
+        throw claimRpcUnavailable();
+      }
+    }
+    let releases: ReturnType<typeof getCreatorClaimOnchainDeployments> = [];
+    if (!reviewedCustomEntry) {
+      try {
+        releases = getCreatorClaimOnchainDeployments(deployment);
+      } catch {
+        throw new CreatorClaimUnavailableError(
+          "runtime-mismatch",
+          "The creator claim releases do not match their manifests",
+        );
+      }
     }
     const response = await withOperationalRpcFailover(
       deployment,
       async (selected) => {
         const client = claimClient(deployment, selected.rpcUrl);
         const snapshot = await currentClaimSnapshot(client);
-        const token = await readCreatorClaimIdentityFromRpc({
-          client,
-          releases,
-          poolId: claimRequest.poolId,
-          blockNumber: snapshot.blockNumber,
-        });
-        if (
-          token.creatorAddress.toLowerCase() !==
-          claimRequest.account.toLowerCase()
-        ) {
+        let tokenAddress: Address;
+        let hookAddress: Address;
+        let creatorAddress: Address;
+        let claimable: bigint;
+        let data: Hex;
+        if (reviewedCustomEntry) {
+          try {
+            const state = await readRouterCustomCreatorClaimStateV1({
+              client,
+              entry: reviewedCustomEntry.entry,
+              blockNumber: snapshot.blockNumber,
+            });
+            tokenAddress = state.capability.tokenAddress;
+            hookAddress = state.capability.hookAddress;
+            creatorAddress = state.capability.creatorAddress;
+            claimable = state.claimable;
+            data = encodeRouterCustomCreatorClaimV1(state.capability);
+          } catch (error) {
+            if (error instanceof RouterCustomCreatorClaimError) {
+              throw new CreatorClaimUnavailableError(error.code, error.message);
+            }
+            throw error;
+          }
+        } else {
+          const token = await readCreatorClaimIdentityFromRpc({
+            client,
+            releases,
+            poolId: claimRequest.poolId,
+            blockNumber: snapshot.blockNumber,
+          });
+          const state = await readCurrentClaimState({
+            client,
+            token,
+            blockNumber: snapshot.blockNumber,
+          });
+          tokenAddress = token.tokenAddress;
+          hookAddress = token.hookAddress;
+          creatorAddress = token.creatorAddress;
+          claimable = state.claimable;
+          data = encodeFunctionData({
+            abi: creatorFeeHookReadAbi,
+            functionName: "claimCreatorFees",
+            args: [claimRequest.poolId],
+          });
+        }
+        if (creatorAddress.toLowerCase() !== claimRequest.account.toLowerCase()) {
           throw new CreatorClaimUnavailableError(
             "not-creator",
             "This account is not the recorded creator for the pool",
           );
         }
-        const state = await readCurrentClaimState({
-          client,
-          token,
-          blockNumber: snapshot.blockNumber,
-        });
-        const claimable = state.claimable;
         if (claimable <= 0n) {
           throw new CreatorClaimUnavailableError(
             "nothing-to-claim",
             "There are no creator fees to claim for this pool",
           );
         }
-        const data = encodeFunctionData({
-          abi: creatorFeeHookReadAbi,
-          functionName: "claimCreatorFees",
-          args: [claimRequest.poolId],
-        });
         const value = 0n;
         const transaction = {
           account: claimRequest.account,
-          to: token.hookAddress,
+          to: hookAddress,
           data,
           value,
         };
@@ -311,8 +376,8 @@ export async function POST(request: NextRequest) {
         const intent = {
           account: claimRequest.account,
           poolId: claimRequest.poolId,
-          tokenAddress: token.tokenAddress,
-          hookAddress: token.hookAddress,
+          tokenAddress,
+          hookAddress,
           snapshotClaimableWei: claimable.toString(),
           snapshotClaimableEth: formatUnits(claimable, 18),
           snapshot: {
@@ -325,7 +390,7 @@ export async function POST(request: NextRequest) {
             kind: "claim-creator-fees" as const,
             chainId: deployment.chainId,
             from: claimRequest.account,
-            to: token.hookAddress,
+            to: hookAddress,
             data,
             value: "0" as const,
           },

@@ -2265,16 +2265,19 @@ export function evaluateReadModelOperationsSourceContracts(
       "readEnvioClassicV2CreatorClaimsV1",
       "readFinalizedRouterCustomExploreEntriesV1",
       "mergeRouterCustomCreatorProfileV1",
+      "projectRouterCustomCreatorClaimProfileV1",
       "LEGACY_RPC_PROFILE_FALLBACK_ENABLED: boolean = false",
       "getWebsiteReadOnchainDeployment",
       "withOperationalRpcFailover",
       "profileRpcProviderHeader",
       "const [result, routerResult] = await Promise.all([",
+      "let rpcProvider = result.provider",
       'const launchSource = routerStatus === "current"',
       ': "envio-classic-v3"',
       ': `${launchSource}+rpc`',
       '"X-Programmable-Router-Read-Status": routerStatus',
-      '"X-Programmable-Rpc-Provider": result.provider',
+      '"X-Programmable-Router-Claim-Read-Status": routerClaimStatus',
+      '"X-Programmable-Rpc-Provider": rpcProvider',
     ]) &&
       !publicCreatorProfile.includes("productionMainnetRpcPrimary") &&
       includesEverySourceFragment(publicClassicProfileGet, [
@@ -2343,7 +2346,7 @@ export function evaluateReadModelOperationsSourceContracts(
         (route) =>
           !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
-    "Profile identity is Envio-first and fail-closed, while the sole official Classic V2 reward read, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
+    "Profile identity is Envio-first and fail-closed, while reviewed reward reads, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
   );
   check(
     "ops-staged-envio-catalog-gate",

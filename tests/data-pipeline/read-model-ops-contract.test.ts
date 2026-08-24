@@ -920,6 +920,12 @@ describe("read-model operations source contract", () => {
       '"X-Programmable-Router-Read-Status": "unknown"',
     ],
     [
+      "profile custom-claim provider provenance",
+      "app/api/explore/profile/route.ts",
+      '"X-Programmable-Router-Claim-Read-Status": routerClaimStatus',
+      '"X-Programmable-Router-Claim-Read-Status": "unknown"',
+    ],
+    [
       "claim receipt binding",
       "app/api/explore/profile/claim/route.ts",
       'status: "not-submitted" as const',

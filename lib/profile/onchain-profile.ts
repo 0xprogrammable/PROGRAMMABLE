@@ -11,6 +11,12 @@ import {
   isLaunchStampProvenanceV1,
   type LaunchStampProvenanceV1,
 } from "../tokens";
+import {
+  FADE_ROUTER_CUSTOM_CREATOR_CLAIM_ADAPTER_ID,
+  resolveRouterCustomCreatorClaimCapabilityV1,
+  type RouterCustomCreatorClaimCapabilityV1,
+  type RouterCustomCreatorClaimProfileCapabilityV1,
+} from "./router-custom-creator-claim";
 
 export type ProfileDataStatus =
   "unavailable" | "not-deployed" | "loading" | "ready" | "error";
@@ -107,6 +113,7 @@ type ParsedProfileToken = ProfileToken & {
   launchLogIndex: number;
   totalSwapFeeBps?: number;
   launchStampProvenance?: LaunchStampProvenanceV1;
+  routerCustomCreatorClaimCapability?: RouterCustomCreatorClaimCapabilityV1;
 };
 
 type ParsedProfilePool = {
@@ -115,6 +122,8 @@ type ParsedProfilePool = {
   symbol: string;
   poolId: Hex;
   totalSwapFeeBps: number;
+  launchModel?: "classic" | "adaptive" | "deep" | "custom-graph";
+  claimCapability?: RouterCustomCreatorClaimProfileCapabilityV1;
   claimableWei: string;
   generatedWei: string;
 };
@@ -391,6 +400,64 @@ function readLaunchStampProvenance(
   return value;
 }
 
+function readRouterCustomClaimProfileCapability(
+  record: Record<string, unknown>,
+) {
+  const value = record.claimCapability;
+  if (value === undefined || value === null) return undefined;
+  const capability = asRecord(value, "creator claim capability");
+  const keys = Object.keys(capability).sort();
+  const expectedKeys = [
+    "adapterId",
+    "chainId",
+    "hookAddress",
+    "launchId",
+    "poolId",
+    "tokenAddress",
+  ].sort();
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index]) ||
+    capability.adapterId !== FADE_ROUTER_CUSTOM_CREATOR_CLAIM_ADAPTER_ID
+  ) {
+    throw new ProfileResponseError("Invalid creator claim capability");
+  }
+  const chainId = readSafeInteger(
+    capability,
+    "chainId",
+    "creator claim capability chain",
+  );
+  if (chainId !== 1) {
+    throw new ProfileResponseError("Invalid creator claim capability chain");
+  }
+  return {
+    adapterId: FADE_ROUTER_CUSTOM_CREATOR_CLAIM_ADAPTER_ID,
+    chainId: 1,
+    launchId: readHex(
+      capability,
+      "launchId",
+      "creator claim capability launch",
+      32,
+    ),
+    tokenAddress: readAddress(
+      capability,
+      "tokenAddress",
+      "creator claim capability token",
+    ),
+    hookAddress: readAddress(
+      capability,
+      "hookAddress",
+      "creator claim capability hook",
+    ),
+    poolId: readHex(
+      capability,
+      "poolId",
+      "creator claim capability pool",
+      32,
+    ),
+  } as const satisfies RouterCustomCreatorClaimProfileCapabilityV1;
+}
+
 function readTimestamp(
   record: Record<string, unknown>,
   key: string,
@@ -433,6 +500,24 @@ function readArray(
 
 function sameAddress(first: string, second: string) {
   return first.toLowerCase() === second.toLowerCase();
+}
+
+function profileClaimCapabilityMatchesToken(
+  pool: ParsedProfilePool,
+  token: ParsedProfileToken,
+) {
+  const profileCapability = pool.claimCapability;
+  const reviewedCapability = token.routerCustomCreatorClaimCapability;
+  return Boolean(
+    profileCapability &&
+    reviewedCapability &&
+    profileCapability.adapterId === reviewedCapability.adapterId &&
+    profileCapability.chainId === reviewedCapability.chainId &&
+    sameAddress(profileCapability.launchId, reviewedCapability.launchId) &&
+    sameAddress(profileCapability.tokenAddress, token.address) &&
+    sameAddress(profileCapability.hookAddress, token.hookAddress) &&
+    sameAddress(profileCapability.poolId, token.poolId),
+  );
 }
 
 function tokenHref(address: Address) {
@@ -696,6 +781,21 @@ function parseToken(
       "Profile token does not match its launch stamp",
     );
   }
+  const routerCustomCreatorClaimCapability =
+    resolveRouterCustomCreatorClaimCapabilityV1({
+      tokenAddress: address,
+      hookAddress,
+      poolId,
+      creatorAddress,
+      totalSwapFeeBps:
+        token.totalSwapFeeBps === null ? null : totalSwapFeeBps,
+      launchModel,
+      launchModelVersion:
+        typeof token.launchModelVersion === "string"
+          ? token.launchModelVersion
+          : undefined,
+      launchStampProvenance,
+    });
 
   return {
     address,
@@ -720,11 +820,24 @@ function parseToken(
     launchLogIndex,
     ...(totalSwapFeeBps === undefined ? {} : { totalSwapFeeBps }),
     ...(launchStampProvenance ? { launchStampProvenance } : {}),
+    ...(routerCustomCreatorClaimCapability
+      ? { routerCustomCreatorClaimCapability }
+      : {}),
   };
 }
 
 function parsePool(value: unknown): ParsedProfilePool {
   const pool = asRecord(value, "profile pool");
+  const launchModel = pool.launchModel;
+  if (
+    launchModel !== undefined &&
+    launchModel !== "classic" &&
+    launchModel !== "adaptive" &&
+    launchModel !== "deep" &&
+    launchModel !== "custom-graph"
+  ) {
+    throw new ProfileResponseError("Invalid creator reward launch model");
+  }
   const claimableWei = readIntegerString(
     pool,
     "claimableCreatorFeesWei",
@@ -747,6 +860,7 @@ function parsePool(value: unknown): ParsedProfilePool {
     generatedWei,
     "generated creator fees in ETH",
   );
+  const claimCapability = readRouterCustomClaimProfileCapability(pool);
 
   return {
     tokenAddress: readAddress(pool, "tokenAddress", "pool token address"),
@@ -754,6 +868,8 @@ function parsePool(value: unknown): ParsedProfilePool {
     symbol: readString(pool, "symbol", "pool token symbol"),
     poolId: readHex(pool, "poolId", "pool id", 32),
     totalSwapFeeBps: readSafeInteger(pool, "totalSwapFeeBps", "pool swap fee"),
+    ...(launchModel ? { launchModel } : {}),
+    ...(claimCapability ? { claimCapability } : {}),
     claimableWei,
     generatedWei,
   };
@@ -867,8 +983,14 @@ export function mapCreatorProfileResponse(
     if (
       pool.name !== token.name ||
       pool.symbol !== token.symbol ||
-      token.totalSwapFeeBps === undefined ||
-      pool.totalSwapFeeBps !== token.totalSwapFeeBps
+      (pool.launchModel !== undefined && pool.launchModel !== token.launchModel) ||
+      (token.launchStampProvenance === undefined
+        ? token.totalSwapFeeBps === undefined ||
+          pool.totalSwapFeeBps !== token.totalSwapFeeBps ||
+          pool.claimCapability !== undefined
+        : token.totalSwapFeeBps !== undefined ||
+          pool.launchModel !== "custom-graph" ||
+          !profileClaimCapabilityMatchesToken(pool, token))
     ) {
       throw new ProfileResponseError(
         "Profile token metadata does not match its verified pool",
@@ -880,8 +1002,10 @@ export function mapCreatorProfileResponse(
     const token = tokenByPool.get(pool.poolId.toLowerCase());
     if (
       !token ||
-      token.launchStampProvenance !== undefined ||
-      !sameAddress(token.address, pool.tokenAddress)
+      !sameAddress(token.address, pool.tokenAddress) ||
+      (token.launchStampProvenance === undefined
+        ? pool.claimCapability !== undefined
+        : !profileClaimCapabilityMatchesToken(pool, token))
     ) {
       throw new ProfileResponseError(
         "Profile pool does not match a verified token",
@@ -895,8 +1019,10 @@ export function mapCreatorProfileResponse(
     if (
       !token ||
       !pool ||
-      token.launchStampProvenance !== undefined ||
-      !sameAddress(token.address, claim.tokenAddress)
+      !sameAddress(token.address, claim.tokenAddress) ||
+      (token.launchStampProvenance === undefined
+        ? pool.claimCapability !== undefined
+        : !profileClaimCapabilityMatchesToken(pool, token))
     ) {
       throw new ProfileResponseError(
         "Creator claim does not match a verified token",
