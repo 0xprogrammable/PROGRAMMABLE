@@ -64,22 +64,17 @@ describe("launch model artwork", () => {
       'aria-describedby="launch-model-classic-description"',
     );
     expect(source).toContain(
-      '? () => void onChoose("custom")',
-    );
-    expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',
     );
     expect(source).toContain(
       'aria-describedby="launch-model-custom-description"',
     );
     expect(source).toContain('data-launch-model-option="custom"');
-    expect(source).toContain(
-      "data-launch-model-available={customLaunchPublicEnabled}",
-    );
-    expect(source).toContain(
-      "data-launch-model-launchable={customLaunchPublicEnabled}",
-    );
-    expect(source).toContain("disabled={!customLaunchPublicEnabled}");
+    expect(source).toContain('data-launch-model-available="true"');
+    expect(source).toContain('data-launch-model-entry="api-first"');
+    expect(source).toContain('href="/developers/api-keys"');
+    expect(source).not.toContain('? () => void onChoose("custom")');
+    expect(source).not.toContain("disabled={!customLaunchPublicEnabled}");
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }
