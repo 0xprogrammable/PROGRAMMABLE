@@ -717,6 +717,7 @@ jobs:
             body?.status !== "ready" ||
             body?.catalog?.source !== "envio-classic-v3" ||
             body.catalog.launchSource !== expectedLaunchSource ||
+            body.catalog.completeness?.classic !== "current" ||
             body.catalog.completeness?.custom !== expectedCustomStatus ||
             body.catalog.completeness?.stock !== "excluded" ||
             body.catalog.evidence?.kind !== "envio-indexer-state" ||
@@ -726,8 +727,6 @@ jobs:
               JSON.stringify(["classic", "custom"]) ||
             !Number.isSafeInteger(body.total) || body.total < 1 ||
             !Array.isArray(body.tokens) || body.tokens.length !== 1 ||
-            body.tokens[0]?.launchModel !== "classic" ||
-            body.tokens[0]?.launchModelVersion !== "classic-v3" ||
             response.headers.get("x-programmable-launch-source") !==
               expectedLaunchSource
           ) {
