@@ -765,9 +765,12 @@ function canonicalTotalSupply(entry: ExploreEntry): string | null {
 export function publicExploreEntryV1(
   entry: ValuedExploreEntry,
 ): PublicValuedExploreEntry {
-  if (entry.exploreKind === "custom-project") return entry;
-
   const output = { ...entry } as Record<string, unknown>;
+  if (output.marketData === null) delete output.marketData;
+  if (entry.exploreKind === "custom-project") {
+    return output as PublicValuedExploreEntry;
+  }
+
   delete output.liveMarketStateEvidence;
   delete output.liveMarketPriceEvidence;
   for (const field of LEGACY_MARKET_CAP_FIELDS) delete output[field];

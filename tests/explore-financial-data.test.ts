@@ -143,6 +143,16 @@ function currentEvidenceFixture(
 }
 
 describe("Explore financial-data semantics", () => {
+  it("omits null optional market data at the public boundary", () => {
+    const entry = {
+      ...canonicalTokenExploreEntryV1(goldenToken()),
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+      marketData: null,
+    } as unknown as ValuedExploreEntry;
+
+    expect(publicExploreEntryV1(entry)).not.toHaveProperty("marketData");
+  });
+
   it("promotes trade-independent current FDV only at the dual liquidity threshold", () => {
     const { valued, liquidityEvidence } = currentEvidenceFixture();
     const current = withCurrentOnchainValuation(valued, liquidityEvidence);
