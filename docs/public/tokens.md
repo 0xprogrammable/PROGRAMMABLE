@@ -4,12 +4,12 @@ description: Compare Programmable launch models and understand how their token, 
 
 # Launch models
 
-Programmable separates direct public models from individually reviewed Custom releases. Prediction Markets is a separately versioned launch model. Choose the model by the behavior the product needs, not by how unusual its name or branding is.
+Programmable separates direct public models from deterministic Custom graph launches. Prediction Markets is a separately versioned launch model. Choose the model by the behavior the product needs, not by how unusual its name or branding is.
 
 | Model              | What it creates                                                            | Market                                        | Access                                |
 | ------------------ | -------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------- |
 | Classic            | Fixed supply tokens with configurable buy and sell transaction fees        | ETH on Uniswap v4                             | Open through Create                   |
-| Custom             | Tokens or applications that need an individually reviewed hook and release | The pool and route named in the exact release | Accepted and activated revisions only |
+| Custom             | Tokens or applications that need their own deterministic hook graph         | The pool and route in the prepared action      | Wallet-bound Custom Launch API         |
 | Prediction Markets | Onchain outcome markets                                                    | A separately versioned Uniswap v4 release     | Open through Create                   |
 
 ## What is a hook
@@ -28,7 +28,7 @@ Classic creates a fixed supply of one billion tokens and initializes its ETH poo
 
 ## Custom
 
-Custom releases are for products whose behavior cannot be represented by the Classic settings. A hook is code that can change how a Uniswap v4 pool behaves during a transaction. Each Custom release identifies the exact source, permissions, transaction fees, dependencies, transaction construction and the wallet allowed to launch it. Public review intake is open through Submit a Launch, while execution remains bound to the accepted release rather than to a project name.
+Custom releases are for products whose behavior cannot be represented by the Classic settings. A hook is code that can change how a Uniswap v4 pool behaves during a transaction. Each Custom request identifies the exact source bundle, graph, permissions, transaction fees, dependencies, transaction construction and controller wallet. Preparation uses a [wallet-bound API key](https://programmable.market/developers/api-keys), while signing remains with the controller wallet rather than the API key or a project name.
 
 {% content-ref url="models/custom.md" %}
 [custom.md](models/custom.md)

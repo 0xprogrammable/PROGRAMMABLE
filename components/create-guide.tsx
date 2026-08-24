@@ -6,11 +6,12 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Check, CircleHelp, Copy, ExternalLink, X } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Check, CircleHelp, Copy, ExternalLink, X } from "lucide-react";
 
 import styles from "@/components/create-guide.module.css";
 
-const BUILD_PROMPT = `Build a Uniswap v4 hook for Programmable. Start from the official Hookbuilder at https://github.com/0xprogrammable/hookbuilder. The token should [describe the behavior in plain words]. Keep the project limited to that behavior, add tests, run the local checks, and explain the results. Prepare the exact GitHub revision for Programmable review. Do not deploy, sign, or submit anything without asking me first.`;
+const BUILD_PROMPT = `Build a Uniswap v4 hook for Programmable. Start from the official Hook Builder at https://github.com/0xprogrammable/hookbuilder. The token should [describe the behavior in plain words]. Keep the project limited to that behavior, add tests, run the applicable local checks, and explain the results. Follow https://programmable.market/developers/custom-launch-api-v1.md to package one deterministic source and graph bundle with the required evidence digests. Use my Programmable API key only for the authenticated request to https://api.programmable.market/v1/custom-launches. Never print the key or store it in source control. Do not sign or broadcast. Stop after the API returns the prepared wallet action so I can review it.`;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -173,9 +174,9 @@ export function CreateGuide() {
               <div>
                 <h3>Review it locally</h3>
                 <p>
-                  Ask the coding assistant to explain the changes, run the local
-                  checks, and fix any failures. Keep the exact commit you want
-                  reviewed on GitHub.
+                  Ask the coding assistant to explain the changes, run the
+                  applicable local checks, and fix any failures. Keep the exact
+                  source and artifacts that the API bundle identifies.
                 </p>
               </div>
             </li>
@@ -185,12 +186,12 @@ export function CreateGuide() {
                 4
               </span>
               <div>
-                <h3>Submit the exact revision</h3>
+                <h3>Prepare the launch through the API</h3>
                 <p>
-                  Hookbuilder prepares the project. Submit a Launch records the
-                  exact revision for Programmable review. After review and release
-                  binding, the approved project can continue through the Custom
-                  Hook launch here.
+                  Hook Builder packages the project and required evidence. Create
+                  a wallet-bound API key, submit the deterministic bundle to the
+                  Custom Launch API, then review the prepared action in the
+                  controller wallet. The API key cannot sign or broadcast.
                 </p>
                 <div className={styles.links}>
                   <a
@@ -201,14 +202,10 @@ export function CreateGuide() {
                     Open Hookbuilder
                     <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
                   </a>
-                  <a
-                    href="https://github.com/0xprogrammable/submit-launch"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open Submit a Launch
-                    <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
-                  </a>
+                  <Link href="/developers/api-keys">
+                    Create a Custom launch API key
+                    <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
+                  </Link>
                 </div>
               </div>
             </li>

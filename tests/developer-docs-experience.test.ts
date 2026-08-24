@@ -214,10 +214,13 @@ describe("Developer documentation experience", () => {
       "each consumer must implement the published verification procedure",
     );
     expect(developerDocsMarkdown).toMatch(
-      /Launch access is a separate product path/,
+      /Custom launch preparation is the separate authenticated write path/,
     );
     expect(developerDocsMarkdown).toContain(
-      "https://programmable.market/docs/creators/launch",
+      "https://api.programmable.market/v1/custom-launches",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "Router verification and the Developer API are read-only",
     );
     expect(developerDocsMarkdown).toContain(
       "It does not automatically list or label a launch in GMGN, Axiom, FOMO",

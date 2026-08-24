@@ -95,9 +95,8 @@ export default function CreatorEarningsDocsPage() {
           official launches that use that version.
         </p>
         <p>
-          The current template repository does not accept public applications. A
-          share accrues only when the matching template registry and payout path
-          are active for the launch.
+          Public template intake is not active. A share accrues only when the
+          matching template registry and payout path are active for the launch.
         </p>
       </section>
 
@@ -122,7 +121,7 @@ export default function CreatorEarningsDocsPage() {
           <li>Fees depend on qualifying activity and may be zero.</li>
           <li>Programmable does not promise trading volume or fixed income.</li>
           <li>
-            Review, approval, listing and program participation do not create a
+            API preparation, listing and program participation do not create a
             payment by themselves.
           </li>
           <li>

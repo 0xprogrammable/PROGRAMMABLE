@@ -1,18 +1,18 @@
 ---
-description: Understand the evidence boundaries behind review, release activation and onchain provenance
+description: Understand the evidence boundaries behind API preparation, wallet execution and onchain provenance
 ---
 
 # Verification and risk
 
-Programmable does not treat one green check as proof of the whole lifecycle. Source review, release activation, wallet execution, chain finality, Router provenance and public indexing answer different questions and can succeed or fail independently.
+Programmable does not treat one green check as proof of the whole lifecycle. Caller-declared source evidence, API preparation, wallet execution, chain finality, Router provenance and public indexing answer different questions and can succeed or fail independently.
 
-## Source review
+## Bundle evidence
 
-Review applies to one repository id, commit, tree and evidence set. A later commit is a new target even when the project name remains unchanged. An accepted revision means it passed the published gates for the named scope; it is not an external audit, endorsement or price opinion.
+Each Custom request binds one source descriptor, manifest digest, graph bundle and set of agent evidence digests. The platform checks their shape and internal bindings. It does not fetch the evidence, reproduce the build or adopt the agent's claims. A changed bundle is a new launch subject even when the project name remains unchanged.
 
-## Release activation
+## API preparation
 
-An accepted project receives launch authority only when a matching execution profile binds the revision, wallet, chain, contracts and transaction plan. The creator inspects and signs the final transaction. A draft application, repository merge or indexer observation cannot replace that authority.
+A prepared result means the exact action exists for the controller wallet. It is not an approval, audit, signed transaction or broadcast. The API key cannot authorize the wallet; the controller inspects and signs the final transaction separately.
 
 ## Finality and public projection
 

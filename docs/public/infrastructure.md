@@ -1,5 +1,5 @@
 ---
-description: How Programmable separates launch creation, review, execution, finality and public discovery
+description: How Programmable separates launch preparation, execution, finality and public discovery
 ---
 
 # How Programmable works
@@ -12,7 +12,7 @@ Classic uses the current launcher and shared hook on Ethereum. One transaction c
 
 ## Custom execution
 
-Custom begins with an exact public source revision and review application. An accepted release identifies the code, wallet, permissions and transaction plan that may use the route. The creator wallet still submits the transaction, and the resulting launch must agree with the release and final chain record.
+Custom begins with one deterministic source and graph bundle submitted through the authenticated API. The platform validates the declared manifest digest, graph constraints, required agent evidence and permit binding, then prepares an exact wallet action. It does not compile the source, reproduce the build or audit the project. The controller wallet still submits the transaction, and the resulting launch must agree with the prepared action and final chain record.
 
 ## Prediction Markets execution
 

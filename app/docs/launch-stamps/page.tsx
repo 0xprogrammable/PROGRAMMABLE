@@ -720,11 +720,11 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Not launch authorization</dt>
             <dd>
-              A Router reference does not grant launch access. Custom releases
-              use a review and activation path. Check the deployment record and{" "}
-              <Link href="/docs/trust">trust boundaries</Link> before the{" "}
+              A Router reference does not grant launch access. Custom launch
+              preparation uses a wallet-bound key and the authenticated API.
+              Read the <Link href="/docs/trust">trust boundaries</Link> and{" "}
               <Link href="/docs/creators/launch">creator launch guide</Link> for
-              the separate access rules.
+              the separate access and wallet rules.
             </dd>
           </div>
         </dl>

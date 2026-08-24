@@ -103,7 +103,7 @@ describe("Docs information architecture", () => {
           {
             depth: 1,
             href: "/docs/creators/templates",
-            label: "Publish a template",
+            label: "Public template policy",
           },
           {
             depth: 1,
@@ -212,7 +212,7 @@ describe("Docs information architecture", () => {
     for (const [source, path, title] of [
       [creatorsPage, "/docs/creators", "Create with Programmable"],
       [creatorLaunchPage, "/docs/creators/launch", "Launch a project"],
-      [creatorTemplatesPage, "/docs/creators/templates", "Publish a template"],
+      [creatorTemplatesPage, "/docs/creators/templates", "Public templates"],
       [creatorEarningsPage, "/docs/creators/earnings", "Creator earnings"],
       [creatorProgramsPage, "/docs/creators/programs", "Creator programs"],
     ] as const) {
@@ -223,18 +223,52 @@ describe("Docs information architecture", () => {
 
     expect(creatorsPage).toContain("Hook Builder");
     expect(creatorsPage).toContain("Custom Launch API");
-    expect(creatorsPage).toContain("Submit a Template");
-    expect(creatorTemplatesPage).toContain(
-      "Follow the Submit a Template repository",
-    );
-    expect(creatorTemplatesPage).toMatch(
-      /do not accept public template\s+applications/,
-    );
+    expect(creatorsPage).toContain("Public templates are planned");
+    expect(creatorTemplatesPage).toContain("Public template intake is closed");
+    expect(creatorTemplatesPage).not.toMatch(/submit[- a]+template/i);
     expect(creatorLaunchPage).toContain("The API does not control your wallet");
     expect(creatorLaunchPage).toContain("Create a Custom launch API key");
     expect(creatorLaunchPage).toContain("does not reproduce your build");
     expect(creatorLaunchPage).not.toContain(
       "Open public wallet self-service is not active",
+    );
+  });
+
+  it("keeps every normal public Custom launch surface API-first", () => {
+    const publicLaunchSurfaces = [
+      "README.md",
+      "components/create-guide.tsx",
+      "docs/public/README.md",
+      "docs/public/creators/README.md",
+      "docs/public/creators/launch.md",
+      "docs/public/creators/templates.md",
+      "docs/public/economics.md",
+      "docs/public/infrastructure.md",
+      "docs/public/models/custom.md",
+      "docs/public/tokens.md",
+      "docs/public/trust.md",
+      "docs/public/reference/official-links.md",
+      "app/docs/page.tsx",
+      "app/docs/creators/page.tsx",
+      "app/docs/creators/launch/page.tsx",
+      "app/docs/creators/templates/page.tsx",
+      "app/docs/launch-stamps/page.tsx",
+      "app/docs/models/[model]/page.tsx",
+      "app/docs/trust/page.tsx",
+    ];
+
+    for (const path of publicLaunchSurfaces) {
+      const source = read(path);
+      expect(source, path).not.toMatch(
+        /submit[- a]+launch|submit[- a]+template|public source review|review application|accepted revision|accepted release|individually reviewed/i,
+      );
+    }
+
+    expect(read("docs/public/creators/launch.md")).toContain(
+      "https://api.programmable.market/v1/custom-launches",
+    );
+    expect(read("docs/public/developers/README.md")).toContain(
+      "The Developer API at `https://developers.programmable.family` is read only",
     );
   });
 

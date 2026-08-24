@@ -41,8 +41,9 @@ export default function CreatorProgramsDocsPage() {
           accrue a share.
         </p>
         <p>
-          Partnership support does not replace technical review or create a
-          general endorsement of every project launched from that template.
+          Partnership support does not replace applicable project checks,
+          Custom API requirements or wallet confirmation. It also does not
+          endorse every project launched from that template.
         </p>
       </section>
 

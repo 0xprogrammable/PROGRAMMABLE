@@ -8,7 +8,7 @@
 - [Create](creators/README.md)
   - [Launch a project](creators/launch.md)
   - [Creator earnings](creators/earnings.md)
-  - [Public templates](creators/templates.md)
+  - [Public template policy](creators/templates.md)
   - [Creator programs](creators/programs.md)
 - [Fees and revenue](economics.md)
 - [V4 token](v4-token.md)
