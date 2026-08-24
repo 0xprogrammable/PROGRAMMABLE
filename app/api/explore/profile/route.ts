@@ -35,6 +35,11 @@ import { readEnvioClassicV2CreatorClaimsV1 } from
   "@/lib/market-data/envio-classic-v2-creator-claims.server";
 import { readEnvioClassicV3CatalogV1 } from
   "@/lib/market-data/envio-classic-v3-catalog.server";
+import {
+  mergeRouterCustomCreatorProfileV1,
+  readFinalizedRouterCustomExploreEntriesV1,
+  ROUTER_CUSTOM_LAUNCH_SOURCE,
+} from "@/lib/alchemy/router-custom-public.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -677,20 +682,56 @@ export async function GET(request: NextRequest) {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const account = getAddress(input);
 
   try {
-    const result = await readEnvioCreatorProfile(
-      getAddress(input),
-      request.signal,
+    const deadlineMs = Date.now() + 7_500;
+    const routerRead = readFinalizedRouterCustomExploreEntriesV1({
+      signal: request.signal,
+      deadlineMs,
+    }).then(
+      (entries) => ({ entries, status: "current" as const }),
+      () => {
+        console.error("Creator profile Router Custom read unavailable", {
+          name: "RouterCustomReadError",
+        });
+        return { entries: [], status: "unavailable" as const };
+      },
     );
-    return NextResponse.json(result.profile, {
+    const [result, routerResult] = await Promise.all([
+      readEnvioCreatorProfile(account, request.signal),
+      routerRead,
+    ]);
+    let profile = result.profile;
+    let routerStatus = routerResult.status;
+    if (routerStatus === "current") {
+      try {
+        profile = mergeRouterCustomCreatorProfileV1(
+          result.profile,
+          account,
+          routerResult.entries,
+        );
+      } catch {
+        console.error("Creator profile Router Custom merge unavailable", {
+          name: "RouterCustomIdentityError",
+        });
+        routerStatus = "unavailable";
+      }
+    }
+    const launchSource = routerStatus === "current"
+      ? `envio-classic-v3+${ROUTER_CUSTOM_LAUNCH_SOURCE}`
+      : "envio-classic-v3";
+    const readSource = result.provider === "envio-indexer-state"
+      ? launchSource
+      : `${launchSource}+rpc`;
+    return NextResponse.json(profile, {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Launch-Source": "envio-classic-v3",
-        "X-Programmable-Read-Source":
-          result.provider === "envio-indexer-state"
-            ? "envio-classic-v3"
-            : "envio-classic-v3+rpc",
+        "X-Programmable-Launch-Source": routerStatus === "current"
+          ? `envio-classic-v3+${ROUTER_CUSTOM_LAUNCH_SOURCE}`
+          : "envio-classic-v3",
+        "X-Programmable-Read-Source": readSource,
+        "X-Programmable-Router-Read-Status": routerStatus,
         "X-Programmable-Rpc-Provider": result.provider,
       },
     });
@@ -706,7 +747,7 @@ export async function GET(request: NextRequest) {
           deployment,
           async (selected) => ({
             profile: await readCreatorProfile(
-              getAddress(input),
+              account,
               profileClient(selected.rpcUrl),
             ),
             provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
@@ -717,6 +758,7 @@ export async function GET(request: NextRequest) {
             "Cache-Control": "private, max-age=0, s-maxage=15",
             "X-Programmable-Launch-Source": "rpc",
             "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Router-Read-Status": "unavailable",
             "X-Programmable-Rpc-Provider": fallback.provider,
           },
         });

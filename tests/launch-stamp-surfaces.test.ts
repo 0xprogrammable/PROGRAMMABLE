@@ -195,7 +195,8 @@ describe("canonical Router stamp surfaces", () => {
         totalPages: 1,
         catalog: {
           source: "envio-classic-v3",
-          launchSource: "envio-classic-v3+registry.custom-launched",
+          launchSource:
+            "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router",
           status: "current",
           lastIndexedAt: "2026-08-16T08:00:00.000Z",
           asOfBlock: "25740000",
@@ -206,12 +207,15 @@ describe("canonical Router stamp surfaces", () => {
             classic: "current",
             stock: "excluded",
             custom: "current",
+            registryCustom: "current",
+            routerCustom: "current",
           },
           scope: {
             included: [
               "classic-v3",
               "official-main-token",
               "registry.custom-launched",
+              "canonical-launch-stamp-router",
             ],
             excluded: [
               "classic-v1",
@@ -229,6 +233,13 @@ describe("canonical Router stamp surfaces", () => {
             progressBlock: "25740000",
             progressOccurrenceId: `1:0x${"11".repeat(32)}:0x${"22".repeat(32)}:0`,
             commitment: `sha256:${"cc".repeat(32)}`,
+          },
+          routerStamp: {
+            source: "canonical-launch-stamp-router",
+            status: "current",
+            finalityConfirmations: 64,
+            verifiedIdentityCount: 2,
+            projectedIdentityCount: 2,
           },
         },
       }), {

@@ -12,13 +12,24 @@ import {
   readEnvioClassicV3CatalogV1,
 } from
   "../../../../lib/market-data/envio-classic-v3-catalog.server";
+import {
+  mergeRouterCustomExploreEntriesV1,
+  publicLaunchSourceV1,
+  readFinalizedRouterCustomExploreEntriesV1,
+  ROUTER_CUSTOM_FINALITY_CONFIRMATIONS,
+  ROUTER_CUSTOM_LAUNCH_SOURCE,
+  routerCustomEntriesAtOrBeforeBlockV1,
+} from "../../../../lib/alchemy/router-custom-public.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
 import { readPublicCreatorArticleV1 } from
   "../../../../lib/server/creator-article/public-read.server";
-import type { ExploreEntry } from "../../../../lib/tokens";
+import type {
+  CanonicalTokenExploreEntry,
+  ExploreEntry,
+} from "../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,6 +48,7 @@ function canonicalResponseHeaders(input: Readonly<{
   marketStatus: "complete" | "partial" | "unavailable";
   launchSource: string;
   lastIndexedAt: string;
+  routerStatus: "current" | "unavailable";
 }>) {
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
@@ -44,6 +56,7 @@ function canonicalResponseHeaders(input: Readonly<{
     "X-Programmable-Read-Source": `${input.launchSource}+dexscreener`,
     "X-Programmable-Market-Provider": "dexscreener",
     "X-Programmable-Market-Read-Status": input.marketStatus,
+    "X-Programmable-Router-Read-Status": input.routerStatus,
     "X-Programmable-Identity-Last-Indexed-At": input.lastIndexedAt,
     ...(input.hasDexscreenerPrice
       ? { "X-Programmable-Market-Source": "dexscreener" }
@@ -121,46 +134,114 @@ export async function GET(request: NextRequest) {
     (candidate) => candidate.exploreKind === "token" &&
       tokenAddress(candidate) === address,
   ) ?? null;
-  let customEntries: readonly ExploreEntry[] = [];
-  let customStatus: "current" | "unavailable" = "unavailable";
-  if (isCustomLaunchRegistryPublicReadEnabled()) {
-    try {
-      customEntries = await readProductionCustomExploreDirectoryV1(
-        readSignal,
-      );
-      customStatus = "current";
-    } catch {
-      console.error("Token detail Custom Registry read unavailable", {
-        name: "CustomRegistryReadError",
+  const registryEnabled = isCustomLaunchRegistryPublicReadEnabled();
+  const registryRead = registryEnabled
+    ? readProductionCustomExploreDirectoryV1(readSignal).then(
+        (entries) => ({
+          entries,
+          failed: false,
+          status: "current" as const,
+        }),
+        () => {
+          console.error("Token detail Custom Registry read unavailable", {
+            name: "CustomRegistryReadError",
+          });
+          return {
+            entries: [] as readonly ExploreEntry[],
+            failed: true,
+            status: "unavailable" as const,
+          };
+        },
+      )
+    : Promise.resolve({
+        entries: [] as readonly ExploreEntry[],
+        failed: false,
+        status: "unavailable" as const,
       });
-      if (canonicalEntry === null) {
-        return unavailableResponse({
-          "X-Programmable-Launch-Source": catalog.source,
-          "X-Programmable-Read-Source": `${catalog.source}+registry.custom-launched`,
-          "X-Programmable-Market-Provider": "dexscreener",
-        });
-      }
-    }
-  }
-  let identityEntries: readonly ExploreEntry[];
+  const routerRead = readFinalizedRouterCustomExploreEntriesV1({
+    signal: readSignal,
+    deadlineMs,
+  }).then(
+    (verified) => ({
+      entries: routerCustomEntriesAtOrBeforeBlockV1(
+        verified,
+        catalog.asOfBlock,
+      ),
+      failed: false,
+      status: "current" as const,
+      verifiedIdentityCount: verified.length,
+    }),
+    () => {
+      console.error("Token detail Router Custom read unavailable", {
+        name: "RouterCustomReadError",
+      });
+      return {
+        entries: [] as readonly CanonicalTokenExploreEntry[],
+        failed: true,
+        status: "unavailable" as const,
+        verifiedIdentityCount: 0,
+      };
+    },
+  );
+  const [registryReadResult, routerReadResult] = await Promise.all([
+    registryRead,
+    routerRead,
+  ]);
+  let registryCustomStatus = registryReadResult.status;
+  let routerCustomStatus = routerReadResult.status;
+  let registryReadFailed = registryReadResult.failed;
+  let routerReadFailed = routerReadResult.failed;
+  let customEntries = registryReadResult.entries;
+  let routerEntries = routerReadResult.entries;
+  const requestedRouterIdentityRead = routerEntries.some(
+    (candidate) => tokenAddress(candidate) === address,
+  );
+  let registryIdentityEntries: readonly ExploreEntry[];
   try {
-    identityEntries = mergeEnvioClassicV3CatalogEntriesV1(
+    registryIdentityEntries = mergeEnvioClassicV3CatalogEntriesV1(
       catalog.entries,
       customEntries,
     );
   } catch {
-    return unavailableResponse({
-      "X-Programmable-Launch-Source": catalog.source,
-      "X-Programmable-Read-Source": `${catalog.source}+registry.custom-launched`,
-      "X-Programmable-Market-Provider": "dexscreener",
+    console.error("Token detail Custom Registry identity merge unavailable", {
+      name: "CustomRegistryIdentityError",
     });
+    customEntries = [];
+    registryIdentityEntries = catalog.entries;
+    registryCustomStatus = "unavailable";
+    registryReadFailed = registryEnabled;
   }
-  const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(
+  let identityEntries: readonly ExploreEntry[];
+  try {
+    identityEntries = mergeRouterCustomExploreEntriesV1(
+      registryIdentityEntries,
+      routerEntries,
+    );
+  } catch {
+    console.error("Token detail Router Custom identity merge unavailable", {
+      name: "RouterCustomIdentityError",
+    });
+    routerEntries = [];
+    identityEntries = registryIdentityEntries;
+    routerCustomStatus = "unavailable";
+    routerReadFailed = true;
+  }
+  const entry: ExploreEntry | null = identityEntries.find(
     (candidate) => tokenAddress(candidate) === address,
   ) ?? null;
-  const launchSource = customStatus === "current"
-    ? `${catalog.source}+registry.custom-launched`
-    : catalog.source;
+  const customStatus =
+    registryCustomStatus === "current" && routerCustomStatus === "current"
+      ? "current" as const
+      : "unavailable" as const;
+  const launchSource = publicLaunchSourceV1({
+    registryCustomCurrent: registryCustomStatus === "current",
+    routerCustomCurrent: routerCustomStatus === "current",
+  });
+  const projectedRouterIdentityCount = identityEntries.filter(
+    (candidate) => candidate.exploreKind === "token" &&
+      candidate.launchCategoryProvenance.source ===
+        ROUTER_CUSTOM_LAUNCH_SOURCE,
+  ).length;
   const catalogBoundary = {
     source: catalog.source,
     launchSource,
@@ -176,12 +257,42 @@ export async function GET(request: NextRequest) {
     completeness: {
       ...catalog.completeness,
       custom: customStatus,
+      registryCustom: registryCustomStatus,
+      routerCustom: routerCustomStatus,
     },
-    scope: catalog.scope,
+    scope: {
+      ...catalog.scope,
+      included: routerCustomStatus === "current"
+        ? [...catalog.scope.included, ROUTER_CUSTOM_LAUNCH_SOURCE]
+        : catalog.scope.included,
+    },
     evidence: catalog.evidence,
+    routerStamp: {
+      source: ROUTER_CUSTOM_LAUNCH_SOURCE,
+      status: routerCustomStatus,
+      finalityConfirmations: ROUTER_CUSTOM_FINALITY_CONFIRMATIONS,
+      verifiedIdentityCount: routerReadResult.verifiedIdentityCount,
+      projectedIdentityCount: projectedRouterIdentityCount,
+    },
   };
 
+  if (routerReadFailed && requestedRouterIdentityRead && canonicalEntry === null) {
+    return unavailableResponse({
+      "X-Programmable-Launch-Source": launchSource,
+      "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
+      "X-Programmable-Market-Provider": "dexscreener",
+      "X-Programmable-Router-Read-Status": routerCustomStatus,
+    });
+  }
   if (!entry) {
+    if (registryReadFailed || routerReadFailed) {
+      return unavailableResponse({
+        "X-Programmable-Launch-Source": launchSource,
+        "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
+        "X-Programmable-Market-Provider": "dexscreener",
+        "X-Programmable-Router-Read-Status": routerCustomStatus,
+      });
+    }
     return NextResponse.json(
       {
         status: "ready",
@@ -198,6 +309,7 @@ export async function GET(request: NextRequest) {
           marketStatus: "complete",
           launchSource,
           lastIndexedAt: catalog.generatedAt,
+          routerStatus: routerCustomStatus,
         }),
       },
     );
@@ -236,6 +348,7 @@ export async function GET(request: NextRequest) {
           marketStatus: market.marketRead.status,
           launchSource,
           lastIndexedAt: catalog.generatedAt,
+          routerStatus: routerCustomStatus,
           ...(marketAsOf ? { marketAsOf } : {}),
         }),
       },
@@ -267,6 +380,7 @@ export async function GET(request: NextRequest) {
           marketStatus: "unavailable",
           launchSource,
           lastIndexedAt: catalog.generatedAt,
+          routerStatus: routerCustomStatus,
         }),
       },
     );

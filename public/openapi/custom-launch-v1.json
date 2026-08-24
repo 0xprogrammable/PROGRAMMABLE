@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "summary": "Wallet-bound, provenance-only Custom launch preparation on Ethereum Mainnet.",
-    "description": "The API validates caller-declared manifest commitments, executable graph constraints, required agent attestation and evidence digests, and the exact platform permit. It does not compile source, simulate the transaction, audit the project, attest safety, sign the controller wallet transaction or broadcast it."
+    "description": "The API validates caller-declared manifest commitments, executable graph constraints, required agent attestation and evidence digests, and the exact platform permit. It returns a Router transaction for a separately authorized controller wallet to sign and broadcast, then reconciles that launch when the caller polls its single-resource status route. An API key is not wallet signing authority. The platform does not compile source, simulate the transaction, audit the project or attest safety."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -15,7 +15,7 @@
   ],
   "externalDocs": {
     "description": "Custom Launch API V1 developer guide",
-    "url": "https://programmable.market/docs/developers/custom-launch-api-v1.md"
+    "url": "https://programmable.market/developers/custom-launch-api-v1.md"
   },
   "security": [
     {
@@ -24,10 +24,65 @@
   ],
   "paths": {
     "/v1/custom-launches": {
+      "get": {
+        "operationId": "listCustomLaunches",
+        "summary": "List your Custom launch requests",
+        "description": "Returns newest-first bounded summaries for the exact wallet bound to the API key. Pagination is keyset-based, output is always null, and pending rows receive bounded best-effort chain reconciliation without hiding durable history on RPC failure. Read the single-resource route for the full prepared artifact and exact output.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Defaults to 10 and never exceeds 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque nextCursor returned by the previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wallet-owned launch request page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchListPageV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
       "post": {
         "operationId": "createCustomLaunch",
         "summary": "Prepare a Custom launch",
-        "description": "Validates the manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding. The API key cannot sign or broadcast the wallet transaction.",
+        "description": "Validates the manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding. It captures a bounded Router observation window and returns the prepared action. The API key cannot sign or broadcast the wallet transaction.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -84,7 +139,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "409": {
-            "description": "The Idempotency-Key is bound to a different request, or the nonce conflicts with another launch for the bound wallet.",
+            "description": "The Idempotency-Key is bound to a different request, the nonce conflicts with another launch for the bound wallet, or a durable prepared permit expired before signing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -95,8 +150,8 @@
                     "value": {
                       "schemaVersion": "programmable.api-error.v1",
                       "error": {
-                        "code": "IDEMPOTENCY_KEY_REUSED",
-                        "message": "Use the original request body or choose a new Idempotency-Key.",
+                        "code": "IDEMPOTENCY_CONFLICT",
+                        "message": "Idempotency key was already used for another request",
                         "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
                       }
                     }
@@ -106,7 +161,17 @@
                       "schemaVersion": "programmable.api-error.v1",
                       "error": {
                         "code": "NONCE_CONFLICT",
-                        "message": "Use the launch already bound to this nonce or choose a new nonce.",
+                        "message": "Permit nonce is already reserved for this wallet and route",
+                        "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+                      }
+                    }
+                  },
+                  "permitExpired": {
+                    "value": {
+                      "schemaVersion": "programmable.api-error.v1",
+                      "error": {
+                        "code": "PERMIT_EXPIRED",
+                        "message": "The prepared launch permit expired; submit a new request with a new nonce and idempotency key.",
                         "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
                       }
                     }
@@ -131,6 +196,38 @@
               }
             }
           },
+          "429": {
+            "description": "The wallet principal reached the launch reservation limit. Exact idempotent replays bypass this quota.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the currently blocking quota window permits another reservation.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchApiErrorV1"
+                },
+                "example": {
+                  "schemaVersion": "programmable.api-error.v1",
+                  "error": {
+                    "code": "LAUNCH_QUOTA_EXCEEDED",
+                    "message": "The launch rate limit was reached; retry after the indicated delay.",
+                    "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25",
+                    "details": {
+                      "limit": 30,
+                      "windowSeconds": 3600,
+                      "retryAfterSeconds": 120
+                    }
+                  }
+                }
+              }
+            }
+          },
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
@@ -141,17 +238,15 @@
       "get": {
         "operationId": "getCustomLaunch",
         "summary": "Read a Custom launch",
-        "description": "Returns one launch owned by the API key principal. A missing launch and another principal's launch both return 404.",
+        "description": "Returns one launch owned by the API key principal. After the controller wallet broadcasts the prepared transaction, polling this single-resource route performs request-driven Router reconciliation for authorized and submitted launches. There is no background reconciliation timer. A missing launch and another principal's launch both return 404.",
         "parameters": [
           {
             "name": "launchId",
             "in": "path",
             "required": true,
+            "description": "Legacy path name for the API request UUID returned as both launchId and requestId. It is not the bytes32 onchainLaunchId.",
             "schema": {
-              "type": "string",
-              "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+              "$ref": "#/components/schemas/CustomLaunchRequestIdV1"
             }
           }
         ],
@@ -197,7 +292,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "Invalid closed request or Idempotency-Key.",
+        "description": "Invalid request, Idempotency-Key or pagination query.",
         "content": {
           "application/json": {
             "schema": {
@@ -247,7 +342,7 @@
         }
       },
       "Unavailable": {
-        "description": "Launch preparation is temporarily unavailable.",
+        "description": "The Custom Launch API is temporarily unavailable.",
         "content": {
           "application/json": {
             "schema": {
@@ -284,6 +379,11 @@
         "minLength": 1,
         "maxLength": 256,
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+      },
+      "CustomLaunchRequestIdV1": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Durable API request identifier. This is distinct from the bytes32 onchain launch identifier."
       },
       "HexData": {
         "type": "string",
@@ -748,7 +848,8 @@
         ],
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable failure code. PERMIT_EXPIRED is terminal and requires a new nonce and Idempotency-Key."
           },
           "message": {
             "type": "string"
@@ -759,11 +860,654 @@
         },
         "additionalProperties": false
       },
+      "PreparedLaunchStampRequestV1": {
+        "type": "object",
+        "required": [
+          "launchId",
+          "token",
+          "tokenRuntimeCodeHash",
+          "poolKey",
+          "hookRuntimeCodeHash",
+          "components"
+        ],
+        "properties": {
+          "launchId": {
+            "$ref": "#/components/schemas/LowerHex32",
+            "description": "The bytes32 onchain launch identifier."
+          },
+          "token": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "tokenRuntimeCodeHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "poolKey": {
+            "type": "object",
+            "required": [
+              "currency0",
+              "currency1",
+              "fee",
+              "tickSpacing",
+              "hooks"
+            ],
+            "properties": {
+              "currency0": {
+                "$ref": "#/components/schemas/EthereumAddress"
+              },
+              "currency1": {
+                "$ref": "#/components/schemas/EthereumAddress"
+              },
+              "fee": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8388608
+              },
+              "tickSpacing": {
+                "type": "integer"
+              },
+              "hooks": {
+                "$ref": "#/components/schemas/EthereumAddress"
+              }
+            },
+            "additionalProperties": false
+          },
+          "hookRuntimeCodeHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "resultIndex",
+                "account",
+                "runtimeCodeHash",
+                "kind",
+                "scope"
+              ],
+              "properties": {
+                "resultIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "account": {
+                  "$ref": "#/components/schemas/EthereumAddress"
+                },
+                "runtimeCodeHash": {
+                  "$ref": "#/components/schemas/LowerHex32"
+                },
+                "kind": {
+                  "type": "integer",
+                  "enum": [
+                    0,
+                    1,
+                    2
+                  ]
+                },
+                "scope": {
+                  "const": 1
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreparedLaunchPermitV1": {
+        "type": "object",
+        "required": [
+          "chainId",
+          "router",
+          "launchWallet",
+          "kind",
+          "routePayloadHash",
+          "expectedResultHash",
+          "stampRequestHash",
+          "nonce",
+          "validAfter",
+          "deadline",
+          "valueWei"
+        ],
+        "properties": {
+          "chainId": {
+            "const": "1"
+          },
+          "router": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "launchWallet": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "kind": {
+            "const": 1
+          },
+          "routePayloadHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "expectedResultHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "stampRequestHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "nonce": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "validAfter": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "valueWei": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreparedLaunchArtifactV1": {
+        "type": "object",
+        "description": "Hash-bound prepared launch artifact. Stable signing and provenance fields are typed here; route construction details remain part of the returned artifact and are covered by artifactHash.",
+        "required": [
+          "schemaVersion",
+          "graphBundleHash",
+          "sourceBundleSha256",
+          "chainBindings",
+          "callerConstraints",
+          "timing",
+          "route",
+          "predictedComponents",
+          "market",
+          "stampRequest",
+          "stampRequestHash",
+          "permit",
+          "permitDigest",
+          "unsignedRouterTransaction",
+          "claims",
+          "artifactHash"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.prepared-custom-graph-launch.v1"
+          },
+          "graphBundleHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "sourceBundleSha256": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "chainBindings": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "callerConstraints": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "timing": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "route": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "predictedComponents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "market": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "stampRequest": {
+            "$ref": "#/components/schemas/PreparedLaunchStampRequestV1"
+          },
+          "stampRequestHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "permit": {
+            "$ref": "#/components/schemas/PreparedLaunchPermitV1"
+          },
+          "permitDigest": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "unsignedRouterTransaction": {
+            "type": "object",
+            "required": [
+              "chainId",
+              "from",
+              "to",
+              "valueWei",
+              "functionName",
+              "selector",
+              "calldataWithEmptySignature",
+              "signatureState",
+              "preimageHash"
+            ],
+            "properties": {
+              "chainId": {
+                "const": "1"
+              },
+              "from": {
+                "$ref": "#/components/schemas/EthereumAddress"
+              },
+              "to": {
+                "$ref": "#/components/schemas/EthereumAddress"
+              },
+              "valueWei": {
+                "$ref": "#/components/schemas/CanonicalUint256"
+              },
+              "functionName": {
+                "const": "launchAndStampV1"
+              },
+              "selector": {
+                "const": "0xe5f6b8cd"
+              },
+              "calldataWithEmptySignature": {
+                "$ref": "#/components/schemas/HexData"
+              },
+              "signatureState": {
+                "const": "permit-authority-signature-required"
+              },
+              "preimageHash": {
+                "$ref": "#/components/schemas/Sha256Digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "claims": {
+            "type": "object",
+            "required": [
+              "provenance",
+              "safety",
+              "approval"
+            ],
+            "properties": {
+              "provenance": {
+                "const": "prepared-for-atomic-router-stamp"
+              },
+              "safety": {
+                "const": "not-asserted"
+              },
+              "approval": {
+                "const": "not-asserted"
+              }
+            },
+            "additionalProperties": false
+          },
+          "artifactHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentLaunchAttestationResultV1": {
+        "type": "object",
+        "description": "Normalized caller-supplied agent self-attestation. Programmable validates its shape and subject binding but does not assess the evidence or adopt the claims.",
+        "required": [
+          "schemaVersion",
+          "subjectGraphBundleHash",
+          "agentId",
+          "checkedAt",
+          "checks",
+          "attribution",
+          "platformVerification",
+          "safetyClaim",
+          "approvalClaim"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.agent-launch-attestation.v1"
+          },
+          "subjectGraphBundleHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "agentId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/AgentLaunchAttestationCheckV1"
+            }
+          },
+          "attribution": {
+            "const": "agent-self-attested"
+          },
+          "platformVerification": {
+            "const": "not-performed-by-this-attestation"
+          },
+          "safetyClaim": {
+            "const": "not-made"
+          },
+          "approvalClaim": {
+            "const": "not-made"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SignedPreparedLaunchPermitV1": {
+        "type": "object",
+        "description": "Platform permit-authority signature. This is not a controller-wallet transaction signature.",
+        "required": [
+          "schemaVersion",
+          "artifactHash",
+          "chainId",
+          "router",
+          "authoritySafe",
+          "signerAddress",
+          "permitDigest",
+          "safeMessageDigest",
+          "signature",
+          "validAfter",
+          "deadline"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.signed-prepared-launch-permit.v1"
+          },
+          "artifactHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "router": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "authoritySafe": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "signerAddress": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "permitDigest": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "safeMessageDigest": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "signature": {
+            "$ref": "#/components/schemas/HexData"
+          },
+          "validAfter": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchWalletTransactionV1": {
+        "type": "object",
+        "description": "Exact permit-attached Router transaction for the separate controller-wallet signer to review, sign and broadcast.",
+        "required": [
+          "schemaVersion",
+          "chainId",
+          "from",
+          "to",
+          "valueWei",
+          "functionName",
+          "selector",
+          "calldata",
+          "signatureState",
+          "requiresControllerWalletSignature",
+          "broadcastByService"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-wallet-transaction.v1"
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "from": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "to": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "valueWei": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "functionName": {
+            "const": "launchAndStampV1"
+          },
+          "selector": {
+            "const": "0xe5f6b8cd"
+          },
+          "calldata": {
+            "$ref": "#/components/schemas/HexData"
+          },
+          "signatureState": {
+            "const": "permit-authority-signature-attached"
+          },
+          "requiresControllerWalletSignature": {
+            "const": true
+          },
+          "broadcastByService": {
+            "const": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchObservationWindowV1": {
+        "type": "object",
+        "description": "Bounded Mainnet Router log window captured during preparation. Single-resource GET polling reconciles only inside this window.",
+        "required": [
+          "schemaVersion",
+          "chainId",
+          "router",
+          "fromBlock",
+          "toBlock"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-observation-window.v1"
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "router": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "fromBlock": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "toBlock": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchOnchainEvidenceV1": {
+        "type": "object",
+        "description": "Canonical Router event and same-block launchStamp getter evidence matched to the prepared artifact. Finalized means confirmationDepth is at least 64.",
+        "required": [
+          "schemaVersion",
+          "finalityState",
+          "chainId",
+          "router",
+          "onchainLaunchId",
+          "transactionHash",
+          "blockNumber",
+          "blockHash",
+          "logIndex",
+          "token",
+          "hook",
+          "poolManager",
+          "poolId",
+          "stampHash",
+          "confirmationDepth",
+          "requiredConfirmationDepth",
+          "observedAtBlockNumber"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-onchain-evidence.v1"
+          },
+          "finalityState": {
+            "type": "string",
+            "enum": [
+              "submitted",
+              "finalized"
+            ]
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "router": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "onchainLaunchId": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "transactionHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "blockNumber": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "blockHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "logIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "token": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "hook": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "poolManager": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "poolId": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "stampHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "confirmationDepth": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "requiredConfirmationDepth": {
+            "const": "64"
+          },
+          "observedAtBlockNumber": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchPreparedOutputV1": {
+        "type": "object",
+        "description": "Prepared artifact before the platform permit is signed. No wallet transaction or observation window is available yet.",
+        "required": [
+          "schemaVersion",
+          "artifact",
+          "agentAttestation",
+          "signedPermit",
+          "walletTransaction"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-authorization-result.v1"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/PreparedLaunchArtifactV1"
+          },
+          "agentAttestation": {
+            "$ref": "#/components/schemas/AgentLaunchAttestationResultV1"
+          },
+          "signedPermit": {
+            "type": "null"
+          },
+          "walletTransaction": {
+            "type": "null"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchAuthorizedOutputV1": {
+        "type": "object",
+        "description": "Permit-attached wallet handoff plus bounded reconciliation state. onchain is null until single-resource polling observes a canonical Router stamp.",
+        "required": [
+          "schemaVersion",
+          "artifact",
+          "agentAttestation",
+          "signedPermit",
+          "walletTransaction",
+          "observationWindow",
+          "onchain"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-authorization-result.v1"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/PreparedLaunchArtifactV1"
+          },
+          "agentAttestation": {
+            "$ref": "#/components/schemas/AgentLaunchAttestationResultV1"
+          },
+          "signedPermit": {
+            "$ref": "#/components/schemas/SignedPreparedLaunchPermitV1"
+          },
+          "walletTransaction": {
+            "$ref": "#/components/schemas/CustomLaunchWalletTransactionV1"
+          },
+          "observationWindow": {
+            "$ref": "#/components/schemas/CustomLaunchObservationWindowV1"
+          },
+          "onchain": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CustomLaunchOnchainEvidenceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchOutputV1": {
+        "description": "Typed durable output for prepared, authorized, submitted and finalized launch states.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CustomLaunchPreparedOutputV1"
+          },
+          {
+            "$ref": "#/components/schemas/CustomLaunchAuthorizedOutputV1"
+          }
+        ]
+      },
       "CustomLaunchResourceV1": {
         "type": "object",
+        "description": "Durable API request state. launchId is the legacy alias of requestId; onchainLaunchId is the distinct Router bytes32 identifier and is present whenever durable output retains a prepared artifact. Poll this resource after wallet broadcast to drive request-scoped reconciliation.",
         "required": [
           "schemaVersion",
           "launchId",
+          "requestId",
+          "onchainLaunchId",
           "routeId",
           "ownerWallet",
           "status",
@@ -778,10 +1522,23 @@
             "const": "programmable.custom-launch.v1"
           },
           "launchId": {
-            "type": "string",
-            "minLength": 16,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            "$ref": "#/components/schemas/CustomLaunchRequestIdV1",
+            "description": "Deprecated-compatible alias of requestId. It is not an onchain identifier.",
+            "deprecated": true
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/CustomLaunchRequestIdV1"
+          },
+          "onchainLaunchId": {
+            "description": "Router bytes32 launch identifier. It is null before preparation and when a terminal failure clears the durable output.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LowerHex32"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "routeId": {
             "const": "custom-launch:create:v1"
@@ -791,6 +1548,7 @@
           },
           "status": {
             "type": "string",
+            "description": "authorized means the permit-attached transaction awaits a separate wallet signature and broadcast. submitted means exact canonical Router event/getter evidence was observed below 64 confirmations. finalized means the same evidence reached at least 64 confirmations.",
             "enum": [
               "received",
               "validating",
@@ -815,10 +1573,10 @@
             "format": "date-time"
           },
           "output": {
+            "description": "Null before preparation and after a terminal failure. prepared returns CustomLaunchPreparedOutputV1; authorized, submitted and finalized return CustomLaunchAuthorizedOutputV1.",
             "oneOf": [
               {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/CustomLaunchOutputV1"
               },
               {
                 "type": "null"
@@ -829,6 +1587,41 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/CustomLaunchFailureV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchListPageV1": {
+        "type": "object",
+        "description": "Newest-first wallet-owned summary page. Each item uses the CustomLaunchResource shape but always has output=null; use the single-resource route for the prepared artifact. launchId remains the legacy alias of requestId; neither should be confused with onchainLaunchId.",
+        "required": [
+          "schemaVersion",
+          "launches",
+          "nextCursor"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-list.v1"
+          },
+          "launches": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CustomLaunchResourceV1"
+            }
+          },
+          "nextCursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 512,
+                "pattern": "^[A-Za-z0-9_-]+$"
               },
               {
                 "type": "null"
@@ -857,14 +1650,16 @@
             ],
             "properties": {
               "code": {
-                "type": "string"
+                "type": "string",
+                "description": "Stable API error code, including IDEMPOTENCY_CONFLICT, NONCE_CONFLICT, PERMIT_EXPIRED and LAUNCH_QUOTA_EXCEEDED."
               },
               "message": {
                 "type": "string"
               },
               "requestId": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "description": "HTTP correlation identifier for this error response, not a Custom launch resource requestId."
               },
               "details": {}
             },
@@ -886,6 +1681,10 @@
     "attestation": "agent-self-attested",
     "platform": "validates manifest digest, graph, attestation subject, evidence digest and permit bindings only",
     "wallet": "controller wallet or separately wallet-authorized agent signs and broadcasts",
-    "claims": "no compilation, simulation, source-to-bytecode verification, audit, approval or safety attestation"
+    "reconciliation": "request-driven only when the single-resource GET is polled after wallet broadcast",
+    "finality": "canonical Router event and same-block getter evidence at 64 confirmations",
+    "indexing": "eligible for Programmable discovery after finality; third-party discovery and listing remain consumer-controlled",
+    "market": "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior",
+    "claims": "no compilation, simulation, source-to-bytecode verification, evidence assessment, audit, approval or safety attestation"
   }
 }

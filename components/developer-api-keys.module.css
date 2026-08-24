@@ -187,9 +187,26 @@
   font-size: 13px;
 }
 
-.accountBar > p {
+.accountActions {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.accountActions p {
   color: var(--muted);
   font-size: 13px;
+}
+
+.accountActions a {
+  align-items: center;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 620;
+  min-height: 44px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .keyReveal {
@@ -683,7 +700,8 @@
   }
 
   .dismissButton:hover,
-  .revokeButton:hover {
+  .revokeButton:hover,
+  .accountActions a:hover {
     color: var(--text);
   }
 }
@@ -703,6 +721,7 @@
 .dismissButton:focus-visible,
 .revokeButton:focus-visible,
 .textButton:focus-visible,
+.accountActions a:focus-visible,
 .field input:focus-visible,
 .field select:focus-visible {
   outline: 2px solid var(--focus);
@@ -734,6 +753,16 @@
 @media (max-width: 600px) {
   .page {
     padding-block: 32px 80px;
+  }
+
+  .accountBar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .accountActions {
+    justify-content: space-between;
   }
 
   .hero {

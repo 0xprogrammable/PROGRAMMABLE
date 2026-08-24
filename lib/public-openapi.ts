@@ -21,11 +21,11 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.1.0",
+    version: "1.2.0",
     summary:
       "Verified launch discovery plus wallet-bound Custom launch preparation on Ethereum.",
     description:
-      "The programmable.market read endpoints remain unauthenticated and read-only. The separately hosted Custom Launch API accepts wallet-bound pm_live_ API keys and prepares exact Router launch actions. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market read endpoints remain unauthenticated and read-only. The separately hosted Custom Launch API accepts wallet-bound pm_live_ API keys, prepares exact Router launch actions, and reconciles an onchain launch when its single-resource status route is polled. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -210,11 +210,73 @@ export const programmablePublicOpenApi = {
       },
     },
     "/v1/custom-launches": {
+      get: {
+        operationId: "listCustomLaunches",
+        summary: "List your Custom launch requests",
+        description:
+          "Returns newest-first bounded summaries for the exact wallet bound to the API key. Pagination is keyset-based, output is always null, and pending rows receive bounded best-effort chain reconciliation without hiding durable history on RPC failure. Read the single-resource route for the full prepared artifact and exact output.",
+        tags: ["Custom launch"],
+        servers: [
+          {
+            url: CUSTOM_LAUNCH_API_ORIGIN,
+            description: "Programmable Custom Launch API",
+          },
+        ],
+        security: [{ CustomLaunchApiKey: [] }],
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            description: "Page size. Defaults to 10 and never exceeds 25.",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 25,
+              default: 10,
+            },
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque nextCursor returned by the previous page.",
+            schema: {
+              type: "string",
+              minLength: 16,
+              maxLength: 512,
+              pattern: "^[A-Za-z0-9_-]+$",
+            },
+          },
+        ],
+        responses: {
+          "200": jsonResponse(
+            component("CustomLaunchListPage"),
+            "Wallet-owned launch request page.",
+          ),
+          "400": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Invalid pagination query.",
+          ),
+          "401": jsonResponse(
+            component("CustomLaunchApiError"),
+            "API key is missing, malformed, expired, revoked, or unknown.",
+          ),
+          "403": jsonResponse(
+            component("CustomLaunchApiError"),
+            "API key lacks custom-launch:read.",
+          ),
+          "503": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Launch history is temporarily unavailable.",
+          ),
+        },
+      },
       post: {
         operationId: "createCustomLaunch",
         summary: "Prepare a Custom launch",
         description:
-          "Validates the submitted manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding; reserves the request idempotently; and prepares the Mainnet Router action for the API key's bound wallet. The platform does not compile source, simulate the transaction, audit the project, attest safety, sign the wallet transaction, or broadcast it.",
+          "Validates the submitted manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding; reserves the request idempotently; captures a bounded Router observation window; and prepares the Mainnet Router action for the API key's bound wallet. The platform does not compile source, simulate the transaction, audit the project, attest safety, sign the wallet transaction, or broadcast it.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -275,7 +337,7 @@ export const programmablePublicOpenApi = {
           ),
           "409": jsonResponse(
             component("CustomLaunchApiError"),
-            "The Idempotency-Key is bound to a different request, or the wallet nonce conflicts with another launch.",
+            "The Idempotency-Key is bound to a different request, the wallet nonce conflicts with another launch, or a durable prepared permit expired before signing.",
           ),
           "413": jsonResponse(
             component("CustomLaunchApiError"),
@@ -289,6 +351,22 @@ export const programmablePublicOpenApi = {
             component("CustomLaunchApiError"),
             "The manifest digest, graph, attestation subject/evidence digest, or permit binding is invalid.",
           ),
+          "429": {
+            description:
+              "The wallet principal reached the launch reservation limit. Exact idempotent replays bypass this quota.",
+            headers: {
+              "Retry-After": {
+                description:
+                  "Seconds until the currently blocking quota window permits another reservation.",
+                schema: { type: "integer", minimum: 1 },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: component("CustomLaunchApiError"),
+              },
+            },
+          },
           "503": jsonResponse(
             component("CustomLaunchApiError"),
             "Launch preparation is temporarily unavailable.",
@@ -301,7 +379,7 @@ export const programmablePublicOpenApi = {
         operationId: "getCustomLaunch",
         summary: "Read a Custom launch",
         description:
-          "Returns one launch owned by the API key's wallet principal. A missing launch and another principal's launch both return 404.",
+          "Returns one launch owned by the API key's wallet principal. After the controller wallet broadcasts the prepared transaction, polling this single-resource route performs request-driven Router reconciliation for authorized and submitted launches. There is no background reconciliation timer. A missing launch and another principal's launch both return 404.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -315,13 +393,9 @@ export const programmablePublicOpenApi = {
             name: "launchId",
             in: "path",
             required: true,
-            description: "Launch identifier returned by the create route.",
-            schema: {
-              type: "string",
-              minLength: 16,
-              maxLength: 128,
-              pattern: "^[A-Za-z0-9_-]{16,128}$",
-            },
+            description:
+              "Legacy path name for the API request UUID returned as both launchId and requestId. It is not the bytes32 onchainLaunchId.",
+            schema: component("CustomLaunchRequestId"),
           },
         ],
         responses: {
@@ -402,6 +476,12 @@ export const programmablePublicOpenApi = {
         minLength: 1,
         maxLength: 256,
         pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$",
+      },
+      CustomLaunchRequestId: {
+        type: "string",
+        format: "uuid",
+        description:
+          "Durable API request identifier. This is distinct from the bytes32 onchain launch identifier.",
       },
       HexData: {
         type: "string",
@@ -719,17 +799,392 @@ export const programmablePublicOpenApi = {
         type: "object",
         required: ["code", "message", "retryable"],
         properties: {
-          code: { type: "string" },
+          code: {
+            type: "string",
+            description:
+              "Stable failure code. PERMIT_EXPIRED is terminal and requires a new nonce and Idempotency-Key.",
+          },
           message: { type: "string" },
           retryable: { type: "boolean" },
         },
         additionalProperties: false,
       },
+      PreparedLaunchStampRequest: {
+        type: "object",
+        required: [
+          "launchId",
+          "token",
+          "tokenRuntimeCodeHash",
+          "poolKey",
+          "hookRuntimeCodeHash",
+          "components",
+        ],
+        properties: {
+          launchId: {
+            ...component("LowerHex32"),
+            description: "The bytes32 onchain launch identifier.",
+          },
+          token: component("EthereumAddress"),
+          tokenRuntimeCodeHash: component("LowerHex32"),
+          poolKey: {
+            type: "object",
+            required: ["currency0", "currency1", "fee", "tickSpacing", "hooks"],
+            properties: {
+              currency0: component("EthereumAddress"),
+              currency1: component("EthereumAddress"),
+              fee: { type: "integer", minimum: 0, maximum: 8_388_608 },
+              tickSpacing: { type: "integer" },
+              hooks: component("EthereumAddress"),
+            },
+            additionalProperties: false,
+          },
+          hookRuntimeCodeHash: component("LowerHex32"),
+          components: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              required: ["resultIndex", "account", "runtimeCodeHash", "kind", "scope"],
+              properties: {
+                resultIndex: { type: "integer", minimum: 0, maximum: 255 },
+                account: component("EthereumAddress"),
+                runtimeCodeHash: component("LowerHex32"),
+                kind: { type: "integer", enum: [0, 1, 2] },
+                scope: { const: 1 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      PreparedLaunchPermit: {
+        type: "object",
+        required: [
+          "chainId",
+          "router",
+          "launchWallet",
+          "kind",
+          "routePayloadHash",
+          "expectedResultHash",
+          "stampRequestHash",
+          "nonce",
+          "validAfter",
+          "deadline",
+          "valueWei",
+        ],
+        properties: {
+          chainId: { const: "1" },
+          router: component("EthereumAddress"),
+          launchWallet: component("EthereumAddress"),
+          kind: { const: 1 },
+          routePayloadHash: component("LowerHex32"),
+          expectedResultHash: component("LowerHex32"),
+          stampRequestHash: component("LowerHex32"),
+          nonce: component("NonzeroLowerHex32"),
+          validAfter: component("CanonicalUint256"),
+          deadline: component("CanonicalUint256"),
+          valueWei: component("CanonicalUint256"),
+        },
+        additionalProperties: false,
+      },
+      PreparedLaunchArtifact: {
+        type: "object",
+        description:
+          "Hash-bound prepared launch artifact. Stable signing and provenance fields are typed here; route construction details remain part of the returned artifact and are covered by artifactHash.",
+        required: [
+          "schemaVersion",
+          "graphBundleHash",
+          "sourceBundleSha256",
+          "chainBindings",
+          "callerConstraints",
+          "timing",
+          "route",
+          "predictedComponents",
+          "market",
+          "stampRequest",
+          "stampRequestHash",
+          "permit",
+          "permitDigest",
+          "unsignedRouterTransaction",
+          "claims",
+          "artifactHash",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.prepared-custom-graph-launch.v1" },
+          graphBundleHash: component("Sha256Digest"),
+          sourceBundleSha256: component("Sha256Digest"),
+          chainBindings: { type: "object", additionalProperties: true },
+          callerConstraints: { type: "object", additionalProperties: true },
+          timing: { type: "object", additionalProperties: true },
+          route: { type: "object", additionalProperties: true },
+          predictedComponents: {
+            type: "array",
+            items: { type: "object", additionalProperties: true },
+          },
+          market: { type: "object", additionalProperties: true },
+          stampRequest: component("PreparedLaunchStampRequest"),
+          stampRequestHash: component("LowerHex32"),
+          permit: component("PreparedLaunchPermit"),
+          permitDigest: component("LowerHex32"),
+          unsignedRouterTransaction: {
+            type: "object",
+            required: [
+              "chainId",
+              "from",
+              "to",
+              "valueWei",
+              "functionName",
+              "selector",
+              "calldataWithEmptySignature",
+              "signatureState",
+              "preimageHash",
+            ],
+            properties: {
+              chainId: { const: "1" },
+              from: component("EthereumAddress"),
+              to: component("EthereumAddress"),
+              valueWei: component("CanonicalUint256"),
+              functionName: { const: "launchAndStampV1" },
+              selector: { const: "0xe5f6b8cd" },
+              calldataWithEmptySignature: component("HexData"),
+              signatureState: { const: "permit-authority-signature-required" },
+              preimageHash: component("Sha256Digest"),
+            },
+            additionalProperties: false,
+          },
+          claims: {
+            type: "object",
+            required: ["provenance", "safety", "approval"],
+            properties: {
+              provenance: { const: "prepared-for-atomic-router-stamp" },
+              safety: { const: "not-asserted" },
+              approval: { const: "not-asserted" },
+            },
+            additionalProperties: false,
+          },
+          artifactHash: component("Sha256Digest"),
+        },
+        additionalProperties: false,
+      },
+      AgentLaunchAttestationResult: {
+        type: "object",
+        description:
+          "Normalized caller-supplied agent self-attestation. Programmable validates its shape and subject binding but does not assess the evidence or adopt the claims.",
+        required: [
+          "schemaVersion",
+          "subjectGraphBundleHash",
+          "agentId",
+          "checkedAt",
+          "checks",
+          "attribution",
+          "platformVerification",
+          "safetyClaim",
+          "approvalClaim",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.agent-launch-attestation.v1" },
+          subjectGraphBundleHash: component("Sha256Digest"),
+          agentId: component("CanonicalIdentifier"),
+          checkedAt: { type: "string", format: "date-time" },
+          checks: {
+            type: "array",
+            minItems: 1,
+            maxItems: 64,
+            items: component("AgentLaunchAttestationCheckV1"),
+          },
+          attribution: { const: "agent-self-attested" },
+          platformVerification: { const: "not-performed-by-this-attestation" },
+          safetyClaim: { const: "not-made" },
+          approvalClaim: { const: "not-made" },
+        },
+        additionalProperties: false,
+      },
+      SignedPreparedLaunchPermit: {
+        type: "object",
+        description:
+          "Platform permit-authority signature. This is not a controller-wallet transaction signature.",
+        required: [
+          "schemaVersion",
+          "artifactHash",
+          "chainId",
+          "router",
+          "authoritySafe",
+          "signerAddress",
+          "permitDigest",
+          "safeMessageDigest",
+          "signature",
+          "validAfter",
+          "deadline",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.signed-prepared-launch-permit.v1" },
+          artifactHash: component("Sha256Digest"),
+          chainId: { const: "1" },
+          router: component("EthereumAddress"),
+          authoritySafe: component("EthereumAddress"),
+          signerAddress: component("EthereumAddress"),
+          permitDigest: component("LowerHex32"),
+          safeMessageDigest: component("LowerHex32"),
+          signature: component("HexData"),
+          validAfter: component("CanonicalUint256"),
+          deadline: component("CanonicalUint256"),
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchWalletTransaction: {
+        type: "object",
+        description:
+          "Exact permit-attached Router transaction for the separate controller-wallet signer to review, sign and broadcast.",
+        required: [
+          "schemaVersion",
+          "chainId",
+          "from",
+          "to",
+          "valueWei",
+          "functionName",
+          "selector",
+          "calldata",
+          "signatureState",
+          "requiresControllerWalletSignature",
+          "broadcastByService",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch-wallet-transaction.v1" },
+          chainId: { const: "1" },
+          from: component("EthereumAddress"),
+          to: component("EthereumAddress"),
+          valueWei: component("CanonicalUint256"),
+          functionName: { const: "launchAndStampV1" },
+          selector: { const: "0xe5f6b8cd" },
+          calldata: component("HexData"),
+          signatureState: { const: "permit-authority-signature-attached" },
+          requiresControllerWalletSignature: { const: true },
+          broadcastByService: { const: false },
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchObservationWindow: {
+        type: "object",
+        description:
+          "Bounded Mainnet Router log window captured during preparation. Single-resource GET polling reconciles only inside this window.",
+        required: ["schemaVersion", "chainId", "router", "fromBlock", "toBlock"],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch-observation-window.v1" },
+          chainId: { const: "1" },
+          router: component("EthereumAddress"),
+          fromBlock: component("CanonicalUint256"),
+          toBlock: component("CanonicalUint256"),
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchOnchainEvidence: {
+        type: "object",
+        description:
+          "Canonical Router event and same-block launchStamp getter evidence matched to the prepared artifact. Finalized means confirmationDepth is at least 64.",
+        required: [
+          "schemaVersion",
+          "finalityState",
+          "chainId",
+          "router",
+          "onchainLaunchId",
+          "transactionHash",
+          "blockNumber",
+          "blockHash",
+          "logIndex",
+          "token",
+          "hook",
+          "poolManager",
+          "poolId",
+          "stampHash",
+          "confirmationDepth",
+          "requiredConfirmationDepth",
+          "observedAtBlockNumber",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch-onchain-evidence.v1" },
+          finalityState: { type: "string", enum: ["submitted", "finalized"] },
+          chainId: { const: "1" },
+          router: component("EthereumAddress"),
+          onchainLaunchId: component("LowerHex32"),
+          transactionHash: component("LowerHex32"),
+          blockNumber: component("CanonicalUint256"),
+          blockHash: component("LowerHex32"),
+          logIndex: { type: "integer", minimum: 0 },
+          token: component("EthereumAddress"),
+          hook: component("EthereumAddress"),
+          poolManager: component("EthereumAddress"),
+          poolId: component("LowerHex32"),
+          stampHash: component("LowerHex32"),
+          confirmationDepth: component("CanonicalUint256"),
+          requiredConfirmationDepth: { const: "64" },
+          observedAtBlockNumber: component("CanonicalUint256"),
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchPreparedOutput: {
+        type: "object",
+        description:
+          "Prepared artifact before the platform permit is signed. No wallet transaction or observation window is available yet.",
+        required: [
+          "schemaVersion",
+          "artifact",
+          "agentAttestation",
+          "signedPermit",
+          "walletTransaction",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch-authorization-result.v1" },
+          artifact: component("PreparedLaunchArtifact"),
+          agentAttestation: component("AgentLaunchAttestationResult"),
+          signedPermit: { type: "null" },
+          walletTransaction: { type: "null" },
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchAuthorizedOutput: {
+        type: "object",
+        description:
+          "Permit-attached wallet handoff plus bounded reconciliation state. onchain is null until single-resource polling observes a canonical Router stamp.",
+        required: [
+          "schemaVersion",
+          "artifact",
+          "agentAttestation",
+          "signedPermit",
+          "walletTransaction",
+          "observationWindow",
+          "onchain",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch-authorization-result.v1" },
+          artifact: component("PreparedLaunchArtifact"),
+          agentAttestation: component("AgentLaunchAttestationResult"),
+          signedPermit: component("SignedPreparedLaunchPermit"),
+          walletTransaction: component("CustomLaunchWalletTransaction"),
+          observationWindow: component("CustomLaunchObservationWindow"),
+          onchain: {
+            oneOf: [component("CustomLaunchOnchainEvidence"), { type: "null" }],
+          },
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchOutput: {
+        description:
+          "Typed durable output for prepared, authorized, submitted and finalized launch states.",
+        oneOf: [
+          component("CustomLaunchPreparedOutput"),
+          component("CustomLaunchAuthorizedOutput"),
+        ],
+      },
       CustomLaunchResource: {
         type: "object",
+        description:
+          "Durable API request state. launchId is the legacy alias of requestId; onchainLaunchId is the distinct Router bytes32 identifier and is present whenever durable output retains a prepared artifact. Poll this resource after wallet broadcast to drive request-scoped reconciliation.",
         required: [
           "schemaVersion",
           "launchId",
+          "requestId",
+          "onchainLaunchId",
           "routeId",
           "ownerWallet",
           "status",
@@ -742,15 +1197,23 @@ export const programmablePublicOpenApi = {
         properties: {
           schemaVersion: { const: "programmable.custom-launch.v1" },
           launchId: {
-            type: "string",
-            minLength: 16,
-            maxLength: 128,
-            pattern: "^[A-Za-z0-9_-]{16,128}$",
+            ...component("CustomLaunchRequestId"),
+            description:
+              "Deprecated-compatible alias of requestId. It is not an onchain identifier.",
+            deprecated: true,
+          },
+          requestId: component("CustomLaunchRequestId"),
+          onchainLaunchId: {
+            description:
+              "Router bytes32 launch identifier. It is null before preparation and when a terminal failure clears the durable output.",
+            oneOf: [component("LowerHex32"), { type: "null" }],
           },
           routeId: { const: "custom-launch:create:v1" },
           ownerWallet: component("EthereumAddress"),
           status: {
             type: "string",
+            description:
+              "authorized means the permit-attached transaction awaits a separate wallet signature and broadcast. submitted means exact canonical Router event/getter evidence was observed below 64 confirmations. finalized means the same evidence reached at least 64 confirmations.",
             enum: [
               "received",
               "validating",
@@ -769,13 +1232,38 @@ export const programmablePublicOpenApi = {
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           output: {
-            oneOf: [
-              { type: "object", additionalProperties: true },
-              { type: "null" },
-            ],
+            description:
+              "Null before preparation and after a terminal failure. prepared returns CustomLaunchPreparedOutput; authorized, submitted and finalized return CustomLaunchAuthorizedOutput.",
+            oneOf: [component("CustomLaunchOutput"), { type: "null" }],
           },
           failure: {
             oneOf: [component("CustomLaunchFailure"), { type: "null" }],
+          },
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchListPage: {
+        type: "object",
+        description:
+          "Newest-first wallet-owned summary page. Each item uses the CustomLaunchResource shape but always has output=null; use the single-resource route for the prepared artifact. launchId remains the legacy alias of requestId; neither should be confused with onchainLaunchId.",
+        required: ["schemaVersion", "launches", "nextCursor"],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch-list.v1" },
+          launches: {
+            type: "array",
+            maxItems: 25,
+            items: component("CustomLaunchResource"),
+          },
+          nextCursor: {
+            oneOf: [
+              {
+                type: "string",
+                minLength: 16,
+                maxLength: 512,
+                pattern: "^[A-Za-z0-9_-]+$",
+              },
+              { type: "null" },
+            ],
           },
         },
         additionalProperties: false,
@@ -789,9 +1277,18 @@ export const programmablePublicOpenApi = {
             type: "object",
             required: ["code", "message", "requestId"],
             properties: {
-              code: { type: "string" },
+              code: {
+                type: "string",
+                description:
+                  "Stable API error code, including IDEMPOTENCY_CONFLICT, NONCE_CONFLICT and PERMIT_EXPIRED.",
+              },
               message: { type: "string" },
-              requestId: { type: "string", format: "uuid" },
+              requestId: {
+                type: "string",
+                format: "uuid",
+                description:
+                  "HTTP correlation identifier for this error response, not a Custom launch resource requestId.",
+              },
               details: {},
             },
             additionalProperties: false,
@@ -1046,15 +1543,17 @@ export const programmablePublicOpenApi = {
   },
   "x-programmable-boundary": {
     identity:
-      "Verified Classic V3, Registry-verified Custom, and the sole official Classic V2 main-token exception.",
+      "Verified Classic V3, Registry-verified Custom, finalized Router-stamped Custom provenance, and the sole official Classic V2 main-token exception.",
     excluded:
-      "All other Classic V1/V2, every Stock family, and non-Registry-verified Custom launches.",
+      "All other Classic V1/V2, every Stock family, and Custom launches without a verified Registry record or finalized Router stamp.",
     marketData:
       "Optional enrichment never determines whether a verified identity is present.",
     router:
-      "Provenance evidence and identity mapping only; never a public category.",
+      "Finalized Router evidence becomes provenance-only Custom discovery after 64 confirmations. It is not approval, an audit, or a safety claim, and third-party listing remains consumer-controlled.",
+    market:
+      "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, and permit bindings and prepares one exact wallet action. It does not compile source, simulate the transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, and permit bindings, prepares one exact wallet action, and reconciles only when its single-resource status is polled. It does not compile source, assess attestation evidence, simulate the transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {

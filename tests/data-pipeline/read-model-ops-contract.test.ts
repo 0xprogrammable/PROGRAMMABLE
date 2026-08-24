@@ -786,8 +786,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a falsely current Custom lane",
-      'let customStatus: "current" | "unavailable" = "unavailable"',
-      'let customStatus: "current" | "unavailable" = "current"',
+      'registryCustomStatus === "current" && routerCustomStatus === "current"',
+      'registryCustomStatus === "current" || routerCustomStatus === "current"',
     ],
     [
       "a different market provider",
@@ -880,8 +880,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "token detail that restores Custom Registry as a hidden fallback",
-      "const entry: ExploreEntry | null = canonicalEntry ?? customEntries.find(",
-      "const entry: ExploreEntry | null = canonicalEntry ?? [/* hidden */].find(",
+      "const entry: ExploreEntry | null = identityEntries.find(",
+      "const entry: ExploreEntry | null = [/* hidden */].find(",
     ],
   ])("rejects %s", (_label, needle, replacement) => {
     const path = "app/api/explore/token/route.ts";
@@ -916,8 +916,8 @@ describe("read-model operations source contract", () => {
     [
       "profile provider provenance",
       "app/api/explore/profile/route.ts",
-      '"X-Programmable-Launch-Source": "envio-classic-v3"',
-      '"X-Programmable-Launch-Source": "unknown"',
+      '"X-Programmable-Router-Read-Status": routerStatus',
+      '"X-Programmable-Router-Read-Status": "unknown"',
     ],
     [
       "claim receipt binding",

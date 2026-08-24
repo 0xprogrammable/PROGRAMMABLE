@@ -12,8 +12,10 @@ and read its durable status.
 
 Create or revoke keys at <https://programmable.market/developers/api-keys>. V1 keys have exactly
 `custom-launch:create` and `custom-launch:read`. The reserved `fees:claim` and `buybacks:manage` scopes are disabled.
+Keys expire after 90 days by default, may be issued for at most 366 days and are limited to 10 active keys per wallet.
 
-An API key is not a wallet key. It cannot sign or broadcast a transaction.
+An API key is not a wallet key. It cannot sign or broadcast a transaction. An agent can complete that step only if it
+separately controls, or has delegated authority for, the bound launch wallet.
 
 ## Create a launch
 
@@ -131,9 +133,30 @@ The platform does not:
 - An exact replay may return `200` with the original launch.
 - Reusing the key with a different body returns `409`.
 - Reusing a conflicting nonce for the bound wallet returns `409`.
+- Each prepared permit is valid for at most one hour. If it expires before platform signing or before the controller
+  wallet broadcasts the authorized Router action, the request becomes terminal `failed` with
+  `failure.code: "PERMIT_EXPIRED"`. Submit a new request with a new nonce and Idempotency-Key.
+
+New reservations are limited to 30 per rolling hour and 100 per rolling day for the wallet principal and route. Exact
+idempotent replays do not consume quota. A `429 LAUNCH_QUOTA_EXCEEDED` response includes `limit`, `windowSeconds` and
+`retryAfterSeconds` and sends the same retry delay in the `Retry-After` header.
 
 Retry an ambiguous timeout with the same key and identical request body. Response `requestHash` values are labeled
 `sha256:<64 lowercase hex>` digests.
+
+## List wallet launch requests
+
+```sh
+curl --fail-with-body \
+  --header "Authorization: Bearer $PROGRAMMABLE_API_KEY" \
+  "https://api.programmable.market/v1/custom-launches?limit=10"
+```
+
+The collection returns only requests owned by the API key's exact wallet principal, newest first. `limit` defaults to
+10 and is bounded to 25. When `nextCursor` is non-null, pass that opaque value as `cursor` without modifying it. The
+collection returns bounded summaries and omits the potentially large prepared artifact, so `output` is always null in
+this response. It performs bounded best-effort reconciliation for pending requests without hiding durable history when
+an RPC is unavailable. Read the single-request route for the full prepared wallet transaction and exact launch output.
 
 ## Read launch status
 
@@ -143,6 +166,10 @@ curl --fail-with-body \
   https://api.programmable.market/v1/custom-launches/$LAUNCH_ID
 ```
 
+The path keeps the legacy name `launchId`, but its value is the API request UUID. Every resource returns that UUID as
+both `launchId` and the explicit `requestId`. The separate `onchainLaunchId` is a bytes32 Router identifier; it is null
+before preparation and when a terminal failure clears the durable output.
+
 The lifecycle is:
 
 ```text
@@ -151,20 +178,41 @@ received -> validating -> prepared -> authorized -> submitted -> finalized
 
 `failed` and `cancelled` are terminal alternatives.
 
-- `prepared`: the exact artifact and unsigned transaction exist.
-- `authorized`: the platform permit is attached and the exact wallet handoff is ready. It is not wallet-signed or
-  broadcast.
-- `submitted`: the exact transaction was observed. It is not finalized.
-- `finalized`: the transaction and Programmable Router stamp passed finality readback. This does not imply Registry
-  publication or website availability.
+- `prepared`: the exact artifact, including its unsigned Router transaction template, exists; the broadcast-ready
+  `walletTransaction` is still null.
+- `authorized`: the platform permit is attached and the exact wallet handoff is ready for up to one hour. It is not
+  wallet-signed or broadcast.
+- `submitted`: a canonical Router event and same-block `launchStamp` getter record match the prepared artifact, but the
+  event has fewer than 64 confirmations.
+- `finalized`: the same canonical Router evidence has at least 64 confirmations.
+
+After the controller wallet broadcasts the exact transaction, poll this single-resource GET. Reconciliation is
+request-driven for `authorized` and `submitted` resources. POST only captures the bounded observation window, list
+reads do not perform per-launch chain reads and there is no background reconciliation timer.
+
+Once the canonical Router stamp has 64 confirmations and website discovery refreshes, the launch is eligible to appear
+in Explore and in the connected wallet's Profile. Router provenance does not require Registry publication. Third-party
+listings remain dependent on each indexer implementing the published Router discovery and verification flow.
 
 The controller wallet, or an agent separately authorized to use that wallet, must review, sign and broadcast the exact
 Router action.
+
+The current website claim flow supports only explicitly verified fee models. A Router-stamped arbitrary Custom hook is
+not automatically claimable, and the `fees:claim` and `buybacks:manage` API operations are not active in V1.
 
 ## Provenance claim
 
 A finalized, verified Router stamp can establish that a coin was launched through Programmable and bind its onchain
 launch to the caller-declared source commitments and graph. It does not establish approval, source-to-bytecode
 verification, audit coverage, safety, liquidity, tradability, endorsement or future value.
+
+The Router verifies fixed runtime, token, hook, PoolManager and pool bindings and requires the pool to be initialized
+with nonzero `sqrtPriceX96`. It does not prove active liquidity or tradability. The submitted Custom graph owns its
+liquidity behavior.
+
+The source descriptor and agent attestation remain caller-declared offchain evidence. Programmable checks their shape,
+digests and graph binding but does not fetch the evidence, prove that source produced the bytecode or adopt the agent's
+claims. A third-party indexer can independently verify finalized Router provenance from the published events and getter;
+whether it discovers or lists the launch is controlled by that indexer.
 
 Machine contract: <https://programmable.market/openapi/custom-launch-v1.json>

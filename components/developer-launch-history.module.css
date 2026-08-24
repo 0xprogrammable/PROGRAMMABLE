@@ -1,0 +1,309 @@
+.history {
+  background: var(--liquid-glass-surface-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 20px;
+  box-shadow: var(--liquid-glass-shadow);
+  margin-top: 20px;
+  min-width: 0;
+  padding: 24px;
+}
+
+.heading,
+.launchTopline {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.kicker {
+  color: var(--brand-pink);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.heading h2 {
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 590;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+
+.intro {
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+  margin-top: 12px;
+  max-width: 720px;
+  text-wrap: pretty;
+}
+
+.launchList {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.launchItem,
+.skeletonRow {
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 16px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.launchTopline > div {
+  min-width: 0;
+}
+
+.launchTopline h3,
+.statePanel h3 {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 590;
+  line-height: 1.3;
+}
+
+.launchTopline code {
+  color: var(--muted);
+  display: block;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  flex: none;
+  font-size: 12px;
+  gap: 6px;
+  text-align: right;
+}
+
+.status::before {
+  background: currentColor;
+  border-radius: 999px;
+  content: "";
+  flex: none;
+  height: 6px;
+  width: 6px;
+}
+
+.status[data-status="authorized"],
+.status[data-status="finalized"] {
+  color: var(--success);
+}
+
+.status[data-status="failed"],
+.status[data-status="cancelled"] {
+  color: var(--danger);
+}
+
+.metadata {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  margin: 16px 0 0;
+}
+
+.metadata dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.metadata dd {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.metadata code {
+  font-family: var(--font-plex-mono), monospace;
+  overflow-wrap: anywhere;
+}
+
+.failure,
+.inlineError {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 14px;
+}
+
+.transaction {
+  border-top: 1px solid var(--liquid-glass-border);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.transaction summary {
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 620;
+  min-height: 44px;
+  padding-block: 12px;
+}
+
+.transaction p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.transaction pre {
+  background: #0b141d;
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 12px;
+  color: #f7f1ea;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 12px 0 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.textButton,
+.secondaryButton,
+.checkButton {
+  align-items: center;
+  border-radius: 12px;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 44px;
+  padding-inline: 12px;
+}
+
+.textButton {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-soft);
+}
+
+.secondaryButton {
+  background: var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
+  color: var(--text);
+  margin-top: 16px;
+}
+
+.checkButton {
+  background: transparent;
+  border: 1px solid var(--liquid-glass-border);
+  color: var(--text-soft);
+  margin-top: 14px;
+}
+
+.secondaryButton:disabled,
+.checkButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.textButton:focus-visible,
+.secondaryButton:focus-visible,
+.checkButton:focus-visible,
+.transaction summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.statePanel {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 180px;
+  padding: 28px 8px;
+}
+
+.statePanel p {
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+  margin-top: 8px;
+}
+
+.skeletonList {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.skeletonRow {
+  animation: historySkeleton 1.6s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+  display: block;
+  min-height: 116px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .textButton:hover,
+  .secondaryButton:not(:disabled):hover,
+  .checkButton:not(:disabled):hover {
+    background: var(--liquid-glass-control-background-hover);
+  }
+}
+
+@media (max-width: 600px) {
+  .history {
+    padding: 20px;
+  }
+
+  .launchTopline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .status {
+    text-align: left;
+  }
+
+  .metadata {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@keyframes historySkeleton {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonRow {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .launchItem,
+  .history,
+  .secondaryButton,
+  .transaction pre {
+    border-color: CanvasText;
+  }
+}

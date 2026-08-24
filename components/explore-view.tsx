@@ -156,7 +156,9 @@ type ExploreCatalogBoundary = Readonly<{
   source: "envio-classic-v3";
   launchSource:
     | "envio-classic-v3"
-    | "envio-classic-v3+registry.custom-launched";
+    | "envio-classic-v3+registry.custom-launched"
+    | "envio-classic-v3+canonical-launch-stamp-router"
+    | "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router";
   status: "current" | "last-known-good";
   lastIndexedAt: string;
   asOfBlock: string;
@@ -167,13 +169,22 @@ type ExploreCatalogBoundary = Readonly<{
     classic: "current" | "last-known-good";
     stock: "excluded";
     custom: "current" | "unavailable";
+    registryCustom?: "current" | "unavailable";
+    routerCustom?: "current" | "unavailable";
   }>;
   scope: Readonly<{
-    included: readonly [
-      "classic-v3",
-      "official-main-token",
-      "registry.custom-launched",
-    ];
+    included:
+      | readonly [
+          "classic-v3",
+          "official-main-token",
+          "registry.custom-launched",
+        ]
+      | readonly [
+          "classic-v3",
+          "official-main-token",
+          "registry.custom-launched",
+          "canonical-launch-stamp-router",
+        ];
     excluded: readonly [
       "classic-v1",
       "classic-v2",
@@ -190,6 +201,13 @@ type ExploreCatalogBoundary = Readonly<{
     progressBlock: string;
     progressOccurrenceId: string;
     commitment: `sha256:${string}`;
+  }>;
+  routerStamp?: Readonly<{
+    source: "canonical-launch-stamp-router";
+    status: "current" | "unavailable";
+    finalityConfirmations: 64;
+    verifiedIdentityCount: number;
+    projectedIdentityCount: number;
   }>;
 }>;
 
@@ -955,9 +973,60 @@ function exactStringArray(value: unknown, expected: readonly string[]) {
 function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
   if (!isRecord(value) || !isRecord(value.completeness) ||
     !isRecord(value.scope) || !isRecord(value.evidence)) return null;
-  const expectedLaunchSource = value.completeness.custom === "current"
-    ? "envio-classic-v3+registry.custom-launched"
-    : "envio-classic-v3";
+  const hasSplitCustomStatus =
+    value.completeness.registryCustom !== undefined ||
+    value.completeness.routerCustom !== undefined;
+  if (
+    hasSplitCustomStatus &&
+    (![
+      "current",
+      "unavailable",
+    ].includes(String(value.completeness.registryCustom)) ||
+      ![
+        "current",
+        "unavailable",
+      ].includes(String(value.completeness.routerCustom)))
+  ) return null;
+  const registryCustomStatus = hasSplitCustomStatus
+    ? value.completeness.registryCustom
+    : value.completeness.custom;
+  const routerCustomStatus = hasSplitCustomStatus
+    ? value.completeness.routerCustom
+    : "unavailable";
+  const expectedLaunchSource = registryCustomStatus === "current"
+    ? routerCustomStatus === "current"
+      ? "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
+      : "envio-classic-v3+registry.custom-launched"
+    : routerCustomStatus === "current"
+      ? "envio-classic-v3+canonical-launch-stamp-router"
+      : "envio-classic-v3";
+  const expectedIncluded = routerCustomStatus === "current"
+    ? [
+        "classic-v3",
+        "official-main-token",
+        "registry.custom-launched",
+        "canonical-launch-stamp-router",
+      ]
+    : [
+        "classic-v3",
+        "official-main-token",
+        "registry.custom-launched",
+      ];
+  const routerStamp = value.routerStamp;
+  if (
+    hasSplitCustomStatus &&
+    (!isRecord(routerStamp) ||
+      routerStamp.source !== "canonical-launch-stamp-router" ||
+      routerStamp.status !== routerCustomStatus ||
+      routerStamp.finalityConfirmations !== 64 ||
+      !Number.isSafeInteger(routerStamp.verifiedIdentityCount) ||
+      Number(routerStamp.verifiedIdentityCount) < 0 ||
+      !Number.isSafeInteger(routerStamp.projectedIdentityCount) ||
+      Number(routerStamp.projectedIdentityCount) < 0 ||
+      Number(routerStamp.projectedIdentityCount) >
+        Number(routerStamp.verifiedIdentityCount))
+  ) return null;
+  if (!hasSplitCustomStatus && routerStamp !== undefined) return null;
   if (
     value.source !== "envio-classic-v3" ||
     value.launchSource !== expectedLaunchSource ||
@@ -978,11 +1047,12 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     !["current", "unavailable"].includes(
       String(value.completeness.custom),
     ) ||
-    !exactStringArray(value.scope.included, [
-      "classic-v3",
-      "official-main-token",
-      "registry.custom-launched",
-    ]) ||
+    (hasSplitCustomStatus &&
+      value.completeness.custom !==
+        (registryCustomStatus === "current" && routerCustomStatus === "current"
+          ? "current"
+          : "unavailable")) ||
+    !exactStringArray(value.scope.included, expectedIncluded) ||
     !exactStringArray(value.scope.excluded, [
       "classic-v1",
       "classic-v2",
@@ -1016,6 +1086,7 @@ function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
     identityCommitment: value.identityCommitment,
     completeness: value.completeness,
     scope: value.scope,
+    routerStamp: value.routerStamp,
     deployment: value.evidence.deployment,
     sourceCommit: value.evidence.sourceCommit,
   });
