@@ -167,7 +167,7 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("opens Custom only when the server readiness gate is true", () => {
+  it("routes Custom to the API-first entry instead of the legacy runtime", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         customLaunchPublicEnabled: true,
@@ -201,20 +201,23 @@ describe("unreleased launch model gating", () => {
     );
     expect(html).toContain('data-launch-model-option="custom"');
     const customCard = html.match(
-      /<button[^>]*data-launch-model-option="custom"[^>]*>/,
+      /<a[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
     expect(customCard).toContain('data-launch-model-available="true"');
-    expect(customCard).toContain('data-launch-model-launchable="true"');
+    expect(customCard).toContain('data-launch-model-entry="api-first"');
+    expect(customCard).toContain('data-launch-model-launchable="false"');
+    expect(customCard).toContain('href="/developers/api-keys"');
     expect(customCard).not.toContain("disabled");
     expect(html).toContain(
       'id="launch-model-custom-title">Custom</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).not.toContain('data-status="pending">Soon</small>');
+    expect(html).toContain('data-status="api">API</small>');
     expect(html).toContain(
-      "Launch an approved GitHub revision through your browser wallet, then follow it to its public record.",
+      "Create an API key, submit a deterministic bundle for checks, then receive a prepared launch for your wallet to review.",
     );
-    expect(html).toContain("Open approved Custom launch");
+    expect(html).toContain("Create a Custom launch API key");
+    expect(html).not.toContain("approved GitHub revision");
     expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
       html.indexOf('data-launch-model-option="custom"'),
     );
@@ -239,7 +242,7 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("keeps Custom visible and non-interactive while it is marked Soon", () => {
+  it("keeps the API-first Custom entry independent of the legacy gate", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
@@ -249,11 +252,13 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-option="prediction"');
     expect(html).toContain('data-launch-model-option="custom"');
     expect(html).toContain('id="launch-model-custom-title"');
-    expect(html).toContain('data-launch-model-available="false"');
+    expect(html).toContain('data-launch-model-available="true"');
+    expect(html).toContain('data-launch-model-entry="api-first"');
     expect(html).toContain('data-launch-model-launchable="false"');
-    expect(html).toContain('data-status="pending">Soon</small>');
-    expect(html).toContain("Custom launch models are coming soon.");
-    expect(html).not.toContain("Open approved Custom launch");
+    expect(html).toContain('data-status="api">API</small>');
+    expect(html).toContain('href="/developers/api-keys"');
+    expect(html).toContain("Create a Custom launch API key");
+    expect(html).not.toContain("approved GitHub revision");
     expect(html).not.toContain("Build or resume");
   });
 

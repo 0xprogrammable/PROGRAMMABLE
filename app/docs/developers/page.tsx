@@ -14,14 +14,14 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Developer integration · Programmable",
   description:
-    "Verify Router-stamped Programmable launches or index new launches from the canonical Ethereum Router.",
+    "Prepare Custom launches with a wallet-bound API key, verify Router stamps or index new launches.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
     type: "website",
     siteName: "Programmable",
     title: "Programmable developer integration",
     description:
-      "Verification and indexing guides for Router-stamped Programmable launches on Ethereum.",
+      "Custom Launch API, verification and indexing guides for Programmable launches on Ethereum.",
     url: "/docs/developers",
     images: [
       {
@@ -53,7 +53,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Verify Router-stamped tokens and pools, or index new launches from the canonical Ethereum Router."
+      description="Prepare a Custom launch with a wallet-bound API key, verify Router-stamped tokens and pools, or index new launches."
       kicker="Developer integration"
       sections={developerSections}
       title="Integrate Programmable launches"
@@ -62,12 +62,26 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Choose a path</h2>
           <p>
-            Start with the task your product needs. Both paths use the same
-            manifest, Router and verification rules.
+            Start with the task your product needs. Launch preparation is an
+            authenticated write path; verification and indexing are public read
+            paths.
           </p>
         </div>
 
         <ul className={styles.taskList}>
+          <li id="custom-api">
+            <h3>
+              <Link href="/developers/api-keys">Prepare a Custom launch</Link>
+            </h3>
+            <p>
+              Create a wallet-bound key, submit one deterministic graph bundle
+              with agent evidence and receive the exact wallet action. The key
+              cannot sign or broadcast.
+            </p>
+            <Link className={styles.textLink} href="/developers/api-keys">
+              Create or manage API keys
+            </Link>
+          </li>
           <li id="identity">
             <h3>
               <Link href="/docs/developers/verify">Verify a token or pool</Link>
@@ -311,6 +325,9 @@ export default function DeveloperDocsPage() {
       >
         <p>Continue</p>
         <ul>
+          <li>
+            <Link href="/developers/api-keys">Prepare a Custom launch</Link>
+          </li>
           <li>
             <Link href="/docs/developers/verify">Verify a token or pool</Link>
           </li>

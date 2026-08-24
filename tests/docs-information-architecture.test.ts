@@ -208,7 +208,7 @@ describe("Docs information architecture", () => {
     expect(statusPage).toContain('export const dynamic = "force-dynamic"');
   });
 
-  it("publishes a complete creator path with explicit repository roles", () => {
+  it("publishes a complete creator path with explicit entrypoint roles", () => {
     for (const [source, path, title] of [
       [creatorsPage, "/docs/creators", "Create with Programmable"],
       [creatorLaunchPage, "/docs/creators/launch", "Launch a project"],
@@ -222,7 +222,7 @@ describe("Docs information architecture", () => {
     }
 
     expect(creatorsPage).toContain("Hook Builder");
-    expect(creatorsPage).toContain("Submit a Launch");
+    expect(creatorsPage).toContain("Custom Launch API");
     expect(creatorsPage).toContain("Submit a Template");
     expect(creatorTemplatesPage).toContain(
       "Follow the Submit a Template repository",
@@ -230,8 +230,9 @@ describe("Docs information architecture", () => {
     expect(creatorTemplatesPage).toMatch(
       /do not accept public template\s+applications/,
     );
-    expect(creatorLaunchPage).toMatch(/while the README keeps the\s+intake/);
-    expect(creatorLaunchPage).toContain("Use the repository instructions");
+    expect(creatorLaunchPage).toContain("The API does not control your wallet");
+    expect(creatorLaunchPage).toContain("Create a Custom launch API key");
+    expect(creatorLaunchPage).toContain("does not reproduce your build");
     expect(creatorLaunchPage).not.toContain(
       "Open public wallet self-service is not active",
     );

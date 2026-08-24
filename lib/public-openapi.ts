@@ -1,6 +1,8 @@
 import { V4_TOKEN_ADDRESS } from "@/components/docs-public-policy";
 
 const SITE_ORIGIN = "https://programmable.market";
+const CUSTOM_LAUNCH_API_ORIGIN = "https://api.programmable.market";
+const API_KEYS_URL = `${SITE_ORIGIN}/developers/api-keys`;
 
 const jsonResponse = (schema: Record<string, unknown>, description: string) => ({
   description,
@@ -18,11 +20,12 @@ const component = (name: string) => ({
 export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
-    title: "Programmable public read API",
-    version: "1.0.0",
-    summary: "Verified launch discovery and identity reads on Ethereum.",
+    title: "Programmable developer APIs",
+    version: "1.1.0",
+    summary:
+      "Verified launch discovery plus wallet-bound Custom launch preparation on Ethereum.",
     description:
-      "A deliberately small, unauthenticated, read-only API for verified Programmable launch identity. Wallet signing, launch creation, trades, claims, profile writes, and other onchain actions are intentionally excluded.",
+      "The programmable.market read endpoints remain unauthenticated and read-only. The separately hosted Custom Launch API accepts wallet-bound pm_live_ API keys and prepares exact Router launch actions. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -46,6 +49,11 @@ export const programmablePublicOpenApi = {
     {
       name: "Metadata",
       description: "Machine-readable API discovery.",
+    },
+    {
+      name: "Custom launch",
+      description:
+        "Wallet-bound, provenance-only Custom launch intake and status. Create API keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {
@@ -201,6 +209,141 @@ export const programmablePublicOpenApi = {
         },
       },
     },
+    "/v1/custom-launches": {
+      post: {
+        operationId: "createCustomLaunch",
+        summary: "Prepare a Custom launch",
+        description:
+          "Validates the submitted manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding; reserves the request idempotently; and prepares the Mainnet Router action for the API key's bound wallet. The platform does not compile source, simulate the transaction, audit the project, attest safety, sign the wallet transaction, or broadcast it.",
+        tags: ["Custom launch"],
+        servers: [
+          {
+            url: CUSTOM_LAUNCH_API_ORIGIN,
+            description: "Programmable Custom Launch API",
+          },
+        ],
+        security: [{ CustomLaunchApiKey: [] }],
+        externalDocs: {
+          description: "Create or revoke a wallet-bound API key",
+          url: API_KEYS_URL,
+        },
+        parameters: [
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: true,
+            description:
+              "Caller-generated operation key. Retry an ambiguous request with the same key and identical body.",
+            schema: {
+              type: "string",
+              minLength: 16,
+              maxLength: 128,
+              pattern: "^[A-Za-z0-9._:-]{16,128}$",
+            },
+          },
+        ],
+        requestBody: {
+          required: true,
+          description:
+            "Closed JSON request, limited to 2 MiB. Unknown top-level fields fail before launch preparation.",
+          content: {
+            "application/json": {
+              schema: component("CustomLaunchCreateRequest"),
+            },
+          },
+        },
+        responses: {
+          "200": jsonResponse(
+            component("CustomLaunchResource"),
+            "Idempotent replay of the original launch request.",
+          ),
+          "202": jsonResponse(
+            component("CustomLaunchResource"),
+            "Launch request accepted for validation and preparation.",
+          ),
+          "400": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Invalid request or Idempotency-Key.",
+          ),
+          "401": jsonResponse(
+            component("CustomLaunchApiError"),
+            "API key is missing, malformed, expired, revoked, or unknown.",
+          ),
+          "403": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Missing custom-launch:create scope or wallet binding mismatch.",
+          ),
+          "409": jsonResponse(
+            component("CustomLaunchApiError"),
+            "The Idempotency-Key is bound to a different request, or the wallet nonce conflicts with another launch.",
+          ),
+          "413": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Request body exceeds 2 MiB.",
+          ),
+          "415": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Content-Type must be application/json.",
+          ),
+          "422": jsonResponse(
+            component("CustomLaunchApiError"),
+            "The manifest digest, graph, attestation subject/evidence digest, or permit binding is invalid.",
+          ),
+          "503": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Launch preparation is temporarily unavailable.",
+          ),
+        },
+      },
+    },
+    "/v1/custom-launches/{launchId}": {
+      get: {
+        operationId: "getCustomLaunch",
+        summary: "Read a Custom launch",
+        description:
+          "Returns one launch owned by the API key's wallet principal. A missing launch and another principal's launch both return 404.",
+        tags: ["Custom launch"],
+        servers: [
+          {
+            url: CUSTOM_LAUNCH_API_ORIGIN,
+            description: "Programmable Custom Launch API",
+          },
+        ],
+        security: [{ CustomLaunchApiKey: [] }],
+        parameters: [
+          {
+            name: "launchId",
+            in: "path",
+            required: true,
+            description: "Launch identifier returned by the create route.",
+            schema: {
+              type: "string",
+              minLength: 16,
+              maxLength: 128,
+              pattern: "^[A-Za-z0-9_-]{16,128}$",
+            },
+          },
+        ],
+        responses: {
+          "200": jsonResponse(
+            component("CustomLaunchResource"),
+            "Current durable launch state.",
+          ),
+          "401": jsonResponse(
+            component("CustomLaunchApiError"),
+            "API key is missing, malformed, expired, revoked, or unknown.",
+          ),
+          "403": jsonResponse(
+            component("CustomLaunchApiError"),
+            "API key lacks custom-launch:read.",
+          ),
+          "404": jsonResponse(
+            component("CustomLaunchApiError"),
+            "Launch not found for this wallet principal.",
+          ),
+        },
+      },
+    },
     "/openapi.json": {
       get: {
         operationId: "getOpenApiDocument",
@@ -210,13 +353,22 @@ export const programmablePublicOpenApi = {
         responses: {
           "200": jsonResponse(
             { type: "object" },
-            "OpenAPI 3.1 description of the public read-only API.",
+            "OpenAPI 3.1 description of the public read and Custom launch APIs.",
           ),
         },
       },
     },
   },
   components: {
+    securitySchemes: {
+      CustomLaunchApiKey: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "pm_live_<22-char-key-id>_<43-char-secret>",
+        description:
+          "Wallet-bound API key created at https://programmable.market/developers/api-keys. V1 keys receive only custom-launch:create and custom-launch:read. They are not wallet keys and cannot sign or broadcast transactions.",
+      },
+    },
     schemas: {
       EthereumAddress: {
         type: "string",
@@ -226,6 +378,426 @@ export const programmablePublicOpenApi = {
       Hex32: {
         type: "string",
         pattern: "^0x[0-9a-fA-F]{64}$",
+      },
+      LowerHex32: {
+        type: "string",
+        pattern: "^0x[0-9a-f]{64}$",
+      },
+      NonzeroLowerHex32: {
+        type: "string",
+        pattern: "^0x(?!0{64}$)[0-9a-f]{64}$",
+      },
+      Sha256Digest: {
+        type: "string",
+        pattern: "^sha256:[0-9a-f]{64}$",
+      },
+      CanonicalUint256: {
+        type: "string",
+        pattern: "^(?:0|[1-9][0-9]*)$",
+        maxLength: 78,
+        description: "Base-10 uint256 with no sign or leading zeroes.",
+      },
+      CanonicalIdentifier: {
+        type: "string",
+        minLength: 1,
+        maxLength: 256,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$",
+      },
+      HexData: {
+        type: "string",
+        pattern: "^0x(?:[0-9a-fA-F]{2})*$",
+      },
+      HookPermission: {
+        type: "string",
+        enum: [
+          "beforeInitialize",
+          "afterInitialize",
+          "beforeAddLiquidity",
+          "afterAddLiquidity",
+          "beforeRemoveLiquidity",
+          "afterRemoveLiquidity",
+          "beforeSwap",
+          "afterSwap",
+          "beforeDonate",
+          "afterDonate",
+          "beforeSwapReturnDelta",
+          "afterSwapReturnDelta",
+          "afterAddLiquidityReturnDelta",
+          "afterRemoveLiquidityReturnDelta",
+        ],
+      },
+      SourceBundleEntryV2: {
+        type: "object",
+        required: [
+          "path",
+          "kind",
+          "mode",
+          "byteLength",
+          "contentSha256",
+          "symlinkTarget",
+        ],
+        properties: {
+          path: {
+            type: "string",
+            minLength: 1,
+            description:
+              "NFC-normalized relative path. Empty segments, dot segments, backslashes, controls, and encoded slash or backslash are rejected.",
+          },
+          kind: { type: "string", enum: ["file", "symlink"] },
+          mode: { type: "string", enum: ["100644", "100755", "120000"] },
+          byteLength: {
+            type: "string",
+            pattern: "^(?:0|[1-9][0-9]*)$",
+            maxLength: 20,
+            description: "Base-10 uint64 byte length.",
+          },
+          contentSha256: component("Sha256Digest"),
+          symlinkTarget: { type: ["string", "null"] },
+        },
+        allOf: [
+          {
+            if: { properties: { kind: { const: "file" } } },
+            then: {
+              properties: {
+                mode: { type: "string", enum: ["100644", "100755"] },
+                symlinkTarget: { type: "null" },
+              },
+            },
+            else: {
+              properties: {
+                mode: { const: "120000" },
+                symlinkTarget: { type: "string" },
+              },
+            },
+          },
+        ],
+        additionalProperties: false,
+      },
+      SourceBundleManifestV2: {
+        type: "object",
+        required: ["schemaVersion", "entries"],
+        properties: {
+          schemaVersion: { const: "2.0.0" },
+          entries: {
+            type: "array",
+            minItems: 1,
+            description:
+              "Complete, non-empty entries in strictly increasing, unique UTF-8 path-byte order. The platform recomputes the frozen manifest digest and requires it to match sourceDescriptor.sourceBundleDigest; it does not fetch or compile source files.",
+            items: component("SourceBundleEntryV2"),
+          },
+        },
+        additionalProperties: false,
+      },
+      DeterministicSourceBundleV2: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "kind",
+          "controllerWallet",
+          "sourceLineageNonce",
+          "sourceBundleDigest",
+          "bundleContentSha256",
+          "publicOriginCommitment",
+        ],
+        properties: {
+          schemaVersion: { const: "2.0.0" },
+          kind: { const: "deterministic-source-bundle" },
+          controllerWallet: {
+            ...component("EthereumAddress"),
+            description:
+              "Must equal launchWallet after address normalization.",
+          },
+          sourceLineageNonce: component("CanonicalUint256"),
+          sourceBundleDigest: component("LowerHex32"),
+          bundleContentSha256: component("Sha256Digest"),
+          publicOriginCommitment: component("LowerHex32"),
+        },
+        additionalProperties: false,
+      },
+      GraphAddressLocatorV1: {
+        type: "object",
+        required: ["targetId", "byteOffset", "encoding"],
+        properties: {
+          targetId: component("CanonicalIdentifier"),
+          byteOffset: { type: "integer", minimum: 0 },
+          encoding: {
+            type: "string",
+            enum: ["abi-address-word", "packed-address-20"],
+          },
+        },
+        additionalProperties: false,
+      },
+      CustomGraphTargetV1: {
+        type: "object",
+        required: [
+          "targetId",
+          "applicantSalt",
+          "creationBytecode",
+          "constructorArguments",
+          "initializerCalldata",
+          "constructorAddressLocators",
+          "initializerAddressLocators",
+          "deploymentValueWei",
+          "initializerValueWei",
+          "expectedRuntimeCodeHash",
+          "componentKind",
+          "declaredHookPermissions",
+        ],
+        properties: {
+          targetId: component("CanonicalIdentifier"),
+          applicantSalt: component("Hex32"),
+          creationBytecode: {
+            type: "string",
+            pattern: "^0x(?:[0-9a-fA-F]{2})+$",
+            description:
+              "Non-empty EVM creation bytecode. Creation bytecode plus constructor arguments is limited to 49,152 bytes.",
+          },
+          constructorArguments: component("HexData"),
+          initializerCalldata: {
+            ...component("HexData"),
+            description: "Limited to 131,072 bytes after address patching.",
+          },
+          constructorAddressLocators: {
+            type: "array",
+            maxItems: 256,
+            items: component("GraphAddressLocatorV1"),
+          },
+          initializerAddressLocators: {
+            type: "array",
+            maxItems: 256,
+            items: component("GraphAddressLocatorV1"),
+          },
+          deploymentValueWei: component("CanonicalUint256"),
+          initializerValueWei: component("CanonicalUint256"),
+          expectedRuntimeCodeHash: {
+            type: "string",
+            pattern: "^0x(?!0{64}$)[0-9a-fA-F]{64}$",
+          },
+          componentKind: {
+            type: "string",
+            enum: ["token", "hook", "other"],
+          },
+          declaredHookPermissions: {
+            oneOf: [
+              { type: "array", maxItems: 14, items: component("HookPermission") },
+              { type: "null" },
+            ],
+          },
+        },
+        allOf: [
+          {
+            if: { properties: { componentKind: { const: "hook" } } },
+            then: {
+              properties: {
+                declaredHookPermissions: {
+                  type: "array",
+                  maxItems: 14,
+                  uniqueItems: true,
+                  items: component("HookPermission"),
+                },
+              },
+            },
+            else: {
+              properties: { declaredHookPermissions: { type: "null" } },
+            },
+          },
+        ],
+        additionalProperties: false,
+      },
+      CustomGraphBundleV1: {
+        type: "object",
+        required: ["schemaVersion", "sourceBundleSha256", "targets", "pool"],
+        properties: {
+          schemaVersion: { const: "programmable.custom-graph-bundle.v1" },
+          sourceBundleSha256: {
+            ...component("Sha256Digest"),
+            description:
+              "Must equal sourceDescriptor.bundleContentSha256.",
+          },
+          targets: {
+            type: "array",
+            minItems: 1,
+            maxItems: 16,
+            description:
+              "Closed target graph with exactly one token target and one hook target. Constructor dependencies must be acyclic.",
+            items: component("CustomGraphTargetV1"),
+          },
+          pool: {
+            type: "object",
+            required: ["tokenTargetId", "hookTargetId", "fee", "tickSpacing"],
+            properties: {
+              tokenTargetId: component("CanonicalIdentifier"),
+              hookTargetId: component("CanonicalIdentifier"),
+              fee: {
+                oneOf: [
+                  { type: "integer", minimum: 0, maximum: 1_000_000 },
+                  { const: 8_388_608 },
+                ],
+              },
+              tickSpacing: { type: "integer", minimum: 1, maximum: 32_767 },
+            },
+            additionalProperties: false,
+          },
+        },
+        description:
+          "Aggregate init code and initializer calldata are limited to 524,288 bytes. Predicted hook-address permission bits must equal declaredHookPermissions.",
+        additionalProperties: false,
+      },
+      AgentLaunchAttestationCheckV1: {
+        type: "object",
+        required: ["checkId", "evidenceSha256"],
+        properties: {
+          checkId: component("CanonicalIdentifier"),
+          evidenceSha256: component("Sha256Digest"),
+        },
+        additionalProperties: false,
+      },
+      AgentLaunchAttestationV1: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "subjectGraphBundleHash",
+          "agentId",
+          "checkedAt",
+          "checks",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.agent-launch-attestation.v1" },
+          subjectGraphBundleHash: {
+            ...component("Sha256Digest"),
+            description:
+              "SHA-256 of the canonical normalized graph bundle. It must match the submitted graph bundle.",
+          },
+          agentId: component("CanonicalIdentifier"),
+          checkedAt: {
+            type: "string",
+            format: "date-time",
+            pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+          },
+          checks: {
+            type: "array",
+            minItems: 1,
+            maxItems: 64,
+            uniqueItems: true,
+            items: component("AgentLaunchAttestationCheckV1"),
+          },
+        },
+        description:
+          "Required agent self-attestation with evidence digests for the submitted graph subject. It is excluded from permit and launch authorization. Programmable does not fetch or assess the evidence, adopt the attestation, or make a safety, audit, approval, compilation, or simulation claim.",
+        additionalProperties: false,
+      },
+      CustomLaunchCreateRequest: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "launchWallet",
+          "chainId",
+          "nonce",
+          "sourceDescriptor",
+          "sourceBundleManifest",
+          "graphBundle",
+          "agentAttestation",
+        ],
+        properties: {
+          schemaVersion: {
+            const: "programmable.custom-launch-create-request.v1",
+          },
+          launchWallet: {
+            ...component("EthereumAddress"),
+            description: "Must equal the API key's bound wallet.",
+          },
+          chainId: { const: "1" },
+          nonce: component("NonzeroLowerHex32"),
+          sourceDescriptor: component("DeterministicSourceBundleV2"),
+          sourceBundleManifest: component("SourceBundleManifestV2"),
+          graphBundle: component("CustomGraphBundleV1"),
+          agentAttestation: component("AgentLaunchAttestationV1"),
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchFailure: {
+        type: "object",
+        required: ["code", "message", "retryable"],
+        properties: {
+          code: { type: "string" },
+          message: { type: "string" },
+          retryable: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchResource: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "launchId",
+          "routeId",
+          "ownerWallet",
+          "status",
+          "requestHash",
+          "createdAt",
+          "updatedAt",
+          "output",
+          "failure",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.custom-launch.v1" },
+          launchId: {
+            type: "string",
+            minLength: 16,
+            maxLength: 128,
+            pattern: "^[A-Za-z0-9_-]{16,128}$",
+          },
+          routeId: { const: "custom-launch:create:v1" },
+          ownerWallet: component("EthereumAddress"),
+          status: {
+            type: "string",
+            enum: [
+              "received",
+              "validating",
+              "prepared",
+              "authorized",
+              "submitted",
+              "finalized",
+              "failed",
+              "cancelled",
+            ],
+          },
+          requestHash: {
+            type: "string",
+            pattern: "^sha256:[0-9a-f]{64}$",
+          },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          output: {
+            oneOf: [
+              { type: "object", additionalProperties: true },
+              { type: "null" },
+            ],
+          },
+          failure: {
+            oneOf: [component("CustomLaunchFailure"), { type: "null" }],
+          },
+        },
+        additionalProperties: false,
+      },
+      CustomLaunchApiError: {
+        type: "object",
+        required: ["schemaVersion", "error"],
+        properties: {
+          schemaVersion: { const: "programmable.api-error.v1" },
+          error: {
+            type: "object",
+            required: ["code", "message", "requestId"],
+            properties: {
+              code: { type: "string" },
+              message: { type: "string" },
+              requestId: { type: "string", format: "uuid" },
+              details: {},
+            },
+            additionalProperties: false,
+          },
+        },
+        additionalProperties: false,
       },
       ApiError: {
         type: "object",
@@ -482,6 +1054,26 @@ export const programmablePublicOpenApi = {
     router:
       "Provenance evidence and identity mapping only; never a public category.",
     actions:
-      "No launch, trade, claim, profile-write, signing, or wallet action is described by this document.",
+      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, and permit bindings and prepares one exact wallet action. It does not compile source, simulate the transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+  },
+  "x-programmable-api-scopes": {
+    "custom-launch:create": {
+      state: "grantable",
+      description: "Create and prepare a provenance-only Custom launch.",
+    },
+    "custom-launch:read": {
+      state: "grantable",
+      description: "Read Custom launches owned by the key's wallet principal.",
+    },
+    "fees:claim": {
+      state: "reserved-disabled",
+      description: "Not grantable or callable in V1.",
+    },
+    "buybacks:manage": {
+      state: "reserved-disabled",
+      description: "Not grantable or callable in V1.",
+    },
+    evolution:
+      "New scopes and endpoints are additive. Existing keys never inherit a scope activated later.",
   },
 } as const;

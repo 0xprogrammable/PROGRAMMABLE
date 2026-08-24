@@ -120,8 +120,8 @@ export default function DocsIndexPage() {
             <h3>Builders</h3>
             <p>
               Use Hook Builder as the skill and tooling layer. It produces the
-              reproducible project that belongs in Submit a Launch or Submit a
-              Template.
+              reproducible project that can become a deterministic Custom
+              Launch API bundle or a reusable template submission.
             </p>
           </div>
           <div>
@@ -148,11 +148,11 @@ export default function DocsIndexPage() {
           </div>
           <div className={docsStyles.flowItem}>
             <span>02</span>
-            <strong>Review one exact source revision</strong>
+            <strong>Check one deterministic launch bundle</strong>
           </div>
           <div className={docsStyles.flowItem}>
             <span>03</span>
-            <strong>Launch from the approved path</strong>
+            <strong>Review the prepared wallet action</strong>
           </div>
           <div className={docsStyles.flowItem}>
             <span>04</span>
@@ -161,9 +161,10 @@ export default function DocsIndexPage() {
         </div>
 
         <p>
-          A review result applies only to the revision it names. A launch still
-          requires the matching execution path and a wallet transaction. Public
-          applications can then verify the resulting onchain record.
+          Bundle checks and transaction preparation do not sign or broadcast a
+          launch. The controller wallet still reviews the exact action and
+          authorizes any transaction. Public applications can then verify the
+          resulting onchain record.
         </p>
       </section>
 
@@ -241,27 +242,24 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Creator paths</strong>
                 <small>
-                  Choose Hook Builder, Submit a Launch or Submit a Template.
+                  Choose Hook Builder, the Custom Launch API or Submit a
+                  Template.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
             </Link>
           </li>
           <li>
-            <a
-              href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitLaunch}
-              rel="noreferrer"
-              target="_blank"
-            >
+            <Link href="/developers/api-keys">
               <span>
-                <strong>Submit a Launch</strong>
+                <strong>Custom Launch API keys</strong>
                 <small>
-                  Submit one concrete project, token and hook revision.
+                  Create a wallet-bound key for bundle checks and prepared
+                  launches.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
-              <span className="sr-only">Opens GitHub in a new tab</span>
-            </a>
+            </Link>
           </li>
           <li>
             <a

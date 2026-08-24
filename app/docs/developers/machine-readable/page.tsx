@@ -11,7 +11,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Markdown, model context, manifest, ABI and canonical source files for Programmable launch verification.",
+    "Public-read and Bearer-authenticated Custom Launch API contracts, Markdown guides, manifests and canonical verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
@@ -50,8 +50,27 @@ export default function MachineReadableDocsPage() {
               <code>/openapi.json</code>
             </a>
             <span>
-              The stable, unauthenticated public read API for verified launch
-              discovery and exact token lookup.
+              Combined developer contract. Public discovery and Registry reads
+              are unauthenticated; Custom launch routes use a wallet-bound
+              Bearer API key.
+            </span>
+          </li>
+          <li>
+            <a href="/openapi/custom-launch-v1.json">
+              <code>/openapi/custom-launch-v1.json</code>
+            </a>
+            <span>
+              Standalone OpenAPI contract for the Bearer-authenticated Custom
+              Launch API.
+            </span>
+          </li>
+          <li>
+            <a href="/docs/developers/custom-launch-api-v1.md">
+              <code>/docs/developers/custom-launch-api-v1.md</code>
+            </a>
+            <span>
+              Concise agent guide for required bundle evidence, idempotency and
+              wallet handoff.
             </span>
           </li>
           <li>
@@ -187,6 +206,14 @@ export default function MachineReadableDocsPage() {
             </dd>
           </div>
           <div>
+            <dt>Custom Launch API contract</dt>
+            <dd>
+              Defines the authenticated request, required manifest and agent
+              evidence, graph constraints, permit binding and wallet handoff.
+              It does not define a safety review.
+            </dd>
+          </div>
+          <div>
             <dt>Web, Markdown and model context</dt>
             <dd>
               Explain and route the integration. <code>/llms-full.txt</code> is
@@ -203,7 +230,17 @@ export default function MachineReadableDocsPage() {
 
         <ul className={styles.checkList}>
           <li>
-            Programmable documentation endpoints require no authentication.
+            Public documentation, discovery and Registry-read endpoints require
+            no authentication.
+          </li>
+          <li>
+            <code>api.programmable.market/v1/custom-launches</code> requires a
+            wallet-bound <code>pm_live_</code> Bearer key.
+          </li>
+          <li>
+            The platform validates manifest digest, graph, required agent
+            evidence digests and permit bindings. It does not compile source,
+            simulate the transaction, audit the project or attest safety.
           </li>
           <li>Ethereum RPC authentication depends on your provider.</li>
           <li>
@@ -219,6 +256,9 @@ export default function MachineReadableDocsPage() {
       >
         <p>Continue</p>
         <ul>
+          <li>
+            <Link href="/developers/api-keys">Create or manage API keys</Link>
+          </li>
           <li>
             <Link href="/docs/developers/verify">Verify a token or pool</Link>
           </li>
