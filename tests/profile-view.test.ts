@@ -7,6 +7,7 @@ import {
   actionCanCheckStatus,
   actionLabel,
   actionPending,
+  actionSettling,
   buildProfilePortfolio,
   clearConfirmedProfileActionStates,
   getProfileSessionView,
@@ -999,7 +1000,7 @@ describe("profile transaction status", () => {
         message: "Still pending on Ethereum",
         transactionHash,
       }),
-    ).toBe("Check status");
+    ).toBe("Confirming");
     expect(
       actionPending({
         account: firstAddress,
@@ -1008,6 +1009,14 @@ describe("profile transaction status", () => {
         transactionHash,
       }),
     ).toBe(false);
+    expect(
+      actionSettling({
+        account: firstAddress,
+        status: "pending",
+        message: "Still pending on Ethereum",
+        transactionHash,
+      }),
+    ).toBe(true);
   });
 
   it("preserves a not-found hash as a checkable non-busy state", async () => {
@@ -1029,8 +1038,9 @@ describe("profile transaction status", () => {
       transactionHash,
     };
     expect(actionCanCheckStatus(state)).toBe(true);
-    expect(actionLabel(state)).toBe("Check status");
+    expect(actionLabel(state)).toBe("Rechecking");
     expect(actionPending(state)).toBe(false);
+    expect(actionSettling(state)).toBe(true);
   });
 
   it("releases a repeatedly missing hash so the next claim can retry", () => {

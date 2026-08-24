@@ -4658,15 +4658,20 @@ export function actionCanCheckStatus(
   );
 }
 
+export function actionSettling(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+) {
+  return actionPending(state) || actionCanCheckStatus(state);
+}
+
 export function actionLabel(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
 ) {
   if (state?.status === "preparing") return "Preparing";
   if (state?.status === "wallet") return "Confirm in wallet";
   if (state?.status === "confirming") return "Confirming";
-  if (state?.status === "pending" || state?.status === "not-found") {
-    return "Check status";
-  }
+  if (state?.status === "pending") return "Confirming";
+  if (state?.status === "not-found") return "Rechecking";
   if (state?.status === "confirmed") return "Confirmed";
   if (state?.status === "error") return "Try again";
   return "Claim";
@@ -4979,7 +4984,7 @@ function ProfileClaimRow({
           description: `Receive ETH at ${recipient}`,
           state: activeClaimState,
           disabled:
-            actionPending(activeClaimState) ||
+            actionSettling(activeClaimState) ||
             (currentClaimable === 0n &&
               !actionCanCheckStatus(activeClaimState)),
           emphasis: "primary",
@@ -5002,7 +5007,7 @@ function ProfileClaimRow({
           description: `Receive ETH at ${recipient}`,
           state,
           disabled:
-            actionPending(state) ||
+            actionSettling(state) ||
             (claimable === 0n && !actionCanCheckStatus(state)),
           emphasis: "primary",
           onSelect: () => onClassicV3Action(reward, "claim"),
@@ -5024,7 +5029,7 @@ function ProfileClaimRow({
           description: `Receive ETH at ${shortenAddress(reward.payoutAddress)}`,
           state,
           disabled:
-            actionPending(state) ||
+            actionSettling(state) ||
             (claimable === 0n && !actionCanCheckStatus(state)),
           emphasis: "primary",
           onSelect: () => onDeepAction(reward, "claim"),
@@ -5060,7 +5065,7 @@ function ProfileClaimRow({
         description: `Receive ${reward.quoteAssetSymbol} at ${shortenAddress(reward.payoutAddress)}`,
         state: stockClaimState,
         disabled:
-          actionPending(stockClaimState) ||
+          actionSettling(stockClaimState) ||
           Boolean(ethActionActive) ||
           (claimable === 0n &&
             !actionCanCheckStatus(stockClaimState)),
@@ -5076,7 +5081,7 @@ function ProfileClaimRow({
         description: `Claim ${reward.quoteAssetSymbol}, then swap on Uniswap${estimate ? ` · ${estimate}` : ""}`,
         state: ethState,
         disabled:
-          actionPending(ethState) ||
+          actionSettling(ethState) ||
           Boolean(quoteActionActive) ||
           (claimable === 0n &&
             !actionCanCheckStatus(ethState) &&
@@ -5095,13 +5100,13 @@ function ProfileClaimRow({
   }
 
   const rowActionPending = claimGroups.some((group) =>
-    group.actions.some((action) => actionPending(action.state)),
+    group.actions.some((action) => actionSettling(action.state)),
   );
   const rowActionState = claimGroups
     .flatMap((group) => group.actions)
     .map((action) => action.state)
     .find(
-      (state) => actionPending(state) || actionCanCheckStatus(state),
+      (state) => actionSettling(state),
     );
 
   return (
@@ -5182,7 +5187,7 @@ function ProfileClaimRow({
       ))}
       {stockPairedClaims.map(({ reward, claimState, ethState }) => {
         const visibleState =
-          [claimState, ethState].find((state) => actionPending(state)) ??
+          [claimState, ethState].find((state) => actionSettling(state)) ??
           [claimState, ethState].find(
             (state) => state?.status === "confirmed",
           ) ??
