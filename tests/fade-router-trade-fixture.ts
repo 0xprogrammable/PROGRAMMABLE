@@ -7,7 +7,7 @@ const LAUNCH_ID =
   "0x6d6ed0e1e69a7cd6afa177e3454c9e32eed61cbd3f855ee56aff1915a6776fc2" as const;
 const STAMP_HASH =
   "0x5ef9eda88dc8269156b0bea01ae306f3e546b95f719ea17c821003aaa8e0c7e2" as const;
-const TOKEN = "0x69D278968AbF120F878F2E1E016Ab615D3686c19" as const;
+const TOKEN = "0x69D278968AbF120F878F2E1E016Ab615D3686c19" as const; // gitleaks:allow -- public Ethereum token address
 const HOOK = "0xd7451a039373f54e493deE42A751fEcBfAFBa0cc" as const;
 const POOL_ID =
   "0x6b6f0f8348bb08c7cbaa45cd48b4531e3a206ac7eabcc5355d9ffdd21c4b579a" as const;
