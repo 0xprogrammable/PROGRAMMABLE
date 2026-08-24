@@ -81,6 +81,7 @@ const mocks = vi.hoisted(() => ({
   mergeEntries: vi.fn(),
   customEnabled: vi.fn(),
   customDirectory: vi.fn(),
+  readRouter: vi.fn(),
   readChart: vi.fn(),
 }));
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -96,8 +97,25 @@ vi.mock("../lib/server/custom-launch/public-readiness", () => ({
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.customDirectory,
 }));
+vi.mock("../lib/alchemy/router-custom-public.server", () => ({
+  readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  routerCustomEntriesAtOrBeforeBlockV1: (entries: readonly unknown[]) => entries,
+  mergeRouterCustomExploreEntriesV1: (
+    existing: readonly unknown[],
+    router: readonly unknown[],
+  ) => [...existing, ...router],
+  publicLaunchSourceV1: (input: Readonly<{
+    registryCustomCurrent: boolean;
+    routerCustomCurrent: boolean;
+  }>) => [
+    "envio-classic-v3",
+    ...(input.registryCustomCurrent ? ["registry.custom-launched"] : []),
+    ...(input.routerCustomCurrent ? ["canonical-launch-stamp-router"] : []),
+  ].join("+"),
+}));
 
 import { GET } from "../app/api/explore/token/chart/route";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 function request(query = `address=${address}&range=1d`) {
   return new NextRequest(`http://localhost/api/explore/token/chart?${query}`);
@@ -110,6 +128,7 @@ describe("pool-bound token chart API", () => {
       source: "envio-classic-v3",
       status: "last-known-good",
       generatedAt: "2026-08-14T00:00:00.000Z",
+      asOfBlock: "25740000",
       entries: [token],
     });
     mocks.customEnabled.mockReturnValue(false);
@@ -118,6 +137,7 @@ describe("pool-bound token chart API", () => {
       ...canonical,
       ...custom,
     ]);
+    mocks.readRouter.mockResolvedValue([]);
     mocks.readChart.mockResolvedValue(chart);
   });
 
@@ -129,10 +149,13 @@ describe("pool-bound token chart API", () => {
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "envio-classic-v3",
+      "envio-classic-v3+canonical-launch-stamp-router",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "envio-classic-v3+bitquery",
+      "envio-classic-v3+canonical-launch-stamp-router+bitquery",
+    );
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "current",
     );
     expect(response.headers.get("x-programmable-data-quality")).toBe("current");
     expect(response.headers.get("x-programmable-market-provider")).toBe(
@@ -200,10 +223,10 @@ describe("pool-bound token chart API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "envio-classic-v3+registry.custom-launched",
+      "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "envio-classic-v3+registry.custom-launched+bitquery",
+      "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router+bitquery",
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(mocks.readChart).toHaveBeenCalledWith(expect.objectContaining({
@@ -273,10 +296,10 @@ describe("pool-bound token chart API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-programmable-launch-source")).toBe(
-      "envio-classic-v3",
+      "envio-classic-v3+canonical-launch-stamp-router",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
-      "envio-classic-v3+bitquery",
+      "envio-classic-v3+canonical-launch-stamp-router+bitquery",
     );
     expect(response.headers.get("x-programmable-data-quality")).toBe(
       "unavailable",
@@ -291,6 +314,46 @@ describe("pool-bound token chart API", () => {
       status: "unavailable",
       points: [],
     });
+  });
+
+  it("binds a Router-only Custom launch to its canonical provenance", async () => {
+    mocks.catalog.mockResolvedValue({
+      source: "envio-classic-v3",
+      asOfBlock: "25740000",
+      entries: [],
+    });
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    mocks.readChart.mockResolvedValue({
+      ...chart,
+      identity: {
+        ...chart.identity,
+        tokenAddress: customGraphExploreEntry.tokenAddress,
+        poolId: customGraphExploreEntry.poolId,
+      },
+    });
+
+    const response = await GET(request(
+      `address=${customGraphExploreEntry.tokenAddress}&range=1d`,
+    ));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router+bitquery",
+    );
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "current",
+    );
+    expect(mocks.readChart).toHaveBeenCalledWith(expect.objectContaining({
+      identity: expect.objectContaining({
+        tokenAddress: customGraphExploreEntry.tokenAddress,
+        poolId: customGraphExploreEntry.poolId,
+      }),
+      range: "1d",
+    }));
   });
 
   it("returns 404 for an address outside the committed identity catalog", async () => {
