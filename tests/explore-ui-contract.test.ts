@@ -40,7 +40,11 @@ describe("Explore UI contract", () => {
     expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
     expect(source).toContain('<ExploreModeSwitch active="token" />');
     expect(source).toContain("const eagerImage = !embedded");
-    expect(source).not.toContain("ExploreGridSkeleton");
+    expect(source).toContain("function ExploreGridSkeleton");
+    expect(source).toContain(
+      "<ExploreGridSkeleton count={EXPLORE_TOKENS_PER_PAGE} />",
+    );
+    expect(source).toContain('data-skeleton="true"');
     expect(source).toContain(
       'className={styles.loadingState} aria-busy="true"',
     );

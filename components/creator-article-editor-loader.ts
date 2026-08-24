@@ -7,7 +7,11 @@ export type CreatorProjectSummaryV1 = Readonly<{
   name: string;
   symbol: string | null;
   imageUrl: string | null;
-  source: "envio-classic-v3" | "registry.custom-launched" | "official-main-token";
+  source:
+    | "envio-classic-v3"
+    | "registry.custom-launched"
+    | "canonical-launch-stamp-router"
+    | "official-main-token";
   article: Readonly<{ revision: number; title: string; updatedAt: string }> | null;
 }>;
 

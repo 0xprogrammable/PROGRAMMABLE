@@ -2064,6 +2064,66 @@ function TokenLinkIcon({ kind }: { kind: TokenLink["kind"] }) {
   return <XBrandIcon />;
 }
 
+function ExploreCardSkeleton() {
+  return (
+    <article className={`${styles.runnerCard} ${styles.skeletonCard}`}>
+      <div className={styles.runnerHitArea}>
+        <div
+          className={`${styles.runnerArt} ${styles.skeletonArt}`}
+          data-skeleton="true"
+        />
+        <div className={styles.runnerBody}>
+          <div className={styles.runnerHeading}>
+            <span
+              className={`${styles.skeletonLine} ${styles.skeletonTitle}`}
+              data-skeleton="true"
+            />
+            <span
+              className={`${styles.skeletonLine} ${styles.skeletonSymbol}`}
+              data-skeleton="true"
+            />
+          </div>
+          <div className={styles.runnerData}>
+            <span>
+              <span
+                className={`${styles.skeletonLine} ${styles.skeletonLabel}`}
+                data-skeleton="true"
+              />
+              <span
+                className={`${styles.skeletonLine} ${styles.skeletonValue}`}
+                data-skeleton="true"
+              />
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className={styles.runnerMeta}>
+        <span
+          className={`${styles.skeletonLine} ${styles.skeletonCategory}`}
+          data-skeleton="true"
+        />
+        <span
+          className={`${styles.skeletonLine} ${styles.skeletonContract}`}
+          data-skeleton="true"
+        />
+      </div>
+    </article>
+  );
+}
+
+function ExploreGridSkeleton({ count }: Readonly<{ count: number }>) {
+  return (
+    <div
+      className={`${styles.runnerGrid} ${styles.skeletonGrid}`}
+      aria-hidden="true"
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <ExploreCardSkeleton key={index} />
+      ))}
+    </div>
+  );
+}
+
 function resultRangeLabel(payload: ExplorePayload | null) {
   if (!payload) return "Loading launch index";
   if (payload.status === "not-deployed") return "Explore unavailable";
@@ -2489,6 +2549,7 @@ export function ExploreView({
           <span className="sr-only" role="status">
             Loading launches
           </span>
+          <ExploreGridSkeleton count={EXPLORE_TOKENS_PER_PAGE} />
         </div>
       );
     }

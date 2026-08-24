@@ -2,9 +2,14 @@ import "server-only";
 
 import { getAddress, isAddress } from "viem";
 
+import { readFinalizedRouterCustomExploreEntriesV1 } from
+  "../../alchemy/router-custom-public.server";
 import { readEnvioClassicV3CatalogV1 } from
   "../../market-data/envio-classic-v3-catalog.server";
-import type { ExploreEntry } from "../../tokens";
+import {
+  isLaunchStampProvenanceV1,
+  type ExploreEntry,
+} from "../../tokens";
 import { readProductionCustomExploreDirectoryV1 } from
   "../custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
@@ -17,7 +22,11 @@ export type CreatorArticleAuthorityV1 = Readonly<{
   chainId: 1;
   tokenAddress: `0x${string}`;
   creatorAddress: `0x${string}`;
-  source: "envio-classic-v3" | "registry.custom-launched" | "official-main-token";
+  source:
+    | "envio-classic-v3"
+    | "registry.custom-launched"
+    | "canonical-launch-stamp-router"
+    | "official-main-token";
   name: string;
   symbol: string | null;
   imageUrl: string | null;
@@ -31,24 +40,28 @@ export interface CreatorArticleAuthorityReaderV1 {
 export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
   readClassic(signal: AbortSignal): Promise<readonly ExploreEntry[]>;
   readCustom(signal: AbortSignal): Promise<readonly ExploreEntry[]>;
+  readRouter(signal: AbortSignal): Promise<readonly ExploreEntry[]>;
 }>): CreatorArticleAuthorityReaderV1 {
   return Object.freeze({
     async read(signal: AbortSignal) {
-      const classic = await input.readClassic(signal);
-      let custom: readonly ExploreEntry[] = [];
-      try {
-        custom = await input.readCustom(signal);
-      } catch {
-        custom = [];
-      }
+      const [classic, custom, router] = await Promise.all([
+        input.readClassic(signal).catch(() => Object.freeze([])),
+        input.readCustom(signal).catch(() => Object.freeze([])),
+        input.readRouter(signal).catch(() => Object.freeze([])),
+      ]);
       const projects: CreatorArticleAuthorityV1[] = [];
       const seen = new Set<string>();
-      for (const entry of [...classic, ...custom]) {
+      const entries = [
+        ...classic.map((entry) => Object.freeze({ lane: "classic" as const, entry })),
+        ...custom.map((entry) => Object.freeze({ lane: "custom" as const, entry })),
+        ...router.map((entry) => Object.freeze({ lane: "router" as const, entry })),
+      ];
+      for (const { lane, entry } of entries) {
         if (!entry.tokenAddress || !isAddress(entry.tokenAddress)) continue;
         const tokenAddress = getAddress(entry.tokenAddress);
         let creatorAddress: `0x${string}` | null = null;
         let source: CreatorArticleAuthorityV1["source"] | null = null;
-        if (entry.exploreKind === "token") {
+        if (lane === "classic" && entry.exploreKind === "token") {
           if (!entry.creatorAddress || !isAddress(entry.creatorAddress)) continue;
           creatorAddress = getAddress(entry.creatorAddress);
           source = tokenAddress.toLowerCase() === MAIN_TOKEN
@@ -57,7 +70,7 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
                 && entry.launchModelVersion === "classic-v3"
               ? "envio-classic-v3"
               : null;
-        } else {
+        } else if (lane === "custom" && entry.exploreKind === "custom-project") {
           if (
             entry.chainId !== "1"
             || entry.launchingWallet.namespace !== "eip155:1"
@@ -65,8 +78,26 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
           ) continue;
           creatorAddress = getAddress(entry.launchingWallet.value);
           source = "registry.custom-launched";
+        } else if (
+          lane === "router"
+          && entry.exploreKind === "token"
+          && entry.launchModel === "custom-graph"
+          && entry.launchModelVersion === "programmable-launch-stamp-router-v1"
+          && entry.launchCategoryProvenance.category === "custom"
+          && entry.launchCategoryProvenance.source ===
+            "canonical-launch-stamp-router"
+          && entry.launchStampProvenance?.kind === "custom-graph"
+          && isLaunchStampProvenanceV1(entry.launchStampProvenance, {
+            chainId: 1,
+            tokenAddress,
+            hookAddress: entry.hookAddress,
+            poolId: entry.poolId,
+          })
+        ) {
+          creatorAddress = getAddress(entry.launchStampProvenance.launchWallet);
+          source = "canonical-launch-stamp-router";
         }
-        if (source === null) continue;
+        if (source === null || creatorAddress === null) continue;
         const key = tokenAddress.toLowerCase();
         if (seen.has(key)) throw new TypeError("Creator article token authority is ambiguous");
         seen.add(key);
@@ -99,6 +130,12 @@ CreatorArticleAuthorityReaderV1 {
     async readCustom(signal) {
       if (!isCustomLaunchRegistryPublicReadEnabled()) return Object.freeze([]);
       return readProductionCustomExploreDirectoryV1(signal);
+    },
+    async readRouter(signal) {
+      return readFinalizedRouterCustomExploreEntriesV1({
+        signal,
+        deadlineMs: Date.now() + 7_500,
+      });
     },
   });
 }

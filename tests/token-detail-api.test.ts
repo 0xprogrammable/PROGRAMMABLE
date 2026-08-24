@@ -53,6 +53,7 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
 
 import { GET } from "../app/api/explore/token/route";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
+import { fadeRouterTradeEntry } from "./fade-router-trade-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
 
@@ -283,6 +284,37 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3+canonical-launch-stamp-router",
     );
+  });
+
+  it("attaches a trade project only to the exact finalized FADE Router stamp", async () => {
+    mocks.readRouter.mockResolvedValue([fadeRouterTradeEntry]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...fadeRouterTradeEntry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: marketRead("unavailable"),
+    });
+
+    const response = await GET(request(fadeRouterTradeEntry.tokenAddress));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.token.tokenAddress).toBe(fadeRouterTradeEntry.tokenAddress);
+    expect(body.customProject).toBeNull();
+    expect(body.routerTradeProject).toMatchObject({
+      customProjectId:
+        "sha256:e7bf1306fc05ef655e3ebebe9566ff86c74b4de21465c3d836cbf3f497865c2d",
+      markets: [{
+        marketId: "fade-eth-v4",
+        poolId: fadeRouterTradeEntry.poolId,
+        tradeCapability: {
+          tradeCapabilityBindingHash:
+            "sha256:2bf52e6d8c476c5d7aa0cbb4724ef9e2e9e132b60c4ffdb5cb9522f89749bbff",
+          hookDataPolicy: { kind: "empty", data: "0x" },
+        },
+      }],
+    });
   });
 
   it("keeps known Envio identity visible when Router discovery fails", async () => {

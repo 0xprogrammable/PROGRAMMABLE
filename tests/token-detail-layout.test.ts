@@ -17,10 +17,12 @@ const chartSource = readFileSync(
 );
 
 describe("token detail layout", () => {
-  it("keeps loading quiet and avoids an unverified onchain price label", () => {
-    expect(detailSource).toContain("className={styles.loadingState}");
-    expect(detailSource).toContain("Loading\n        </div>");
-    expect(detailSource).not.toContain("className={styles.loadingArtwork}");
+  it("keeps loading shape-stable and avoids an unverified onchain price label", () => {
+    expect(detailSource).toContain(
+      'import { TokenDetailShell } from "@/components/token-detail-shell";',
+    );
+    expect(detailSource).toContain("return <TokenDetailShell />;");
+    expect(detailSource).not.toContain("Loading\n        </div>");
     expect(chartSource).not.toContain(': "Onchain"');
   });
 
@@ -99,12 +101,14 @@ describe("token detail layout", () => {
   });
 
   it("uses a compact read-only Router notice without shrinking live trade forms", () => {
-    expect(detailSource).toContain(
-      'isRouterStamped ? styles.routerNoticeShell : ""',
+    expect(detailSource).toMatch(
+      /isRouterStamped && !routerTradeAvailable\s*\? styles\.routerNoticeShell\s*:\s*""/s,
     );
     expect(detailSource).toContain('className={styles.routerNotice} role="status"');
     expect(detailSource).toContain("market availability");
     expect(detailSource).toContain("This page shows launch data only.");
+    expect(detailSource).toContain("routerTradeAvailable && routerTradeProject");
+    expect(detailSource).toContain("project={routerTradeProject}");
     expect(detailStyles).toMatch(
       /\.tradeShell\s*\{[^}]*min-height:\s*390px;/s,
     );

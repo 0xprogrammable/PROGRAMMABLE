@@ -29,7 +29,17 @@ export function CreatorArticle({
   article: CreatorArticleV1 | null;
   editAction?: ReactNode;
 }>) {
-  if (article === null) return null;
+  if (article === null) {
+    return editAction ? (
+      <div
+        className={styles.actionRow}
+        role="group"
+        aria-label="Project article actions"
+      >
+        {editAction}
+      </div>
+    ) : null;
+  }
   const headerContent = creatorArticleHeaderContentV1(article.document.content);
   const updated = new Intl.DateTimeFormat("en", {
     year: "numeric",

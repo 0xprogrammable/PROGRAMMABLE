@@ -1597,3 +1597,71 @@
     display: inline-flex;
   }
 }
+
+.skeletonCard {
+  pointer-events: none;
+}
+
+.skeletonArt {
+  background: var(--skeleton-base);
+}
+
+.skeletonLine {
+  border-radius: 999px;
+  display: block;
+}
+
+.skeletonTitle {
+  height: 25px;
+  width: min(62%, 172px);
+}
+
+.skeletonSymbol {
+  height: 12px;
+  margin-inline-start: 8px;
+  width: 42px;
+}
+
+.skeletonLabel {
+  height: 11px;
+  width: 66px;
+}
+
+.skeletonValue {
+  height: 13px;
+  margin-top: 4px;
+  width: 92px;
+}
+
+.skeletonCategory {
+  height: 11px;
+  width: 54px;
+}
+
+.skeletonContract {
+  height: 12px;
+  margin-inline-start: auto;
+  width: 92px;
+}
+
+@media (max-width: 700px) {
+  .skeletonGrid .runnerCard:nth-child(n + 5) {
+    display: none;
+  }
+
+  .skeletonTitle {
+    height: 20px;
+    width: 68%;
+  }
+
+  .skeletonSymbol {
+    height: 10px;
+    width: 30px;
+  }
+
+  .skeletonContract {
+    margin-inline-start: 0;
+    order: 3;
+    width: 80px;
+  }
+}

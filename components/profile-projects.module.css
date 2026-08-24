@@ -260,9 +260,26 @@
 }
 
 .copy span {
+  align-items: center;
   color: var(--muted, rgb(255 255 255 / 52%));
+  display: flex;
   font-size: 12px;
+  gap: 7px;
   font-weight: 540;
+}
+
+.launchType {
+  background: var(--profile-subtle, rgb(255 255 255 / 6%));
+  border: 1px solid var(--webde-line, rgb(255 255 255 / 10%));
+  border-radius: 999px;
+  color: var(--text-soft, rgb(255 255 255 / 62%));
+  flex: none;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.45;
+  padding-inline: 6px;
+  text-transform: uppercase;
 }
 
 .copy small,
@@ -273,6 +290,74 @@
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
+}
+
+.skeletonList {
+  display: grid;
+  gap: 3px;
+  min-height: 213px;
+}
+
+.skeletonProject {
+  align-items: center;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 42px minmax(0, 1fr) 104px;
+  min-height: 68px;
+  padding: 7px 8px;
+}
+
+.skeletonArt,
+.skeletonCopy span,
+.skeletonAction {
+  animation: profile-project-skeleton 1.4s ease-in-out infinite alternate;
+  background: color-mix(in srgb, var(--text, #fff) 9%, transparent);
+}
+
+.skeletonArt {
+  border-radius: 10px;
+  height: 42px;
+  width: 42px;
+}
+
+.skeletonCopy {
+  display: grid;
+  gap: 7px;
+  max-width: 260px;
+}
+
+.skeletonCopy span {
+  border-radius: 999px;
+  display: block;
+  height: 10px;
+  width: 68%;
+}
+
+.skeletonCopy span:first-child {
+  height: 13px;
+  width: 44%;
+}
+
+.skeletonAction {
+  border-radius: 10px;
+  height: 44px;
+}
+
+.visuallyHidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@keyframes profile-project-skeleton {
+  from { opacity: 0.48; }
+  to { opacity: 0.9; }
 }
 
 .initialBuy {
@@ -397,6 +482,14 @@
     padding-block: 9px;
   }
 
+  .skeletonProject {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .skeletonAction {
+    grid-column: 1 / -1;
+  }
+
   .actions {
     grid-column: 1 / -1;
   }
@@ -428,6 +521,12 @@
   }
 
   .openingProgress {
+    animation: none;
+  }
+
+  .skeletonArt,
+  .skeletonCopy span,
+  .skeletonAction {
     animation: none;
   }
 }

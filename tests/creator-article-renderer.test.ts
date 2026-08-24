@@ -51,6 +51,15 @@ describe("creator article public renderer", () => {
       .toBe("");
   });
 
+  it("keeps the create action reachable before the first article exists", () => {
+    const html = renderToStaticMarkup(createElement(CreatorArticle, {
+      article: null,
+      editAction: createElement("button", { type: "button" }, "Create article"),
+    }));
+    expect(html).toContain('aria-label="Project article actions"');
+    expect(html).toContain("Create article");
+  });
+
   it("recognizes common social providers and keeps an icon for unknown HTTPS links", () => {
     const provider = (creatorArticleRenderer as unknown as {
       creatorArticleLinkProviderV1(href: string): string;

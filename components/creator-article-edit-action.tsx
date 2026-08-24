@@ -46,6 +46,9 @@ export function CreatorArticleEditAction({
   const [editorOpen, setEditorOpen] = useState(false);
   const [error, setError] = useState("");
   const walletMatchesCreator = walletAccount === creatorAddress.toLowerCase();
+  const hasArticle = editorState
+    ? editorState.article !== null
+    : project.article !== null;
 
   const getAuthHeaders = useCallback(
     () => acquireCreatorArticleAuthHeadersV1({
@@ -121,7 +124,9 @@ export function CreatorArticleEditAction({
           onClick={() => void openEditor()}
         >
           <Pencil aria-hidden="true" size={15} strokeWidth={1.8} />
-          {opening ? "Opening…" : "Edit article"}
+          {opening
+            ? "Opening…"
+            : hasArticle ? "Edit article" : "Create article"}
         </button>
         {error ? <p className={styles.editActionError} role="alert">{error}</p> : null}
       </div>

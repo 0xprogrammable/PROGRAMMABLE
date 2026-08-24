@@ -15,6 +15,11 @@ import type {
   DiscoverableMarketTradeCapabilityV1,
 } from "../../custom-launch/contract-v2";
 import {
+  resolveRouterTradeAdapterV1,
+  routerTradeAdapterForProjectIdV1,
+  type RouterTradeAdapterV1,
+} from "../../custom-launch/router-trade-adapter-v1";
+import {
   CUSTOM_TRADE_RESPONSE_SCHEMA_V1,
   CustomMarketTradeInputErrorV1,
   CustomMarketTradeUnavailableErrorV1,
@@ -35,6 +40,8 @@ import {
   type CustomMarketTradeRequestV1,
 } from "../../custom-launch/trade-v1";
 import type { PreparedTradeTransaction } from "../../prepared-transaction";
+import { readFinalizedRouterCustomExploreEntriesV1 } from
+  "../../alchemy/router-custom-public.server";
 import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
 import {
   isCustomLaunchPublicEnabled,
@@ -84,6 +91,40 @@ function uint(value: unknown, label: string): bigint {
 function runtimeSha256(code: Hex): `sha256:${string}` {
   const bytes = Buffer.from(code.slice(2), "hex");
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+async function assertRouterAdapterRuntimeV1(
+  client: CustomMarketTradeRuntimeClientV1,
+  adapter: RouterTradeAdapterV1,
+) {
+  const targets = [
+    {
+      label: "FADE token",
+      address: getAddress(adapter.tokenAddress),
+      runtimeCodeKeccak256: adapter.tokenRuntimeCodeKeccak256,
+      runtimeCodeSha256: adapter.tokenRuntimeCodeSha256,
+    },
+    {
+      label: "FADE hook",
+      address: getAddress(adapter.hookAddress),
+      runtimeCodeKeccak256: adapter.hookRuntimeCodeKeccak256,
+      runtimeCodeSha256: adapter.hookRuntimeCodeSha256,
+    },
+  ] as const;
+  const codes = await Promise.all(targets.map(({ address }) =>
+    client.getCode({ address })));
+  for (let index = 0; index < targets.length; index += 1) {
+    const expected = targets[index]!;
+    const code = codes[index];
+    if (!code || code === "0x"
+      || keccak256(code).toLowerCase()
+        !== expected.runtimeCodeKeccak256.toLowerCase()
+      || runtimeSha256(code) !== expected.runtimeCodeSha256) {
+      throw new CustomMarketTradeUnavailableErrorV1(
+        `${expected.label} runtime code no longer matches the reviewed Router adapter`,
+      );
+    }
+  }
 }
 
 async function assertCapabilityRuntimeV1(
@@ -251,21 +292,61 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   client: CustomMarketTradeRuntimeClientV1;
   request: CustomMarketTradeRequestV1;
 }>): Promise<CustomMarketTradePreparationV1> {
-  if (!isCustomLaunchPublicEnabled() || !isCustomLaunchRegistryPublicReadEnabled()) {
-    throw new CustomMarketTradeUnavailableErrorV1("Custom launches are not public");
+  let projectId: `sha256:${string}`;
+  let projectChainId: string;
+  let projectChainProfileId: string;
+  let projectChainProfileHash: `sha256:${string}`;
+  let market: DiscoverableLaunchMarketV2 | undefined;
+  let routerAdapter: RouterTradeAdapterV1 | null = null;
+  const requestedRouterAdapter = routerTradeAdapterForProjectIdV1(
+    input.request.projectId,
+  );
+  if (requestedRouterAdapter !== null) {
+    const entries = await readFinalizedRouterCustomExploreEntriesV1({
+      signal: AbortSignal.timeout(10_000),
+    });
+    const matches = entries.flatMap((entry) => {
+      const adapter = resolveRouterTradeAdapterV1(entry);
+      return adapter === null ? [] : [adapter];
+    });
+    if (matches.length !== 1
+      || matches[0]!.projectId !== input.request.projectId) {
+      throw new CustomMarketTradeUnavailableErrorV1(
+        "The Router Custom project is not an exact finalized adapter",
+      );
+    }
+    routerAdapter = matches[0]!;
+    projectId = routerAdapter.projectId;
+    projectChainId = routerAdapter.chainId;
+    projectChainProfileId = routerAdapter.chainProfileId;
+    projectChainProfileHash = routerAdapter.chainProfileHash;
+    market = routerAdapter.market;
+  } else {
+    if (!isCustomLaunchPublicEnabled()
+      || !isCustomLaunchRegistryPublicReadEnabled()) {
+      throw new CustomMarketTradeUnavailableErrorV1(
+        "Custom launches are not public",
+      );
+    }
+    const target = getProductionWebsiteProjectionTargetV1();
+    await target.assertProductionReadiness();
+    const project = await target.registryCustomPublicStore
+      .findFinalizedCustomLaunchByProjectId({
+      projectId: input.request.projectId,
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (project === null) {
+      throw new CustomMarketTradeUnavailableErrorV1(
+        "The Custom project is not finalized",
+      );
+    }
+    projectId = project.projectId;
+    projectChainId = project.chainId;
+    projectChainProfileId = project.chainProfileId;
+    projectChainProfileHash = project.chainProfileHash;
+    market = project.discoverableMarkets.find(({ marketId }) =>
+      marketId === input.request.marketId);
   }
-  const target = getProductionWebsiteProjectionTargetV1();
-  await target.assertProductionReadiness();
-  const project = await target.registryCustomPublicStore
-    .findFinalizedCustomLaunchByProjectId({
-    projectId: input.request.projectId,
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (project === null) {
-    throw new CustomMarketTradeUnavailableErrorV1("The Custom project is not finalized");
-  }
-  const market = project.discoverableMarkets.find(({ marketId }) =>
-    marketId === input.request.marketId);
   const capability = market?.tradeCapability;
   if (market === undefined || capability === undefined) {
     throw new CustomMarketTradeUnavailableErrorV1(
@@ -274,10 +355,11 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   }
   if (market.status !== "active" || market.verification.status !== "verified"
     || market.uniswapV4 === null
-    || project.chainId !== String(input.request.chainId)
-    || capability.chainId !== project.chainId
-    || capability.chainProfileId !== project.chainProfileId
-    || capability.chainProfileHash !== project.chainProfileHash
+    || market.marketId !== input.request.marketId
+    || projectChainId !== String(input.request.chainId)
+    || capability.chainId !== projectChainId
+    || capability.chainProfileId !== projectChainProfileId
+    || capability.chainProfileHash !== projectChainProfileHash
     || capability.marketId !== market.marketId
     || capability.tradeCapabilityBindingHash
       !== input.request.tradeCapabilityBindingHash
@@ -298,6 +380,9 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   }
   customTradePoolKeyV1(capability);
   await assertCapabilityRuntimeV1(input.client, market, capability);
+  if (routerAdapter !== null) {
+    await assertRouterAdapterRuntimeV1(input.client, routerAdapter);
+  }
   const block = await input.client.getBlock();
   assertCustomTradeDeadlineV1(block.timestamp, BigInt(input.request.deadline), capability);
   const [stateView, quoted, nativeBalance, gasPrice] = await Promise.all([
@@ -332,7 +417,7 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   });
   const base = {
     schemaVersion: CUSTOM_TRADE_RESPONSE_SCHEMA_V1,
-    projectId: project.projectId,
+    projectId,
     marketId: market.marketId,
     tradeCapabilityBindingHash: capability.tradeCapabilityBindingHash,
     chainId: input.request.chainId,

@@ -23,6 +23,25 @@ describe("token detail initial server read", () => {
     expect(source).toContain("<Suspense fallback={<TokenDetailShell />}> ".trim());
     expect(source).toContain("<InitialTokenDetail address={address} />");
   });
+
+  it("keeps the token layout stable while the initial detail read is pending", () => {
+    const shell = readFileSync(
+      join(process.cwd(), "components/token-detail-shell.tsx"),
+      "utf8",
+    );
+
+    expect(shell).toContain('aria-busy="true"');
+    expect(shell).toContain("className={styles.navigationRow}");
+    expect(shell).toContain(
+      "`${styles.layout} ${styles.classicLayout} ${styles.detailSkeleton}`",
+    );
+    expect(shell).toContain("className={styles.identity}");
+    expect(shell).toContain("className={styles.marketChart}");
+    expect(shell).toContain("className={styles.tradeShell}");
+    expect(shell).toContain('data-skeleton="true"');
+    expect(shell).toContain("Loading token details");
+  });
+
   it("returns at the total deadline and consumes the aborted read", async () => {
     vi.useFakeTimers();
     let readSignal: AbortSignal | undefined;

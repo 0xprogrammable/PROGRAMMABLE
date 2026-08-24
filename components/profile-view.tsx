@@ -122,6 +122,7 @@ const creatorProfileCache = new Map<
 const CREATOR_PROFILE_CACHE_TTL_MS = 5 * 60_000;
 const MAX_CREATOR_PROFILE_CACHE_ENTRIES = 8;
 const PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000;
+export const MINIMUM_VISIBLE_NATIVE_CLAIM_WEI = 100_000_000_000_000n;
 type ReadyClassicV3Profile = Extract<
   ClassicV3ProfileRewards,
   { status: "ready" }
@@ -203,6 +204,7 @@ type ProfileClaimActionState = {
     | "wallet"
     | "confirming"
     | "pending"
+    | "not-found"
     | "confirmed"
     | "error";
   message: string;
@@ -216,6 +218,7 @@ type ClassicV3ActionState = {
     | "wallet"
     | "confirming"
     | "pending"
+    | "not-found"
     | "confirmed"
     | "error";
   message: string;
@@ -236,7 +239,12 @@ type StockPairedReceiptGate =
 
 export function resolveStockPairedReceiptGate(
   pendingStage: StockPairedPendingStage,
-  receiptStatus: "pending" | "confirmed" | "reverted" | "unavailable",
+  receiptStatus:
+    | "pending"
+    | "not-found"
+    | "confirmed"
+    | "reverted"
+    | "unavailable",
 ): StockPairedReceiptGate {
   if (receiptStatus === "confirmed") {
     return { outcome: "advance" };
@@ -256,6 +264,12 @@ export function resolveStockPairedReceiptGate(
     return {
       outcome: "hold",
       message: "Confirming on Ethereum",
+    };
+  }
+  if (receiptStatus === "not-found") {
+    return {
+      outcome: "hold",
+      message: "Transaction not found. Check your wallet activity.",
     };
   }
   return {
@@ -658,7 +672,7 @@ export async function waitForTransaction(
   transactionHash: Hex,
   chainId: number,
   options: WaitForTransactionOptions = {},
-): Promise<"pending" | "confirmed" | "reverted"> {
+): Promise<"pending" | "not-found" | "confirmed" | "reverted"> {
   const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 40));
   const intervalMs = options.intervalMs ?? 1_500;
   const fetcher = options.fetcher ?? fetch;
@@ -684,21 +698,44 @@ export async function waitForTransaction(
     );
     throwIfTransactionPollAborted(options.signal);
     const body = (await response.json()) as {
-      status?: "pending" | "confirmed" | "reverted";
+      status?: "pending" | "not-found" | "confirmed" | "reverted";
     };
     throwIfTransactionPollAborted(options.signal);
     if (!response.ok) {
       throw new Error("The transaction status could not be checked");
     }
+    if (
+      body.status !== "pending" &&
+      body.status !== "not-found" &&
+      body.status !== "confirmed" &&
+      body.status !== "reverted"
+    ) {
+      throw new Error("The transaction status response was invalid");
+    }
     if (body.status === "confirmed" || body.status === "reverted") {
       return body.status;
     }
+    if (attempt === maxAttempts - 1) return body.status;
     if (attempt < maxAttempts - 1) {
       await wait(intervalMs);
       throwIfTransactionPollAborted(options.signal);
     }
   }
   return "pending";
+}
+
+export function resolveProfileNotFoundTransaction(retryAllowed: boolean) {
+  return retryAllowed
+    ? Object.freeze({
+        release: true,
+        status: "error" as const,
+        message: "Transaction not found. You can try again.",
+      })
+    : Object.freeze({
+        release: false,
+        status: "not-found" as const,
+        message: "Transaction not found. Check your wallet activity.",
+      });
 }
 
 type RecoverableTransactionActionState = {
@@ -1857,7 +1894,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       imageUrl: token.imageUrl ?? null,
       source: token.address.toLowerCase() === PROGRAMMABLE_MAIN_TOKEN_ADDRESS
         ? "official-main-token" as const
-        : "envio-classic-v3" as const,
+        : token.launchProvenance === "canonical-router"
+          ? "canonical-launch-stamp-router" as const
+          : "envio-classic-v3" as const,
       article: null,
     })),
     [scopedOnchainData.tokens],
@@ -1913,6 +1952,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       revertedMessage,
       setActionState,
       manualCheck = false,
+      retryNotFound = false,
+      submittedAt,
       policy,
     }: {
       transactionHash: Hex;
@@ -1927,6 +1968,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         state: Omit<ProfileClaimActionState, "account">,
       ) => void;
       manualCheck?: boolean;
+      retryNotFound?: boolean;
+      submittedAt?: number;
       policy?: "stock-paired";
     }) => {
       const pendingTransaction: PendingProfileTransactionRecord = {
@@ -1937,7 +1980,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         stateKey,
         action,
         transactionHash,
-        submittedAt: Date.now(),
+        submittedAt: submittedAt ?? Date.now(),
       };
       persistPendingProfileTransaction(pendingTransaction);
       if (
@@ -1976,6 +2019,18 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           setActionState({
             status: "pending",
             message: "Confirming on Ethereum",
+            transactionHash,
+          });
+          return;
+        }
+        if (receiptStatus === "not-found") {
+          const resolution = resolveProfileNotFoundTransaction(retryNotFound);
+          if (resolution.release) {
+            forgetPendingProfileTransaction(pendingTransaction);
+          }
+          setActionState({
+            status: resolution.status,
+            message: resolution.message,
             transactionHash,
           });
           return;
@@ -2073,6 +2128,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             ? "Claim reverted"
             : "Payout update reverted",
         setActionState,
+        submittedAt: record.submittedAt,
+        manualCheck: Date.now() - record.submittedAt >= 60_000,
+        retryNotFound: Date.now() - record.submittedAt >= 60_000,
       }).finally(() => {
         autoResumingProfileTransactionsRef.current.delete(resumeKey);
       });
@@ -2110,7 +2168,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         existingState?.account.toLowerCase() === claimAccount.toLowerCase()
       ) {
         if (
-          existingState.status === "pending" &&
+          (existingState.status === "pending" ||
+            existingState.status === "not-found") &&
           existingState.transactionHash
         ) {
           await settleSubmittedTransaction({
@@ -2124,6 +2183,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             revertedMessage: "The claim reverted onchain",
             setActionState: setClaimState,
             manualCheck: true,
+            retryNotFound: existingState.status === "not-found",
           });
           return;
         }
@@ -2247,7 +2307,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         existingState?.account.toLowerCase() === actionAccount.toLowerCase()
       ) {
         if (
-          existingState.status === "pending" &&
+          (existingState.status === "pending" ||
+            existingState.status === "not-found") &&
           existingState.transactionHash
         ) {
           await settleSubmittedTransaction({
@@ -2264,6 +2325,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             revertedMessage: "The reward transaction reverted onchain",
             setActionState,
             manualCheck: true,
+            retryNotFound: existingState.status === "not-found",
           });
           return;
         }
@@ -2380,7 +2442,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         existingState?.account.toLowerCase() === actionAccount.toLowerCase()
       ) {
         if (
-          existingState.status === "pending" &&
+          (existingState.status === "pending" ||
+            existingState.status === "not-found") &&
           existingState.transactionHash
         ) {
           await settleSubmittedTransaction({
@@ -2397,6 +2460,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             revertedMessage: "The reward transaction reverted onchain",
             setActionState,
             manualCheck: true,
+            retryNotFound: existingState.status === "not-found",
           });
           return;
         }
@@ -2523,7 +2587,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
         if (action !== "claim-as-eth") {
           if (
-            scopedExistingState?.status === "pending" &&
+            (scopedExistingState?.status === "pending" ||
+              scopedExistingState?.status === "not-found") &&
             scopedExistingState.transactionHash
           ) {
             await settleSubmittedTransaction({
@@ -2540,6 +2605,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               revertedMessage: "The reward transaction reverted onchain",
               setActionState,
               manualCheck: true,
+              retryNotFound: scopedExistingState.status === "not-found",
               policy: action === "claim" ? "stock-paired" : undefined,
             });
             return;
@@ -2619,10 +2685,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           transactionHash,
           pendingStage,
           manualCheck,
+          retryNotFound = false,
         }: {
           transactionHash: Hex;
           pendingStage: StockPairedPendingStage;
           manualCheck: boolean;
+          retryNotFound?: boolean;
         }) => {
           const authoritativeClaimHash =
             claimTransactionHash ?? transactionHash;
@@ -2655,7 +2723,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             claimTransactionHash: authoritativeClaimHash,
             amountIn: rewardAmount,
           });
-          let receiptStatus: "pending" | "confirmed" | "reverted";
+          let receiptStatus:
+            | "pending"
+            | "not-found"
+            | "confirmed"
+            | "reverted";
           try {
             receiptStatus = await waitForTransaction(
               transactionHash,
@@ -2692,8 +2764,32 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             receiptStatus,
           );
           if (gate.outcome === "hold") {
+            if (receiptStatus === "not-found" && retryNotFound) {
+              const checkpoint = stockPairedCheckpointAfterReceipt(
+                pendingTransaction,
+                "reverted",
+              );
+              if (checkpoint) {
+                persistPendingProfileTransaction(checkpoint);
+              } else {
+                forgetPendingProfileTransaction(pendingTransaction);
+              }
+              setActionState({
+                status: "error",
+                message: "Transaction not found. You can try again.",
+                transactionHash,
+                ...(pendingStage === "claim"
+                  ? {}
+                  : {
+                      claimTransactionHash: authoritativeClaimHash,
+                      amountIn: rewardAmount,
+                    }),
+              });
+              return "reverted" as const;
+            }
             setActionState({
-              status: "pending",
+              status:
+                receiptStatus === "not-found" ? "not-found" : "pending",
               message: gate.message,
               transactionHash,
               pendingStage,
@@ -2739,7 +2835,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         const resumedStage = scopedExistingState?.pendingStage;
         let transactionHash = scopedExistingState?.transactionHash;
         if (
-          scopedExistingState?.status === "pending" &&
+          (scopedExistingState?.status === "pending" ||
+            scopedExistingState?.status === "not-found") &&
           transactionHash &&
           resumedStage
         ) {
@@ -2747,6 +2844,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             transactionHash,
             pendingStage: resumedStage,
             manualCheck: true,
+            retryNotFound: scopedExistingState.status === "not-found",
           });
           if (status !== "confirmed") return;
           if (resumedStage === "swap") {
@@ -4003,7 +4101,9 @@ function profileEntryHasActionableReward(
     actionStates,
   );
   return (
-    profileEntryActionableNativeWei(entry, account, actionStates) > 0n ||
+    profileNativeClaimMeetsVisibilityThreshold(
+      profileEntryActionableNativeWei(entry, account, actionStates),
+    ) ||
     stock.raw > 0n ||
     profileEntryHasVisibleClaimState(
       entry,
@@ -4014,6 +4114,10 @@ function profileEntryHasActionableReward(
       actionStates.stockPaired,
     )
   );
+}
+
+export function profileNativeClaimMeetsVisibilityThreshold(valueWei: bigint) {
+  return valueWei >= MINIMUM_VISIBLE_NATIVE_CLAIM_WEI;
 }
 
 export function profileHasRewardSurface(
@@ -4045,29 +4149,58 @@ export function profileRewardsForAccount<
 function ProfileSessionLoadingState() {
   return (
     <div className={`${styles.page} page-width`}>
-      <section
-        className={styles.profileLoadingState}
-        aria-busy="true"
-        aria-label="Restoring wallet profile"
-      >
-        <span className={styles.visuallyHidden} role="status">
-          Restoring wallet profile
-        </span>
-      </section>
+      <ProfileLoadingSkeleton label="Restoring wallet profile" showHero />
     </div>
   );
 }
 
 function ProfileLoadingState() {
+  return <ProfileLoadingSkeleton label="Loading profile" />;
+}
+
+function ProfileLoadingSkeleton({
+  label,
+  showHero = false,
+}: {
+  label: string;
+  showHero?: boolean;
+}) {
   return (
     <section
-      className={styles.profileLoadingState}
+      className={styles.profileSkeleton}
       aria-busy="true"
-      aria-label="Loading profile"
+      aria-label={label}
     >
       <span className={styles.visuallyHidden} role="status">
-        Loading profile
+        {label}
       </span>
+      {showHero ? (
+        <div className={styles.profileSkeletonHero} aria-hidden="true">
+          <span className={styles.profileSkeletonAvatar} />
+          <span className={styles.profileSkeletonCopy}>
+            <span />
+            <span />
+          </span>
+        </div>
+      ) : null}
+      <div className={styles.profileSkeletonWorkspace} aria-hidden="true">
+        <div className={styles.profileSkeletonSummary}>
+          <span className={styles.profileSkeletonHeading} />
+          <span className={styles.profileSkeletonMetric} />
+          <span className={styles.profileSkeletonLine} />
+          <span className={styles.profileSkeletonBar} />
+        </div>
+        <div className={styles.profileSkeletonClaims}>
+          <span className={styles.profileSkeletonHeading} />
+          {[0, 1].map((item) => (
+            <span className={styles.profileSkeletonRow} key={item}>
+              <span />
+              <span />
+              <span />
+            </span>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -4321,12 +4454,12 @@ function ProfileAccountWorkspace({
     claimableEntries,
     claimPage,
   );
-  const routerLaunchEntries = profileRouterLaunchEntries(entries);
   const emptyState =
     rewardDataQuality === "current"
       ? {
           title: "No rewards to claim",
-          description: "New claimable rewards will appear here.",
+          description:
+            "Rewards appear once a launch has at least 0.0001 ETH available.",
         }
       : rewardDataQuality === "stale"
         ? {
@@ -4344,8 +4477,6 @@ function ProfileAccountWorkspace({
       aria-label="Profile overview"
       aria-busy={loading || undefined}
     >
-      <ProfileRouterLaunches entries={routerLaunchEntries} />
-
       <div
         className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
@@ -4514,15 +4645,17 @@ export function actionPending(
   return (
     state?.status === "preparing" ||
     state?.status === "wallet" ||
-    state?.status === "confirming" ||
-    state?.status === "pending"
+    state?.status === "confirming"
   );
 }
 
 export function actionCanCheckStatus(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
 ) {
-  return state?.status === "pending" && Boolean(state.transactionHash);
+  return (
+    (state?.status === "pending" || state?.status === "not-found") &&
+    Boolean(state.transactionHash)
+  );
 }
 
 export function actionLabel(
@@ -4530,8 +4663,9 @@ export function actionLabel(
 ) {
   if (state?.status === "preparing") return "Preparing";
   if (state?.status === "wallet") return "Confirm in wallet";
-  if (state?.status === "confirming" || state?.status === "pending") {
-    return "Confirming";
+  if (state?.status === "confirming") return "Confirming";
+  if (state?.status === "pending" || state?.status === "not-found") {
+    return "Check status";
   }
   if (state?.status === "confirmed") return "Confirmed";
   if (state?.status === "error") return "Try again";
@@ -4963,6 +5097,12 @@ function ProfileClaimRow({
   const rowActionPending = claimGroups.some((group) =>
     group.actions.some((action) => actionPending(action.state)),
   );
+  const rowActionState = claimGroups
+    .flatMap((group) => group.actions)
+    .map((action) => action.state)
+    .find(
+      (state) => actionPending(state) || actionCanCheckStatus(state),
+    );
 
   return (
     <article className={styles.claimRow}>
@@ -5012,7 +5152,7 @@ function ProfileClaimRow({
           disabled={rowActionPending || claimGroups.length === 0}
           onClick={() => setClaimDialogOpen(true)}
         >
-          {rowActionPending ? "Claiming" : "Claim rewards"}
+          {rowActionState ? actionLabel(rowActionState) : "Claim rewards"}
         </button>
       </div>
 
@@ -5064,13 +5204,20 @@ function ProfileActionState({
 }: {
   state?: ProfileClaimActionState | ClassicV3ActionState;
 }) {
-  if (!state || (state.status !== "confirmed" && state.status !== "error")) {
+  if (
+    !state ||
+    (state.status !== "confirmed" &&
+      state.status !== "error" &&
+      state.status !== "not-found")
+  ) {
     return null;
   }
   return (
     <p
       className={
-        state.status === "error" ? styles.rowError : styles.actionState
+        state.status === "error" || state.status === "not-found"
+          ? styles.rowError
+          : styles.actionState
       }
       role={state.status === "error" ? "alert" : "status"}
     >
