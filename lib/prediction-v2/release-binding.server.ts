@@ -74,3 +74,17 @@ export function getPredictionV2ReleaseBinding(): PredictionV2ReleaseBinding {
   cachedReleaseBinding ??= parsePredictionV2ReleaseBinding(releaseBindingJson);
   return cachedReleaseBinding;
 }
+
+/**
+ * V1 has no activation schema, so it can never authorize a public V2 route.
+ * Activation must replace this guard with a separately reviewed exact parser
+ * bound to the deployed contracts and its attestation trust root.
+ */
+export function isPredictionV2ReleaseEnabled(): boolean {
+  try {
+    void getPredictionV2ReleaseBinding();
+  } catch {
+    return false;
+  }
+  return false;
+}

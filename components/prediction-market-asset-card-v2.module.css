@@ -1,0 +1,343 @@
+.card {
+  background: var(--webde-surface, #171717);
+  border: 1px solid var(--webde-line, rgb(255 255 255 / 11%));
+  border-radius: var(--webde-radius-card, 17px);
+  color: var(--webde-ink, #f7f3ed);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  transition:
+    background-color 180ms var(--webde-ease, ease),
+    border-color 180ms var(--webde-ease, ease),
+    box-shadow 180ms var(--webde-ease, ease),
+    transform 160ms var(--webde-ease, ease);
+  width: 100%;
+}
+
+.hitArea {
+  color: inherit;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  outline: 0;
+}
+
+.art {
+  aspect-ratio: 2.42 / 1;
+  background: #090909;
+  border-bottom: 1px solid var(--webde-line, rgb(255 255 255 / 11%));
+  contain: paint;
+  line-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.image {
+  background: #090909;
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: transform 240ms var(--webde-ease, ease);
+  width: 100%;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 154px;
+  min-width: 0;
+  padding: 18px 18px 15px;
+}
+
+.heading {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.heading :is(h2, h3) {
+  color: var(--webde-ink, #f7f3ed);
+  font-size: 22px;
+  font-weight: 580;
+  letter-spacing: -0.03em;
+  line-height: 1.14;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heading > span {
+  color: var(--webde-dim, #858585);
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.condition {
+  color: var(--webde-ink, #f7f3ed);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 580;
+  letter-spacing: -0.012em;
+  line-height: 1.35;
+  margin: 13px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.secondaryIntent {
+  color: var(--webde-dim, #858585);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 520;
+  line-height: 1.4;
+  margin: 6px 0 0;
+}
+
+.facts {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 19px 0 0;
+}
+
+.facts > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--webde-dim, #858585);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.facts dd {
+  color: var(--webde-muted, #b9b9b9);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  line-height: 1.3;
+  margin: 0;
+  min-width: 0;
+}
+
+.facts > div:last-child:not(:first-child) {
+  text-align: right;
+}
+
+.meta {
+  align-items: center;
+  border-top: 1px solid var(--webde-line, rgb(255 255 255 / 11%));
+  display: flex;
+  gap: 8px;
+  min-height: 48px;
+  min-width: 0;
+  padding: 1px 8px 1px 14px;
+}
+
+.metaFacts {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  min-width: 0;
+}
+
+.metaFacts > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.metaFacts dt {
+  color: var(--webde-dim, #858585);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.metaFacts dd {
+  color: var(--webde-muted, #b9b9b9);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.1;
+  margin: 0;
+  max-width: 15ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.socials {
+  align-items: center;
+  display: flex;
+  gap: 0;
+  margin-inline-start: auto;
+  min-height: 44px;
+}
+
+.socialLink {
+  align-items: center;
+  background: transparent;
+  border-radius: 7px;
+  color: var(--webde-dim, #858585);
+  display: inline-flex;
+  flex: none;
+  height: 44px;
+  justify-content: center;
+  outline: 0;
+  transition:
+    background-color 160ms var(--webde-ease, ease),
+    color 160ms var(--webde-ease, ease),
+    transform 140ms var(--webde-ease, ease);
+  width: 44px;
+}
+
+.socialLink svg {
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
+.hitArea:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--webde-ink, #f7f3ed);
+}
+
+.socialLink:focus-visible {
+  background: var(--webde-control, #242424);
+  outline: 2px solid var(--webde-ink, #f7f3ed);
+  outline-offset: 2px;
+}
+
+.socialLink:active {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:has(a.hitArea):hover {
+    background: var(--webde-surface-raised, #1d1d1d);
+    border-color: #505050;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 30%);
+    transform: translate3d(0, -2px, 0);
+  }
+
+  .card:has(a.hitArea):hover .image {
+    transform: scale(1.012);
+  }
+
+  .socialLink:hover {
+    background: var(--webde-control, #242424);
+    color: var(--webde-ink, #f7f3ed);
+  }
+}
+
+@media (max-width: 700px) {
+  .art {
+    aspect-ratio: 1.7 / 1;
+  }
+
+  .body {
+    min-height: 140px;
+    padding: 14px 12px 12px;
+  }
+
+  .heading :is(h2, h3) {
+    font-size: 17px;
+  }
+
+  .heading > span {
+    font-size: 10px;
+  }
+
+  .condition {
+    font-size: 13px;
+    margin-top: 10px;
+  }
+
+  .secondaryIntent {
+    font-size: 10px;
+  }
+
+  .facts {
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 13px;
+  }
+
+  .facts > div:last-child:not(:first-child) {
+    text-align: left;
+  }
+
+  .facts dt {
+    font-size: 10px;
+  }
+
+  .facts dd {
+    font-size: 11px;
+  }
+
+  .meta {
+    flex-wrap: wrap;
+    min-height: 76px;
+    padding: 0 4px 0 10px;
+  }
+
+  .metaFacts {
+    gap: 8px;
+  }
+
+  .metaFacts dd {
+    font-size: 10px;
+  }
+
+  .socials {
+    margin-inline-start: auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .meta {
+    align-content: center;
+  }
+
+  .socials {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-inline-start: -8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .image,
+  .socialLink {
+    transition-duration: 1ms;
+  }
+
+  .card:has(a.hitArea):hover,
+  .card:has(a.hitArea):hover .image {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .card {
+    border-color: CanvasText;
+  }
+
+  .hitArea:focus-visible,
+  .socialLink:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
