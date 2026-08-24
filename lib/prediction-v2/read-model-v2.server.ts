@@ -25,6 +25,7 @@ import {
 } from "./abi";
 import {
   bindPredictionV2MarketState,
+  predictionV2MarketId,
   predictionV2PoolId,
   predictionV2PoolStateSlot,
   predictionV2YesProbabilityBps,
@@ -36,7 +37,50 @@ import {
 } from "./codec";
 
 const PREDICTION_V2_CHAIN_ID = 4_663 as const;
-const PREDICTION_V2_MAXIMUM_PAGE_SIZE = 24;
+export const PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE = 8;
+
+const PREDICTION_V2_DUAL_PROVIDER_REQUESTS = 2;
+const PREDICTION_V2_SNAPSHOT_PROVIDER_REQUESTS = 4;
+const PREDICTION_V2_CURSOR_PROVIDER_REQUESTS = 2;
+const PREDICTION_V2_RELEASE_ENDPOINT_DUAL_CALLS = 9;
+const PREDICTION_V2_MARKET_KEY_DUAL_CALLS = 1;
+const PREDICTION_V2_MARKET_INITIAL_DUAL_CALLS = 2;
+const PREDICTION_V2_MARKET_WIRING_DUAL_CALLS = 31;
+const PREDICTION_V2_MARKET_DERIVATION_DUAL_CALLS = 2;
+const PREDICTION_V2_REVALIDATION_PROVIDER_REQUESTS = 2;
+
+const PREDICTION_V2_RELEASE_ENDPOINT_PROVIDER_REQUESTS =
+  PREDICTION_V2_RELEASE_ENDPOINT_DUAL_CALLS * PREDICTION_V2_DUAL_PROVIDER_REQUESTS;
+const PREDICTION_V2_MARKET_KEY_PROVIDER_REQUESTS =
+  PREDICTION_V2_MARKET_KEY_DUAL_CALLS * PREDICTION_V2_DUAL_PROVIDER_REQUESTS;
+const PREDICTION_V2_VERIFIED_MARKET_PROVIDER_REQUESTS =
+  (
+    PREDICTION_V2_MARKET_INITIAL_DUAL_CALLS +
+    PREDICTION_V2_MARKET_WIRING_DUAL_CALLS +
+    PREDICTION_V2_MARKET_DERIVATION_DUAL_CALLS
+  ) * PREDICTION_V2_DUAL_PROVIDER_REQUESTS;
+
+/** Exact worst-case logical reader calls for one same-snapshot market read. */
+export const PREDICTION_V2_TARGETED_MARKET_MAX_PROVIDER_REQUESTS =
+  PREDICTION_V2_SNAPSHOT_PROVIDER_REQUESTS +
+  PREDICTION_V2_RELEASE_ENDPOINT_PROVIDER_REQUESTS +
+  PREDICTION_V2_VERIFIED_MARKET_PROVIDER_REQUESTS +
+  PREDICTION_V2_REVALIDATION_PROVIDER_REQUESTS;
+
+/**
+ * Exact worst-case logical reader calls for one full public directory
+ * page. The cursor branch is included because it adds a dual historical-block
+ * check before the same endpoint, key, market and final reorg reads.
+ */
+export const PREDICTION_V2_DIRECTORY_MAX_PROVIDER_REQUESTS =
+  PREDICTION_V2_SNAPSHOT_PROVIDER_REQUESTS +
+  PREDICTION_V2_CURSOR_PROVIDER_REQUESTS +
+  PREDICTION_V2_RELEASE_ENDPOINT_PROVIDER_REQUESTS +
+  PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE * (
+    PREDICTION_V2_MARKET_KEY_PROVIDER_REQUESTS +
+    PREDICTION_V2_VERIFIED_MARKET_PROVIDER_REQUESTS
+  ) +
+  PREDICTION_V2_REVALIDATION_PROVIDER_REQUESTS;
 const PREDICTION_V2_MARKET_BATCH_SIZE = 4;
 const PREDICTION_V2_MAXIMUM_DUAL_CALLS_IN_FLIGHT = 8;
 const PREDICTION_V2_CUTOFF_BEFORE_OBSERVATION_SECONDS = 60n;
@@ -47,8 +91,8 @@ const HEX_PATTERN = /^0x(?:[0-9a-fA-F]{2})*$/u;
 const BYTES32_PATTERN = /^0x[0-9a-fA-F]{64}$/u;
 
 /**
- * Exact LifecycleHookV2 read closure from canonical V2 source commit
- * 2a6297b34a30aff3b945156d0dce94ff979861fd.
+ * Exact LifecycleHookV2 read closure. Public use additionally requires the
+ * signed V2 release binding to pin the reviewed source and runtime graph.
  */
 export const PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI = [
   {
@@ -87,8 +131,8 @@ export const PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI = [
 ] as const satisfies Abi;
 
 /**
- * Exact Router-facing Factory read from canonical V2 source commit
- * 2a6297b34a30aff3b945156d0dce94ff979861fd.
+ * Exact Router-facing Factory read closure. Its deployment target comes only
+ * from the signed V2 release binding.
  */
 export const PREDICTION_V2_FACTORY_CANONICAL_READ_ABI = [
   {
@@ -104,8 +148,8 @@ export const PREDICTION_V2_FACTORY_CANONICAL_READ_ABI = [
 ] as const satisfies Abi;
 
 /**
- * Exact ExecutionRouterV2 read closure from canonical V2 source commit
- * 2a6297b34a30aff3b945156d0dce94ff979861fd.
+ * Exact ExecutionRouterV2 read closure. Its deployment target comes only from
+ * the signed V2 release binding.
  */
 export const PREDICTION_V2_EXECUTION_ROUTER_READ_ABI = [
   {
@@ -262,6 +306,20 @@ export type PredictionV2ReadMarket = Readonly<{
   accountedLiability: bigint;
 }>;
 
+const VERIFIED_PREDICTION_V2_MARKETS = new WeakMap<
+  PredictionV2ReadMarket,
+  Readonly<{
+    chainId: typeof PREDICTION_V2_CHAIN_ID;
+    snapshot: PredictionV2SafeBlock;
+    binding: PredictionV2ReadBinding;
+  }>
+>();
+
+export type PredictionV2MarketAtSnapshotRead = Readonly<{
+  market: PredictionV2ReadMarket;
+  snapshot: PredictionV2SafeBlock;
+}>;
+
 export type PredictionV2QuarantinedMarket = Readonly<{
   index: bigint;
   economicKey: PredictionBytes32V2;
@@ -333,6 +391,60 @@ function invalidMarket(): never {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Runtime provenance boundary for value-bearing consumers. A structural clone,
+ * JSON round-trip, cast, or request body cannot impersonate a market returned
+ * by this module's completed dual-RPC wiring and reorg checks.
+ */
+function assertPredictionV2ReadMarketProvenance(
+  value: unknown,
+): asserts value is PredictionV2ReadMarket {
+  if (
+    !isRecord(value) ||
+    !VERIFIED_PREDICTION_V2_MARKETS.has(value as PredictionV2ReadMarket)
+  ) fail("Prediction V2 market lacks verified read-model provenance");
+}
+
+/**
+ * Exact provenance binding between a verified market, its read-block object,
+ * and the normalized signed-release read graph that produced it.
+ */
+export function assertPredictionV2ReadMarketAtSnapshotProvenance(
+  market: unknown,
+  snapshot: unknown,
+  binding: PredictionV2ReadBinding,
+): asserts market is PredictionV2ReadMarket {
+  assertPredictionV2ReadMarketProvenance(market);
+  const verified = VERIFIED_PREDICTION_V2_MARKETS.get(market);
+  if (!verified || verified.snapshot !== snapshot) {
+    fail("Prediction V2 market is not bound to this verified snapshot object");
+  }
+  const normalized = normalizeBinding(binding);
+  const expected = verified.binding;
+  if (
+    verified.chainId !== PREDICTION_V2_CHAIN_ID ||
+    expected.factory !== normalized.factory ||
+    expected.assetRegistry !== normalized.assetRegistry ||
+    expected.poolManager !== normalized.poolManager ||
+    expected.hook !== normalized.hook ||
+    expected.collateral !== normalized.collateral ||
+    expected.router !== normalized.router ||
+    expected.deploymentBlock !== normalized.deploymentBlock
+  ) fail("Prediction V2 market is not bound to this signed release read graph");
+}
+
+function bindPredictionV2ReadMarketProvenance(
+  market: PredictionV2ReadMarket,
+  snapshot: PredictionV2SafeBlock,
+  binding: NormalizedBinding,
+) {
+  VERIFIED_PREDICTION_V2_MARKETS.set(market, Object.freeze({
+    chainId: PREDICTION_V2_CHAIN_ID,
+    snapshot,
+    binding,
+  }));
 }
 
 function nonzeroAddress(value: unknown, label: string): Address {
@@ -471,8 +583,12 @@ export function predictionV2PageIndices(input: Readonly<{
   if (
     !Number.isInteger(input.limit) ||
     input.limit < 1 ||
-    input.limit > PREDICTION_V2_MAXIMUM_PAGE_SIZE
-  ) return fail("Prediction V2 page size must be between 1 and 24");
+    input.limit > PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE
+  ) {
+    return fail(
+      `Prediction V2 page size must be between 1 and ${PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE}`,
+    );
+  }
   const upperBound = input.nextExclusiveIndex ?? input.marketCount;
   if (upperBound < 0n || upperBound > input.marketCount) {
     return fail("Prediction V2 page cursor is outside the Factory range");
@@ -1057,6 +1173,7 @@ async function readVerifiedMarket(input: Readonly<{
 
   const localAssetKey = predictionOnchainAssetKeyV2(snapshot.identity);
   const localSnapshotHash = predictionV2RegistrySnapshotHash(snapshot);
+  const localMarketId = predictionV2MarketId(input.economicKey, localSnapshotHash);
   const localPoolId = predictionV2PoolId(poolKey);
   if (
     !sameAddress(collateral, input.binding.collateral) ||
@@ -1066,6 +1183,7 @@ async function readVerifiedMarket(input: Readonly<{
     !sameAddress(poolKey.hooks, input.binding.hook) ||
     !sameBytes32(vaultEconomicKey, input.economicKey) ||
     !sameBytes32(vaultMarketId, market.marketId) ||
+    !sameBytes32(localMarketId, market.marketId) ||
     !sameBytes32(vaultAssetKey, market.assetKey) ||
     vaultRegistryRevision !== market.registryRevision ||
     !sameBytes32(vaultRegistrySnapshotHash, market.registrySnapshotHash) ||
@@ -1179,7 +1297,7 @@ async function readVerifiedMarket(input: Readonly<{
     blockTimestamp: input.block.timestamp,
   });
   const yesIsCurrency0 = sameAddress(poolKey.currency0, yesToken);
-  return Object.freeze({
+  const verified = Object.freeze({
     economicKey: input.economicKey,
     marketId: market.marketId,
     assetKey: market.assetKey,
@@ -1224,57 +1342,51 @@ async function readVerifiedMarket(input: Readonly<{
     }),
     accountedLiability,
   });
+  return verified;
 }
 
-export async function readPredictionV2Directory(input: Readonly<{
-  readers: readonly [PredictionV2RpcReader, PredictionV2RpcReader];
-  binding: PredictionV2ReadBinding;
-  limit?: number;
-  cursor?: PredictionV2ReadCursor | null;
-  signal?: AbortSignal;
-}>): Promise<PredictionV2DirectoryRead> {
+function assertDistinctReaders(
+  readers: readonly [PredictionV2RpcReader, PredictionV2RpcReader],
+) {
   if (
-    input.readers.length !== 2 ||
-    input.readers[0] === input.readers[1] ||
-    typeof input.readers[0].readerId !== "string" ||
-    typeof input.readers[1].readerId !== "string" ||
-    input.readers[0].readerId.trim().length === 0 ||
-    input.readers[1].readerId.trim().length === 0 ||
-    input.readers[0].readerId === input.readers[1].readerId
+    readers.length !== 2 ||
+    readers[0] === readers[1] ||
+    typeof readers[0].readerId !== "string" ||
+    typeof readers[1].readerId !== "string" ||
+    readers[0].readerId.trim().length === 0 ||
+    readers[1].readerId.trim().length === 0 ||
+    readers[0].readerId === readers[1].readerId
   ) fail("Prediction V2 requires two distinct RPC readers");
-  const binding = normalizeBinding(input.binding);
-  const cursor = input.cursor ? normalizeCursor(input.cursor) : undefined;
-  const limit = input.limit ?? PREDICTION_V2_MAXIMUM_PAGE_SIZE;
-  const block = await resolveSnapshot({
+}
+
+async function readAndAssertReleaseEndpoints(input: Readonly<{
+  readers: readonly [PredictionV2RpcReader, PredictionV2RpcReader];
+  limiter: PredictionV2DualCallLimiter;
+  binding: NormalizedBinding;
+  block: PredictionV2SafeBlock;
+  signal?: AbortSignal;
+}>) {
+  const readFactory = (functionName: string) => readFunction({
     readers: input.readers,
-    binding,
-    ...(cursor ? { cursor } : {}),
+    limiter: input.limiter,
+    to: input.binding.factory,
+    abi: PREDICTION_V2_FACTORY_ABI,
+    functionName,
+    blockNumber: input.block.number,
+    blockHash: input.block.hash,
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  const limiter = new PredictionV2DualCallLimiter();
-
-  const readFactory = (functionName: string, args?: readonly unknown[]) =>
+  const readBound = (to: Address, abi: Abi, functionName: string) =>
     readFunction({
       readers: input.readers,
-      limiter,
-      to: binding.factory,
-      abi: PREDICTION_V2_FACTORY_ABI,
+      limiter: input.limiter,
+      to,
+      abi,
       functionName,
-      ...(args ? { args } : {}),
-      blockNumber: block.number,
-      blockHash: block.hash,
+      blockNumber: input.block.number,
+      blockHash: input.block.hash,
       ...(input.signal ? { signal: input.signal } : {}),
     });
-  const readBound = (to: Address, abi: Abi, functionName: string) => readFunction({
-    readers: input.readers,
-    limiter,
-    to,
-    abi,
-    functionName,
-    blockNumber: block.number,
-    blockHash: block.hash,
-    ...(input.signal ? { signal: input.signal } : {}),
-  });
   const [
     assetRegistryResult,
     managerResult,
@@ -1289,23 +1401,47 @@ export async function readPredictionV2Directory(input: Readonly<{
     readFactory("assetRegistry"),
     readFactory("manager"),
     readFactory("marketCount"),
-    readBound(binding.hook, PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI, "factory"),
     readBound(
-      binding.hook,
+      input.binding.hook,
+      PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI,
+      "factory",
+    ),
+    readBound(
+      input.binding.hook,
       PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI,
       "authorizedRouter",
     ),
-    readBound(binding.hook, PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI, "poolManager"),
-    readBound(binding.router, PREDICTION_V2_EXECUTION_ROUTER_READ_ABI, "factory"),
-    readBound(binding.router, PREDICTION_V2_EXECUTION_ROUTER_READ_ABI, "manager"),
-    readBound(binding.router, PREDICTION_V2_EXECUTION_ROUTER_READ_ABI, "collateral"),
+    readBound(
+      input.binding.hook,
+      PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI,
+      "poolManager",
+    ),
+    readBound(
+      input.binding.router,
+      PREDICTION_V2_EXECUTION_ROUTER_READ_ABI,
+      "factory",
+    ),
+    readBound(
+      input.binding.router,
+      PREDICTION_V2_EXECUTION_ROUTER_READ_ABI,
+      "manager",
+    ),
+    readBound(
+      input.binding.router,
+      PREDICTION_V2_EXECUTION_ROUTER_READ_ABI,
+      "collateral",
+    ),
   ]);
   const assetRegistry = decodeAddressResult(
     PREDICTION_V2_FACTORY_ABI,
     "assetRegistry",
     assetRegistryResult,
   );
-  const manager = decodeAddressResult(PREDICTION_V2_FACTORY_ABI, "manager", managerResult);
+  const manager = decodeAddressResult(
+    PREDICTION_V2_FACTORY_ABI,
+    "manager",
+    managerResult,
+  );
   const marketCount = decodeUnsignedResult(
     PREDICTION_V2_FACTORY_ABI,
     "marketCount",
@@ -1342,15 +1478,141 @@ export async function readPredictionV2Directory(input: Readonly<{
     routerCollateralResult,
   );
   if (
-    !sameAddress(assetRegistry, binding.assetRegistry) ||
-    !sameAddress(manager, binding.poolManager) ||
-    !sameAddress(hookFactory, binding.factory) ||
-    !sameAddress(hookRouter, binding.router) ||
-    !sameAddress(hookManager, binding.poolManager) ||
-    !sameAddress(routerFactory, binding.factory) ||
-    !sameAddress(routerManager, binding.poolManager) ||
-    !sameAddress(routerCollateral, binding.collateral)
+    !sameAddress(assetRegistry, input.binding.assetRegistry) ||
+    !sameAddress(manager, input.binding.poolManager) ||
+    !sameAddress(hookFactory, input.binding.factory) ||
+    !sameAddress(hookRouter, input.binding.router) ||
+    !sameAddress(hookManager, input.binding.poolManager) ||
+    !sameAddress(routerFactory, input.binding.factory) ||
+    !sameAddress(routerManager, input.binding.poolManager) ||
+    !sameAddress(routerCollateral, input.binding.collateral)
   ) fail("Prediction V2 release endpoints do not match the read binding");
+  return marketCount;
+}
+
+async function resolveExactSnapshot(input: Readonly<{
+  readers: readonly [PredictionV2RpcReader, PredictionV2RpcReader];
+  binding: NormalizedBinding;
+  snapshot: PredictionV2SafeBlock;
+  signal?: AbortSignal;
+}>) {
+  const expected = normalizeBlock(input.snapshot, "requested exact snapshot");
+  const [primaryChainId, secondaryChainId, primarySafe, secondarySafe] =
+    await Promise.all([
+      input.readers[0].getChainId(input.signal),
+      input.readers[1].getChainId(input.signal),
+      input.readers[0].getSafeBlock(input.signal),
+      input.readers[1].getSafeBlock(input.signal),
+    ]);
+  if (
+    primaryChainId !== PREDICTION_V2_CHAIN_ID ||
+    secondaryChainId !== PREDICTION_V2_CHAIN_ID
+  ) fail("A Prediction V2 RPC is not serving Robinhood Chain");
+  const primary = normalizeBlock(primarySafe, "primary exact safe");
+  const secondary = normalizeBlock(secondarySafe, "secondary exact safe");
+  assertSameBlock(primary, secondary);
+  if (!sameBlockIdentity(primary, expected)) {
+    fail("Prediction V2 readers are not leased to the requested exact snapshot");
+  }
+  if (expected.number < input.binding.deploymentBlock) {
+    fail("Prediction V2 exact snapshot predates the release deployment");
+  }
+  return expected;
+}
+
+/**
+ * Reads exactly one Factory market by economic key at an operation-leased
+ * snapshot. It reuses the same global endpoint and per-market wiring checks as
+ * the directory path, but never scans or trusts a caller-provided market row.
+ */
+export async function readPredictionV2MarketAtSnapshot(input: Readonly<{
+  readers: readonly [PredictionV2RpcReader, PredictionV2RpcReader];
+  binding: PredictionV2ReadBinding;
+  economicKey: PredictionBytes32V2;
+  snapshot: PredictionV2SafeBlock;
+  signal?: AbortSignal;
+}>): Promise<PredictionV2MarketAtSnapshotRead> {
+  assertDistinctReaders(input.readers);
+  const binding = normalizeBinding(input.binding);
+  const economicKey = nonzeroBytes32(input.economicKey, "economic key");
+  const block = await resolveExactSnapshot({
+    readers: input.readers,
+    binding,
+    snapshot: input.snapshot,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  const limiter = new PredictionV2DualCallLimiter();
+  await readAndAssertReleaseEndpoints({
+    readers: input.readers,
+    limiter,
+    binding,
+    block,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  let market: PredictionV2ReadMarket;
+  try {
+    market = await readVerifiedMarket({
+      readers: input.readers,
+      limiter,
+      binding,
+      economicKey,
+      block,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+  } catch (error) {
+    if (
+      error instanceof PredictionV2MarketWiringError ||
+      error instanceof PredictionV2DeterministicCallRevert
+    ) fail("Prediction V2 economic key is missing or not canonically wired");
+    throw error;
+  }
+  await revalidateSnapshot({
+    readers: input.readers,
+    block,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  bindPredictionV2ReadMarketProvenance(market, block, binding);
+  return Object.freeze({ market, snapshot: block });
+}
+
+export async function readPredictionV2Directory(input: Readonly<{
+  readers: readonly [PredictionV2RpcReader, PredictionV2RpcReader];
+  binding: PredictionV2ReadBinding;
+  limit?: number;
+  cursor?: PredictionV2ReadCursor | null;
+  signal?: AbortSignal;
+}>): Promise<PredictionV2DirectoryRead> {
+  assertDistinctReaders(input.readers);
+  const binding = normalizeBinding(input.binding);
+  const cursor = input.cursor ? normalizeCursor(input.cursor) : undefined;
+  const limit = input.limit ?? PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE;
+  const block = await resolveSnapshot({
+    readers: input.readers,
+    binding,
+    ...(cursor ? { cursor } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  const limiter = new PredictionV2DualCallLimiter();
+
+  const readFactory = (functionName: string, args?: readonly unknown[]) =>
+    readFunction({
+      readers: input.readers,
+      limiter,
+      to: binding.factory,
+      abi: PREDICTION_V2_FACTORY_ABI,
+      functionName,
+      ...(args ? { args } : {}),
+      blockNumber: block.number,
+      blockHash: block.hash,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+  const marketCount = await readAndAssertReleaseEndpoints({
+    readers: input.readers,
+    limiter,
+    binding,
+    block,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
   if (cursor && cursor.marketCount !== marketCount) {
     fail("Prediction V2 cursor market count changed");
   }
@@ -1421,6 +1683,9 @@ export async function readPredictionV2Directory(input: Readonly<{
       nextExclusiveIndex: page.nextExclusiveIndex,
     })
     : null;
+  for (const market of markets) {
+    bindPredictionV2ReadMarketProvenance(market, block, binding);
+  }
   return Object.freeze({
     schemaVersion: 2,
     chainId: PREDICTION_V2_CHAIN_ID,

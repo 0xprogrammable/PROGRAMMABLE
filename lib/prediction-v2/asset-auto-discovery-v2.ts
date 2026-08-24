@@ -2,6 +2,10 @@ import {
   normalizePredictionTokenProfileV2,
   type PredictionTokenProfileV2,
 } from "./token-profile-v2";
+import {
+  isCanonicalPredictionAssetLogoCapabilityV2,
+  type PredictionAssetLogoProxyV2,
+} from "./asset-logo-v2";
 
 export const PREDICTION_ASSET_AUTO_DISCOVERY_IDENTITY_SOURCE_V2 =
   "onchain-rpc" as const;
@@ -65,6 +69,8 @@ export type PredictionAssetAutoDiscoveryClientCandidateV2 = Readonly<{
   fdvUsd: number | null;
   matchingPairCount: number;
   pair: PredictionAssetAutoDiscoveryClientPairV2 | null;
+  /** Server-issued display transport. Never persisted as canonical artwork. */
+  logoProxy: PredictionAssetLogoProxyV2 | null;
   /** Verified identity plus optional display-only provider enrichment. */
   profile: PredictionTokenProfileV2;
 }>;
@@ -400,7 +406,7 @@ function parseCandidate(
     "matchingPairCount",
     "pair",
     "links",
-  ]);
+  ], ["logoProxy"]);
   if (!candidate) return null;
 
   const selection = exactRecord(candidate.selection, [
@@ -477,7 +483,6 @@ function parseCandidate(
     address: token.address,
     name: token.name,
     symbol: token.symbol,
-    imageUrl: links.imageUrl,
     websites: links.websites,
     socials: links.socials,
     priceUsd: currentPriceUsd,
@@ -491,6 +496,10 @@ function parseCandidate(
     profile.chain.id !== binding.sourceNetwork ||
     profile.address !== locator
   ) return null;
+  const logoProxy = provenance.enrichment !== null &&
+      Object.hasOwn(candidate, "logoProxy")
+    ? parseLogoProxy(candidate.logoProxy)
+    : null;
 
   return Object.freeze({
     selectionKey: expectedSelectionKey,
@@ -508,7 +517,25 @@ function parseCandidate(
     fdvUsd,
     matchingPairCount: candidate.matchingPairCount as number,
     pair,
+    logoProxy,
     profile,
+  });
+}
+
+function parseLogoProxy(
+  value: unknown,
+): PredictionAssetLogoProxyV2 | null {
+  if (value === null) return null;
+  const proxy = exactRecord(value, ["assetId", "capability"]);
+  if (
+    !proxy ||
+    typeof proxy.assetId !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(proxy.assetId) ||
+    !isCanonicalPredictionAssetLogoCapabilityV2(proxy.capability)
+  ) return null;
+  return Object.freeze({
+    assetId: proxy.assetId,
+    capability: proxy.capability,
   });
 }
 
@@ -604,29 +631,24 @@ function parsePair(
 }
 
 type ParsedLinksV2 = Readonly<{
-  imageUrl: string | null;
   websites: readonly Readonly<{ label: string | null; url: string }>[];
   socials: readonly Readonly<{ type: string | null; url: string }>[];
 }>;
 
 function parseLinks(value: unknown): ParsedLinksV2 | null {
-  const links = exactRecord(value, ["imageUrl", "websites", "socials"]);
-  if (!links || !nullableBoundedString(links.imageUrl, MAX_URL_LENGTH_V2)) {
-    return null;
-  }
+  const links = exactRecord(value, ["websites", "socials"]);
+  if (!links) return null;
   const websites = parseLinkRows(links.websites, "label");
   const socials = parseLinkRows(links.socials, "type");
   if (websites === null || socials === null) return null;
   return Object.freeze({
-    imageUrl: links.imageUrl as string | null,
     websites,
     socials,
   });
 }
 
 function linksAreEmpty(links: ParsedLinksV2) {
-  return links.imageUrl === null &&
-    links.websites.length === 0 &&
+  return links.websites.length === 0 &&
     links.socials.length === 0;
 }
 

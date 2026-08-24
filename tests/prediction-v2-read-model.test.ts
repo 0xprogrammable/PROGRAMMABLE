@@ -29,17 +29,23 @@ import {
   type PredictionV2RegistrySnapshot,
 } from "../lib/prediction-v2/abi";
 import {
+  predictionV2MarketId,
   predictionV2PoolId,
 } from "../lib/prediction-v2/accounting";
 import {
   predictionV2RegistrySnapshotHash,
 } from "../lib/prediction-v2/codec";
 import {
+  PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE,
+  PREDICTION_V2_DIRECTORY_MAX_PROVIDER_REQUESTS,
   PREDICTION_V2_EXECUTION_ROUTER_READ_ABI,
   PREDICTION_V2_FACTORY_CANONICAL_READ_ABI,
   PREDICTION_V2_LIFECYCLE_HOOK_READ_ABI,
+  PREDICTION_V2_TARGETED_MARKET_MAX_PROVIDER_REQUESTS,
+  assertPredictionV2ReadMarketAtSnapshotProvenance,
   predictionV2PageIndices,
   readPredictionV2Directory,
+  readPredictionV2MarketAtSnapshot,
   type PredictionV2ReadBinding,
   type PredictionV2ReadCall,
   type PredictionV2RpcReader,
@@ -67,7 +73,6 @@ const AGGREGATOR = address(13);
 
 const ECONOMIC_KEY = bytes32(101);
 const OTHER_ECONOMIC_KEY = bytes32(102);
-const MARKET_ID = bytes32(103);
 const POLICY_VALID_UNTIL = 5_000n;
 const ASSET_CAP = 20_000_000n;
 const THRESHOLD = 100_000_000n;
@@ -117,6 +122,7 @@ const snapshot = Object.freeze({
   policy,
 }) satisfies PredictionV2RegistrySnapshot;
 const SNAPSHOT_HASH = predictionV2RegistrySnapshotHash(snapshot);
+const MARKET_ID = predictionV2MarketId(ECONOMIC_KEY, SNAPSHOT_HASH);
 const POLICY_HASH = policy.checkpointKind;
 const poolKey = Object.freeze({
   currency0: YES_TOKEN,
@@ -174,6 +180,7 @@ function decodedCall(abi: Abi, data: Hex) {
 class FixtureReader implements PredictionV2RpcReader {
   readonly readerId: string;
   readonly calls: PredictionV2ReadCall[] = [];
+  providerRequests = 0;
   readonly #block: PredictionV2SafeBlock;
   readonly #chainId: number;
   readonly #marketCount: bigint;
@@ -197,14 +204,17 @@ class FixtureReader implements PredictionV2RpcReader {
   }
 
   async getChainId() {
+    this.providerRequests += 1;
     return this.#chainId;
   }
 
   async getSafeBlock() {
+    this.providerRequests += 1;
     return this.#block;
   }
 
   async getBlock(blockNumber: bigint) {
+    this.providerRequests += 1;
     const configured = this.#blockReads[this.#blockReadIndex];
     this.#blockReadIndex += 1;
     if (configured !== undefined) return configured;
@@ -212,6 +222,7 @@ class FixtureReader implements PredictionV2RpcReader {
   }
 
   async call(request: PredictionV2ReadCall) {
+    this.providerRequests += 1;
     this.calls.push(request);
     const callProbe = this.#callProbe;
     if (callProbe) {
@@ -438,12 +449,110 @@ function deterministicMarketRevert(economicKey: PredictionBytes32V2) {
 }
 
 describe("Prediction V2 bounded Factory read model", () => {
+  it("reads one economic key only at the exact operation-leased snapshot", async () => {
+    const pair = readers();
+    const result = await readPredictionV2MarketAtSnapshot({
+      readers: pair,
+      binding,
+      economicKey: ECONOMIC_KEY,
+      snapshot: BLOCK,
+    });
+    const { market } = result;
+
+    expect(market).toMatchObject({
+      economicKey: ECONOMIC_KEY,
+      marketId: MARKET_ID,
+      vault: VAULT,
+      checkpoint: CHECKPOINT,
+    });
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      market,
+      result.snapshot,
+      binding,
+    )).not.toThrow();
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      market,
+      { ...result.snapshot },
+      binding,
+    )).toThrow("not bound to this verified snapshot object");
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      market,
+      { ...result.snapshot, hash: bytes32(998) },
+      binding,
+    )).toThrow("not bound to this verified snapshot object");
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      market,
+      result.snapshot,
+      { ...binding, factory: address(998) },
+    )).toThrow("not bound to this signed release read graph");
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      { ...market },
+      result.snapshot,
+      binding,
+    ))
+      .toThrow("lacks verified read-model provenance");
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      JSON.parse(JSON.stringify({ economicKey: market.economicKey })),
+      result.snapshot,
+      binding,
+    )).toThrow("lacks verified read-model provenance");
+    for (const reader of pair) {
+      expect(reader.calls.every(({ blockNumber }) => blockNumber === BLOCK.number))
+        .toBe(true);
+      expect(reader.calls.every(({ blockHash }) => blockHash === BLOCK.hash))
+        .toBe(true);
+      expect(reader.calls.some(({ to, data }) =>
+        to.toLowerCase() === FACTORY.toLowerCase() &&
+        decodedCall(PREDICTION_V2_FACTORY_TEST_ABI, data).functionName ===
+          "marketKeyAt"
+      )).toBe(false);
+    }
+    expect(pair[0].providerRequests + pair[1].providerRequests).toBe(
+      PREDICTION_V2_TARGETED_MARKET_MAX_PROVIDER_REQUESTS,
+    );
+  });
+
+  it("rejects wrong or missing economic keys and readers leased to another snapshot", async () => {
+    await expect(readPredictionV2MarketAtSnapshot({
+      readers: readers(),
+      binding,
+      economicKey: OTHER_ECONOMIC_KEY,
+      snapshot: BLOCK,
+    })).rejects.toThrow("missing or not canonically wired");
+
+    const missing = deterministicMarketRevert(OTHER_ECONOMIC_KEY);
+    await expect(readPredictionV2MarketAtSnapshot({
+      readers: readers({
+        primary: { deterministicRevert: missing },
+        secondary: { deterministicRevert: missing },
+      }),
+      binding,
+      economicKey: OTHER_ECONOMIC_KEY,
+      snapshot: BLOCK,
+    })).rejects.toThrow("missing or not canonically wired");
+
+    const otherBlock = Object.freeze({
+      ...BLOCK,
+      hash: bytes32(991),
+      parentHash: bytes32(990),
+    });
+    await expect(readPredictionV2MarketAtSnapshot({
+      readers: readers({
+        primary: { block: otherBlock },
+        secondary: { block: otherBlock },
+      }),
+      binding,
+      economicKey: ECONOMIC_KEY,
+      snapshot: BLOCK,
+    })).rejects.toThrow("not leased to the requested exact snapshot");
+  });
+
   it("reads one fully cross-bound market at one agreed safe block", async () => {
     const pair = readers();
     const result = await readPredictionV2Directory({
       readers: pair,
       binding,
-      limit: 24,
+      limit: PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE,
     });
 
     expect(result).toMatchObject({
@@ -484,6 +593,11 @@ describe("Prediction V2 bounded Factory read model", () => {
         },
       }],
     });
+    expect(() => assertPredictionV2ReadMarketAtSnapshotProvenance(
+      result.markets[0],
+      result.snapshot,
+      binding,
+    )).not.toThrow();
     for (const reader of pair) {
       expect(reader.calls.length).toBeGreaterThan(25);
       expect(reader.calls.every(({ blockNumber }) => blockNumber === BLOCK.number))
@@ -514,15 +628,15 @@ describe("Prediction V2 bounded Factory read model", () => {
     }
   });
 
-  it("bounds newest-first pagination to 1..24 and emits a snapshot-bound cursor", async () => {
+  it("bounds newest-first pagination to 1..8 and emits a snapshot-bound cursor", async () => {
     expect(predictionV2PageIndices({ marketCount: 27n, limit: 3 })).toEqual({
       indices: [26n, 25n, 24n],
       nextExclusiveIndex: 24n,
     });
     expect(() => predictionV2PageIndices({ marketCount: 1n, limit: 0 }))
-      .toThrow("between 1 and 24");
-    expect(() => predictionV2PageIndices({ marketCount: 25n, limit: 25 }))
-      .toThrow("between 1 and 24");
+      .toThrow("between 1 and 8");
+    expect(() => predictionV2PageIndices({ marketCount: 9n, limit: 9 }))
+      .toThrow("between 1 and 8");
 
     const pair = readers({
       primary: { marketCount: 2n, marketKeys: [OTHER_ECONOMIC_KEY, ECONOMIC_KEY] },
@@ -541,6 +655,32 @@ describe("Prediction V2 bounded Factory read model", () => {
       marketCount: 2n,
       nextExclusiveIndex: 1n,
     });
+  });
+
+  it("keeps the exact directory provider budget synchronized with every read branch", async () => {
+    const pair = readers();
+    const result = await readPredictionV2Directory({
+      readers: pair,
+      binding,
+      limit: PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE,
+      cursor: {
+        schemaVersion: 2,
+        blockNumber: BLOCK.number,
+        blockHash: BLOCK.hash,
+        marketCount: 1n,
+        nextExclusiveIndex: 1n,
+      },
+    });
+
+    expect(result.markets).toHaveLength(1);
+    // 26 fixed cursor-path requests plus 72 for one fully verified market.
+    expect(pair[0].providerRequests + pair[1].providerRequests).toBe(98);
+    expect(PREDICTION_V2_DIRECTORY_MAX_PROVIDER_REQUESTS).toBe(
+      26 + 72 * PREDICTION_V2_DIRECTORY_MAX_PAGE_SIZE,
+    );
+    expect(pair[0].providerRequests + pair[1].providerRequests).toBeLessThanOrEqual(
+      PREDICTION_V2_DIRECTORY_MAX_PROVIDER_REQUESTS,
+    );
   });
 
   it("rejects chain, safe-block and raw same-block RPC disagreement globally", async () => {
@@ -683,6 +823,10 @@ describe("Prediction V2 bounded Factory read model", () => {
 
   it.each([
     ["Factory/Vault identity", { "vault.economicKey": bytes32(800) }],
+    ["locally derived market id", {
+      "factory.marketId": bytes32(803),
+      "vault.marketId": bytes32(803),
+    }],
     ["Registry snapshot", { "factory.registrySnapshotHash": bytes32(801) }],
     ["Checkpoint policy", { "checkpoint.policyHash": bytes32(802) }],
     ["terminal checkpoint health", {

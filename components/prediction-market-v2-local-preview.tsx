@@ -150,7 +150,6 @@ function rawCandidate(fixture: FixtureDefinition) {
       pairCreatedAt: fixture.pairCreatedAt,
     },
     links: {
-      imageUrl: null,
       websites: [{ label: "Website", url: "https://programmable.market" }],
       socials: [{ type: "twitter", url: "https://x.com/0xprogrammable" }],
     },

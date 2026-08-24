@@ -10,6 +10,8 @@ const EVM_ADDRESS = `0x${"ab".repeat(20)}`;
 const OTHER_EVM_ADDRESS = `0x${"ef".repeat(20)}`;
 const SOLANA_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SOLANA_PAIR = "So11111111111111111111111111111111111111112";
+const IMAGE_ASSET_ID = "12".repeat(32);
+const LOGO_CAPABILITY = `v2.preview-1.1800000600.${"a".repeat(43)}`;
 
 const NETWORKS = {
   ethereum: {
@@ -90,7 +92,6 @@ function candidate(
       pairCreatedAt: Date.parse("2026-08-21T18:00:00.000Z"),
     },
     links: {
-      imageUrl: "https://cdn.example.com/token.png#provider",
       websites: [{ label: "Website", url: "https://token.example.com" }],
       socials: [
         { type: "twitter", url: "https://twitter.com/example?s=20" },
@@ -118,7 +119,7 @@ function identityOnlyCandidate(sourceNetwork: Network = "base") {
       identity: { source: "onchain-rpc" },
       enrichment: null,
     },
-    links: { imageUrl: null, websites: [], socials: [] },
+    links: { websites: [], socials: [] },
   });
 }
 
@@ -171,7 +172,6 @@ describe("prediction V2 asset auto-discovery client contract", () => {
         symbol: "BAD SYMBOL",
       },
       links: {
-        imageUrl: "http://cdn.example.com/insecure.png",
         websites: [
           { label: "bad", url: "javascript:alert(1)" },
           { label: "site", url: "https://token.example.com/docs#top" },
@@ -211,6 +211,7 @@ describe("prediction V2 asset auto-discovery client contract", () => {
         marketCapUsd: 4_200_000,
         fdvUsd: 5_000_000,
         matchingPairCount: 2,
+        logoProxy: null,
         profile: {
           schemaVersion: 2,
           chain: { id: "base", reference: "8453", label: "Base" },
@@ -245,6 +246,49 @@ describe("prediction V2 asset auto-discovery client contract", () => {
     expect(parsed && parsed.status === "unique" && parsed.candidate)
       .not.toHaveProperty("settlementEligible");
     expect(Object.isFrozen(parsed)).toBe(true);
+  });
+
+  it("accepts a server-derived projection without exposing a provider URL", () => {
+    const parsed = parsePredictionAssetAutoDiscoveryV2(unique("base", {
+      links: {
+        websites: [],
+        socials: [],
+      },
+      logoProxy: {
+        assetId: IMAGE_ASSET_ID,
+        capability: LOGO_CAPABILITY,
+      },
+    }));
+
+    expect(parsed).toMatchObject({
+      status: "unique",
+      candidate: {
+        logoProxy: {
+          assetId: IMAGE_ASSET_ID,
+          capability: LOGO_CAPABILITY,
+        },
+      },
+    });
+    if (!parsed || parsed.status !== "unique") throw new Error("unreachable");
+    expect(parsed.candidate.profile).not.toHaveProperty("logoUrl");
+
+    expect(parsePredictionAssetAutoDiscoveryV2(unique("base", {
+      links: { websites: [], socials: [] },
+      logoProxy: {
+        assetId: IMAGE_ASSET_ID,
+        capability: `v1.preview-1.${"a".repeat(43)}`,
+      },
+    }))).toMatchObject({
+      status: "unique",
+      candidate: { logoProxy: null },
+    });
+    expect(parsePredictionAssetAutoDiscoveryV2(unique("base", {
+      links: { websites: [], socials: [] },
+      logoProxy: { unexpected: true },
+    }))).toMatchObject({
+      status: "unique",
+      candidate: { logoProxy: null },
+    });
   });
 
   it("binds the response to the exact submitted locator", () => {
@@ -617,7 +661,6 @@ describe("prediction V2 asset auto-discovery client contract", () => {
   it("bounds link arrays and rejects zero token or pair identities", () => {
     expect(parsePredictionAssetAutoDiscoveryV2(unique("base", {
       links: {
-        imageUrl: null,
         websites: Array.from({ length: 9 }, (_, index) => ({
           label: null,
           url: `https://site-${index}.example.com`,

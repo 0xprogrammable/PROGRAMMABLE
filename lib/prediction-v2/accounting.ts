@@ -5,6 +5,7 @@ import {
   isAddress,
   keccak256,
   parseAbiParameters,
+  toBytes,
   zeroAddress,
   type Address,
   type Hex,
@@ -29,6 +30,10 @@ import {
 } from "./codec";
 
 export type PredictionV2Outcome = "YES" | "NO";
+
+export const PREDICTION_V2_MARKET_ID_DOMAIN = keccak256(
+  toBytes("PROGRAMMABLE_PREDICTION_MARKET_V2"),
+) as PredictionBytes32V2;
 
 export type PredictionV2PriceImpact = Readonly<{
   currentProbabilityBps: number;
@@ -199,6 +204,24 @@ export function predictionV2PoolId(poolKeyInput: PredictionV2PoolKey): Predictio
   return keccak256(encodeAbiParameters(
     parseAbiParameters("address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks"),
     [poolKey.currency0, poolKey.currency1, poolKey.fee, poolKey.tickSpacing, poolKey.hooks],
+  )) as PredictionBytes32V2;
+}
+
+/** Exact parity with MarketDeployerV2.marketIdOf. */
+export function predictionV2MarketId(
+  economicKeyInput: PredictionBytes32V2,
+  registrySnapshotHashInput: PredictionBytes32V2,
+): PredictionBytes32V2 {
+  const economicKey = nonzeroBytes32(economicKeyInput, "economic key");
+  const registrySnapshotHash = nonzeroBytes32(
+    registrySnapshotHashInput,
+    "Registry snapshot hash",
+  );
+  return keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "bytes32 domain, bytes32 economicKey, bytes32 registrySnapshotHash",
+    ),
+    [PREDICTION_V2_MARKET_ID_DOMAIN, economicKey, registrySnapshotHash],
   )) as PredictionBytes32V2;
 }
 

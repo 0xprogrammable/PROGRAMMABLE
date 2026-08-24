@@ -48,6 +48,15 @@ import {
   type PredictionPermitSignature,
 } from "@/lib/prediction-market";
 import {
+  submitPredictionV2Eip1193TransactionV2,
+  submitPredictionV2PrivyTransactionV2,
+  type ParsedPredictionV2PreparedTransactionV2,
+  type PredictionV2Eip1193ProviderV2,
+} from "@/lib/prediction-v2/client-api-v2";
+import {
+  getPredictionV2PreparedTransactionReviewV2,
+} from "@/lib/prediction-v2/prepared-transaction-v2";
+import {
   buildEip1193TransactionRequest,
   buildPrivyTransactionRequest,
   getPreparedTransactionReview,
@@ -141,6 +150,9 @@ type WalletContextValue = {
     value: `0x${string}`;
   }>) => Promise<Hex>;
   sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
+  sendPredictionV2Transaction: (
+    transaction: ParsedPredictionV2PreparedTransactionV2,
+  ) => Promise<Hex>;
   readNativeBalance: () => Promise<WalletNativeBalance>;
   readTradeBalances: (token: `0x${string}`) => Promise<WalletTradeBalances>;
 };
@@ -866,6 +878,9 @@ function DeferredWalletProvider({
       sendTransaction: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
+      sendPredictionV2Transaction: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
       readNativeBalance: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
@@ -1081,14 +1096,16 @@ function PrivyWalletBridge({
     authenticated: activeAuthenticated,
     privyUserId: user?.id ?? null,
     account: wallet?.account ?? null,
+    walletCapability: connectedWallet ?? null,
   });
   useEffect(() => {
     walletRequestSessionRef.current = {
       authenticated: activeAuthenticated,
       privyUserId: user?.id ?? null,
       account: wallet?.account ?? null,
+      walletCapability: connectedWallet ?? null,
     };
-  }, [activeAuthenticated, user?.id, wallet?.account]);
+  }, [activeAuthenticated, connectedWallet, user?.id, wallet?.account]);
   const providerSettled = isWalletProviderSettled(
     ready,
     walletsReady,
@@ -1526,6 +1543,117 @@ function PrivyWalletBridge({
     [connectedWallet, sendPrivyTransaction, user?.id, wallet],
   );
 
+  const sendPredictionV2Transaction = useCallback(
+    async (prepared: ParsedPredictionV2PreparedTransactionV2) => {
+      if (!connectedWallet || !wallet) {
+        throw new Error("Connect an Ethereum wallet before continuing");
+      }
+      const sessionSubject = user?.id ?? null;
+      if (sessionSubject === null) {
+        throw new Error("Your wallet session expired. Reconnect and try again");
+      }
+      const boundWallet = connectedWallet;
+      const expectedAccount = wallet.account.toLowerCase();
+      const isEmbeddedWallet =
+        boundWallet.walletClientType === "privy" ||
+        boundWallet.walletClientType === "privy-v2";
+      const assertCurrentSession = () => {
+        const current = walletRequestSessionRef.current;
+        if (
+          !current.authenticated ||
+          current.privyUserId !== sessionSubject ||
+          current.account?.toLowerCase() !== expectedAccount
+        ) {
+          throw new Error("The wallet session changed. Reconnect and try again");
+        }
+        if (current.walletCapability !== boundWallet) {
+          throw new Error("The selected wallet changed. Review and try again");
+        }
+      };
+
+      try {
+        return await runWithBrowserWalletRequestLock({
+          sessionSubject,
+          account: wallet.account,
+          chainId: String(robinhoodChain.id),
+          requestSubject: "prediction-v2-branded-wallet-submit",
+          assertCurrentSession,
+          execute: async () => {
+            assertCurrentSession();
+            const provider = await boundWallet.getEthereumProvider();
+            assertCurrentSession();
+            const checkedProvider: PredictionV2Eip1193ProviderV2 = {
+              request: async (request) => {
+                assertCurrentSession();
+                const result = await provider.request({
+                  method: request.method,
+                  ...(request.params === undefined
+                    ? {}
+                    : { params: Array.from(request.params) }),
+                });
+                assertCurrentSession();
+                return result;
+              },
+            };
+
+            if (isEmbeddedWallet) {
+              const review = getPredictionV2PreparedTransactionReviewV2(
+                prepared.action,
+              );
+              return submitPredictionV2PrivyTransactionV2({
+                prepared,
+                connected: async () => {
+                  assertCurrentSession();
+                  await assertExternalWalletAuthorityCurrent({
+                    expectedAccount: wallet.account,
+                    expectedChainId: robinhoodChainHex,
+                    networkName: robinhoodChain.name,
+                    request: (method) => checkedProvider.request({ method }),
+                  });
+                  assertCurrentSession();
+                  return {
+                    account: wallet.account,
+                    chainId: robinhoodChain.id,
+                    wallet: boundWallet,
+                  };
+                },
+                send: async (submission) => {
+                  assertCurrentSession();
+                  if (submission.wallet !== boundWallet) {
+                    throw new Error(
+                      "The selected wallet changed. Review and try again",
+                    );
+                  }
+                  const result = await sendPrivyTransaction(
+                    submission.transaction,
+                    {
+                      address: submission.account,
+                      uiOptions: {
+                        description: review.description,
+                        buttonText: review.buttonText,
+                        successHeader: review.successHeader,
+                      },
+                    },
+                  );
+                  assertCurrentSession();
+                  return result.hash;
+                },
+              });
+            }
+
+            return submitPredictionV2Eip1193TransactionV2({
+              prepared,
+              provider: checkedProvider,
+            });
+          },
+        });
+      } catch (caught) {
+        throw new Error(getWalletTransactionErrorMessage(caught));
+      }
+    },
+    [connectedWallet, sendPrivyTransaction, user?.id, wallet],
+  );
+
   const signPredictionPermit = useCallback(async (input: Readonly<{
     deadline: bigint;
     factoryAddress: Address;
@@ -1939,6 +2067,7 @@ function PrivyWalletBridge({
       signPredictionTokenPermit,
       sendBrowserWalletAction,
       sendTransaction,
+      sendPredictionV2Transaction,
       readNativeBalance,
       readTradeBalances,
     }),
@@ -1963,6 +2092,7 @@ function PrivyWalletBridge({
       refreshApplicantSession,
       reauthorizeGithub,
       sendBrowserWalletAction,
+      sendPredictionV2Transaction,
       sendTransaction,
       signLaunchMessage,
       signPredictionPermit,
@@ -2051,6 +2181,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendTransaction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      sendPredictionV2Transaction: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       readNativeBalance: async () => {

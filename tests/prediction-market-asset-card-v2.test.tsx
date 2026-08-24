@@ -6,16 +6,20 @@ import { describe, expect, it } from "vitest";
 import {
   PredictionMarketAssetCardV2,
   PredictionMarketAssetPreviewCardV2,
-  bindPredictionMarketAssetCardStateV2,
   predictionAssetConditionLabelV2,
   predictionAssetResultTimeLabelV2,
   predictionMarketAssetCardHrefV2,
-  type PredictionMarketAssetCardStateV2,
 } from "../components/prediction-market-asset-card-v2";
 import { predictionAssetCardImageV2 } from
   "../lib/prediction-v2/asset-logo-v2";
+import type { PredictionV2BaseMarketView } from
+  "../lib/prediction-v2/base-market-view-v2";
 import type { PredictionV2CreateReview } from
   "../lib/prediction-v2/create-flow-v2";
+import {
+  enrichPredictionV2BaseMarketView,
+  type PredictionV2EnrichedMarketView,
+} from "../lib/prediction-v2/enriched-market-view-v2";
 import type { PublicPredictionMarketViewV2 } from
   "../lib/prediction-v2/public-market-view-v2";
 import type { PredictionTokenProfileV2 } from
@@ -23,31 +27,97 @@ import type { PredictionTokenProfileV2 } from
 
 const ADDRESS = `0x${"ab".repeat(20)}`;
 const OTHER_ADDRESS = `0x${"cd".repeat(20)}`;
-const MARKET_ID = `0x${"22".repeat(32)}` as `0x${string}`;
-const MARKET_KEY =
-  `eip155:4663:0x${"11".repeat(20)}:0x${"21".repeat(32)}` as const;
+const FACTORY = `0x${"11".repeat(20)}`;
+const MARKET_ID = `0x${"22".repeat(32)}` as const;
+const ECONOMIC_KEY = `0x${"21".repeat(32)}` as const;
+const MARKET_KEY = `eip155:4663:${FACTORY}:${ECONOMIC_KEY}` as const;
 const CONFIRMED_BLOCK_NUMBER = "9100020";
-const CONFIRMED_BLOCK_HASH = `0x${"24".repeat(32)}` as `0x${string}`;
+const CONFIRMED_BLOCK_HASH = `0x${"24".repeat(32)}` as const;
 const ARTWORK_DIGEST = "33".repeat(32);
 const PROVIDER_ASSET_ID = "12".repeat(32);
+const LOGO_CAPABILITY = `v2.preview-1.1800000000.${"a".repeat(43)}`;
+const LOGO_PROXY = Object.freeze({
+  assetId: PROVIDER_ASSET_ID,
+  capability: LOGO_CAPABILITY,
+});
 
-const PUBLIC_MARKET = Object.freeze({
+const OPEN_LIFECYCLE = Object.freeze({
+  protocolState: "OPEN",
+  checkpointStatus: "AWAITING",
+  tradingPhase: "OPEN",
+  tradable: true,
+  tradabilityReason: "tradable",
+  checkpointTradingHealthy: true,
+  resolvedPrice: 0n,
+} as const);
+
+const BASE_MARKET = Object.freeze({
+  schemaVersion: 2,
+  source: "dual-rpc-onchain",
+  marketKey: MARKET_KEY,
+  marketId: MARKET_ID,
+  economicKey: ECONOMIC_KEY,
+  asset: Object.freeze({
+    kind: "token",
+    presetId: null,
+    sourceNetwork: "base",
+    chainLabel: "Base",
+    address: ADDRESS,
+    explorerUrl: `https://basescan.org/token/${ADDRESS}`,
+    name: null,
+    symbol: "EXAMPLE",
+  }),
+  condition: Object.freeze({
+    kind: "usd-price-at-utc",
+    metric: "usd-price",
+    comparator: "greater-than-or-equal",
+    quoteCurrency: "USD",
+    strikeAtoms: "1000000",
+    priceDecimals: 8,
+    observationUnixSeconds: "1788112800",
+    observationUtc: "2026-08-30T18:00:00.000Z",
+    oracleSnapshotRule: Object.freeze({
+      source: "chainlink-data-feed",
+      winningPrice: "latest-completed-round-at-or-before-observation",
+      requiredAfterRound: "first-completed-round-after-observation",
+      maximumBeforeAgeSeconds: "90000",
+      maximumAfterDelaySeconds: "90000",
+    }),
+  }),
+  lifecycle: OPEN_LIFECYCLE,
+  poolState: Object.freeze({
+    sqrtPriceX96: 1n << 96n,
+    tick: 0,
+    poolManagerProtocolFee: 0,
+    lpFee: 200,
+    yesProbabilityBps: 5_000,
+  }),
+  artwork: Object.freeze({
+    kind: "bundled-fallback",
+    url: "/brand/programmable-token-fallback-01-dawn.webp",
+  }),
+  links: Object.freeze([]) as readonly [],
+  onchain: Object.freeze({
+    releaseId: "prediction-v2.release-1",
+    settlementChainId: 4_663,
+    factoryAddress: FACTORY,
+    factoryRuntimeCodeHash: `0x${"41".repeat(32)}`,
+    assetKey: `0x${"13".repeat(32)}`,
+    registryRevision: "7",
+    registrySnapshotHash: `0x${"23".repeat(32)}`,
+    resolutionPolicyHash: `0x${"28".repeat(32)}`,
+    vaultAddress: `0x${"31".repeat(20)}`,
+    checkpointAddress: `0x${"32".repeat(20)}`,
+    poolId: `0x${"27".repeat(32)}`,
+    confirmedBlockNumber: CONFIRMED_BLOCK_NUMBER,
+    confirmedBlockHash: CONFIRMED_BLOCK_HASH,
+  }),
+} as const) satisfies PredictionV2BaseMarketView;
+
+const PUBLIC_ENRICHMENT = Object.freeze({
   schemaVersion: 2,
   marketKey: MARKET_KEY,
   marketId: MARKET_ID,
-  attestedProjection: Object.freeze({
-    releaseId: "prediction-v2-test",
-    settlementChainId: "4663",
-    factoryAddress: `0x${"11".repeat(20)}`,
-    factoryRuntimeCodeHash: `0x${"12".repeat(32)}`,
-    economicKey: `0x${"21".repeat(32)}`,
-    onchainAssetKey: `0x${"13".repeat(32)}`,
-    registryRevision: "7",
-    registrySnapshotHash: `0x${"23".repeat(32)}`,
-    confirmedBlockNumber: CONFIRMED_BLOCK_NUMBER,
-    confirmedBlockHash: CONFIRMED_BLOCK_HASH,
-    attestorAddress: `0x${"14".repeat(20)}`,
-  }),
   asset: Object.freeze({
     sourceNetwork: "base",
     chainLabel: "Base",
@@ -64,32 +134,10 @@ const PUBLIC_MARKET = Object.freeze({
     strikeUsd: "0.01",
     strikeAtoms: "1000000",
     priceDecimals: 8,
-    observationUtc: "2026-08-30T18:00:00Z",
+    observationUtc: "2026-08-30T18:00:00.000Z",
     observationUnixSeconds: "1788112800",
     timezone: "UTC",
   }),
-  creationIntent: null,
-  artwork: Object.freeze({
-    kind: "owned-provider-snapshot",
-    url: `/media/prediction/sha256-${ARTWORK_DIGEST}.webp`,
-    digest: `sha256:${ARTWORK_DIGEST}`,
-    contentType: "image/webp",
-    sourceAssetId: PROVIDER_ASSET_ID,
-  }),
-  links: Object.freeze([
-    Object.freeze({ kind: "website", url: "https://example.com/" }),
-    Object.freeze({ kind: "x", url: "https://x.com/example" }),
-    Object.freeze({ kind: "telegram", url: "https://t.me/example" }),
-  ]),
-  presentation: Object.freeze({
-    revision: "1",
-    revisionHash: `sha256:${"44".repeat(32)}`,
-    observedAt: "2026-08-23T18:00:00.000Z",
-  }),
-} as const) satisfies PublicPredictionMarketViewV2;
-
-const PUBLIC_MARKET_WITH_INTENT = Object.freeze({
-  ...PUBLIC_MARKET,
   creationIntent: Object.freeze({
     kind: "market-cap-equivalent",
     settlementRole: "secondary-non-settlement",
@@ -120,23 +168,43 @@ const PUBLIC_MARKET_WITH_INTENT = Object.freeze({
       referenceMetricSnapshot: null,
     }),
   }),
-} as const) satisfies PublicPredictionMarketViewV2;
-
-const CARD_STATE = Object.freeze({
-  schemaVersion: 2,
-  marketKey: MARKET_KEY,
-  marketId: MARKET_ID,
-  snapshot: Object.freeze({
+  artwork: Object.freeze({
+    kind: "owned-provider-snapshot",
+    url: `/media/prediction/sha256-${ARTWORK_DIGEST}.webp`,
+    digest: `sha256:${ARTWORK_DIGEST}`,
+    contentType: "image/webp",
+    sourceAssetId: PROVIDER_ASSET_ID,
+  }),
+  links: Object.freeze([
+    Object.freeze({ kind: "website", url: "https://example.com/" }),
+    Object.freeze({ kind: "x", url: "https://x.com/example" }),
+    Object.freeze({ kind: "telegram", url: "https://t.me/example" }),
+  ]),
+  presentation: Object.freeze({
+    revision: "1",
+    revisionHash: `sha256:${"44".repeat(32)}`,
+    observedAt: "2026-08-23T18:00:00.000Z",
+  }),
+  attestedProjection: Object.freeze({
+    releaseId: BASE_MARKET.onchain.releaseId,
     settlementChainId: "4663",
+    factoryAddress: FACTORY,
+    factoryRuntimeCodeHash: BASE_MARKET.onchain.factoryRuntimeCodeHash,
+    economicKey: ECONOMIC_KEY,
+    onchainAssetKey: BASE_MARKET.onchain.assetKey,
+    registryRevision: BASE_MARKET.onchain.registryRevision,
+    registrySnapshotHash: BASE_MARKET.onchain.registrySnapshotHash,
     confirmedBlockNumber: CONFIRMED_BLOCK_NUMBER,
     confirmedBlockHash: CONFIRMED_BLOCK_HASH,
+    attestorAddress: `0x${"14".repeat(20)}`,
   }),
-  lifecycle: "open",
-  probability: Object.freeze({
-    status: "available",
-    yesProbabilityBps: 6_270,
-  }),
-} as const satisfies PredictionMarketAssetCardStateV2);
+} as const) satisfies PublicPredictionMarketViewV2;
+
+const BASE_ONLY = enrichPredictionV2BaseMarketView(BASE_MARKET, null);
+const ENRICHED = enrichPredictionV2BaseMarketView(
+  BASE_MARKET,
+  PUBLIC_ENRICHMENT,
+);
 
 const PROFILE = {
   schemaVersion: 2,
@@ -146,7 +214,7 @@ const PROFILE = {
   name: "Example Coin",
   symbol: "EXAMPLE",
   logoUrl: `https://cdn.dexscreener.com/cms/images/${PROVIDER_ASSET_ID}`,
-  links: PUBLIC_MARKET.links,
+  links: PUBLIC_ENRICHMENT.links,
 } as const satisfies PredictionTokenProfileV2;
 
 const CREATION_SNAPSHOT = {
@@ -191,49 +259,55 @@ const REVIEW = {
 } as const satisfies PredictionV2CreateReview;
 
 type PublicCardProps = Parameters<typeof PredictionMarketAssetCardV2>[0];
-type PublicRawInputKeys = Extract<
+type PublicIndependentTrustKeys = Extract<
   keyof PublicCardProps,
-  "profile" | "review" | "href" | "status" | "lifecycle" | "probability"
+  | "cardState"
+  | "lifecycle"
+  | "probability"
+  | "snapshot"
+  | "profile"
+  | "review"
+  | "href"
+  | "status"
+  | "transaction"
+  | "preparedTransaction"
+  | "calldata"
+  | "wallet"
+  | "account"
 >;
-const PUBLIC_CARD_HAS_NO_RAW_INPUTS: PublicRawInputKeys extends never
-  ? true
-  : false = true;
-const PUBLIC_CARD_REQUIRES_BOUND_STATE: "cardState" extends keyof PublicCardProps
-  ? true
-  : false = true;
+const PUBLIC_CARD_HAS_NO_INDEPENDENT_TRUST_INPUTS:
+  PublicIndependentTrustKeys extends never ? true : false = true;
+const PUBLIC_CARD_ACCEPTS_ENRICHED_VIEW:
+  PublicCardProps["market"] extends PredictionV2EnrichedMarketView
+    ? true
+    : false = true;
 
 function renderPublicCard(
-  cardState: PredictionMarketAssetCardStateV2 = CARD_STATE,
-  market: PublicPredictionMarketViewV2 = PUBLIC_MARKET_WITH_INTENT,
+  market: PredictionV2EnrichedMarketView = ENRICHED,
 ) {
-  return renderToStaticMarkup(
-    <PredictionMarketAssetCardV2 cardState={cardState} market={market} />,
-  );
+  return renderToStaticMarkup(<PredictionMarketAssetCardV2 market={market} />);
+}
+
+function withLifecycle(
+  lifecycle: PredictionV2EnrichedMarketView["lifecycle"],
+): PredictionV2EnrichedMarketView {
+  return Object.freeze({
+    ...BASE_ONLY,
+    lifecycle: Object.freeze(lifecycle),
+  });
 }
 
 describe("PredictionMarketAssetCardV2", () => {
-  it("accepts only market- and block-bound state and keeps price primary", () => {
-    const bound = bindPredictionMarketAssetCardStateV2(
-      PUBLIC_MARKET_WITH_INTENT,
-      CARD_STATE,
-    );
+  it("accepts one enriched dual-RPC view and keeps price primary", () => {
     const html = renderToStaticMarkup(
-      <PredictionMarketAssetCardV2
-        cardState={CARD_STATE}
-        headingLevel="h2"
-        market={PUBLIC_MARKET_WITH_INTENT}
-      />,
+      <PredictionMarketAssetCardV2 headingLevel="h2" market={ENRICHED} />,
     );
     const conditionIndex = html.indexOf("Price ≥ $0.01");
     const intentIndex = html.indexOf("Market-cap intent");
     const resultTime = "Aug 30, 2026 · 18:00:00 UTC";
 
-    expect(PUBLIC_CARD_HAS_NO_RAW_INPUTS).toBe(true);
-    expect(PUBLIC_CARD_REQUIRES_BOUND_STATE).toBe(true);
-    expect(bound).not.toBeNull();
-    expect(Object.isFrozen(bound)).toBe(true);
-    expect(Object.isFrozen(bound?.snapshot)).toBe(true);
-    expect(Object.isFrozen(bound?.probability)).toBe(true);
+    expect(PUBLIC_CARD_HAS_NO_INDEPENDENT_TRUST_INPUTS).toBe(true);
+    expect(PUBLIC_CARD_ACCEPTS_ENRICHED_VIEW).toBe(true);
     expect(html).toContain('data-prediction-asset-card-v2=""');
     expect(html).toContain('data-runtime-binding="bound"');
     expect(html).toContain(
@@ -251,138 +325,196 @@ describe("PredictionMarketAssetCardV2", () => {
     );
     expect(html).toContain("<dt>Result time</dt>");
     expect(html).not.toContain("<dt>Closes</dt>");
-    expect(predictionAssetConditionLabelV2(PUBLIC_MARKET)).toBe(
-      "Price ≥ $0.01",
+    expect(predictionAssetConditionLabelV2(ENRICHED)).toBe("Price ≥ $0.01");
+    expect(predictionAssetResultTimeLabelV2(ENRICHED)).toBe(resultTime);
+    expect(predictionMarketAssetCardHrefV2(ENRICHED)).toBe(
+      `/markets/v2/${MARKET_ID}`,
     );
-    expect(predictionAssetResultTimeLabelV2(PUBLIC_MARKET)).toBe(resultTime);
   });
 
-  it("fails closed when state carries another market id", () => {
-    const mismatched = Object.freeze({
-      ...CARD_STATE,
-      marketId: `0x${"66".repeat(32)}`,
-    }) as unknown as PredictionMarketAssetCardStateV2;
-    const html = renderPublicCard(mismatched);
-
-    expect(bindPredictionMarketAssetCardStateV2(
-      PUBLIC_MARKET_WITH_INTENT,
-      mismatched,
-    )).toBeNull();
-    expect(html).toContain('data-runtime-binding="unavailable"');
-    expect(html).not.toContain("data-snapshot-block");
-    expect(html).not.toContain("/markets/v2/");
-    expect(html).toContain("<dt>Status</dt><dd>Unavailable</dd>");
-    expect(html).toContain("<dt>Probability</dt><dd>Not available</dd>");
-    expect(html).not.toContain("62.7%");
-  });
-
-  it("rejects stale state from another market key even with a reused id", () => {
-    const stale = Object.freeze({
-      ...CARD_STATE,
-      marketKey:
-        `eip155:4663:0x${"77".repeat(20)}:0x${"78".repeat(32)}`,
-    }) as unknown as PredictionMarketAssetCardStateV2;
-    const html = renderPublicCard(stale);
-
-    expect(bindPredictionMarketAssetCardStateV2(
-      PUBLIC_MARKET_WITH_INTENT,
-      stale,
-    )).toBeNull();
-    expect(html).toContain('data-runtime-binding="unavailable"');
-    expect(html).not.toContain("/markets/v2/");
-    expect(html).not.toContain("62.7%");
-  });
-
-  it("rejects a stale or malformed confirmed-block identity", () => {
-    const staleBlock = Object.freeze({
-      ...CARD_STATE,
-      snapshot: Object.freeze({
-        ...CARD_STATE.snapshot,
-        confirmedBlockNumber: "9100019",
-      }),
-    }) as PredictionMarketAssetCardStateV2;
-    const wrongHash = Object.freeze({
-      ...CARD_STATE,
-      snapshot: Object.freeze({
-        ...CARD_STATE.snapshot,
-        confirmedBlockHash: `0x${"25".repeat(32)}`,
-      }),
-    }) as PredictionMarketAssetCardStateV2;
-    const nonCanonicalBlock = {
-      ...CARD_STATE,
-      snapshot: {
-        ...CARD_STATE.snapshot,
-        confirmedBlockNumber: "09100020",
+  it("cannot pair copied ids with an independently supplied probability", () => {
+    const legacyInjection = {
+      market: BASE_ONLY,
+      cardState: {
+        marketId: MARKET_ID,
+        marketKey: MARKET_KEY,
+        probability: { status: "available", yesProbabilityBps: 9_999 },
       },
-    };
-
-    expect(bindPredictionMarketAssetCardStateV2(
-      PUBLIC_MARKET_WITH_INTENT,
-      staleBlock,
-    )).toBeNull();
-    expect(bindPredictionMarketAssetCardStateV2(
-      PUBLIC_MARKET_WITH_INTENT,
-      wrongHash,
-    )).toBeNull();
-    expect(bindPredictionMarketAssetCardStateV2(
-      PUBLIC_MARKET_WITH_INTENT,
-      nonCanonicalBlock,
-    )).toBeNull();
-    expect(renderPublicCard(staleBlock)).toContain(
-      'data-runtime-binding="unavailable"',
+      probability: { status: "available", yesProbabilityBps: 9_999 },
+    } as unknown as PublicCardProps;
+    const html = renderToStaticMarkup(
+      <PredictionMarketAssetCardV2 {...legacyInjection} />,
     );
+
+    expect(html).toContain("<dt>Probability</dt><dd>50%</dd>");
+    expect(html).not.toContain("99.99%");
   });
 
-  it("fails closed without the view's attested snapshot identity", () => {
-    const withoutProjection = {
-      ...PUBLIC_MARKET_WITH_INTENT,
-    };
-    delete (withoutProjection as { attestedProjection?: unknown })
-      .attestedProjection;
-    const market = withoutProjection as unknown as PublicPredictionMarketViewV2;
-    const html = renderPublicCard(CARD_STATE, market);
+  it("keeps the base market visible without attestor enrichment", () => {
+    const html = renderPublicCard(BASE_ONLY);
 
-    expect(bindPredictionMarketAssetCardStateV2(market, CARD_STATE)).toBeNull();
-    expect(html).toContain('data-runtime-binding="unavailable"');
-    expect(html).not.toContain("/markets/v2/");
-    expect(html).not.toContain("62.7%");
+    expect(html).toContain(`<h3 title="EXAMPLE">EXAMPLE</h3>`);
+    expect(html).toContain(`href="/markets/v2/${MARKET_ID}"`);
+    expect(html).toContain('data-artwork-source="bundled-fallback"');
+    expect(html).toContain(
+      'src="/brand/programmable-token-fallback-01-dawn.webp"',
+    );
+    expect(html).toContain("<dt>Status</dt><dd>Open</dd>");
+    expect(html).toContain("<dt>Probability</dt><dd>50%</dd>");
+    expect(html).not.toContain("<nav");
   });
 
-  it("uses owned decorative artwork and semantic status/source facts", () => {
+  it("drops mismatched enrichment without hiding or rewriting the base", () => {
+    const forged = {
+      ...PUBLIC_ENRICHMENT,
+      asset: {
+        ...PUBLIC_ENRICHMENT.asset,
+        address: OTHER_ADDRESS,
+        name: "Attacker Coin",
+      },
+    } satisfies PublicPredictionMarketViewV2;
+    const mismatch = enrichPredictionV2BaseMarketView(BASE_MARKET, forged);
+    const html = renderPublicCard(mismatch);
+
+    expect(mismatch.enrichment).toBeNull();
+    expect(html).toContain(`<h3 title="EXAMPLE">EXAMPLE</h3>`);
+    expect(html).toContain(`href="/markets/v2/${MARKET_ID}"`);
+    expect(html).not.toContain("Attacker Coin");
+    expect(html).not.toContain("attacker");
+  });
+
+  it("uses only content-addressed public artwork and safe enrichment links", () => {
     const html = renderPublicCard();
 
     expect(html).toContain('data-artwork-source="owned-provider-snapshot"');
     expect(html).toContain(
       `src="/media/prediction/sha256-${ARTWORK_DIGEST}.webp"`,
     );
-    expect(html).toContain('alt=""');
     expect(html).not.toContain("cdn.dexscreener.com");
-    expect(html).toContain('referrerPolicy="no-referrer"');
-    expect(html).toContain('<dl aria-label="Market summary"');
-    expect(html).toContain("<dt>Status</dt><dd>Open</dd>");
-    expect(html).toContain("<dt>Source chain</dt><dd>Base</dd>");
-    expect(html).toContain("<dt>Probability</dt><dd>62.7%</dd>");
+    expect(html).not.toContain("capability=");
+    expect(html).toContain('href="https://example.com/"');
+    expect(html).toContain('href="https://x.com/example"');
+    expect(html).toContain('href="https://t.me/example"');
+    expect(html).toContain('rel="noopener noreferrer nofollow ugc"');
   });
 
-  it("derives only the strict public market path and rejects malformed ids", () => {
-    expect(predictionMarketAssetCardHrefV2(PUBLIC_MARKET)).toBe(
-      `/markets/v2/${MARKET_ID}`,
-    );
-    const malformed = {
-      ...PUBLIC_MARKET,
-      marketId: MARKET_ID.toUpperCase(),
-    } as unknown as PublicPredictionMarketViewV2;
-    expect(predictionMarketAssetCardHrefV2(malformed)).toBeNull();
-    const matchingMalformedState = {
-      ...CARD_STATE,
-      marketId: MARKET_ID.toUpperCase(),
-    } as unknown as PredictionMarketAssetCardStateV2;
-    const html = renderPublicCard(matchingMalformedState, malformed);
+  it.each([
+    [
+      "paused",
+      {
+        ...OPEN_LIFECYCLE,
+        tradable: false,
+        tradabilityReason: "checkpoint-unhealthy",
+        checkpointTradingHealthy: false,
+      },
+      "Trading paused",
+      "50%",
+    ],
+    [
+      "closed",
+      {
+        ...OPEN_LIFECYCLE,
+        tradingPhase: "CLOSED",
+        tradable: false,
+        tradabilityReason: "cutoff-reached",
+      },
+      "Closed",
+      "50%",
+    ],
+    [
+      "final YES",
+      {
+        protocolState: "FINAL_YES",
+        checkpointStatus: "FINAL",
+        tradingPhase: "FINAL",
+        tradable: false,
+        tradabilityReason: "market-final",
+        checkpointTradingHealthy: false,
+        resolvedPrice: 1_000_000n,
+      },
+      "Resolved YES",
+      "100%",
+    ],
+    [
+      "final NO",
+      {
+        protocolState: "FINAL_NO",
+        checkpointStatus: "FINAL",
+        tradingPhase: "FINAL",
+        tradable: false,
+        tradabilityReason: "market-final",
+        checkpointTradingHealthy: false,
+        resolvedPrice: 999_999n,
+      },
+      "Resolved NO",
+      "0%",
+    ],
+    [
+      "final invalid",
+      {
+        protocolState: "FINAL_INVALID",
+        checkpointStatus: "INVALID",
+        tradingPhase: "FINAL",
+        tradable: false,
+        tradabilityReason: "market-final",
+        checkpointTradingHealthy: false,
+        resolvedPrice: 0n,
+      },
+      "Invalid",
+      "Not available",
+    ],
+  ] as const)("derives %s lifecycle and probability from the view", (
+    _label,
+    lifecycle,
+    expectedStatus,
+    expectedProbability,
+  ) => {
+    const html = renderPublicCard(withLifecycle(lifecycle));
 
-    expect(html).not.toContain("/markets/v2/");
-    expect(html).toContain("<h3");
-    expect(html).toContain('data-runtime-binding="unavailable"');
-    expect(html).not.toContain("62.7%");
+    expect(html).toContain(`<dt>Status</dt><dd>${expectedStatus}</dd>`);
+    expect(html).toContain(
+      `<dt>Probability</dt><dd>${expectedProbability}</dd>`,
+    );
+  });
+
+  it("fails a malformed base view closed without throwing", () => {
+    const wrongKey = {
+      ...BASE_ONLY,
+      marketKey:
+        `eip155:4663:${FACTORY}:0x${"99".repeat(32)}`,
+    } as unknown as PredictionV2EnrichedMarketView;
+    const arbitraryProbability = {
+      ...BASE_ONLY,
+      poolState: { ...BASE_ONLY.poolState, yesProbabilityBps: 9_999 },
+    } as unknown as PredictionV2EnrichedMarketView;
+    const mismatchedPreset = {
+      ...BASE_ONLY,
+      asset: {
+        kind: "preset",
+        presetId: "btc",
+        sourceNetwork: "global",
+        chainLabel: "Global crypto asset",
+        address: null,
+        explorerUrl: null,
+        name: "Ethereum",
+        symbol: "ETH",
+      },
+    } as unknown as PredictionV2EnrichedMarketView;
+
+    for (const malformed of [
+      wrongKey,
+      arbitraryProbability,
+      mismatchedPreset,
+    ]) {
+      const html = renderPublicCard(malformed);
+      expect(html).toContain('data-runtime-binding="unavailable"');
+      expect(html).toContain("Market unavailable");
+      expect(html).toContain("<dt>Status</dt><dd>Unavailable</dd>");
+      expect(html).toContain("<dt>Probability</dt><dd>Not available</dd>");
+      expect(html).not.toContain("/markets/v2/");
+      expect(html).not.toContain("50%");
+      expect(predictionMarketAssetCardHrefV2(malformed)).toBeNull();
+    }
   });
 
   it("keeps every 44px project link outside the primary market link", () => {
@@ -392,10 +524,6 @@ describe("PredictionMarketAssetCardV2", () => {
       "Example Coin Website (opens in a new tab)",
     );
 
-    expect(html).toContain('href="https://example.com/"');
-    expect(html).toContain('href="https://x.com/example"');
-    expect(html).toContain('href="https://t.me/example"');
-    expect(html).toContain('rel="noopener noreferrer nofollow ugc"');
     expect(marketLinkEnd).toBeGreaterThan(0);
     expect(firstSocial).toBeGreaterThan(marketLinkEnd);
 
@@ -411,11 +539,12 @@ describe("PredictionMarketAssetCardV2", () => {
     );
   });
 
-  it("keeps raw discovery and review data inside the create-only preview", () => {
+  it("keeps the transient logo capability inside the create-only preview", () => {
     const html = renderToStaticMarkup(
       <PredictionMarketAssetPreviewCardV2
         headingLevel="h2"
         imageLoading="eager"
+        logoProxy={LOGO_PROXY}
         profile={PROFILE}
         review={REVIEW}
       />,
@@ -427,16 +556,10 @@ describe("PredictionMarketAssetCardV2", () => {
     expect(html).toContain('data-runtime-binding="preview"');
     expect(html).toContain('data-artwork-source="preview-proxy"');
     expect(html).toContain(
-      `src="/api/prediction/asset-logo/${PROVIDER_ASSET_ID}"`,
+      `src="/api/prediction/asset-logo/${PROVIDER_ASSET_ID}` +
+        `?capability=${LOGO_CAPABILITY}"`,
     );
     expect(html).not.toContain("cdn.dexscreener.com");
-    expect(html).toContain('alt=""');
-    expect(html).toContain("Price ≥ $0.01");
-    expect(html).toContain(
-      "Market-cap intent · ≥ $10,000,000 · Price settles",
-    );
-    expect(html).toContain("<dt>Result time</dt>");
-    expect(html).not.toContain("<dt>Closes</dt>");
     expect(html).not.toContain("/markets/v2/");
     expect(html).toContain("<dt>Status</dt><dd>Preview</dd>");
   });
@@ -450,6 +573,7 @@ describe("PredictionMarketAssetCardV2", () => {
     } as const satisfies PredictionTokenProfileV2;
     const html = renderToStaticMarkup(
       <PredictionMarketAssetPreviewCardV2
+        logoProxy={LOGO_PROXY}
         profile={unboundProfile}
         review={REVIEW}
       />,
