@@ -144,7 +144,7 @@
     "maximumCatchUpBlocks": 50000,
     "route": {
       "path": "app/api/ops/alchemy-launch-refresh/route.ts",
-      "sha256": "9734a0498cb75773c08d3427e3bc9ffe957c3e94378756bb81bb6d459a99108d"
+      "sha256": "71a783691e226120836f3f26c603d1aa793159af5afbc35d2fb03909ee4add03"
     },
     "runtime": {
       "path": "lib/alchemy/explore.server.ts",
@@ -160,7 +160,7 @@
     },
     "publicSnapshot": {
       "path": "lib/alchemy/router-custom-public.server.ts",
-      "sha256": "f4d3b022955c677148deabb7b2cc7af5a7e8283d2cbbb82d3f546ed37392cddd"
+      "sha256": "95da23fd7a97667f7b5341f3bf1ef0674c83707666ff591e1884919c76d01b9b"
     }
   },
   "workers": [

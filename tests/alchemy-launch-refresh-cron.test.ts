@@ -8,6 +8,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   revalidateTag: vi.fn(),
   refreshAlchemyExploreRegistry: vi.fn(),
+  persistRouterCustomIdentitySnapshotFromSourceV1: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -18,6 +19,11 @@ vi.mock("next/cache", () => ({
 vi.mock("../lib/alchemy/explore.server", () => ({
   ALCHEMY_EXPLORE_CACHE_TAG: "alchemy-explore-v1",
   refreshAlchemyExploreRegistry: mocks.refreshAlchemyExploreRegistry,
+}));
+
+vi.mock("../lib/alchemy/router-custom-public.server", () => ({
+  persistRouterCustomIdentitySnapshotFromSourceV1:
+    mocks.persistRouterCustomIdentitySnapshotFromSourceV1,
 }));
 
 import {
@@ -43,6 +49,20 @@ describe("Alchemy launch refresh Vercel cron", () => {
       registryChanged: true,
       confirmedBlockNumber: "25750000",
       launchStampRouterBlockNumber: "25749936",
+      registryGeneratedAt: "2026-08-25T07:00:00.000Z",
+      launchStampRouterCaughtUp: true,
+      launchStampRouterRebuiltAfterReorg: false,
+      launchStampRouter: {
+        cursor: {
+          blockNumber: "25749936",
+          blockHash: `0x${"ab".repeat(32)}`,
+        },
+        tokens: [],
+      },
+    });
+    mocks.persistRouterCustomIdentitySnapshotFromSourceV1.mockResolvedValue({
+      entries: [{ id: "1:token:router-custom" }, { id: "1:token:fade" }],
+      identityCommitment: `sha256:${"cd".repeat(32)}`,
     });
   });
 
@@ -79,11 +99,27 @@ describe("Alchemy launch refresh Vercel cron", () => {
       registryChanged: true,
       confirmedBlockNumber: "25750000",
       launchStampRouterBlockNumber: "25749936",
+      routerCustomIdentityCount: 2,
+      routerCustomIdentityCommitment: `sha256:${"cd".repeat(32)}`,
     });
     expect(mocks.refreshAlchemyExploreRegistry).toHaveBeenCalledWith({
       forcePersist: true,
       includeLatest: false,
       requirePersistence: true,
+    });
+    expect(
+      mocks.persistRouterCustomIdentitySnapshotFromSourceV1,
+    ).toHaveBeenCalledWith({
+      generatedAt: "2026-08-25T07:00:00.000Z",
+      status: "current",
+      reorgDetected: false,
+      slice: {
+        cursor: {
+          blockNumber: "25749936",
+          blockHash: `0x${"ab".repeat(32)}`,
+        },
+        tokens: [],
+      },
     });
     expect(mocks.revalidateTag).toHaveBeenCalledWith(
       "alchemy-explore-v1",
@@ -101,6 +137,22 @@ describe("Alchemy launch refresh Vercel cron", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(JSON.parse(text)).toEqual({
+      error: "Alchemy launch registry refresh unavailable",
+    });
+    expect(text).not.toContain(SECRET);
+    expect(mocks.revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the Router Custom durable snapshot cannot persist", async () => {
+    mocks.persistRouterCustomIdentitySnapshotFromSourceV1.mockRejectedValueOnce(
+      new Error(`blob unavailable ${SECRET}`),
+    );
+
+    const response = await GET(request());
+    const text = await response.text();
+
+    expect(response.status).toBe(503);
     expect(JSON.parse(text)).toEqual({
       error: "Alchemy launch registry refresh unavailable",
     });

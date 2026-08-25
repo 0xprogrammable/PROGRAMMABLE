@@ -7,6 +7,9 @@ import {
   ALCHEMY_EXPLORE_CACHE_TAG,
   refreshAlchemyExploreRegistry,
 } from "../../../../lib/alchemy/explore.server";
+import {
+  persistRouterCustomIdentitySnapshotFromSourceV1,
+} from "../../../../lib/alchemy/router-custom-public.server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -47,6 +50,15 @@ export async function GET(request: NextRequest) {
       includeLatest: false,
       requirePersistence: true,
     });
+    const routerSnapshot =
+      await persistRouterCustomIdentitySnapshotFromSourceV1({
+        generatedAt: result.registryGeneratedAt,
+        status: result.launchStampRouterCaughtUp
+          ? "current"
+          : "last-known-good",
+        reorgDetected: result.launchStampRouterRebuiltAfterReorg,
+        slice: result.launchStampRouter,
+      });
     revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, { expire: 0 });
     return NextResponse.json(
       {
@@ -55,6 +67,8 @@ export async function GET(request: NextRequest) {
         registryChanged: result.registryChanged,
         confirmedBlockNumber: result.confirmedBlockNumber,
         launchStampRouterBlockNumber: result.launchStampRouterBlockNumber,
+        routerCustomIdentityCount: routerSnapshot.entries.length,
+        routerCustomIdentityCommitment: routerSnapshot.identityCommitment,
       },
       { headers: NO_STORE },
     );
