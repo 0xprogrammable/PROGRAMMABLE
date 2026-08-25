@@ -102,7 +102,7 @@ describe("Custom Launch API documentation", () => {
     }
     expect(gitBookGuide).toContain("examples/no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
-    expect(gitBookGuide).toContain("submit launch.json");
+    expect(gitBookGuide).toContain("submit ./launch.json");
     expect(gitBookGuide).toMatch(/submit[\s\S]{0,120}--config programmable-launch\.config\.json/);
   });
 
