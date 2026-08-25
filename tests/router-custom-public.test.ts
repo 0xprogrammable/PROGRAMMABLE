@@ -41,6 +41,7 @@ import type {
 import {
   customGraphExploreEntry,
   customGraphToken,
+  launchStampProvenance,
   stampedClassicToken,
 } from "./launch-stamp-surface-fixture";
 
@@ -144,6 +145,24 @@ describe("finalized Router Custom public projection", () => {
       entries: [customGraphExploreEntry],
     });
     expect(snapshot.identityCommitment).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
+  it("publishes an identity as soon as its launch enters the 64-confirmation cursor", () => {
+    const snapshot = routerCustomIdentitySnapshotFromSourceV1(source(
+      [customGraphToken],
+      {
+        blockNumber: launchStampProvenance.blockNumber,
+        blockHash: launchStampProvenance.blockHash,
+      },
+    ));
+
+    expect(BigInt(launchStampProvenance.finalizedAtBlockNumber)).toBe(
+      BigInt(launchStampProvenance.blockNumber) + 64n,
+    );
+    expect(snapshot).toMatchObject({
+      asOfBlock: launchStampProvenance.blockNumber,
+      entries: [customGraphExploreEntry],
+    });
   });
 
   it("preserves the Blob API strong ETag contract for conditional writes", () => {
@@ -505,14 +524,14 @@ describe("finalized Router Custom public projection", () => {
     })).toThrow("not ready");
   });
 
-  it("publishes only stamps finalized at or before the Envio snapshot", () => {
+  it("projects only Router launches at or before the consumer snapshot", () => {
     expect(routerCustomEntriesAtOrBeforeBlockV1(
       [customGraphExploreEntry],
-      "25718016",
+      "25717952",
     )).toEqual([]);
     expect(routerCustomEntriesAtOrBeforeBlockV1(
       [customGraphExploreEntry],
-      "25718017",
+      "25717953",
     )).toEqual([customGraphExploreEntry]);
   });
 
@@ -575,10 +594,15 @@ describe("finalized Router Custom public projection", () => {
       }),
     ]);
     expect(mergeRouterCustomCreatorProfileV1(
-      profile("25718016"),
+      profile("25717952"),
       customGraphExploreEntry.creatorAddress!,
       [customGraphExploreEntry],
     ).tokens).toEqual([]);
+    expect(mergeRouterCustomCreatorProfileV1(
+      profile("25717953"),
+      customGraphExploreEntry.creatorAddress!,
+      [customGraphExploreEntry],
+    ).tokens).toEqual([customGraphExploreEntry]);
   });
 
   it("reports the exact set of healthy public identity lanes", () => {
