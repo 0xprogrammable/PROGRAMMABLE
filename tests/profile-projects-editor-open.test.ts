@@ -40,9 +40,16 @@ describe("My projects editor opening", () => {
       join(process.cwd(), "components/profile-view.tsx"),
       "utf8",
     );
+    const projectsSource = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
 
     expect(source).toContain(
       'key={account?.toLowerCase() ?? "disconnected"}',
+    );
+    expect(projectsSource).toContain(
+      "const [projectPage, setProjectPage] = useState(1);",
     );
   });
 
@@ -190,6 +197,71 @@ describe("My projects editor opening", () => {
       currentPage: 2,
       totalPages: 2,
       items: [projects[4], projects[0]],
+    });
+  });
+
+  it("preserves a page-two edit action across refresh and clamps after shrink", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const paginate = (profileProjects as unknown as {
+      paginateCreatorProjectsV1(
+        projects: readonly CreatorProjectSummaryV1[],
+        marketCaps: readonly CreatorProjectMarketCapV1[],
+        requestedPage: number,
+      ): Readonly<{
+        currentPage: number;
+        totalPages: number;
+        items: readonly CreatorProjectSummaryV1[];
+      }>;
+    }).paginateCreatorProjectsV1;
+    const editableProject = {
+      ...project,
+      tokenAddress: "0x9999999999999999999999999999999999999999" as const,
+      name: "Programmable",
+      symbol: "V4",
+      article: {
+        revision: 3,
+        title: "Shape what assets can do",
+        updatedAt: "2026-08-21T23:55:55.976Z",
+      },
+    };
+    const projects = [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        ...project,
+        tokenAddress: `0x${String(index + 1).padStart(40, "0")}` as `0x${string}`,
+        name: `A Project 0${index + 1}`,
+      })),
+      editableProject,
+      ...Array.from({ length: 5 }, (_, index) => ({
+        ...project,
+        tokenAddress: `0x${String(index + 11).padStart(40, "0")}` as `0x${string}`,
+        name: `Z Project ${index + 11}`,
+      })),
+    ];
+
+    const pageTwo = paginate(projects, [], 2);
+    const refreshedPageTwo = paginate([...projects], [], pageTwo.currentPage);
+    const editableTokens = new Set([editableProject.tokenAddress.toLowerCase()]);
+
+    expect(source).not.toContain("setProjectPage(1);");
+    expect(source).toContain(
+      ': project.article ? "Edit article" : "Create article"',
+    );
+    expect(pageTwo).toMatchObject({
+      currentPage: 2,
+      totalPages: 3,
+    });
+    expect(refreshedPageTwo.items[0]).toEqual(editableProject);
+    expect(
+      editableTokens.has(refreshedPageTwo.items[0].tokenAddress.toLowerCase()),
+    ).toBe(true);
+    expect(refreshedPageTwo.items[0].article).not.toBeNull();
+
+    expect(paginate(projects.slice(0, 7), [], 3)).toMatchObject({
+      currentPage: 2,
+      totalPages: 2,
     });
   });
 
