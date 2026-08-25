@@ -397,6 +397,9 @@ function routerCustomStagedFetch(
             ...body.dataQuality,
             launchIdentity: {
               ...body.dataQuality.launchIdentity,
+              status: customStatus === "last-known-good"
+                ? "last-known-good"
+                : body.dataQuality.launchIdentity.status,
               custom: customStatus,
             },
           },
