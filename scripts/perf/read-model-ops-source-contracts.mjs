@@ -188,7 +188,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     publicSnapshot: Object.freeze({
       path: "lib/alchemy/router-custom-public.server.ts",
       sha256:
-        "b5dbb13c98bc69e7b94d6e67844bd1c89478ad02a823eab1c900e6523a272613",
+        "45b2f31c00f7ca7fa93ea72f2815b1d2a77d583a1df2ac16427f713e17f8f0f8",
     }),
   }),
   independentCrons: Object.freeze([
@@ -2262,7 +2262,7 @@ export function evaluateReadModelOperationsSourceContracts(
       "suppressRouterBoundCustomProjectDuplicates",
       "routerCustomEntriesAtOrBeforeBlockV1",
       "mergeRouterCustomCreatorProfileV1",
-      "BigInt(stamp.finalizedAtBlockNumber) > snapshotBlock",
+      "BigInt(stamp.blockNumber) > snapshotBlock",
       'entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE',
     ]);
   check(

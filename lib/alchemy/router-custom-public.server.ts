@@ -197,8 +197,12 @@ function buildRouterCustomIdentitySnapshotV1(input: Readonly<{
   const entries = canonicalRouterEntriesV1(input.entries);
   const boundary = BigInt(input.asOfBlock);
   for (const entry of entries) {
-    if (BigInt(entry.launchStampProvenance!.finalizedAtBlockNumber) > boundary) {
-      throw new Error("Router Custom identity is newer than its snapshot");
+    // The Router cursor is the highest launch-event block for which a separate
+    // 64-confirmation observation has already been recorded in the provenance.
+    // `finalizedAtBlockNumber` is that later observation head, so comparing it
+    // to the scan cursor would impose the finality depth a second time.
+    if (BigInt(entry.launchStampProvenance!.blockNumber) > boundary) {
+      throw new Error("Router Custom identity launch is newer than its snapshot");
     }
   }
   const identityCore = {
@@ -739,7 +743,7 @@ export function routerCustomEntriesAtOrBeforeBlockV1(
   return Object.freeze(
     entries.filter((entry) => {
       requireRouterCustomEntryV1(entry);
-      return BigInt(entry.launchStampProvenance!.finalizedAtBlockNumber) <= boundary;
+      return BigInt(entry.launchStampProvenance!.blockNumber) <= boundary;
     }),
   );
 }
@@ -838,7 +842,7 @@ export function mergeRouterCustomCreatorProfileV1(
     const tokenAddress = entry.tokenAddress.toLowerCase();
     if (
       entry.creatorAddress?.toLowerCase() !== account.toLowerCase() ||
-      BigInt(stamp.finalizedAtBlockNumber) > snapshotBlock ||
+      BigInt(stamp.blockNumber) > snapshotBlock ||
       tokenAddresses.has(tokenAddress)
     ) {
       return false;
