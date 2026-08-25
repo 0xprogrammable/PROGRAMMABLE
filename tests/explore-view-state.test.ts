@@ -383,7 +383,7 @@ describe("Explore refresh state", () => {
         },
       );
 
-    expect(initialState).toEqual({ phase: "loading" });
+    expect(initialState).toBeNull();
     expect(
       handledInitialExploreRequestKey(initialState, "initial-request-error"),
     ).toBeNull();

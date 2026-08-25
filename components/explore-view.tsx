@@ -1202,7 +1202,7 @@ export function createExploreInitialState(
 ): ExploreState | null {
   if (response === undefined) return null;
   if (!response.ok) {
-    return { phase: "loading" };
+    return null;
   }
 
   try {
