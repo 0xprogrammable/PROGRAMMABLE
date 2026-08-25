@@ -1,24 +1,224 @@
-.page { min-height: 100vh; padding: 9rem max(1.25rem, 6vw) 5rem; background: #f5f2e9; color: #11110f; }
-.header { max-width: 56rem; margin-bottom: 3.5rem; }
-.eyebrow, .cardState { margin: 0 0 .8rem; font: 600 .75rem/1.2 var(--font-mono, monospace); letter-spacing: .12em; text-transform: uppercase; color: #5d5a50; }
-.header h1, .detail h1 { max-width: 14ch; margin: 0; font-size: clamp(2.7rem, 7vw, 6.6rem); line-height: .92; letter-spacing: -.065em; }
-.intro { max-width: 46rem; margin: 1.5rem 0 0; font-size: clamp(1rem, 2vw, 1.3rem); line-height: 1.5; color: #555248; }
-.status { padding: 2rem 0; font-size: 1rem; color: #5d5a50; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1px; border: 1px solid #cac5b8; background: #cac5b8; }
-.card { min-height: 20rem; padding: 1.5rem; background: #fbf9f3; display: flex; flex-direction: column; }
-.card h2 { margin: 1.2rem 0 .55rem; font-size: 1.4rem; line-height: 1.1; overflow-wrap: anywhere; }
-.card > p:not(.cardState) { margin: 0; color: #6b675d; }
-.cardFacts, .facts { margin: 2rem 0; display: grid; gap: 1rem; }
-.cardFacts div, .facts div { min-width: 0; }
-.cardFacts dt, .facts dt { margin-bottom: .25rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: #78746a; }
-.cardFacts dd, .facts dd { margin: 0; font-family: var(--font-mono, monospace); font-size: .82rem; overflow-wrap: anywhere; }
-.cardLink { margin-top: auto; color: inherit; font-weight: 650; text-decoration-thickness: 1px; text-underline-offset: .25em; }
-.back { display: inline-block; margin-bottom: 3rem; color: inherit; }
-.detail { max-width: 72rem; }
-.facts { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 3.5rem; padding: 1.5rem 0; border-block: 1px solid #cac5b8; }
-.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
-.actions a { display: inline-flex; min-height: 2.9rem; align-items: center; padding: .65rem 1rem; border: 1px solid #11110f; color: inherit; text-decoration: none; }
-.actions a:first-child { background: #11110f; color: #f5f2e9; }
-.actions a:focus-visible, .cardLink:focus-visible, .back:focus-visible { outline: 3px solid #6e5cff; outline-offset: 3px; }
-.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-@media (max-width: 42rem) { .page { padding-top: 6.5rem; } .facts { grid-template-columns: 1fr; } .card { min-height: 17rem; } }
+.page {
+  background: var(--webde-canvas, #080808);
+  color: var(--webde-ink, #f8f0e9);
+  margin: 0 auto;
+  max-width: 1180px;
+  min-height: calc(100svh - var(--header-height));
+  padding: 48px max(20px, 3vw) 72px;
+}
+
+.header {
+  margin-bottom: 32px;
+  max-width: 760px;
+}
+
+.eyebrow,
+.cardState {
+  color: var(--webde-dim, rgb(248 240 233 / 52%));
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
+
+.header h1,
+.detail h1 {
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 570;
+  letter-spacing: -0.052em;
+  line-height: 0.98;
+  margin: 0;
+  max-width: 15ch;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.intro {
+  color: var(--webde-muted, rgb(248 240 233 / 68%));
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 16px 0 0;
+  max-width: 64ch;
+  text-wrap: pretty;
+}
+
+.headerActions,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.headerActions a,
+.actions a {
+  align-items: center;
+  background: var(--webde-control, #121212);
+  border: 1px solid var(--webde-line, rgb(248 240 233 / 14%));
+  border-radius: var(--webde-radius-control, 12px);
+  color: var(--webde-ink, #f8f0e9);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 650;
+  min-height: 44px;
+  padding: 8px 14px;
+  text-decoration: none;
+}
+
+.headerActions a:first-child,
+.actions a:first-child {
+  background: var(--webde-ink, #f8f0e9);
+  border-color: var(--webde-ink, #f8f0e9);
+  color: var(--webde-canvas, #080808);
+}
+
+.status {
+  color: var(--webde-muted, rgb(248 240 233 / 68%));
+  font-size: 14px;
+  padding: 32px 0;
+}
+
+.grid {
+  background: var(--webde-line, rgb(248 240 233 / 14%));
+  border: 1px solid var(--webde-line, rgb(248 240 233 / 14%));
+  border-radius: var(--webde-radius-card, 17px);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  overflow: hidden;
+}
+
+.card {
+  background: var(--webde-surface, #0d0d0d);
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  padding: 22px;
+}
+
+.card h2 {
+  font-size: 18px;
+  font-weight: 620;
+  line-height: 1.25;
+  margin: 18px 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.card > p:not(.cardState) {
+  color: var(--webde-muted, rgb(248 240 233 / 68%));
+  font-size: 13px;
+  margin: 0;
+}
+
+.cardFacts,
+.facts {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.cardFacts div,
+.facts div {
+  min-width: 0;
+}
+
+.cardFacts dt,
+.facts dt {
+  color: var(--webde-dim, rgb(248 240 233 / 52%));
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.cardFacts dd,
+.facts dd {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cardLink {
+  color: var(--webde-ink, #f8f0e9);
+  font-size: 13px;
+  font-weight: 650;
+  margin-top: auto;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.back {
+  color: var(--webde-muted, rgb(248 240 233 / 68%));
+  display: inline-block;
+  font-size: 13px;
+  margin-bottom: 28px;
+}
+
+.detail {
+  background: var(--webde-surface, #0d0d0d);
+  border: 1px solid var(--webde-line, rgb(248 240 233 / 14%));
+  border-radius: var(--webde-radius-card, 17px);
+  max-width: 960px;
+  padding: clamp(22px, 4vw, 40px);
+}
+
+.facts {
+  border-block: 1px solid var(--webde-line, rgb(248 240 233 / 14%));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 32px;
+  padding: 22px 0;
+}
+
+.headerActions a:focus-visible,
+.actions a:focus-visible,
+.cardLink:focus-visible,
+.back:focus-visible {
+  outline: 2px solid var(--focus, #fff);
+  outline-offset: 3px;
+}
+
+.srOnly {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (hover: hover) {
+  .headerActions a:hover,
+  .actions a:hover {
+    background: var(--webde-surface-raised, #151515);
+    color: var(--webde-ink, #f8f0e9);
+  }
+}
+
+@media (max-width: 620px) {
+  .page {
+    padding: 28px 16px 56px;
+  }
+
+  .header h1,
+  .detail h1 {
+    font-size: clamp(32px, 10vw, 44px);
+  }
+
+  .facts {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    min-height: 250px;
+  }
+
+  .headerActions a,
+  .actions a {
+    justify-content: center;
+    width: 100%;
+  }
+}

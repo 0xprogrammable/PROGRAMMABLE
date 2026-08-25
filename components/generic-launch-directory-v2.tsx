@@ -41,18 +41,22 @@ export function GenericLaunchDirectoryV2() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>Custom launches</p>
-        <h1>Launched from an approved revision.</h1>
+        <p className={styles.eyebrow}>Legacy Custom records</p>
+        <h1>Registry launch history</h1>
         <p className={styles.intro}>
-          Each record joins the signed source revision to its finalized,
-          non-revoked Registry lifecycle.
+          These records come from the retired Registry approval flow. New
+          Custom launches use the Custom Launch API.
         </p>
+        <div className={styles.headerActions}>
+          <Link href="/developers/api-keys">Manage API keys</Link>
+          <Link href="/docs/developers/custom-launch">Read the API guide</Link>
+        </div>
       </header>
       {state.status === "loading" ? (
         <p role="status" className={styles.status}>Loading launch records…</p>
       ) : state.status === "error" ? (
         <p role="status" className={styles.status}>
-          Custom launch records are not active yet.
+          Registry records are unavailable right now.
         </p>
       ) : state.records.length === 0 ? (
         <p role="status" className={styles.status}>No finalized launches yet.</p>
@@ -97,12 +101,12 @@ export function GenericLaunchDetailV2({ recordHash }: { recordHash: string }) {
   const source = record.sourceProjection;
   return (
     <main className={styles.page}>
-      <Link className={styles.back} href="/custom-launches">← Custom launches</Link>
+      <Link className={styles.back} href="/custom-launches">← Registry records</Link>
       <article className={styles.detail} aria-labelledby="launch-title">
-        <p className={styles.eyebrow}>Finalized custom launch</p>
+        <p className={styles.eyebrow}>Legacy Registry launch</p>
         <h1 id="launch-title">{source.sourceRevision.repositoryFullName}</h1>
         <p className={styles.intro}>
-          Approval revision {source.approval.approvalRevision} · source {short(source.sourceRevision.commitObjectId)}
+          Registry approval {source.approval.approvalRevision} · source {short(source.sourceRevision.commitObjectId)}
         </p>
         <dl className={styles.facts}>
           <Fact label="Launch ID" value={source.descriptor.launchId} />
@@ -121,7 +125,7 @@ export function GenericLaunchDetailV2({ recordHash }: { recordHash: string }) {
           <a href={`https://github.com/${source.sourceRevision.repositoryFullName}/tree/${source.sourceRevision.commitObjectId}`} target="_blank" rel="noreferrer">
             View source revision
           </a>
-          <Link href="/launch">Launch a project</Link>
+          <Link href="/developers/api-keys">Manage API keys</Link>
         </div>
       </article>
     </main>
