@@ -370,7 +370,7 @@ describe("Explore refresh state", () => {
     });
   });
 
-  it("keeps a server-side Explore failure retryable without inventing data", () => {
+  it("keeps a server-side Explore failure behind skeletons while retrying", () => {
     const initialState = createExploreInitialState(
         {
           ok: false,
@@ -383,15 +383,28 @@ describe("Explore refresh state", () => {
         },
       );
 
-    expect(initialState).toEqual({
+    expect(initialState).toEqual({ phase: "loading" });
+    expect(
+      handledInitialExploreRequestKey(initialState, "initial-request-error"),
+    ).toBeNull();
+  });
+
+  it("surfaces an error only after the client retry also fails", () => {
+    expect(
+      preserveExplorePayloadOnRefreshFailure(
+        { phase: "loading" },
+        {
+          contentKey: "initial-content-error",
+          requestKey: "initial-request-error",
+          message: "Launch index is catching up",
+        },
+      ),
+    ).toEqual({
       phase: "error",
       message: "Launch index is catching up",
       contentKey: "initial-content-error",
       requestKey: "initial-request-error",
     });
-    expect(
-      handledInitialExploreRequestKey(initialState, "initial-request-error"),
-    ).toBeNull();
   });
 
   it("suppresses only the successful server response hydration request", () => {
