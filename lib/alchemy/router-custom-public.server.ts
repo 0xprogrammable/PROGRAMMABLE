@@ -249,6 +249,13 @@ function lastKnownGoodRouterCustomSnapshotV1(
 
 function immutableRouterCustomIdentityV1(entry: CanonicalTokenExploreEntry) {
   requireRouterCustomEntryV1(entry);
+  const {
+    finalizedAtBlockNumber: _finalizedAtBlockNumber,
+    finalizedAtBlockHash: _finalizedAtBlockHash,
+    ...immutableLaunchStampProvenance
+  } = entry.launchStampProvenance!;
+  void _finalizedAtBlockNumber;
+  void _finalizedAtBlockHash;
   return {
     id: entry.id,
     name: entry.name,
@@ -267,7 +274,9 @@ function immutableRouterCustomIdentityV1(entry: CanonicalTokenExploreEntry) {
     launchModel: entry.launchModel ?? null,
     launchModelVersion: entry.launchModelVersion ?? null,
     launchCategoryProvenance: entry.launchCategoryProvenance,
-    launchStampProvenance: entry.launchStampProvenance!,
+    // These two fields record when finality was observed, not launch identity.
+    // A reorg-safe rebuild may legitimately rehydrate them at a later block.
+    launchStampProvenance: immutableLaunchStampProvenance,
   };
 }
 

@@ -36,6 +36,7 @@ import { mapCreatorProfileResponse } from "../lib/profile/onchain-profile";
 import type {
   CustomProjectExploreEntry,
   ExploreEntry,
+  LauncherToken,
 } from "../lib/tokens";
 import {
   customGraphExploreEntry,
@@ -60,7 +61,7 @@ function model(tokens = [customGraphToken, stampedClassicToken]) {
 }
 
 function source(
-  tokens = [customGraphToken, stampedClassicToken],
+  tokens: readonly LauncherToken[] = [customGraphToken, stampedClassicToken],
   input: Readonly<{
     blockNumber?: string;
     blockHash?: `0x${string}`;
@@ -305,6 +306,21 @@ describe("finalized Router Custom public projection", () => {
         },
       }],
     };
+    const rehydrated = routerCustomIdentitySnapshotFromSourceV1(source([
+      {
+        ...customGraphToken,
+        launchStampProvenance: {
+          ...customGraphToken.launchStampProvenance!,
+          finalizedAtBlockNumber: "25740099",
+          finalizedAtBlockHash: `0x${"df".repeat(32)}` as `0x${string}`,
+        },
+      },
+      stampedClassicToken,
+    ], {
+      blockNumber: "25740100",
+      blockHash: `0x${"bd".repeat(32)}`,
+      generatedAt: "2026-08-25T06:01:00.000Z",
+    }));
 
     expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
       durable,
@@ -318,6 +334,10 @@ describe("finalized Router Custom public projection", () => {
       durable,
       rewritten,
     )).toBe(false);
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      durable,
+      rehydrated,
+    )).toBe(true);
   });
 
   it("serves the durable LKG instead of accepting a newer shrinking snapshot", async () => {

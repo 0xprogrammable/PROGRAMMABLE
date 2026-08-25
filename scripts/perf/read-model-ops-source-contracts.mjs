@@ -188,7 +188,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     publicSnapshot: Object.freeze({
       path: "lib/alchemy/router-custom-public.server.ts",
       sha256:
-        "02dc2a835a637657a00c7b770bdf4ada238fe7fd1233cf465d81ec75a3f995d7",
+        "b5dbb13c98bc69e7b94d6e67844bd1c89478ad02a823eab1c900e6523a272613",
     }),
   }),
   independentCrons: Object.freeze([
