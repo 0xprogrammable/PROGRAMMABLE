@@ -72,6 +72,64 @@ function currentUnixSeconds() {
   return Math.floor(Date.now() / 1_000);
 }
 
+function customMarketLabel(market: CustomMarket) {
+  return `${market.marketId} · ${market.kind}`;
+}
+
+function CustomMarketSelector({
+  markets,
+  value,
+  onChange,
+}: {
+  markets: readonly CustomMarket[];
+  value: string;
+  onChange(nextMarketId: string): void;
+}) {
+  const groupName = useId();
+  const selected = markets.find((market) => market.marketId === value)
+    ?? markets[0];
+  if (selected === undefined) return null;
+
+  if (markets.length === 1) {
+    return (
+      <div className={styles.customMarketSelect}>
+        <span>Verified market</span>
+        <div className={styles.customMarketValue}>
+          {customMarketLabel(selected)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <fieldset className={styles.customMarketSelect}>
+      <legend>Verified market</legend>
+      <div className={styles.customMarketOptions}>
+        {markets.map((market) => {
+          const selectedOption = market.marketId === value;
+          return (
+            <label
+              className={styles.customMarketOption}
+              data-selected={selectedOption ? "true" : "false"}
+              key={market.marketId}
+            >
+              <input
+                className={styles.customMarketOptionInput}
+                type="radio"
+                name={groupName}
+                value={market.marketId}
+                checked={selectedOption}
+                onChange={() => onChange(market.marketId)}
+              />
+              <span>{customMarketLabel(market)}</span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 export function CustomMarketTrade({
   project,
   chainId,
@@ -294,10 +352,10 @@ export function CustomMarketTrade({
 
   return (
     <form className={styles.tradeForm} onSubmit={(event) => void prepare(event)} aria-busy={pending}>
-      <label className={styles.customMarketSelect}>
-        <span>Verified market</span>
-        <select value={marketId} onChange={(event) => {
-          const nextMarketId = event.target.value;
+      <CustomMarketSelector
+        markets={tradableMarkets}
+        value={marketId}
+        onChange={(nextMarketId) => {
           const nextCapability = tradableMarkets.find(
             (candidate) => candidate.marketId === nextMarketId,
           )?.tradeCapability;
@@ -311,14 +369,8 @@ export function CustomMarketTrade({
           }
           setAmount("");
           setError("");
-        }}>
-          {tradableMarkets.map((candidate) => (
-            <option key={candidate.marketId} value={candidate.marketId}>
-              {candidate.marketId} · {candidate.kind}
-            </option>
-          ))}
-        </select>
-      </label>
+        }}
+      />
       <div
         className={`${styles.sideControl} ${styles.customSideControl}`}
         role="group"
