@@ -3,6 +3,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  mergeApiKeySummaries,
+  type ApiKeySummary,
+} from "../components/developer-api-keys";
+import {
+  mergeLaunchResources,
+  selectMonotonicLaunchResource,
+  type LaunchResource,
+  type LaunchStatus,
+} from "../components/developer-launch-history";
+
+import {
   PROGRAMMABLE_AGENT_SETUP_LINKS_V1,
   PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
 } from "../lib/custom-launch/agent-setup-v1";
@@ -27,6 +38,41 @@ const walletProviderSource = readFileSync(
   new URL("../components/wallet-provider.tsx", import.meta.url),
   "utf8",
 );
+
+function apiKey(
+  id: string,
+  overrides: Partial<ApiKeySummary> = {},
+): ApiKeySummary {
+  return {
+    id,
+    label: id,
+    keyPrefix: `pm_${id}`,
+    scopes: ["custom-launch:create", "custom-launch:read"],
+    createdAt: "2026-08-25T10:00:00.000Z",
+    expiresAt: "2026-11-23T10:00:00.000Z",
+    lastUsedAt: null,
+    revokedAt: null,
+    ...overrides,
+  };
+}
+
+function launch(
+  requestId: string,
+  status: LaunchStatus,
+  updatedAt: string,
+): LaunchResource {
+  return {
+    launchId: requestId,
+    requestId,
+    onchainLaunchId: null,
+    ownerWallet: "0x0000000000000000000000000000000000000001",
+    status,
+    createdAt: "2026-08-25T10:00:00.000Z",
+    updatedAt,
+    output: null,
+    failure: null,
+  };
+}
 
 describe("developer API key interface", () => {
   it("keeps the first view compact and focused on key management", () => {
@@ -111,6 +157,43 @@ describe("developer API key interface", () => {
     expect(apiKeysStyles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(apiKeysStyles).toContain("min-height: 44px");
   });
+
+  it("keeps mutation results when a stale key list arrives", () => {
+    const revoked = apiKey("revoked", {
+      lastUsedAt: "2026-08-25T10:02:00.000Z",
+      revokedAt: "2026-08-25T10:03:00.000Z",
+    });
+    const created = apiKey("created");
+    const staleRevoked = apiKey("revoked", {
+      lastUsedAt: "2026-08-25T10:04:00.000Z",
+    });
+    const serverOnly = apiKey("server-only");
+
+    const merged = mergeApiKeySummaries(
+      [created, revoked],
+      [staleRevoked, serverOnly],
+    );
+
+    expect(merged.map((candidate) => candidate.id)).toEqual([
+      "revoked",
+      "server-only",
+      "created",
+    ]);
+    expect(merged[0]?.revokedAt).toBe(revoked.revokedAt);
+    expect(merged[0]?.lastUsedAt).toBe(staleRevoked.lastUsedAt);
+    expect(apiKeysSource).toContain(
+      "const readGeneration = ++apiKeyReadGenerationRef.current;",
+    );
+    expect(apiKeysSource.match(
+      /readGeneration !== apiKeyReadGenerationRef\.current/gu,
+    )).toHaveLength(2);
+    expect(apiKeysSource.match(
+      /refreshApiKeysAfterMutation\(account\);/gu,
+    )).toHaveLength(2);
+    expect(apiKeysSource).toContain(
+      'loadApiKeys(walletAddress, undefined, "mutation")',
+    );
+  });
 });
 
 describe("developer launch history interface", () => {
@@ -145,6 +228,49 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
+  });
+
+  it("never lets a stale list regress a single-resource launch status", () => {
+    const submitted = launch(
+      "request-a",
+      "submitted",
+      "2026-08-25T10:03:00.000Z",
+    );
+    const staleAuthorized = launch(
+      "request-a",
+      "authorized",
+      "2026-08-25T10:04:00.000Z",
+    );
+    const finalized = launch(
+      "request-b",
+      "finalized",
+      "2026-08-25T10:05:00.000Z",
+    );
+    const olderSubmitted = launch(
+      "request-b",
+      "submitted",
+      "2026-08-25T10:04:00.000Z",
+    );
+
+    expect(selectMonotonicLaunchResource(
+      submitted,
+      staleAuthorized,
+    )).toBe(submitted);
+    expect(selectMonotonicLaunchResource(
+      staleAuthorized,
+      submitted,
+    )).toBe(submitted);
+    expect(selectMonotonicLaunchResource(
+      finalized,
+      olderSubmitted,
+    )).toBe(finalized);
+
+    const merged = mergeLaunchResources(
+      [submitted, finalized],
+      [staleAuthorized],
+      true,
+    );
+    expect(merged).toEqual([submitted, finalized]);
   });
 
   it("rechecks the Custom launch action at the final wallet boundary", () => {

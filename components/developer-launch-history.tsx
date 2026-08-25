@@ -22,7 +22,7 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-type LaunchStatus =
+export type LaunchStatus =
   | "received"
   | "validating"
   | "prepared"
@@ -32,7 +32,7 @@ type LaunchStatus =
   | "failed"
   | "cancelled";
 
-type LaunchResource = Readonly<{
+export type LaunchResource = Readonly<{
   launchId: string;
   requestId: string;
   onchainLaunchId: `0x${string}` | null;
@@ -81,6 +81,16 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 const submittedPollIntervalMs = 12_000;
 const authorizedPollIntervalMs = 4_000;
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
+const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
+  received: 0,
+  validating: 1,
+  prepared: 2,
+  authorized: 3,
+  submitted: 4,
+  failed: 5,
+  cancelled: 5,
+  finalized: 6,
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -250,6 +260,64 @@ function terminalStatus(status: LaunchStatus) {
   return status === "finalized" || status === "failed" || status === "cancelled";
 }
 
+function updatedAtTime(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function selectMonotonicLaunchResource(
+  current: LaunchResource,
+  incoming: LaunchResource,
+) {
+  if (current.requestId !== incoming.requestId) return incoming;
+  if (terminalStatus(current.status) && current.status !== incoming.status) {
+    return current;
+  }
+
+  const currentRank = launchStatusRank[current.status];
+  const incomingRank = launchStatusRank[incoming.status];
+  if (incomingRank < currentRank) return current;
+  if (incomingRank > currentRank) return incoming;
+  return updatedAtTime(incoming.updatedAt) > updatedAtTime(current.updatedAt)
+    ? incoming
+    : current;
+}
+
+export function mergeLaunchResources(
+  current: readonly LaunchResource[],
+  incoming: readonly LaunchResource[],
+  incomingOrderFirst: boolean,
+) {
+  const currentByRequestId = new Map(
+    current.map((launch) => [launch.requestId, launch] as const),
+  );
+  const incomingByRequestId = new Map(
+    incoming.map((launch) => [launch.requestId, launch] as const),
+  );
+
+  if (incomingOrderFirst) {
+    return [
+      ...incoming.map((launch) => {
+        const existing = currentByRequestId.get(launch.requestId);
+        return existing
+          ? selectMonotonicLaunchResource(existing, launch)
+          : launch;
+      }),
+      ...current.filter((launch) => !incomingByRequestId.has(launch.requestId)),
+    ];
+  }
+
+  return [
+    ...current.map((launch) => {
+      const updated = incomingByRequestId.get(launch.requestId);
+      return updated
+        ? selectMonotonicLaunchResource(launch, updated)
+        : launch;
+    }),
+    ...incoming.filter((launch) => !currentByRequestId.has(launch.requestId)),
+  ];
+}
+
 function pollDelay(milliseconds: number, signal: AbortSignal) {
   return new Promise<boolean>((resolve) => {
     if (signal.aborted) {
@@ -355,14 +423,11 @@ export function DeveloperLaunchHistory({
       const page = parseHistoryPage(body, account);
       if (!page) throw new Error("The API returned an invalid launch history.");
       if (requestSequence !== requestSequenceRef.current) return;
-      setLaunches((current) => cursor === null
-        ? page.launches
-        : [
-            ...current,
-            ...page.launches.filter((launch) =>
-              !current.some((existing) => existing.launchId === launch.launchId)
-            ),
-          ]);
+      setLaunches((current) => mergeLaunchResources(
+        current,
+        page.launches,
+        cursor === null,
+      ));
       setNextCursor(page.nextCursor);
       setState("ready");
       if (refreshRequest) setStatusMessage("Launch history refreshed.");
@@ -408,9 +473,7 @@ export function DeveloperLaunchHistory({
   }, [account, getAuthHeaders]);
 
   const updateLaunch = useCallback((updated: LaunchResource) => {
-    setLaunches((current) => current.map((candidate) =>
-      candidate.requestId === updated.requestId ? updated : candidate
-    ));
+    setLaunches((current) => mergeLaunchResources(current, [updated], false));
   }, []);
 
   useEffect(() => {

@@ -19,7 +19,7 @@ import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
 import type { CustomLaunchWalletActionV1 } from
   "@/lib/custom-launch/wallet-handoff-v1";
 
-type ApiKeySummary = Readonly<{
+export type ApiKeySummary = Readonly<{
   id: string;
   label: string;
   keyPrefix: string;
@@ -38,6 +38,7 @@ type CreatedApiKey = Readonly<{
 type ListState = "idle" | "loading" | "ready" | "error";
 type CreateState = "idle" | "creating";
 type ActiveSection = "keys" | "history";
+type ApiKeyLoadMode = "initial" | "refresh" | "mutation";
 type DeveloperApiKeysViewProps = Readonly<{
   account: `0x${string}` | null;
   authReady: boolean;
@@ -134,6 +135,47 @@ function parseCreatedApiKey(value: unknown): CreatedApiKey | null {
   const apiKey = parseApiKeySummary(value.apiKey);
   if (!apiKey || value.apiKeySecret.length === 0) return null;
   return { apiKey, apiKeySecret: value.apiKeySecret };
+}
+
+function latestNullableTimestamp(
+  current: string | null,
+  incoming: string | null,
+) {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  const currentTime = Date.parse(current);
+  const incomingTime = Date.parse(incoming);
+  if (!Number.isFinite(currentTime)) return incoming;
+  if (!Number.isFinite(incomingTime)) return current;
+  return incomingTime > currentTime ? incoming : current;
+}
+
+export function mergeApiKeySummaries(
+  current: readonly ApiKeySummary[],
+  incoming: readonly ApiKeySummary[],
+) {
+  const currentById = new Map(
+    current.map((apiKey) => [apiKey.id, apiKey] as const),
+  );
+  const incomingIds = new Set(incoming.map((apiKey) => apiKey.id));
+  return [
+    ...incoming.map((apiKey) => {
+      const existing = currentById.get(apiKey.id);
+      if (!existing) return apiKey;
+      return {
+        ...apiKey,
+        lastUsedAt: latestNullableTimestamp(
+          existing.lastUsedAt,
+          apiKey.lastUsedAt,
+        ),
+        revokedAt: latestNullableTimestamp(
+          existing.revokedAt,
+          apiKey.revokedAt,
+        ),
+      };
+    }),
+    ...current.filter((apiKey) => !incomingIds.has(apiKey.id)),
+  ];
 }
 
 function readApiError(response: Response, value: unknown, fallback: string) {
@@ -440,6 +482,7 @@ function DeveloperApiKeysView({
   const revokeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmRevokeRef = useRef<HTMLButtonElement>(null);
   const createInFlightRef = useRef(false);
+  const apiKeyReadGenerationRef = useRef(0);
 
   const getAuthHeaders = useCallback(
     async (json = false) => {
@@ -470,8 +513,10 @@ function DeveloperApiKeysView({
     async (
       walletAddress: string,
       signal?: AbortSignal,
-      refreshRequest = false,
+      mode: ApiKeyLoadMode = "initial",
     ) => {
+      const readGeneration = ++apiKeyReadGenerationRef.current;
+      const refreshRequest = mode !== "initial";
       try {
         const headers = await getAuthHeaders();
         const response = await fetch(
@@ -492,18 +537,25 @@ function DeveloperApiKeysView({
         }
         const parsed = parseApiKeyList(body);
         if (!parsed) throw new Error("The API returned an invalid key list.");
-        setApiKeys(parsed);
+        if (readGeneration !== apiKeyReadGenerationRef.current) return;
+        setApiKeys((current) => mergeApiKeySummaries(current, parsed));
         setListState("ready");
-        if (refreshRequest) setStatusMessage("API keys refreshed.");
+        if (mode === "refresh") setStatusMessage("API keys refreshed.");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
+        if (readGeneration !== apiKeyReadGenerationRef.current) return;
         setListError(
           error instanceof Error ? error.message : "Unable to load API keys.",
         );
         if (!refreshRequest) setListState("error");
       } finally {
-        if (refreshRequest) setRefreshingKeys(false);
+        if (
+          refreshRequest
+          && readGeneration === apiKeyReadGenerationRef.current
+        ) {
+          setRefreshingKeys(false);
+        }
       }
     },
     [getAuthHeaders],
@@ -514,7 +566,14 @@ function DeveloperApiKeysView({
     setRefreshingKeys(true);
     setListError("");
     setStatusMessage("Refreshing API keys.");
-    void loadApiKeys(account, undefined, true);
+    void loadApiKeys(account, undefined, "refresh");
+  };
+
+  const refreshApiKeysAfterMutation = (walletAddress: string) => {
+    apiKeyReadGenerationRef.current += 1;
+    setRefreshingKeys(true);
+    setListError("");
+    void loadApiKeys(walletAddress, undefined, "mutation");
   };
 
   useEffect(() => {
@@ -606,6 +665,7 @@ function DeveloperApiKeysView({
       setStatusMessage(
         `${parsed.apiKey.label} was created. Save the secret now because it will not be shown again.`,
       );
+      refreshApiKeysAfterMutation(account);
     } catch (error) {
       setCreateError(
         error instanceof Error
@@ -705,6 +765,7 @@ function DeveloperApiKeysView({
       );
       setConfirmingRevokeId(null);
       setStatusMessage(`${apiKey.label} was revoked.`);
+      refreshApiKeysAfterMutation(account);
       window.setTimeout(() => revokeTriggerRef.current?.focus(), 0);
     } catch (error) {
       setRevokeError(
