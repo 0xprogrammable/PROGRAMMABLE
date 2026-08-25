@@ -1681,7 +1681,7 @@
     "attestation": "agent-self-attested",
     "platform": "validates manifest digest, graph, attestation subject, evidence digest and permit bindings only",
     "wallet": "controller wallet or separately wallet-authorized agent signs and broadcasts",
-    "reconciliation": "request-driven only when the single-resource GET is polled after wallet broadcast",
+    "reconciliation": "request-driven after wallet broadcast: the single-resource GET reconciles exact state and the bounded history GET makes a best-effort pass over pending rows",
     "finality": "canonical Router event and same-block getter evidence at 64 confirmations",
     "indexing": "eligible for Programmable discovery after finality; third-party discovery and listing remain consumer-controlled",
     "market": "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior",

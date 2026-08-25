@@ -1553,7 +1553,7 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, and permit bindings, prepares one exact wallet action, and reconciles only when its single-resource status is polled. It does not compile source, assess attestation evidence, simulate the transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, and permit bindings, prepares one exact wallet action, reconciles exact state when its single-resource status is polled, and makes a bounded best-effort reconciliation pass over pending history rows. It does not compile source, assess attestation evidence, simulate the transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {

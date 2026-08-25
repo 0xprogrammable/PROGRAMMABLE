@@ -7,11 +7,12 @@ info:
   description: |
     Read-only discovery for terminals, scanners, explorers, bots, wallets and apps.
 
-    Classic is live on Ethereum. Programmable Custom is reserved for launches
-    accepted through the canonical Custom Registry. Registry discovery and its
-    finalized approved launch feed are live, while general public intake remains
-    prelaunch. Historical Stock-Paired launches are not part of the version 2
-    Programmable Custom classification.
+    Classic is live on Ethereum. Custom discovery includes Registry-verified and
+    finalized Router-stamped launches. The separate authenticated Custom Launch
+    API at `https://api.programmable.market` is the API-first write path; this v2
+    service remains read only. Its `publicSubmissionStatus` field describes only
+    the legacy Registry intake, which remains prelaunch. Historical Stock-Paired
+    launches are not part of the version 2 Programmable Custom classification.
 
     Within v2, existing fields keep their type and meaning. New deployments,
     capabilities and market kinds are additive. Consumers must ignore unknown
@@ -127,8 +128,9 @@ paths:
         record's `LaunchKindV1` value. The shared Classic hook is not a launch
         identity and must not classify a Classic launch. Only a consistent
         record from the exact canonical Router qualifies through Router V1.
-        Publication does not imply named-terminal adoption, and the GitHub
-        approval to permit to wallet self-service launch flow is not live.
+        Publication does not imply named-terminal adoption. Launch submission is
+        not part of this read-only API; use the separate authenticated Custom
+        Launch API for API-first preparation and wallet handoff.
       responses:
         "200":
           description: Current deployment manifest.
@@ -418,6 +420,7 @@ components:
                   const: live
                 publicSubmissionStatus:
                   const: prelaunch
+                  description: Legacy Custom Registry intake status. This does not describe the separate authenticated API-first Custom Launch route.
                 registryAddress:
                   type: string
                   pattern: ^0x[0-9a-fA-F]{40}$

@@ -264,8 +264,9 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             <code>GET /v1/custom-launches</code> returns a wallet-owned,
-            cursor-paginated snapshot. It does not run per-launch chain reads;
-            only the exact single-launch GET reconciles current onchain state.
+            cursor-paginated snapshot. It makes a bounded best-effort
+            reconciliation pass over pending rows and still returns durable
+            history when RPC is unavailable.
           </li>
           <li>
             After broadcast, poll the single-launch status route. It reconciles

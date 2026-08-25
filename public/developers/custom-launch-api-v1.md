@@ -186,9 +186,10 @@ received -> validating -> prepared -> authorized -> submitted -> finalized
   event has fewer than 64 confirmations.
 - `finalized`: the same canonical Router evidence has at least 64 confirmations.
 
-After the controller wallet broadcasts the exact transaction, poll this single-resource GET. Reconciliation is
-request-driven for `authorized` and `submitted` resources. POST only captures the bounded observation window, list
-reads do not perform per-launch chain reads and there is no background reconciliation timer.
+After the controller wallet broadcasts the exact transaction, poll this single-resource GET for the full output.
+Reconciliation is request-driven for `authorized` and `submitted` resources. The bounded history route also makes a
+best-effort reconciliation pass over pending rows without hiding durable history when RPC is unavailable. There is no
+background reconciliation timer.
 
 Once the canonical Router stamp has 64 confirmations and website discovery refreshes, the launch is eligible to appear
 in Explore and in the connected wallet's Profile. Router provenance does not require Registry publication. Third-party
