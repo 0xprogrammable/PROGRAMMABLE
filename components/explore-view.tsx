@@ -1202,12 +1202,7 @@ export function createExploreInitialState(
 ): ExploreState | null {
   if (response === undefined) return null;
   if (!response.ok) {
-    return {
-      phase: "error",
-      message: readApiError(response.body),
-      requestKey: input.requestKey,
-      contentKey: input.contentKey,
-    };
+    return null;
   }
 
   try {

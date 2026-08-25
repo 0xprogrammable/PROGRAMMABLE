@@ -3,6 +3,7 @@ import { appendFileSync } from "node:fs";
 import { readBoundedResponseText } from "./read-bounded-response.mjs";
 
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
+const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const CATALOG_SOURCES = new Set(["envio-classic-v3"]);
@@ -101,12 +102,56 @@ function exactIdentity(token) {
   if (typeof token?.id !== "string" || token.id.trim() === "") return null;
   if (token.exploreKind === "token") {
     const tokenAddress = String(token.tokenAddress ?? "").toLowerCase();
+    const poolId = String(token.poolId ?? "").toLowerCase();
+    if (!ADDRESS.test(tokenAddress) || !BYTES32.test(poolId)) return null;
+
+    if (token.launchModel === "custom-graph") {
+      const stamp = token.launchStampProvenance;
+      const category = token.launchCategoryProvenance;
+      const launchId = String(stamp?.launchId ?? "").toLowerCase();
+      const stampHash = String(stamp?.stampHash ?? "").toLowerCase();
+      const poolManagerAddress = String(
+        stamp?.poolManagerAddress ?? "",
+      ).toLowerCase();
+      if (
+        token.launchModelVersion !== "programmable-launch-stamp-router-v1" ||
+        stamp?.schemaVersion !== "programmable.launch-stamp-provenance.v1" ||
+        stamp.chainId !== 1 ||
+        stamp.kind !== "custom-graph" ||
+        !BYTES32.test(launchId) ||
+        !BYTES32.test(stampHash) ||
+        String(stamp.poolId ?? "").toLowerCase() !== poolId ||
+        category?.schemaVersion !==
+          "programmable.explore-launch-category-provenance.v1" ||
+        category.category !== "custom" ||
+        category.source !== "canonical-launch-stamp-router" ||
+        String(category.launchId ?? "").toLowerCase() !== launchId ||
+        String(category.stampHash ?? "").toLowerCase() !== stampHash ||
+        !ADDRESS.test(poolManagerAddress) ||
+        String(stamp.tokenProof?.tokenAddress ?? "").toLowerCase() !==
+          tokenAddress ||
+        String(stamp.tokenProof?.launchId ?? "").toLowerCase() !== launchId ||
+        String(stamp.tokenProof?.stampHash ?? "").toLowerCase() !== stampHash ||
+        String(stamp.poolProof?.poolManagerAddress ?? "").toLowerCase() !==
+          poolManagerAddress ||
+        String(stamp.poolProof?.poolId ?? "").toLowerCase() !== poolId ||
+        String(stamp.poolProof?.launchId ?? "").toLowerCase() !== launchId ||
+        String(stamp.poolProof?.stampHash ?? "").toLowerCase() !== stampHash
+      ) return null;
+      return JSON.stringify([
+        "router-custom-token",
+        token.id,
+        tokenAddress,
+        poolId,
+        launchId,
+        stampHash,
+      ]);
+    }
+
     const exactOfficialException =
       tokenAddress === PROGRAMMABLE_MAIN_ASSET_ADDRESS &&
       token.launchModelVersion === "classic-v2";
     if (
-      !ADDRESS.test(tokenAddress) ||
-      !/^0x[0-9a-f]{64}$/u.test(String(token.poolId ?? "").toLowerCase()) ||
       token.launchModel !== "classic" ||
       (token.launchModelVersion !== "classic-v3" && !exactOfficialException) ||
       token.launchStampProvenance !== undefined
@@ -114,8 +159,8 @@ function exactIdentity(token) {
     return JSON.stringify([
       "token",
       token.id,
-      token.tokenAddress.toLowerCase(),
-      token.poolId.toLowerCase(),
+      tokenAddress,
+      poolId,
     ]);
   }
   if (

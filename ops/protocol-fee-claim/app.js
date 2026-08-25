@@ -7,69 +7,39 @@ import {
   CUSTOM_V2_RELEASE_PATH,
   CUSTOM_V2_SELECTORS,
   HOOKS,
-  LAUNCH_STAMP_ROUTER,
-  LAUNCH_STAMP_SELECTORS,
-  LAUNCH_STAMP_TOPICS,
   MAINNET_CHAIN_ID,
-  ROUTER_CUSTOM_CLAIM_PROFILES,
   SELECTORS,
+  TOKEN_SELECTORS,
   TREASURY,
   atomicCapabilityStatus,
   buildWalletSendCalls,
-  createRefreshQueue,
   customClaimDefinitionClassification,
   customLaunchClassification,
   customLaunchStateData,
   customV2Bytes32ReadData,
   customV2IndexedReadData,
   customV2SourceClassification,
+  decodeAbiString,
   decodeAddress,
   decodeBool,
   decodeBytes4,
   decodeBytes32,
   decodeCustomLaunchState,
   decodeCustomV2SourceState,
-  decodeLaunchStampProof,
-  decodeLaunchStampRecord,
   decodeUint256,
-  exactRouterFinalizedCheckpoint,
   formatEth,
   formatUnits,
   isTreasury,
   keccak256Hex,
-  launchStampAddressReadData,
-  launchStampBytes32ReadData,
-  launchStampLogSetFingerprint,
-  launchStampPoolReadData,
   normalizeBatchId,
   parseCustomV2Release,
-  poolManagerBalanceOfData,
   readAccruedData,
   reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
-  reduceLaunchStampLogs,
   requireAtomicClaimCapability,
-  routerFinalizedBoundary,
   shortAddress,
   toQuantityHex,
-  routerCustomClaimClassification,
-  withTimeout,
 } from "./logic.mjs";
-
-const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
-const EVENT_LOG_CHUNK_SIZE = 10_000n;
-const MAX_ROUTER_LAUNCHES = 4_096;
-const MAX_BATCH_CALLS = 64;
-const ROUTER_QUORUM_RPC_URLS = Object.freeze([
-  "https://eth.drpc.org",
-  "https://rpc.mevblocker.io",
-]);
-const ROUTER_QUORUM_TIMEOUT_MS = 20_000;
-const INTERACTIVE_WALLET_METHODS = new Set([
-  "eth_requestAccounts",
-  "wallet_switchEthereumChain",
-  "wallet_sendCalls",
-]);
 
 const state = {
   account: null,
@@ -88,13 +58,6 @@ const state = {
     status: "idle",
     release: null,
     sources: [],
-    error: null,
-  },
-  router: {
-    status: "idle",
-    verified: false,
-    finalizedBlock: null,
-    launches: [],
     error: null,
   },
   classic: {
@@ -128,55 +91,7 @@ function provider() {
 }
 
 async function request(method, params = []) {
-  const operation = provider().request({ method, params });
-  if (INTERACTIVE_WALLET_METHODS.has(method)) return operation;
-  return withTimeout(
-    operation,
-    ROUTER_QUORUM_TIMEOUT_MS,
-    `Wallet-RPC-Zeitlimit bei ${method} überschritten`,
-  );
-}
-
-let publicRpcId = 1;
-
-async function publicRpcRequest(url, method, params = []) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    ROUTER_QUORUM_TIMEOUT_MS,
-  );
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: publicRpcId++,
-        method,
-        params,
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok)
-      throw new Error(`Router-Quorum-RPC antwortet mit HTTP ${response.status}`);
-    const payload = await response.json();
-    if (payload?.error || payload?.result === undefined)
-      throw new Error(
-        payload?.error?.message ?? "Router-Quorum-RPC-Antwort ist ungültig",
-      );
-    return payload.result;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
-async function routerQuorumRequest(method, params = []) {
-  return Promise.all([
-    request(method, params),
-    ...ROUTER_QUORUM_RPC_URLS.map((url) =>
-      publicRpcRequest(url, method, params),
-    ),
-  ]);
+  return provider().request({ method, params });
 }
 
 function setError(message = "") {
@@ -196,24 +111,8 @@ function disclosureIndicator() {
 }
 
 function hookVerified(claim) {
-  if (claim.kind === "custom") {
-    if (claim.origin === "launch-stamp-router")
-      return (
-        claim.provenanceVerified === true &&
-        claim.runtimeVerified === true &&
-        claim.claimBindingVerified === true
-      );
-    return claim.bindingVerified === true;
-  }
+  if (claim.kind === "custom") return claim.bindingVerified === true;
   return state.hooks.get(claim.hookId)?.verified === true;
-}
-
-function claimHasOpenAmount(claim) {
-  return (
-    (typeof claim?.amount === "bigint" && claim.amount > 0n) ||
-    (typeof claim?.secondaryAmount === "bigint" &&
-      claim.secondaryAmount > 0n)
-  );
 }
 
 function statusLabel(claim) {
@@ -225,7 +124,7 @@ function statusLabel(claim) {
   if (claim.status === "failed") return "Nicht verfügbar";
   if (!hookVerified(claim)) return "Contract nicht verifiziert";
   if (!claim.recipientMatches) return "Falscher Empfänger";
-  if (!claimHasOpenAmount(claim)) return "Nichts offen";
+  if (claim.amount === 0n) return "Nichts offen";
   return "Bereit";
 }
 
@@ -343,68 +242,7 @@ function buildCustomV2Row(source) {
   return row;
 }
 
-function routerCustomStatusLabel(source) {
-  const current = state.claims.get(source.id) ?? source;
-  if (current.status === "claiming") return "In MetaMask bestätigen";
-  if (current.status === "pending") return "Wird bestätigt";
-  if (current.status === "claimed") return "Geclaimt";
-  const classification = routerCustomClaimClassification({
-    ...source,
-    ...current,
-  });
-  if (classification === "ready") return "Bereit";
-  if (classification === "empty") return "Nichts offen";
-  if (classification === "no-manual-claim")
-    return "Gebühren werden direkt ausgezahlt";
-  return "Claim-Profil fehlt · alles gesperrt";
-}
-
-function buildRouterCustomRow(source) {
-  const current = state.claims.get(source.id) ?? source;
-  const rendered = { ...source, ...current };
-  const classification = routerCustomClaimClassification(rendered);
-  const row = document.createElement("li");
-  row.className = "claim-row custom-row router-custom-row";
-  row.dataset.state = ["claiming", "pending", "claimed"].includes(
-    rendered.status,
-  )
-    ? rendered.status
-    : classification;
-
-  const identity = document.createElement("div");
-  identity.className = "claim-identity";
-  const name = document.createElement("strong");
-  name.textContent = `Custom · ${shortAddress(source.token)}`;
-  const detail = document.createElement("span");
-  detail.textContent = `Launch Router · ${shortAddress(source.hook)}`;
-  identity.append(name, detail);
-
-  const value = document.createElement("div");
-  value.className = "claim-value";
-  const amount = document.createElement("strong");
-  if (classification === "no-manual-claim") {
-    amount.textContent = "Direkt";
-  } else {
-    const amounts = [];
-    if ((rendered.amount ?? 0n) > 0n)
-      amounts.push(`${formatEth(rendered.amount)} ETH`);
-    if ((rendered.secondaryAmount ?? 0n) > 0n)
-      amounts.push(
-        `${formatUnits(rendered.secondaryAmount, rendered.secondaryDecimals)} ${rendered.secondaryUnit}`,
-      );
-    amount.textContent = amounts.length > 0 ? amounts.join(" + ") : "0 ETH";
-  }
-  const status = document.createElement("span");
-  status.textContent = routerCustomStatusLabel(rendered);
-  value.append(amount, status);
-  row.append(identity, value);
-  return row;
-}
-
 function buildCustomGroup() {
-  const routerCustoms = state.router.launches.filter(
-    ({ launchKind }) => launchKind === 1,
-  );
   const group = document.createElement("li");
   group.className = "asset-group custom-group";
   const details = document.createElement("details");
@@ -414,7 +252,7 @@ function buildCustomGroup() {
   const name = document.createElement("strong");
   name.textContent = "Custom-v4-Gebühren";
   const detail = document.createElement("span");
-  detail.textContent = "Retired V1 + offizieller Launch Router";
+  detail.textContent = "Automatisch aus der Mainnet Registry";
   identity.append(name, detail);
 
   const value = document.createElement("span");
@@ -426,12 +264,11 @@ function buildCustomGroup() {
     hint.textContent = "Nach Verbindung";
   } else if (
     state.custom.status === "loading" ||
-    state.customV2.status === "loading" ||
-    state.router.status === "loading"
+    state.customV2.status === "loading"
   ) {
     count.textContent = "Wird gelesen";
     hint.textContent = "Finalisierte Launches";
-  } else if (state.custom.error || state.router.error) {
+  } else if (state.custom.error) {
     count.textContent = "Nicht verfügbar";
     hint.textContent = "Claims gesperrt";
   } else {
@@ -442,22 +279,11 @@ function buildCustomGroup() {
       (launch) => customLaunchClassification(launch) === "ready",
     ).length;
     const sourceCount = state.customV2.sources.length;
-    const routerReadyCount = routerCustoms.filter(
-      (source) => routerCustomClaimClassification(source) === "ready",
+    const readyCount = readyV1Count + state.customV2.sources.filter(
+      (source) => customV2SourceClassification(source) === "ready",
     ).length;
-    const routerBlockedCount = routerCustoms.filter(
-      (source) => routerCustomClaimClassification(source) === "blocked",
-    ).length;
-    const readyCount =
-      readyV1Count +
-      routerReadyCount +
-      state.customV2.sources.filter(
-        (source) => customV2SourceClassification(source) === "ready",
-      ).length;
-    count.textContent = `${state.custom.launches.length + sourceCount + routerCustoms.length} erkannt`;
+    count.textContent = `${state.custom.launches.length + sourceCount} erkannt`;
     if (state.customV2.error) hint.textContent = "V2-Release gesperrt";
-    else if (routerBlockedCount > 0)
-      hint.textContent = `${routerBlockedCount} unbekanntes Claim-Profil gesperrt`;
     else if (readyCount > 0)
       hint.textContent = `${readyCount} Custom-Claim${readyCount === 1 ? "" : "s"} offen`;
     else if (feeBearing > 0)
@@ -470,16 +296,11 @@ function buildCustomGroup() {
   summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
-  if (
-    state.custom.launches.length > 0 ||
-    state.customV2.sources.length > 0 ||
-    routerCustoms.length > 0
-  ) {
+  if (state.custom.launches.length > 0 || state.customV2.sources.length > 0) {
     const list = document.createElement("ul");
     list.className = "asset-list";
     list.replaceChildren(
       ...state.customV2.sources.map(buildCustomV2Row),
-      ...routerCustoms.map(buildRouterCustomRow),
       ...state.custom.launches.map(buildCustomRow),
     );
     details.append(list);
@@ -491,36 +312,28 @@ function buildCustomGroup() {
 function buildClassicLaunchRow(launch) {
   const row = document.createElement("li");
   row.className = "claim-row classic-launch-row";
-  const releaseName = launch.releaseName ?? "Launch Router";
-  const covered = launch.claimMode !== "unsupported";
-  row.dataset.state = covered ? "covered" : "blocked";
+  row.dataset.state = "covered";
 
   const identity = document.createElement("div");
   identity.className = "claim-identity";
   const name = document.createElement("strong");
   name.textContent = launch.symbol || launch.name || "Classic Token";
   const detail = document.createElement("span");
-  detail.textContent = `${releaseName} · ${shortAddress(launch.token)}`;
+  detail.textContent = `${launch.releaseName} · ${shortAddress(launch.token)}`;
   identity.append(name, detail);
 
   const value = document.createElement("div");
   value.className = "claim-value";
   const coverage = document.createElement("strong");
-  coverage.textContent = covered ? "Enthalten" : "Gesperrt";
+  coverage.textContent = "Enthalten";
   const status = document.createElement("span");
-  status.textContent = covered
-    ? `Im ${launch.claimProfile ?? releaseName}-Claim`
-    : "Unbekannter Classic-Hook";
+  status.textContent = `Im ${launch.releaseName}-Claim`;
   value.append(coverage, status);
   row.append(identity, value);
   return row;
 }
 
 function buildClassicLaunchGroup() {
-  const routerClassic = state.router.launches.filter(
-    ({ launchKind }) => launchKind === 2,
-  );
-  const launches = [...routerClassic, ...state.classic.launches];
   const group = document.createElement("li");
   group.className = "asset-group classic-launch-group";
   const details = document.createElement("details");
@@ -530,7 +343,7 @@ function buildClassicLaunchGroup() {
   const name = document.createElement("strong");
   name.textContent = "Classic Launches";
   const detail = document.createElement("span");
-  detail.textContent = "Launcher-Historie + offizieller Launch Router";
+  detail.textContent = "Neue Coins automatisch aus den Launchern";
   identity.append(name, detail);
 
   const value = document.createElement("span");
@@ -540,32 +353,24 @@ function buildClassicLaunchGroup() {
   if (state.account === null) {
     count.textContent = "Onchain";
     hint.textContent = "Nach Verbindung";
-  } else if (
-    state.classic.status === "loading" ||
-    state.router.status === "loading"
-  ) {
+  } else if (state.classic.status === "loading") {
     count.textContent = "Wird gelesen";
     hint.textContent = "V2 und V3";
-  } else if (state.classic.error || state.router.error) {
+  } else if (state.classic.error) {
     count.textContent = "Nicht verfügbar";
     hint.textContent = "Hook-Claim bleibt aktiv";
   } else {
-    const unsupported = routerClassic.filter(
-      ({ claimMode }) => claimMode === "unsupported",
-    ).length;
-    count.textContent = `${launches.length} erkannt`;
-    hint.textContent = unsupported
-      ? `${unsupported} neuer Hook gesperrt`
-      : "Alle über Classic-Hooks abgedeckt";
+    count.textContent = `${state.classic.launches.length} erkannt`;
+    hint.textContent = "Alle über Classic-Hooks abgedeckt";
   }
   value.append(count, hint);
   summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
-  if (launches.length > 0) {
+  if (state.classic.launches.length > 0) {
     const list = document.createElement("ul");
     list.className = "asset-list";
-    list.replaceChildren(...launches.map(buildClassicLaunchRow));
+    list.replaceChildren(...state.classic.launches.map(buildClassicLaunchRow));
     details.append(list);
   }
   group.append(details);
@@ -647,10 +452,6 @@ function allClaimDefinitions() {
         standardClaimBindingVerified === true,
     ),
     ...state.customV2.sources,
-    ...state.router.launches.filter(
-      ({ launchKind, claimMode }) =>
-        launchKind === 1 && claimMode === "manual",
-    ),
   ];
 }
 
@@ -667,16 +468,14 @@ function claimableClaims() {
     return (
       hookVerified(claim) &&
       current?.recipientMatches === true &&
-      claimHasOpenAmount(current)
+      current.amount > 0n
     );
-  }).sort((left, right) => left.id.localeCompare(right.id));
+  });
 }
 
 function claimSafetyError() {
-  if (state.router.status !== "ready" || state.router.verified !== true)
-    return "Der Launch-Stamp-Router ist nicht vollständig verifiziert";
   if (
-    !["ready", "retired"].includes(state.custom.status) ||
+    state.custom.status !== "ready" ||
     state.custom.registryVerified !== true
   )
     return "Die Custom Registry ist nicht vollständig verifiziert";
@@ -696,19 +495,8 @@ function claimSafetyError() {
     )
   )
     return "Mindestens eine Custom-V2-Source-Bindung stimmt nicht";
-  if (
-    state.router.launches.some(
-      (launch) =>
-        (launch.launchKind === 1 &&
-          routerCustomClaimClassification(launch) === "blocked") ||
-        (launch.launchKind === 2 && launch.claimMode === "unsupported"),
-    )
-  )
-    return "Mindestens ein Router-Launch hat noch kein freigegebenes Claim-Profil";
   if (HOOKS.some(({ id }) => state.hooks.get(id)?.verified !== true))
     return "Mindestens eine Classic- oder Stock-Bindung stimmt nicht";
-  if (claimableClaims().length > MAX_BATCH_CALLS)
-    return `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`;
   return null;
 }
 
@@ -720,11 +508,7 @@ function renderSummary() {
       (sum, claim) => sum + (state.claims.get(claim.id)?.amount ?? 0n),
       0n,
     );
-  const assetCount =
-    claimable.filter(({ kind }) => kind === "asset").length +
-    claimable.filter(
-      (claim) => (state.claims.get(claim.id)?.secondaryAmount ?? 0n) > 0n,
-    ).length;
+  const assetCount = claimable.filter(({ kind }) => kind === "asset").length;
   const verifiedHooks = HOOKS.filter(
     ({ id }) => state.hooks.get(id)?.verified === true,
   ).length;
@@ -737,21 +521,14 @@ function renderSummary() {
   const customV2BindingBlockers = state.customV2.sources.filter(
     (source) => customV2SourceClassification(source) === "blocked",
   );
-  const routerBindingBlockers = state.router.launches.filter(
-    (launch) =>
-      (launch.launchKind === 1 &&
-        routerCustomClaimClassification(launch) === "blocked") ||
-      (launch.launchKind === 2 && launch.claimMode === "unsupported"),
-  );
 
   elements.total.textContent = `${formatEth(nativeTotal)} ETH${assetCount > 0 ? ` + ${assetCount} Assets` : ""}`;
   elements.claimCount.textContent = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
   elements.account.textContent = state.account
     ? shortAddress(state.account)
     : "Nicht verbunden";
-  elements.network.textContent = DEMO_MODE
-    ? "Ethereum · QA"
-    : state.chainId === MAINNET_CHAIN_ID
+  elements.network.textContent =
+    state.chainId === MAINNET_CHAIN_ID
       ? "Ethereum"
       : state.account
         ? "Falsches Netzwerk"
@@ -768,7 +545,7 @@ function renderSummary() {
 
   if (!connected) {
     elements.actionLabel.textContent = "Wallet verbinden";
-    elements.actionDetail.textContent = "Nur 0x4957…376C";
+    elements.actionDetail.textContent = "MetaMask · Programmable Treasury";
     elements.action.disabled = state.busy;
   } else if (!correctNetwork) {
     elements.actionLabel.textContent = "Zu Ethereum wechseln";
@@ -777,16 +554,6 @@ function renderSummary() {
   } else if (!correctWallet) {
     elements.actionLabel.textContent = "Treasury-Wallet verwenden";
     elements.actionDetail.textContent = shortAddress(TREASURY);
-    elements.action.disabled = true;
-  } else if (
-    state.custom.status === "loading" ||
-    state.customV2.status === "loading" ||
-    state.classic.status === "loading" ||
-    state.router.status === "loading"
-  ) {
-    elements.actionLabel.textContent = "Scan läuft";
-    elements.actionDetail.textContent =
-      "Router, Registry, Codehashes und Guthaben werden geprüft";
     elements.action.disabled = true;
   } else if (
     state.custom.status === "failed" ||
@@ -798,10 +565,6 @@ function renderSummary() {
   } else if (state.customV2.status === "failed") {
     elements.actionLabel.textContent = "Custom V2 nicht verifiziert";
     elements.actionDetail.textContent = "Release-Bindung oder RPC-Verbindung prüfen";
-    elements.action.disabled = true;
-  } else if (state.router.status === "failed" || state.router.verified !== true) {
-    elements.actionLabel.textContent = "Launch Router nicht verifiziert";
-    elements.actionDetail.textContent = "Neu laden oder RPC-Verbindung prüfen";
     elements.action.disabled = true;
   } else if (customBindingBlockers.length > 0) {
     elements.actionLabel.textContent = "Custom-Quelle nicht verifiziert";
@@ -815,17 +578,9 @@ function renderSummary() {
     elements.actionLabel.textContent = "Custom-Claimadapter fehlt";
     elements.actionDetail.textContent = `${customAdapterBlockers.length} finalisierte Feequelle${customAdapterBlockers.length === 1 ? "" : "n"} gesperrt`;
     elements.action.disabled = true;
-  } else if (routerBindingBlockers.length > 0) {
-    elements.actionLabel.textContent = "Neues Claim-Profil erforderlich";
-    elements.actionDetail.textContent = `${routerBindingBlockers.length} Router-Launch${routerBindingBlockers.length === 1 ? "" : "es"} sichtbar und gesperrt`;
-    elements.action.disabled = true;
   } else if (verifiedHooks !== HOOKS.length) {
     elements.actionLabel.textContent = "Contract-Prüfung fehlgeschlagen";
     elements.actionDetail.textContent = `${verifiedHooks} von ${HOOKS.length} verifiziert`;
-    elements.action.disabled = true;
-  } else if (claimable.length > MAX_BATCH_CALLS) {
-    elements.actionLabel.textContent = "Zu viele offene Claims";
-    elements.actionDetail.textContent = `Sicheres Limit: ${MAX_BATCH_CALLS} pro atomarem Batch`;
     elements.action.disabled = true;
   } else if (claimable.length === 0) {
     elements.actionLabel.textContent = "Alles geclaimt";
@@ -837,7 +592,7 @@ function renderSummary() {
       "MetaMask unterstützt keinen atomaren Batch";
     elements.action.disabled = true;
   } else {
-    elements.actionLabel.textContent = "Alle verifizierten Fees claimen";
+    elements.actionLabel.textContent = "Scannen & alles claimen";
     const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
     elements.actionDetail.textContent = `${claimLabel} · 1 MetaMask-Bestätigung`;
     elements.action.disabled = state.busy;
@@ -854,12 +609,9 @@ async function readCustomRegistryLogs(blockTag) {
   for (
     let fromBlock = CUSTOM_REGISTRY.startBlock;
     fromBlock <= latest;
-    fromBlock += EVENT_LOG_CHUNK_SIZE
+    fromBlock += 4_000n
   ) {
-    const toBlock =
-      fromBlock + EVENT_LOG_CHUNK_SIZE - 1n < latest
-        ? fromBlock + EVENT_LOG_CHUNK_SIZE - 1n
-        : latest;
+    const toBlock = fromBlock + 3_999n < latest ? fromBlock + 3_999n : latest;
     logs.push(
       ...(await request("eth_getLogs", [
         {
@@ -880,12 +632,9 @@ async function readClassicLauncherLogs(launcher, blockTag) {
   for (
     let fromBlock = launcher.startBlock;
     fromBlock <= latest;
-    fromBlock += EVENT_LOG_CHUNK_SIZE
+    fromBlock += 4_000n
   ) {
-    const toBlock =
-      fromBlock + EVENT_LOG_CHUNK_SIZE - 1n < latest
-        ? fromBlock + EVENT_LOG_CHUNK_SIZE - 1n
-        : latest;
+    const toBlock = fromBlock + 3_999n < latest ? fromBlock + 3_999n : latest;
     logs.push(
       ...(await request("eth_getLogs", [
         {
@@ -898,6 +647,24 @@ async function readClassicLauncherLogs(launcher, blockTag) {
     );
   }
   return logs;
+}
+
+async function readTokenText(token, selector, blockTag) {
+  return decodeAbiString(
+    await request("eth_call", [{ to: token, data: selector }, blockTag]),
+  );
+}
+
+async function readClassicLaunchMetadata(launch, blockTag) {
+  const [name, symbol] = await Promise.allSettled([
+    readTokenText(launch.token, TOKEN_SELECTORS.name, blockTag),
+    readTokenText(launch.token, TOKEN_SELECTORS.symbol, blockTag),
+  ]);
+  return {
+    ...launch,
+    name: name.status === "fulfilled" ? name.value : null,
+    symbol: symbol.status === "fulfilled" ? symbol.value : null,
+  };
 }
 
 async function readClassicLaunches(blockTag) {
@@ -924,10 +691,13 @@ async function readClassicLaunches(blockTag) {
       }),
     );
     const launches = reduceClassicLaunchLogs(launcherResults.flat());
+    const hydrated = await Promise.all(
+      launches.map((launch) => readClassicLaunchMetadata(launch, blockTag)),
+    );
     state.classic = {
       status: "ready",
       launchersVerified: true,
-      launches,
+      launches: hydrated,
       error: null,
     };
   } catch (error) {
@@ -939,518 +709,6 @@ async function readClassicLaunches(blockTag) {
         error instanceof Error
           ? error.message
           : "Classic Launches konnten nicht gelesen werden",
-    };
-  }
-}
-
-async function readLaunchStampLogs(toBlock) {
-  const logs = [];
-  for (
-    let fromBlock = LAUNCH_STAMP_ROUTER.startBlock;
-    fromBlock <= toBlock;
-    fromBlock += EVENT_LOG_CHUNK_SIZE
-  ) {
-    const chunkEnd =
-      fromBlock + EVENT_LOG_CHUNK_SIZE - 1n < toBlock
-        ? fromBlock + EVENT_LOG_CHUNK_SIZE - 1n
-        : toBlock;
-    const filter = {
-      address: LAUNCH_STAMP_ROUTER.address,
-      fromBlock: toQuantityHex(fromBlock),
-      toBlock: toQuantityHex(chunkEnd),
-      topics: [LAUNCH_STAMP_TOPICS.launchStamped],
-    };
-    const responses = await routerQuorumRequest("eth_getLogs", [filter]);
-    const fingerprints = responses.map(launchStampLogSetFingerprint);
-    if (new Set(fingerprints).size !== 1)
-      throw new Error("Die Router-Loghistorie stimmt im RPC-Quorum nicht überein");
-    logs.push(...responses[0]);
-    if (logs.length > MAX_ROUTER_LAUNCHES)
-      throw new Error("Die Router-Launchliste überschreitet das sichere Scan-Limit");
-  }
-  return logs;
-}
-
-async function readRouterQuorumBlock(blockTag) {
-  const blocks = await routerQuorumRequest("eth_getBlockByNumber", [
-    blockTag,
-    false,
-  ]);
-  return exactRouterFinalizedCheckpoint(
-    blocks,
-    LAUNCH_STAMP_ROUTER.startBlock,
-  );
-}
-
-async function readRouterFinalizedBoundary() {
-  const blocks = await routerQuorumRequest("eth_getBlockByNumber", [
-    LAUNCH_STAMP_ROUTER.finalizedTag,
-    false,
-  ]);
-  return routerFinalizedBoundary(
-    blocks,
-    LAUNCH_STAMP_ROUTER.startBlock,
-    LAUNCH_STAMP_ROUTER.maximumFinalizedSpread,
-  );
-}
-
-async function verifyLaunchStampInfrastructure(blockTag) {
-  const [
-    routerCode,
-    chainIdWord,
-    permitAuthorityWord,
-    permitAuthorityRuntimeWord,
-    graphFactoryWord,
-    graphFactoryRuntimeWord,
-    poolManagerWord,
-    poolManagerRuntimeWord,
-  ] = await Promise.all([
-    request("eth_getCode", [LAUNCH_STAMP_ROUTER.address, blockTag]),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.chainId,
-      blockTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.permitAuthority,
-      blockTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.permitAuthorityRuntimeCodeHash,
-      blockTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.graphFactory,
-      blockTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.graphFactoryRuntimeCodeHash,
-      blockTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.poolManager,
-      blockTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      LAUNCH_STAMP_SELECTORS.poolManagerRuntimeCodeHash,
-      blockTag,
-    ),
-  ]);
-  const permitAuthority = decodeAddress(permitAuthorityWord);
-  const graphFactory = decodeAddress(graphFactoryWord);
-  const poolManager = decodeAddress(poolManagerWord);
-  if (
-    keccak256Hex(routerCode).toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.runtimeCodeHash ||
-    decodeUint256(chainIdWord) !== 1n ||
-    permitAuthority.toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.permitAuthority.address.toLowerCase() ||
-    decodeBytes32(permitAuthorityRuntimeWord) !==
-      LAUNCH_STAMP_ROUTER.permitAuthority.runtimeCodeHash ||
-    graphFactory.toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.graphFactory.address.toLowerCase() ||
-    decodeBytes32(graphFactoryRuntimeWord) !==
-      LAUNCH_STAMP_ROUTER.graphFactory.runtimeCodeHash ||
-    poolManager.toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.poolManager.address.toLowerCase() ||
-    decodeBytes32(poolManagerRuntimeWord) !==
-      LAUNCH_STAMP_ROUTER.poolManager.runtimeCodeHash
-  )
-    throw new Error("Launch-Stamp-Router-Bindung stimmt nicht");
-
-  const [permitCode, graphCode, poolManagerCode] = await Promise.all([
-    request("eth_getCode", [permitAuthority, blockTag]),
-    request("eth_getCode", [graphFactory, blockTag]),
-    request("eth_getCode", [poolManager, blockTag]),
-  ]);
-  if (
-    keccak256Hex(permitCode).toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.permitAuthority.runtimeCodeHash ||
-    keccak256Hex(graphCode).toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.graphFactory.runtimeCodeHash ||
-    keccak256Hex(poolManagerCode).toLowerCase() !==
-      LAUNCH_STAMP_ROUTER.poolManager.runtimeCodeHash
-  )
-    throw new Error("Launch-Stamp-Infrastruktur-Runtime stimmt nicht");
-}
-
-function routerProfileBindingMatches(launch, profile) {
-  return profile.bindings.some(
-    ({ launchId, source, runtimeCodeHash }) =>
-      launch.launchId === launchId &&
-      launch.hook.toLowerCase() === source.toLowerCase() &&
-      launch.runtimeCodeHash === runtimeCodeHash,
-  );
-}
-
-async function tryRouterClaimProfile(
-  launch,
-  runtimeCode,
-  profile,
-  blockTag,
-) {
-  if (!routerProfileBindingMatches(launch, profile)) return null;
-  try {
-    const [recipientWord, feeWord, accruedWord] = await Promise.all([
-      readContractWord(launch.hook, profile.recipient, blockTag),
-      readContractWord(launch.hook, profile.feeBps, blockTag),
-      readContractWord(launch.hook, profile.accrued, blockTag),
-    ]);
-    const amount = decodeUint256(accruedWord);
-    if (
-      !isTreasury(decodeAddress(recipientWord)) ||
-      decodeUint256(feeWord) !== profile.expectedFeeBps
-    )
-      return null;
-    if (amount > 0n) {
-      const simulated = await readContractWord(
-        launch.hook,
-        profile.claim,
-        blockTag,
-        TREASURY,
-      );
-      if (decodeUint256(simulated) !== amount)
-        throw new Error("Custom-Claim-Simulation stimmt nicht");
-    }
-    return {
-      ...launch,
-      id: `router-custom:${launch.launchId}`,
-      name: "Custom · Router",
-      detail: shortAddress(launch.token),
-      unit: "ETH",
-      decimals: 18,
-      kind: "custom",
-      origin: "launch-stamp-router",
-      address: launch.hook,
-      claimMode: "manual",
-      claimProfile: profile.id,
-      readData: profile.accrued,
-      claimData: profile.claim,
-      claimBindingVerified: true,
-      recipientMatches: true,
-      amount,
-      status: "ready",
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function readRouterCustomClaim(launch, runtimeCode, blockTag) {
-  for (const profile of [
-    ROUTER_CUSTOM_CLAIM_PROFILES.nativeAccumulatorV1,
-    ROUTER_CUSTOM_CLAIM_PROFILES.protocolFeeSourceV1,
-  ]) {
-    const claim = await tryRouterClaimProfile(
-      launch,
-      runtimeCode,
-      profile,
-      blockTag,
-    );
-    if (claim) return claim;
-  }
-
-  const redeemer = ROUTER_CUSTOM_CLAIM_PROFILES.dualCurrencyRedeemerV1;
-  try {
-    if (!routerProfileBindingMatches(launch, redeemer))
-      throw new Error("Kein freigegebenes Mehrwährungs-Claim-Profil");
-    const [
-      recipientWord,
-      feePipsWord,
-      poolManagerWord,
-      currency0Word,
-      currency1Word,
-      poolIdWord,
-      nativeAmountWord,
-      tokenAmountWord,
-    ] = await Promise.all([
-      readContractWord(launch.hook, redeemer.recipient, blockTag),
-      readContractWord(launch.hook, redeemer.feePips, blockTag),
-      readContractWord(launch.hook, redeemer.poolManager, blockTag),
-      readContractWord(launch.hook, redeemer.currency0, blockTag),
-      readContractWord(launch.hook, redeemer.currency1, blockTag),
-      readContractWord(launch.hook, redeemer.poolId, blockTag),
-      readContractWord(
-        LAUNCH_STAMP_ROUTER.poolManager.address,
-        poolManagerBalanceOfData(
-          redeemer.balanceOf,
-          launch.hook,
-          CUSTOM_V2_POLICY.nativeAsset,
-        ),
-        blockTag,
-      ),
-      readContractWord(
-        LAUNCH_STAMP_ROUTER.poolManager.address,
-        poolManagerBalanceOfData(
-          redeemer.balanceOf,
-          launch.hook,
-          launch.token,
-        ),
-        blockTag,
-      ),
-    ]);
-    if (
-      !isTreasury(decodeAddress(recipientWord)) ||
-      decodeUint256(feePipsWord) !== redeemer.expectedFeePips ||
-      decodeAddress(poolManagerWord).toLowerCase() !==
-        LAUNCH_STAMP_ROUTER.poolManager.address.toLowerCase() ||
-      decodeAddress(currency0Word).toLowerCase() !==
-        CUSTOM_V2_POLICY.nativeAsset.toLowerCase() ||
-      decodeAddress(currency1Word).toLowerCase() !==
-        launch.token.toLowerCase() ||
-      decodeBytes32(poolIdWord) !== launch.poolId
-    )
-      throw new Error("Mehrwährungs-Claim-Bindung stimmt nicht");
-    const amount = decodeUint256(nativeAmountWord);
-    const secondaryAmount = decodeUint256(tokenAmountWord);
-    if (amount > 0n || secondaryAmount > 0n) {
-      const simulated = await request("eth_call", [
-        { from: TREASURY, to: launch.hook, data: redeemer.claim },
-        blockTag,
-      ]);
-      if (simulated !== "0x")
-        throw new Error("Mehrwährungs-Claim-Simulation stimmt nicht");
-    }
-    return {
-      ...launch,
-      id: `router-custom:${launch.launchId}`,
-      name: "Custom · Router",
-      detail: shortAddress(launch.token),
-      unit: "ETH",
-      decimals: 18,
-      secondaryAsset: launch.token,
-      secondaryUnit: redeemer.secondaryUnit,
-      secondaryDecimals: redeemer.secondaryDecimals,
-      kind: "custom",
-      origin: "launch-stamp-router",
-      address: launch.hook,
-      claimMode: "manual",
-      claimProfile: redeemer.id,
-      claimData: redeemer.claim,
-      claimBindingVerified: true,
-      recipientMatches: true,
-      amount,
-      secondaryAmount,
-      status: "ready",
-    };
-  } catch {
-    // Continue to the explicit unsupported disposition below.
-  }
-
-  return {
-    ...launch,
-    id: `router-custom:${launch.launchId}`,
-    name: "Custom · Router",
-    detail: shortAddress(launch.token),
-    unit: "ETH",
-    decimals: 18,
-    kind: "custom",
-    origin: "launch-stamp-router",
-    address: launch.hook,
-    claimMode: "unsupported",
-    claimProfile: null,
-    claimBindingVerified: false,
-    recipientMatches: false,
-    amount: 0n,
-    status: "failed",
-  };
-}
-
-async function readVerifiedRouterLaunch(candidate, finalizedTag) {
-  const [recordValue, tokenLaunchIdWord, poolLaunchIdWord, tokenProofValue] =
-    await Promise.all([
-    request("eth_call", [
-      {
-        to: LAUNCH_STAMP_ROUTER.address,
-        data: launchStampBytes32ReadData(
-          LAUNCH_STAMP_SELECTORS.launchStamp,
-          candidate.launchId,
-        ),
-      },
-      finalizedTag,
-    ]),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      launchStampAddressReadData(
-        LAUNCH_STAMP_SELECTORS.launchIdByToken,
-        candidate.token,
-      ),
-      finalizedTag,
-    ),
-    readContractWord(
-      LAUNCH_STAMP_ROUTER.address,
-      launchStampPoolReadData(
-        LAUNCH_STAMP_SELECTORS.launchIdByPool,
-        candidate.poolManager,
-        candidate.poolId,
-      ),
-      finalizedTag,
-    ),
-    request("eth_call", [
-      {
-        to: LAUNCH_STAMP_ROUTER.address,
-        data: launchStampAddressReadData(
-          LAUNCH_STAMP_SELECTORS.stampProof,
-          candidate.token,
-        ),
-      },
-      finalizedTag,
-    ]),
-  ]);
-  const record = decodeLaunchStampRecord(recordValue);
-  const tokenProof = decodeLaunchStampProof(tokenProofValue);
-  if (
-    decodeBytes32(tokenLaunchIdWord) !== candidate.launchId ||
-    decodeBytes32(poolLaunchIdWord) !== candidate.launchId ||
-    tokenProof.launchId !== candidate.launchId ||
-    tokenProof.stampHash !== candidate.stampHash ||
-    record.token.toLowerCase() !== candidate.token.toLowerCase() ||
-    record.hook.toLowerCase() !== candidate.hook.toLowerCase() ||
-    record.poolManager.toLowerCase() !== candidate.poolManager.toLowerCase() ||
-    record.poolId !== candidate.poolId ||
-    record.stampHash !== candidate.stampHash
-  )
-    throw new Error("Launch-Stamp-Record stimmt nicht mit dem Event überein");
-
-  const routeCode = await request("eth_getCode", [
-    record.routeLauncher,
-    finalizedTag,
-  ]);
-  if (
-    keccak256Hex(routeCode).toLowerCase() !==
-    record.routeLauncherRuntimeCodeHash
-  )
-    throw new Error("Launch-Route-Runtime ist gedriftet");
-
-  const verified = {
-    ...candidate,
-    ...record,
-    launchKind: record.kind,
-    provenanceVerified: true,
-    runtimeVerified: true,
-  };
-  if (record.kind === 2) {
-    const knownHook = HOOKS.find(
-      ({ address }) => address.toLowerCase() === record.hook.toLowerCase(),
-    );
-    return {
-      ...verified,
-      claimMode: knownHook ? "covered-by-known-hook" : "unsupported",
-      claimProfile: knownHook?.id ?? null,
-      claimBindingVerified: Boolean(knownHook),
-      amount: 0n,
-    };
-  }
-
-  const [hookLaunchIdWord, hookProofValue, recordedRuntimeWord, hookCode] =
-    await Promise.all([
-      readContractWord(
-        LAUNCH_STAMP_ROUTER.address,
-        launchStampAddressReadData(
-          LAUNCH_STAMP_SELECTORS.launchIdByComponent,
-          record.hook,
-        ),
-        finalizedTag,
-      ),
-      request("eth_call", [
-        {
-          to: LAUNCH_STAMP_ROUTER.address,
-          data: launchStampAddressReadData(
-            LAUNCH_STAMP_SELECTORS.stampProof,
-            record.hook,
-          ),
-        },
-        finalizedTag,
-      ]),
-      readContractWord(
-        LAUNCH_STAMP_ROUTER.address,
-        launchStampAddressReadData(
-          LAUNCH_STAMP_SELECTORS.componentRuntimeCodeHash,
-          record.hook,
-        ),
-        finalizedTag,
-      ),
-      request("eth_getCode", [record.hook, finalizedTag]),
-    ]);
-  const hookProof = decodeLaunchStampProof(hookProofValue);
-  const recordedRuntime = decodeBytes32(recordedRuntimeWord);
-  if (
-    decodeBytes32(hookLaunchIdWord) !== candidate.launchId ||
-    hookProof.launchId !== candidate.launchId ||
-    hookProof.stampHash !== candidate.stampHash ||
-    /^0x0{64}$/i.test(recordedRuntime) ||
-    keccak256Hex(hookCode).toLowerCase() !== recordedRuntime
-  )
-    throw new Error("Custom-Hook-Stamp oder Runtime stimmt nicht");
-
-  return readRouterCustomClaim(
-    { ...verified, runtimeCodeHash: recordedRuntime },
-    hookCode,
-    finalizedTag,
-  );
-}
-
-async function readLaunchStampRouter() {
-  for (const key of state.claims.keys()) {
-    if (key.startsWith("router-custom:")) state.claims.delete(key);
-  }
-  state.router = {
-    status: "loading",
-    verified: false,
-    finalizedBlock: null,
-    launches: [],
-    error: null,
-  };
-  renderSummary();
-  try {
-    const finalizedBlock = await readRouterFinalizedBoundary();
-    const finalizedTag = toQuantityHex(finalizedBlock);
-    const openingBlock = await readRouterQuorumBlock(finalizedTag);
-    await verifyLaunchStampInfrastructure(finalizedTag);
-    const candidates = reduceLaunchStampLogs(
-      await readLaunchStampLogs(finalizedBlock),
-    );
-    const launches = await mapWithConcurrency(candidates, 8, (candidate) =>
-      readVerifiedRouterLaunch(candidate, finalizedTag),
-    );
-    const closingBlock = await readRouterQuorumBlock(finalizedTag);
-    if (
-      closingBlock.number !== openingBlock.number ||
-      closingBlock.hash !== openingBlock.hash
-    )
-      throw new Error("Finalisierter Router-Block hat sich während des Scans geändert");
-    for (const launch of launches) {
-      if (launch.launchKind !== 1 || launch.claimMode !== "manual") continue;
-      state.claims.set(launch.id, {
-        amount: launch.amount,
-        secondaryAmount: launch.secondaryAmount,
-        recipientMatches: launch.recipientMatches,
-        status: launch.status,
-      });
-    }
-    state.router = {
-      status: "ready",
-      verified: true,
-      finalizedBlock,
-      launches,
-      error: null,
-    };
-  } catch (error) {
-    state.router = {
-      status: "failed",
-      verified: false,
-      finalizedBlock: null,
-      launches: [],
-      error:
-        error instanceof Error
-          ? error.message
-          : "Launch-Stamp-Router konnte nicht gelesen werden",
     };
   }
 }
@@ -1552,18 +810,16 @@ async function readCustomRegistry(blockTag) {
     if (key.startsWith("custom-v1-standard:")) state.claims.delete(key);
   }
   state.custom = {
-    status: "retired",
-    registryVerified: true,
+    status: "failed",
+    registryVerified: false,
     launches: [],
-    error: null,
+    error: "Custom Registry V1 ist außer Betrieb",
   };
   renderSummary();
 }
 
-async function readContractWord(address, data, blockTag, from = null) {
-  const call = { to: address, data };
-  if (from) call.from = from;
-  const value = await request("eth_call", [call, blockTag]);
+async function readContractWord(address, data, blockTag) {
+  const value = await request("eth_call", [{ to: address, data }, blockTag]);
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
     throw new Error(`Ungültige Contract-Antwort von ${shortAddress(address)}`);
   return value;
@@ -1819,9 +1075,6 @@ async function readCustomV2Source(release, indexed, blockTag) {
 }
 
 async function readCustomV2(blockTag) {
-  for (const key of state.claims.keys()) {
-    if (key.startsWith("custom-v2:")) state.claims.delete(key);
-  }
   state.customV2 = {
     status: "loading",
     release: null,
@@ -1964,7 +1217,7 @@ async function readCapabilities() {
   }
 }
 
-async function refreshClaimsOnce() {
+async function refreshClaims() {
   if (!state.account || state.chainId !== MAINNET_CHAIN_ID) return;
   setError();
   setStatus("Contract-Bindungen und Guthaben werden geprüft");
@@ -1975,7 +1228,6 @@ async function refreshClaimsOnce() {
     readCustomRegistry(blockTag),
     readCustomV2(blockTag),
     readClassicLaunches(blockTag),
-    readLaunchStampRouter(),
   ]);
 
   const hookResults = await Promise.allSettled(
@@ -2027,22 +1279,16 @@ async function refreshClaimsOnce() {
     errors.push(
       "Die Classic-Launchliste konnte nicht vollständig gelesen werden. Der verifizierte gemeinsame Hook-Claim bleibt verfügbar.",
     );
-  if (state.router.error)
-    errors.push(
-      "Der offizielle Launch-Stamp-Router konnte nicht vollständig verifiziert werden. Alle Claims bleiben gesperrt.",
-    );
   setError(errors.join(" "));
   setStatus(
-    state.custom.error || state.customV2.error || state.router.error
-      ? "Ecosystem-Scan konnte nicht vollständig gelesen werden"
+    state.custom.error || state.customV2.error
+      ? "Custom Registry konnte nicht vollständig gelesen werden"
       : failedClaims === 0
-        ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length + state.router.launches.filter(({ launchKind }) => launchKind === 2).length} Classic · ${state.custom.launches.length + state.customV2.sources.length + state.router.launches.filter(({ launchKind }) => launchKind === 1).length} Custom`
+        ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length} Classic · ${state.custom.launches.length + state.customV2.sources.length} Custom`
         : `${failedClaims} Guthaben konnten nicht gelesen werden`,
   );
   renderSummary();
 }
-
-const refreshClaims = createRefreshQueue(refreshClaimsOnce);
 
 async function syncWallet({ requestAccounts = false } = {}) {
   const method = requestAccounts ? "eth_requestAccounts" : "eth_accounts";
@@ -2054,7 +1300,7 @@ async function syncWallet({ requestAccounts = false } = {}) {
     Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
   state.chainId = chainId;
   renderSummary();
-  await refreshClaims();
+  if (state.account && chainId === MAINNET_CHAIN_ID) await refreshClaims();
 }
 
 async function switchToMainnet() {
@@ -2087,40 +1333,8 @@ async function waitForBatch(id) {
   );
 }
 
-async function preflightClaimBatch(claims) {
-  if (claims.length > MAX_BATCH_CALLS)
-    throw new Error(
-      `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`,
-    );
-  const batch = buildWalletSendCalls(state.account, claims);
-  await Promise.all(
-    batch.calls.map(({ to, data, value }) =>
-      request("eth_call", [
-        { from: state.account, to, data, value },
-        "latest",
-      ]),
-    ),
-  );
-  return batch;
-}
-
 async function claimAll() {
-  const expectedAccount = state.account?.toLowerCase();
-  if (
-    state.chainId !== MAINNET_CHAIN_ID ||
-    !expectedAccount ||
-    !isTreasury(expectedAccount)
-  )
-    throw new Error("Treasury-Wallet auf Ethereum Mainnet erforderlich");
   await refreshClaims();
-  if (
-    state.chainId !== MAINNET_CHAIN_ID ||
-    state.account?.toLowerCase() !== expectedAccount ||
-    !isTreasury(state.account)
-  )
-    throw new Error(
-      "Wallet oder Netzwerk hat sich während des Scans geändert. Bitte erneut scannen.",
-    );
   const safetyError = claimSafetyError();
   if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
   const claims = claimableClaims();
@@ -2132,14 +1346,10 @@ async function claimAll() {
 
   try {
     setStatus(
-      `${claims.length} Claims werden direkt vor MetaMask erneut simuliert`,
-    );
-    const batch = await preflightClaimBatch(claims);
-    setStatus(
       `${claims.length} Claims werden in einer MetaMask-Bestätigung vorbereitet`,
     );
     const result = await request("wallet_sendCalls", [
-      batch,
+      buildWalletSendCalls(state.account, claims),
     ]);
     await waitForBatch(normalizeBatchId(result));
     setStatus("Alle verfügbaren Fees wurden geclaimt");
@@ -2164,12 +1374,6 @@ async function claimAll() {
 async function handlePrimaryAction() {
   try {
     setError();
-    if (DEMO_MODE) {
-      setStatus(
-        "QA-Vorschau: In der echten Ansicht öffnet dieser Button genau eine MetaMask-Bestätigung",
-      );
-      return;
-    }
     state.busy = true;
     renderSummary();
     if (!state.account) await syncWallet({ requestAccounts: true });
@@ -2193,10 +1397,6 @@ async function handlePrimaryAction() {
 
 elements.action.addEventListener("click", handlePrimaryAction);
 elements.refresh.addEventListener("click", async () => {
-  if (DEMO_MODE) {
-    setStatus("QA-Vorschau wurde neu geladen · keine Wallet-Aktion");
-    return;
-  }
   state.busy = true;
   renderSummary();
   try {
@@ -2218,132 +1418,8 @@ window.ethereum?.on?.("chainChanged", () =>
   syncWallet().catch(() => undefined),
 );
 
-function seedDemoState() {
-  state.account = TREASURY;
-  state.chainId = MAINNET_CHAIN_ID;
-  state.blockTag = "0x189f510";
-  state.capability = "ready";
-  for (const hook of HOOKS) {
-    state.hooks.set(hook.id, {
-      actualCodeHash: hook.runtimeCodeHash,
-      recipient: TREASURY,
-      verified: true,
-    });
-  }
-  const demoAmounts = new Map([
-    ["classic-v3", 3_831_314_566_506_772n],
-    ["classic-v2", 227_307_871_565_013_620n],
-    ["classic-v1", 46_446_511_178_969n],
-    ["stock-current-nvdaon", 84_200_000_000_000_000n],
-  ]);
-  for (const claim of CLAIMS) {
-    state.claims.set(claim.id, {
-      amount: demoAmounts.get(claim.id) ?? 0n,
-      recipient: TREASURY,
-      recipientMatches: true,
-      status: "ready",
-    });
-  }
-  state.custom = {
-    status: "retired",
-    registryVerified: true,
-    launches: [],
-    error: null,
-  };
-  state.customV2 = {
-    status: "hold",
-    release: null,
-    sources: [],
-    error: null,
-  };
-  state.classic = {
-    status: "ready",
-    launchersVerified: true,
-    launches: [],
-    error: null,
-  };
-  const fadeProfile = ROUTER_CUSTOM_CLAIM_PROFILES.nativeAccumulatorV1;
-  const fadeBinding = fadeProfile.bindings[0];
-  const fadeClaim = {
-    id: `router-custom:${fadeBinding.launchId}`,
-    launchId: fadeBinding.launchId,
-    token: "0x69d278968abf120f878f2e1e016ab615d3686c19",
-    hook: fadeBinding.source,
-    runtimeCodeHash: fadeBinding.runtimeCodeHash,
-    launchKind: 1,
-    kind: "custom",
-    origin: "launch-stamp-router",
-    address: fadeBinding.source,
-    unit: "ETH",
-    decimals: 18,
-    provenanceVerified: true,
-    runtimeVerified: true,
-    claimMode: "manual",
-    claimProfile: fadeProfile.id,
-    readData: fadeProfile.accrued,
-    claimData: fadeProfile.claim,
-    claimBindingVerified: true,
-    recipientMatches: true,
-    amount: 28_054_452_170_132_560n,
-    status: "ready",
-  };
-  const pcanProfile = ROUTER_CUSTOM_CLAIM_PROFILES.dualCurrencyRedeemerV1;
-  const pcanBinding = pcanProfile.bindings[0];
-  const pcanClaim = {
-    id: `router-custom:${pcanBinding.launchId}`,
-    launchId: pcanBinding.launchId,
-    token: "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce",
-    hook: pcanBinding.source,
-    runtimeCodeHash: pcanBinding.runtimeCodeHash,
-    launchKind: 1,
-    kind: "custom",
-    origin: "launch-stamp-router",
-    address: pcanBinding.source,
-    unit: "ETH",
-    decimals: 18,
-    provenanceVerified: true,
-    runtimeVerified: true,
-    claimMode: "manual",
-    claimProfile: pcanProfile.id,
-    claimData: pcanProfile.claim,
-    claimBindingVerified: true,
-    recipientMatches: true,
-    amount: 500_802_908_283_517n,
-    secondaryAsset: "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce",
-    secondaryAmount: 2_740_004_896_936_423_458_238n,
-    secondaryUnit: pcanProfile.secondaryUnit,
-    secondaryDecimals: pcanProfile.secondaryDecimals,
-    status: "ready",
-  };
-  state.router = {
-    status: "ready",
-    verified: true,
-    finalizedBlock: 25_827_076n,
-    launches: [fadeClaim, pcanClaim],
-    error: null,
-  };
-  state.claims.set(fadeClaim.id, {
-    amount: fadeClaim.amount,
-    recipientMatches: true,
-    status: "ready",
-  });
-  state.claims.set(pcanClaim.id, {
-    amount: pcanClaim.amount,
-    secondaryAmount: pcanClaim.secondaryAmount,
-    recipientMatches: true,
-    status: "ready",
-  });
+renderSummary();
+syncWallet().catch(() => {
+  setStatus("MetaMask verbinden, um offene Fees zu lesen");
   renderSummary();
-  elements.status.textContent =
-    "Sichere QA-Vorschau · Werte sind Testdaten · keine Wallet-Aktion";
-}
-
-if (DEMO_MODE) {
-  seedDemoState();
-} else {
-  renderSummary();
-  syncWallet().catch(() => {
-    setStatus("MetaMask verbinden, um offene Fees zu lesen");
-    renderSummary();
-  });
-}
+});
