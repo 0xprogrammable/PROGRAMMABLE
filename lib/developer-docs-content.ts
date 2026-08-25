@@ -21,7 +21,7 @@ const customLaunchHumanGuideUrl =
   "https://programmable.market/docs/developers/custom-launch";
 const customLaunchReadyzUrl = "https://api.programmable.market/readyz";
 const customLaunchCliReleaseUrl =
-  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz";
+  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz";
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
@@ -387,7 +387,7 @@ export function buildProgrammableLlmsIndex(): string {
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
-    `- Programmable Launch CLI 1.0.0: ${customLaunchCliReleaseUrl}`,
+    `- Programmable Launch CLI 1.0.1: ${customLaunchCliReleaseUrl}`,
     `- Create a Custom launch: POST ${customLaunchApiOrigin}/v1/custom-launches`,
     `- List wallet-owned Custom launches: GET ${customLaunchApiOrigin}/v1/custom-launches`,
     `- Read a Custom launch: GET ${customLaunchApiOrigin}/v1/custom-launches/{launchId}`,

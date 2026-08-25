@@ -16,7 +16,7 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch API guide | [programmable.market/developers/custom-launch-api-v1.md](https://programmable.market/developers/custom-launch-api-v1.md) |
 | Custom write API        | [api.programmable.market](https://api.programmable.market)                                                         |
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
-| Custom Launch CLI 1.0.0 | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz) |
+| Custom Launch CLI 1.0.1 | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Launch policy           | [github.com/0xprogrammable/launch-policy](https://github.com/0xprogrammable/launch-policy)                         |
 | Read-only developer API | [developers.programmable.family](https://developers.programmable.family)                                           |
 | X                       | [x.com/0xProgrammable](https://x.com/0xProgrammable)                                                               |

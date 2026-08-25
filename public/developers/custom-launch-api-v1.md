@@ -13,7 +13,7 @@ Readiness: <https://api.programmable.market/readyz>
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
 programmable-launch --version
 ```
 
@@ -31,7 +31,8 @@ programmable-launch status REQUEST_UUID --watch --until authorized
 
 The release tarball includes `examples/no-broadcast/README.md` with real Solidity source, exact Standard JSON, matching
 solc artifacts and a config generator. Its pack-native hook salt grind is deterministic after source, wallet and nonce
-are fixed. The rehearsal submits and polls to `authorized`, then stops without a wallet signature or broadcast.
+are fixed. Generated evidence stops truthfully at `pre-submit`; separately recorded commands can submit and poll to
+`authorized`, then stop without a wallet signature or broadcast.
 
 `pack` derives the sorted manifest, source descriptor, ABI-encoded arguments, graph, target locators, CREATE2
 predictions, evidence digests, canonical hashes and exact-source verification bundle from exact source, Standard JSON,

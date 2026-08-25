@@ -40,11 +40,11 @@ export function programmableWellKnownDocumentV1(
       cli: Object.freeze({
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "1.0.0",
+        releaseVersion: "1.0.1",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v1.0.0",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v1.0.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
       }),
       authentication: "wallet-bound-api-key" as const,
       walletAuthority: "separate-review-and-sign" as const,

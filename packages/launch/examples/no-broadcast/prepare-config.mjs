@@ -62,10 +62,11 @@ if (compilerVersions.size !== 1
 const evidence = {
   schemaVersion: "programmable.no-broadcast-rehearsal-evidence.v1",
   scope: {
-    pack: true,
-    validate: true,
-    submit: true,
-    stopAt: "authorized",
+    pack: false,
+    validate: false,
+    submit: false,
+    status: false,
+    stopAt: "pre-submit",
     walletBroadcast: false,
   },
   launchWallet,

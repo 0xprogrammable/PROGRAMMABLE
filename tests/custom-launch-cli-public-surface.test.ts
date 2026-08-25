@@ -25,9 +25,9 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "1.0.0",
+        releaseVersion: "1.0.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
       },
     });
     expect(document.publicCategories.custom).toMatchObject({
@@ -54,6 +54,8 @@ describe("public Custom Launch CLI surface", () => {
     expect(guide).toContain("--until authorized");
     expect(guide).toContain("do not sign");
     expect(guide).toContain("do not call `eth_sendTransaction`");
+    expect(guide).toContain("`submit: false`");
+    expect(guide).toContain('`stopAt: "pre-submit"`');
   });
 
   it("keeps request and exact-source limits aligned with the live API", () => {
