@@ -4,7 +4,9 @@ description: Read-only Developer API reference and authenticated Custom Launch A
 
 # API reference
 
-The Developer API version 2 at `https://developers.programmable.family` is read only, requires no API key and publishes stable discovery, manifest, launch and compatibility responses. The separate Custom Launch API at `https://api.programmable.market` is an authenticated write path. Create a wallet-bound key at [Custom Launch API keys](https://programmable.market/developers/api-keys) and use its [standalone OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json) or [V1 guide](https://programmable.market/developers/custom-launch-api-v1.md).
+The Developer API version 2 at `https://developers.programmable.family` is read only, requires no API key and publishes stable discovery, manifest, launch and compatibility responses. The separate Custom Launch API at `https://api.programmable.market` is an authenticated write path. Start with the [Custom Launch API guide](custom-launch.md), then use the [standalone OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json) for the normative request and response schema. The existing [raw V1 guide](https://programmable.market/developers/custom-launch-api-v1.md) remains compatible for agents and scripts.
+
+The public-read OpenAPI below describes the Developer API. It does not define Custom launch writes. The standalone Custom Launch API contract defines those authenticated operations.
 
 ## Service status
 

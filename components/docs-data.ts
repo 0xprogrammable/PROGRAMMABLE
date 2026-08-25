@@ -25,6 +25,7 @@ const tokenModelPaths = [
 ] as const;
 
 const developerReferencePaths = [
+  "/docs/developers/custom-launch",
   "/docs/developers/verify",
   "/docs/developers/indexing",
   "/docs/developers/machine-readable",
@@ -62,7 +63,7 @@ export const docsCategories = [
     relatedPaths: creatorPaths,
   },
   {
-    description: "Verification and indexing",
+    description: "Custom launches, verification and indexing",
     href: "/docs/developers",
     label: "Developers",
     relatedPaths: developerReferencePaths,
@@ -131,6 +132,11 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       },
       {
         depth: 1,
+        href: "/docs/developers/custom-launch",
+        label: "Custom Launch API",
+      },
+      {
+        depth: 1,
         href: "/docs/developers/verify",
         label: "Verify a token or pool",
       },
@@ -165,7 +171,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Launch a project",
     description:
-      "Create an API key, submit a deterministic bundle for checks and review the prepared launch.",
+      "Create an API key, submit a deterministic bundle and review the transaction after authorization.",
     href: "/docs/creators/launch",
   },
   {
@@ -253,8 +259,21 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Developer overview",
     description:
-      "Choose the verification or indexing path for a terminal, wallet, scanner or app.",
+      "Prepare a Custom launch or choose a verification and indexing path.",
     href: "/docs/developers",
+  },
+  {
+    title: "Custom Launch API",
+    description:
+      "Authenticate, submit and track one wallet-bound Custom launch.",
+    href: "/docs/developers/custom-launch",
+    keywords: [
+      "custom API",
+      "API key",
+      "idempotency",
+      "agent attestation",
+      "authorized wallet transaction",
+    ],
   },
   {
     title: "Verify a token or pool",

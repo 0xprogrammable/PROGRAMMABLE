@@ -71,15 +71,20 @@ export default function DeveloperDocsPage() {
         <ul className={styles.taskList}>
           <li id="custom-api">
             <h3>
-              <Link href="/developers/api-keys">Prepare a Custom launch</Link>
+              <Link href="/docs/developers/custom-launch">
+                Prepare a Custom launch
+              </Link>
             </h3>
             <p>
               Create a wallet-bound key, submit one deterministic graph bundle
-              with agent evidence and receive the exact wallet action. The key
-              cannot sign or broadcast.
+              with caller-attested evidence and track it to an authorized wallet
+              transaction. The key cannot authorize, sign or broadcast.
             </p>
-            <Link className={styles.textLink} href="/developers/api-keys">
-              Create or manage API keys
+            <Link
+              className={styles.textLink}
+              href="/docs/developers/custom-launch"
+            >
+              Read the Custom Launch API guide
             </Link>
           </li>
           <li id="identity">
@@ -326,7 +331,9 @@ export default function DeveloperDocsPage() {
         <p>Continue</p>
         <ul>
           <li>
-            <Link href="/developers/api-keys">Prepare a Custom launch</Link>
+            <Link href="/docs/developers/custom-launch">
+              Prepare a Custom launch
+            </Link>
           </li>
           <li>
             <Link href="/docs/developers/verify">Verify a token or pool</Link>

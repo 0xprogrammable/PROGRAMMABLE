@@ -47,7 +47,7 @@ export default function TrustDocsPage() {
             <strong>API preparation</strong>
             <span>
               Did the platform validate the declared manifest, graph, evidence
-              digests and wallet binding and return an exact action?
+              digests and wallet binding and prepare the exact artifact?
             </span>
           </li>
           <li>
@@ -93,7 +93,13 @@ export default function TrustDocsPage() {
           </div>
           <div className={docsStyles.fact}>
             <span>Prepared</span>
-            <strong>The exact wallet action exists but is not signed</strong>
+            <strong>
+              The exact artifact exists; the wallet transaction is null
+            </strong>
+          </div>
+          <div className={docsStyles.fact}>
+            <span>Authorized</span>
+            <strong>The exact transaction exists but is not wallet-signed</strong>
           </div>
           <div className={docsStyles.fact}>
             <span>Failed</span>
@@ -103,9 +109,9 @@ export default function TrustDocsPage() {
         <p>
           The platform validates shapes, digests and graph bindings. It does not
           fetch the evidence, reproduce the build, compile or simulate the
-          project, audit it or adopt the agent&apos;s claims. A prepared result is
-          not an approval, endorsement, price opinion or promise that a launch
-          will trade.
+          project, audit it or adopt the agent&apos;s claims. Prepared and
+          authorized results are not an approval, endorsement, price opinion or
+          promise that a launch will trade.
         </p>
       </section>
 

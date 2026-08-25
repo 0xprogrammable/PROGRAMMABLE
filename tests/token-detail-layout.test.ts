@@ -149,6 +149,15 @@ describe("token detail layout", () => {
     expect(visualOrder).toEqual(domOrder);
   });
 
+  it("stacks detail metrics at the narrowest supported width", () => {
+    expect(detailStyles).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*?\.metrics,[\s\S]*?\.metrics\[data-count="3"\]\s*\{[^}]*grid-template-columns:\s*1fr;/s,
+    );
+    expect(detailStyles).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*?\.metrics\[data-count="3"\] \.metric:last-child\s*\{[^}]*grid-column:\s*auto;/s,
+    );
+  });
+
   it("keeps only useful identity metadata", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Token details\s*<\/h2>/i);
     expect(detailSource).not.toMatch(/<dt>\s*Network\s*<\/dt>/i);

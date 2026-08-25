@@ -1,20 +1,18 @@
 .page {
-  --api-panel: var(--liquid-glass-surface-background);
-  --api-panel-strong: var(--liquid-glass-surface-background-strong);
-  --api-subtle: var(--liquid-glass-inner-background);
-  --api-line: var(--liquid-glass-border);
+  --api-panel: var(--webde-surface);
+  --api-panel-strong: var(--webde-surface-raised);
+  --api-subtle: var(--webde-surface-raised);
+  --api-line: var(--webde-line);
   max-width: 1180px;
   min-height: calc(100svh - var(--header-height));
   min-width: 0;
   overflow-x: clip;
-  padding-block: 48px 32px;
+  padding-block: 32px 64px;
 }
 
 .hero {
-  display: grid;
-  gap: 32px;
-  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
-  margin: 0 auto 32px;
+  margin: 0 0 24px;
+  max-width: 720px;
 }
 
 .heroCopy {
@@ -23,7 +21,7 @@
 
 .kicker,
 .accountLabel {
-  color: var(--brand-pink);
+  color: var(--webde-dim);
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.08em;
@@ -31,87 +29,50 @@
 }
 
 .hero h1 {
-  color: var(--text);
-  font-size: clamp(48px, 6vw, 72px);
+  color: var(--webde-ink);
+  font-size: clamp(44px, 5vw, 64px);
   font-weight: 580;
   letter-spacing: -0.052em;
-  line-height: 0.98;
-  margin-top: 12px;
-  max-width: 12ch;
+  line-height: 0.95;
+  margin-top: 8px;
   text-wrap: balance;
 }
 
 .intro {
-  color: var(--text-soft);
-  font-size: 18px;
+  color: var(--webde-muted);
+  font-size: 16px;
   line-height: 1.55;
-  margin-top: 24px;
+  margin-top: 14px;
   max-width: 620px;
   text-wrap: pretty;
-}
-
-.launchPath {
-  align-self: end;
-  display: grid;
-  gap: 0;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.launchPath li {
-  align-items: center;
-  border-top: 1px solid var(--api-line);
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 52px;
-  padding: 8px 0;
-}
-
-.launchPath li:last-child {
-  border-bottom: 1px solid var(--api-line);
-}
-
-.launchPath span {
-  color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.launchPath strong {
-  color: var(--text-soft);
-  font-size: 14px;
-  font-weight: 570;
 }
 
 .walletGate {
   align-items: center;
   background: var(--api-panel);
   border: 1px solid var(--api-line);
-  border-radius: 24px;
-  box-shadow: var(--liquid-glass-shadow);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
   margin: 0 auto;
-  max-width: 620px;
-  min-height: 360px;
-  padding: 40px 32px;
+  max-width: 640px;
+  min-height: 280px;
+  padding: 32px;
   text-align: center;
 }
 
 .loopMark {
-  height: 64px;
-  margin-bottom: 24px;
+  height: 52px;
+  margin-bottom: 16px;
   object-fit: contain;
-  width: 52px;
+  width: 40px;
 }
 
 .walletGate h2 {
-  color: var(--text);
-  font-size: 30px;
+  color: var(--webde-ink);
+  font-size: 28px;
   font-weight: 580;
   letter-spacing: -0.035em;
   line-height: 1.08;
@@ -120,16 +81,20 @@
 }
 
 .walletGate p {
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 16px;
   line-height: 1.55;
-  margin-top: 16px;
+  margin-top: 12px;
   max-width: 460px;
   text-wrap: pretty;
 }
 
 .walletGate .primaryButton {
-  margin-top: 24px;
+  margin-top: 20px;
+}
+
+.walletGate .secondaryButton {
+  margin-top: 20px;
 }
 
 .walletGateMark,
@@ -145,22 +110,22 @@
 }
 
 .walletGateMark {
-  height: 64px;
-  width: 52px;
+  height: 52px;
+  width: 40px;
 }
 
 .walletGateTitle {
-  height: 32px;
-  margin-top: 24px;
-  max-width: 360px;
-  width: 72%;
+  height: 28px;
+  margin-top: 16px;
+  max-width: 320px;
+  width: 68%;
 }
 
 .walletGateLine {
-  height: 16px;
-  margin-top: 16px;
-  max-width: 440px;
-  width: 88%;
+  height: 14px;
+  margin-top: 12px;
+  max-width: 400px;
+  width: 82%;
 }
 
 .accountBar {
@@ -169,9 +134,9 @@
   border-top: 1px solid var(--api-line);
   display: flex;
   justify-content: space-between;
-  margin-bottom: 24px;
-  min-height: 64px;
-  padding-block: 8px;
+  margin-bottom: 12px;
+  min-height: 52px;
+  padding-block: 6px;
 }
 
 .accountBar > div {
@@ -182,7 +147,7 @@
 }
 
 .accountBar code {
-  color: var(--text);
+  color: var(--webde-ink);
   font-family: var(--font-plex-mono), monospace;
   font-size: 13px;
 }
@@ -190,32 +155,58 @@
 .accountActions {
   align-items: center;
   display: flex;
-  gap: 16px;
+  gap: 12px;
 }
 
 .accountActions p {
-  color: var(--muted);
+  color: var(--webde-dim);
   font-size: 13px;
 }
 
-.accountActions a {
-  align-items: center;
-  color: var(--text-soft);
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 620;
+.sectionSwitch {
+  background: var(--api-panel);
+  border: 1px solid var(--api-line);
+  border-radius: var(--webde-radius-control);
+  display: inline-grid;
+  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+  padding: 4px;
+}
+
+.sectionSwitch button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--webde-dim);
+  font-size: 14px;
+  font-weight: 650;
   min-height: 44px;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  padding-inline: 16px;
+  transition:
+    background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sectionSwitch button[aria-pressed="true"] {
+  background: var(--webde-control);
+  border-color: var(--webde-line);
+  color: var(--webde-ink);
+}
+
+.sectionSwitch button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .keyReveal {
   background: var(--api-panel-strong);
   border: 1px solid color-mix(in srgb, var(--success) 42%, var(--api-line));
-  border-radius: 20px;
-  box-shadow: var(--liquid-glass-shadow);
-  margin-bottom: 24px;
-  padding: 24px;
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
+  margin-bottom: 16px;
+  padding: 20px;
 }
 
 .keyReveal:focus-visible {
@@ -225,7 +216,6 @@
 
 .revealHeading,
 .panelHeading,
-.scopeHeading,
 .keyIdentity > div,
 .revokeConfirmation > div {
   align-items: center;
@@ -235,7 +225,7 @@
 
 .revealHeading h2,
 .panelHeading h2 {
-  color: var(--text);
+  color: var(--webde-ink);
   font-size: 24px;
   font-weight: 590;
   letter-spacing: -0.035em;
@@ -250,10 +240,10 @@
 }
 
 .revealWarning {
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 14px;
   line-height: 1.55;
-  margin-top: 16px;
+  margin-top: 12px;
   max-width: 760px;
   text-wrap: pretty;
 }
@@ -263,14 +253,14 @@
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .secretRow > code {
-  background: #0b141d;
+  background: #111;
   border: 1px solid var(--api-line);
-  border-radius: 12px;
-  color: #f7f1ea;
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-ink);
   font-family: var(--font-plex-mono), monospace;
   font-size: 13px;
   line-height: 1.55;
@@ -282,10 +272,10 @@
 
 .dismissButton {
   background: transparent;
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 13px;
   font-weight: 620;
-  margin-top: 16px;
+  margin-top: 12px;
   min-height: 44px;
   padding-inline: 0;
   text-decoration: underline;
@@ -293,19 +283,28 @@
 }
 
 .workspace {
-  align-items: start;
+  align-items: stretch;
   display: grid;
-  gap: 20px;
-  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: clamp(
+    380px,
+    calc(100svh - var(--header-height) - 282px),
+    440px
+  );
 }
 
 .panel {
   background: var(--api-panel);
   border: 1px solid var(--api-line);
-  border-radius: 20px;
-  box-shadow: var(--liquid-glass-shadow);
+  border-radius: var(--webde-radius-card);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-width: 0;
-  padding: 24px;
+  overflow: hidden;
+  padding: 22px;
 }
 
 .createPanel,
@@ -313,36 +312,52 @@
   min-width: 0;
 }
 
+.createPanel {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .panelHeading {
   gap: 16px;
+  min-height: 48px;
 }
 
 .createForm {
-  margin-top: 24px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin-top: 18px;
+  min-height: 0;
+}
+
+.formFields {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 168px;
+}
+
+.formFields > div {
+  min-width: 0;
 }
 
 .field {
   display: grid;
   gap: 8px;
-  margin-top: 20px;
-}
-
-.field:first-child {
-  margin-top: 0;
+  margin: 0;
 }
 
 .field > span {
-  color: var(--text);
+  color: var(--webde-ink);
   font-size: 14px;
   font-weight: 620;
 }
 
 .field input,
 .field select {
-  background: var(--liquid-glass-control-background);
-  border: 1px solid var(--liquid-glass-border);
-  border-radius: 12px;
-  color: var(--text);
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-ink);
   font-size: 16px;
   min-height: 48px;
   padding-inline: 12px;
@@ -357,49 +372,47 @@
   border-color: var(--danger);
 }
 
-.fieldHelp,
 .inlineError {
   font-size: 12px;
+  color: var(--danger);
   line-height: 1.5;
   margin-top: 8px;
 }
 
-.fieldHelp {
-  color: var(--muted);
-}
-
-.inlineError {
-  color: var(--danger);
-}
-
 .scopeLedger {
   border: 1px solid var(--api-line);
-  border-radius: 14px;
-  margin-top: 24px;
-  padding: 16px;
+  border-radius: var(--webde-radius-control);
+  margin-top: 16px;
+  overflow: hidden;
 }
 
-.scopeHeading {
+.scopeLedger summary {
+  align-items: center;
+  color: var(--webde-muted);
+  cursor: pointer;
+  display: flex;
   gap: 12px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 10px 14px;
 }
 
-.scopeHeading span,
-.scopeHeading strong {
+.scopeLedger summary span,
+.scopeLedger summary strong {
   font-size: 12px;
 }
 
-.scopeHeading span {
-  color: var(--text-soft);
+.scopeLedger summary span {
+  color: var(--webde-muted);
   font-weight: 620;
 }
 
-.scopeHeading strong {
-  color: var(--muted);
+.scopeLedger summary strong {
+  color: var(--webde-dim);
   font-weight: 500;
 }
 
 .scopeLedger ul,
-.keyScopes,
 .keyList {
   list-style: none;
   margin: 0;
@@ -409,27 +422,26 @@
 .scopeLedger ul {
   display: grid;
   gap: 8px;
-  margin-top: 14px;
+  padding: 0 14px 14px;
 }
 
 .scopeLedger li {
-  color: var(--text);
+  color: var(--webde-ink);
   font-size: 12px;
   min-width: 0;
 }
 
 .scopeLedger code,
-.keyScopes code,
 .keyIdentity > code {
   font-family: var(--font-plex-mono), monospace;
   overflow-wrap: anywhere;
 }
 
 .securityNote {
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 13px;
   line-height: 1.55;
-  margin-top: 16px;
+  margin-top: 12px;
   text-wrap: pretty;
 }
 
@@ -439,7 +451,7 @@
 .revokeButton,
 .textButton {
   align-items: center;
-  border-radius: 12px;
+  border-radius: var(--webde-radius-control);
   display: inline-flex;
   font-size: 14px;
   font-weight: 650;
@@ -454,20 +466,20 @@
 }
 
 .primaryButton {
-  background: var(--brand-pink-action);
-  border: 1px solid var(--brand-pink-action);
-  color: var(--brand-pink-ink);
+  background: var(--webde-ink);
+  border: 1px solid var(--webde-ink);
+  color: var(--webde-canvas);
 }
 
 .createForm > .primaryButton {
-  margin-top: 24px;
+  margin-top: auto;
   width: 100%;
 }
 
 .secondaryButton {
-  background: var(--liquid-glass-control-background);
-  border: 1px solid var(--liquid-glass-border);
-  color: var(--text);
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
+  color: var(--webde-ink);
 }
 
 .dangerButton {
@@ -480,7 +492,7 @@
 .textButton {
   background: transparent;
   border: 1px solid transparent;
-  color: var(--text-soft);
+  color: var(--webde-muted);
 }
 
 .revokeButton {
@@ -495,20 +507,25 @@
 .secondaryButton:disabled,
 .dangerButton:disabled,
 .textButton:disabled {
-  cursor: not-allowed;
   opacity: 0.58;
 }
 
 .keyList {
+  align-content: start;
   display: grid;
+  flex: 1;
   gap: 12px;
   margin-top: 20px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline-end: 4px;
 }
 
 .keyItem {
   background: var(--api-subtle);
   border: 1px solid var(--api-line);
-  border-radius: 16px;
+  border-radius: 10px;
   min-width: 0;
   padding: 16px;
 }
@@ -525,7 +542,7 @@
 
 .keyIdentity h3,
 .statePanel h3 {
-  color: var(--text);
+  color: var(--webde-ink);
   font-size: 17px;
   font-weight: 590;
   line-height: 1.3;
@@ -534,13 +551,13 @@
 }
 
 .keyIdentity > code {
-  color: var(--muted);
+  color: var(--webde-dim);
   font-size: 12px;
 }
 
 .keyStatus {
   align-items: center;
-  color: var(--muted);
+  color: var(--webde-dim);
   display: inline-flex;
   flex: none;
   font-size: 12px;
@@ -561,7 +578,7 @@
 
 .keyStatus[data-status="revoked"],
 .keyStatus[data-status="expired"] {
-  color: var(--muted);
+  color: var(--webde-dim);
 }
 
 .keyMetadata {
@@ -576,40 +593,28 @@
 }
 
 .keyMetadata dt {
-  color: var(--muted);
+  color: var(--webde-dim);
   font-size: 11px;
   font-weight: 620;
 }
 
 .keyMetadata dd {
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 12px;
   line-height: 1.45;
   margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
 
-.keyScopes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  margin-top: 16px;
-}
-
-.keyScopes li {
-  color: var(--text-soft);
-  font-size: 11px;
-}
-
 .revokeConfirmation {
   border: 1px solid color-mix(in srgb, var(--danger) 36%, var(--api-line));
-  border-radius: 12px;
+  border-radius: var(--webde-radius-control);
   margin-top: 16px;
   padding: 12px;
 }
 
 .revokeConfirmation > p:first-child {
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -623,14 +628,15 @@
 .statePanel {
   align-items: flex-start;
   display: flex;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
-  min-height: 240px;
-  padding: 32px 8px;
+  min-height: 0;
+  padding: 24px 8px;
 }
 
 .statePanel p {
-  color: var(--text-soft);
+  color: var(--webde-muted);
   font-size: 14px;
   line-height: 1.55;
   margin-top: 8px;
@@ -643,16 +649,19 @@
 }
 
 .skeletonList {
+  align-content: start;
   display: grid;
+  flex: 1;
   gap: 12px;
   margin-top: 20px;
+  min-height: 0;
 }
 
 .skeletonRow {
   background: var(--api-subtle);
   border: 1px solid var(--api-line);
-  border-radius: 16px;
-  min-height: 160px;
+  border-radius: 10px;
+  min-height: 148px;
   padding: 16px;
 }
 
@@ -685,14 +694,15 @@
 
 @media (hover: hover) and (pointer: fine) {
   .primaryButton:not(:disabled):hover {
-    background: var(--brand-pink-hover);
-    border-color: var(--brand-pink-hover);
+    background: #f2f2f2;
+    border-color: #f2f2f2;
     transform: translateY(-1px);
   }
 
   .secondaryButton:not(:disabled):hover,
-  .textButton:not(:disabled):hover {
-    background: var(--liquid-glass-control-background-hover);
+  .textButton:not(:disabled):hover,
+  .sectionSwitch button:not([aria-pressed="true"]):hover {
+    background: var(--webde-control);
   }
 
   .dangerButton:not(:disabled):hover {
@@ -700,9 +710,8 @@
   }
 
   .dismissButton:hover,
-  .revokeButton:hover,
-  .accountActions a:hover {
-    color: var(--text);
+  .revokeButton:hover {
+    color: var(--webde-ink);
   }
 }
 
@@ -711,7 +720,8 @@
 .dangerButton:active,
 .dismissButton:active,
 .revokeButton:active,
-.textButton:active {
+.textButton:active,
+.sectionSwitch button:active {
   transform: scale(0.98);
 }
 
@@ -721,70 +731,41 @@
 .dismissButton:focus-visible,
 .revokeButton:focus-visible,
 .textButton:focus-visible,
-.accountActions a:focus-visible,
+.scopeLedger summary:focus-visible,
 .field input:focus-visible,
 .field select:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 
-@media (max-width: 900px) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .hero h1 {
-    max-width: 13ch;
-  }
-
-  .launchPath {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .launchPath li:nth-child(2) {
-    border-bottom: 1px solid var(--api-line);
-  }
-
+@media (max-width: 760px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .panel {
+    min-height: 360px;
+    overflow: visible;
   }
 }
 
 @media (max-width: 600px) {
   .page {
-    padding-block: 32px 80px;
-  }
-
-  .accountBar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .accountActions {
-    justify-content: space-between;
+    padding-block: 24px 72px;
   }
 
   .hero {
-    gap: 24px;
     margin-bottom: 24px;
   }
 
   .hero h1 {
-    font-size: clamp(44px, 13vw, 60px);
+    font-size: clamp(42px, 13vw, 54px);
   }
 
   .intro {
     font-size: 16px;
     margin-top: 16px;
-  }
-
-  .launchPath {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .launchPath li:nth-child(2) {
-    border-bottom: 0;
   }
 
   .accountBar {
@@ -807,7 +788,16 @@
   }
 
   .walletGate {
-    min-height: 340px;
+    min-height: 260px;
+  }
+
+  .sectionSwitch {
+    display: grid;
+    width: 100%;
+  }
+
+  .formFields {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .secretRow {
@@ -862,7 +852,8 @@
   .dangerButton,
   .dismissButton,
   .revokeButton,
-  .textButton {
+  .textButton,
+  .sectionSwitch button {
     transition: none;
   }
 
@@ -883,7 +874,8 @@
   .keyItem,
   .panel,
   .keyReveal,
-  .walletGate {
+  .walletGate,
+  .sectionSwitch {
     border: 1px solid CanvasText;
   }
 

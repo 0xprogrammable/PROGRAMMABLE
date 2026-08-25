@@ -59,6 +59,51 @@ function hasTouchHeight(declarations: string) {
     .some((match) => Number(match[1]) >= 44);
 }
 
+function hexChannels(value: string) {
+  const normalized = value.trim().replace(/^#/u, "");
+  if (!/^[0-9a-f]{6}$/iu.test(normalized)) {
+    throw new Error(`Expected a six-digit hex color, received ${value}`);
+  }
+  return [0, 2, 4].map((offset) =>
+    Number.parseInt(normalized.slice(offset, offset + 2), 16)
+  );
+}
+
+function relativeLuminance(value: string) {
+  const channels = hexChannels(value).map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(first: string, second: string) {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  return (
+    (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05)
+  );
+}
+
+function rgbChroma(value: string) {
+  const channels = hexChannels(value);
+  return Math.max(...channels) - Math.min(...channels);
+}
+
+function cssHexVariable(css: string, variable: string) {
+  const match = css.match(new RegExp(`${variable}\\s*:\\s*(#[0-9a-f]{6})`, "iu"));
+  if (!match?.[1]) throw new Error(`Missing ${variable}`);
+  return match[1];
+}
+
+function hasFontSizeAtLeast(declarations: string, minimum: number) {
+  return [...declarations.matchAll(/font-size\s*:\s*(\d+)px/gu)]
+    .some((match) => Number(match[1]) >= minimum);
+}
+
 const account = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const otherAccount = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
@@ -254,6 +299,63 @@ describe("prediction profile regression contract", () => {
       /useState<[^>]*(?:Tab|"positions")[^>]*>\(["']positions["']\)/u,
     );
     expect(portfolioSource).toMatch(/(?:model|viewModel)\s*\[\s*activeTab\s*\]/u);
+  });
+
+  it("presents Predictions without a redundant profile-activity eyebrow", () => {
+    expect(portfolioSource).toContain(
+      '<h2 id="prediction-portfolio-title">Predictions</h2>',
+    );
+    expect(portfolioSource).not.toContain("Profile activity");
+    expect(portfolioSource).not.toContain("portfolioEyebrow");
+    expect(portfolioStyles).not.toContain(".portfolioEyebrow");
+  });
+
+  it("uses vivid yes and no colors with AA text contrast and non-color labels", () => {
+    const yes = cssHexVariable(portfolioStyles, "--portfolio-yes");
+    const no = cssHexVariable(portfolioStyles, "--portfolio-no");
+
+    expect(rgbChroma(yes)).toBeGreaterThan(rgbChroma("#72d3a4"));
+    expect(rgbChroma(no)).toBeGreaterThan(rgbChroma("#e58d96"));
+    for (const surface of ["#181818", "#202020"]) {
+      expect(contrastRatio(yes, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(no, surface)).toBeGreaterThanOrEqual(4.5);
+    }
+
+    expect(portfolioSource).toContain("{item.statusLabel}");
+    expect(portfolioSource).toContain("data-outcome={side.outcome}");
+    expect(portfolioSource).toContain("<strong>{side.outcome}</strong>");
+    expect(portfolioSource).toContain("{item.probabilityLabel}");
+    expect(portfolioStyles).toMatch(
+      /\.portfolioCardStatus > span::before\s*\{[^}]*background:\s*currentcolor;/su,
+    );
+  });
+
+  it("keeps compact portfolio actions and supporting copy legible", () => {
+    for (const [selector, minimum] of [
+      [".portfolioRefresh", 13],
+      [".portfolioTabs button", 13],
+      [".portfolioCardStatus", 12],
+      [".portfolioCardCopy h3", 14],
+      [".portfolioHoldings strong", 12],
+      [".portfolioMetrics dt", 12],
+      [".portfolioMetrics dd", 13],
+      [".portfolioMetrics small", 12],
+      [".portfolioEmpty small", 13],
+      [".portfolioInlineError", 13],
+    ] as const) {
+      expect(
+        hasFontSizeAtLeast(cssDeclarationsFor(portfolioStyles, selector), minimum),
+        `${selector} needs at least ${minimum}px type`,
+      ).toBe(true);
+    }
+
+    const narrowStyles = mediaBodiesAtOrBelow(portfolioStyles, 360);
+    expect(
+      hasFontSizeAtLeast(
+        cssDeclarationsFor(narrowStyles, ".portfolioTabs button"),
+        12,
+      ),
+    ).toBe(true);
   });
 
   it("does not present an OPEN market as tradable after its cutoff", () => {

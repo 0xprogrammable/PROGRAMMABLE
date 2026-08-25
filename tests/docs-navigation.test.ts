@@ -132,6 +132,7 @@ describe("Docs navigation state", () => {
       href: "/docs/developers",
       label: "Overview",
       relatedPaths: [
+        "/docs/developers/custom-launch",
         "/docs/developers/verify",
         "/docs/developers/indexing",
         "/docs/developers/machine-readable",
@@ -299,7 +300,11 @@ describe("Docs navigation state", () => {
     ).toBe(true);
   });
 
-  it("finds the three dedicated developer guides", () => {
+  it("finds the four dedicated developer guides", () => {
+    expect(getDocsSearchResults("idempotency")[0]).toMatchObject({
+      href: "/docs/developers/custom-launch",
+      title: "Custom Launch API",
+    });
     expect(getDocsSearchResults("verify")[0]).toMatchObject({
       href: "/docs/developers/verify",
       title: "Verify a token or pool",

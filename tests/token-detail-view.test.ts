@@ -9,6 +9,7 @@ import {
   formatStockPairedGrossVolume,
   getValuationMetricLabel,
   parseDetailPayload,
+  TOKEN_DETAIL_REQUEST_TIMEOUT_MS,
 } from "../components/token-detail-view";
 import type { PreparedTokenTrade } from "../components/token-trade";
 import type { TokenMarketDataV1 } from "../lib/market-data/market-data-v1";
@@ -50,6 +51,11 @@ const canonicalToken = {
 } satisfies CanonicalTokenExploreEntry;
 
 describe("token detail metrics", () => {
+  it("keeps client retries bounded beyond the route provider budget", () => {
+    expect(TOKEN_DETAIL_REQUEST_TIMEOUT_MS).toBeGreaterThan(8_000);
+    expect(TOKEN_DETAIL_REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
+  });
+
   it("hydrates a verified server response without a duplicate client request", () => {
     const state = createTokenDetailInitialState(
       {
@@ -73,12 +79,16 @@ describe("token detail metrics", () => {
     });
   });
 
-  it("keeps unavailable or mismatched server responses retryable", () => {
+  it("surfaces unavailable or mismatched server responses with explicit retry", () => {
     expect(createTokenDetailInitialState(
       { status: 503, body: { error: "temporarily unavailable" } },
       canonicalToken.tokenAddress,
       "unavailable-request",
-    )).toBeNull();
+    )).toEqual({
+      phase: "error",
+      message: "temporarily unavailable",
+      requestKey: "unavailable-request",
+    });
     expect(createTokenDetailInitialState(
       {
         status: 200,
@@ -91,7 +101,11 @@ describe("token detail metrics", () => {
       },
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "mismatched-request",
-    )).toBeNull();
+    )).toEqual({
+      phase: "error",
+      message: "The token registry returned the wrong token",
+      requestKey: "mismatched-request",
+    });
   });
 
   it("hydrates a verified not-found response as a terminal empty state", () => {
@@ -245,7 +259,11 @@ describe("token detail metrics", () => {
       buildTokenDetailMetrics(token, null, volume).find((metric) =>
         metric.label.startsWith("Volume"),
       ),
-    ).toEqual({ label: "Volume 1W", value: "" });
+    ).toEqual({ label: "Volume 1W", value: "Loading…" });
+    expect(buildChartVolumeMetric({
+      range: "1d",
+      pending: false,
+    })).toEqual({ label: "Volume 1D", value: "Not available yet" });
     expect(buildChartVolumeMetric(null)).toBeUndefined();
     expect(
       buildChartVolumeMetric({

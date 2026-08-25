@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 import styles from "@/components/docs-hub.module.css";
-import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
@@ -43,8 +42,8 @@ export default function CreatorsDocsPage() {
             <span>Custom Launch API</span>
             <strong>Prepare one Custom launch</strong>
             <small>
-              Create a wallet-bound API key, submit one deterministic bundle for
-              checks and receive a prepared wallet action.
+              Create a wallet-bound API key, submit one deterministic bundle and
+              wait for an authorized wallet transaction.
             </small>
           </Link>
           <Link className={styles.pathCard} href="/docs/creators/templates">
@@ -57,17 +56,17 @@ export default function CreatorsDocsPage() {
           </Link>
           <a
             className={styles.pathCard}
-            href={PROGRAMMABLE_PUBLIC_REPOSITORIES.hookbuilder}
+            href="https://github.com/0xprogrammable/Hookbuilder-Skill"
             rel="noreferrer"
             target="_blank"
           >
-            <span>Hook Builder</span>
+            <span>Hookbuilder-Skill</span>
             <strong>Build with the skill and tools</strong>
             <small>
-              Use the Hook Builder skill to create a reproducible Uniswap v4
-              project before packaging it for the Custom Launch API.
+              Use Hookbuilder-Skill as a starting point for a Uniswap v4 project.
+              Package the API request with project-specific tooling.
             </small>
-            <span className="sr-only">Opens Hook Builder on GitHub</span>
+            <span className="sr-only">Opens Hookbuilder-Skill on GitHub</span>
           </a>
         </div>
       </section>
@@ -75,15 +74,15 @@ export default function CreatorsDocsPage() {
       <section id="project">
         <h2>Launch a project</h2>
         <p>
-          Start with Hook Builder, create a deterministic source and graph
-          bundle, then submit it through the Custom Launch API with a
-          wallet-bound key. The API validates its declared commitments and graph
-          bindings, then prepares the exact wallet action without reproducing
-          the build.
+          Build and test the project, then create a deterministic source and
+          graph bundle with project-specific tooling. Submit it through the
+          Custom Launch API with a wallet-bound key. The API validates the
+          declared commitments and graph bindings without reproducing the build.
         </p>
         <p>
-          The API key cannot sign or broadcast. The controller wallet must
-          review and confirm the prepared launch separately.
+          A prepared result contains the artifact but no wallet transaction.
+          After authorization, the controller wallet must review, sign and
+          broadcast the exact transaction separately. The API key cannot do so.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/launch">
@@ -114,8 +113,10 @@ export default function CreatorsDocsPage() {
         <h2>Checks and wallet action</h2>
         <p>
           The Custom Launch API checks one deterministic bundle and prepares an
-          exact wallet action. A future template program would separately bind
-          one reusable version, parameter range and payout identity.
+          exact artifact. After platform authorization, it exposes the exact
+          transaction for separate wallet review. A future template program
+          would separately bind one reusable version, parameter range and payout
+          identity.
         </p>
         <p>
           Preparation and wallet execution are separate. An API result does not
@@ -146,15 +147,15 @@ export default function CreatorsDocsPage() {
         <ul className={styles.linkList}>
           <li>
             <a
-              href={PROGRAMMABLE_PUBLIC_REPOSITORIES.hookbuilder}
+              href="https://github.com/0xprogrammable/Hookbuilder-Skill"
               rel="noreferrer"
               target="_blank"
             >
               <span>
-                <strong>Hook Builder</strong>
+                <strong>Hookbuilder-Skill</strong>
                 <small>
-                  The skill and local tools for building a reproducible Uniswap
-                  v4 project.
+                  A starting point for building and testing a Uniswap v4
+                  project; the API schema defines launch packaging.
                 </small>
               </span>
               <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.8} />

@@ -1202,7 +1202,12 @@ export function createExploreInitialState(
 ): ExploreState | null {
   if (response === undefined) return null;
   if (!response.ok) {
-    return null;
+    return {
+      phase: "error",
+      message: readApiError(response.body),
+      requestKey: input.requestKey,
+      contentKey: input.contentKey,
+    };
   }
 
   try {
@@ -1251,7 +1256,7 @@ export function handledInitialExploreRequestKey(
   state: ExploreState | null,
   requestKey: string,
 ): string | null {
-  return state?.phase === "ready" ? requestKey : null;
+  return state === null ? null : requestKey;
 }
 
 export function createResponsiveExploreInitialState(
@@ -1265,8 +1270,7 @@ export function createResponsiveExploreInitialState(
   }>,
 ): ExploreState | null {
   if (!input.reuseAvailable || !input.isInitialRequest) return null;
-  const state = createExploreInitialState(response, input);
-  return state?.phase === "ready" ? state : null;
+  return createExploreInitialState(response, input);
 }
 
 type PendingExploreRequest = {
@@ -2001,6 +2005,10 @@ export function exploreTokenCardDescription(token: ExploreEntry) {
     : undefined;
 }
 
+export function formatExploreContractAddress(address: `0x${string}`) {
+  return `${address.slice(0, 6)}…${address.slice(-3)}`;
+}
+
 export function getTokenCards(
   tokens: Array<ExploreEntry | ValuedExploreEntry>,
 ): TokenCard[] {
@@ -2181,7 +2189,7 @@ export function ExploreView({
     }),
   );
   const initialResponseReuseAvailable = useRef(
-    initialState?.phase === "ready",
+    initialState !== null,
   );
   const handledRequestKey = useRef<string | null>(
     handledInitialExploreRequestKey(initialState, requestKey),
@@ -2309,12 +2317,14 @@ export function ExploreView({
         pageSize,
       },
     );
-    if (responsiveInitialState?.phase === "ready") {
+    if (responsiveInitialState !== null) {
       activeExploreContentKey.current = activeRequestContentKey;
-      cacheResolvedExplorePayload(
-        activeRequestContentKey,
-        responsiveInitialState.payload,
-      );
+      if (responsiveInitialState.phase === "ready") {
+        cacheResolvedExplorePayload(
+          activeRequestContentKey,
+          responsiveInitialState.payload,
+        );
+      }
       if (handledRequestKey.current !== requestKey) {
         handledRequestKey.current = requestKey;
         setState(responsiveInitialState);
@@ -2541,9 +2551,9 @@ export function ExploreView({
     ) {
       return (
         <div className={styles.loadingState} aria-busy="true">
-          <span className="sr-only" role="status">
+          <p className={styles.loadingStatus} role="status" aria-live="polite">
             Loading launches
-          </span>
+          </p>
           <ExploreGridSkeleton count={EXPLORE_TOKENS_PER_PAGE} />
         </div>
       );
@@ -2715,7 +2725,7 @@ export function ExploreView({
                 {token.tokenAddress ? (
                   <div className={styles.runnerContract}>
                     <code title={token.tokenAddress}>
-                      {`${token.tokenAddress.slice(0, 6)}…${token.tokenAddress.slice(-4)}`}
+                      {formatExploreContractAddress(token.tokenAddress)}
                     </code>
                     <button
                       className={styles.runnerCopyButton}

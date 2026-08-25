@@ -13,6 +13,7 @@ import {
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const developerPage = read("app/docs/developers/page.tsx");
+const customLaunchPage = read("app/docs/developers/custom-launch/page.tsx");
 const verifyPage = read("app/docs/developers/verify/page.tsx");
 const indexingPage = read("app/docs/developers/indexing/page.tsx");
 const machineReadablePage = read(
@@ -45,9 +46,14 @@ describe("Developer documentation experience", () => {
     );
   });
 
-  it("publishes focused verification, indexing and machine-readable routes", () => {
+  it("publishes focused Custom launch, verification, indexing and machine-readable routes", () => {
     expect(docsSearch).toContain("key={`${item.href}:${item.title}`}");
     for (const [source, path, canonical] of [
+      [
+        customLaunchPage,
+        "/docs/developers/custom-launch",
+        'alternates: { canonical: "/docs/developers/custom-launch" }',
+      ],
       [
         verifyPage,
         "/docs/developers/verify",

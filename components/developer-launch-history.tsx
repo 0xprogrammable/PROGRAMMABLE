@@ -178,11 +178,14 @@ function walletTransaction(launch: LaunchResource) {
 
 function HistorySkeleton() {
   return (
-    <div className={styles.skeletonList} aria-hidden="true">
-      {[0, 1].map((index) => (
-        <span className={styles.skeletonRow} key={index} />
-      ))}
-    </div>
+    <>
+      <span className={styles.visuallyHidden} role="status">
+        Loading launch history
+      </span>
+      <div className={styles.skeletonList} aria-hidden="true">
+        <span className={styles.skeletonRow} />
+      </div>
+    </>
   );
 }
 
@@ -197,6 +200,7 @@ export function DeveloperLaunchHistory({
   const [loadingMore, setLoadingMore] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const requestSequenceRef = useRef(0);
   const loadMoreInFlightRef = useRef(false);
   const checkInFlightRef = useRef(false);
@@ -309,6 +313,7 @@ export function DeveloperLaunchHistory({
       setLaunches((current) => current.map((candidate) =>
         candidate.requestId === updated.requestId ? updated : candidate
       ));
+      setStatusMessage("Launch status updated.");
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Unable to check launch status.",
@@ -325,19 +330,26 @@ export function DeveloperLaunchHistory({
       aria-busy={state === "loading" || loadingMore}
       aria-labelledby="launch-history-title"
     >
+      <p className={styles.visuallyHidden} role="status" aria-live="polite">
+        {statusMessage}
+      </p>
       <div className={styles.heading}>
         <div>
-          <p className={styles.kicker}>API requests</p>
+          <p className={styles.kicker}>Custom Launch API</p>
           <h2 id="launch-history-title">Launch history</h2>
         </div>
-        <button className={styles.textButton} type="button" onClick={refresh}>
+        <button
+          className={styles.textButton}
+          disabled={state === "loading" || loadingMore}
+          type="button"
+          onClick={refresh}
+        >
           Refresh
         </button>
       </div>
       <p className={styles.intro}>
-        Wallet-owned preparation records. A request is only onchain after the
-        controller wallet signs and broadcasts it. Open a pending request to
-        load its prepared transaction and refresh its exact onchain state.
+        Requests prepared for this wallet. A launch is onchain only after the
+        wallet signs and broadcasts it.
       </p>
 
       {state === "loading" ? <HistorySkeleton /> : null}
@@ -354,8 +366,8 @@ export function DeveloperLaunchHistory({
 
       {state === "ready" && launches.length === 0 ? (
         <div className={styles.statePanel}>
-          <h3>No API launch requests yet</h3>
-          <p>Your agent&apos;s first accepted request will appear here.</p>
+          <h3>No launch requests</h3>
+          <p>Accepted API requests will appear here.</p>
         </div>
       ) : null}
 
@@ -367,10 +379,7 @@ export function DeveloperLaunchHistory({
               <li className={styles.launchItem} key={launch.launchId}>
                 <div className={styles.launchTopline}>
                   <div>
-                    <h3>Custom launch request</h3>
-                    <code title={launch.requestId}>
-                      API request {shortId(launch.requestId)}
-                    </code>
+                    <h3>Request {shortId(launch.requestId)}</h3>
                   </div>
                   <span className={styles.status} data-status={launch.status}>
                     {statusCopy(launch.status)}
@@ -403,8 +412,8 @@ export function DeveloperLaunchHistory({
                 ) : null}
                 {transaction ? (
                   <details className={styles.transaction}>
-                    <summary>Prepared wallet transaction</summary>
-                    <p>Review these exact fields before signing in your wallet.</p>
+                    <summary>Prepared transaction</summary>
+                    <p>Review these fields before signing in your wallet.</p>
                     <pre>{JSON.stringify(transaction, null, 2)}</pre>
                   </details>
                 ) : null}
@@ -416,8 +425,8 @@ export function DeveloperLaunchHistory({
                     onClick={() => void checkOnchainStatus(launch)}
                   >
                     {checkingId === launch.requestId
-                      ? "Loading launch details"
-                      : "Open launch details"}
+                      ? "Checking status"
+                      : "Check onchain status"}
                   </button>
                 ) : null}
               </li>

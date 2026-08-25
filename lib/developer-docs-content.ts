@@ -17,6 +17,8 @@ const customLaunchApiOpenApiUrl =
   "https://programmable.market/openapi/custom-launch-v1.json";
 const customLaunchApiGuideUrl =
   "https://programmable.market/developers/custom-launch-api-v1.md";
+const customLaunchHumanGuideUrl =
+  "https://programmable.market/docs/developers/custom-launch";
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
@@ -44,7 +46,8 @@ export function buildDeveloperDocsMarkdown(): string {
     `Custom Launch API: ${customLaunchApiOrigin}`,
     `Create and revoke API keys: ${apiKeysUrl}`,
     `Custom Launch API OpenAPI: ${customLaunchApiOpenApiUrl}`,
-    `Custom Launch API guide: ${customLaunchApiGuideUrl}`,
+    `Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
+    `Raw Custom Launch API guide: ${customLaunchApiGuideUrl}`,
     `Deployment manifest: ${resources.manifestUrl}`,
     `Frozen Router ABI: ${resources.abiUrl}`,
     `ABI SHA-256: ${resources.abiSha256}`,
@@ -62,7 +65,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "Keys expire after 90 days by default, may be issued for at most 366 days, and are limited to 10 active keys per wallet.",
     "",
-    "An API key is not a wallet or private key. The platform validates the submitted manifest digest, graph constraints, required agent attestation and evidence digests, and exact permit binding, then returns the prepared Router action. It does not compile source, simulate the transaction, audit the project, or attest safety. A controller wallet, or an agent separately authorized to use that wallet, must review, sign, and broadcast the action. The API key alone never grants wallet signing authority.",
+    "An API key is not a wallet or private key. The platform validates the submitted manifest digest, graph constraints, attestation shape and evidence digests, and exact permit binding. `prepared` contains an exact artifact but no wallet transaction. `authorized` contains the permit-attached wallet transaction, which a controller wallet, or an agent separately authorized to use that wallet, must review, sign, and broadcast. The platform does not compile source, simulate the transaction, audit the project, or attest safety. The API key alone never grants wallet signing authority.",
     "",
     "### Create a launch",
     "",
@@ -106,7 +109,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     `The pool contains exactly \`tokenTargetId\`, \`hookTargetId\`, \`fee\`, and \`tickSpacing\`. Target IDs must select the declared token and hook. The standalone Custom Launch API schema, including every bound, enum, and response, is published at ${customLaunchApiOpenApiUrl}.`,
     "",
-    "The required agent attestation contains exactly `schemaVersion: programmable.agent-launch-attestation.v1`, `subjectGraphBundleHash`, `agentId`, canonical UTC `checkedAt`, and 1 to 64 unique checks. Each check contains `checkId` and a non-null `sha256:<64 lowercase hex>` evidence digest. It is the agent's self-attestation for the submitted graph subject, is excluded from platform permit authorization and is not a Programmable safety, audit, approval, compilation, or simulation claim.",
+    "The agent attestation is a required request field and contains exactly `schemaVersion: programmable.agent-launch-attestation.v1`, `subjectGraphBundleHash`, `agentId`, canonical UTC `checkedAt`, and 1 to 64 unique checks. Each check contains `checkId` and a non-null `sha256:<64 lowercase hex>` evidence digest. V1 does not publish a universal check-ID catalog or project-independent pass/fail semantics. The submitting workflow chooses IDs for checks it actually ran and preserves the underlying evidence. This is the agent's self-attestation for the submitted graph subject, is excluded from platform permit authorization and is not a Programmable safety, audit, approval, compilation, or simulation claim.",
     "",
     "### List wallet launch requests",
     "",
@@ -338,7 +341,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Understand the public scope, creator information, launch provenance, and available market context before directing a user to the website.",
     "- Integrate a read-only terminal, wallet, scanner, catalog, or research tool with the documented public endpoints.",
     `- Prepare a Custom launch with a wallet-bound API key from ${apiKeysUrl} and \`POST ${customLaunchApiOrigin}/v1/custom-launches\`.`,
-    "- Direct a human to trade, manage a project, claim rewards, or sign a prepared launch transaction through the website. Those wallet actions require explicit wallet authority.",
+    "- Direct a human to trade, manage a project, claim rewards, or sign an authorized Custom launch transaction through the website. A prepared Custom launch has no wallet transaction. Every wallet action requires explicit wallet authority.",
     "",
     "## Do not use Programmable to infer",
     "",
@@ -361,6 +364,7 @@ export function buildProgrammableLlmsIndex(): string {
     "",
     "- OpenAPI: https://programmable.market/openapi.json",
     `- Create or revoke API keys: ${apiKeysUrl}`,
+    `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Create a Custom launch: POST ${customLaunchApiOrigin}/v1/custom-launches`,
     `- List wallet-owned Custom launches: GET ${customLaunchApiOrigin}/v1/custom-launches`,
     `- Read a Custom launch: GET ${customLaunchApiOrigin}/v1/custom-launches/{launchId}`,

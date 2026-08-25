@@ -8,9 +8,9 @@ Programmable has two separate developer surfaces. The Developer API at `https://
 
 ## Prepare a Custom launch
 
-Create or revoke a key at [Custom Launch API keys](https://programmable.market/developers/api-keys), then follow the [Custom Launch API V1 guide](https://programmable.market/developers/custom-launch-api-v1.md). Send deterministic bundles only to `https://api.programmable.market/v1/custom-launches`.
+Start with the [Custom Launch API guide](custom-launch.md). Create or revoke a key at [Custom Launch API keys](https://programmable.market/developers/api-keys), then send deterministic bundles only to `https://api.programmable.market/v1/custom-launches`.
 
-The key can create and read launch preparations for its wallet principal. It cannot sign or broadcast. The controller wallet reviews and confirms the prepared transaction separately.
+The key can create and read launch preparations for its wallet principal. It cannot authorize, sign or broadcast. A `prepared` response contains an exact artifact but no wallet transaction. Only `authorized` contains the exact transaction for the controller wallet to review, sign and broadcast separately.
 
 ## Start with discovery
 
@@ -39,6 +39,10 @@ Protocol fee claim discovery is a separate execution index. The claim console
 uses complete Classic Launcher and Custom Registry scans plus the fixed Stock
 release set; see [Index Programmable launches](indexing.md#index-protocol-fee-claims-separately)
 for the exact completeness and fail-closed rules.
+
+{% content-ref url="custom-launch.md" %}
+[custom-launch.md](custom-launch.md)
+{% endcontent-ref %}
 
 {% content-ref url="verify.md" %}
 [verify.md](verify.md)

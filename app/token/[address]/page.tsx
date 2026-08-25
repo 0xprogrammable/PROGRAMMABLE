@@ -11,7 +11,10 @@ import { TokenDetailShell } from "@/components/token-detail-shell";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_TOKEN_DETAIL_TIMEOUT_MS = 4_000;
+// The route owns an eight-second provider budget. Give it a small response
+// margin so a valid slow read is not aborted and immediately repeated by the
+// browser, while keeping the initial render strictly bounded.
+export const INITIAL_TOKEN_DETAIL_TIMEOUT_MS = 8_500;
 
 function unavailableInitialTokenDetailResponse(): TokenDetailInitialResponse {
   return {

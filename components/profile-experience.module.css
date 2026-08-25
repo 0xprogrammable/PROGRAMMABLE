@@ -87,11 +87,12 @@
   font-weight: 585;
   letter-spacing: -0.042em;
   line-height: 1;
+  max-width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   padding-block-end: 0.04em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-wrap: balance;
+  white-space: normal;
 }
 
 .address {
@@ -612,7 +613,7 @@
   border-radius: 10px;
   color: var(--text-soft);
   display: inline-flex;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 620;
   gap: 6px;
   min-height: 44px;
@@ -1035,7 +1036,7 @@
 }
 
 .claimRow .claimButton {
-  font-size: 11px;
+  font-size: 13px;
   min-height: 44px;
   min-width: 0;
   padding-inline: 10px;
@@ -1079,7 +1080,7 @@
 
 .claimEmpty p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   margin-block-start: 5px;
   max-width: 100%;
@@ -1091,7 +1092,7 @@
 .rowError {
   display: flex;
   flex-wrap: wrap;
-  font-size: 10px;
+  font-size: 12px;
   gap: 4px 7px;
   grid-column: 1 / -1;
   line-height: 1.4;
@@ -1174,7 +1175,7 @@
 
 .claimDialogHeader p {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 13px;
   margin-block-start: 7px;
   overflow-wrap: anywhere;
 }
@@ -1254,7 +1255,7 @@
 
 .claimDialogAction p {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1263,7 +1264,7 @@
 
 .claimDialogAction .claimButton,
 .claimDialogAction .secondaryAction {
-  font-size: 11px;
+  font-size: 13px;
   min-width: 154px;
   padding-inline: 13px;
   white-space: nowrap;
@@ -2021,8 +2022,8 @@
 }
 
 .editButton {
-  font-size: 13px;
-  min-height: 40px;
+  font-size: 14px;
+  min-height: 44px;
 }
 
 .profileBio {
@@ -2408,7 +2409,7 @@
   }
 
   .nameRow h1 {
-    font-size: 32px;
+    font-size: clamp(24px, 8.2vw, 32px);
   }
 
   .bannerActions {

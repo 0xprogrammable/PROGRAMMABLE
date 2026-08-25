@@ -10,7 +10,10 @@ import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_EXPLORE_TIMEOUT_MS = 4_000;
+// The route owns an eight-second provider budget. Give it a small response
+// margin so a valid slow read is not aborted and immediately repeated by the
+// browser, while keeping the initial render strictly bounded.
+export const INITIAL_EXPLORE_TIMEOUT_MS = 8_500;
 export const INITIAL_EXPLORE_QUERY = new URLSearchParams({
   q: "",
   sort: DEFAULT_EXPLORE_VIEW_SORT,

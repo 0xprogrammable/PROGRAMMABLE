@@ -11,7 +11,7 @@ import { ArrowRight, Check, CircleHelp, Copy, ExternalLink, X } from "lucide-rea
 
 import styles from "@/components/create-guide.module.css";
 
-const BUILD_PROMPT = `Build a Uniswap v4 hook for Programmable. Start from the official Hook Builder at https://github.com/0xprogrammable/hookbuilder. The token should [describe the behavior in plain words]. Keep the project limited to that behavior, add tests, run the applicable local checks, and explain the results. Follow https://programmable.market/developers/custom-launch-api-v1.md to package one deterministic source and graph bundle with the required evidence digests. Use my Programmable API key only for the authenticated request to https://api.programmable.market/v1/custom-launches. Never print the key or store it in source control. Do not sign or broadcast. Stop after the API returns the prepared wallet action so I can review it.`;
+const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Hookbuilder-Skill at https://github.com/0xprogrammable/Hookbuilder-Skill is an optional project starting point; follow https://programmable.market/docs/developers/custom-launch for the exact packaging and API steps. Derive the request and evidence digests from the exact artifacts, never expose the API key, and never invent check results. Poll the single-request status: prepared has no wallet transaction, so stop at authorized and return the exact transaction and permit for my review. Never sign or broadcast.`;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -188,22 +188,28 @@ export function CreateGuide() {
               <div>
                 <h3>Prepare the launch through the API</h3>
                 <p>
-                  Hook Builder packages the project and required evidence. Create
-                  a wallet-bound API key, submit the deterministic bundle to the
-                  Custom Launch API, then review the prepared action in the
-                  controller wallet. The API key cannot sign or broadcast.
+                  Package the request with project-specific tooling that follows
+                  the API schema. Create a wallet-bound API key, submit the
+                  deterministic bundle and wait for <code>authorized</code>. The
+                  controller wallet reviews the exact transaction separately.
+                  A <code>prepared</code> result has no wallet transaction, and
+                  the API key cannot authorize, sign or broadcast.
                 </p>
                 <div className={styles.links}>
                   <a
-                    href="https://github.com/0xprogrammable/hookbuilder/releases/latest"
+                    href="https://github.com/0xprogrammable/Hookbuilder-Skill"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Open Hookbuilder
+                    Open Hookbuilder-Skill
                     <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
                   </a>
                   <Link href="/developers/api-keys">
                     Create a Custom launch API key
+                    <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
+                  </Link>
+                  <Link href="/docs/developers/custom-launch">
+                    Read the Custom Launch API guide
                     <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
                   </Link>
                 </div>

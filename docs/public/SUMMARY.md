@@ -17,6 +17,7 @@
   - [Verification and risk](trust.md)
   - [Service status](status.md)
 - [Developers](developers/README.md)
+  - [Custom Launch API](developers/custom-launch.md)
   - [Verify a launch](developers/verify.md)
   - [Index launches](developers/indexing.md)
   - [API reference](developers/machine-readable.md)

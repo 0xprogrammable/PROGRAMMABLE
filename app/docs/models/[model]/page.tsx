@@ -389,11 +389,15 @@ function CustomDocs() {
         </p>
         <p>
           Each request binds one source descriptor, manifest digest, graph
-          bundle and controller wallet. The authenticated API prepares the exact
-          wallet action without signing or broadcasting it.
+          bundle and controller wallet. The authenticated API prepares an exact
+          artifact. Only the later <code>authorized</code> state contains the
+          permit-attached wallet transaction, and the API does not wallet-sign
+          or broadcast it.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/developers/api-keys">Create a Custom launch API key</Link>
+          <Link href="/docs/developers/custom-launch">
+            Read the Custom Launch API guide
+          </Link>
         </p>
       </section>
 
@@ -449,7 +453,8 @@ function CustomDocs() {
       <section id="project-presentation">
         <h2>What preparation does not prove</h2>
         <p>
-          A prepared action does not establish current tradability, liquidity,
+          A prepared artifact is not a wallet transaction or wallet
+          authorization. It does not establish current tradability, liquidity,
           price, pool state, audit coverage, support in an external terminal or
           the behavior of an interface outside the submitted graph. Project
           artwork, descriptions and links do not verify the hook or make another
