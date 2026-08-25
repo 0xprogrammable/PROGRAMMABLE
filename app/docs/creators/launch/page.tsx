@@ -35,14 +35,14 @@ export default function CreatorLaunchDocsPage() {
       <section id="access">
         <h2>Start here</h2>
         <p>
-           Public V2 Custom launch creation is live on Ethereum Mainnet. Package
-           and validate locally, then use a scoped API key to submit and track
-           the bound wallet&apos;s request.
-         </p>
-         <p>
-           The retained V1 create endpoint is read-only and returns
-           <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
-         </p>
+          Public V2 Custom launch creation is live on Ethereum Mainnet. Package
+          and validate locally, then use a scoped API key to submit and track
+          the bound wallet&apos;s request.
+        </p>
+        <p>
+          The retained V1 create endpoint is read-only and returns{" "}
+          <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+        </p>
         <div className={docsStyles.callout}>
           <strong>The API does not control your wallet.</strong>
           <p>
