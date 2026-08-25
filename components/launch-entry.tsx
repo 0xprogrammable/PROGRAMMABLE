@@ -295,19 +295,19 @@ export function LaunchModelPicker({
           className={`launch-model-card-heading ${launchExperience.modelHeading}`}
         >
           <strong id="launch-model-custom-title">Custom</strong>
-          <small data-status="held">Held</small>
+          <small data-status="live">Live API</small>
         </span>
         <span
           className={`launch-model-description ${launchExperience.modelDescription}`}
           id="launch-model-custom-description"
         >
-          Package and validate a deterministic bundle locally. Public Custom
-          creation remains held until the fee-enforced V2 release is activated.
+          Package, validate and submit a deterministic Custom launch through
+          the public V2 API. Your connected wallet reviews and signs separately.
         </span>
         <span
           className={`launch-model-action ${launchExperience.modelAction}`}
         >
-          Read API availability
+          Launch with the API
           <ArrowRight aria-hidden="true" size={16} />
         </span>
       </span>
@@ -401,8 +401,8 @@ export function LaunchModelPicker({
         <Link
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="custom"
-          data-launch-model-available="false"
-          data-launch-model-entry="release-held"
+          data-launch-model-available="true"
+          data-launch-model-entry="public-api"
           data-launch-model-launchable="false"
           href="/docs/developers/custom-launch"
           aria-labelledby="launch-model-custom-title"

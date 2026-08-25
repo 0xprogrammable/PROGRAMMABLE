@@ -18,7 +18,7 @@ Prediction Markets is available from [Create](https://programmable.market/launch
 
 Build and test the exact hook project. Use the versioned public `programmable-launch` CLI to derive the deterministic source manifest, graph bundle, address locators, evidence digests and exact-source verification metadata described by the [Custom Launch API schema](../developers/custom-launch.md).
 
-Pack and validate locally. Public Custom creation is currently held: authenticated V1 POST returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`, while V2 returns `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After` until canary and explicit public activation. A [wallet-bound API key](https://programmable.market/developers/api-keys) can still read its existing V1 history and must remain in an encrypted environment or secret store, never in chat or prompts.
+Pack and validate locally, then submit the byte identical V2 request with a [wallet-bound API key](https://programmable.market/developers/api-keys). Keep the key in an encrypted environment or secret store, never in chat or prompts. At `authorized`, stop for separate controller wallet review and signing.
 
 ## Reusable work
 

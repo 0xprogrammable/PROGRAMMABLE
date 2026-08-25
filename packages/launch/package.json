@@ -1,6 +1,6 @@
 {
   "name": "@programmable/launch",
-  "version": "2.0.0-rc.2",
+  "version": "2.0.0",
   "description": "Deterministic pack, validation, submission, and status tooling for the Programmable Custom Launch API",
   "type": "module",
   "bin": {

@@ -1,16 +1,16 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Programmable Custom Launch API V2 release candidate",
-    "version": "2.0.0-rc.2",
-    "summary": "Held fee-enforced V2 Custom launch contract for private canary integration.",
-    "description": "This machine contract describes the immutable 2.0.0-rc.2 request, lifecycle and wallet-handoff shapes. It does not activate public V2 launch creation. Public V2 requests currently receive 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After until an explicit canary and public activation. V1 history reads remain governed by the separate V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
+    "title": "Programmable Custom Launch API V2",
+    "version": "2.0.0",
+    "summary": "Public fee-enforced Custom launch creation and wallet-owned lifecycle reads.",
+    "description": "This machine contract describes the immutable 2.0.0 request, lifecycle and wallet-handoff shapes for public Ethereum Mainnet launch creation. V1 history reads remain governed by the separate V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
     {
       "url": "https://api.programmable.market",
-      "description": "Programmable Custom Launch API; V2 public access is held"
+      "description": "Programmable Custom Launch API production"
     }
   ],
   "externalDocs": {
@@ -23,34 +23,42 @@
     }
   ],
   "x-programmable-availability": {
-    "status": "release-candidate-held",
-    "release": "2.0.0-rc.2",
-    "publicAuthorized": false,
-    "privateCanaryOnly": true,
+    "status": "live",
+    "release": "2.0.0",
+    "publicAuthorized": true,
+    "privateCanaryOnly": false,
     "publicCreate": {
-      "status": "held",
-      "httpStatus": 503,
-      "errorCode": "CUSTOM_LAUNCH_V2_UNAVAILABLE",
-      "retryAfterSeconds": 30
+      "status": "live"
     },
-    "activationRule": "A published profile allowlist, canary evidence and explicit public activation are required. This document or a successful local pack does not satisfy that rule.",
+    "activationRule": "Only the exact published Rev3 production profile is accepted. API authorization never replaces separate controller-wallet review and signing.",
     "v1Contract": "https://programmable.market/openapi/custom-launch-v1.json"
   },
   "x-programmable-release-candidate": {
+    "status": "promoted-to-public",
     "packageName": "@programmable/launch",
     "binary": "programmable-launch",
-    "version": "2.0.0-rc.2",
-    "tag": "programmable-launch-v2.0.0-rc.2",
-    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.2",
-    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
-    "launchProfileHash": "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
-    "productionLaunchAuthorized": false
+    "version": "2.0.0",
+    "tag": "programmable-launch-v2.0.0",
+    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
+    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+    "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+    "productionLaunchAuthorized": true
+  },
+  "x-programmable-release": {
+    "packageName": "@programmable/launch",
+    "binary": "programmable-launch",
+    "version": "2.0.0",
+    "tag": "programmable-launch-v2.0.0",
+    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
+    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+    "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+    "productionLaunchAuthorized": true
   },
   "x-programmable-fee-policy": {
     "profileId": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-    "profileRevision": 2,
-    "launchProfileHash": "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
-    "productionLaunchAuthorized": false,
+    "profileRevision": 3,
+    "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+    "productionLaunchAuthorized": true,
     "chainId": "1",
     "network": "Ethereum Mainnet",
     "chargeTrigger": "successful-swap",
@@ -119,13 +127,20 @@
       "INTERNAL_ERROR"
     ]
   },
+  "x-programmable-admission": {
+    "scope": "global-v2-created-requests",
+    "hourlyLimit": 120,
+    "dailyLimit": 500,
+    "exactIdempotentReplayConsumesCapacity": false,
+    "enforcement": "durable-transactional"
+  },
   "paths": {
     "/v2/custom-launches": {
       "get": {
         "operationId": "listCustomLaunchesV2",
         "summary": "List wallet-owned V2 launch requests",
-        "description": "Private-canary contract. Returns newest-first compact rows for the wallet bound to the API key. List output is always null; use the version-matched single-resource route for a full handoff. Public availability remains held and can return 503 with Retry-After.",
-        "x-programmable-public-availability": "held",
+        "description": "Returns newest-first compact rows for the wallet bound to the API key. List output is always null; use the version-matched single-resource route for a full handoff.",
+        "x-programmable-public-availability": "live",
         "parameters": [
           {
             "name": "limit",
@@ -182,9 +197,9 @@
       },
       "post": {
         "operationId": "createCustomLaunchV2",
-        "summary": "Prepare a fee-enforced V2 launch (held/private canary)",
-        "description": "The request is byte- and hash-bound to the frozen fee-enforced profile, five-target graph, exact source, runtime materialization and agent attestation. Public authorization is held. Approved private-canary traffic may receive 202, or 200 only when replaying the same Idempotency-Key with byte-identical request bytes. Public traffic receives 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After. Never mutate request bytes when retrying a transient response.",
-        "x-programmable-public-availability": "held",
+        "summary": "Prepare a fee-enforced V2 launch",
+        "description": "The request is byte- and hash-bound to the frozen Rev3 production profile, five-target graph, exact source, runtime materialization and agent attestation. A new durable request returns 202; an exact Idempotency-Key replay can return 200. Never mutate request bytes when retrying a transient response.",
+        "x-programmable-public-availability": "live",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -227,7 +242,7 @@
             }
           },
           "202": {
-            "description": "Private-canary request durably accepted. Poll the Location resource. This response is not available to public traffic while held.",
+            "description": "New public V2 request durably accepted. Poll the Location resource.",
             "headers": {
               "Location": {
                 "$ref": "#/components/headers/ResourceLocation"
@@ -278,8 +293,8 @@
       "get": {
         "operationId": "getCustomLaunchV2",
         "summary": "Read one wallet-owned V2 launch request",
-        "description": "Private-canary single-resource polling contract. The simulating state exposes no output. Only an authorized resource can contain the exact simulation-passed wallet transaction for separate wallet review. The service never signs or broadcasts for the controller wallet. A missing launch and another principal's launch both return 404. Public availability remains held and can return 503 with Retry-After.",
-        "x-programmable-public-availability": "held",
+        "description": "Public V2 single-resource polling contract. The simulating state exposes no output. Only an authorized resource can contain the exact simulation-passed wallet transaction for separate wallet review. The service never signs or broadcasts for the controller wallet. A missing launch and another principal's launch both return 404.",
+        "x-programmable-public-availability": "live",
         "parameters": [
           {
             "name": "launchId",
@@ -296,7 +311,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Current durable private-canary V2 resource.",
+            "description": "Current durable public V2 resource.",
             "content": {
               "application/json": {
                 "schema": {
@@ -330,12 +345,12 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "pm_live_<22-char-key-id>_<43-char-secret>",
-        "description": "Wallet-bound key created at https://programmable.market/developers/api-keys. Private-canary V2 requires the route scope and an approved wallet/profile grant. Possessing a key or scope does not activate public V2 and never grants wallet signing authority."
+        "description": "Wallet-bound key created at https://programmable.market/developers/api-keys. The key requires the V2 route scope, is limited to its bound wallet and never grants wallet signing authority."
       }
     },
     "headers": {
       "RetryAfterSeconds": {
-        "description": "Whole seconds to wait before retrying the identical request. Current V2 held responses use 30.",
+        "description": "Whole seconds to wait before retrying the identical request.",
         "schema": {
           "type": "string",
           "pattern": "^[0-9]+$",
@@ -380,7 +395,7 @@
         }
       },
       "Forbidden": {
-        "description": "Required route scope or linked-wallet binding is missing. A held or unavailable V2 profile is reported as 503 instead.",
+        "description": "Required route scope or linked-wallet binding is missing.",
         "content": {
           "application/json": {
             "schema": {
@@ -471,7 +486,7 @@
         }
       },
       "V2Unavailable": {
-        "description": "V2 is held, unavailable or awaiting a retryable simulation dependency. Preserve exact request bytes. Honor Retry-After when present: CUSTOM_LAUNCH_V2_UNAVAILABLE and SIMULATION_UNAVAILABLE include it, while generic LAUNCH_UNAVAILABLE can omit it. CUSTOM_LAUNCH_V2_UNAVAILABLE is the expected public response while held.",
+        "description": "The launch service or a simulation dependency is temporarily unavailable. Preserve exact request bytes and honor Retry-After when present.",
         "headers": {
           "Retry-After": {
             "$ref": "#/components/headers/RetryAfterSeconds"
@@ -485,8 +500,8 @@
             "example": {
               "schemaVersion": "programmable.api-error.v1",
               "error": {
-                "code": "CUSTOM_LAUNCH_V2_UNAVAILABLE",
-                "message": "The fee-enforced V2 profile is held until its production security commitments are activated",
+                "code": "LAUNCH_UNAVAILABLE",
+                "message": "The Custom launch service is temporarily unavailable",
                 "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25",
                 "details": {
                   "retryAfterSeconds": 30
@@ -607,7 +622,7 @@
       },
       "FeeEnforcedLaunchProfileV2": {
         "type": "object",
-        "description": "Frozen server-allowlisted profile. The server requires the canonical JSON to match the private durable profile byte for byte; the 2.0.0-rc.2 public package carries a non-production-authorized candidate for offline pack and validation.",
+        "description": "Frozen Rev3 production profile. The server requires the canonical JSON to match the durable public profile byte for byte; the 2.0.0 package derives it from the exact distributed assets.",
         "required": [
           "schemaVersion",
           "profileId",
@@ -635,19 +650,16 @@
             "const": "programmable.fee-enforced-launch-profile.v1"
           },
           "profileId": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9.-]{2,127}$"
+            "const": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1"
           },
           "profileRevision": {
-            "type": "integer",
-            "minimum": 1
+            "const": 3
           },
           "profileVersion": {
-            "type": "string",
-            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            "const": "2.0.0"
           },
           "productionLaunchAuthorized": {
-            "type": "boolean"
+            "const": true
           },
           "chainId": {
             "const": "1"
@@ -811,12 +823,10 @@
             "const": "programmable.fee-enforced-launch-profile-binding.v1"
           },
           "profileId": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9.-]{2,127}$"
+            "const": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1"
           },
           "profileRevision": {
-            "type": "integer",
-            "minimum": 1
+            "const": 3
           },
           "targetRoles": {
             "$ref": "#/components/schemas/FeeEnforcedLaunchTargetRolesV2"

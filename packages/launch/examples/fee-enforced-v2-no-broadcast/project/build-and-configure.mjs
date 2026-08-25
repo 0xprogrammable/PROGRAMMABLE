@@ -224,7 +224,7 @@ const config = {
   launchProfile: {
     schemaVersion: "programmable.fee-enforced-launch-profile-selection.v1",
     profileId: "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-    profileRevision: 2,
+    profileRevision: 3,
     targetRoles: {
       tokenTargetId: "token",
       customModuleTargetId: "custom-module",

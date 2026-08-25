@@ -4,11 +4,11 @@ description: Read only contracts and verification rules for detecting Programmab
 
 # Developer reference
 
-Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated V1 list and single-resource reads remain live for existing wallet-owned requests. V1 launch creation is read-only and V2 remains held until canary and explicit public activation.
+Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V2 creation and lifecycle reads are live for wallet-owned requests. V1 history remains readable and V1 creation remains read only.
 
 ## Package locally and read existing launches
 
-Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` CLI to pack and validate locally, and manage a key at [Custom Launch API keys](https://programmable.market/developers/api-keys) to read existing V1 resources. Do not submit to V1: authenticated POST returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. The [fee-enforced V2 release-candidate contract](https://programmable.market/openapi/custom-launch-v2.json) is published for offline/private-canary integration, but public V2 requests return `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After` until activation. Legacy Registry and GitHub submission intake is closed.
+Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` CLI to pack, validate, submit and track V2 requests, and manage a key at [Custom Launch API keys](https://programmable.market/developers/api-keys). The [public V2 contract](https://programmable.market/openapi/custom-launch-v2.json) is normative. V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
 The key can create and read launch preparations for its wallet principal. Keep it only as `PROGRAMMABLE_API_KEY` in an encrypted secret store. It cannot authorize, sign or broadcast. A `prepared` response contains an exact artifact but no wallet transaction. Only `authorized` contains the exact transaction for the controller wallet to review, sign and broadcast separately.
 

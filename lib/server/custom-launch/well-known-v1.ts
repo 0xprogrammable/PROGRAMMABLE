@@ -18,7 +18,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and Custom launches. V1 launch history reads remain live while public launch creation is held for the fee-enforced V2 release candidate.",
+      "Canonical discovery for Programmable Classic and Custom launches. Public V2 launch creation and wallet-owned lifecycle reads are live on Ethereum Mainnet.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -33,7 +33,7 @@ export function programmableWellKnownDocumentV1(
     documentationUrl: "https://developers.programmable.family/",
     sourceUrl: "https://github.com/0xprogrammable/developers",
     customLaunchApi: Object.freeze({
-      status: "read-only" as const,
+      status: "live" as const,
       readStatus: "live" as const,
       apiBaseUrl: "https://api.programmable.market",
       readyzUrl: "https://api.programmable.market/readyz",
@@ -49,26 +49,43 @@ export function programmableWellKnownDocumentV1(
         tarballUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
       }),
+      publicRelease: Object.freeze({
+        status: "live" as const,
+        apiVersion: "2" as const,
+        guideUrl: "https://programmable.market/docs/developers/custom-launch",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        authentication: "wallet-bound-api-key" as const,
+        walletBoundary: "separate-wallet-signature" as const,
+        cli: Object.freeze({
+          packageName: "@programmable/launch",
+          binary: "programmable-launch",
+          releaseVersion: "2.0.0",
+          releaseUrl:
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
+          tarballUrl:
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+        }),
+      }),
       releaseCandidate: Object.freeze({
-        status: "private-canary-held" as const,
-        publicAuthorization: false as const,
+        status: "promoted-to-public" as const,
+        publicAuthorization: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "2.0.0-rc.2",
-        releaseTag: "programmable-launch-v2.0.0-rc.2",
+        releaseVersion: "2.0.0",
+        releaseTag: "programmable-launch-v2.0.0",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.2",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
         feePolicy: Object.freeze({
           profileId:
             "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-          profileRevision: 2 as const,
+          profileRevision: 3 as const,
           launchProfileHash:
-            "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
-          productionLaunchAuthorized: false as const,
+            "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+          productionLaunchAuthorized: true as const,
           chainId: "1" as const,
           network: "Ethereum Mainnet" as const,
           chargeTrigger: "successful-swap" as const,
@@ -100,10 +117,10 @@ export function programmableWellKnownDocumentV1(
           retryable: false as const,
         }),
         v2: Object.freeze({
-          status: "release-candidate-held" as const,
-          createHttpStatus: 503 as const,
-          createErrorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE" as const,
-          retryAfter: "honor" as const,
+          status: "live" as const,
+          createHttpStatus: 202 as const,
+          replayHttpStatus: 200 as const,
+          retryAfter: "honor-on-429-or-503" as const,
         }),
       }),
       legacyIntake: Object.freeze({
@@ -122,7 +139,8 @@ export function programmableWellKnownDocumentV1(
       classic: Object.freeze({ discoveryStatus: "live" as const }),
       custom: Object.freeze({
         discoveryStatus: "live" as const,
-        publicSubmissionStatus: "release-candidate-held" as const,
+        publicSubmissionStatus: "closed" as const,
+        customLaunchApiStatus: "live" as const,
         registryDiscoveryStatus: manifest.status,
         legacyRegistrySubmissionStatus: "closed" as const,
         legacyGithubSubmissionStatus: "closed" as const,
@@ -132,8 +150,8 @@ export function programmableWellKnownDocumentV1(
           ? "1"
           : null,
         note: manifest.status === "live"
-          ? "V1 launch history reads are live, V1 launch creation is read-only, and the fee-enforced V2 release candidate is held until canary and public activation. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
-          : "V1 launch history reads are live, V1 launch creation is read-only, and the fee-enforced V2 release candidate is held until canary and public activation. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
+          ? "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation is read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
+          : "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation is read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
       }),
     }),
     compatibility: Object.freeze({

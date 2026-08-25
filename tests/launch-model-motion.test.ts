@@ -71,8 +71,8 @@ describe("launch model artwork", () => {
       'aria-describedby="launch-model-custom-description"',
     );
     expect(source).toContain('data-launch-model-option="custom"');
-    expect(source).toContain('data-launch-model-available="false"');
-    expect(source).toContain('data-launch-model-entry="release-held"');
+    expect(source).toContain('data-launch-model-available="true"');
+    expect(source).toContain('data-launch-model-entry="public-api"');
     expect(source).toContain('href="/docs/developers/custom-launch"');
     expect(source).not.toContain('onChoose("custom")');
     expect(source).not.toContain("customLaunchPublicEnabled");

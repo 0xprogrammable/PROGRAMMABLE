@@ -99,7 +99,7 @@ export async function statusLaunch(options) {
     throw new TypeError("status requires the Custom launch request UUID");
   }
   const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
-  const requestPath = createPathForApiVersion(options.apiVersion ?? 1);
+  const requestPath = createPathForApiVersion(options.apiVersion ?? 2);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const until = options.until ?? WALLET_HANDOFF_STATUS;
   if (until !== WALLET_HANDOFF_STATUS && until !== "finalized") {

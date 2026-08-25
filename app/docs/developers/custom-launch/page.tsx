@@ -7,7 +7,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Package exact build artifacts locally and read existing wallet-bound V1 Custom launch history.",
+    "Package, submit and track deterministic wallet-bound Custom launches on Ethereum Mainnet.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
@@ -15,10 +15,10 @@ const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
   { id: "request", label: "Request contract" },
-  { id: "fees", label: "RC2 fee policy" },
+  { id: "fees", label: "Rev3 fee policy" },
   { id: "verification", label: "Exact-source verification" },
   { id: "checks", label: "Attested checks" },
-  { id: "submit", label: "Write fence" },
+  { id: "submit", label: "Submit safely" },
   { id: "lifecycle", label: "Lifecycle" },
   { id: "discovery", label: "Explore, Profile and claims" },
   { id: "errors", label: "Errors" },
@@ -26,7 +26,7 @@ const customLaunchSections = [
 ] as const;
 
 const requestFields = [
-  ["schemaVersion", "programmable.custom-launch-create-request.v1"],
+  ["schemaVersion", "programmable.custom-launch-create-request.v2"],
   ["launchWallet", "The Ethereum wallet bound to the API key"],
   ["chainId", "String 1"],
   ["nonce", "A nonzero lowercase bytes32"],
@@ -36,7 +36,12 @@ const requestFields = [
     "One complete, non-empty, UTF-8 path-sorted SourceBundleManifestV2",
   ],
   ["graphBundle", "One executable CustomGraphBundleV1"],
-  ["agentAttestation", "One self-attestation for the exact graph subject"],
+  ["launchProfile", "The complete closed Rev3 production profile"],
+  ["launchProfileSelection", "The exact target-role and deployment bindings"],
+  ["launchProfileHash", "The CLI-derived canonical Rev3 profile digest"],
+  ["launchIntentHash", "The CLI-derived request intent digest"],
+  ["agentAttestation", "One self-attestation for the exact launch intent"],
+  ["verificationBundle", "Exact source, compiler and constructor bindings"],
 ] as const;
 
 const lifecycle = [
@@ -80,7 +85,7 @@ const errors = [
   ],
   [
     "409",
-    "CUSTOM_LAUNCH_V1_READ_ONLY is the permanent V1 POST result. Do not retry it.",
+    "Keep the original idempotency key and bytes. A conflicting binding must be fixed locally, not retried with changed bytes.",
   ],
   ["413", "Reduce the body to at most 8,388,608 bytes."],
   ["415", "Send Content-Type: application/json."],
@@ -94,7 +99,7 @@ const errors = [
   ],
   [
     "503",
-    "Honor Retry-After for reads. CUSTOM_LAUNCH_V2_UNAVAILABLE means the V2 release candidate remains held.",
+    "Honor Retry-After and retry only the byte-identical request. Service availability never grants wallet signing authority.",
   ],
 ] as const;
 
@@ -102,26 +107,30 @@ export default function CustomLaunchApiDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers/custom-launch"
-      description="Package and validate exact launch artifacts locally, then read existing V1 launch history while public creation is held."
+      description="Package exact launch artifacts locally, submit byte-identical V2 requests, and stop for separate controller-wallet review and signing."
       kicker="Developer integration"
       parentHref="/docs/developers"
       parentLabel="Developers"
       sections={customLaunchSections}
       title="Custom Launch API"
     >
+      <p className={styles.bodyCopy}>
+        Public V2 is the creation contract. V1 history remains readable, while
+        V1 creation is permanently write fenced with the nonretryable error{" "}
+        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+      </p>
+
       <section id="quickstart">
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            V1 launch-history reads remain live, but V1 creation is read-only.
-            The fee-enforced V2 release candidate remains held until canary and
-            explicit public activation. Legacy Registry and GitHub submission
-            intake is closed. Its separate{" "}
+            Public V2 launch creation is live on Ethereum Mainnet. V1 history
+            reads remain available, while V1 creation stays read-only. Legacy
+            Registry and GitHub submission intake is closed. Use the{" "}
             <a href="/openapi/custom-launch-v2.json">
-              V2 machine contract
+              public V2 machine contract
             </a>{" "}
-            is for offline and private-canary integration, not public
-            authorization.
+            for the exact request, response and retry contract.
           </p>
         </div>
 
@@ -142,14 +151,13 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Use <Link href="/developers/api-keys">API keys</Link> to manage the
-            wallet-bound key for existing history. Store it as{" "}
+            wallet-bound key. Store it as{" "}
             <code>PROGRAMMABLE_API_KEY</code>.
           </li>
           <li>
-            Run <code>status REQUEST_UUID --watch --until finalized</code> only
-            for an existing V1 request. Do not run <code>submit</code> against
-            V1; it receives non-retryable{" "}
-            <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+            Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
+            At <code>authorized</code>, stop for exact wallet review and signing,
+            then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>
         </ol>
 
@@ -163,7 +171,7 @@ export default function CustomLaunchApiDocsPage() {
         </aside>
 
         <p className={styles.inlineAction}>
-          <a href="/developers/custom-launch-api-v1.md">Open the raw V1 guide</a>
+          <a href="/developers/custom-launch-api-v1.md">Open the raw compatibility guide</a>
         </p>
       </section>
 
@@ -191,9 +199,8 @@ export default function CustomLaunchApiDocsPage() {
             API.
           </li>
           <li>
-            Existing V1 keys can use <code>custom-launch:read</code>. A legacy
-            <code>custom-launch:create</code> scope does not override the write
-            fence. A key can access only requests owned by its bound wallet.
+            A key can access only requests owned by its bound wallet. API
+            scopes grant API operations only; they never grant wallet signing.
           </li>
           <li>
             Store the secret outside source control and logs. Key lists never
@@ -210,13 +217,11 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="request">
         <div className={styles.sectionIntro}>
-          <h2>Understand the retained V1 request contract</h2>
+          <h2>Understand the public V2 request contract</h2>
           <p>
-            After successful authentication and scope checks,{" "}
-            <code>POST /v1/custom-launches</code> returns{" "}
-            <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code> before reading an
-            idempotency key or body. The schema below remains available for
-            compatibility with existing resources and local tooling.
+            <code>POST /v2/custom-launches</code> accepts only the closed,
+            byte-bound Rev3 request. V1 remains available for existing history;
+            its POST route stays read-only.
           </p>
         </div>
 
@@ -238,10 +243,10 @@ export default function CustomLaunchApiDocsPage() {
           target. The complete graph input is limited to 524,288 bytes;
           per-target init code is limited to 49,152 bytes and initializer
           calldata to 131,072 bytes. Use the{" "}
-          <a href="/openapi/custom-launch-v1.json">OpenAPI contract</a> for every
-          V1 nested field, enum and bound. The held V2 profile, exact runtime
-          materialization and simulation response are defined separately in the{" "}
-          <a href="/openapi/custom-launch-v2.json">V2 RC contract</a>.
+          <a href="/openapi/custom-launch-v2.json">V2 OpenAPI contract</a> for every
+          nested field, enum and bound. The retained{" "}
+          <a href="/openapi/custom-launch-v1.json">V1 contract</a> documents
+          compatibility reads and its read-only creation route.
         </p>
 
         <p className={styles.bodyCopy}>
@@ -254,12 +259,11 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="fees">
         <div className={styles.sectionIntro}>
-          <h2>Review the RC2 fee policy</h2>
+          <h2>Review the Rev3 fee policy</h2>
           <p>
-            This disclosure describes only the frozen RC2 profile. It does not
-            activate public V2 submission. The profile is for Ethereum Mainnet
-            only (<code>chainId: &quot;1&quot;</code>) and has{" "}
-            <code>productionLaunchAuthorized: false</code>.
+            The frozen Rev3 profile is public on Ethereum Mainnet only
+            (<code>chainId: &quot;1&quot;</code>) and has{" "}
+            <code>productionLaunchAuthorized: true</code>.
           </p>
         </div>
 
@@ -339,34 +343,38 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="submit">
         <div className={styles.sectionIntro}>
-          <h2>Stop at the public write fence</h2>
+          <h2>Submit byte-identical requests</h2>
           <p>
-            V1 POST is not an active public creation path. Its authenticated
-            result is <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+            Use <code>POST /v2/custom-launches</code>. The CLI persistently binds
+            the idempotency key to the exact request bytes before network access.
           </p>
         </div>
 
         <ul className={styles.checkList}>
           <li>
-            Do not retry, rotate a nonce or change request bytes to bypass the
-            fence.
+            On timeout, <code>429</code> or <code>503</code>, retry only the exact
+            persisted bytes and honor <code>Retry-After</code>.
           </li>
           <li>
-            V1 list and single-resource reads remain live. Honor{" "}
-            <code>Retry-After</code> on read <code>429</code> or <code>503</code>.
+            A byte-identical replay can return the existing resource. A reused
+            key bound to different bytes is a conflict.
           </li>
           <li>
-            The V2 release candidate is not public. Until canary and public
-            activation, unavailable V2 requests return{" "}
-            <code>503 CUSTOM_LAUNCH_V2_UNAVAILABLE</code> with{" "}
-            <code>Retry-After</code>.
+            Stop at <code>authorized</code>. The API and CLI never sign or
+            broadcast the returned transaction.
           </li>
         </ul>
 
         <p className={styles.bodyCopy}>
-          Service readiness does not activate a held write route. Wait for a
-          versioned public V2 contract and explicit activation notice before
-          treating launch creation as available.
+          Service readiness and API authorization do not replace controller
+          approval. The connected wallet must review the exact chain, sender,
+          Router, value and calldata before a separate signature.
+        </p>
+
+        <p className={styles.bodyCopy}>
+          New V2 requests share a durable global admission cap of 120 created
+          requests per hour and 500 per day. An exact idempotent replay is
+          checked first and consumes no additional capacity.
         </p>
       </section>
 
@@ -374,7 +382,7 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Track the resource, not an assumed transaction</h2>
           <p>
-            Read <code>GET /v1/custom-launches/{"{launchId}"}</code> with the same
+            Read <code>GET /v2/custom-launches/{"{launchId}"}</code> with the same
             Bearer key. The path value and resource <code>requestId</code> are
             the API request UUID; <code>onchainLaunchId</code> is the distinct
             Router <code>bytes32</code> identifier.
@@ -394,7 +402,7 @@ export default function CustomLaunchApiDocsPage() {
 
         <p className={styles.bodyCopy}>
           After wallet broadcast, poll the single-resource route to drive exact
-          reconciliation. <code>GET /v1/custom-launches</code> is a newest-first
+          reconciliation. <code>GET /v2/custom-launches</code> is a newest-first
           wallet-owned history view with bounded summaries; its{" "}
           <code>output</code> is always <code>null</code>. Use the single-resource
           route for the artifact, wallet transaction and durable failure.
@@ -502,7 +510,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             <a href="/openapi/custom-launch-v2.json">
-              Inspect the held V2 RC contract
+              Inspect the public V2 contract
             </a>
           </li>
           <li>

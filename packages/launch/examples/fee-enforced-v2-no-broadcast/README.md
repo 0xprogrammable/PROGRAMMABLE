@@ -2,8 +2,8 @@
 
 This installed example compiles a real isolated custom module with exact solc 0.8.26, combines it with the package's
 closed four-contract profile assets, then runs offline `pack` and `validate`. It does not submit, poll, sign, broadcast,
-or create a Mainnet coin. The RC profile remains production-disabled; an API may return
-`CUSTOM_LAUNCH_V2_UNAVAILABLE` even if the offline gates pass.
+or create a Mainnet coin. Passing this offline rehearsal does not authenticate an API request or authorize a wallet
+transaction.
 
 From a neutral temporary directory, locate the installed package and copy the sample plus immutable profile assets:
 

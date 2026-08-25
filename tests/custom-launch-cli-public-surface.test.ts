@@ -13,7 +13,7 @@ import { programmableWellKnownDocumentV1 } from
 const root = process.cwd();
 
 describe("public Custom Launch CLI surface", () => {
-  it("advertises live V1 reads and the fail-closed public write cutover", () => {
+  it("advertises public V2 creation and retained V1 reads", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
@@ -21,7 +21,7 @@ describe("public Custom Launch CLI surface", () => {
       "https://programmable.market/api/indexers/v1/router-custom-identities",
     );
     expect(document.customLaunchApi).toMatchObject({
-      status: "read-only",
+      status: "live",
       readStatus: "live",
       readyzUrl: "https://api.programmable.market/readyz",
       openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
@@ -33,22 +33,37 @@ describe("public Custom Launch CLI surface", () => {
         tarballUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
       },
+      publicRelease: {
+        status: "live",
+        apiVersion: "2",
+        guideUrl: "https://programmable.market/docs/developers/custom-launch",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        authentication: "wallet-bound-api-key",
+        walletBoundary: "separate-wallet-signature",
+        cli: {
+          packageName: "@programmable/launch",
+          binary: "programmable-launch",
+          releaseVersion: "2.0.0",
+          tarballUrl:
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+        },
+      },
       releaseCandidate: {
-        status: "private-canary-held",
-        publicAuthorization: false,
-        releaseVersion: "2.0.0-rc.2",
-        releaseTag: "programmable-launch-v2.0.0-rc.2",
+        status: "promoted-to-public",
+        publicAuthorization: true,
+        releaseVersion: "2.0.0",
+        releaseTag: "programmable-launch-v2.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
         feePolicy: {
           profileId:
             "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-          profileRevision: 2,
+          profileRevision: 3,
           launchProfileHash:
-            "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
-          productionLaunchAuthorized: false,
+            "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+          productionLaunchAuthorized: true,
           chainId: "1",
           network: "Ethereum Mainnet",
           chargeTrigger: "successful-swap",
@@ -78,16 +93,17 @@ describe("public Custom Launch CLI surface", () => {
           retryable: false,
         },
         v2: {
-          status: "release-candidate-held",
-          createHttpStatus: 503,
-          createErrorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE",
-          retryAfter: "honor",
+          status: "live",
+          createHttpStatus: 202,
+          replayHttpStatus: 200,
+          retryAfter: "honor-on-429-or-503",
         },
       },
     });
     expect(document.publicCategories.custom).toMatchObject({
       discoveryStatus: "live",
-      publicSubmissionStatus: "release-candidate-held",
+      publicSubmissionStatus: "closed",
+      customLaunchApiStatus: "live",
       registryDiscoveryStatus: "prelaunch",
       legacyRegistrySubmissionStatus: "closed",
       legacyGithubSubmissionStatus: "closed",
@@ -95,7 +111,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(JSON.stringify(document)).not.toContain("api-live");
   });
 
-  it("publishes a held, reference-complete V2 release-candidate contract", () => {
+  it("publishes a public, reference-complete V2 contract", () => {
     const v1 = JSON.parse(readFileSync(
       join(root, "public/openapi/custom-launch-v1.json"),
       "utf8",
@@ -106,17 +122,21 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v2.openapi).toBe("3.1.0");
-    expect(v2.info.version).toBe("2.0.0-rc.2");
+    expect(v2.info.version).toBe("2.0.0");
     expect(v2["x-programmable-availability"]).toMatchObject({
-      status: "release-candidate-held",
-      publicAuthorized: false,
-      privateCanaryOnly: true,
+      status: "live",
+      publicAuthorized: true,
+      privateCanaryOnly: false,
       publicCreate: {
-        status: "held",
-        httpStatus: 503,
-        errorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE",
-        retryAfterSeconds: 30,
+        status: "live",
       },
+    });
+    expect(v2["x-programmable-release-candidate"]).toMatchObject({
+      status: "promoted-to-public",
+      version: "2.0.0",
+      launchProfileHash:
+        "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+      productionLaunchAuthorized: true,
     });
     expect(Object.keys(v2.paths).sort()).toEqual([
       "/v2/custom-launches",
@@ -129,7 +149,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
 
     const create = v2.paths["/v2/custom-launches"].post;
-    expect(create["x-programmable-public-availability"]).toBe("held");
+    expect(create["x-programmable-public-availability"]).toBe("live");
     expect(Object.keys(create.responses)).toEqual([
       "200", "202", "400", "401", "403", "409", "413", "415", "422", "429", "500", "503",
     ]);
@@ -146,7 +166,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(
       v2.components.responses.V2Unavailable.content["application/json"]
         .example.error.code,
-    ).toBe("CUSTOM_LAUNCH_V2_UNAVAILABLE");
+    ).toBe("LAUNCH_UNAVAILABLE");
 
     const request = v2.components.schemas.CustomLaunchCreateRequestV2;
     expect(request.additionalProperties).toBe(false);
@@ -168,6 +188,25 @@ describe("public Custom Launch CLI surface", () => {
     expect(request.properties.verificationBundle).toEqual({
       $ref: "#/components/schemas/ExactSourceVerificationBundleV2",
     });
+    expect(v2.components.schemas.FeeEnforcedLaunchProfileV2.properties)
+      .toMatchObject({
+        profileId: {
+          const:
+            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+        },
+        profileRevision: { const: 3 },
+        profileVersion: { const: "2.0.0" },
+        productionLaunchAuthorized: { const: true },
+        chainId: { const: "1" },
+      });
+    expect(v2.components.schemas.FeeEnforcedLaunchProfileBindingV2.properties)
+      .toMatchObject({
+        profileId: {
+          const:
+            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+        },
+        profileRevision: { const: 3 },
+      });
     expect(v2.components.schemas.CustomLaunchResourceV2.properties.status.enum)
       .toContain("simulating");
     const sourceVerification =
@@ -299,10 +338,17 @@ describe("public Custom Launch CLI surface", () => {
         retryable: false,
       },
       v2ReleaseCandidate: {
-        status: "held",
-        httpStatus: 503,
-        errorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE",
-        retryAfter: "honor-until-canary-and-public-activation",
+        status: "promoted-to-public",
+        release: "2.0.0",
+        publicAuthorization: true,
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+      },
+      v2: {
+        status: "live",
+        createHttpStatus: 202,
+        replayHttpStatus: 200,
+        retryAfter: "honor-on-429-or-503",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
       },
       legacyIntake: { registry: "closed", github: "closed" },
     });

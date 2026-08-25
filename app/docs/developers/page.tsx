@@ -53,7 +53,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Read existing wallet-bound V1 launch history, verify Router-stamped tokens and pools, or index new launches."
+      description="Create and track wallet-bound V2 launches, verify Router-stamped tokens and pools, or index new launches."
       kicker="Developer integration"
       sections={developerSections}
       title="Integrate Programmable launches"
@@ -62,9 +62,9 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Choose a path</h2>
           <p>
-            Start with the task your product needs. V1 launch history remains
-            an authenticated read path; public launch creation is held.
-            Verification and indexing are public read paths.
+            Start with the task your product needs. Public V2 launch creation
+            and lifecycle reads use a wallet-bound API key. Verification and
+            indexing remain public read paths.
           </p>
         </div>
 
@@ -77,8 +77,8 @@ export default function DeveloperDocsPage() {
             </h3>
             <p>
               Package and validate one deterministic graph locally, then use a
-              wallet-bound key to read existing V1 resources. V1 POST is
-              read-only and V2 is held until public activation.
+              wallet-bound key to submit and track the exact V2 request. Wallet
+              review and signing remain separate.
             </p>
             <Link
               className={styles.textLink}

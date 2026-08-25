@@ -380,11 +380,7 @@ test("the bundled no-broadcast example derives a real graph and deterministic ho
   const projectDirectory = path.join(root, "project");
   const exampleRoot = new URL("../examples/no-broadcast/", import.meta.url);
   await cp(new URL("project/", exampleRoot), projectDirectory, { recursive: true });
-  const repositoryRoot = path.resolve(process.cwd(), "../..");
-  const revision = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  }).trim();
+  const revision = "f6eb3e95dd7728c590c2a3bb115b6dd29c8c5607";
   execFileSync(process.execPath, [new URL("prepare-config.mjs", exampleRoot).pathname, projectDirectory], {
     env: {
       ...process.env,
@@ -418,8 +414,8 @@ test("the bundled no-broadcast example derives a real graph and deterministic ho
   });
   assert.equal(
     first.requestSha256,
-    "sha256:0de407187c0edc2f1e9ddb8146d03f31b8f07565c597c1c62e6473ceada5636f",
-    "V1 request golden bytes must remain deterministic in @programmable/launch 2.0.0-rc.2",
+    "sha256:b44f9dc43b51bc69ca52ec6769b9e3d64cd9472387e2f5a3b83cf73078a029aa",
+    "V1 request golden bytes must remain deterministic in @programmable/launch 2.0.0",
   );
   assert.deepEqual(await readFile(first.outputPath), await readFile(second.outputPath));
   const request = JSON.parse(await readFile(first.outputPath, "utf8"));
@@ -450,9 +446,9 @@ test("V2 binds a closed fee profile, launch intent, and compiler immutables", as
     request.launchProfile.profileId,
     "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
   );
-  assert.equal(request.launchProfile.profileRevision, 2);
-  assert.equal(request.launchProfile.productionLaunchAuthorized, false);
-  assert.equal(request.launchProfile.contractBuildBindings.activationStatus, "canary");
+  assert.equal(request.launchProfile.profileRevision, 3);
+  assert.equal(request.launchProfile.productionLaunchAuthorized, true);
+  assert.equal(request.launchProfile.contractBuildBindings.activationStatus, "production");
   assert.equal(
     request.launchProfile.feePolicy.policyId,
     "0xb7ff874d418bc714d0ec6c36a2df03ea6251bc8b6eb125adc4f5b6b4899d2517",
@@ -537,7 +533,7 @@ test("V2 embedded profile matches every distributed fixed-build asset digest", a
   assert.equal(profile.contractBuildBindings.activationStatus, manifest.activationStatus);
   assert.equal(
     hashLaunchProfile(profile),
-    "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
+    "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
   );
   const distributedOnly = new Set([
     "standardJsonAssetPath",
@@ -776,7 +772,6 @@ test("V2 submit and status use the schema-selected path and bind it in the journ
 
   const statusResult = await statusLaunch({
     requestId: "515a4b20-a7bd-40e1-8cfa-f6da5457036b",
-    apiVersion: 2,
     apiOrigin: "http://127.0.0.1:43194",
     maxAttempts: 1,
     fetchImpl: async (url) => {
@@ -1028,7 +1023,7 @@ async function materializeV2CompiledFixture({ dangerousCustomModule = false } = 
     launchProfile: {
       schemaVersion: "programmable.fee-enforced-launch-profile-selection.v1",
       profileId: "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-      profileRevision: 2,
+      profileRevision: 3,
       targetRoles: {
         tokenTargetId: "token",
         customModuleTargetId: "custom-module",

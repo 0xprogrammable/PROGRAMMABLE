@@ -12,7 +12,7 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` CLI derives the deterministic source manifest, graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API schema](../developers/custom-launch.md). Pack and validate locally. Do not submit to V1: authenticated POST returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. V2 remains held until canary and explicit public activation.
+Build and test the exact project. The public `programmable-launch` CLI derives the deterministic source manifest, graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API schema](../developers/custom-launch.md). Pack and validate locally, then submit the byte-identical public V2 request. Stop at `authorized` for separate controller-wallet review and signing.
 
 Existing durable resources record the API's declared bundle checks. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. An already `authorized` resource supplies the permit-attached transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never revises it. The API does not audit the project, sign the transaction or broadcast it, and the API key is not wallet authority.
 
