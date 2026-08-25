@@ -60,6 +60,32 @@ export function programmableWellKnownDocumentV1(
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
+        feePolicy: Object.freeze({
+          profileId:
+            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+          profileRevision: 2 as const,
+          launchProfileHash:
+            "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
+          productionLaunchAuthorized: false as const,
+          chainId: "1" as const,
+          network: "Ethereum Mainnet" as const,
+          chargeTrigger: "successful-swap" as const,
+          basis: "gross-unspecified-pool-currency-amount" as const,
+          assetMode: "unspecified-pool-currency-per-swap" as const,
+          ratePpm: 1_000 as const,
+          denominatorPpm: 1_000_000 as const,
+          ratePercent: "0.10%" as const,
+          rateBps: 10 as const,
+          recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          enforcement: Object.freeze({
+            frozenProfile: true as const,
+            customModuleMayReduce: false as const,
+            customModuleMayRedirect: false as const,
+          }),
+          lpFee: "separate-from-platform-fee" as const,
+          genericFeeClaiming: "not-live" as const,
+          genericBuybackManagement: "not-live" as const,
+        }),
       }),
       authentication: "wallet-bound-api-key" as const,
       walletAuthority: "separate-review-and-sign" as const,

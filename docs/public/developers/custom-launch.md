@@ -19,6 +19,21 @@ The live V1 reads and write fence are defined by the
 future/private-canary request and lifecycle shapes without authorizing public submission. The raw
 [V1 agent guide](https://programmable.market/developers/custom-launch-api-v1.md) remains compatible.
 
+## RC2 fee policy (private canary)
+
+This disclosure describes only the frozen RC2 profile. It does not activate public V2 submission. The profile is for
+Ethereum Mainnet only (`chainId: "1"`) and has `productionLaunchAuthorized: false`.
+
+For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the documented
+`gross-unspecified-pool-currency-amount` basis: `1,000 ppm = 0.10% = 10 bps`. It accrues in the profile's unspecified
+pool currency to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The frozen profile enforces this path independently
+of custom behavior; a Custom module cannot reduce or redirect it. A reverted swap rolls back the fee with the rest of
+the transaction.
+
+The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
+buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
+disabled.
+
 ## Cold-agent quickstart
 
 Install the pinned public GitHub Release asset. Do not substitute an unverified npm-registry package with the same name.

@@ -39,6 +39,32 @@ describe("public Custom Launch CLI surface", () => {
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
+        feePolicy: {
+          profileId:
+            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+          profileRevision: 2,
+          launchProfileHash:
+            "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
+          productionLaunchAuthorized: false,
+          chainId: "1",
+          network: "Ethereum Mainnet",
+          chargeTrigger: "successful-swap",
+          basis: "gross-unspecified-pool-currency-amount",
+          assetMode: "unspecified-pool-currency-per-swap",
+          ratePpm: 1_000,
+          denominatorPpm: 1_000_000,
+          ratePercent: "0.10%",
+          rateBps: 10,
+          recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          enforcement: {
+            frozenProfile: true,
+            customModuleMayReduce: false,
+            customModuleMayRedirect: false,
+          },
+          lpFee: "separate-from-platform-fee",
+          genericFeeClaiming: "not-live",
+          genericBuybackManagement: "not-live",
+        },
       },
       versions: {
         v1: {
