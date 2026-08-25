@@ -46,6 +46,30 @@
     "launchProfileHash": "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
     "productionLaunchAuthorized": false
   },
+  "x-programmable-fee-policy": {
+    "profileId": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+    "profileRevision": 2,
+    "launchProfileHash": "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
+    "productionLaunchAuthorized": false,
+    "chainId": "1",
+    "network": "Ethereum Mainnet",
+    "chargeTrigger": "successful-swap",
+    "basis": "gross-unspecified-pool-currency-amount",
+    "assetMode": "unspecified-pool-currency-per-swap",
+    "ratePpm": 1000,
+    "denominatorPpm": 1000000,
+    "ratePercent": "0.10%",
+    "rateBps": 10,
+    "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "enforcement": {
+      "frozenProfile": true,
+      "customModuleMayReduce": false,
+      "customModuleMayRedirect": false
+    },
+    "lpFee": "separate-from-platform-fee",
+    "genericFeeClaiming": "not-live",
+    "genericBuybackManagement": "not-live"
+  },
   "x-programmable-error-status": {
     "400": [
       "INVALID_IDEMPOTENCY_KEY",

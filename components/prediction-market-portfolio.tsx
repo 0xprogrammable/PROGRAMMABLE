@@ -35,6 +35,10 @@ import {
   type PredictionPortfolioRequest,
 } from "@/lib/prediction-market-portfolio";
 import {
+  readPredictionPortfolioWithRetry,
+  type PredictionPortfolioLoadMode,
+} from "@/lib/prediction-portfolio-load-policy";
+import {
   formatPredictionMarketObservation,
   formatPredictionOutcome,
   formatPredictionUsdg,
@@ -581,7 +585,7 @@ export function PredictionMarketPortfolio({
   const activeRequestRef = useRef<PredictionPortfolioRequest | null>(null);
   const tabRefs = useRef(new Map<PredictionPortfolioTabV1, HTMLButtonElement>());
 
-  const loadPortfolio = useCallback(async (mode: "initial" | "refresh" | "retry") => {
+  const loadPortfolio = useCallback(async (mode: PredictionPortfolioLoadMode) => {
     if (!account || !release) return;
     const accountKey = account.toLowerCase();
     const request = createPredictionPortfolioRequest(
@@ -608,9 +612,20 @@ export function PredictionMarketPortfolio({
         : "loading",
     }));
     try {
-      const data = await readPredictionMarketPortfolio({
-        config: release,
-        request,
+      const data = await readPredictionPortfolioWithRetry({
+        isCurrent: () => isPredictionPortfolioRequestCurrent(
+          request,
+          activeRequestRef.current,
+        ),
+        mode,
+        read: () => readPredictionMarketPortfolio({
+          config: release,
+          request,
+          shouldContinue: () => isPredictionPortfolioRequestCurrent(
+            request,
+            activeRequestRef.current,
+          ),
+        }),
       });
       if (!isPredictionPortfolioRequestCurrent(data, activeRequestRef.current)) return;
       setState({
@@ -756,7 +771,9 @@ export function PredictionMarketPortfolio({
       data-visible-card-count={
         visibleItems.length > 0
           ? Math.min(visibleItems.length, 2)
-          : undefined
+          : model.phase === "loading" || model.phase === "error"
+            ? 2
+            : undefined
       }
     >
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">

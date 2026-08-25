@@ -16,6 +16,8 @@ const websiteGuide = read("app/docs/developers/custom-launch/page.tsx");
 const summary = read("docs/public/SUMMARY.md");
 const createGuide = read("components/create-guide.tsx");
 const rawGuide = read("public/developers/custom-launch-api-v1.md");
+const cliGuide = read("packages/launch/README.md");
+const v2OpenApi = JSON.parse(read("public/openapi/custom-launch-v2.json"));
 const machineReadableGuide = read(
   "app/docs/developers/machine-readable/page.tsx",
 );
@@ -152,6 +154,48 @@ describe("Custom Launch API documentation", () => {
         },
         legacyIntake: { registry: "closed", github: "closed" },
       });
+  });
+
+  it("discloses the exact held RC2 fee without conflating LP fees or future operations", () => {
+    for (const source of [gitBookGuide, websiteGuide, rawGuide, cliGuide]) {
+      expect(source).toContain("Ethereum Mainnet");
+      expect(source).toContain("productionLaunchAuthorized: false");
+      expect(source).toContain("gross-unspecified-pool-currency-amount");
+      expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
+      expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
+      expect(source).toContain("cannot reduce or redirect");
+      expect(source).toContain("LP fee is separate");
+      expect(source).toMatch(/Generic fee claiming and\s+buyback/);
+      expect(source).toMatch(/private[- ]canary/i);
+      expect(source).not.toContain("public V2 is active");
+    }
+
+    expect(v2OpenApi["x-programmable-fee-policy"]).toEqual({
+      profileId:
+        "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+      profileRevision: 2,
+      launchProfileHash:
+        "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
+      productionLaunchAuthorized: false,
+      chainId: "1",
+      network: "Ethereum Mainnet",
+      chargeTrigger: "successful-swap",
+      basis: "gross-unspecified-pool-currency-amount",
+      assetMode: "unspecified-pool-currency-per-swap",
+      ratePpm: 1_000,
+      denominatorPpm: 1_000_000,
+      ratePercent: "0.10%",
+      rateBps: 10,
+      recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      enforcement: {
+        frozenProfile: true,
+        customModuleMayReduce: false,
+        customModuleMayRedirect: false,
+      },
+      lpFee: "separate-from-platform-fee",
+      genericFeeClaiming: "not-live",
+      genericBuybackManagement: "not-live",
+    });
   });
 
   it("describes request-driven reconciliation consistently", () => {

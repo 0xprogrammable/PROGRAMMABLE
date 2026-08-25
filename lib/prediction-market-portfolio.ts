@@ -23,6 +23,9 @@ import {
   type PredictionMarketSnapshot,
   type PredictionMarketView,
 } from "./prediction-market-trading";
+import {
+  readPredictionPortfolioHistoryLanes,
+} from "./prediction-portfolio-load-policy";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
@@ -790,38 +793,36 @@ async function readPredictionRedeemedLogs({
 }) {
   const logs = [];
   for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
-    const [holderLogs, recipientLogs] = await Promise.all([
-      readPredictionPortfolioLogs({
-        clients,
-        fromBlock,
-        read: (client, range) =>
-          client.getLogs({
+    const holderLogs = await readPredictionPortfolioLogs({
+      clients,
+      fromBlock,
+      read: (client, range) =>
+        client.getLogs({
+          address: addressBatch,
+          args: { holder: account },
+          event: predictionRedeemedEvent,
+          fromBlock: range.fromBlock,
+          strict: true,
+          toBlock: range.toBlock,
+        }),
+      toBlock,
+    });
+    const recipientLogs = await readPredictionPortfolioLogs({
+      clients,
+      fromBlock,
+      read: (client, range) =>
+        client
+          .getLogs({
             address: addressBatch,
-            args: { holder: account },
+            args: { recipient: account },
             event: predictionRedeemedEvent,
             fromBlock: range.fromBlock,
             strict: true,
             toBlock: range.toBlock,
-          }),
-        toBlock,
-      }),
-      readPredictionPortfolioLogs({
-        clients,
-        fromBlock,
-        read: (client, range) =>
-          client
-            .getLogs({
-              address: addressBatch,
-              args: { recipient: account },
-              event: predictionRedeemedEvent,
-              fromBlock: range.fromBlock,
-              strict: true,
-              toBlock: range.toBlock,
-            })
-            .then(filterFundedPredictionRedemptionRecipients),
-        toBlock,
-      }),
-    ]);
+          })
+          .then(filterFundedPredictionRedemptionRecipients),
+      toBlock,
+    });
     logs.push(
       ...holderLogs,
       ...recipientLogs,
@@ -845,36 +846,34 @@ async function readPredictionSplitLogs({
 }) {
   const logs = [];
   for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
-    const [payerLogs, recipientLogs] = await Promise.all([
-      readPredictionPortfolioLogs({
-        clients,
-        fromBlock,
-        read: (client, range) =>
-          client.getLogs({
-            address: addressBatch,
-            args: { payer: account },
-            event: predictionSplitEvent,
-            fromBlock: range.fromBlock,
-            strict: true,
-            toBlock: range.toBlock,
-          }),
-        toBlock,
-      }),
-      readPredictionPortfolioLogs({
-        clients,
-        fromBlock,
-        read: (client, range) =>
-          client.getLogs({
-            address: addressBatch,
-            args: { recipient: account },
-            event: predictionSplitEvent,
-            fromBlock: range.fromBlock,
-            strict: true,
-            toBlock: range.toBlock,
-          }),
-        toBlock,
-      }),
-    ]);
+    const payerLogs = await readPredictionPortfolioLogs({
+      clients,
+      fromBlock,
+      read: (client, range) =>
+        client.getLogs({
+          address: addressBatch,
+          args: { payer: account },
+          event: predictionSplitEvent,
+          fromBlock: range.fromBlock,
+          strict: true,
+          toBlock: range.toBlock,
+        }),
+      toBlock,
+    });
+    const recipientLogs = await readPredictionPortfolioLogs({
+      clients,
+      fromBlock,
+      read: (client, range) =>
+        client.getLogs({
+          address: addressBatch,
+          args: { recipient: account },
+          event: predictionSplitEvent,
+          fromBlock: range.fromBlock,
+          strict: true,
+          toBlock: range.toBlock,
+        }),
+      toBlock,
+    });
     logs.push(
       ...payerLogs,
       ...recipientLogs,
@@ -898,36 +897,34 @@ async function readPredictionMergedLogs({
 }) {
   const logs = [];
   for (const addressBatch of predictionPortfolioAddressBatches(addresses)) {
-    const [holderLogs, recipientLogs] = await Promise.all([
-      readPredictionPortfolioLogs({
-        clients,
-        fromBlock,
-        read: (client, range) =>
-          client.getLogs({
-            address: addressBatch,
-            args: { holder: account },
-            event: predictionMergedEvent,
-            fromBlock: range.fromBlock,
-            strict: true,
-            toBlock: range.toBlock,
-          }),
-        toBlock,
-      }),
-      readPredictionPortfolioLogs({
-        clients,
-        fromBlock,
-        read: (client, range) =>
-          client.getLogs({
-            address: addressBatch,
-            args: { recipient: account },
-            event: predictionMergedEvent,
-            fromBlock: range.fromBlock,
-            strict: true,
-            toBlock: range.toBlock,
-          }),
-        toBlock,
-      }),
-    ]);
+    const holderLogs = await readPredictionPortfolioLogs({
+      clients,
+      fromBlock,
+      read: (client, range) =>
+        client.getLogs({
+          address: addressBatch,
+          args: { holder: account },
+          event: predictionMergedEvent,
+          fromBlock: range.fromBlock,
+          strict: true,
+          toBlock: range.toBlock,
+        }),
+      toBlock,
+    });
+    const recipientLogs = await readPredictionPortfolioLogs({
+      clients,
+      fromBlock,
+      read: (client, range) =>
+        client.getLogs({
+          address: addressBatch,
+          args: { recipient: account },
+          event: predictionMergedEvent,
+          fromBlock: range.fromBlock,
+          strict: true,
+          toBlock: range.toBlock,
+        }),
+      toBlock,
+    });
     logs.push(
       ...holderLogs,
       ...recipientLogs,
@@ -1086,10 +1083,12 @@ async function readPredictionMarketPortfolioAtRequest({
   clients,
   config,
   request,
+  shouldContinue,
 }: {
   clients: PredictionMarketClients;
   config: PredictionMarketReleaseConfig;
   request: PredictionPortfolioRequest;
+  shouldContinue: () => boolean;
 }): Promise<PredictionMarketPortfolio> {
   const snapshot = await readPredictionMarketSnapshot({ clients, config });
   const fromBlock = config.deploymentBlock;
@@ -1143,8 +1142,8 @@ async function readPredictionMarketPortfolioAtRequest({
     mergedLogs,
     redeemedLogs,
   ] =
-    await Promise.all([
-      readPredictionPortfolioLogs({
+    await readPredictionPortfolioHistoryLanes([
+      () => readPredictionPortfolioLogs({
         clients,
         fromBlock,
         read: (client, range) =>
@@ -1158,7 +1157,7 @@ async function readPredictionMarketPortfolioAtRequest({
           }),
         toBlock,
       }),
-      readPredictionPortfolioLogs({
+      () => readPredictionPortfolioLogs({
         clients,
         fromBlock,
         read: (client, range) =>
@@ -1172,7 +1171,7 @@ async function readPredictionMarketPortfolioAtRequest({
           }),
         toBlock,
       }),
-      readPredictionPortfolioLogs({
+      () => readPredictionPortfolioLogs({
         clients,
         fromBlock,
         read: (client, range) =>
@@ -1186,7 +1185,7 @@ async function readPredictionMarketPortfolioAtRequest({
           }),
         toBlock,
       }),
-      readOutcomeTransferLogs({
+      () => readOutcomeTransferLogs({
         account: request.account,
         addresses: outcomeTokenAddresses,
         allowedTokens,
@@ -1195,7 +1194,7 @@ async function readPredictionMarketPortfolioAtRequest({
         fromBlock,
         toBlock,
       }),
-      readOutcomeTransferLogs({
+      () => readOutcomeTransferLogs({
         account: request.account,
         addresses: outcomeTokenAddresses,
         allowedTokens,
@@ -1204,28 +1203,28 @@ async function readPredictionMarketPortfolioAtRequest({
         fromBlock,
         toBlock,
       }),
-      readPredictionSplitLogs({
+      () => readPredictionSplitLogs({
         account: request.account,
         addresses: vaultAddresses,
         clients,
         fromBlock,
         toBlock,
       }),
-      readPredictionMergedLogs({
+      () => readPredictionMergedLogs({
         account: request.account,
         addresses: vaultAddresses,
         clients,
         fromBlock,
         toBlock,
       }),
-      readPredictionRedeemedLogs({
+      () => readPredictionRedeemedLogs({
         account: request.account,
         addresses: vaultAddresses,
         clients,
         fromBlock,
         toBlock,
       }),
-    ]);
+    ], shouldContinue);
   const transferLogs = dedupePortfolioLogs([
     ...incomingTransfers,
     ...outgoingTransfers,
@@ -1557,10 +1556,12 @@ export async function readPredictionMarketPortfolio({
   clients = createPredictionMarketPublicClients(),
   config,
   request,
+  shouldContinue = () => true,
 }: {
   clients?: PredictionMarketClients;
   config: PredictionMarketReleaseConfig;
   request: PredictionPortfolioRequest;
+  shouldContinue?: () => boolean;
 }): Promise<PredictionMarketPortfolio> {
   const normalizedRequest = createPredictionPortfolioRequest(
     request.account,
@@ -1571,6 +1572,7 @@ export async function readPredictionMarketPortfolio({
       clients,
       config,
       request: normalizedRequest,
+      shouldContinue,
     });
   } catch (error) {
     if (error instanceof PredictionPortfolioReadError) throw error;

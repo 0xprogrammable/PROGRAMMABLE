@@ -15,6 +15,7 @@ const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
   { id: "request", label: "Request contract" },
+  { id: "fees", label: "RC2 fee policy" },
   { id: "verification", label: "Exact-source verification" },
   { id: "checks", label: "Attested checks" },
   { id: "submit", label: "Write fence" },
@@ -249,6 +250,41 @@ export default function CustomLaunchApiDocsPage() {
           bytecode has no unresolved link or immutable references. Otherwise it
           fails closed with <code>RUNTIME_MATERIALIZATION_REQUIRED</code>.
         </p>
+      </section>
+
+      <section id="fees">
+        <div className={styles.sectionIntro}>
+          <h2>Review the RC2 fee policy</h2>
+          <p>
+            This disclosure describes only the frozen RC2 profile. It does not
+            activate public V2 submission. The profile is for Ethereum Mainnet
+            only (<code>chainId: &quot;1&quot;</code>) and has{" "}
+            <code>productionLaunchAuthorized: false</code>.
+          </p>
+        </div>
+
+        <p className={styles.bodyCopy}>
+          For each successful swap, the mandatory platform charge is 1,000
+          parts per 1,000,000 of the documented{" "}
+          <code>gross-unspecified-pool-currency-amount</code> basis:{" "}
+          <code>1,000 ppm = 0.10% = 10 bps</code>. It accrues in the
+          profile&apos;s unspecified pool currency to{" "}
+          <code>0x4957f49620AFf3Adbbe8195a4f633E49cc93376c</code>.
+          The frozen profile enforces this path independently of custom
+          behavior; a Custom module cannot reduce or redirect it. A reverted
+          swap rolls back the fee with the rest of the transaction.
+        </p>
+
+        <aside className={styles.callout}>
+          <strong>Keep platform, LP and future operations separate</strong>
+          <p>
+            The pool&apos;s LP fee is separate from this platform charge and must
+            be disclosed separately. Generic fee claiming and buyback
+            management for arbitrary hooks are not live. The reserved{" "}
+            <code>fees:claim</code> and <code>buybacks:manage</code> scopes remain
+            disabled.
+          </p>
+        </aside>
       </section>
 
       <section id="verification">
