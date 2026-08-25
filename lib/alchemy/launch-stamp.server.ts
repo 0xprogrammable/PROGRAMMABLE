@@ -176,6 +176,8 @@ export type AdvanceLaunchStampRouterResult = Readonly<{
   hydrated: number;
   boundedByDensity: boolean;
   rebuiltAfterReorg: boolean;
+  highestSafeBlockNumber: string;
+  caughtUp: boolean;
 }>;
 
 export type LaunchStampReaderOptions = Readonly<{
@@ -1206,6 +1208,8 @@ export async function advanceLaunchStampRouterSlice(
       hydrated: 0,
       boundedByDensity: false,
       rebuiltAfterReorg,
+      highestSafeBlockNumber: highestSafeNumber.toString(),
+      caughtUp: true,
     };
   }
   let anchors = await scanLaunchStampAnchors(client, {
@@ -1307,5 +1311,7 @@ export async function advanceLaunchStampRouterSlice(
     hydrated: hydrated.length,
     boundedByDensity,
     rebuiltAfterReorg,
+    highestSafeBlockNumber: highestSafeNumber.toString(),
+    caughtUp: targetNumber === highestSafeNumber,
   };
 }

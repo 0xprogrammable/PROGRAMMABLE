@@ -4,20 +4,31 @@ vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
   readAlchemyExploreModel: vi.fn(),
+  readAlchemyRouterCustomIdentitySourceV1: vi.fn(),
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
   readAlchemyExploreModel: mocks.readAlchemyExploreModel,
+  readAlchemyRouterCustomIdentitySourceV1:
+    mocks.readAlchemyRouterCustomIdentitySourceV1,
 }));
 
 import {
+  createRouterCustomIdentitySnapshotReaderV1,
   mergeRouterCustomCreatorProfileV1,
   mergeRouterCustomExploreEntriesV1,
+  normalizeRouterCustomSnapshotBlobEtagV1,
   publicLaunchSourceV1,
   readFinalizedRouterCustomExploreEntriesV1,
+  ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS,
+  ROUTER_CUSTOM_SNAPSHOT_MAX_IDENTITIES,
   routerCustomEntriesAtOrBeforeBlockV1,
   routerCustomExploreEntriesFromModelV1,
+  routerCustomIdentitySnapshotFromSourceV1,
 } from "../lib/alchemy/router-custom-public.server";
+import {
+  LAUNCH_STAMP_ROUTER_BINDING,
+} from "../lib/alchemy/launch-registry.server";
 import type { CreatorProfile, ExploreReadModel } from "../lib/onchain/types";
 import { mapCreatorProfileResponse } from "../lib/profile/onchain-profile";
 import type {
@@ -44,6 +55,30 @@ function model(tokens = [customGraphToken, stampedClassicToken]) {
     launcherFeesAccruedWei: "0",
     launcherFeesAccruedEth: "0",
   } satisfies ExploreReadModel;
+}
+
+function source(
+  tokens = [customGraphToken, stampedClassicToken],
+  input: Readonly<{
+    blockNumber?: string;
+    blockHash?: `0x${string}`;
+    generatedAt?: string;
+  }> = {},
+) {
+  return {
+    generatedAt: input.generatedAt ?? "2026-08-25T06:00:00.000Z",
+    status: "current" as const,
+    reorgDetected: false,
+    slice: {
+      schemaVersion: "programmable-launch-stamp-router-registry-v1" as const,
+      binding: LAUNCH_STAMP_ROUTER_BINDING,
+      cursor: {
+        blockNumber: input.blockNumber ?? "25740001",
+        blockHash: input.blockHash ?? `0x${"bc".repeat(32)}`,
+      },
+      tokens,
+    },
+  };
 }
 
 function registryProject(poolId = customGraphExploreEntry.poolId) {
@@ -84,6 +119,7 @@ describe("finalized Router Custom public projection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.readAlchemyExploreModel.mockResolvedValue(model());
+    mocks.readAlchemyRouterCustomIdentitySourceV1.mockResolvedValue(source());
   });
 
   it("projects only fully verified Custom Graph stamps", async () => {
@@ -93,6 +129,236 @@ describe("finalized Router Custom public projection", () => {
     await expect(readFinalizedRouterCustomExploreEntriesV1()).resolves.toEqual([
       customGraphExploreEntry,
     ]);
+  });
+
+  it("owns the exact Router cursor independently of the Classic snapshot", () => {
+    const snapshot = routerCustomIdentitySnapshotFromSourceV1(source());
+
+    expect(snapshot).toMatchObject({
+      status: "current",
+      asOfBlock: "25740001",
+      asOfBlockHash: `0x${"bc".repeat(32)}`,
+      entries: [customGraphExploreEntry],
+    });
+    expect(snapshot.identityCommitment).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
+  it("preserves the Blob API strong ETag contract for conditional writes", () => {
+    expect(normalizeRouterCustomSnapshotBlobEtagV1(
+      'W/"8e8ed5b7c65cfe481ae32dc684e98710"',
+    )).toBe('"8e8ed5b7c65cfe481ae32dc684e98710"');
+    expect(() => normalizeRouterCustomSnapshotBlobEtagV1(
+      "8e8ed5b7c65cfe481ae32dc684e98710",
+    )).toThrow("ETag is invalid");
+  });
+
+  it("keeps finalized identities as last-known-good across a long outage", async () => {
+    const startedAt = Date.parse("2026-08-25T06:00:00.000Z");
+    let now = startedAt;
+    const currentFailure = new Error("Router provider unavailable");
+    const readCurrentSource = vi.fn()
+      .mockResolvedValueOnce(source())
+      .mockRejectedValue(currentFailure);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => now,
+      readCurrentSource,
+      readDurableSnapshot: vi.fn().mockRejectedValue(
+        new Error("Durable snapshot unavailable"),
+      ),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(reader()).resolves.toMatchObject({ status: "current" });
+    now = startedAt + ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS + 1;
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      entries: [customGraphExploreEntry],
+    });
+    now = startedAt + 30 * 24 * 60 * 60_000;
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      entries: [customGraphExploreEntry],
+    });
+  });
+
+  it("uses an older durable Router snapshot on a cold provider failure", async () => {
+    const now = Date.parse("2026-08-25T06:00:00.000Z");
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source(
+      undefined,
+      { generatedAt: "2026-07-01T05:59:59.000Z" },
+    ));
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => now,
+      readCurrentSource: vi.fn().mockRejectedValue(
+        new Error("Router provider unavailable"),
+      ),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      generatedAt: "2026-07-01T05:59:59.000Z",
+      entries: [customGraphExploreEntry],
+    });
+  });
+
+  it("keeps a newer durable snapshot during cross-commit catch-up", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const behind = {
+      ...source([], {
+        blockNumber: "25718016",
+        blockHash: `0x${"ad".repeat(32)}`,
+      }),
+      status: "last-known-good" as const,
+    };
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(behind),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot,
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      asOfBlock: "25740001",
+      entries: [customGraphExploreEntry],
+    });
+    expect(persistDurableSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("does not regress to a lagging provider that reports itself current", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const lagging = source([], {
+      blockNumber: "25718016",
+      blockHash: `0x${"ad".repeat(32)}`,
+    });
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(lagging),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot,
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      asOfBlock: "25740001",
+      entries: [customGraphExploreEntry],
+    });
+    expect(persistDurableSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("keeps current status when the durable snapshot matches exactly", async () => {
+    const current = source();
+    const durable = routerCustomIdentitySnapshotFromSourceV1(current);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(current),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "current",
+      asOfBlock: "25740001",
+      entries: [customGraphExploreEntry],
+    });
+  });
+
+  it("fails closed on a warm-cache same-boundary conflict", async () => {
+    const startedAt = Date.parse("2026-08-25T06:01:00.000Z");
+    let now = startedAt;
+    const first = source();
+    const durable = routerCustomIdentitySnapshotFromSourceV1(first);
+    const conflicting = source([], {
+      blockNumber: "25740001",
+      blockHash: `0x${"bc".repeat(32)}`,
+    });
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => now,
+      readCurrentSource: vi.fn()
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(conflicting),
+      readDurableSnapshot: vi.fn()
+        .mockRejectedValueOnce(new Error("missing"))
+        .mockResolvedValueOnce(durable),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(reader()).resolves.toMatchObject({ status: "current" });
+    now += ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS + 1;
+    await expect(reader()).rejects.toThrow(
+      "snapshots conflict at one boundary",
+    );
+  });
+
+  it("replaces a stale durable snapshot after an explicit Router reorg", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const rebuilt = {
+      ...source([], {
+        blockNumber: "25718016",
+        blockHash: `0x${"ad".repeat(32)}`,
+      }),
+      status: "last-known-good" as const,
+      reorgDetected: true,
+    };
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(rebuilt),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot,
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      asOfBlock: "25718016",
+      entries: [],
+    });
+    expect(persistDurableSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ asOfBlock: "25718016" }),
+      { replaceAfterReorg: true },
+    );
+  });
+
+  it("falls back durably when the cold current read never settles", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      currentReadTimeoutMs: 10,
+      readCurrentSource: vi.fn(() => new Promise<never>(() => undefined)),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      entries: [customGraphExploreEntry],
+    });
+  });
+
+  it("does not substitute a Classic cursor for an empty Router cursor", () => {
+    const snapshot = routerCustomIdentitySnapshotFromSourceV1(source([], {
+      blockNumber: "25718016",
+      blockHash: `0x${"ad".repeat(32)}`,
+    }));
+
+    expect(snapshot).toMatchObject({
+      asOfBlock: "25718016",
+      asOfBlockHash: `0x${"ad".repeat(32)}`,
+      entries: [],
+    });
+  });
+
+  it("bounds the durable Router identity set", () => {
+    expect(() => routerCustomIdentitySnapshotFromSourceV1(source(
+      Array.from(
+        { length: ROUTER_CUSTOM_SNAPSHOT_MAX_IDENTITIES + 1 },
+        () => customGraphToken,
+      ),
+    ))).toThrow("exceeds its bound");
   });
 
   it("rejects a non-ready Router model", () => {
@@ -183,6 +449,11 @@ describe("finalized Router Custom public projection", () => {
   });
 
   it("reports the exact set of healthy public identity lanes", () => {
+    expect(publicLaunchSourceV1({
+      envioAvailable: false,
+      registryCustomCurrent: false,
+      routerCustomCurrent: true,
+    })).toBe("canonical-launch-stamp-router");
     expect(publicLaunchSourceV1({
       registryCustomCurrent: false,
       routerCustomCurrent: false,

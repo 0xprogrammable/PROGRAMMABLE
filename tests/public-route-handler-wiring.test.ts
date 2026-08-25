@@ -122,6 +122,20 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
   readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  readFinalizedRouterCustomIdentitySnapshotV1: async (...args: unknown[]) => {
+    const entries = await mocks.readRouter(...args);
+    return {
+      schemaVersion: "programmable.router-custom-identity-snapshot.v1",
+      source: "canonical-launch-stamp-router",
+      status: "current",
+      generatedAt: "2026-08-22T08:00:01.000Z",
+      asOfBlock: "25740001",
+      asOfBlockHash: `0x${"bc".repeat(32)}`,
+      finalityConfirmations: 64,
+      identityCommitment: `sha256:${"ac".repeat(32)}`,
+      entries,
+    };
+  },
   mergeRouterCustomCreatorProfileV1: (
     profile: Readonly<{
       status: string;
@@ -133,18 +147,32 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
       creatorAddress?: string;
       launchStampProvenance?: Readonly<{ finalizedAtBlockNumber: string }>;
     }>[],
-  ) => ({
-    ...profile,
-    tokens: [
-      ...profile.tokens,
-      ...entries.filter((entry) =>
-        entry.creatorAddress?.toLowerCase() === account.toLowerCase() &&
-        profile.snapshot !== null &&
-        BigInt(entry.launchStampProvenance?.finalizedAtBlockNumber ?? -1) <=
-          BigInt(profile.snapshot.blockNumber)
-      ),
-    ],
-  }),
+    snapshot?: Readonly<{
+      asOfBlock: string;
+      asOfBlockHash: string;
+      finalityConfirmations: number;
+    }>,
+  ) => {
+    const additions = entries.filter((entry) =>
+      entry.creatorAddress?.toLowerCase() === account.toLowerCase() &&
+      profile.snapshot !== null &&
+      BigInt(entry.launchStampProvenance?.finalizedAtBlockNumber ?? -1) <=
+        BigInt(snapshot?.asOfBlock ?? profile.snapshot.blockNumber)
+    );
+    return {
+      ...profile,
+      tokens: [...profile.tokens, ...additions],
+      snapshot: snapshot && profile.snapshot && additions.length > 0 &&
+          BigInt(snapshot.asOfBlock) > BigInt(profile.snapshot.blockNumber)
+        ? {
+            ...profile.snapshot,
+            blockNumber: snapshot.asOfBlock,
+            blockHash: snapshot.asOfBlockHash,
+            confirmations: snapshot.finalityConfirmations,
+          }
+        : profile.snapshot,
+    };
+  },
 }));
 
 vi.mock("../lib/onchain/config", () => ({
@@ -369,6 +397,37 @@ describe("public route coordinator wiring", () => {
     );
   });
 
+  it("keeps a wallet-owned Router launch visible when Envio is unavailable", async () => {
+    mocks.readEnvioClassicV3CatalogV1.mockRejectedValueOnce(
+      new Error("Envio temporarily unavailable"),
+    );
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+
+    const response = await creatorProfile(new NextRequest(
+      `http://localhost/api/explore/profile?account=${customGraphExploreEntry.creatorAddress}`,
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "ready",
+      account: customGraphExploreEntry.creatorAddress,
+      tokens: [{ tokenAddress: customGraphExploreEntry.tokenAddress }],
+      snapshot: {
+        blockNumber: "25740001",
+      },
+    });
+    expect(body.snapshot).not.toHaveProperty(
+      "blockTimestamp",
+    );
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("X-Programmable-Canonical-Read-Status")).toBe(
+      "unavailable",
+    );
+  });
+
   it("uses bounded RPC failover only for the official Classic V2 reward state", async () => {
     mocks.readEnvioClassicV3CatalogV1.mockResolvedValue(
       profileCatalog("classic-v2"),
@@ -407,6 +466,35 @@ describe("public route coordinator wiring", () => {
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "envio-classic-v3+canonical-launch-stamp-router+rpc",
     );
+  });
+
+  it("keeps Classic identity visible when its claim enrichment is unavailable", async () => {
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue(
+      profileCatalog("classic-v2"),
+    );
+    rpcFixtures.client.getBlockNumber.mockRejectedValue(
+      new Error("RPC unavailable"),
+    );
+
+    const response = await creatorProfile(
+      new NextRequest(
+        `http://localhost/api/explore/profile?account=${ACCOUNT}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tokens).toEqual([
+      expect.objectContaining({
+        tokenAddress: PROFILE_TOKEN,
+        launchModelVersion: "classic-v2",
+      }),
+    ]);
+    expect(body.pools).toEqual([]);
+    expect(body.claims).toEqual([]);
+    expect(response.headers.get(
+      "X-Programmable-Classic-Claim-Read-Status",
+    )).toBe("unavailable");
   });
 
   it("fails closed without restoring historical RPC identities when Envio is unavailable", async () => {

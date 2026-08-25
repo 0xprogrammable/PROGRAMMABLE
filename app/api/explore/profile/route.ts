@@ -37,8 +37,9 @@ import { readEnvioClassicV3CatalogV1 } from
   "@/lib/market-data/envio-classic-v3-catalog.server";
 import {
   mergeRouterCustomCreatorProfileV1,
-  readFinalizedRouterCustomExploreEntriesV1,
+  readFinalizedRouterCustomIdentitySnapshotV1,
   ROUTER_CUSTOM_LAUNCH_SOURCE,
+  type RouterCustomIdentitySnapshotV1,
 } from "@/lib/alchemy/router-custom-public.server";
 import {
   projectRouterCustomCreatorClaimProfileV1,
@@ -482,6 +483,8 @@ async function readEnvioCreatorProfile(
 ): Promise<Readonly<{
   profile: CreatorProfile;
   provider: string;
+  catalogStatus: "current" | "last-known-good";
+  classicClaimStatus: "not-applicable" | "current" | "unavailable";
 }>> {
   const catalog = await readEnvioClassicV3CatalogV1({
     signal,
@@ -500,85 +503,107 @@ async function readEnvioCreatorProfile(
   const classicV2Tokens = tokens.filter(
     (token) => token.launchModelVersion === "classic-v2",
   );
-  const [claimState, classicV2Claims] = await Promise.all([
-    classicV2Tokens.length
-      ? (async () => {
-        const deployment = getWebsiteReadOnchainDeployment("production");
-        if (deployment.status !== "ready") {
-          throw new Error("Classic V2 creator rewards are not deployed");
-        }
-        return withOperationalRpcFailover(deployment, async (selected) => {
-          const client = profileClient(selected.rpcUrl);
-          const head = await client.getBlockNumber();
-          const blockNumber = head > CONFIRMATIONS ? head - CONFIRMATIONS : head;
-          const block = await client.getBlock({ blockNumber });
-          if (!block.hash) {
-            throw new Error("Creator reward snapshot has no block hash");
+  type ClassicV2ClaimState = Readonly<{
+    blockNumber: bigint;
+    blockHash: Hex;
+    blockTimestamp: bigint;
+    confirmations: number;
+    claimableByPool: ReadonlyMap<string, bigint>;
+    provider: string;
+  }>;
+  type ClassicV2Claims = Awaited<
+    ReturnType<typeof readEnvioClassicV2CreatorClaimsV1>
+  >;
+  let claimState: ClassicV2ClaimState | null = null;
+  let classicV2Claims: ClassicV2Claims = [];
+  let classicClaimStatus: "not-applicable" | "current" | "unavailable" =
+    classicV2Tokens.length === 0 ? "not-applicable" : "unavailable";
+  if (classicV2Tokens.length > 0) {
+    try {
+      [claimState, classicV2Claims] = await Promise.all([
+        (async () => {
+          const deployment = getWebsiteReadOnchainDeployment("production");
+          if (deployment.status !== "ready") {
+            throw new Error("Classic V2 creator rewards are not deployed");
           }
-          await Promise.all([
-            assertRuntime(
-              client,
-              deployment.launcher,
-              deployment.launcherRuntimeCodeHash,
-              blockNumber,
-            ),
-            assertRuntime(
-              client,
-              deployment.feeHook,
-              deployment.feeHookRuntimeCodeHash,
-              blockNumber,
-            ),
-          ]);
-          const claimableByPool = new Map<string, bigint>();
-          await Promise.all(classicV2Tokens.map(async (token) => {
-            if (
-              token.hookAddress.toLowerCase() !==
-                deployment.feeHook.toLowerCase() ||
-              typeof token.totalSwapFeeBps !== "number"
-            ) {
-              throw new Error("Classic V2 reward identity is invalid");
+          return withOperationalRpcFailover(deployment, async (selected) => {
+            const client = profileClient(selected.rpcUrl);
+            const head = await client.getBlockNumber();
+            const blockNumber = head > CONFIRMATIONS
+              ? head - CONFIRMATIONS
+              : head;
+            const block = await client.getBlock({ blockNumber });
+            if (!block.hash) {
+              throw new Error("Creator reward snapshot has no block hash");
             }
-            const config = await client.readContract({
-              address: deployment.feeHook,
-              abi: creatorFeeHookReadAbi,
-              functionName: "poolFeeConfig",
-              args: [token.poolId],
+            await Promise.all([
+              assertRuntime(
+                client,
+                deployment.launcher,
+                deployment.launcherRuntimeCodeHash,
+                blockNumber,
+              ),
+              assertRuntime(
+                client,
+                deployment.feeHook,
+                deployment.feeHookRuntimeCodeHash,
+                blockNumber,
+              ),
+            ]);
+            const claimableByPool = new Map<string, bigint>();
+            await Promise.all(classicV2Tokens.map(async (token) => {
+              if (
+                token.hookAddress.toLowerCase() !==
+                  deployment.feeHook.toLowerCase() ||
+                typeof token.totalSwapFeeBps !== "number"
+              ) {
+                throw new Error("Classic V2 reward identity is invalid");
+              }
+              const config = await client.readContract({
+                address: deployment.feeHook,
+                abi: creatorFeeHookReadAbi,
+                functionName: "poolFeeConfig",
+                args: [token.poolId],
+                blockNumber,
+              });
+              const [creator, registrar, totalSwapFeeBps, registered, accrued] =
+                config;
+              if (
+                !registered ||
+                getAddress(creator).toLowerCase() !== account.toLowerCase() ||
+                getAddress(registrar).toLowerCase() !==
+                  deployment.launcher.toLowerCase() ||
+                Number(totalSwapFeeBps) !== token.totalSwapFeeBps
+              ) {
+                throw new Error("Classic V2 reward state is invalid");
+              }
+              claimableByPool.set(token.poolId.toLowerCase(), accrued);
+            }));
+            return {
               blockNumber,
-            });
-            const [creator, registrar, totalSwapFeeBps, registered, accrued] =
-              config;
-            if (
-              !registered ||
-              getAddress(creator).toLowerCase() !== account.toLowerCase() ||
-              getAddress(registrar).toLowerCase() !==
-                deployment.launcher.toLowerCase() ||
-              Number(totalSwapFeeBps) !== token.totalSwapFeeBps
-            ) {
-              throw new Error("Classic V2 reward state is invalid");
-            }
-            claimableByPool.set(token.poolId.toLowerCase(), accrued);
-          }));
-          return {
-            blockNumber,
-            blockHash: block.hash as Hex,
-            blockTimestamp: block.timestamp,
-            confirmations: Number(head - blockNumber),
-            claimableByPool,
-            provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
-          };
-        });
-      })()
-      : Promise.resolve(null),
-    classicV2Tokens.length
-      ? readEnvioClassicV2CreatorClaimsV1({
+              blockHash: block.hash as Hex,
+              blockTimestamp: block.timestamp,
+              confirmations: Number(head - blockNumber),
+              claimableByPool,
+              provider: profileRpcProviderHeader(deployment, selected.rpcUrl),
+            };
+          });
+        })(),
+        readEnvioClassicV2CreatorClaimsV1({
           account,
           poolIds: classicV2Tokens.map((token) => token.poolId),
           throughBlock: catalog.asOfBlock,
           signal,
           deadlineMs: Date.now() + 5_000,
-        })
-      : Promise.resolve([]),
-  ]);
+        }),
+      ]);
+      classicClaimStatus = "current";
+    } catch {
+      console.error("Creator profile Classic V2 claim read unavailable", {
+        name: "ClassicV2CreatorClaimReadError",
+      });
+    }
+  }
   const claimedByPool = new Map<string, bigint>();
   for (const claim of classicV2Claims) {
     const key = claim.poolId.toLowerCase();
@@ -610,7 +635,9 @@ async function readEnvioCreatorProfile(
     };
   });
   const pools = tokens.flatMap((token) =>
-    typeof token.totalSwapFeeBps === "number"
+    typeof token.totalSwapFeeBps === "number" &&
+      !(token.launchModelVersion === "classic-v2" &&
+        classicClaimStatus !== "current")
       ? (() => {
           const claimable =
             claimState?.claimableByPool.get(token.poolId.toLowerCase()) ?? 0n;
@@ -636,6 +663,8 @@ async function readEnvioCreatorProfile(
     .reduce((sum, value) => sum + value, 0n);
   return {
     provider: claimState?.provider ?? "envio-indexer-state",
+    catalogStatus: catalog.status,
+    classicClaimStatus,
     profile: {
       status: "ready",
       account,
@@ -670,6 +699,33 @@ async function readEnvioCreatorProfile(
   };
 }
 
+function emptyRouterCustomCreatorProfile(
+  account: Address,
+  snapshot: RouterCustomIdentitySnapshotV1,
+): CreatorProfile {
+  return {
+    status: "ready",
+    account,
+    tokens: [],
+    pools: [],
+    claims: [],
+    totals: {
+      claimableWei: "0",
+      claimableEth: "0",
+      generatedWei: "0",
+      generatedEth: "0",
+      claimedWei: "0",
+      claimedEth: "0",
+    },
+    snapshot: {
+      chainId: 1,
+      blockNumber: snapshot.asOfBlock,
+      blockHash: snapshot.asOfBlockHash,
+      confirmations: snapshot.finalityConfirmations,
+    },
+  };
+}
+
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   if (
@@ -692,84 +748,118 @@ export async function GET(request: NextRequest) {
 
   try {
     const deadlineMs = Date.now() + 7_500;
-    const routerRead = readFinalizedRouterCustomExploreEntriesV1({
+    const envioRead = readEnvioCreatorProfile(account, request.signal).then(
+      (result) => result,
+      () => {
+        console.error("Creator profile Envio identity read unavailable", {
+          name: "EnvioCreatorProfileError",
+        });
+        return null;
+      },
+    );
+    const routerRead = readFinalizedRouterCustomIdentitySnapshotV1({
       signal: request.signal,
       deadlineMs,
     }).then(
-      (entries) => ({ entries, status: "current" as const }),
+      (snapshot) => ({
+        entries: snapshot.entries,
+        snapshot,
+        status: snapshot.status,
+      }),
       () => {
         console.error("Creator profile Router Custom read unavailable", {
           name: "RouterCustomReadError",
         });
-        return { entries: [], status: "unavailable" as const };
+        return {
+          entries: [],
+          snapshot: null,
+          status: "unavailable" as const,
+        };
       },
     );
     const [result, routerResult] = await Promise.all([
-      readEnvioCreatorProfile(account, request.signal),
+      envioRead,
       routerRead,
     ]);
-    let profile = result.profile;
+    if (result === null && routerResult.snapshot === null) {
+      throw new Error("No creator identity snapshot is available");
+    }
+    let profile = result?.profile ?? emptyRouterCustomCreatorProfile(
+      account,
+      routerResult.snapshot!,
+    );
     let routerStatus = routerResult.status;
     let routerClaimStatus: "not-applicable" | "current" | "unavailable" =
       "not-applicable";
-    let rpcProvider = result.provider;
-    if (routerStatus === "current") {
+    let rpcProvider = result?.provider ?? ROUTER_CUSTOM_LAUNCH_SOURCE;
+    if (routerStatus !== "unavailable") {
       try {
         profile = mergeRouterCustomCreatorProfileV1(
-          result.profile,
+          profile,
           account,
           routerResult.entries,
+          routerResult.snapshot!,
         );
-        const hasReviewedClaim = routerResult.entries.some((entry) => {
-          const capability = resolveRouterCustomCreatorClaimCapabilityV1(entry);
-          return capability !== null &&
-            capability.creatorAddress.toLowerCase() === account.toLowerCase() &&
-            profile.snapshot !== null &&
-            BigInt(entry.launchStampProvenance!.finalizedAtBlockNumber) <=
-              BigInt(profile.snapshot.blockNumber);
-        });
-        if (hasReviewedClaim) {
-          try {
-            const deployment = getWebsiteReadOnchainDeployment("production");
-            if (deployment.status !== "ready" || deployment.chainId !== 1) {
-              throw new Error("Router Custom creator claims are not deployed");
-            }
-            const projected = await withOperationalRpcFailover(
-              deployment,
-              async (selected) => ({
-                profile: await projectRouterCustomCreatorClaimProfileV1({
-                  profile,
-                  account,
-                  entries: routerResult.entries,
-                  client: profileClient(selected.rpcUrl),
-                }),
-                provider: profileRpcProviderHeader(
-                  deployment,
-                  selected.rpcUrl,
-                ),
-              }),
-            );
-            profile = projected.profile;
-            rpcProvider = projected.provider;
-            routerClaimStatus = "current";
-          } catch {
-            console.error("Creator profile Router Custom claim read unavailable", {
-              name: "RouterCustomCreatorClaimReadError",
-            });
-            routerClaimStatus = "unavailable";
-          }
+        if (result === null && profile.tokens.length === 0) {
+          throw new Error("No Router Custom identity exists for this account");
         }
       } catch {
         console.error("Creator profile Router Custom merge unavailable", {
           name: "RouterCustomIdentityError",
         });
         routerStatus = "unavailable";
+        if (result === null) throw new Error(
+          "Router Custom creator identity fallback is unavailable",
+        );
       }
     }
-    const launchSource = routerStatus === "current"
-      ? `envio-classic-v3+${ROUTER_CUSTOM_LAUNCH_SOURCE}`
-      : "envio-classic-v3";
-    const usesRpc = result.provider !== "envio-indexer-state" ||
+    const hasReviewedClaim = routerStatus !== "unavailable" &&
+      routerResult.entries.some((entry) => {
+        const capability = resolveRouterCustomCreatorClaimCapabilityV1(entry);
+        return capability !== null &&
+          capability.creatorAddress.toLowerCase() === account.toLowerCase() &&
+          profile.snapshot !== null &&
+          BigInt(entry.launchStampProvenance!.finalizedAtBlockNumber) <=
+            BigInt(profile.snapshot.blockNumber);
+      });
+    if (hasReviewedClaim) {
+      try {
+        const deployment = getWebsiteReadOnchainDeployment("production");
+        if (deployment.status !== "ready" || deployment.chainId !== 1) {
+          throw new Error("Router Custom creator claims are not deployed");
+        }
+        const projected = await withOperationalRpcFailover(
+          deployment,
+          async (selected) => ({
+            profile: await projectRouterCustomCreatorClaimProfileV1({
+              profile,
+              account,
+              entries: routerResult.entries,
+              client: profileClient(selected.rpcUrl),
+            }),
+            provider: profileRpcProviderHeader(
+              deployment,
+              selected.rpcUrl,
+            ),
+          }),
+        );
+        profile = projected.profile;
+        rpcProvider = projected.provider;
+        routerClaimStatus = "current";
+      } catch {
+        console.error("Creator profile Router Custom claim read unavailable", {
+          name: "RouterCustomCreatorClaimReadError",
+        });
+        routerClaimStatus = "unavailable";
+      }
+    }
+    const launchSource = result === null
+      ? ROUTER_CUSTOM_LAUNCH_SOURCE
+      : routerStatus !== "unavailable"
+        ? `envio-classic-v3+${ROUTER_CUSTOM_LAUNCH_SOURCE}`
+        : "envio-classic-v3";
+    const usesRpc = (result !== null &&
+        result.provider !== "envio-indexer-state") ||
       routerClaimStatus === "current";
     const readSource = !usesRpc
       ? launchSource
@@ -777,18 +867,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(profile, {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Launch-Source": routerStatus === "current"
-          ? `envio-classic-v3+${ROUTER_CUSTOM_LAUNCH_SOURCE}`
-          : "envio-classic-v3",
+        "X-Programmable-Launch-Source": launchSource,
         "X-Programmable-Read-Source": readSource,
+        "X-Programmable-Canonical-Read-Status":
+          result?.catalogStatus ?? "unavailable",
+        "X-Programmable-Classic-Claim-Read-Status":
+          result?.classicClaimStatus ?? "not-applicable",
         "X-Programmable-Router-Read-Status": routerStatus,
         "X-Programmable-Router-Claim-Read-Status": routerClaimStatus,
         "X-Programmable-Rpc-Provider": rpcProvider,
       },
     });
   } catch (error) {
-    console.error("Envio creator profile read failed", {
-      name: error instanceof Error ? error.name : "EnvioCreatorProfileError",
+    console.error("Creator profile identity read failed", {
+      name: error instanceof Error ? error.name : "CreatorProfileIdentityError",
       category: "read-failed",
     });
     if (LEGACY_RPC_PROFILE_FALLBACK_ENABLED) {

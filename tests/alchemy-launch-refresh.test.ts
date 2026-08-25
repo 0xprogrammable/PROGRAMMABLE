@@ -155,6 +155,8 @@ describe("Alchemy launch overlay refresh", () => {
         scannedToBlock: null,
         discovered: 0,
         hydrated: 0,
+        highestSafeBlockNumber: slice.cursor.blockNumber,
+        caughtUp: true,
         rebuiltAfterReorg: false,
       }),
     );

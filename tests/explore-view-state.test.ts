@@ -32,6 +32,7 @@ import {
   tokenLaunchModelGroup,
 } from "../components/explore-view";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const classicProvenance = {
   schemaVersion: "programmable.explore-launch-category-provenance.v1",
@@ -374,6 +375,70 @@ describe("Explore refresh state", () => {
       payload,
       contentKey: "initial-content",
       requestKey: "initial-request",
+    });
+  });
+
+  it("hydrates a Router-only fallback when Envio is unavailable", () => {
+    const routerFallback = {
+      status: "ready" as const,
+      tokens: [{
+        ...customGraphExploreEntry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      page: 1,
+      pageSize: 9,
+      total: 1,
+      totalPages: 1,
+      catalog: {
+        source: "envio-classic-v3" as const,
+        launchSource: "canonical-launch-stamp-router" as const,
+        status: "last-known-good" as const,
+        lastIndexedAt: "2026-08-25T06:00:00.000Z",
+        asOfBlock: "25740001",
+        asOfBlockHash: `0x${"bc".repeat(32)}`,
+        identityCount: 1,
+        identityCommitment: `sha256:${"ac".repeat(32)}`,
+        completeness: {
+          classic: "unavailable" as const,
+          stock: "excluded" as const,
+          custom: "unavailable" as const,
+          registryCustom: "unavailable" as const,
+          routerCustom: "current" as const,
+        },
+        scope: {
+          included: ["canonical-launch-stamp-router"] as const,
+          excluded: catalogBoundary.scope.excluded,
+          publicCategories: ["classic", "custom"] as const,
+        },
+        routerStamp: {
+          source: "canonical-launch-stamp-router" as const,
+          status: "current" as const,
+          finalityConfirmations: 64 as const,
+          verifiedIdentityCount: 1,
+          projectedIdentityCount: 1,
+          generatedAt: "2026-08-25T06:00:00.000Z",
+          asOfBlock: "25740001",
+          asOfBlockHash: `0x${"bc".repeat(32)}`,
+          identityCommitment: `sha256:${"ac".repeat(32)}`,
+        },
+      },
+    };
+
+    const state = createExploreInitialState(
+      { ok: true, body: routerFallback },
+      {
+        contentKey: "router-fallback-content",
+        requestKey: "router-fallback-request",
+        pageSize: EXPLORE_TOKENS_PER_PAGE,
+      },
+    );
+
+    expect(state).toMatchObject({
+      phase: "ready",
+      payload: {
+        tokens: [{ tokenAddress: customGraphExploreEntry.tokenAddress }],
+        catalog: { launchSource: "canonical-launch-stamp-router" },
+      },
     });
   });
 
