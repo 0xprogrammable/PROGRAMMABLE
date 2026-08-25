@@ -207,7 +207,7 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Use the closed request contract</h2>
           <p>
-            <code>POST /v1/custom-launches</code> accepts a JSON object up to 2
+            <code>POST /v1/custom-launches</code> accepts a JSON object up to 8
             MiB. The eight original V1 fields remain required; the exact-source
             bundle is additive and optional for legacy compatibility.
           </p>

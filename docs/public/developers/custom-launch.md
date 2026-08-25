@@ -65,7 +65,7 @@ programmable-launch status REQUEST_UUID --watch --until finalized
 ## What `pack` derives
 
 `pack` consumes exact files and structured ABI values. It does not accept hand-written source, graph, verification or
-runtime hashes. It derives:
+runtime hashes. Do not enter derived hashes by hand or copy test-only hashes. It derives:
 
 - `launch.json` and a deterministic pack receipt;
 - a UTF-8 path-byte-sorted source manifest and exact file or symlink content commitments;
@@ -129,6 +129,8 @@ approval or safety claim.
 It then writes a mode `0600` journal before the first network request and binds the API origin and Idempotency-Key to
 the exact request bytes. The key itself is never written.
 
+Raw HTTP clients send `Authorization: Bearer $PROGRAMMABLE_API_KEY` only to `https://api.programmable.market`.
+
 - A new request returns `202`; an identical replay may return `200`.
 - A timeout, transport ambiguity, `429` or `503` retries only the persisted bytes with the same Idempotency-Key.
 - `Retry-After` is honored as either seconds or an HTTP date.
@@ -143,7 +145,8 @@ SHA-256 of exact `launch.json` bytes.
 Use `GET /v1/custom-launches/{launchId}` as the precise polling route. The legacy path name receives the API request
 UUID returned as both `launchId` and `requestId`; `onchainLaunchId` is a different Router `bytes32` value. The bounded
 history list can opportunistically reconcile pending rows, but returns `output: null`. It does not replace the
-single-resource route.
+single-resource route. The single-resource response is the resource-level source of the exact prepared output and
+failure state.
 
 | Status | Meaning |
 | --- | --- |
@@ -190,5 +193,6 @@ send only the response `error.requestId`, HTTP status, UTC time and public error
 ## Current boundary
 
 Generic fee claiming and buyback management for arbitrary hooks are not live. FADE uses a specifically bound adapter;
-that does not create a generic capability. The reserved `fees:claim` and `buybacks:manage` scopes remain disabled and
+an arbitrary Custom hook is not automatically claimable. That adapter does not create a generic capability. The
+reserved `fees:claim` and `buybacks:manage` scopes remain disabled and
 promise no future behavior. Public Hookbuilder and reusable-template intake are not part of this API.
