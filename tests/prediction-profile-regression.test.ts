@@ -19,6 +19,10 @@ const portfolioSource = readFileSync(
   join(root, "components/prediction-market-portfolio.tsx"),
   "utf8",
 );
+const portfolioDataSource = readFileSync(
+  join(root, "lib/prediction-market-portfolio.ts"),
+  "utf8",
+);
 const detailSource = readFileSync(
   join(root, "components/prediction-market-detail.tsx"),
   "utf8",
@@ -288,6 +292,18 @@ describe("prediction profile regression contract", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("runs the eight history lanes through the bounded concurrency policy", () => {
+    expect(portfolioDataSource).toContain(
+      "await readPredictionPortfolioHistoryLanes([",
+    );
+    expect(portfolioDataSource).not.toMatch(
+      /createdLogs,[\s\S]{0,300}redeemedLogs,[\s\S]{0,100}await Promise\.all/u,
+    );
+    expect(portfolioDataSource).not.toMatch(
+      /const \[(?:holderLogs|payerLogs), recipientLogs\] = await Promise\.all/u,
+    );
+  });
+
   it("exposes Positions, Created, and History as one accessible tab set", () => {
     for (const label of ["Positions", "Created", "History"]) {
       expect(portfolioSource).toMatch(new RegExp(`(?:["']${label}["']|>${label}<)`, "u"));
@@ -334,6 +350,15 @@ describe("prediction profile regression contract", () => {
     expect(portfolioSource).toContain(
       "? Math.min(visibleItems.length, 2)",
     );
+    expect(portfolioSource).toMatch(
+      /model\.phase === "loading" \|\| model\.phase === "error"[\s\S]{0,80}\? 2/u,
+    );
+    expect(portfolioStyles).toMatch(
+      /\.portfolioSection\[data-visible-card-count="2"\]\s*\{[^}]*min-height:\s*424px;/s,
+    );
+    expect(portfolioStyles).toMatch(
+      /@media\s*\(max-width:\s*52rem\)[\s\S]*?\.portfolioSection\[data-visible-card-count="2"\]\s*\{[^}]*min-height:\s*748px;/u,
+    );
     expect(portfolioStyles).toMatch(
       /\.portfolioLoadingCard\s*\{[^}]*min-height:\s*82px;/s,
     );
@@ -349,6 +374,19 @@ describe("prediction profile regression contract", () => {
     expect(portfolioStyles).toMatch(
       /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioSection\[data-visible-card-count="2"\]\s*\{[^}]*min-height:\s*806px;/s,
     );
+  });
+
+  it("keeps the iconless mobile error state readable in one column", () => {
+    const narrowStyles = mediaBodiesAtOrBelow(portfolioStyles, 620);
+    const errorLayout = cssDeclarationsFor(narrowStyles, ".portfolioError");
+
+    expect(errorLayout).toMatch(
+      /grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/u,
+    );
+    expect(errorLayout).not.toMatch(/44px/u);
+    expect(
+      cssDeclarationsFor(narrowStyles, ".portfolioError button"),
+    ).toMatch(/width\s*:\s*100%/u);
   });
 
   it("uses vivid yes and no colors with AA text contrast and non-color labels", () => {
