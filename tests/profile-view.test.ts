@@ -498,6 +498,21 @@ describe("profile workspace loading state", () => {
       /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonBanner\s*\{[^}]*height:\s*108px;/s,
     );
     expect(profileViewSource).toContain("styles.profileSkeletonSection");
+    expect(profileViewSource).toContain(
+      "Array.from({ length: creatorProjectPageSize }, (_, item)",
+    );
+    expect(profileViewSource).toContain(
+      "length: predictionPortfolioLoadingPlaceholderCount",
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileSkeletonLaunch\s*\{[^}]*min-height:\s*448px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileSkeletonPrediction\s*\{[^}]*min-height:\s*422px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(max-width:\s*820px\)[\s\S]*?\.profileSkeletonSummary,[\s\S]*?\.profileSkeletonClaims\s*\{[^}]*min-height:\s*340px;/s,
+    );
     expect(profileExperienceCss).not.toContain("profile-content-reveal");
     expect(profileExperienceCss).toContain("profile-skeleton-pulse");
   });
@@ -511,6 +526,7 @@ describe("profile workspace loading state", () => {
       '{refreshing ? "Refreshing" : "Refresh"}',
     );
     expect(profileViewSource).toContain("aria-busy={refreshing || undefined}");
+    expect(profileViewSource).toContain("disabled={refreshing}");
     expect(profileViewSource).toContain(
       '{refreshing ? "Refreshing rewards" : ""}',
     );

@@ -116,6 +116,7 @@ const PORTFOLIO_PARTIAL_ERROR =
 const PORTFOLIO_INITIAL_VISIBLE_ITEMS = 12;
 const PORTFOLIO_VISIBLE_ITEM_STEP = 12;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+export const predictionPortfolioLoadingPlaceholderCount = 3;
 
 const PORTFOLIO_TABS = [
   { id: "positions", label: "Positions" },
@@ -842,11 +843,7 @@ export function PredictionMarketPortfolio({
                   )}
                 />
               ) : model.phase === "loading" && visibleItems.length === 0 ? (
-                <PortfolioEmptyState
-                  icon={<CircleDollarSign aria-hidden="true" size={21} strokeWidth={1.8} />}
-                  title="Loading prediction activity"
-                  description="Your latest positions will appear here."
-                />
+                <PredictionPortfolioLoadingState />
               ) : model.phase === "error" && visibleItems.length === 0 ? (
                 <div className={styles.portfolioError} role="alert">
                   <span>
@@ -908,6 +905,30 @@ export function PredictionMarketPortfolio({
         </div>
       ))}
     </section>
+  );
+}
+
+function PredictionPortfolioLoadingState() {
+  return (
+    <div className={styles.portfolioLoadingCards} aria-hidden="true">
+      {Array.from(
+        { length: predictionPortfolioLoadingPlaceholderCount },
+        (_, item) => (
+          <div className={styles.portfolioLoadingCard} key={item}>
+            <span className={styles.portfolioLoadingArtwork} />
+            <span className={styles.portfolioLoadingCopy}>
+              <span />
+              <span />
+            </span>
+            <span className={styles.portfolioLoadingMetrics}>
+              <span />
+              <span />
+            </span>
+            <span className={styles.portfolioLoadingAction} />
+          </div>
+        ),
+      )}
+    </div>
   );
 }
 
