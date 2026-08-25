@@ -10,6 +10,10 @@ import {
   type AuthenticatedWalletPrincipalV1,
   type WalletPrincipalAuthenticatorV1,
 } from "../creator-article/wallet-principal.server";
+import {
+  PreservedBackendPublicErrorV1,
+  readPreservedBackendPublicErrorV1,
+} from "./backend-public-error-v1";
 
 export const CUSTOM_LAUNCH_API_SCHEMA_V1 =
   "programmable.custom-launch-api.v1" as const;
@@ -115,7 +119,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
           "GET",
           "/v1/wallet-admin/api-keys",
         );
-        if (!backend.ok) throw mappedBackendError(backend.status);
+        if (!backend.ok) throw await mappedBackendError(backend);
         const value = await readBoundedBackendJson(backend);
         const record = jsonRecord(value);
         const apiKeys = parseApiKeyList(record.apiKeys);
@@ -150,7 +154,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
             expiresInDays: parsed.expiresInDays,
           }),
         );
-        if (!backend.ok) throw mappedBackendError(backend.status);
+        if (!backend.ok) throw await mappedBackendError(backend);
         const value = await readBoundedBackendJson(backend);
         const record = jsonRecord(value);
         const apiKey = parseApiKeySummary(record.apiKey);
@@ -192,7 +196,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
         if (backend.status === 404) {
           return errorResponse(404, "api_key_not_found");
         }
-        if (!backend.ok) throw mappedBackendError(backend.status);
+        if (!backend.ok) throw await mappedBackendError(backend);
         const value = await readBoundedBackendJson(backend);
         const record = jsonRecord(value);
         if (
@@ -476,8 +480,12 @@ function requiredEnvironment(name: string) {
   return value;
 }
 
-function mappedBackendError(status: number) {
-  if (status === 404) return new BrowserRequestErrorV1(404, "api_key_not_found");
+async function mappedBackendError(response: Response) {
+  if (response.status === 404) {
+    return new BrowserRequestErrorV1(404, "api_key_not_found");
+  }
+  const preserved = await readPreservedBackendPublicErrorV1(response);
+  if (preserved) return preserved;
   return new BackendContractErrorV1();
 }
 
@@ -487,6 +495,16 @@ function mappedError(error: unknown) {
   }
   if (error instanceof BrowserRequestErrorV1) {
     return errorResponse(error.status, error.code);
+  }
+  if (error instanceof PreservedBackendPublicErrorV1) {
+    return errorResponse(
+      error.status,
+      error.code,
+      undefined,
+      error.publicMessage,
+      error.requestId,
+      error.retryAfter,
+    );
   }
   console.error("Developer API key request failed", {
     name: error instanceof Error ? error.name : "DeveloperApiKeyError",
@@ -498,22 +516,34 @@ function jsonResponse(
   status: number,
   body: Readonly<Record<string, unknown>>,
   allow?: string,
+  requestId?: string | null,
+  retryAfter?: string | null,
 ) {
   const headers = new Headers(RESPONSE_HEADERS);
   if (allow) headers.set("Allow", allow);
+  if (requestId) headers.set("X-Request-Id", requestId);
+  if (retryAfter) headers.set("Retry-After", retryAfter);
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-function errorResponse(status: number, code: string, allow?: string) {
+function errorResponse(
+  status: number,
+  code: string,
+  allow?: string,
+  publicMessage?: string,
+  requestId?: string | null,
+  retryAfter?: string | null,
+) {
   return jsonResponse(status, {
     schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
     error: Object.freeze({
       code,
-      message: status >= 500
+      message: publicMessage ?? (status >= 500
         ? "The API key service is temporarily unavailable."
-        : "The request could not be completed.",
+        : "The request could not be completed."),
+      ...(requestId ? { requestId } : {}),
     }),
-  }, allow);
+  }, allow, requestId, retryAfter);
 }
 
 class BrowserRequestErrorV1 extends Error {

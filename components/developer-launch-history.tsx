@@ -8,6 +8,10 @@ import {
 } from "react";
 
 import styles from "@/components/developer-launch-history.module.css";
+import {
+  prepareCustomLaunchWalletActionV1,
+  type CustomLaunchWalletActionV1,
+} from "@/lib/custom-launch/wallet-handoff-v1";
 
 type JsonValue =
   | null
@@ -52,6 +56,9 @@ type DeveloperLaunchHistoryProps = Readonly<{
   account: `0x${string}`;
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
+  sendCustomLaunchWalletAction: (
+    input: CustomLaunchWalletActionV1,
+  ) => Promise<`0x${string}`>;
 }>;
 
 const schemaVersion = "programmable.custom-launch-list.v1";
@@ -70,6 +77,9 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
   timeStyle: "short",
 });
+const submittedPollIntervalMs = 12_000;
+const authorizedPollIntervalMs = 4_000;
+const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -140,13 +150,49 @@ function parseHistoryPage(value: unknown, account: string): HistoryPage | null {
   };
 }
 
-function readApiError(value: unknown) {
-  if (!isRecord(value) || !isRecord(value.error)) {
-    return "Unable to load launch history.";
+class LaunchHistoryRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterMs: number | null,
+  ) {
+    super(message);
+    this.name = "LaunchHistoryRequestError";
   }
-  return typeof value.error.message === "string" && value.error.message.trim()
+}
+
+function readApiError(
+  response: Response,
+  value: unknown,
+  fallback = "Unable to load launch history.",
+) {
+  const retryAfter = response.headers.get("retry-after");
+  const retryAfterSeconds = retryAfter && /^[1-9][0-9]{0,4}$/u.test(retryAfter)
+    ? Number(retryAfter)
+    : null;
+  if (!isRecord(value) || !isRecord(value.error)) {
+    return new LaunchHistoryRequestError(
+      fallback,
+      response.status,
+      retryAfterSeconds === null ? null : retryAfterSeconds * 1_000,
+    );
+  }
+  const message = typeof value.error.message === "string" && value.error.message.trim()
     ? value.error.message
-    : "Unable to load launch history.";
+    : fallback;
+  const requestId = typeof value.error.requestId === "string"
+    && /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$/u.test(value.error.requestId)
+    ? value.error.requestId
+    : null;
+  const retryCopy = response.status === 429 && retryAfterSeconds !== null
+    ? ` Try again in ${retryAfterSeconds} seconds.`
+    : "";
+  const requestCopy = requestId ? ` Request ID: ${requestId}.` : "";
+  return new LaunchHistoryRequestError(
+    `${message}${retryCopy}${requestCopy}`,
+    response.status,
+    retryAfterSeconds === null ? null : retryAfterSeconds * 1_000,
+  );
 }
 
 function formatDate(value: string) {
@@ -163,7 +209,7 @@ function statusCopy(status: LaunchStatus) {
     case "received": return "Request saved";
     case "validating": return "Checks in progress";
     case "prepared": return "Launch prepared";
-    case "authorized": return "Ready for wallet confirmation";
+    case "authorized": return "Review and sign in wallet";
     case "submitted": return "Submitted onchain";
     case "finalized": return "Finalized onchain";
     case "failed": return "Launch failed";
@@ -174,6 +220,38 @@ function statusCopy(status: LaunchStatus) {
 function walletTransaction(launch: LaunchResource) {
   const candidate = launch.output?.walletTransaction;
   return isRecord(candidate) ? candidate : null;
+}
+
+function onchainTransactionHash(launch: LaunchResource) {
+  const onchain = launch.output?.onchain;
+  if (!isRecord(onchain) || typeof onchain.transactionHash !== "string") {
+    return null;
+  }
+  return transactionHashPattern.test(onchain.transactionHash)
+    ? onchain.transactionHash as `0x${string}`
+    : null;
+}
+
+function terminalStatus(status: LaunchStatus) {
+  return status === "finalized" || status === "failed" || status === "cancelled";
+}
+
+function pollDelay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<boolean>((resolve) => {
+    if (signal.aborted) {
+      resolve(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve(true);
+    }, milliseconds);
+    const abort = () => {
+      window.clearTimeout(timeout);
+      resolve(false);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function HistorySkeleton() {
@@ -193,17 +271,27 @@ export function DeveloperLaunchHistory({
   account,
   getAccessToken,
   getIdentityToken,
+  sendCustomLaunchWalletAction,
 }: DeveloperLaunchHistoryProps) {
   const [launches, setLaunches] = useState<LaunchResource[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [loadingMore, setLoadingMore] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [pollingIds, setPollingIds] = useState<
+    Readonly<Record<string, true>>
+  >({});
+  const [submittedHashes, setSubmittedHashes] = useState<
+    Readonly<Record<string, `0x${string}`>>
+  >({});
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const requestSequenceRef = useRef(0);
   const loadMoreInFlightRef = useRef(false);
   const checkInFlightRef = useRef(false);
+  const sendInFlightRef = useRef(false);
+  const pollControllersRef = useRef(new Map<string, AbortController>());
 
   const getAuthHeaders = useCallback(async () => {
     const identityToken = await getIdentityToken().catch(() => null);
@@ -247,7 +335,7 @@ export function DeveloperLaunchHistory({
         },
       );
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readApiError(body));
+      if (!response.ok) throw readApiError(response, body);
       const page = parseHistoryPage(body, account);
       if (!page) throw new Error("The API returned an invalid launch history.");
       if (requestSequence !== requestSequenceRef.current) return;
@@ -274,6 +362,39 @@ export function DeveloperLaunchHistory({
     }
   }, [account, getAuthHeaders]);
 
+  const readLaunchResource = useCallback(async (
+    requestId: string,
+    signal?: AbortSignal,
+  ) => {
+    const response = await fetch(
+      `/api/developer/custom-launches/${encodeURIComponent(requestId)}?walletAddress=${encodeURIComponent(account)}`,
+      {
+        cache: "no-store",
+        headers: await getAuthHeaders(),
+        signal,
+      },
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw readApiError(
+        response,
+        body,
+        "Unable to check launch status.",
+      );
+    }
+    const updated = parseLaunch(body, account);
+    if (!updated || updated.requestId !== requestId) {
+      throw new Error("The API returned an invalid launch status.");
+    }
+    return updated;
+  }, [account, getAuthHeaders]);
+
+  const updateLaunch = useCallback((updated: LaunchResource) => {
+    setLaunches((current) => current.map((candidate) =>
+      candidate.requestId === updated.requestId ? updated : candidate
+    ));
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     const initialRead = window.setTimeout(() => {
@@ -285,6 +406,13 @@ export function DeveloperLaunchHistory({
     };
   }, [load]);
 
+  useEffect(() => () => {
+    for (const controller of pollControllersRef.current.values()) {
+      controller.abort();
+    }
+    pollControllersRef.current.clear();
+  }, []);
+
   const refresh = () => {
     setState("loading");
     setNextCursor(null);
@@ -292,27 +420,13 @@ export function DeveloperLaunchHistory({
   };
 
   const checkOnchainStatus = async (launch: LaunchResource) => {
-    if (checkInFlightRef.current) return;
+    if (checkInFlightRef.current || pollingIds[launch.requestId]) return;
     checkInFlightRef.current = true;
     setCheckingId(launch.requestId);
     setError("");
     try {
-      const response = await fetch(
-        `/api/developer/custom-launches/${encodeURIComponent(launch.requestId)}?walletAddress=${encodeURIComponent(account)}`,
-        {
-          cache: "no-store",
-          headers: await getAuthHeaders(),
-        },
-      );
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readApiError(body));
-      const updated = parseLaunch(body, account);
-      if (!updated || updated.requestId !== launch.requestId) {
-        throw new Error("The API returned an invalid launch status.");
-      }
-      setLaunches((current) => current.map((candidate) =>
-        candidate.requestId === updated.requestId ? updated : candidate
-      ));
+      const updated = await readLaunchResource(launch.requestId);
+      updateLaunch(updated);
       setStatusMessage("Launch status updated.");
     } catch (cause) {
       setError(
@@ -321,6 +435,113 @@ export function DeveloperLaunchHistory({
     } finally {
       checkInFlightRef.current = false;
       setCheckingId(null);
+    }
+  };
+
+  const startStatusPolling = useCallback((requestId: string) => {
+    pollControllersRef.current.get(requestId)?.abort();
+    const controller = new AbortController();
+    pollControllersRef.current.set(requestId, controller);
+    setPollingIds((current) => Object.freeze({
+      ...current,
+      [requestId]: true as const,
+    }));
+
+    void (async () => {
+      let waitMs = 0;
+      while (!controller.signal.aborted) {
+        if (waitMs > 0 && !await pollDelay(waitMs, controller.signal)) return;
+        try {
+          const updated = await readLaunchResource(requestId, controller.signal);
+          updateLaunch(updated);
+          setError("");
+          if (terminalStatus(updated.status)) {
+            setStatusMessage(
+              updated.status === "finalized"
+                ? "Launch finalized onchain."
+                : "Launch tracking reached a terminal state.",
+            );
+            return;
+          }
+          if (updated.status !== "authorized" && updated.status !== "submitted") {
+            throw new Error("The launch returned an unexpected status after broadcast.");
+          }
+          setStatusMessage(
+            updated.status === "submitted"
+              ? "Transaction found. Waiting for finality."
+              : "Transaction submitted. Waiting for the Router record.",
+          );
+          waitMs = updated.status === "submitted"
+            ? submittedPollIntervalMs
+            : authorizedPollIntervalMs;
+        } catch (cause) {
+          if (controller.signal.aborted) return;
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to track the submitted transaction.",
+          );
+          if (
+            cause instanceof LaunchHistoryRequestError
+            && cause.status === 429
+            && cause.retryAfterMs !== null
+          ) {
+            waitMs = cause.retryAfterMs;
+            continue;
+          }
+          return;
+        }
+      }
+    })().finally(() => {
+      if (pollControllersRef.current.get(requestId) === controller) {
+        pollControllersRef.current.delete(requestId);
+        setPollingIds((current) => {
+          const next = { ...current };
+          delete next[requestId];
+          return Object.freeze(next);
+        });
+      }
+    });
+  }, [readLaunchResource, updateLaunch]);
+
+  const submitWalletTransaction = async (launch: LaunchResource) => {
+    if (
+      sendInFlightRef.current
+      || submittingId !== null
+    ) return;
+    sendInFlightRef.current = true;
+    setSubmittingId(launch.requestId);
+    setError("");
+    try {
+      const current = await readLaunchResource(launch.requestId);
+      updateLaunch(current);
+      if (current.status !== "authorized") {
+        throw new Error(
+          "This launch is no longer awaiting a wallet signature. Review its current status.",
+        );
+      }
+      const action = prepareCustomLaunchWalletActionV1(current.output, account);
+      const transactionHash = await sendCustomLaunchWalletAction(action);
+      if (!transactionHashPattern.test(transactionHash)) {
+        throw new Error("The wallet returned an invalid transaction hash.");
+      }
+      setSubmittedHashes((currentHashes) => Object.freeze({
+        ...currentHashes,
+        [launch.requestId]: transactionHash,
+      }));
+      setStatusMessage(
+        "Transaction submitted from the wallet. Tracking its Router status.",
+      );
+      startStatusPolling(launch.requestId);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The wallet transaction could not be submitted.",
+      );
+    } finally {
+      sendInFlightRef.current = false;
+      setSubmittingId(null);
     }
   };
 
@@ -375,6 +596,9 @@ export function DeveloperLaunchHistory({
         <ul className={styles.launchList}>
           {launches.map((launch) => {
             const transaction = walletTransaction(launch);
+            const transactionHash = onchainTransactionHash(launch)
+              ?? submittedHashes[launch.requestId]
+              ?? null;
             return (
               <li className={styles.launchItem} key={launch.launchId}>
                 <div className={styles.launchTopline}>
@@ -413,21 +637,54 @@ export function DeveloperLaunchHistory({
                 {transaction ? (
                   <details className={styles.transaction}>
                     <summary>Prepared transaction</summary>
-                    <p>Review these fields before signing in your wallet.</p>
+                    <p>
+                      Review these fields before approving the separate wallet
+                      request. Programmable never signs automatically.
+                    </p>
                     <pre>{JSON.stringify(transaction, null, 2)}</pre>
                   </details>
                 ) : null}
+                {transactionHash ? (
+                  <div className={styles.transactionHash}>
+                    <span>Transaction hash</span>
+                    <code>{transactionHash}</code>
+                  </div>
+                ) : null}
                 {launch.status === "authorized" || launch.status === "submitted" ? (
-                  <button
-                    className={styles.checkButton}
-                    disabled={checkingId !== null}
-                    type="button"
-                    onClick={() => void checkOnchainStatus(launch)}
-                  >
-                    {checkingId === launch.requestId
-                      ? "Checking status"
-                      : "Check onchain status"}
-                  </button>
+                  <div className={styles.launchActions}>
+                    {launch.status === "authorized" ? (
+                      <button
+                        className={styles.walletButton}
+                        disabled={
+                          submittingId !== null
+                          || Boolean(pollingIds[launch.requestId])
+                          || checkingId !== null
+                        }
+                        type="button"
+                        onClick={() => void submitWalletTransaction(launch)}
+                      >
+                        {submittingId === launch.requestId
+                          ? "Opening wallet review"
+                          : "Review and sign in wallet"}
+                      </button>
+                    ) : null}
+                    <button
+                      className={styles.checkButton}
+                      disabled={
+                        checkingId !== null
+                        || submittingId !== null
+                        || Boolean(pollingIds[launch.requestId])
+                      }
+                      type="button"
+                      onClick={() => void checkOnchainStatus(launch)}
+                    >
+                      {pollingIds[launch.requestId]
+                        ? "Tracking transaction"
+                        : checkingId === launch.requestId
+                          ? "Checking status"
+                          : "Check onchain status"}
+                    </button>
+                  </div>
                 ) : null}
               </li>
             );

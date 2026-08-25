@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  PROGRAMMABLE_AGENT_SETUP_LINKS_V1,
+  PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
+} from "../lib/custom-launch/agent-setup-v1";
+
 const apiKeysSource = readFileSync(
   new URL("../components/developer-api-keys.tsx", import.meta.url),
   "utf8",
@@ -16,6 +21,10 @@ const historySource = readFileSync(
 );
 const historyStyles = readFileSync(
   new URL("../components/developer-launch-history.module.css", import.meta.url),
+  "utf8",
+);
+const walletProviderSource = readFileSync(
+  new URL("../components/wallet-provider.tsx", import.meta.url),
   "utf8",
 );
 
@@ -54,6 +63,19 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('event.key === "Escape"');
     expect(apiKeysSource).toContain("revealRef.current?.focus()");
     expect(apiKeysSource).toContain("confirmRevokeRef.current?.focus()");
+    expect(apiKeysSource).toContain("Copy agent setup");
+    expect(apiKeysSource).toContain("PROGRAMMABLE_AGENT_SETUP_TEXT_V1");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("$PROGRAMMABLE_API_KEY");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.guide,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
   });
 
   it("offers named loading, failure, empty and recovery states", () => {
@@ -77,6 +99,9 @@ describe("developer launch history interface", () => {
       "A launch is onchain only after the\n        wallet signs and broadcasts it.",
     );
     expect(historySource).toContain("Check onchain status");
+    expect(historySource).toContain("Review and sign in wallet");
+    expect(historySource).toContain("sendCustomLaunchWalletAction(action)");
+    expect(historySource).toContain("startStatusPolling(launch.requestId)");
     expect(historySource).not.toContain("Your agent&apos;s first accepted request");
     expect(historyStyles).toContain("height: clamp(");
     expect(historyStyles).toContain("background: var(--webde-surface)");
@@ -96,5 +121,22 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain('disabled={state === "loading" || loadingMore}');
     expect(historySource).toContain("Prepared transaction");
+  });
+
+  it("rechecks the Custom launch action at the final wallet boundary", () => {
+    const start = walletProviderSource.indexOf(
+      "const sendCustomLaunchWalletAction = useCallback",
+    );
+    const end = walletProviderSource.indexOf(
+      "const readTradeBalances = useCallback",
+      start,
+    );
+    const boundary = walletProviderSource.slice(start, end);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(boundary.indexOf("assertCustomLaunchWalletActionV1(")).toBeGreaterThan(-1);
+    expect(boundary.indexOf("sendBrowserWalletAction(checked)")).toBeGreaterThan(
+      boundary.indexOf("assertCustomLaunchWalletActionV1("),
+    );
   });
 });

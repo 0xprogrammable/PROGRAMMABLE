@@ -188,9 +188,38 @@
   word-break: break-word;
 }
 
+.transactionHash {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.transactionHash span {
+  color: var(--webde-dim);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.transactionHash code {
+  color: var(--webde-muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.launchActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .textButton,
 .secondaryButton,
-.checkButton {
+.checkButton,
+.walletButton {
   align-items: center;
   border-radius: var(--webde-radius-control);
   display: inline-flex;
@@ -218,17 +247,24 @@
   background: transparent;
   border: 1px solid var(--webde-line);
   color: var(--webde-muted);
-  margin-top: 14px;
+}
+
+.walletButton {
+  background: var(--webde-ink);
+  border: 1px solid var(--webde-ink);
+  color: var(--webde-canvas);
 }
 
 .secondaryButton:disabled,
-.checkButton:disabled {
+.checkButton:disabled,
+.walletButton:disabled {
   opacity: 0.58;
 }
 
 .textButton:focus-visible,
 .secondaryButton:focus-visible,
 .checkButton:focus-visible,
+.walletButton:focus-visible,
 .transaction summary:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
@@ -282,6 +318,11 @@
   .checkButton:not(:disabled):hover {
     background: var(--webde-control);
   }
+
+  .walletButton:not(:disabled):hover {
+    background: #f2f2f2;
+    border-color: #f2f2f2;
+  }
 }
 
 @media (max-width: 600px) {
@@ -304,6 +345,15 @@
 
   .metadata {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .launchActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .launchActions button {
+    width: 100%;
   }
 }
 
@@ -342,6 +392,7 @@
   .launchItem,
   .history,
   .secondaryButton,
+  .walletButton,
   .transaction pre {
     border-color: CanvasText;
   }

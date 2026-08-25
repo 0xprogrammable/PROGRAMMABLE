@@ -221,6 +221,47 @@ describe("developer API key same-origin bridge", () => {
     });
   });
 
+  it.each([
+    [400, "REQUEST_SCHEMA_INVALID", null],
+    [409, "WALLET_BINDING_CONFLICT", null],
+    [429, "API_CREDENTIAL_QUOTA_EXCEEDED", "37"],
+  ] as const)(
+    "preserves bounded backend HTTP %i errors and correlation metadata",
+    async (status, code, retryAfter) => {
+      const requestId = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
+      fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
+        schemaVersion: "programmable.api-error.v1",
+        error: {
+          code,
+          message: "The request could not be completed.",
+          requestId,
+        },
+      }), {
+        status,
+        headers: {
+          "content-type": "application/json",
+          ...(retryAfter ? { "retry-after": retryAfter } : {}),
+        },
+      }));
+
+      const response = await bridge().list(new Request(
+        `https://programmable.market/api/developer/api-keys?walletAddress=${WALLET}`,
+      ));
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get("x-request-id")).toBe(requestId);
+      expect(response.headers.get("retry-after")).toBe(retryAfter);
+      expect(await response.json()).toEqual({
+        schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+        error: {
+          code,
+          message: "The request could not be completed.",
+          requestId,
+        },
+      });
+    },
+  );
+
   it("maps malformed or unavailable backend responses to one generic 503", async () => {
     fetchBackend.mockResolvedValueOnce(backendJson({ apiKeys: [{ secret: "leak" }] }));
     const malformed = await bridge().list(new Request(
