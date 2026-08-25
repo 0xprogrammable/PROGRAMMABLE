@@ -12,7 +12,7 @@ Classic uses the current launcher and shared hook on Ethereum. One transaction c
 
 ## Custom execution
 
-Custom begins with one deterministic source and graph bundle submitted through the authenticated API. The platform validates the declared manifest digest, graph constraints, attestation shape, evidence digests and permit binding. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the permit-attached transaction for separate controller-wallet signing and broadcast. The platform does not compile the source, reproduce the build or audit the project, and the resulting launch must agree with the authorized transaction and final chain record.
+Custom begins with one deterministic source and graph bundle derived by the public `programmable-launch` CLI and submitted through the authenticated API. When exact-source material is present, the prepared artifact also binds the exact Solidity Standard JSON bytes, compiler build, settings, libraries, contract identity and resolved constructor arguments. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the permit-attached transaction for separate controller-wallet signing and broadcast. Post-finality source verification is independent from launch finality; Programmable does not simulate the wallet transaction, reproduce project tests or audit the project.
 
 ## Prediction Markets execution
 

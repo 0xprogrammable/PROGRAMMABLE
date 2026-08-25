@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API",
-    "version": "1.2.0",
-    "summary": "Wallet-bound, provenance-only Custom launch preparation on Ethereum Mainnet.",
-    "description": "The API validates caller-declared manifest commitments, executable graph constraints, required agent attestation and evidence digests, and the exact platform permit. It returns a Router transaction for a separately authorized controller wallet to sign and broadcast, then reconciles that launch when the caller polls its single-resource status route. An API key is not wallet signing authority. The platform does not compile source, simulate the transaction, audit the project or attest safety."
+    "version": "1.3.0",
+    "summary": "Wallet-bound Custom launch preparation with exact-source commitments on Ethereum Mainnet.",
+    "description": "The API validates caller-declared manifest commitments, executable graph constraints, required agent attestation and evidence digests, and the exact platform permit. An optional exact-source verification bundle binds the precise Solidity Standard JSON bytes, compiler build, contract identity and resolved constructor arguments to the prepared artifact without breaking legacy V1 requests. It returns a Router transaction for a separately authorized controller wallet to sign and broadcast, then reconciles that launch when the caller polls its single-resource status route. After finality, provider verification runs independently and never revises launch finality. An API key is not wallet signing authority. Programmable does not simulate the wallet transaction, audit the project or attest safety."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -82,7 +82,7 @@
       "post": {
         "operationId": "createCustomLaunch",
         "summary": "Prepare a Custom launch",
-        "description": "Validates the manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding. It captures a bounded Router observation window and returns the prepared action. The API key cannot sign or broadcast the wallet transaction.",
+        "description": "Validates the manifest digest, executable graph, required agent attestation and evidence digests, optional exact-source verification bundle, and exact permit binding. It captures a bounded Router observation window and returns the prepared action. The API key cannot sign or broadcast the wallet transaction.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -99,7 +99,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Closed JSON request limited to 2 MiB.",
+          "description": "Closed JSON request limited to 8,388,608 bytes (8 MiB).",
           "content": {
             "application/json": {
               "schema": {
@@ -276,6 +276,27 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "The read rate limit was reached. Retry the same single-resource read after the indicated delay.",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds or an HTTP date after which the request may be retried.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchApiErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -322,7 +343,7 @@
         }
       },
       "PayloadTooLarge": {
-        "description": "Request body exceeds 2 MiB.",
+        "description": "Request body exceeds 8,388,608 bytes (8 MiB).",
         "content": {
           "application/json": {
             "schema": {
@@ -343,6 +364,14 @@
       },
       "Unavailable": {
         "description": "The Custom Launch API is temporarily unavailable.",
+        "headers": {
+          "Retry-After": {
+            "description": "Optional delay in seconds or an HTTP date after which the same request may be retried.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
@@ -799,6 +828,100 @@
         },
         "additionalProperties": false
       },
+      "ExactSourceCompilationUnitV1": {
+        "type": "object",
+        "description": "One exact Solidity Standard JSON compilation input. The decoded UTF-8 bytes, not a reconstructed object, are the hash preimage. The input is closed to language, sources and settings; every source entry contains only inline content and no URL.",
+        "required": [
+          "compilationUnitId",
+          "compilerVersion",
+          "standardJsonInputBase64",
+          "standardJsonInputSha256"
+        ],
+        "properties": {
+          "compilationUnitId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "compilerVersion": {
+            "type": "string",
+            "pattern": "^0\\.[0-9]+\\.[0-9]+\\+commit\\.[0-9a-f]{8}$",
+            "description": "Exact solc build identifier, including the eight-character commit suffix."
+          },
+          "standardJsonInputBase64": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 6990508,
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "description": "Canonical base64 of the exact UTF-8 Solidity Standard JSON input bytes. Decoded input is limited to 5,242,880 bytes per compilation unit and across all units in the request."
+          },
+          "standardJsonInputSha256": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExactSourceComponentV1": {
+        "type": "object",
+        "description": "Exact compiler target identity and the resolved constructor arguments used for one graph target.",
+        "required": [
+          "targetId",
+          "compilationUnitId",
+          "sourcePath",
+          "contractName",
+          "constructorArguments"
+        ],
+        "properties": {
+          "targetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "compilationUnitId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "sourcePath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contractName": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "constructorArguments": {
+            "type": "string",
+            "pattern": "^0x(?:[0-9a-f]{2})*$",
+            "description": "Lowercase ABI-encoded constructor arguments after graph address locators are resolved."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExactSourceVerificationBundleV1": {
+        "type": "object",
+        "description": "Optional exact-source material bound to the prepared artifact. Compilation units are uniquely sorted by UTF-8 compilationUnitId; components are uniquely sorted by UTF-8 targetId and exactly cover every graph target. Decoded Standard JSON is limited to 5,242,880 bytes per compilation unit and in aggregate.",
+        "required": [
+          "schemaVersion",
+          "compilationUnits",
+          "components"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.exact-source-verification-bundle.v1"
+          },
+          "compilationUnits": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ExactSourceCompilationUnitV1"
+            }
+          },
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ExactSourceComponentV1"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomLaunchCreateRequestV1": {
         "type": "object",
         "required": [
@@ -835,6 +958,10 @@
           },
           "agentAttestation": {
             "$ref": "#/components/schemas/AgentLaunchAttestationV1"
+          },
+          "verificationBundle": {
+            "$ref": "#/components/schemas/ExactSourceVerificationBundleV1",
+            "description": "Optional for V1 compatibility. When present, the exact bundle is cryptographically bound to the prepared artifact and enables post-finality exact-match verification."
           }
         },
         "additionalProperties": false
@@ -1500,6 +1627,84 @@
           }
         ]
       },
+      "SourceVerificationComponentV1": {
+        "type": "object",
+        "required": [
+          "targetId",
+          "address",
+          "status",
+          "provider"
+        ],
+        "properties": {
+          "targetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "address": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{40}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "retrying",
+              "exact_match",
+              "needs_attention"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "sourcify",
+              "etherscan",
+              "blockscout",
+              null
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SourceVerificationStatusV1": {
+        "type": "object",
+        "description": "Server-authored exact-source verification state. Only literal exact_match for every exclusive component means Source verified; clients must not infer or submit this object.",
+        "required": [
+          "schemaVersion",
+          "status",
+          "components",
+          "updatedAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.source-verification-status.v1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "retrying",
+              "exact_match",
+              "needs_attention"
+            ]
+          },
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/SourceVerificationComponentV1"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomLaunchResourceV1": {
         "type": "object",
         "description": "Durable API request state. launchId is the legacy alias of requestId; onchainLaunchId is the distinct Router bytes32 identifier and is present whenever durable output retains a prepared artifact. Poll this resource after wallet broadcast to drive request-scoped reconciliation.",
@@ -1562,7 +1767,8 @@
           },
           "requestHash": {
             "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "Server-side canonical idempotency request digest. It is distinct from a caller's local SHA-256 of the exact HTTP request bytes."
           },
           "createdAt": {
             "type": "string",
@@ -1587,6 +1793,17 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/CustomLaunchFailureV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceVerification": {
+            "description": "Optional server-authored post-finality verification state. It is absent or null for legacy requests, requests without an exact-source bundle, and requests that have not created verification jobs.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SourceVerificationStatusV1"
               },
               {
                 "type": "null"

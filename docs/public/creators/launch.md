@@ -8,13 +8,13 @@ Custom launch preparation is API-first. The submitting workflow packages one det
 
 ## Prepare the source
 
-Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request from that project with packaging that follows the published schema.
+Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
 The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject. Run the checks that apply to the project and keep their underlying evidence. V1 requires check IDs and evidence digests but does not publish a universal check catalog or assess the evidence.
 
 ## Create an API key
 
-Connect the controller wallet at [Custom Launch API keys](https://programmable.market/developers/api-keys) and create a scoped key. Give the secret only to the agent or workflow that should prepare launches for that wallet. Keep it out of source control and public chats.
+Connect the controller wallet at [Custom Launch API keys](https://programmable.market/developers/api-keys) and create a scoped key. Store it only as `PROGRAMMABLE_API_KEY` in an encrypted environment or secret store. Put only `$PROGRAMMABLE_API_KEY` in source, chat, prompts and agent setup.
 
 The key grants only `custom-launch:create` and `custom-launch:read`. It is not a wallet key and cannot sign or broadcast a transaction.
 
@@ -22,7 +22,7 @@ The key grants only `custom-launch:create` and `custom-launch:read`. It is not a
 
 Send one closed request to `https://api.programmable.market/v1/custom-launches` with the API key as a Bearer credential and a stable idempotency key. Follow the [Custom Launch API guide](../developers/custom-launch.md) for authentication, the exact schema, graph limits, evidence fields and response states.
 
-The platform validates the manifest digest, graph constraints, attestation shape, evidence digests and permit binding. It does not compile the source, reproduce the build, audit the project or adopt the agent's claims as a safety conclusion.
+The platform validates the manifest digest, graph constraints, attestation shape, evidence digests, optional exact-source build inputs and permit binding. Post-finality provider verification is independent from launch finality. Programmable does not reproduce project tests, audit the project or adopt the agent's claims as a safety conclusion.
 
 ## Launch from the bound wallet
 

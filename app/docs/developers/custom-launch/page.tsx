@@ -7,7 +7,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Authenticate, submit and track one wallet-bound Custom launch through the V1 API.",
+    "Package exact build artifacts, submit and track one wallet-bound Custom launch through the live V1 API.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
@@ -15,6 +15,7 @@ const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
   { id: "request", label: "Request contract" },
+  { id: "verification", label: "Exact-source verification" },
   { id: "checks", label: "Attested checks" },
   { id: "submit", label: "Submit and retry" },
   { id: "lifecycle", label: "Lifecycle" },
@@ -80,11 +81,11 @@ const errors = [
     "409",
     "Replay an ambiguous request with its original body. For nonce conflict or permit expiry, use a new nonce and idempotency key as directed by the error code.",
   ],
-  ["413", "Reduce the body below 2 MiB."],
+  ["413", "Reduce the body to at most 8,388,608 bytes."],
   ["415", "Send Content-Type: application/json."],
   [
     "422",
-    "Fix the reported manifest, graph, attestation or permit binding. Do not retry unchanged.",
+    "Fix the reported source, graph, attestation, verification or permit binding. Do not retry unchanged.",
   ],
   [
     "429",
@@ -111,9 +112,10 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            Create a key, generate <code>launch.json</code> from the built
-            project, submit it and wait for the controller wallet transaction.
-            The API key never signs or broadcasts that transaction.
+            The Custom Launch API is live. Legacy Registry and GitHub
+            submission intake is closed. Install the pinned public CLI, create
+            a key, derive <code>launch.json</code> from the exact build and stop
+            at the controller-wallet handoff.
           </p>
         </div>
 
@@ -123,30 +125,35 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Generate <code>launch.json</code> from that exact build with the
-            project&apos;s packaging tooling, then validate it against the{" "}
-            <a href="/openapi/custom-launch-v1.json">OpenAPI contract</a>.
+            Install <code>@programmable/launch</code> from the versioned GitHub
+            Release asset linked in the raw guide. The binary is{" "}
+            <code>programmable-launch</code>.
+          </li>
+          <li>
+            Run <code>pack</code> and <code>validate</code> against exact
+            Standard JSON, compiler artifacts and evidence files. Never enter
+            derived hashes by hand.
           </li>
           <li>
             Connect the controller wallet at{" "}
-            <Link href="/developers/api-keys">API keys</Link>, create a key and
-            submit <code>launch.json</code> with a stable idempotency key.
+            <Link href="/developers/api-keys">API keys</Link>, store the new key
+            as <code>PROGRAMMABLE_API_KEY</code>, then run <code>submit</code>{" "}
+            with the same pack config. Submit freshly repacks and requires
+            byte-identical request bytes before network access.
           </li>
           <li>
-            Poll the request until it is <code>authorized</code>. The controller
-            wallet then reviews, signs and broadcasts{" "}
-            <code>output.walletTransaction</code>. Keep polling until the request
-            is <code>finalized</code> or terminally failed.
+            Run <code>status REQUEST_UUID --watch --until authorized</code>.
+            The controller wallet reviews and signs separately. After
+            broadcast, poll until <code>finalized</code>.
           </li>
         </ol>
 
         <aside className={styles.callout}>
           <strong>Generate the request from the exact project</strong>
           <p>
-            <code>launch.json</code> contains project-specific bytecode,
-            addresses, permission bits and hashes from one exact build.
-            Generate it from the project being launched.{" "}
-            {"Do not copy test-only hashes or another project's file."}
+            The CLI derives the sorted manifest, SourceDescriptor, graph,
+            locators, CREATE2 addresses, canonical hashes and verification
+            metadata. Do not copy test-only hashes or another project&apos;s file.
           </p>
         </aside>
 
@@ -161,6 +168,11 @@ export default function CustomLaunchApiDocsPage() {
         </div>
 
         <ul className={styles.checkList}>
+          <li>
+            The CLI writes a mode <code>0600</code> journal before the first
+            request and binds the Idempotency-Key to exact request bytes. It
+            never writes the API key.
+          </li>
           <li>
             Connect the controller wallet on <code>programmable.market</code> to
             create, list or revoke its keys.
@@ -180,7 +192,8 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Store the secret outside source control and logs. Key lists never
-            return the full secret again.
+            return the full secret again. Put only{" "}
+            <code>$PROGRAMMABLE_API_KEY</code> in chat, prompts and agent setup.
           </li>
         </ul>
 
@@ -195,7 +208,8 @@ export default function CustomLaunchApiDocsPage() {
           <h2>Use the closed request contract</h2>
           <p>
             <code>POST /v1/custom-launches</code> accepts a JSON object up to 2
-            MiB with all eight fields.
+            MiB. The eight original V1 fields remain required; the exact-source
+            bundle is additive and optional for legacy compatibility.
           </p>
         </div>
 
@@ -221,12 +235,39 @@ export default function CustomLaunchApiDocsPage() {
           nested field, enum and bound.
         </p>
 
-        <aside className={styles.callout}>
-          <strong>Validation is not source verification</strong>
+        <p className={styles.bodyCopy}>
+          The public CLI derives every commitment from exact source, build and
+          evidence files. It derives the full runtime hash only when deployed
+          bytecode has no unresolved link or immutable references. Otherwise it
+          fails closed with <code>RUNTIME_MATERIALIZATION_REQUIRED</code>.
+        </p>
+      </section>
+
+      <section id="verification">
+        <div className={styles.sectionIntro}>
+          <h2>Bind exact source and follow server-authored status</h2>
           <p>
-            The platform does not fetch source files, reproduce dependencies,
-            compile the project, prove source-to-bytecode correspondence,
-            simulate the transaction, audit the project or attest safety.
+            Optional <code>verificationBundle</code> binds exact UTF-8 Solidity
+            Standard JSON bytes, their SHA-256, the exact solc build, source and
+            contract identity and resolved constructor arguments to the
+            prepared artifact.
+          </p>
+        </div>
+
+        <p className={styles.bodyCopy}>
+          Standard JSON sources contain inline <code>content</code>; URL-only
+          sources fail. Compilation units and components are uniquely UTF-8
+          sorted, and components exactly cover the graph. Legacy requests
+          without a bundle remain accepted and unverified.
+        </p>
+
+        <aside className={styles.callout}>
+          <strong>Exact match is server-authored</strong>
+          <p>
+            After finality, provider verification runs independently. Only
+            literal <code>exact_match</code> for every component means Source
+            verified. Clients must not submit or infer that state. Explorer
+            failure never blocks or revises launch finality.
           </p>
         </aside>
       </section>
@@ -268,8 +309,9 @@ export default function CustomLaunchApiDocsPage() {
             resource.
           </li>
           <li>
-            After an ambiguous timeout or <code>503</code>, retry with the same
-            key and byte-identical body.
+            After an ambiguous timeout, <code>429</code> or <code>503</code>,
+            retry with the same key and byte-identical body. Honor{" "}
+            <code>Retry-After</code> as seconds or an HTTP date.
           </li>
           <li>
             Reusing the key with a changed body returns{" "}
@@ -287,6 +329,12 @@ export default function CustomLaunchApiDocsPage() {
           and 100 per rolling day for the wallet principal and route. Exact
           idempotent replays bypass quota. For <code>429</code>, wait for the{" "}
           <code>Retry-After</code> delay.
+        </p>
+
+        <p className={styles.bodyCopy}>
+          Resource <code>requestHash</code> is the server&apos;s canonical
+          idempotency digest. It is distinct from the CLI receipt&apos;s local
+          SHA-256 of the exact <code>launch.json</code> bytes.
         </p>
       </section>
 
@@ -323,8 +371,9 @@ export default function CustomLaunchApiDocsPage() {
         <aside className={styles.callout}>
           <strong>API access is not wallet authorization</strong>
           <p>
-            The API key authorizes only the API request. It is never proof that
-            the controller wallet approved the transaction.
+            At <code>authorized</code>, review and sign in the connected
+            controller wallet. The API and CLI never auto-sign or
+            auto-broadcast. The API key is never proof of wallet approval.
           </p>
         </aside>
       </section>
@@ -348,6 +397,10 @@ export default function CustomLaunchApiDocsPage() {
             Router provenance alone does not create a claim route. Only
             explicitly supported fee models appear in the current website claim
             flow; an arbitrary Custom hook is not automatically claimable.
+          </li>
+          <li>
+            FADE uses a specifically bound adapter. That does not create generic
+            fee claiming or buyback management for arbitrary hooks.
           </li>
           <li>
             V1 scopes <code>fees:claim</code> and{" "}
@@ -378,6 +431,12 @@ export default function CustomLaunchApiDocsPage() {
           <code>requestId</code>. A resource-level <code>failure</code> is the
           durable lifecycle failure for that launch request.
         </p>
+
+        <p className={styles.bodyCopy}>
+          Check <a href="https://api.programmable.market/readyz">API readiness</a>.
+          For support, send only the public request ID, HTTP status, UTC time and
+          error code. Never send the API key.
+        </p>
       </section>
 
       <section id="extensions">
@@ -391,9 +450,9 @@ export default function CustomLaunchApiDocsPage() {
         </div>
 
         <p className={styles.bodyCopy}>
-          Wallet signing, fee claims, buyback management, reusable-template
-          publication and source review are not granted by the V1 Custom Launch
-          API.
+          Generic fee claims, buyback management, reusable-template publication
+          and a public Hookbuilder are not granted by the V1 Custom Launch API.
+          Reserved scopes promise no future behavior.
         </p>
       </section>
 

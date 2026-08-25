@@ -12,9 +12,9 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## API-first preparation
 
-Build and test the exact project. Project-specific tooling derives the deterministic source manifest, graph bundle and evidence digests against the [Custom Launch API schema](../developers/custom-launch.md). The controller wallet creates a [wallet-bound API key](https://programmable.market/developers/api-keys), and the workflow submits the bundle to `https://api.programmable.market/v1/custom-launches`.
+Build and test the exact project. The public `programmable-launch` CLI derives the deterministic source manifest, graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API schema](../developers/custom-launch.md). The controller wallet creates a [wallet-bound API key](https://programmable.market/developers/api-keys), and the workflow submits the bundle to `https://api.programmable.market/v1/custom-launches`.
 
-The API checks the declared bundle commitments. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. `authorized` supplies the permit-attached transaction for separate controller-wallet review. The API does not compile the project, reproduce its tests, audit it, sign the transaction or broadcast it, and the API key is not wallet authority.
+The API checks the declared bundle commitments. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. `authorized` supplies the permit-attached transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never revises it. The API does not reproduce project tests, audit the project, sign the transaction or broadcast it, and the API key is not wallet authority.
 
 ## Release binding
 

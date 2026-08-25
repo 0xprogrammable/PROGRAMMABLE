@@ -1,0 +1,36 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "src/NoBroadcastHook.sol": {
+      "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity 0.8.26;\n\ntype Currency is address;\n\ninterface IHooks {\n    function afterInitialize(\n        address sender,\n        PoolKey calldata key,\n        uint160 sqrtPriceX96,\n        int24 tick,\n        bytes calldata hookData\n    ) external returns (bytes4);\n}\n\nstruct PoolKey {\n    Currency currency0;\n    Currency currency1;\n    uint24 fee;\n    int24 tickSpacing;\n    IHooks hooks;\n}\n\ncontract NoBroadcastHook is IHooks {\n    address public token;\n    address public poolManager;\n\n    constructor(address token_, address poolManager_) {\n        require(token_ != address(0), \"token\");\n        require(poolManager_ != address(0), \"poolManager\");\n        token = token_;\n        poolManager = poolManager_;\n    }\n\n    function afterInitialize(\n        address,\n        PoolKey calldata,\n        uint160,\n        int24,\n        bytes calldata\n    ) external view returns (bytes4) {\n        require(msg.sender == poolManager, \"PoolManager only\");\n        return this.afterInitialize.selector;\n    }\n}\n"
+    },
+    "src/NoBroadcastToken.sol": {
+      "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity 0.8.26;\n\ncontract NoBroadcastToken {\n    string public constant name = \"Programmable No Broadcast\";\n    string public constant symbol = \"PNB\";\n    uint8 public constant decimals = 18;\n\n    uint256 public totalSupply;\n    mapping(address account => uint256 amount) public balanceOf;\n    mapping(address owner => mapping(address spender => uint256 amount)) public allowance;\n\n    event Transfer(address indexed from, address indexed to, uint256 amount);\n    event Approval(address indexed owner, address indexed spender, uint256 amount);\n\n    constructor(address controller) {\n        require(controller != address(0), \"controller\");\n        totalSupply = 1_000_000 ether;\n        balanceOf[controller] = totalSupply;\n        emit Transfer(address(0), controller, totalSupply);\n    }\n\n    function approve(address spender, uint256 amount) external returns (bool) {\n        allowance[msg.sender][spender] = amount;\n        emit Approval(msg.sender, spender, amount);\n        return true;\n    }\n\n    function transfer(address to, uint256 amount) external returns (bool) {\n        _transfer(msg.sender, to, amount);\n        return true;\n    }\n\n    function transferFrom(address from, address to, uint256 amount) external returns (bool) {\n        uint256 permitted = allowance[from][msg.sender];\n        if (permitted != type(uint256).max) {\n            require(permitted >= amount, \"allowance\");\n            unchecked {\n                allowance[from][msg.sender] = permitted - amount;\n            }\n        }\n        _transfer(from, to, amount);\n        return true;\n    }\n\n    function _transfer(address from, address to, uint256 amount) internal {\n        require(to != address(0), \"to\");\n        uint256 available = balanceOf[from];\n        require(available >= amount, \"balance\");\n        unchecked {\n            balanceOf[from] = available - amount;\n            balanceOf[to] += amount;\n        }\n        emit Transfer(from, to, amount);\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "evmVersion": "cancun",
+    "viaIR": false,
+    "metadata": {
+      "bytecodeHash": "ipfs",
+      "appendCBOR": true,
+      "useLiteralContent": true
+    },
+    "libraries": {},
+    "remappings": [],
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "metadata"
+        ]
+      }
+    }
+  }
+}

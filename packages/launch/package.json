@@ -1,0 +1,41 @@
+{
+  "name": "@programmable/launch",
+  "version": "1.0.0",
+  "description": "Deterministic pack, validation, submission, and status tooling for the Programmable Custom Launch API",
+  "type": "module",
+  "bin": {
+    "programmable-launch": "bin/programmable-launch.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "dependencies": {
+    "viem": "2.55.5"
+  },
+  "devDependencies": {
+    "solc": "0.8.26"
+  },
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xprogrammable/PROGRAMMABLE.git",
+    "directory": "packages/launch"
+  },
+  "homepage": "https://programmable.market/docs/developers/custom-launch",
+  "bugs": {
+    "url": "https://github.com/0xprogrammable/PROGRAMMABLE/issues"
+  }
+}
