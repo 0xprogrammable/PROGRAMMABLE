@@ -3,6 +3,14 @@ export type PredictionPortfolioLoadMode = "initial" | "refresh" | "retry";
 export const PREDICTION_PORTFOLIO_INITIAL_ATTEMPT_LIMIT = 2;
 export const PREDICTION_PORTFOLIO_INITIAL_RETRY_DELAY_MS = 600;
 export const PREDICTION_PORTFOLIO_HISTORY_LANE_CONCURRENCY = 2;
+export const PREDICTION_PORTFOLIO_ATTEMPT_TIMEOUT_MS = 12_000;
+
+export class PredictionPortfolioReadTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Prediction portfolio read exceeded ${timeoutMs}ms`);
+    this.name = "PredictionPortfolioReadTimeoutError";
+  }
+}
 
 type PredictionPortfolioReadLane<Result> = () => Promise<Result>;
 
@@ -21,6 +29,7 @@ type PredictionPortfolioLoadPolicyInput<Result> = Readonly<{
   isCurrent: () => boolean;
   mode: PredictionPortfolioLoadMode;
   read: () => Promise<Result>;
+  timeoutMs?: number;
   wait?: (delayMs: number) => Promise<void>;
 }>;
 
@@ -28,6 +37,27 @@ function waitForRetry(delayMs: number) {
   return new Promise<void>((resolve) => {
     globalThis.setTimeout(resolve, delayMs);
   });
+}
+
+async function readWithinTimeout<Result>(
+  read: () => Promise<Result>,
+  timeoutMs: number,
+) {
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeoutResult = new Promise<never>((_resolve, reject) => {
+    timeout = globalThis.setTimeout(() => {
+      reject(new PredictionPortfolioReadTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      Promise.resolve().then(read),
+      timeoutResult,
+    ]);
+  } finally {
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
+  }
 }
 
 async function withPredictionPortfolioHistoryLanePermit<Result>(
@@ -101,6 +131,7 @@ export async function readPredictionPortfolioWithRetry<Result>({
   isCurrent,
   mode,
   read,
+  timeoutMs = PREDICTION_PORTFOLIO_ATTEMPT_TIMEOUT_MS,
   wait = waitForRetry,
 }: PredictionPortfolioLoadPolicyInput<Result>): Promise<Result> {
   const attemptLimit = mode === "initial"
@@ -109,7 +140,7 @@ export async function readPredictionPortfolioWithRetry<Result>({
 
   for (let attempt = 1; attempt <= attemptLimit; attempt += 1) {
     try {
-      return await read();
+      return await readWithinTimeout(read, timeoutMs);
     } catch (error) {
       const canRetry = attempt < attemptLimit && isCurrent();
       if (!canRetry) throw error;

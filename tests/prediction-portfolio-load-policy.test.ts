@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  PREDICTION_PORTFOLIO_ATTEMPT_TIMEOUT_MS,
   PREDICTION_PORTFOLIO_HISTORY_LANE_CONCURRENCY,
   PREDICTION_PORTFOLIO_INITIAL_RETRY_DELAY_MS,
+  PredictionPortfolioReadTimeoutError,
   readPredictionPortfolioHistoryLanes,
   readPredictionPortfolioWithRetry,
 } from "../lib/prediction-portfolio-load-policy";
@@ -171,6 +173,28 @@ describe("prediction portfolio load policy", () => {
       expect(wait).not.toHaveBeenCalled();
     },
   );
+
+  it("ends a stalled manual refresh within the bounded attempt timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const read = vi.fn(() => new Promise<string>(() => undefined));
+      const result = readPredictionPortfolioWithRetry({
+        isCurrent: () => true,
+        mode: "refresh",
+        read,
+      }).catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(
+        PREDICTION_PORTFOLIO_ATTEMPT_TIMEOUT_MS,
+      );
+
+      expect(await result).toBeInstanceOf(PredictionPortfolioReadTimeoutError);
+      expect(read).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("does not retry after the active wallet request becomes stale", async () => {
     const staleError = new Error("stale request");
