@@ -89,6 +89,7 @@ export function ProfileProjects({
 
   const loadProjects = useCallback(async (signal?: AbortSignal) => {
     if (!wallet) return;
+    setProjectError("");
     setPhase("loading");
     try {
       const response = await fetch("/api/profile/projects", {
@@ -208,14 +209,23 @@ export function ProfileProjects({
           <button
             className={styles.refresh}
             type="button"
+            aria-busy={phase === "loading"}
+            aria-label={phase === "loading"
+              ? "Refreshing launches"
+              : "Refresh launches"}
+            data-loading={phase === "loading"}
             onClick={() => {
               onRefresh?.();
               void loadProjects();
             }}
             disabled={phase === "loading"}
           >
-            <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
-            <span>Refresh</span>
+            <span className={styles.refreshIcon} aria-hidden="true">
+              <RefreshCw size={15} strokeWidth={1.8} />
+            </span>
+            <span className={styles.refreshLabel}>
+              {phase === "loading" ? "Refreshing…" : "Refresh"}
+            </span>
           </button>
           {pageData.totalPages > 1 ? (
             <nav className={styles.pagination} aria-label="Creator project pages">
@@ -245,18 +255,23 @@ export function ProfileProjects({
           ) : null}
         </div>
       </header>
+      <span className={styles.visuallyHidden} role="status" aria-live="polite">
+        {phase === "loading" ? "Refreshing launches" : ""}
+      </span>
 
       {projectError ? <p className={styles.error} role="alert">{projectError}</p> : null}
       {phase === "error" && visibleProjects.length > 0 ? (
         <p className={styles.error} role="alert">
-          Article controls are temporarily unavailable. Refresh to try again.
+          Launch details could not be refreshed. The current list is still shown.
         </p>
       ) : null}
 
       {phase === "loading" && visibleProjects.length === 0 ? (
         <ProfileProjectsSkeleton />
       ) : phase === "error" && visibleProjects.length === 0 ? (
-        <p className={styles.error} role="alert">Your projects could not be verified right now.</p>
+        <p className={styles.error} role="alert">
+          Launches could not be refreshed. Select Refresh to try again.
+        </p>
       ) : visibleProjects.length === 0 ? (
         <p className={styles.empty}>Your verified launches will appear here.</p>
       ) : (
@@ -273,6 +288,9 @@ export function ProfileProjects({
               project.source === "canonical-launch-stamp-router"
                 ? "Custom"
                 : "Classic";
+            const canEditArticle = editableTokens.has(
+              project.tokenAddress.toLowerCase(),
+            );
             return (
             <article className={styles.project} key={project.tokenAddress}>
               <div className={styles.art}>
@@ -305,21 +323,35 @@ export function ProfileProjects({
                 ) : null}
               </div>
               <div className={styles.actions}>
-                {phase === "ready" &&
-                editableTokens.has(project.tokenAddress.toLowerCase()) ? (
-                  <button
-                    type="button"
-                    disabled={openingProject !== null}
-                    onPointerEnter={() => warmEditor(project)}
-                    onPointerDown={() => warmEditor(project)}
-                    onFocus={() => warmEditor(project)}
-                    onClick={(event) => void openEditor(project, event.currentTarget)}
-                  >
-                    {openingProject?.tokenAddress === project.tokenAddress
-                      ? "Opening…"
-                      : project.article ? "Edit article" : "Create article"}
-                  </button>
-                ) : null}
+                <span className={styles.articleActionSlot}>
+                  {canEditArticle ? (
+                    <button
+                      className={styles.articleAction}
+                      type="button"
+                      aria-busy={openingProject?.tokenAddress === project.tokenAddress}
+                      data-opening={openingProject?.tokenAddress === project.tokenAddress}
+                      disabled={openingProject !== null}
+                      onPointerEnter={() => warmEditor(project)}
+                      onPointerDown={() => warmEditor(project)}
+                      onFocus={() => warmEditor(project)}
+                      onClick={(event) => void openEditor(project, event.currentTarget)}
+                    >
+                      {openingProject?.tokenAddress === project.tokenAddress
+                        ? "Opening…"
+                        : project.article ? "Edit article" : "Create article"}
+                    </button>
+                  ) : (
+                    <span
+                      className={styles.articleActionState}
+                      data-state={phase}
+                      aria-hidden="true"
+                    >
+                      {phase === "loading"
+                        ? "Checking…"
+                        : phase === "error" ? "Unavailable" : ""}
+                    </span>
+                  )}
+                </span>
                 <Link href={`/token/${project.tokenAddress}`}>View token</Link>
               </div>
             </article>

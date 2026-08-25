@@ -46,17 +46,36 @@ describe("My projects editor opening", () => {
     );
   });
 
-  it("exposes article controls only after a current authenticated read", () => {
+  it("keeps the article action slot stable without granting unverified access", () => {
     const source = readFileSync(
       join(process.cwd(), "components/profile-projects.tsx"),
       "utf8",
     );
 
-    expect(source).toMatch(
-      /phase === "ready" &&\s*editableTokens\.has\(project\.tokenAddress\.toLowerCase\(\)\)/u,
-    );
+    expect(source).toContain("const canEditArticle = editableTokens.has(");
+    expect(source).toContain("{canEditArticle ? (");
+    expect(source).toContain("className={styles.articleActionSlot}");
+    expect(source).toContain('aria-hidden="true"');
     expect(source).toContain(
-      "Article controls are temporarily unavailable. Refresh to try again.",
+      "Launch details could not be refreshed. The current list is still shown.",
+    );
+  });
+
+  it("communicates refresh progress without relying on motion", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
+
+    expect(source).toContain('aria-busy={phase === "loading"}');
+    expect(source).toContain('? "Refreshing…" : "Refresh"');
+    expect(source).toContain('data-loading={phase === "loading"}');
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*\.refresh\[data-loading="true"\] \.refreshIcon/u,
     );
   });
 
