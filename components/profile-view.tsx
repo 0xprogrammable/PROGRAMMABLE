@@ -122,6 +122,7 @@ const creatorProfileCache = new Map<
 const CREATOR_PROFILE_CACHE_TTL_MS = 5 * 60_000;
 const MAX_CREATOR_PROFILE_CACHE_ENTRIES = 8;
 const PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000;
+const PROFILE_MANUAL_REFRESH_TIMEOUT_MS = 15_000;
 export const MINIMUM_VISIBLE_NATIVE_CLAIM_WEI = 100_000_000_000_000n;
 type ReadyClassicV3Profile = Extract<
   ClassicV3ProfileRewards,
@@ -146,6 +147,19 @@ type ClassicV3ProfileSourceState = Readonly<{
   quality: ClassicV3ProfileSourceQuality;
   verifiedAt?: number;
 }>;
+
+type ProfileRefreshSource =
+  | "creator"
+  | "classic-v3"
+  | "deep"
+  | "deep-v3"
+  | "stock-paired";
+
+type ActiveProfileRefresh = {
+  account: string;
+  id: number;
+  pending: Set<ProfileRefreshSource>;
+};
 
 export type ProfileRewardDataQuality = "current" | "stale" | "partial";
 
@@ -263,18 +277,19 @@ export function resolveStockPairedReceiptGate(
   if (receiptStatus === "unavailable") {
     return {
       outcome: "hold",
-      message: "Confirming on Ethereum",
+      message: "Status unavailable. Select Check status to try again.",
     };
   }
   if (receiptStatus === "not-found") {
     return {
       outcome: "hold",
-      message: "Transaction not found. Check your wallet activity.",
+      message:
+        "Still waiting for the transaction. Check your wallet activity, then select Check status.",
     };
   }
   return {
     outcome: "hold",
-    message: "Confirming on Ethereum",
+    message: "Waiting for confirmation. Select Check status to check again.",
   };
 }
 
@@ -729,13 +744,13 @@ export function resolveProfileNotFoundTransaction(retryAllowed: boolean) {
     ? Object.freeze({
         release: true,
         status: "error" as const,
-        message: "Transaction not found. You can try again.",
+        message: "No transaction was found. You can submit the claim again.",
       })
     : Object.freeze({
         release: false,
         status: "not-found" as const,
         message:
-          "Transaction is not visible yet. Check your wallet activity, then check again.",
+          "Still waiting for the transaction. Check your wallet activity, then select Check status.",
       });
 }
 
@@ -756,7 +771,7 @@ export function preserveInterruptedTransactionStates<
     next[key] = {
       ...state,
       status: "pending",
-      message: "Confirming on Ethereum",
+      message: "Waiting for confirmation. Select Check status to check again.",
     };
     changed = true;
   }
@@ -1074,7 +1089,7 @@ function restoredPendingProfileActionState(
   return {
     account: record.account,
     status: "pending",
-    message: "Confirming on Ethereum",
+    message: "Waiting for confirmation. Select Check status to check again.",
     transactionHash: record.transactionHash,
     ...(record.source === "stock-paired" && record.pendingStage
       ? {
@@ -1171,6 +1186,18 @@ function getEmptyProfileSnapshot() {
   return "";
 }
 
+function subscribeToClientHydration() {
+  return () => undefined;
+}
+
+function getClientHydrationSnapshot() {
+  return true;
+}
+
+function getServerHydrationSnapshot() {
+  return false;
+}
+
 export function withoutClosedDeepProfileData(
   data: ProfileOnchainData,
 ): ProfileOnchainData {
@@ -1254,6 +1281,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const autoResumingProfileTransactionsRef = useRef<Set<string>>(new Set());
   const stockPairedActionLocksRef = useRef<Set<string>>(new Set());
   const hydratedPendingAccountRef = useRef<string | undefined>(undefined);
+  const profileRefreshSequenceRef = useRef(0);
+  const activeProfileRefreshRef = useRef<ActiveProfileRefresh | null>(null);
   const confirmedProfileTransactionsRef = useRef<
     Record<PendingProfileTransactionSource, Map<string, Hex>>
   >({
@@ -1263,6 +1292,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     "stock-paired": new Map(),
   });
   const savedProfile = useWalletLocalProfile(account);
+  const clientHydrated = useSyncExternalStore(
+    subscribeToClientHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
   const [editingAccount, setEditingAccount] = useState("");
   const [usernameDraft, setUsernameDraft] = useState("");
   const [avatarDraft, setAvatarDraft] = useState("");
@@ -1283,6 +1317,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const [remoteOnchainData, setRemoteOnchainData] =
     useState<ProfileOnchainData>(UNAVAILABLE_PROFILE_DATA);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const [profileRefreshState, setProfileRefreshState] = useState({
+    account: "",
+    active: false,
+    id: 0,
+  });
   const liveProfileRefresh = useLiveDataRefresh({
     enabled: Boolean(account),
     intervalMs: PROFILE_LIVE_REFRESH_INTERVAL_MS,
@@ -1312,6 +1351,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   >({});
   const editingProfile =
     Boolean(account) && editingAccount === account?.toLowerCase();
+  const profileRefreshing =
+    Boolean(account) &&
+    profileRefreshState.active &&
+    profileRefreshState.account === account?.toLowerCase();
   const profileLoadKey = account
     ? `${account.toLowerCase()}:${profileRefresh}`
     : "";
@@ -1323,6 +1366,54 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     }
     transactionPollControllersRef.current.clear();
   }, []);
+  const completeProfileRefreshSource = useCallback(
+    (refreshId: number, source: ProfileRefreshSource) => {
+      const active = activeProfileRefreshRef.current;
+      if (!active || active.id !== refreshId) return;
+      active.pending.delete(source);
+      if (active.pending.size > 0) return;
+      activeProfileRefreshRef.current = null;
+      setProfileRefreshState((current) =>
+        current.id === refreshId ? { ...current, active: false } : current
+      );
+    },
+    [],
+  );
+  const requestProfileRefresh = useCallback(
+    (manual = false) => {
+      const refreshId = ++profileRefreshSequenceRef.current;
+      if (manual && account) {
+        const pending = new Set<ProfileRefreshSource>();
+        if (!onchainData) pending.add("creator");
+        if (classicV3ReleaseAvailable) pending.add("classic-v3");
+        if (deepReleaseAvailable) pending.add("deep");
+        if (deepV3ReleaseAvailable) pending.add("deep-v3");
+        if (stockPairedReleaseAvailable) pending.add("stock-paired");
+        activeProfileRefreshRef.current = pending.size
+          ? {
+              account: account.toLowerCase(),
+              id: refreshId,
+              pending,
+            }
+          : null;
+        setProfileRefreshState({
+          account: account.toLowerCase(),
+          active: pending.size > 0,
+          id: refreshId,
+        });
+      } else if (!manual && account) {
+        const active = activeProfileRefreshRef.current;
+        if (active?.account === account.toLowerCase()) {
+          activeProfileRefreshRef.current = { ...active, id: refreshId };
+          setProfileRefreshState((current) =>
+            current.active ? { ...current, id: refreshId } : current
+          );
+        }
+      }
+      setProfileRefresh(refreshId);
+    },
+    [account, onchainData],
+  );
 
   useEffect(() => {
     const previousAccount = activeAccountRef.current?.toLowerCase();
@@ -1381,6 +1472,20 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     },
     [abortTransactionPolls],
   );
+
+  useEffect(() => {
+    if (!profileRefreshState.active) return;
+    const refreshId = profileRefreshState.id;
+    const timeout = window.setTimeout(() => {
+      const active = activeProfileRefreshRef.current;
+      if (!active || active.id !== refreshId) return;
+      activeProfileRefreshRef.current = null;
+      setProfileRefreshState((current) =>
+        current.id === refreshId ? { ...current, active: false } : current
+      );
+    }, PROFILE_MANUAL_REFRESH_TIMEOUT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [profileRefreshState.active, profileRefreshState.id]);
 
   useEffect(() => {
     if (!profileLoadKey) return;
@@ -1447,10 +1552,21 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             caught,
           ),
         );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          completeProfileRefreshSource(profileRefresh, "creator");
+        }
       });
 
     return () => controller.abort();
-  }, [account, liveProfileRefresh, onchainData, profileRefresh]);
+  }, [
+    account,
+    completeProfileRefreshSource,
+    liveProfileRefresh,
+    onchainData,
+    profileRefresh,
+  ]);
 
   useEffect(() => {
     if (!account || !classicV3ReleaseAvailable) return;
@@ -1543,12 +1659,22 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           quality:
             failureKind === "integrity" ? "integrity" : "unavailable",
         });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          completeProfileRefreshSource(profileRefresh, "classic-v3");
+        }
       });
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [account, liveProfileRefresh, profileRefresh]);
+  }, [
+    account,
+    completeProfileRefreshSource,
+    liveProfileRefresh,
+    profileRefresh,
+  ]);
 
   useEffect(() => {
     if (!account || !deepReleaseAvailable) return;
@@ -1598,9 +1724,19 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                     : "Deep rewards could not be loaded",
               },
         );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          completeProfileRefreshSource(profileRefresh, "deep");
+        }
       });
     return () => controller.abort();
-  }, [account, liveProfileRefresh, profileRefresh]);
+  }, [
+    account,
+    completeProfileRefreshSource,
+    liveProfileRefresh,
+    profileRefresh,
+  ]);
 
   useEffect(() => {
     if (!account || !deepV3ReleaseAvailable) return;
@@ -1623,9 +1759,19 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               ? caught.message
               : "Deep liquidity state could not be loaded",
         });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          completeProfileRefreshSource(profileRefresh, "deep-v3");
+        }
       });
     return () => controller.abort();
-  }, [account, liveProfileRefresh, profileRefresh]);
+  }, [
+    account,
+    completeProfileRefreshSource,
+    liveProfileRefresh,
+    profileRefresh,
+  ]);
 
   useEffect(() => {
     if (!account || !stockPairedReleaseAvailable) return;
@@ -1676,9 +1822,19 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                     : "Stock-Paired rewards could not be loaded",
               },
         );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          completeProfileRefreshSource(profileRefresh, "stock-paired");
+        }
       });
     return () => controller.abort();
-  }, [account, liveProfileRefresh, profileRefresh]);
+  }, [
+    account,
+    completeProfileRefreshSource,
+    liveProfileRefresh,
+    profileRefresh,
+  ]);
 
   function beginEditingProfile() {
     setUsernameDraft(savedProfile.username);
@@ -2019,7 +2175,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         if (receiptStatus === "pending") {
           setActionState({
             status: "pending",
-            message: "Confirming on Ethereum",
+            message:
+              "Waiting for confirmation. Select Check status to check again.",
             transactionHash,
           });
           return;
@@ -2055,7 +2212,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           message: confirmedMessage,
           transactionHash,
         });
-        setProfileRefresh((current) => current + 1);
+        requestProfileRefresh();
       } catch {
         if (controller.signal.aborted) return;
         if (
@@ -2066,14 +2223,15 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "pending",
-          message: "Confirming on Ethereum",
+          message:
+            "Status unavailable. Select Check status to try again.",
           transactionHash,
         });
       } finally {
         transactionPollControllersRef.current.delete(controller);
       }
     },
-    [],
+    [requestProfileRefresh],
   );
 
   useEffect(() => {
@@ -2135,7 +2293,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         autoResumingProfileTransactionsRef.current.delete(resumeKey);
       });
     }
-  }, [account, liveProfileRefresh, settleSubmittedTransaction]);
+  }, [
+    account,
+    liveProfileRefresh,
+    profileRefresh,
+    settleSubmittedTransaction,
+  ]);
 
   const submitCreatorClaim = useCallback(
     async (claim: ProfileClaim) => {
@@ -2857,7 +3020,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               message: "Claimed as ETH",
               transactionHash,
             });
-            setProfileRefresh((current) => current + 1);
+            requestProfileRefresh();
             return;
           }
           stockClaimConfirmed = true;
@@ -2971,7 +3134,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               message: "Claimed as ETH",
               transactionHash,
             });
-            setProfileRefresh((current) => current + 1);
+            requestProfileRefresh();
             return;
           }
         }
@@ -3000,7 +3163,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             : {}),
         });
         if (stockClaimConfirmed) {
-          setProfileRefresh((current) => current + 1);
+          requestProfileRefresh();
         }
       } finally {
         stockPairedActionLocksRef.current.delete(lockKey);
@@ -3008,6 +3171,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     },
     [
       account,
+      requestProfileRefresh,
       scopedStockPairedRewards,
       sendTransaction,
       settleSubmittedTransaction,
@@ -3053,12 +3217,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   function retryProfileData() {
     if (!account) return;
-    setProfileRefresh((current) => current + 1);
+    requestProfileRefresh(true);
   }
 
   const sessionView = getProfileSessionView(connecting, account);
 
-  if (sessionView === "loading") {
+  if (!clientHydrated || sessionView === "loading") {
     return <ProfileSessionLoadingState />;
   }
 
@@ -3094,7 +3258,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   }
 
   return (
-    <div className={`${styles.page} ${styles.profileReveal} page-width`}>
+    <div className={`${styles.page} page-width`}>
       <section
         className={`${styles.hero} ${
           editingProfile ? styles.heroEditing : ""
@@ -3455,6 +3619,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         onStockPairedAction={submitStockPairedAction}
         onConnect={openWallet}
         onRetry={retryProfileData}
+        refreshing={profileRefreshing}
         terminalErrorReady={terminalErrorReady}
       />
     </div>
@@ -4167,7 +4332,9 @@ function ProfileLoadingSkeleton({
 }) {
   return (
     <section
-      className={styles.profileSkeleton}
+      className={`${styles.profileSkeleton} ${
+        showHero ? styles.profileSkeletonPage : styles.profileSkeletonInline
+      }`}
       aria-busy="true"
       aria-label={label}
     >
@@ -4176,12 +4343,35 @@ function ProfileLoadingSkeleton({
       </span>
       {showHero ? (
         <div className={styles.profileSkeletonHero} aria-hidden="true">
+          <span className={styles.profileSkeletonBanner} />
           <span className={styles.profileSkeletonAvatar} />
           <span className={styles.profileSkeletonCopy}>
             <span />
             <span />
           </span>
         </div>
+      ) : null}
+      {showHero ? (
+        <>
+          <div className={styles.profileSkeletonSection} aria-hidden="true">
+            <span className={styles.profileSkeletonHeading} />
+            {[0, 1, 2].map((item) => (
+              <span className={styles.profileSkeletonRow} key={item}>
+                <span />
+                <span />
+                <span />
+              </span>
+            ))}
+          </div>
+          <div
+            className={`${styles.profileSkeletonSection} ${styles.profileSkeletonPrediction}`}
+            aria-hidden="true"
+          >
+            <span className={styles.profileSkeletonHeading} />
+            <span className={styles.profileSkeletonTabs} />
+            <span className={styles.profileSkeletonPredictionRow} />
+          </div>
+        </>
       ) : null}
       <div className={styles.profileSkeletonWorkspace} aria-hidden="true">
         <div className={styles.profileSkeletonSummary}>
@@ -4278,6 +4468,7 @@ function ProfileAccountWorkspace({
   onStockPairedAction,
   onConnect,
   onRetry,
+  refreshing,
   terminalErrorReady,
 }: {
   connected: boolean;
@@ -4311,6 +4502,7 @@ function ProfileAccountWorkspace({
   ) => void;
   onConnect: () => void;
   onRetry: () => void;
+  refreshing: boolean;
   terminalErrorReady: boolean;
 }) {
   const [claimPage, setClaimPage] = useState(1);
@@ -4377,9 +4569,10 @@ function ProfileAccountWorkspace({
         <button
           className={styles.retryButton}
           type="button"
+          aria-busy={refreshing || undefined}
           onClick={onRetry}
         >
-          Try again
+          {refreshing ? "Refreshing…" : "Try again"}
         </button>
       </section>
     );
@@ -4475,7 +4668,7 @@ function ProfileAccountWorkspace({
     <section
       className={styles.portfolio}
       aria-label="Profile overview"
-      aria-busy={loading || undefined}
+      aria-busy={loading || refreshing || undefined}
     >
       <div
         className={`${styles.profileWorkspace} liquid-glass-surface`}
@@ -4494,20 +4687,30 @@ function ProfileAccountWorkspace({
         >
           <header className={styles.panelHeader}>
             <h2 id="profile-claimable-title">Claim rewards</h2>
-            {loading ? (
-              <span className={styles.visuallyHidden} role="status">
-                Refreshing rewards
-              </span>
-            ) : null}
+            <span
+              className={styles.visuallyHidden}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {refreshing ? "Refreshing rewards" : ""}
+            </span>
             <div className={styles.claimPanelActions}>
               <button
-                className={styles.claimRefresh}
+                className={`${styles.claimRefresh} ${
+                  refreshing ? styles.claimRefreshActive : ""
+                }`}
                 type="button"
-                aria-label="Refresh claimable rewards"
+                aria-label={
+                  refreshing
+                    ? "Refreshing claimable rewards"
+                    : "Refresh claimable rewards"
+                }
+                aria-busy={refreshing || undefined}
                 onClick={onRetry}
               >
                 <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
-                <span>Refresh</span>
+                <span>{refreshing ? "Refreshing" : "Refresh"}</span>
               </button>
               {claimPageData.totalPages > 1 ? (
                 <nav
@@ -4661,7 +4864,7 @@ export function actionCanCheckStatus(
 export function actionSettling(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
 ) {
-  return actionPending(state) || actionCanCheckStatus(state);
+  return actionPending(state);
 }
 
 export function actionLabel(
@@ -4670,8 +4873,8 @@ export function actionLabel(
   if (state?.status === "preparing") return "Preparing";
   if (state?.status === "wallet") return "Confirm in wallet";
   if (state?.status === "confirming") return "Confirming";
-  if (state?.status === "pending") return "Confirming";
-  if (state?.status === "not-found") return "Rechecking";
+  if (state?.status === "pending") return "Check status";
+  if (state?.status === "not-found") return "Check status";
   if (state?.status === "confirmed") return "Confirmed";
   if (state?.status === "error") return "Try again";
   return "Claim";
@@ -4984,7 +5187,7 @@ function ProfileClaimRow({
           description: `Receive ETH at ${recipient}`,
           state: activeClaimState,
           disabled:
-            actionSettling(activeClaimState) ||
+            actionPending(activeClaimState) ||
             (currentClaimable === 0n &&
               !actionCanCheckStatus(activeClaimState)),
           emphasis: "primary",
@@ -5007,7 +5210,7 @@ function ProfileClaimRow({
           description: `Receive ETH at ${recipient}`,
           state,
           disabled:
-            actionSettling(state) ||
+            actionPending(state) ||
             (claimable === 0n && !actionCanCheckStatus(state)),
           emphasis: "primary",
           onSelect: () => onClassicV3Action(reward, "claim"),
@@ -5029,7 +5232,7 @@ function ProfileClaimRow({
           description: `Receive ETH at ${shortenAddress(reward.payoutAddress)}`,
           state,
           disabled:
-            actionSettling(state) ||
+            actionPending(state) ||
             (claimable === 0n && !actionCanCheckStatus(state)),
           emphasis: "primary",
           onSelect: () => onDeepAction(reward, "claim"),
@@ -5065,7 +5268,7 @@ function ProfileClaimRow({
         description: `Receive ${reward.quoteAssetSymbol} at ${shortenAddress(reward.payoutAddress)}`,
         state: stockClaimState,
         disabled:
-          actionSettling(stockClaimState) ||
+          actionPending(stockClaimState) ||
           Boolean(ethActionActive) ||
           (claimable === 0n &&
             !actionCanCheckStatus(stockClaimState)),
@@ -5081,7 +5284,7 @@ function ProfileClaimRow({
         description: `Claim ${reward.quoteAssetSymbol}, then swap on Uniswap${estimate ? ` · ${estimate}` : ""}`,
         state: ethState,
         disabled:
-          actionSettling(ethState) ||
+          actionPending(ethState) ||
           Boolean(quoteActionActive) ||
           (claimable === 0n &&
             !actionCanCheckStatus(ethState) &&
@@ -5100,14 +5303,26 @@ function ProfileClaimRow({
   }
 
   const rowActionPending = claimGroups.some((group) =>
-    group.actions.some((action) => actionSettling(action.state)),
+    group.actions.some((action) => actionPending(action.state)),
   );
   const rowActionState = claimGroups
     .flatMap((group) => group.actions)
     .map((action) => action.state)
-    .find(
-      (state) => actionSettling(state),
-    );
+    .find((state) => actionPending(state) || actionCanCheckStatus(state));
+  const rowStatusStates = [
+    activeClaimState,
+    ...classicClaims.map(({ state }) => state),
+    ...deepClaims.map(({ state }) => state),
+    ...stockPairedClaims.flatMap(({ claimState, ethState }) => [
+      claimState,
+      ethState,
+    ]),
+  ];
+  const rowStatusState =
+    rowStatusStates.find((state) => state?.status === "error") ??
+    rowStatusStates.find((state) => state?.status === "not-found") ??
+    rowStatusStates.find((state) => state?.status === "pending") ??
+    rowStatusStates.find((state) => state?.status === "confirmed");
 
   return (
     <article className={styles.claimRow}>
@@ -5170,36 +5385,7 @@ function ProfileClaimRow({
         onClose={closeClaimDialog}
       />
 
-      <ProfileActionState
-        state={activeClaimState}
-      />
-      {classicClaims.map(({ reward, state }) => (
-        <ProfileActionState
-          key={`${reward.vaultAddress}:state`}
-          state={state}
-        />
-      ))}
-      {deepClaims.map(({ reward, state }) => (
-        <ProfileActionState
-          key={`${reward.vaultAddress}:deep-state`}
-          state={state}
-        />
-      ))}
-      {stockPairedClaims.map(({ reward, claimState, ethState }) => {
-        const visibleState =
-          [claimState, ethState].find((state) => actionSettling(state)) ??
-          [claimState, ethState].find(
-            (state) => state?.status === "confirmed",
-          ) ??
-          claimState ??
-          ethState;
-        return (
-          <ProfileActionState
-            key={`${reward.vaultAddress}:stock-paired-state`}
-            state={visibleState}
-          />
-        );
-      })}
+      <ProfileActionState state={rowStatusState} />
     </article>
   );
 }
@@ -5211,7 +5397,8 @@ function ProfileActionState({
 }) {
   if (
     !state ||
-    (state.status !== "confirmed" &&
+    (state.status !== "pending" &&
+      state.status !== "confirmed" &&
       state.status !== "error" &&
       state.status !== "not-found")
   ) {
@@ -5220,9 +5407,7 @@ function ProfileActionState({
   return (
     <p
       className={
-        state.status === "error" || state.status === "not-found"
-          ? styles.rowError
-          : styles.actionState
+        state.status === "error" ? styles.rowError : styles.actionState
       }
       role={state.status === "error" ? "alert" : "status"}
     >
