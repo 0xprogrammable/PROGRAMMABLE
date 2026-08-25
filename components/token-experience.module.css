@@ -1909,6 +1909,15 @@
 }
 
 @media (max-width: 360px) {
+  .metrics,
+  .metrics[data-count="3"] {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics[data-count="3"] .metric:last-child {
+    grid-column: auto;
+  }
+
   .name {
     font-size: 27px;
     letter-spacing: -0.025em;

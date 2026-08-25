@@ -7,7 +7,10 @@ vi.mock("@/components/token-detail-view", () => ({
   TokenDetailView: () => null,
 }));
 
-import { readInitialTokenDetailWithinDeadline } from
+import {
+  INITIAL_TOKEN_DETAIL_TIMEOUT_MS,
+  readInitialTokenDetailWithinDeadline,
+} from
   "../app/token/[address]/page";
 
 afterEach(() => {
@@ -15,6 +18,11 @@ afterEach(() => {
 });
 
 describe("token detail initial server read", () => {
+  it("covers the API provider budget without allowing an unbounded render", () => {
+    expect(INITIAL_TOKEN_DETAIL_TIMEOUT_MS).toBeGreaterThan(8_000);
+    expect(INITIAL_TOKEN_DETAIL_TIMEOUT_MS).toBeLessThanOrEqual(9_000);
+  });
+
   it("places the bounded detail read behind an immediate Suspense shell", () => {
     const source = readFileSync(
       join(process.cwd(), "app/token/[address]/page.tsx"),

@@ -123,6 +123,8 @@ export type TokenMetric = {
   value: string;
 };
 
+export const TOKEN_DETAIL_REQUEST_TIMEOUT_MS = 10_000;
+
 function chartTotalSupply(input: {
   totalSupply?: string;
   marketData?: TokenMarketDataV1;
@@ -940,10 +942,15 @@ export function createTokenDetailInitialState(
   if (!response || !tokenAddress) return null;
   try {
     return detailStateFromResponse(response, tokenAddress, requestKey);
-  } catch {
-    // A malformed, timed-out or unavailable server read is never treated as a
-    // terminal browser state. The client gets one bounded retry instead.
-    return null;
+  } catch (error) {
+    return {
+      phase: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Token data is temporarily unavailable",
+      requestKey,
+    };
   }
 }
 
@@ -1119,10 +1126,10 @@ export function buildChartVolumeMetric(
   return {
     label: CHART_VOLUME_LABELS[volume.range],
     value: volume.pending
-      ? ""
+      ? "Loading…"
       : (formatUsdWadAmount(volume.volumeUsdWad) ??
         formatEth(volume.volumeEth, "amount") ??
-        ""),
+        "Not available yet"),
   };
 }
 
@@ -1234,9 +1241,7 @@ export function buildTokenDetailMetrics(
   return values.filter(
     (metric): metric is TokenMetric =>
       metric !== null &&
-      (metric.value.length > 0 ||
-        metric.label === "Market cap" ||
-        metric.label.startsWith("Volume ")),
+      (metric.value.length > 0 || metric.label === "Market cap"),
   );
 }
 
@@ -2456,6 +2461,11 @@ export function TokenDetailView({
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, TOKEN_DETAIL_REQUEST_TIMEOUT_MS);
 
     async function loadToken() {
       try {
@@ -2475,9 +2485,11 @@ export function TokenDetailView({
           requestKey,
         ));
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted && !timedOut) return;
         const message =
-          error instanceof Error
+          timedOut
+            ? "Token details took too long to load"
+            : error instanceof Error
             ? error.message
             : "Token data is temporarily unavailable";
         setState((current) =>
@@ -2486,11 +2498,16 @@ export function TokenDetailView({
             ? current
             : { phase: "error", requestKey, message },
         );
+      } finally {
+        window.clearTimeout(timeout);
       }
     }
 
     void loadToken();
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [
     initialState,
     normalizedAddress,

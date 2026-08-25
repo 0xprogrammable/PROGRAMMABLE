@@ -48,6 +48,9 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       'className={styles.loadingState} aria-busy="true"',
     );
+    expect(source).toContain(
+      'className={styles.loadingStatus} role="status" aria-live="polite"',
+    );
   });
 
   it("keeps token and prediction discovery inside one Explore destination", () => {
@@ -312,6 +315,10 @@ describe("Explore UI contract", () => {
     );
     expect(source).not.toContain("<small>CA</small>");
     expect(source).toContain("<small>Market cap</small>");
+    expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*11px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*11px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*11px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*11px;/s,
+    );
     expect(source).toMatch(
       /\{valuationLabel \? \([\s\S]*?<small>Market cap<\/small>[\s\S]*?\) : null\}/,
     );

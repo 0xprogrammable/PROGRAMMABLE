@@ -5,6 +5,7 @@ vi.mock("@/components/explore-view", () => ({ ExploreView: () => null }));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 
 import {
+  INITIAL_EXPLORE_TIMEOUT_MS,
   INITIAL_EXPLORE_QUERY,
   readInitialExploreWithinDeadline,
 } from "../app/explore/page";
@@ -15,6 +16,11 @@ afterEach(() => {
 });
 
 describe("Explore initial server read", () => {
+  it("covers the API provider budget without allowing an unbounded render", () => {
+    expect(INITIAL_EXPLORE_TIMEOUT_MS).toBeGreaterThan(8_000);
+    expect(INITIAL_EXPLORE_TIMEOUT_MS).toBeLessThanOrEqual(9_000);
+  });
+
   it("starts with the highest available FDV ranking", () => {
     const query = new URLSearchParams(INITIAL_EXPLORE_QUERY);
 

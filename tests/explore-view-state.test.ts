@@ -14,6 +14,7 @@ import {
   handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
+  formatExploreContractAddress,
   getTokenCards,
   getExplorePaginationItems,
   getExploreValuationMetric,
@@ -349,6 +350,12 @@ afterEach(() => {
 });
 
 describe("Explore refresh state", () => {
+  it("keeps compact contract identity readable on narrow cards", () => {
+    expect(formatExploreContractAddress(
+      "0x1234567890abcdef1234567890abcdef12345678",
+    )).toBe("0x1234…678");
+  });
+
   it("hydrates the first server page without waiting for a client request", () => {
     expect(
       createExploreInitialState(
@@ -370,7 +377,7 @@ describe("Explore refresh state", () => {
     });
   });
 
-  it("keeps a server-side Explore failure behind skeletons while retrying", () => {
+  it("surfaces a server-side Explore failure with explicit recovery", () => {
     const initialState = createExploreInitialState(
         {
           ok: false,
@@ -383,10 +390,15 @@ describe("Explore refresh state", () => {
         },
       );
 
-    expect(initialState).toBeNull();
+    expect(initialState).toEqual({
+      phase: "error",
+      message: "Launch index is catching up",
+      contentKey: "initial-content-error",
+      requestKey: "initial-request-error",
+    });
     expect(
       handledInitialExploreRequestKey(initialState, "initial-request-error"),
-    ).toBeNull();
+    ).toBe("initial-request-error");
   });
 
   it("surfaces an error only after the client retry also fails", () => {
@@ -448,6 +460,24 @@ describe("Explore refresh state", () => {
     expect(
       handledInitialExploreRequestKey(initialState, "initial-mobile-request"),
     ).toBe("initial-mobile-request");
+  });
+
+  it("keeps a responsive initial failure explicit instead of refetching it", () => {
+    expect(createResponsiveExploreInitialState(
+      { ok: false, body: { error: "Launch index is catching up" } },
+      {
+        reuseAvailable: true,
+        isInitialRequest: true,
+        contentKey: "initial-mobile-error-content",
+        requestKey: "initial-mobile-error-request",
+        pageSize: EXPLORE_MOBILE_TOKENS_PER_PAGE,
+      },
+    )).toEqual({
+      phase: "error",
+      message: "Launch index is catching up",
+      contentKey: "initial-mobile-error-content",
+      requestKey: "initial-mobile-error-request",
+    });
   });
 
   it("stops reusing the server page after the first non-initial request", () => {
