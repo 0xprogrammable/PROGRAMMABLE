@@ -300,6 +300,23 @@ export function normalizeRouterCustomSnapshotBlobEtagV1(value: string) {
   return normalized;
 }
 
+export function assertBoundedRouterCustomSnapshotBlobSizeV1(
+  declaredLength: number,
+  actualLength: number,
+) {
+  // Private Vercel Blob reads currently report `blob.size = 0` while still
+  // returning the complete stream. Treat zero as an unknown declared size and
+  // enforce the bound against the bytes that were actually read below.
+  if (
+    !Number.isSafeInteger(declaredLength)
+    || declaredLength < 0
+    || declaredLength > ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES
+    || !Number.isSafeInteger(actualLength)
+    || actualLength < 1
+    || actualLength > ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES
+  ) throw new Error("Router Custom durable snapshot size is invalid");
+}
+
 async function readDurableRouterCustomIdentitySnapshotRecordV1() {
   const token = resolveDurableExploreBlobToken();
   if (!token) throw new Error(
@@ -317,13 +334,14 @@ async function readDurableRouterCustomIdentitySnapshotRecordV1() {
   const declaredLength = Number(result.blob.size);
   if (
     !Number.isSafeInteger(declaredLength)
-    || declaredLength < 1
+    || declaredLength < 0
     || declaredLength > ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES
   ) throw new Error("Router Custom durable snapshot size is invalid");
   const source = await new Response(result.stream).text();
-  if (Buffer.byteLength(source, "utf8") > ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES) {
-    throw new Error("Router Custom durable snapshot is too large");
-  }
+  assertBoundedRouterCustomSnapshotBlobSizeV1(
+    declaredLength,
+    Buffer.byteLength(source, "utf8"),
+  );
   return Object.freeze({
     snapshot: parseDurableRouterCustomIdentitySnapshotV1(
       parseStrictJson(source, {

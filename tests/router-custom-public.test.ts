@@ -14,6 +14,7 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 }));
 
 import {
+  assertBoundedRouterCustomSnapshotBlobSizeV1,
   createRouterCustomIdentitySnapshotReaderV1,
   mergeRouterCustomCreatorProfileV1,
   mergeRouterCustomExploreEntriesV1,
@@ -150,6 +151,25 @@ describe("finalized Router Custom public projection", () => {
     expect(() => normalizeRouterCustomSnapshotBlobEtagV1(
       "8e8ed5b7c65cfe481ae32dc684e98710",
     )).toThrow("ETag is invalid");
+  });
+
+  it("bounds private Blob streams when the provider omits their declared size", () => {
+    expect(() => assertBoundedRouterCustomSnapshotBlobSizeV1(
+      0,
+      11_499,
+    )).not.toThrow();
+    expect(() => assertBoundedRouterCustomSnapshotBlobSizeV1(
+      11_499,
+      11_499,
+    )).not.toThrow();
+    expect(() => assertBoundedRouterCustomSnapshotBlobSizeV1(
+      0,
+      0,
+    )).toThrow("snapshot size is invalid");
+    expect(() => assertBoundedRouterCustomSnapshotBlobSizeV1(
+      -1,
+      11_499,
+    )).toThrow("snapshot size is invalid");
   });
 
   it("keeps finalized identities as last-known-good across a long outage", async () => {
