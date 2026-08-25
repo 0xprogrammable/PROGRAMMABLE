@@ -4,18 +4,16 @@ description: Submit, authorize and track one wallet-bound Custom launch through 
 
 # Custom Launch API
 
-The Custom Launch API accepts one deterministic launch request for an Ethereum wallet. It validates the request and prepares an exact artifact. The API key never authorizes, signs or broadcasts the wallet transaction.
+Use the Custom Launch API when an agent or developer has a complete Custom hook project and needs the exact transaction for its controller wallet. Create a key, generate `launch.json` from the built project, submit it and wait for the wallet transaction. The API key never signs or broadcasts that transaction.
 
 The human guide on the website is [programmable.market/docs/developers/custom-launch](https://programmable.market/docs/developers/custom-launch). The [standalone OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json) is the normative source for request fields, bounds and response schemas. The existing [raw V1 guide](https://programmable.market/developers/custom-launch-api-v1.md) remains available for agents and scripts.
 
 ## Quickstart
 
-1. Build and test the hook and every launch component. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional starting point for the project; it is not a substitute for the API schema or project-specific packaging.
-2. Use the project's packaging tooling to derive the source descriptor, sorted source manifest, executable graph bundle and evidence digests from the exact artifacts being launched.
-3. Connect the controller wallet at [Custom Launch API keys](https://programmable.market/developers/api-keys), create a key and copy the secret when it is shown.
-4. Validate `launch.json` against the [standalone OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json), then submit it with a stable idempotency key.
-5. Poll the single-request route. Do not hand a transaction to the wallet while the request is only `prepared`. Wait for `authorized`, then inspect `output.walletTransaction` and the attached permit.
-6. The controller wallet separately reviews, signs and broadcasts that exact transaction. Continue polling until the request is `finalized` or terminally failed.
+1. Build and test the hook and every launch component. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional way to build and check the project.
+2. Generate `launch.json` from that exact build with the project's packaging tooling, then validate it against the [OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json).
+3. Connect the controller wallet at [API keys](https://programmable.market/developers/api-keys), create a key and submit `launch.json` with a stable idempotency key.
+4. Poll the request until it is `authorized`. The controller wallet then reviews, signs and broadcasts `output.walletTransaction`. Keep polling until the request is `finalized` or terminally failed.
 
 ```bash
 curl --fail-with-body https://api.programmable.market/v1/custom-launches \
@@ -26,7 +24,7 @@ curl --fail-with-body https://api.programmable.market/v1/custom-launches \
   --data-binary @launch.json
 ```
 
-The docs do not publish a hand-written launch fixture. A valid graph contains project-specific bytecode, address locators, permission bits and digests derived from the exact source and build artifacts. Generate those values with the packaging tooling for the project and validate the result against OpenAPI; do not copy test-only hashes or invent them by hand.
+`launch.json` contains project-specific bytecode, addresses, permission bits and hashes from one exact build. Generate it from the project being launched. Do not copy test-only hashes or another project's file.
 
 ## Authentication
 

@@ -111,9 +111,9 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            The API validates one wallet-bound request and prepares an exact
-            artifact. The API key never authorizes, signs or broadcasts the
-            wallet transaction.
+            Create a key, generate <code>launch.json</code> from the built
+            project, submit it and wait for the controller wallet transaction.
+            The API key never signs or broadcasts that transaction.
           </p>
         </div>
 
@@ -123,47 +123,33 @@ export default function CustomLaunchApiDocsPage() {
             <a href="https://github.com/0xprogrammable/Hookbuilder-Skill">
               Hookbuilder-Skill
             </a>{" "}
-            is an optional starting point for the project; it is not a
-            substitute for the API schema or project-specific packaging.
+            is an optional way to build and check the project.
           </li>
           <li>
-            Use the project&apos;s packaging tooling to derive the source
-            descriptor, sorted source manifest, executable graph and evidence
-            digests from the exact artifacts being launched.
+            Generate <code>launch.json</code> from that exact build with the
+            project&apos;s packaging tooling, then validate it against the{" "}
+            <a href="/openapi/custom-launch-v1.json">OpenAPI contract</a>.
           </li>
           <li>
             Connect the controller wallet at{" "}
-            <Link href="/developers/api-keys">Custom Launch API keys</Link>,
-            create a key and copy the secret when it is shown.
+            <Link href="/developers/api-keys">API keys</Link>, create a key and
+            submit <code>launch.json</code> with a stable idempotency key.
           </li>
           <li>
-            Validate <code>launch.json</code> against the{" "}
-            <a href="/openapi/custom-launch-v1.json">
-              standalone OpenAPI contract
-            </a>
-            , then submit it with a stable idempotency key.
-          </li>
-          <li>
-            Poll the single-request route. Do not hand a transaction to the
-            wallet while the request is only <code>prepared</code>. Wait for{" "}
-            <code>authorized</code>, then inspect{" "}
-            <code>output.walletTransaction</code> and the attached permit.
-          </li>
-          <li>
-            The controller wallet separately reviews, signs and broadcasts that
-            exact transaction. Continue polling until the request is{" "}
-            <code>finalized</code> or terminally failed.
+            Poll the request until it is <code>authorized</code>. The controller
+            wallet then reviews, signs and broadcasts{" "}
+            <code>output.walletTransaction</code>. Keep polling until the request
+            is <code>finalized</code> or terminally failed.
           </li>
         </ol>
 
         <aside className={styles.callout}>
           <strong>Generate the request from the exact project</strong>
           <p>
-            The docs do not publish a hand-written launch fixture. A valid graph
-            contains project-specific bytecode, address locators, permission
-            bits and digests. Generate those values with the project&apos;s
-            packaging tooling and validate them against OpenAPI. Do not copy
-            test-only hashes or invent them by hand.
+            <code>launch.json</code> contains project-specific bytecode,
+            addresses, permission bits and hashes from one exact build.
+            Generate it from the project being launched.{" "}
+            {"Do not copy test-only hashes or another project's file."}
           </p>
         </aside>
 
