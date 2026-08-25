@@ -2387,6 +2387,9 @@ export function evaluateReadModelOperationsSourceContracts(
         'routerCustomStatus === "last-known-good"',
         "let exactCatalog = false",
         "attempt < 5",
+        "response = undefined",
+        "if (attempt === 4) throw error",
+        "continue;",
         "if (exactCatalog) break",
       ]) &&
       !stagedCatalogProbeBlock.includes("body.tokens[0]?.launchModel") &&
@@ -2468,6 +2471,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "const profileRpcProvider =",
         "const profileRouterReadStatus =",
         "const profileRpcProviderReady =",
+        "const profileRouterReadReady =",
         'profileRpcProvider === "drpc-primary"',
         'profileRpcProvider === "quicknode-secondary"',
         "const profileSourceReady =",
@@ -2480,6 +2484,7 @@ export function evaluateReadModelOperationsSourceContracts(
         'profile.headers.get("x-programmable-read-source") ===\n        "envio-classic-v3+canonical-launch-stamp-router"',
         'profile.headers.get("x-programmable-read-source") ===\n        "envio-classic-v3+canonical-launch-stamp-router+rpc"',
         'profileRouterReadStatus === "current"',
+        'profileRouterReadStatus === "last-known-good"',
         'profile.headers.get("x-programmable-read-source") ===\n        "envio-classic-v3+rpc"',
         'schemaVersion !== "programmable.market-chart.v1"',
         'chart.body?.source !== "bitquery"',

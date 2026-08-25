@@ -298,6 +298,9 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(probe, /body\.total >= 1/u);
   assert.match(probe, /let exactCatalog = false/u);
   assert.match(probe, /attempt < 5/u);
+  assert.match(probe, /response = undefined/u);
+  assert.match(probe, /if \(attempt === 4\) throw error/u);
+  assert.match(probe, /continue/u);
   assert.match(probe, /if \(exactCatalog\) break/u);
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
   assert.doesNotMatch(probe, /\n        if:/u);

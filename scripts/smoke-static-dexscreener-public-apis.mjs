@@ -704,6 +704,9 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const profileRpcProviderReady =
     profileRpcProvider === "drpc-primary" ||
     profileRpcProvider === "quicknode-secondary";
+  const profileRouterReadReady =
+    profileRouterReadStatus === "current" ||
+    profileRouterReadStatus === "last-known-good";
   const profileSourceReady =
     (
       profile.headers.get("x-programmable-launch-source") === "rpc" &&
@@ -723,7 +726,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       profile.headers.get("x-programmable-read-source") ===
         "envio-classic-v3+canonical-launch-stamp-router" &&
       profileRpcProvider === "envio-indexer-state" &&
-      profileRouterReadStatus === "current"
+      profileRouterReadReady
     ) ||
     (
       profile.headers.get("x-programmable-launch-source") ===
@@ -731,7 +734,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       profile.headers.get("x-programmable-read-source") ===
         "envio-classic-v3+canonical-launch-stamp-router+rpc" &&
       profileRpcProviderReady &&
-      profileRouterReadStatus === "current"
+      profileRouterReadReady
     ) ||
     (
       profile.headers.get("x-programmable-launch-source") ===

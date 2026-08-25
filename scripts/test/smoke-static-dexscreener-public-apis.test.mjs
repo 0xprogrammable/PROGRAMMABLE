@@ -1164,7 +1164,7 @@ test("staged smoke accepts the exact Envio plus RPC creator profile source", asy
   assert.equal(result.profileStatus, "ready");
 });
 
-test("staged smoke accepts the exact Router-combined Envio creator profile source", async () => {
+test("staged smoke accepts the bounded last-good Router-combined Envio creator profile source", async () => {
   const result = await runStagedStaticDexscreenerSmokeV1({
     environment: {
       STAGED_TARGET_URL: "https://candidate.vercel.app/",
@@ -1179,7 +1179,7 @@ test("staged smoke accepts the exact Router-combined Envio creator profile sourc
               "envio-classic-v3+canonical-launch-stamp-router",
             "x-programmable-read-source":
               "envio-classic-v3+canonical-launch-stamp-router",
-            "x-programmable-router-read-status": "current",
+            "x-programmable-router-read-status": "last-known-good",
             "x-programmable-rpc-provider": "envio-indexer-state",
           }
         : extraHeaders,

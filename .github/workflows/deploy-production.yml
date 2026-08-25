@@ -683,16 +683,23 @@ jobs:
           let expectedLaunchSource;
           let exactCatalog = false;
           for (let attempt = 0; attempt < 5; attempt += 1) {
-            response = await fetch(target, {
-              redirect: "error",
-              headers: {
-                "x-vercel-protection-bypass":
-                  process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
-                "x-vercel-set-bypass-cookie": "false",
-              },
-              signal: AbortSignal.timeout(30_000),
-            });
+            response = undefined;
             body = undefined;
+            try {
+              response = await fetch(target, {
+                redirect: "error",
+                headers: {
+                  "x-vercel-protection-bypass":
+                    process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+                  "x-vercel-set-bypass-cookie": "false",
+                },
+                signal: AbortSignal.timeout(30_000),
+              });
+            } catch (error) {
+              if (attempt === 4) throw error;
+              await new Promise((resolve) => setTimeout(resolve, 5_000));
+              continue;
+            }
             if (response.status === 200) {
               try {
                 body = JSON.parse(await readBoundedResponseText(response, {
