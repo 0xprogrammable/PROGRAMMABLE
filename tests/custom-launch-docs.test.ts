@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { docsNavigation, docsSearchItems } from "../components/docs-data";
 import sitemap from "../app/sitemap";
 import { developerDocsMarkdown } from "../lib/developer-docs-content";
+import { programmablePublicOpenApi } from "../lib/public-openapi";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -14,6 +15,10 @@ const gitBookGuide = read("docs/public/developers/custom-launch.md");
 const websiteGuide = read("app/docs/developers/custom-launch/page.tsx");
 const summary = read("docs/public/SUMMARY.md");
 const createGuide = read("components/create-guide.tsx");
+const rawGuide = read("public/developers/custom-launch-api-v1.md");
+const machineReadableGuide = read(
+  "app/docs/developers/machine-readable/page.tsx",
+);
 
 describe("Custom Launch API documentation", () => {
   it("publishes one canonical human guide in both documentation systems", () => {
@@ -39,6 +44,10 @@ describe("Custom Launch API documentation", () => {
     expect(sitemap().map(({ url }) => url)).toContain(
       "https://programmable.market/docs/developers/custom-launch",
     );
+    expect(
+      docsSearchItems.find(({ title }) => title === "Creator overview")
+        ?.description,
+    ).not.toContain("publish reusable hook logic");
   });
 
   it("keeps prepared artifacts separate from authorized wallet transactions", () => {
@@ -81,5 +90,16 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("error.requestId");
       expect(source).toContain("resource-level");
     }
+  });
+
+  it("describes request-driven reconciliation consistently", () => {
+    for (const source of [rawGuide, machineReadableGuide]) {
+      expect(source).toContain("bounded best-effort");
+      expect(source).not.toContain("only the exact single-launch GET reconciles");
+      expect(source).not.toContain("list reads do not perform per-launch chain reads");
+    }
+    expect(programmablePublicOpenApi["x-programmable-boundary"].actions).toContain(
+      "pending history rows",
+    );
   });
 });
