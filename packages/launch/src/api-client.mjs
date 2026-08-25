@@ -24,6 +24,7 @@ import { validateLaunchFile } from "./validate.mjs";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
 
 export class ProgrammableApiError extends Error {
@@ -260,14 +261,29 @@ function parseResponseBody(bytes, status) {
 function apiError(status, body, retryAfter) {
   const error = body?.error ?? body;
   return new ProgrammableApiError(
-    typeof error?.message === "string" ? error.message : `Custom Launch API returned HTTP ${status}`,
+    `Custom Launch API returned HTTP ${status}`,
     {
       httpStatus: status,
-      code: typeof error?.code === "string" ? error.code : null,
-      requestId: typeof error?.requestId === "string" ? error.requestId : null,
-      retryAfter,
+      code: safeApiCode(error?.code),
+      requestId: safeErrorRequestId(error?.requestId),
+      retryAfter: safeRetryAfter(retryAfter),
     },
   );
+}
+
+function safeApiCode(value) {
+  return typeof value === "string" && SAFE_API_CODE.test(value) ? value : null;
+}
+
+function safeErrorRequestId(value) {
+  return typeof value === "string" && REQUEST_ID.test(value) ? value : null;
+}
+
+function safeRetryAfter(value) {
+  if (typeof value !== "string") return null;
+  if (/^[0-9]{1,10}$/.test(value)) return value;
+  const when = Date.parse(value);
+  return Number.isFinite(when) ? new Date(when).toUTCString() : null;
 }
 
 function retryDelayMs(retryAfter, attempt) {

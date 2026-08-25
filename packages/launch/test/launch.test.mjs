@@ -9,7 +9,12 @@ import test from "node:test";
 import solc from "solc";
 import { encodeAbiParameters, keccak256 } from "viem";
 
-import { statusLaunch, submitLaunch } from "../src/api-client.mjs";
+import {
+  ProgrammableApiError,
+  statusLaunch,
+  submitLaunch,
+} from "../src/api-client.mjs";
+import { formatCliError } from "../src/cli.mjs";
 import {
   HOOK_PERMISSION_BITS,
   HOOK_PERMISSIONS,
@@ -259,7 +264,7 @@ test("submit treats the V1 read-only 409 as non-retryable", async () => {
         error: {
           code: "CUSTOM_LAUNCH_V1_READ_ONLY",
           message: "V1 launch creation is read-only",
-          requestId: "v1-read-only-request",
+          requestId: "9be43bed-a5f2-4c15-b0d0-2f0f0ae942f0",
         },
       }), { status: 409, headers: { "content-type": "application/json" } });
     },
@@ -268,10 +273,59 @@ test("submit treats the V1 read-only 409 as non-retryable", async () => {
   }), (error) => {
     assert.equal(error.details.httpStatus, 409);
     assert.equal(error.details.code, "CUSTOM_LAUNCH_V1_READ_ONLY");
-    assert.equal(error.details.requestId, "v1-read-only-request");
+    assert.equal(error.details.requestId, "9be43bed-a5f2-4c15-b0d0-2f0f0ae942f0");
     return true;
   });
   assert.equal(networkCalls, 1);
+});
+
+test("CLI renders only safe API error details", async () => {
+  const apiKey = "pm_live_must_never_be_rendered";
+  const requestBytes = '{"sourceDescriptor":"must-never-be-rendered"}';
+  let caught;
+  try {
+    await statusLaunch({
+      requestId: "836b6989-bac4-4f39-98ab-828c7231fbf1",
+      maxAttempts: 1,
+      apiOrigin: "http://127.0.0.1:43197",
+      fetchImpl: async () => new Response(JSON.stringify({
+        error: {
+          code: "RATE_LIMITED",
+          message: `unsafe echo ${apiKey} ${requestBytes}`,
+          requestId: "af9c0ec0-ff27-4a48-9ff5-8d99bc11e667",
+          authorization: apiKey,
+          requestBody: requestBytes,
+        },
+      }), {
+        status: 429,
+        headers: { "retry-after": "17", "content-type": "application/json" },
+      }),
+      loadApiKeyImpl: async () => apiKey,
+    });
+  } catch (error) {
+    caught = error;
+  }
+  const rendered = formatCliError(caught);
+  assert.equal(
+    rendered,
+    'Custom Launch API returned HTTP 429\nProgrammable API error details: {"code":"RATE_LIMITED","httpStatus":429,"requestId":"af9c0ec0-ff27-4a48-9ff5-8d99bc11e667","retryAfter":"17"}',
+  );
+  assert.ok(!rendered.includes(apiKey));
+  assert.ok(!rendered.includes(requestBytes));
+  assert.ok(!rendered.includes("authorization"));
+  assert.ok(!rendered.includes("requestBody"));
+
+  const rejectedDetails = formatCliError(new ProgrammableApiError(
+    "Custom Launch API request failed",
+    {
+      code: apiKey,
+      httpStatus: 999,
+      requestId: apiKey,
+      retryAfter: requestBytes,
+      requestBody: requestBytes,
+    },
+  ));
+  assert.equal(rejectedDetails, "Custom Launch API request failed");
 });
 
 test("status honors Retry-After and stops at the wallet handoff", async () => {
