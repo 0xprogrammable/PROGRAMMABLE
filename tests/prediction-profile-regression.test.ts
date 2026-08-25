@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 
 import {
+  predictionMarketDetailIdentityMatchesV1,
+} from "../components/prediction-market-detail";
+import {
   createPredictionPortfolioRequest,
   derivePredictionPortfolioPosition,
   isPredictionPortfolioRequestCurrent,
@@ -395,11 +398,38 @@ describe("prediction profile regression contract", () => {
     expect(detailSource).toContain(
       "const [refreshing, setRefreshing] = useState(false)",
     );
+    expect(
+      predictionMarketDetailIdentityMatchesV1(
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+      ),
+    ).toBe(true);
+    expect(
+      predictionMarketDetailIdentityMatchesV1(
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+        { accountKey: "0xbbb", semanticKey: "0xmarket" },
+      ),
+    ).toBe(false);
+    expect(
+      predictionMarketDetailIdentityMatchesV1(
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+        { accountKey: "0xaaa", semanticKey: "0xother" },
+      ),
+    ).toBe(false);
     expect(detailSource).toContain(
-      "lastMarketRef.current?.semanticKey.toLowerCase() === normalizedSemanticKey",
+      "const lastMarketRef = useRef<LastMarketState | null>(null)",
     );
     expect(detailSource).toMatch(
-      /if \(!preserveCurrentMarket\) \{\s*setLoadState\(\{ kind: "loading" \}\);/u,
+      /if \(!preserveCurrentMarket\) \{\s*lastMarketRef\.current = null;\s*setLoadState\(\{/u,
+    );
+    expect(detailSource).toContain(
+      "candidate.accountKey === expected.accountKey",
+    );
+    expect(detailSource).toContain(
+      "candidate.semanticKey === expected.semanticKey",
+    );
+    expect(detailSource).toContain(
+      'if (!loadStateIsCurrent || loadState.kind === "loading")',
     );
     expect(detailSource).toContain(
       '"Unable to refresh. Showing the last loaded market."',

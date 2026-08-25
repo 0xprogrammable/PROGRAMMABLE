@@ -67,11 +67,30 @@ import {
   type PredictionTradeMode,
 } from "@/lib/prediction-market-quote-selection";
 
-type MarketLoadState =
+type MarketLoadIdentity = Readonly<{
+  accountKey: string;
+  semanticKey: string;
+}>;
+
+type MarketLoadState = MarketLoadIdentity & (
   | { kind: "loading" }
   | { kind: "preview"; market: PredictionMarketView }
   | { kind: "live"; market: PredictionMarketView }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+);
+
+type LastMarketState = MarketLoadIdentity & Readonly<{
+  market: PredictionMarketView;
+}>;
+
+export function predictionMarketDetailIdentityMatchesV1(
+  candidate: MarketLoadIdentity | null,
+  expected: MarketLoadIdentity,
+) {
+  return candidate !== null &&
+    candidate.accountKey === expected.accountKey &&
+    candidate.semanticKey === expected.semanticKey;
+}
 
 type LiveQuote =
   | { kind: "BUY"; value: PredictionBuyQuote }
@@ -352,7 +371,9 @@ export function PredictionMarketDetail({
   const walletAccountKey = walletAccount?.toLowerCase() ?? "";
   const normalizedSemanticKey = semanticKey.toLowerCase();
   const [loadState, setLoadState] = useState<MarketLoadState>({
+    accountKey: walletAccountKey,
     kind: "loading",
+    semanticKey: normalizedSemanticKey,
   });
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
@@ -374,7 +395,7 @@ export function PredictionMarketDetail({
   const activeMarketLoadRequest = useRef<PredictionMarketLoadRequestV1 | null>(
     null,
   );
-  const lastMarketRef = useRef<PredictionMarketView | null>(null);
+  const lastMarketRef = useRef<LastMarketState | null>(null);
   const marketActionGeneration = useRef(0);
   const activeMarketActionRequest =
     useRef<PredictionMarketLoadRequestV1 | null>(null);
@@ -420,6 +441,14 @@ export function PredictionMarketDetail({
       semanticKey: normalizedSemanticKey,
     } satisfies PredictionMarketLoadRequestV1;
     activeMarketLoadRequest.current = request;
+    const requestIsCurrent = () =>
+      isPredictionMarketLoadRequestCurrent(
+        request,
+        activeMarketLoadRequest.current,
+      ) && predictionMarketDetailIdentityMatchesV1(request, {
+        accountKey: walletAccountKeyRef.current,
+        semanticKey: semanticKeyRef.current,
+      });
     quoteRequestId.current += 1;
     if (quotePhaseRequestId.current !== null) {
       quotePhaseRequestId.current = null;
@@ -434,20 +463,21 @@ export function PredictionMarketDetail({
     setShownQuote(null);
     setQuotedSelectionKey(null);
     setRefreshError("");
-    const preserveCurrentMarket =
-      lastMarketRef.current?.semanticKey.toLowerCase() === normalizedSemanticKey;
+    const preserveCurrentMarket = predictionMarketDetailIdentityMatchesV1(
+      lastMarketRef.current,
+      request,
+    );
     setRefreshing(preserveCurrentMarket);
     if (!preserveCurrentMarket) {
-      setLoadState({ kind: "loading" });
+      lastMarketRef.current = null;
+      setLoadState({
+        accountKey: request.accountKey,
+        kind: "loading",
+        semanticKey: request.semanticKey,
+      });
     }
     await Promise.resolve();
-    if (
-      !isPredictionMarketLoadRequestCurrent(
-        request,
-        activeMarketLoadRequest.current,
-      )
-    )
-      return;
+    if (!requestIsCurrent()) return;
     try {
       if (!release.config) {
         const market = predictionPreviewMarkets(
@@ -457,28 +487,29 @@ export function PredictionMarketDetail({
             candidate.semanticKey.toLowerCase() === semanticKey.toLowerCase(),
         );
         if (!market) {
-          if (
-            isPredictionMarketLoadRequestCurrent(
-              request,
-              activeMarketLoadRequest.current,
-            )
-          ) {
+          if (requestIsCurrent()) {
             lastMarketRef.current = null;
             setLoadState({
+              accountKey: request.accountKey,
               kind: "error",
               message: "This preview market does not exist",
+              semanticKey: request.semanticKey,
             });
           }
           return;
         }
-        if (
-          isPredictionMarketLoadRequestCurrent(
-            request,
-            activeMarketLoadRequest.current,
-          )
-        ) {
-          lastMarketRef.current = market;
-          setLoadState({ kind: "preview", market });
+        if (requestIsCurrent()) {
+          lastMarketRef.current = {
+            accountKey: request.accountKey,
+            market,
+            semanticKey: request.semanticKey,
+          };
+          setLoadState({
+            accountKey: request.accountKey,
+            kind: "preview",
+            market,
+            semanticKey: request.semanticKey,
+          });
         }
         return;
       }
@@ -487,38 +518,37 @@ export function PredictionMarketDetail({
         config: release.config,
         semanticKey,
       });
-      if (
-        isPredictionMarketLoadRequestCurrent(
-          request,
-          activeMarketLoadRequest.current,
-        )
-      ) {
-        lastMarketRef.current = market;
-        setLoadState({ kind: "live", market });
+      if (requestIsCurrent()) {
+        lastMarketRef.current = {
+          accountKey: request.accountKey,
+          market,
+          semanticKey: request.semanticKey,
+        };
+        setLoadState({
+          accountKey: request.accountKey,
+          kind: "live",
+          market,
+          semanticKey: request.semanticKey,
+        });
       }
     } catch (error) {
-      if (
-        isPredictionMarketLoadRequestCurrent(
-          request,
-          activeMarketLoadRequest.current,
-        )
-      ) {
+      if (requestIsCurrent()) {
         if (preserveCurrentMarket) {
           setRefreshError(
             "Unable to refresh. Showing the last loaded market.",
           );
         } else {
           lastMarketRef.current = null;
-          setLoadState({ kind: "error", message: getErrorMessage(error) });
+          setLoadState({
+            accountKey: request.accountKey,
+            kind: "error",
+            message: getErrorMessage(error),
+            semanticKey: request.semanticKey,
+          });
         }
       }
     } finally {
-      if (
-        isPredictionMarketLoadRequestCurrent(
-          request,
-          activeMarketLoadRequest.current,
-        )
-      ) {
+      if (requestIsCurrent()) {
         setRefreshing(false);
       }
     }
@@ -551,8 +581,14 @@ export function PredictionMarketDetail({
     };
   }, [refresh]);
 
-  const market = "market" in loadState ? loadState.market : null;
-  const preview = loadState.kind === "preview";
+  const loadStateIsCurrent = predictionMarketDetailIdentityMatchesV1(
+    loadState,
+    { accountKey: walletAccountKey, semanticKey: normalizedSemanticKey },
+  );
+  const market = loadStateIsCurrent && "market" in loadState
+    ? loadState.market
+    : null;
+  const preview = loadStateIsCurrent && loadState.kind === "preview";
   const busy = phase !== "idle" || refreshing;
   const currentQuoteSelectionKey = predictionQuoteSelectionKey({
     amount,
@@ -898,7 +934,7 @@ export function PredictionMarketDetail({
     }
   }
 
-  if (loadState.kind === "loading") {
+  if (!loadStateIsCurrent || loadState.kind === "loading") {
     return (
       <main className={`page-width ${styles.detailPage}`}>
         <div className={styles.detailLoading}>Loading market…</div>
