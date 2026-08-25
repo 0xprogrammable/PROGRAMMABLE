@@ -21,6 +21,7 @@ import {
   profileClaimableWei,
   profileClaimActionCount,
   profileClaimSubmissionAllowed,
+  profileActionStateUsesNeutralStatus,
   profileCreatorClaimErrorMessage,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
@@ -563,7 +564,9 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).toContain(
       'data-visible-count={claimPageData.items.length}',
     );
-    expect(profileViewSource).toContain('if (state.status !== "error")');
+    expect(profileViewSource).toContain(
+      "if (profileActionStateUsesNeutralStatus(state))",
+    );
     expect(profileViewSource).toContain(
       '{refreshing ? "Refreshing rewards" : ""}',
     );
@@ -1227,9 +1230,44 @@ describe("profile transaction status", () => {
       release: true,
       status: "error",
       message: "No transaction was found. You can submit the claim again.",
+      recoverable: true,
     });
     expect(profileViewSource).toMatch(
       /if \(resolution\.release\) \{\s*forgetPendingProfileTransaction\(pendingTransaction\);/s,
+    );
+  });
+
+  it("announces released missing transactions neutrally without hiding true errors", () => {
+    expect(
+      profileActionStateUsesNeutralStatus({
+        account: firstAddress,
+        status: "error",
+        message: "No transaction was found. You can submit the claim again.",
+        transactionHash,
+        recoverable: true,
+      }),
+    ).toBe(true);
+    expect(
+      profileActionStateUsesNeutralStatus({
+        account: firstAddress,
+        status: "error",
+        message: "No transaction was found. You can submit the claim again.",
+        transactionHash,
+      }),
+    ).toBe(false);
+    expect(
+      profileActionStateUsesNeutralStatus({
+        account: firstAddress,
+        status: "error",
+        message: "The reward transaction reverted onchain",
+        transactionHash,
+      }),
+    ).toBe(false);
+    expect(profileViewSource).toContain(
+      "if (profileActionStateUsesNeutralStatus(state))",
+    );
+    expect(profileViewSource).toContain(
+      "const resolution = resolveProfileNotFoundTransaction(true);",
     );
   });
 
