@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     ...router,
   ]),
   routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
+  readSourceVerification: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -36,6 +37,9 @@ vi.mock("../lib/server/custom-launch/public-readiness", () => ({
 }));
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.readCustom,
+}));
+vi.mock("../lib/server/custom-launch/source-verification-display-v1", () => ({
+  readProductionSourceVerificationDisplayV1: mocks.readSourceVerification,
 }));
 vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ROUTER_CUSTOM_FINALITY_CONFIRMATIONS: 64,
@@ -211,6 +215,12 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       ],
     );
     mocks.routerStatus.mockReturnValue("current");
+    mocks.readSourceVerification.mockResolvedValue({
+      schemaVersion: "programmable.source-verification-display.v1",
+      status: "not-verified",
+      label: "Source not verified",
+      updatedAt: null,
+    });
     mocks.readDex.mockResolvedValue({
       entries: [{
         ...entry,
@@ -283,6 +293,7 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
   it("resolves a finalized Router Custom identity from its Explore card URL", async () => {
     mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    mocks.mergeRouter.mockReturnValue([customGraphExploreEntry]);
     mocks.readDex.mockResolvedValueOnce({
       entries: [{
         ...customGraphExploreEntry,
@@ -307,6 +318,16 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       verifiedIdentityCount: 1,
       projectedIdentityCount: 1,
     });
+    expect(body.sourceVerification).toEqual({
+      schemaVersion: "programmable.source-verification-display.v1",
+      status: "not-verified",
+      label: "Source not verified",
+      updatedAt: null,
+    });
+    expect(mocks.readSourceVerification).toHaveBeenCalledWith(
+      customGraphExploreEntry.tokenAddress,
+      expect.any(AbortSignal),
+    );
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3+canonical-launch-stamp-router",
     );

@@ -88,11 +88,19 @@ type RouterTradeProject = Pick<
   "customProjectId" | "markets"
 >;
 
+type SourceVerificationDisplay = Readonly<{
+  schemaVersion: "programmable.source-verification-display.v1";
+  status: "verified" | "in-progress" | "not-verified";
+  label: "Source verified" | "Verification in progress" | "Source not verified";
+  updatedAt: string | null;
+}>;
+
 type DetailPayload = {
   status: "ready" | "not-deployed";
   token: DetailToken | null;
   customProject: DetailCustomProject | null;
   routerTradeProject: RouterTradeProject | null;
+  sourceVerification: SourceVerificationDisplay | null;
   creatorArticle: CreatorArticleV1 | null;
   snapshot: { chainId: number } | null;
 };
@@ -106,6 +114,7 @@ export type DetailState =
       phase: "ready";
       token: DetailToken;
       routerTradeProject: RouterTradeProject | null;
+      sourceVerification: SourceVerificationDisplay | null;
       creatorArticle: CreatorArticleV1 | null;
       chainId: number;
       requestKey: string;
@@ -523,6 +532,35 @@ function parseLauncherToken(value: unknown): DetailToken | null {
       };
 }
 
+function parseSourceVerificationDisplay(
+  value: unknown,
+): SourceVerificationDisplay | null {
+  if (value === null || value === undefined) return null;
+  if (
+    !isRecord(value)
+    || value.schemaVersion !== "programmable.source-verification-display.v1"
+    || !["verified", "in-progress", "not-verified"].includes(
+      String(value.status),
+    )
+    || (value.updatedAt !== null && (
+      typeof value.updatedAt !== "string"
+      || !Number.isFinite(Date.parse(value.updatedAt))
+    ))
+  ) return null;
+  const expectedLabel = value.status === "verified"
+    ? "Source verified"
+    : value.status === "in-progress"
+      ? "Verification in progress"
+      : "Source not verified";
+  if (value.label !== expectedLabel) return null;
+  return {
+    schemaVersion: "programmable.source-verification-display.v1",
+    status: value.status as SourceVerificationDisplay["status"],
+    label: expectedLabel,
+    updatedAt: value.updatedAt as string | null,
+  };
+}
+
 function parseCustomProject(value: unknown): DetailCustomProject | null {
   if (!isRecord(value)
     || value.exploreKind !== "custom-project"
@@ -827,6 +865,16 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   ) {
     throw new Error("The token registry returned an invalid Router trade route");
   }
+  const sourceVerification = parseSourceVerificationDisplay(
+    value.sourceVerification,
+  );
+  if (
+    value.sourceVerification !== null
+    && value.sourceVerification !== undefined
+    && sourceVerification === null
+  ) {
+    throw new Error("The token registry returned invalid source verification");
+  }
   let creatorArticle: CreatorArticleV1 | null = null;
   if (value.creatorArticle !== null && value.creatorArticle !== undefined) {
     try {
@@ -860,6 +908,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     token,
     customProject,
     routerTradeProject,
+    sourceVerification,
     creatorArticle,
     snapshot,
   };
@@ -928,6 +977,7 @@ function detailStateFromResponse(
       phase: "ready",
       token: payload.token!,
       routerTradeProject: payload.routerTradeProject,
+      sourceVerification: payload.sourceVerification,
       creatorArticle: payload.creatorArticle,
     chainId: payload.snapshot.chainId,
     requestKey,
@@ -1473,12 +1523,14 @@ function TokenDetailContent({
   preview,
   creatorArticle = null,
   routerTradeProject = null,
+  sourceVerification = null,
 }: {
   token: LauncherToken;
   chainId: number;
   preview: boolean;
   creatorArticle?: CreatorArticleV1 | null;
   routerTradeProject?: RouterTradeProject | null;
+  sourceVerification?: SourceVerificationDisplay | null;
 }) {
   const {
     wallet,
@@ -1871,6 +1923,18 @@ function TokenDetailContent({
                   </nav>
                 ) : null}
               </div>
+
+              {sourceVerification ? (
+                <p
+                  className={styles.sourceVerification}
+                  data-status={sourceVerification.status}
+                  title={sourceVerification.updatedAt
+                    ? `Checked ${sourceVerification.updatedAt}`
+                    : undefined}
+                >
+                  {sourceVerification.label}
+                </p>
+              ) : null}
 
               {token.description?.trim() ? (
                 <p className={styles.description}>{token.description.trim()}</p>
@@ -2567,6 +2631,7 @@ export function TokenDetailView({
         chainId={activeState.chainId}
         preview={false}
         routerTradeProject={activeState.routerTradeProject}
+        sourceVerification={activeState.sourceVerification}
         creatorArticle={activeState.creatorArticle}
       />
     );

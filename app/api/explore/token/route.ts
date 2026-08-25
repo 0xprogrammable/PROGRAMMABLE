@@ -21,6 +21,8 @@ import {
 } from "../../../../lib/alchemy/router-custom-public.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
+import { readProductionSourceVerificationDisplayV1 } from
+  "../../../../lib/server/custom-launch/source-verification-display-v1";
 import { routerTradeProjectForEntryV1 } from
   "../../../../lib/custom-launch/router-trade-adapter-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
@@ -374,6 +376,7 @@ export async function GET(request: NextRequest) {
         token: null,
         customProject: null,
         routerTradeProject: null,
+        sourceVerification: null,
         creatorArticle: null,
         snapshot: null,
         catalog: catalogBoundary,
@@ -395,6 +398,14 @@ export async function GET(request: NextRequest) {
   const routerTradeProject = entry.exploreKind === "token"
     ? routerTradeProjectForEntryV1(entry)
     : null;
+  const sourceVerificationPromise = entry.exploreKind === "token"
+      && entry.launchCategoryProvenance.category === "custom"
+      && entry.launchCategoryProvenance.source === ROUTER_CUSTOM_LAUNCH_SOURCE
+    ? readProductionSourceVerificationDisplayV1(
+        entry.tokenAddress!,
+        readSignal,
+      )
+    : Promise.resolve(null);
 
   try {
     const creatorArticlePromise = readPublicCreatorArticleV1(
@@ -419,6 +430,7 @@ export async function GET(request: NextRequest) {
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         routerTradeProject,
+        sourceVerification: await sourceVerificationPromise,
         creatorArticle: await creatorArticlePromise,
         snapshot:
           publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
@@ -454,6 +466,7 @@ export async function GET(request: NextRequest) {
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         routerTradeProject,
+        sourceVerification: await sourceVerificationPromise,
         creatorArticle,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
         catalog: catalogBoundary,
