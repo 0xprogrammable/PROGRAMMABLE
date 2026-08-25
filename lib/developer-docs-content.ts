@@ -78,7 +78,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     `Connect a wallet and create a key at ${apiKeysUrl}. Store the one-time \`pm_live_\` secret only as the encrypted environment secret \`PROGRAMMABLE_API_KEY\` or in the OS secret store. Put only \`$PROGRAMMABLE_API_KEY\` in chat, prompts and agent setup.`,
     "",
-    "A wallet-bound key can use its authorized public V2 operations and read existing V1 history. API scopes never grant wallet signing. `fees:claim` and `buybacks:manage` are reserved and disabled.",
+    "A wallet-bound key can use its authorized public V2 operations and read existing V1 history. API authorization is not launch authorization: API scopes never grant wallet signing, and the controller wallet must review and sign separately. `fees:claim` and `buybacks:manage` are reserved and disabled.",
     "",
     "Keys expire after 90 days by default, may be issued for at most 366 days, and are limited to 10 active keys per wallet.",
     "",
