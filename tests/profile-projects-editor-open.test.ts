@@ -129,6 +129,26 @@ describe("My projects editor opening", () => {
     );
   });
 
+  it("reserves a complete first page while keeping warm launch actions visible", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "Array.from({ length: creatorProjectPageSize }, (_, item)",
+    );
+    expect(styles).toMatch(/\.skeletonList\s*\{[^}]*min-height:\s*352px;/s);
+    expect(source).toContain(
+      'phase === "loading" && visibleProjects.length === 0',
+    );
+    expect(source).toContain("{canEditArticle ? (");
+  });
+
   it("paginates verified projects by highest available market cap", () => {
     const paginate = (profileProjects as unknown as {
       paginateCreatorProjectsV1(

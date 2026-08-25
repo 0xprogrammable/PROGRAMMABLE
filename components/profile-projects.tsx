@@ -491,7 +491,7 @@ function ProfileProjectsSkeleton() {
       <span className={styles.visuallyHidden} role="status">
         Loading launches
       </span>
-      {[0, 1, 2].map((item) => (
+      {Array.from({ length: creatorProjectPageSize }, (_, item) => (
         <div className={styles.skeletonProject} aria-hidden="true" key={item}>
           <span className={styles.skeletonArt} />
           <span className={styles.skeletonCopy}>

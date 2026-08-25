@@ -1110,6 +1110,66 @@
   min-width: 0;
 }
 
+.portfolioLoadingCards {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.portfolioLoadingCard {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 58px minmax(210px, 1fr) 252px 148px;
+  min-height: 82px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.portfolioLoadingArtwork,
+.portfolioLoadingCopy > span,
+.portfolioLoadingMetrics > span,
+.portfolioLoadingAction {
+  background: color-mix(in srgb, var(--text, #fff) 9%, transparent);
+}
+
+.portfolioLoadingArtwork {
+  border-radius: 15px;
+  height: 58px;
+  width: 58px;
+}
+
+.portfolioLoadingCopy,
+.portfolioLoadingMetrics {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.portfolioLoadingCopy > span,
+.portfolioLoadingMetrics > span {
+  border-radius: 999px;
+  display: block;
+  height: 10px;
+}
+
+.portfolioLoadingCopy > span:first-child {
+  width: 74%;
+}
+
+.portfolioLoadingCopy > span:last-child {
+  width: 52%;
+}
+
+.portfolioLoadingMetrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.portfolioLoadingAction {
+  border-radius: 10px;
+  height: 44px;
+}
+
 .portfolioCard {
   align-items: center;
   background: var(
@@ -1625,6 +1685,22 @@
 }
 
 @media (max-width: 52rem) {
+  .portfolioLoadingCard {
+    align-items: start;
+    grid-template-columns: 52px minmax(0, 1fr);
+    min-height: 190px;
+  }
+
+  .portfolioLoadingArtwork {
+    height: 52px;
+    width: 52px;
+  }
+
+  .portfolioLoadingMetrics,
+  .portfolioLoadingAction {
+    grid-column: 1 / -1;
+  }
+
   .portfolioCard {
     align-items: start;
     grid-template-columns: 52px minmax(0, 1fr);
@@ -1777,6 +1853,27 @@
 
   .portfolioSection {
     padding: 16px;
+  }
+
+  .portfolioLoadingCard {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 256px;
+    position: relative;
+  }
+
+  .portfolioLoadingArtwork {
+    inset-block-start: 10px;
+    inset-inline-start: 10px;
+    position: absolute;
+  }
+
+  .portfolioLoadingCopy {
+    min-height: 52px;
+    padding-inline-start: 64px;
+  }
+
+  .portfolioLoadingMetrics {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .portfolioCard {

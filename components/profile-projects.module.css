@@ -326,7 +326,7 @@
 .skeletonList {
   display: grid;
   gap: 3px;
-  min-height: 213px;
+  min-height: 352px;
 }
 
 .skeletonProject {

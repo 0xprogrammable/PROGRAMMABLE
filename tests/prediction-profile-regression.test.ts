@@ -326,6 +326,19 @@ describe("prediction profile regression contract", () => {
     );
   });
 
+  it("reserves the populated profile geometry while prediction activity loads", () => {
+    expect(portfolioSource).toContain(
+      "predictionPortfolioLoadingPlaceholderCount = 3",
+    );
+    expect(portfolioSource).toContain("<PredictionPortfolioLoadingState />");
+    expect(portfolioStyles).toMatch(
+      /\.portfolioLoadingCard\s*\{[^}]*min-height:\s*82px;/s,
+    );
+    expect(portfolioStyles).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioLoadingCard\s*\{[^}]*min-height:\s*256px;/s,
+    );
+  });
+
   it("uses vivid yes and no colors with AA text contrast and non-color labels", () => {
     const yes = cssHexVariable(portfolioStyles, "--portfolio-yes");
     const no = cssHexVariable(portfolioStyles, "--portfolio-no");

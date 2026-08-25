@@ -1303,11 +1303,14 @@
 }
 
 .profileSkeletonInline {
+  margin-block-start: 34px;
   min-height: 360px;
+  padding-block-start: 0;
 }
 
 .profileSkeletonPage {
   min-height: calc(100svh - 88px);
+  padding-block-start: 0;
 }
 
 .profileSkeletonHero {
@@ -1382,6 +1385,10 @@
   min-height: 360px;
 }
 
+.profileSkeletonWorkspacePage {
+  margin-block-start: 18px;
+}
+
 .profileSkeletonSummary,
 .profileSkeletonClaims,
 .profileSkeletonSection {
@@ -1393,13 +1400,29 @@
   padding: 20px;
 }
 
+.profileSkeletonSummary,
+.profileSkeletonClaims {
+  min-height: 360px;
+}
+
 .profileSkeletonSection {
   align-content: start;
-  min-height: 285px;
+  gap: 12px;
+}
+
+.profileSkeletonLaunch {
+  margin-block-start: 40px;
+  min-height: 448px;
 }
 
 .profileSkeletonPrediction {
-  min-height: 220px;
+  min-height: 422px;
+}
+
+.profileSkeletonSectionHeader {
+  align-items: center;
+  display: flex;
+  min-height: 44px;
 }
 
 .profileSkeletonTabs {
@@ -1412,8 +1435,13 @@
 .profileSkeletonPredictionRow {
   border-radius: 11px;
   display: block;
-  height: 92px;
+  min-height: 82px;
   width: 100%;
+}
+
+.profileSkeletonPredictionRows {
+  display: grid;
+  gap: 8px;
 }
 
 .profileSkeletonHeading {
@@ -1438,7 +1466,7 @@
 
 .profileSkeletonRows {
   display: grid;
-  gap: 8px;
+  gap: 3px;
 }
 
 .profileSkeletonRow {
@@ -1631,6 +1659,15 @@
 
   .profileSkeletonWorkspace {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profileSkeletonSummary,
+  .profileSkeletonClaims {
+    min-height: 340px;
+  }
+
+  .profileSkeletonPredictionRow {
+    min-height: 190px;
   }
 
   .customProjects {
@@ -2500,6 +2537,36 @@
 
   .portfolio {
     margin-top: 28px;
+  }
+
+  .profileSkeletonInline {
+    margin-block-start: 28px;
+  }
+
+  .profileSkeletonLaunch,
+  .profileSkeletonPrediction {
+    padding: 16px;
+  }
+
+  .profileSkeletonLaunch {
+    margin-block-start: 16px;
+  }
+
+  .profileSkeletonWorkspacePage {
+    margin-block-start: 12px;
+  }
+
+  .profileSkeletonLaunch .profileSkeletonRow {
+    grid-template-columns: 44px minmax(0, 1fr);
+    min-height: 109px;
+  }
+
+  .profileSkeletonLaunch .profileSkeletonRow > span:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .profileSkeletonPredictionRow {
+    min-height: 256px;
   }
 
   .profileSkeletonHero {

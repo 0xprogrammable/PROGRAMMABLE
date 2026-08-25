@@ -18,12 +18,16 @@ import {
 
 import { useWallet } from "@/components/wallet-provider";
 import {
+  creatorProjectPageSize,
   ProfileProjects,
   type CreatorProjectInitialBuyV1,
   type CreatorProjectMarketCapV1,
   type CreatorProjectSummaryV1,
 } from "@/components/profile-projects";
-import { PredictionMarketPortfolio } from "@/components/prediction-market-portfolio";
+import {
+  PredictionMarketPortfolio,
+  predictionPortfolioLoadingPlaceholderCount,
+} from "@/components/prediction-market-portfolio";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -4353,27 +4357,51 @@ function ProfileLoadingSkeleton({
       ) : null}
       {showHero ? (
         <>
-          <div className={styles.profileSkeletonSection} aria-hidden="true">
-            <span className={styles.profileSkeletonHeading} />
-            {[0, 1, 2].map((item) => (
-              <span className={styles.profileSkeletonRow} key={item}>
-                <span />
-                <span />
-                <span />
-              </span>
-            ))}
+          <div
+            className={`${styles.profileSkeletonSection} ${styles.profileSkeletonLaunch}`}
+            aria-hidden="true"
+          >
+            <span className={styles.profileSkeletonSectionHeader}>
+              <span className={styles.profileSkeletonHeading} />
+            </span>
+            <span className={styles.profileSkeletonRows}>
+              {Array.from({ length: creatorProjectPageSize }, (_, item) => (
+                <span className={styles.profileSkeletonRow} key={item}>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ))}
+            </span>
           </div>
           <div
             className={`${styles.profileSkeletonSection} ${styles.profileSkeletonPrediction}`}
             aria-hidden="true"
           >
-            <span className={styles.profileSkeletonHeading} />
+            <span className={styles.profileSkeletonSectionHeader}>
+              <span className={styles.profileSkeletonHeading} />
+            </span>
             <span className={styles.profileSkeletonTabs} />
-            <span className={styles.profileSkeletonPredictionRow} />
+            <span className={styles.profileSkeletonPredictionRows}>
+              {Array.from(
+                { length: predictionPortfolioLoadingPlaceholderCount },
+                (_, item) => (
+                  <span
+                    className={styles.profileSkeletonPredictionRow}
+                    key={item}
+                  />
+                ),
+              )}
+            </span>
           </div>
         </>
       ) : null}
-      <div className={styles.profileSkeletonWorkspace} aria-hidden="true">
+      <div
+        className={`${styles.profileSkeletonWorkspace} ${
+          showHero ? styles.profileSkeletonWorkspacePage : ""
+        }`}
+        aria-hidden="true"
+      >
         <div className={styles.profileSkeletonSummary}>
           <span className={styles.profileSkeletonHeading} />
           <span className={styles.profileSkeletonMetric} />
@@ -4707,6 +4735,7 @@ function ProfileAccountWorkspace({
                     : "Refresh claimable rewards"
                 }
                 aria-busy={refreshing || undefined}
+                disabled={refreshing}
                 onClick={onRetry}
               >
                 <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
