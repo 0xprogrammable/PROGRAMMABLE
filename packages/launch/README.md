@@ -8,7 +8,7 @@ transaction.
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
 programmable-launch --version
 ```
 
@@ -41,8 +41,9 @@ separate wallet flow. After broadcast, use `status REQUEST_UUID --watch --until 
 `cancelled` always stop polling.
 
 For an executable cold-room rehearsal, use `examples/no-broadcast/README.md` from the installed package. It contains
-real Solidity sources, exact Standard JSON, matching solc artifacts and a config generator. It packs, validates,
-submits and polls to `authorized`, then explicitly stops without signing or broadcasting.
+real Solidity sources, exact Standard JSON, matching solc artifacts and a config generator. The generated evidence is
+truthfully scoped to `pre-submit`; separate commands can then pack, validate, submit and poll to `authorized`, where
+the workflow explicitly stops without signing or broadcasting.
 
 ## Pack config V1
 

@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "1.0.0";
+export const PACKAGE_VERSION = "1.0.1";
 export const PACK_CONFIG_SCHEMA = "programmable.launch-pack-config.v1";
 export const CREATE_REQUEST_SCHEMA = "programmable.custom-launch-create-request.v1";
 export const SOURCE_DESCRIPTOR_SCHEMA = "2.0.0";
@@ -13,8 +13,8 @@ export const READY_PATH = "/readyz";
 export const OPENAPI_URL = "https://programmable.market/openapi/custom-launch-v1.json";
 export const GUIDE_URL = "https://programmable.market/docs/developers/custom-launch";
 export const API_KEYS_URL = "https://programmable.market/developers/api-keys";
-export const RELEASE_TAG = "programmable-launch-v1.0.0";
-export const RELEASE_TARBALL = "programmable-launch-1.0.0.tgz";
+export const RELEASE_TAG = "programmable-launch-v1.0.1";
+export const RELEASE_TARBALL = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 

@@ -137,7 +137,7 @@ provider availability or onchain lifecycle completion.
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
 | Authenticated Custom writes  | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
 | Custom Launch API readiness  | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                  |
-| Custom Launch CLI 1.0.0      | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz) |
+| Custom Launch CLI 1.0.1      | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |

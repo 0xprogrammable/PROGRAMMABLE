@@ -197,6 +197,18 @@ test("the bundled no-broadcast example derives a real graph and deterministic ho
     },
     encoding: "utf8",
   });
+  const rehearsalEvidence = JSON.parse(await readFile(
+    path.join(projectDirectory, "evidence", "rehearsal.json"),
+    "utf8",
+  ));
+  assert.deepEqual(rehearsalEvidence.scope, {
+    pack: false,
+    validate: false,
+    submit: false,
+    status: false,
+    stopAt: "pre-submit",
+    walletBroadcast: false,
+  });
   const configPath = path.join(projectDirectory, "programmable-launch.config.json");
   const first = await packLaunch({
     configPath,

@@ -21,13 +21,14 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
 programmable-launch --version
 ```
 
 The release includes `examples/no-broadcast/README.md`, real Solidity sources, exact Standard JSON and matching solc
-artifacts. Its generated config uses the pack-native deterministic hook-permission salt grind, reaches `authorized`
-with a real wallet-bound request and then stops without signing or broadcasting.
+artifacts. Its generated evidence is limited to `pre-submit`. The separate authenticated commands can use the
+pack-native deterministic hook-permission salt grind, reach `authorized` with a real wallet-bound request and then
+stop without signing or broadcasting.
 
 Build the project from one pinned source revision and preserve:
 
