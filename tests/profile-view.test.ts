@@ -75,6 +75,15 @@ const profileViewSource = readFileSync(
   "utf8",
 );
 
+function profileCssDeclarationsFor(selectorFragment: string) {
+  return [...profileExperienceCss.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
+    .filter(([, selectors]) => selectors.split(",").some(
+      (selector) => selector.trim() === selectorFragment,
+    ))
+    .map(([, , declarations]) => declarations)
+    .join("\n");
+}
+
 describe("profile editor composition", () => {
   it("keeps banner actions on the trailing edge away from the avatar", () => {
     expect(profileExperienceCss).toMatch(
@@ -85,6 +94,55 @@ describe("profile editor composition", () => {
     );
     expect(profileExperienceCss).toMatch(
       /@media \(max-width:\s*620px\)[\s\S]*?\.bannerActions\s*\{[^}]*align-items:\s*flex-end;[^}]*right:\s*10px;/,
+    );
+  });
+
+  it("wraps the hero name instead of clipping it behind Edit profile", () => {
+    const nameRule = profileExperienceCss.match(
+      /\.nameRow h1\s*\{([^}]*)\}/su,
+    )?.[1] ?? "";
+    expect(nameRule).toMatch(/max-width:\s*100%;/u);
+    expect(nameRule).toMatch(/overflow-wrap:\s*anywhere;/u);
+    expect(nameRule).toMatch(/white-space:\s*normal;/u);
+    expect(nameRule).not.toMatch(/overflow:\s*hidden;/u);
+    expect(nameRule).not.toMatch(/text-overflow:\s*ellipsis;/u);
+
+    const finalMobileRules = profileExperienceCss.slice(
+      profileExperienceCss.lastIndexOf("@media (max-width: 620px)"),
+    );
+    expect(finalMobileRules).toMatch(
+      /\.nameRow\s*\{[^}]*flex-direction:\s*column;/su,
+    );
+    expect(finalMobileRules).toMatch(
+      /\.nameRow h1\s*\{[^}]*font-size:\s*clamp\(24px,\s*8\.2vw,\s*32px\);/su,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.editButton\s*\{\s*font-size:\s*14px;\s*min-height:\s*44px;\s*\}/su,
+    );
+  });
+
+  it("raises only compact claim actions and supporting descriptions", () => {
+    for (const [selector, fontSize] of [
+      [".claimRefresh", 13],
+      [".claimRow .claimButton", 13],
+      [".actionState", 12],
+      [".rowError", 12],
+      [".claimEmpty p", 13],
+      [".claimDialogHeader p", 13],
+      [".claimDialogAction p", 13],
+      [".claimDialogAction .claimButton", 13],
+      [".claimDialogAction .secondaryAction", 13],
+    ] as const) {
+      expect(profileCssDeclarationsFor(selector)).toMatch(
+        new RegExp(`font-size:\\s*${fontSize}px;`, "u"),
+      );
+    }
+
+    expect(profileCssDeclarationsFor(".claimCopy small")).toMatch(
+      /font-size:\s*10px;/u,
+    );
+    expect(profileCssDeclarationsFor(".claimAmount small")).toMatch(
+      /font-size:\s*11px;/u,
     );
   });
 });
@@ -1047,7 +1105,8 @@ describe("profile transaction status", () => {
     expect(resolveProfileNotFoundTransaction(false)).toEqual({
       release: false,
       status: "not-found",
-      message: "Transaction not found. Check your wallet activity.",
+      message:
+        "Transaction is not visible yet. Check your wallet activity, then check again.",
     });
     expect(resolveProfileNotFoundTransaction(true)).toEqual({
       release: true,
@@ -1058,6 +1117,100 @@ describe("profile transaction status", () => {
       /if \(resolution\.release\) \{\s*forgetPendingProfileTransaction\(pendingTransaction\);/s,
     );
   });
+
+  it("keeps the first not-found result for aged restored Classic transactions", () => {
+    const resumeLoop = profileViewSource.indexOf("for (const record of pending)");
+    const resumeCall = profileViewSource.indexOf(
+      "void settleSubmittedTransaction({",
+      resumeLoop,
+    );
+    const resumeCallEnd = profileViewSource.indexOf("}).finally", resumeCall);
+    expect(resumeLoop).toBeGreaterThan(-1);
+    expect(resumeCall).toBeGreaterThan(resumeLoop);
+    expect(resumeCallEnd).toBeGreaterThan(resumeCall);
+    const autoResumeSource = profileViewSource.slice(resumeCall, resumeCallEnd);
+    expect(autoResumeSource).toContain(
+      "manualCheck: Date.now() - record.submittedAt >= 60_000",
+    );
+    expect(autoResumeSource).not.toContain("retryNotFound");
+
+    const classicActionStart = profileViewSource.indexOf(
+      "const submitCreatorClaim",
+    );
+    const classicV3ActionStart = profileViewSource.indexOf(
+      "const submitClassicV3Action",
+    );
+    const deepActionStart = profileViewSource.indexOf("const submitDeepAction");
+    expect(
+      profileViewSource.slice(classicActionStart, classicV3ActionStart),
+    ).toContain('retryNotFound: existingState.status === "not-found"');
+    expect(
+      profileViewSource.slice(classicV3ActionStart, deepActionStart),
+    ).toContain('retryNotFound: existingState.status === "not-found"');
+
+    for (const [index, source] of (["classic", "classic-v3"] as const).entries()) {
+      const stateKey = `${secondAddress.toLowerCase()}:${source}:claim`;
+      const record = {
+        version: 1,
+        account: firstAddress.toLowerCase(),
+        chainId: 1,
+        source,
+        stateKey,
+        action: "claim",
+        transactionHash: index === 0 ? transactionHash : secondTransactionHash,
+        submittedAt: Date.now() - 5 * 60_000,
+      } satisfies PendingProfileTransactionRecord;
+      const restored = groupPendingProfileTransactionStates([record]);
+      expect(restored[source][stateKey]).toMatchObject({
+        status: "pending",
+        transactionHash: record.transactionHash,
+      });
+
+      const firstObservation = resolveProfileNotFoundTransaction(false);
+      const afterFirstObservation = firstObservation.release
+        ? removePendingProfileTransactionRecord([record], record)
+        : [record];
+      expect(firstObservation.status).toBe("not-found");
+      expect(afterFirstObservation).toEqual([record]);
+
+      const explicitRecheck = resolveProfileNotFoundTransaction(true);
+      const afterExplicitRecheck = explicitRecheck.release
+        ? removePendingProfileTransactionRecord(afterFirstObservation, record)
+        : afterFirstObservation;
+      expect(explicitRecheck.status).toBe("error");
+      expect(afterExplicitRecheck).toEqual([]);
+    }
+  });
+
+  it.each(["classic", "classic-v3"] as const)(
+    "clears a persisted %s transaction when a not-found recheck confirms",
+    (source) => {
+      const record = {
+        version: 1,
+        account: firstAddress.toLowerCase(),
+        chainId: 1,
+        source,
+        stateKey: `${secondAddress.toLowerCase()}:${source}:claim`,
+        action: "claim",
+        transactionHash,
+        submittedAt: Date.now() - 5 * 60_000,
+      } satisfies PendingProfileTransactionRecord;
+      const notFound = resolveProfileNotFoundTransaction(false);
+      const afterNotFound = notFound.release
+        ? removePendingProfileTransactionRecord([record], record)
+        : [record];
+      expect(afterNotFound).toEqual([record]);
+
+      const afterConfirmed = removePendingProfileTransactionRecord(
+        afterNotFound,
+        record,
+      );
+      expect(afterConfirmed).toEqual([]);
+      expect(profileViewSource).toMatch(
+        /if \(receiptStatus === "not-found"\)[\s\S]*?return;\s*\}\s*if \(receiptStatus === "reverted"\)[\s\S]*?return;\s*\}\s*forgetPendingProfileTransaction\(pendingTransaction\);\s*confirmedProfileTransactionsRef/u,
+      );
+    },
+  );
 
   it("uses one receipt request for a manual status check", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>

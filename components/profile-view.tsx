@@ -734,7 +734,8 @@ export function resolveProfileNotFoundTransaction(retryAllowed: boolean) {
     : Object.freeze({
         release: false,
         status: "not-found" as const,
-        message: "Transaction not found. Check your wallet activity.",
+        message:
+          "Transaction is not visible yet. Check your wallet activity, then check again.",
       });
 }
 
@@ -2130,7 +2131,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         setActionState,
         submittedAt: record.submittedAt,
         manualCheck: Date.now() - record.submittedAt >= 60_000,
-        retryNotFound: Date.now() - record.submittedAt >= 60_000,
       }).finally(() => {
         autoResumingProfileTransactionsRef.current.delete(resumeKey);
       });

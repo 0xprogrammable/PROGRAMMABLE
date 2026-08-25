@@ -759,7 +759,6 @@ export function PredictionMarketPortfolio({
 
       <header className={styles.portfolioHeading}>
         <div>
-          <span className={styles.portfolioEyebrow}>Profile activity</span>
           <h2 id="prediction-portfolio-title">Predictions</h2>
         </div>
         {canRefresh ? (
