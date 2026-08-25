@@ -32,4 +32,17 @@ describe("legacy Custom Registry directory", () => {
     expect(styles).not.toContain("liquid-glass");
     expect(directoryPage).toContain("robots: { follow: false, index: false }");
   });
+
+  it("reserves the launch-card geometry while the cold feed is loading", () => {
+    expect(component).toContain('Array.from({ length: 3 }');
+    expect(component).toContain('aria-hidden="true"');
+    expect(component).toContain("styles.skeletonCard");
+    expect(component).not.toContain(
+      '<p role="status" className={styles.status}>Loading launch records…</p>',
+    );
+    expect(styles).toMatch(/\.skeletonCard\s*\{[^}]*pointer-events:\s*none/s);
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.skeletonLine\s*\{[\s\S]*animation:\s*none/,
+    );
+  });
 });

@@ -145,6 +145,20 @@
   font-weight: 650;
 }
 
+.utcField {
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.utcField > legend {
+  color: var(--webde-ink);
+  font-size: 14px;
+  font-weight: 650;
+  padding: 0;
+}
+
 .field input {
   background: var(--webde-control);
   border: 1px solid var(--webde-line);
@@ -160,6 +174,74 @@
 
 .field input[aria-invalid="true"] {
   border-color: color-mix(in srgb, var(--danger) 72%, transparent);
+}
+
+.utcControl {
+  align-items: center;
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
+  border-radius: 13px;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1.35fr) auto minmax(0, 0.8fr) auto;
+  height: 56px;
+  min-width: 0;
+  padding: 5px 9px;
+}
+
+.utcControl[data-invalid="true"] {
+  border-color: color-mix(in srgb, var(--danger) 72%, transparent);
+}
+
+.utcSegment {
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 5px;
+}
+
+.utcSegment > span {
+  color: var(--webde-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.utcSegment input {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font-plex-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  height: auto;
+  line-height: 1.2;
+  padding: 0;
+}
+
+.utcSegment input:focus-visible {
+  outline: 0;
+}
+
+.utcSegment:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.utcDivider,
+.utcZone {
+  color: var(--webde-muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.utcZone {
+  background: var(--surface-soft);
+  border-radius: 999px;
+  padding: 5px 7px;
+  white-space: nowrap;
 }
 
 .priceInput {

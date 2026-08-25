@@ -534,44 +534,76 @@
 }
 
 .customMarketSelect {
+  border: 0;
   display: grid;
   gap: 7px;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
+  min-width: 0;
+  padding: 0;
 }
 
 .customMarketSelect > span,
+.customMarketSelect > legend,
 .customTradeReviewHeader > span {
   color: var(--muted);
   font-size: 10px;
   font-weight: 680;
   letter-spacing: 0.07em;
+  padding: 0;
   text-transform: uppercase;
 }
 
-.customMarketSelect select {
-  appearance: none;
-  background:
-    linear-gradient(45deg, transparent 50%, var(--muted) 50%)
-      calc(100% - 17px) 19px / 5px 5px no-repeat,
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%)
-      calc(100% - 12px) 19px / 5px 5px no-repeat,
-    var(--liquid-glass-control-background);
+.customMarketValue,
+.customMarketOption {
+  align-items: center;
+  background: var(--liquid-glass-control-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 14px;
   color: var(--text);
-  font: inherit;
+  display: flex;
   font-size: 13px;
   min-height: 44px;
-  outline: 0;
-  padding: 0 38px 0 12px;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.customMarketValue,
+.customMarketOption > span {
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customMarketOptions {
+  display: grid;
+  gap: 6px;
+}
+
+.customMarketOption {
+  cursor: pointer;
+  position: relative;
   transition:
+    background-color 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease;
   width: 100%;
 }
 
-.customMarketSelect select:focus-visible {
+.customMarketOption[data-selected="true"] {
+  background: var(--liquid-glass-control-background-hover);
+  border-color: color-mix(in srgb, var(--token-accent) 46%, var(--liquid-glass-border));
+}
+
+.customMarketOptionInput {
+  height: 1px;
+  margin: -1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.customMarketOption:has(.customMarketOptionInput:focus-visible) {
   border-color: color-mix(in srgb, var(--focus) 58%, var(--control-glass-border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 11%, transparent);
 }
@@ -1589,6 +1621,10 @@
     filter: saturate(1.04) brightness(0.99);
   }
 
+  .customMarketOption:hover {
+    background: var(--liquid-glass-control-background-hover);
+  }
+
   .communityAction:hover {
     filter: brightness(1.08);
     transform: translate3d(0, -1px, 0);
@@ -1619,6 +1655,12 @@
 
 @media (forced-colors: active) {
   .amountInput:focus-visible {
+    box-shadow: none;
+    outline: 2px solid ButtonText;
+    outline-offset: 2px;
+  }
+
+  .customMarketOption:has(.customMarketOptionInput:focus-visible) {
     box-shadow: none;
     outline: 2px solid ButtonText;
     outline-offset: 2px;
@@ -1697,7 +1739,8 @@
 }
 
 @media (max-width: 720px) {
-  .customMarketSelect select {
+  .customMarketValue,
+  .customMarketOption {
     font-size: 16px;
   }
 

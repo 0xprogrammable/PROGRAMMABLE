@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { RefreshCw } from "lucide-react";
 
 import styles from "@/components/developer-launch-history.module.css";
 import {
@@ -21,7 +22,7 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-type LaunchStatus =
+export type LaunchStatus =
   | "received"
   | "validating"
   | "prepared"
@@ -31,7 +32,7 @@ type LaunchStatus =
   | "failed"
   | "cancelled";
 
-type LaunchResource = Readonly<{
+export type LaunchResource = Readonly<{
   launchId: string;
   requestId: string;
   onchainLaunchId: `0x${string}` | null;
@@ -80,6 +81,16 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 const submittedPollIntervalMs = 12_000;
 const authorizedPollIntervalMs = 4_000;
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
+const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
+  received: 0,
+  validating: 1,
+  prepared: 2,
+  authorized: 3,
+  submitted: 4,
+  failed: 5,
+  cancelled: 5,
+  finalized: 6,
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -206,14 +217,27 @@ function shortId(value: string) {
 
 function statusCopy(status: LaunchStatus) {
   switch (status) {
-    case "received": return "Request saved";
-    case "validating": return "Checks in progress";
-    case "prepared": return "Launch prepared";
-    case "authorized": return "Review and sign in wallet";
-    case "submitted": return "Submitted onchain";
-    case "finalized": return "Finalized onchain";
-    case "failed": return "Launch failed";
+    case "received": return "Received";
+    case "validating": return "Validating";
+    case "prepared": return "Prepared";
+    case "authorized": return "Wallet action required";
+    case "submitted": return "Confirming onchain";
+    case "finalized": return "Finalized";
+    case "failed": return "Failed";
     case "cancelled": return "Cancelled";
+  }
+}
+
+function statusDescription(status: LaunchStatus) {
+  switch (status) {
+    case "received": return "The API accepted this request.";
+    case "validating": return "The API is validating the request.";
+    case "prepared": return "The launch transaction has been prepared.";
+    case "authorized": return "Review and sign the prepared transaction in your wallet.";
+    case "submitted": return "The wallet transaction is being tracked onchain.";
+    case "finalized": return "The Router recorded this launch.";
+    case "failed": return "This request did not complete.";
+    case "cancelled": return "This request was cancelled.";
   }
 }
 
@@ -234,6 +258,64 @@ function onchainTransactionHash(launch: LaunchResource) {
 
 function terminalStatus(status: LaunchStatus) {
   return status === "finalized" || status === "failed" || status === "cancelled";
+}
+
+function updatedAtTime(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function selectMonotonicLaunchResource(
+  current: LaunchResource,
+  incoming: LaunchResource,
+) {
+  if (current.requestId !== incoming.requestId) return incoming;
+  if (terminalStatus(current.status) && current.status !== incoming.status) {
+    return current;
+  }
+
+  const currentRank = launchStatusRank[current.status];
+  const incomingRank = launchStatusRank[incoming.status];
+  if (incomingRank < currentRank) return current;
+  if (incomingRank > currentRank) return incoming;
+  return updatedAtTime(incoming.updatedAt) > updatedAtTime(current.updatedAt)
+    ? incoming
+    : current;
+}
+
+export function mergeLaunchResources(
+  current: readonly LaunchResource[],
+  incoming: readonly LaunchResource[],
+  incomingOrderFirst: boolean,
+) {
+  const currentByRequestId = new Map(
+    current.map((launch) => [launch.requestId, launch] as const),
+  );
+  const incomingByRequestId = new Map(
+    incoming.map((launch) => [launch.requestId, launch] as const),
+  );
+
+  if (incomingOrderFirst) {
+    return [
+      ...incoming.map((launch) => {
+        const existing = currentByRequestId.get(launch.requestId);
+        return existing
+          ? selectMonotonicLaunchResource(existing, launch)
+          : launch;
+      }),
+      ...current.filter((launch) => !incomingByRequestId.has(launch.requestId)),
+    ];
+  }
+
+  return [
+    ...current.map((launch) => {
+      const updated = incomingByRequestId.get(launch.requestId);
+      return updated
+        ? selectMonotonicLaunchResource(launch, updated)
+        : launch;
+    }),
+    ...incoming.filter((launch) => !currentByRequestId.has(launch.requestId)),
+  ];
 }
 
 function pollDelay(milliseconds: number, signal: AbortSignal) {
@@ -276,6 +358,7 @@ export function DeveloperLaunchHistory({
   const [launches, setLaunches] = useState<LaunchResource[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -312,6 +395,7 @@ export function DeveloperLaunchHistory({
   const load = useCallback(async (
     cursor: string | null,
     signal?: AbortSignal,
+    refreshRequest = false,
   ) => {
     if (cursor !== null && loadMoreInFlightRef.current) return;
     if (cursor !== null) {
@@ -339,26 +423,25 @@ export function DeveloperLaunchHistory({
       const page = parseHistoryPage(body, account);
       if (!page) throw new Error("The API returned an invalid launch history.");
       if (requestSequence !== requestSequenceRef.current) return;
-      setLaunches((current) => cursor === null
-        ? page.launches
-        : [
-            ...current,
-            ...page.launches.filter((launch) =>
-              !current.some((existing) => existing.launchId === launch.launchId)
-            ),
-          ]);
+      setLaunches((current) => mergeLaunchResources(
+        current,
+        page.launches,
+        cursor === null,
+      ));
       setNextCursor(page.nextCursor);
       setState("ready");
+      if (refreshRequest) setStatusMessage("Launch history refreshed.");
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       if (requestSequence !== requestSequenceRef.current) return;
       setError(
         cause instanceof Error ? cause.message : "Unable to load launch history.",
       );
-      if (cursor === null) setState("error");
+      if (cursor === null && !refreshRequest) setState("error");
     } finally {
       if (cursor !== null) loadMoreInFlightRef.current = false;
       if (requestSequence === requestSequenceRef.current) setLoadingMore(false);
+      if (refreshRequest) setRefreshing(false);
     }
   }, [account, getAuthHeaders]);
 
@@ -390,9 +473,7 @@ export function DeveloperLaunchHistory({
   }, [account, getAuthHeaders]);
 
   const updateLaunch = useCallback((updated: LaunchResource) => {
-    setLaunches((current) => current.map((candidate) =>
-      candidate.requestId === updated.requestId ? updated : candidate
-    ));
+    setLaunches((current) => mergeLaunchResources(current, [updated], false));
   }, []);
 
   useEffect(() => {
@@ -414,9 +495,11 @@ export function DeveloperLaunchHistory({
   }, []);
 
   const refresh = () => {
-    setState("loading");
-    setNextCursor(null);
-    void load(null);
+    if (state === "loading" || loadingMore || refreshing) return;
+    setRefreshing(true);
+    setError("");
+    setStatusMessage("Refreshing launch history.");
+    void load(null, undefined, true);
   };
 
   const checkOnchainStatus = async (launch: LaunchResource) => {
@@ -548,7 +631,7 @@ export function DeveloperLaunchHistory({
   return (
     <section
       className={styles.history}
-      aria-busy={state === "loading" || loadingMore}
+      aria-busy={state === "loading" || loadingMore || refreshing}
       aria-labelledby="launch-history-title"
     >
       <p className={styles.visuallyHidden} role="status" aria-live="polite">
@@ -561,11 +644,18 @@ export function DeveloperLaunchHistory({
         </div>
         <button
           className={styles.textButton}
-          disabled={state === "loading" || loadingMore}
+          disabled={state === "loading" || loadingMore || refreshing}
           type="button"
           onClick={refresh}
         >
-          Refresh
+          <RefreshCw
+            aria-hidden="true"
+            className={styles.refreshIcon}
+            data-spinning={state === "loading" || refreshing ? "true" : "false"}
+            size={16}
+            strokeWidth={1.9}
+          />
+          {state === "loading" || refreshing ? "Refreshing" : "Refresh history"}
         </button>
       </div>
       <p className={styles.intro}>
@@ -603,12 +693,15 @@ export function DeveloperLaunchHistory({
               <li className={styles.launchItem} key={launch.launchId}>
                 <div className={styles.launchTopline}>
                   <div>
-                    <h3>Request {shortId(launch.requestId)}</h3>
+                    <h3>Launch {shortId(launch.requestId)}</h3>
                   </div>
                   <span className={styles.status} data-status={launch.status}>
                     {statusCopy(launch.status)}
                   </span>
                 </div>
+                <p className={styles.statusDescription}>
+                  {statusDescription(launch.status)}
+                </p>
                 <dl className={styles.metadata}>
                   <div>
                     <dt>Created</dt>

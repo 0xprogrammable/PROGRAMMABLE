@@ -625,6 +625,19 @@
     transform 120ms var(--ease-out);
 }
 
+.claimRefresh svg {
+  flex: none;
+}
+
+.claimRefresh span {
+  min-width: 64px;
+  text-align: start;
+}
+
+.claimRefreshActive {
+  color: var(--text);
+}
+
 .panelStatus {
   color: var(--muted);
   font-family: var(--font-instrument), Arial, sans-serif;
@@ -1284,40 +1297,62 @@
 
 .profileSkeleton {
   display: grid;
-  gap: 18px;
-  min-height: clamp(420px, 68svh, 680px);
+  gap: 16px;
   min-width: 0;
   padding-block-start: 12px;
 }
 
-.profileSkeletonHero {
-  align-items: center;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 56px minmax(0, 1fr);
-  min-height: 64px;
+.profileSkeletonInline {
+  min-height: 360px;
 }
 
+.profileSkeletonPage {
+  min-height: calc(100svh - 88px);
+}
+
+.profileSkeletonHero {
+  align-items: start;
+  display: grid;
+  gap: 0 20px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  min-height: 227px;
+}
+
+.profileSkeletonBanner,
 .profileSkeletonAvatar,
 .profileSkeletonCopy span,
 .profileSkeletonHeading,
 .profileSkeletonMetric,
 .profileSkeletonLine,
 .profileSkeletonBar,
+.profileSkeletonTabs,
+.profileSkeletonPredictionRow,
 .profileSkeletonRow > span {
   animation: profile-skeleton-pulse 1.4s ease-in-out infinite alternate;
   background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
+.profileSkeletonBanner {
+  border: 1px solid var(--profile-line);
+  border-radius: var(--webde-radius-card, 17px);
+  grid-column: 1 / -1;
+  height: 156px;
+  width: 100%;
+}
+
 .profileSkeletonAvatar {
-  border-radius: 15px;
-  height: 56px;
-  width: 56px;
+  border: 4px solid #000;
+  border-radius: 22px;
+  height: 92px;
+  margin-inline-start: 18px;
+  margin-top: -38px;
+  width: 92px;
 }
 
 .profileSkeletonCopy {
   display: grid;
   gap: 9px;
+  margin-top: 17px;
   max-width: 330px;
 }
 
@@ -1331,7 +1366,7 @@
 }
 
 .profileSkeletonCopy span:first-child {
-  height: 24px;
+  height: 38px;
   width: 48%;
 }
 
@@ -1341,23 +1376,44 @@
 }
 
 .profileSkeletonWorkspace {
-  background: var(--profile-panel);
-  border: 1px solid var(--profile-line);
-  border-radius: 24px;
   display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.62fr);
-  min-height: 330px;
-  padding: 10px;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 360px;
 }
 
 .profileSkeletonSummary,
-.profileSkeletonClaims {
-  background: var(--profile-subtle);
-  border-radius: 18px;
+.profileSkeletonClaims,
+.profileSkeletonSection {
+  background: var(--profile-panel);
+  border: 1px solid var(--profile-line);
+  border-radius: var(--webde-radius-card, 17px);
   display: grid;
   gap: 18px;
-  padding: 24px;
+  padding: 20px;
+}
+
+.profileSkeletonSection {
+  align-content: start;
+  min-height: 285px;
+}
+
+.profileSkeletonPrediction {
+  min-height: 220px;
+}
+
+.profileSkeletonTabs {
+  border-radius: 12px;
+  display: block;
+  height: 52px;
+  width: 100%;
+}
+
+.profileSkeletonPredictionRow {
+  border-radius: 11px;
+  display: block;
+  height: 92px;
+  width: 100%;
 }
 
 .profileSkeletonHeading {
@@ -1829,21 +1885,14 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .profileReveal {
-    animation: profile-content-reveal 420ms cubic-bezier(0.32, 0.72, 0, 1)
-      both;
+  .claimRefreshActive svg {
+    animation: profile-refresh-spin 700ms linear infinite;
   }
 }
 
-@keyframes profile-content-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
+@keyframes profile-refresh-spin {
   to {
-    opacity: 1;
-    transform: translateY(0);
+    transform: rotate(1turn);
   }
 }
 
@@ -1855,6 +1904,7 @@
   .claimButton,
   .secondaryAction,
   .retryButton,
+  .claimRefresh,
   .claimDialogClose,
   .timeframeControls button,
   .claimPagination button,
@@ -1862,12 +1912,15 @@
     transition: none;
   }
 
+  .profileSkeletonBanner,
   .profileSkeletonAvatar,
   .profileSkeletonCopy span,
   .profileSkeletonHeading,
   .profileSkeletonMetric,
   .profileSkeletonLine,
   .profileSkeletonBar,
+  .profileSkeletonTabs,
+  .profileSkeletonPredictionRow,
   .profileSkeletonRow > span {
     animation: none;
   }
@@ -2447,5 +2500,33 @@
 
   .portfolio {
     margin-top: 28px;
+  }
+
+  .profileSkeletonHero {
+    gap: 0 14px;
+    grid-template-columns: 76px minmax(0, 1fr);
+    min-height: 175px;
+  }
+
+  .profileSkeletonBanner {
+    border-radius: 12px;
+    height: 108px;
+  }
+
+  .profileSkeletonAvatar {
+    border-radius: 17px;
+    height: 72px;
+    margin-inline-start: 10px;
+    margin-top: -26px;
+    width: 72px;
+  }
+
+  .profileSkeletonCopy {
+    margin-top: 13px;
+  }
+
+  .profileSkeletonCopy span:first-child {
+    height: 27px;
+    width: 62%;
   }
 }

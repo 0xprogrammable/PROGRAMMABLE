@@ -361,21 +361,53 @@ function stagedFetch(
   };
 }
 
-function routerCustomStagedFetch(mutate = (value) => value) {
-  const launchSource =
-    "envio-classic-v3+canonical-launch-stamp-router";
+function routerCustomStagedFetch(
+  mutate = (value) => value,
+  {
+    registryCustomStatus = "unavailable",
+    routerCustomStatus = "current",
+  } = {},
+) {
+  const routerCustomAvailable =
+    routerCustomStatus === "current" ||
+    routerCustomStatus === "last-known-good";
+  const launchSource = [
+    "envio-classic-v3",
+    ...(registryCustomStatus === "current"
+      ? ["registry.custom-launched"]
+      : []),
+    ...(routerCustomAvailable
+      ? ["canonical-launch-stamp-router"]
+      : []),
+  ].join("+");
+  const customStatus =
+    registryCustomStatus === "current" && routerCustomStatus === "current"
+      ? "current"
+      : registryCustomStatus === "current" &&
+          routerCustomStatus === "last-known-good"
+        ? "last-known-good"
+        : "unavailable";
   return stagedFetch(
     ({ body, url }) => {
       if (url.pathname === "/api/explore") {
         return {
           ...body,
           tokens: [mutate(routerCustomEntry()), entry(1)],
+          dataQuality: {
+            ...body.dataQuality,
+            launchIdentity: {
+              ...body.dataQuality.launchIdentity,
+              custom: customStatus,
+            },
+          },
           catalog: {
             ...body.catalog,
             launchSource,
             completeness: {
               ...body.catalog.completeness,
-              routerCustom: "current",
+              custom: customStatus,
+              registryCustom: registryCustomStatus,
+              routerCustom: routerCustomStatus,
             },
             scope: {
               ...body.catalog.scope,
@@ -396,7 +428,9 @@ function routerCustomStagedFetch(mutate = (value) => value) {
             launchSource,
             completeness: {
               ...body.catalog.completeness,
-              routerCustom: "current",
+              custom: customStatus,
+              registryCustom: registryCustomStatus,
+              routerCustom: routerCustomStatus,
             },
             scope: {
               ...body.catalog.scope,
@@ -565,6 +599,27 @@ test("staged smoke accepts an exact Router Custom token identity", async () => {
       GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
     },
     fetchImpl: routerCustomStagedFetch(),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.tokenAddress, ROUTER_TOKEN);
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+});
+
+test("staged smoke accepts a bounded Router last-known-good identity", async () => {
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: routerCustomStagedFetch(
+      (value) => value,
+      {
+        registryCustomStatus: "current",
+        routerCustomStatus: "last-known-good",
+      },
+    ),
     appendOutput: () => undefined,
   });
 
@@ -1109,7 +1164,7 @@ test("staged smoke accepts the exact Envio plus RPC creator profile source", asy
   assert.equal(result.profileStatus, "ready");
 });
 
-test("staged smoke accepts the exact Router-combined Envio creator profile source", async () => {
+test("staged smoke accepts the bounded last-good Router-combined Envio creator profile source", async () => {
   const result = await runStagedStaticDexscreenerSmokeV1({
     environment: {
       STAGED_TARGET_URL: "https://candidate.vercel.app/",
@@ -1124,7 +1179,7 @@ test("staged smoke accepts the exact Router-combined Envio creator profile sourc
               "envio-classic-v3+canonical-launch-stamp-router",
             "x-programmable-read-source":
               "envio-classic-v3+canonical-launch-stamp-router",
-            "x-programmable-router-read-status": "current",
+            "x-programmable-router-read-status": "last-known-good",
             "x-programmable-rpc-provider": "envio-indexer-state",
           }
         : extraHeaders,

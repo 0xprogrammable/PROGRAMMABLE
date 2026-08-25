@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 
 import {
+  predictionMarketDetailIdentityMatchesV1,
+} from "../components/prediction-market-detail";
+import {
   createPredictionPortfolioRequest,
   derivePredictionPortfolioPosition,
   isPredictionPortfolioRequestCurrent,
@@ -356,6 +359,95 @@ describe("prediction profile regression contract", () => {
         12,
       ),
     ).toBe(true);
+  });
+
+  it("keeps probability, payout, and action columns aligned across cards", () => {
+    expect(
+      cssDeclarationsFor(portfolioStyles, ".portfolioCard"),
+    ).toMatch(
+      /grid-template-columns\s*:\s*58px minmax\(210px,\s*1fr\) 252px 148px/u,
+    );
+
+    const metricColumns = cssDeclarationsFor(
+      portfolioStyles,
+      ".portfolioMetrics",
+    );
+    expect(metricColumns).toMatch(
+      /grid-template-columns\s*:\s*108px minmax\(0,\s*1fr\)/u,
+    );
+    expect(metricColumns).toMatch(/align-items\s*:\s*start/u);
+    expect(
+      cssDeclarationsFor(portfolioStyles, ".portfolioMetrics > div"),
+    ).toMatch(/justify-content\s*:\s*flex-start/u);
+    expect(
+      cssDeclarationsFor(portfolioStyles, ".portfolioMetrics dd"),
+    ).toMatch(/font-variant-numeric\s*:\s*tabular-nums/u);
+
+    const actionSlot = cssDeclarationsFor(
+      portfolioStyles,
+      ".portfolioCardActions",
+    );
+    expect(actionSlot).toMatch(/min-width\s*:\s*0/u);
+    expect(actionSlot).toMatch(/width\s*:\s*100%/u);
+    expect(
+      cssDeclarationsFor(portfolioStyles, ".portfolioCardActions a"),
+    ).toMatch(/width\s*:\s*100%/u);
+  });
+
+  it("keeps the last market visible while refresh gives explicit feedback", () => {
+    expect(detailSource).toContain(
+      "const [refreshing, setRefreshing] = useState(false)",
+    );
+    expect(
+      predictionMarketDetailIdentityMatchesV1(
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+      ),
+    ).toBe(true);
+    expect(
+      predictionMarketDetailIdentityMatchesV1(
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+        { accountKey: "0xbbb", semanticKey: "0xmarket" },
+      ),
+    ).toBe(false);
+    expect(
+      predictionMarketDetailIdentityMatchesV1(
+        { accountKey: "0xaaa", semanticKey: "0xmarket" },
+        { accountKey: "0xaaa", semanticKey: "0xother" },
+      ),
+    ).toBe(false);
+    expect(detailSource).toContain(
+      "const lastMarketRef = useRef<LastMarketState | null>(null)",
+    );
+    expect(detailSource).toMatch(
+      /if \(!preserveCurrentMarket\) \{\s*lastMarketRef\.current = null;\s*setLoadState\(\{/u,
+    );
+    expect(detailSource).toContain(
+      "candidate.accountKey === expected.accountKey",
+    );
+    expect(detailSource).toContain(
+      "candidate.semanticKey === expected.semanticKey",
+    );
+    expect(detailSource).toContain(
+      'if (!loadStateIsCurrent || loadState.kind === "loading")',
+    );
+    expect(detailSource).toContain(
+      '"Unable to refresh. Showing the last loaded market."',
+    );
+    expect(detailSource).toContain("aria-busy={refreshing}");
+    expect(detailSource).toContain(
+      'const busy = phase !== "idle" || refreshing',
+    );
+    expect(detailSource).toContain("disabled={busy}");
+    expect(detailSource).toContain(
+      '{refreshing ? "Refreshing" : "Refresh market"}',
+    );
+    expect(
+      cssDeclarationsFor(portfolioStyles, ".refreshMarket"),
+    ).toMatch(/min-width\s*:\s*128px/u);
+    expect(portfolioStyles).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\) \{\s*\.refreshMarket\[aria-busy="true"\] svg \{\s*animation: prediction-market-refresh-spin 800ms linear infinite;/u,
+    );
   });
 
   it("does not present an OPEN market as tradable after its cutoff", () => {

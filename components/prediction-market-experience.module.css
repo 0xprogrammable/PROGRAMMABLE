@@ -871,7 +871,34 @@
   justify-content: center;
   margin: 14px auto 0;
   min-height: 44px;
+  min-width: 128px;
   padding: 0 10px;
+}
+
+.refreshMarket:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.refreshMarketStatus {
+  color: var(--webde-dim);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 12px 0 0;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .refreshMarket[aria-busy="true"] svg {
+    animation: prediction-market-refresh-spin 800ms linear infinite;
+  }
+}
+
+@keyframes prediction-market-refresh-spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 .settlementTerminal {
@@ -1089,7 +1116,7 @@
   box-shadow: 0 0 0 1px var(--webde-line, var(--profile-line, var(--border)));
   display: grid;
   gap: 14px;
-  grid-template-columns: 58px minmax(210px, 1.35fr) minmax(220px, 0.9fr) auto;
+  grid-template-columns: 58px minmax(210px, 1fr) 252px 148px;
   min-width: 0;
   padding: 10px;
 }
@@ -1279,9 +1306,10 @@
 }
 
 .portfolioMetrics {
+  align-items: start;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(90px, 0.65fr) minmax(132px, 1.35fr);
+  grid-template-columns: 108px minmax(0, 1fr);
   margin: 0;
   min-width: 0;
 }
@@ -1291,7 +1319,7 @@
     var(--webde-line, var(--profile-line, var(--border)));
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
   padding-inline-start: 12px;
 }
@@ -1334,6 +1362,8 @@
 .portfolioCardActions {
   display: flex;
   justify-content: flex-end;
+  min-width: 0;
+  width: 100%;
 }
 
 .portfolioCardActions a {
@@ -1343,6 +1373,7 @@
   gap: 6px;
   padding-inline: 13px 11px;
   white-space: nowrap;
+  width: 100%;
 }
 
 .portfolioCardActions a[data-tone="primary"] {

@@ -25,6 +25,7 @@ import {
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileNativeClaimMeetsVisibilityThreshold,
+  prioritizedProfileActionState,
   profileRouterLaunchEntries,
   profileRewardsForAccount,
   profileRewardActionErrorMessage,
@@ -472,12 +473,15 @@ describe("profile workspace loading state", () => {
     );
   });
 
-  it("reveals the profile shell while reward sources load progressively", () => {
+  it("holds cold profile geometry until wallet and local profile hydration settle", () => {
     expect(profileViewSource).toContain(
-      'className={styles.profileSkeleton}',
+      "showHero ? styles.profileSkeletonPage : styles.profileSkeletonInline",
     );
     expect(profileViewSource).toContain(
       'if (phase === "loading")',
+    );
+    expect(profileViewSource).toContain(
+      'if (!clientHydrated || sessionView === "loading")',
     );
     expect(profileViewSource).not.toContain(
       'if (profileWorkspacePhase === "loading")',
@@ -485,12 +489,37 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).not.toContain("styles.sessionLoadingWorkspace");
     expect(profileViewSource).not.toContain("styles.loadingPanelTitle");
     expect(profileExperienceCss).toMatch(
-      /\.profileSkeleton\s*\{[^}]*min-height:/s,
+      /\.profileSkeletonPage\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);/s,
     );
     expect(profileExperienceCss).toMatch(
-      /\.profileReveal\s*\{[^}]*animation: profile-content-reveal/s,
+      /\.profileSkeletonBanner\s*\{[^}]*height:\s*156px;/s,
     );
+    expect(profileExperienceCss).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonBanner\s*\{[^}]*height:\s*108px;/s,
+    );
+    expect(profileViewSource).toContain("styles.profileSkeletonSection");
+    expect(profileExperienceCss).not.toContain("profile-content-reveal");
     expect(profileExperienceCss).toContain("profile-skeleton-pulse");
+  });
+
+  it("keeps warm reward refreshes visible, announced and motion-safe", () => {
+    expect(profileViewSource).toContain("requestProfileRefresh(true)");
+    expect(profileViewSource).toContain(
+      'completeProfileRefreshSource(profileRefresh, "creator")',
+    );
+    expect(profileViewSource).toContain(
+      '{refreshing ? "Refreshing" : "Refresh"}',
+    );
+    expect(profileViewSource).toContain("aria-busy={refreshing || undefined}");
+    expect(profileViewSource).toContain(
+      '{refreshing ? "Refreshing rewards" : ""}',
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.claimRefreshActive svg\s*\{[^}]*animation:\s*profile-refresh-spin/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.claimRefresh[\s\S]*?transition:\s*none;/s,
+    );
   });
 });
 
@@ -1058,7 +1087,7 @@ describe("profile transaction status", () => {
         message: "Still pending on Ethereum",
         transactionHash,
       }),
-    ).toBe("Confirming");
+    ).toBe("Check status");
     expect(
       actionPending({
         account: firstAddress,
@@ -1074,7 +1103,7 @@ describe("profile transaction status", () => {
         message: "Still pending on Ethereum",
         transactionHash,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("preserves a not-found hash as a checkable non-busy state", async () => {
@@ -1096,9 +1125,42 @@ describe("profile transaction status", () => {
       transactionHash,
     };
     expect(actionCanCheckStatus(state)).toBe(true);
-    expect(actionLabel(state)).toBe("Rechecking");
+    expect(actionLabel(state)).toBe("Check status");
     expect(actionPending(state)).toBe(false);
-    expect(actionSettling(state)).toBe(true);
+    expect(actionSettling(state)).toBe(false);
+    expect(profileViewSource).toContain(
+      "group.actions.some((action) => actionPending(action.state))",
+    );
+    expect(profileViewSource).toContain(
+      "disabled={rowActionPending || claimGroups.length === 0}",
+    );
+    expect(profileViewSource.match(/actionSettling\(/gu)).toHaveLength(1);
+  });
+
+  it("prioritizes the active claim phase over stale checkable states", () => {
+    const stalePending = {
+      account: firstAddress,
+      status: "pending" as const,
+      message: "Still pending on Ethereum",
+      transactionHash,
+    };
+    const activeWallet = {
+      account: firstAddress,
+      status: "wallet" as const,
+      message: "Confirm in wallet",
+    };
+
+    expect(
+      prioritizedProfileActionState([stalePending, activeWallet]),
+    ).toEqual(activeWallet);
+    expect(
+      actionLabel(
+        prioritizedProfileActionState([stalePending, activeWallet]),
+      ),
+    ).toBe("Confirm in wallet");
+    expect(profileViewSource).toContain(
+      "<ProfileActionState state={rowActionState} />",
+    );
   });
 
   it("releases a repeatedly missing hash so the next claim can retry", () => {
@@ -1106,12 +1168,12 @@ describe("profile transaction status", () => {
       release: false,
       status: "not-found",
       message:
-        "Transaction is not visible yet. Check your wallet activity, then check again.",
+        "Still waiting for the transaction. Check your wallet activity, then select Check status.",
     });
     expect(resolveProfileNotFoundTransaction(true)).toEqual({
       release: true,
       status: "error",
-      message: "Transaction not found. You can try again.",
+      message: "No transaction was found. You can submit the claim again.",
     });
     expect(profileViewSource).toMatch(
       /if \(resolution\.release\) \{\s*forgetPendingProfileTransaction\(pendingTransaction\);/s,

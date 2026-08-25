@@ -19,8 +19,7 @@
   min-width: 0;
 }
 
-.kicker,
-.accountLabel {
+.kicker {
   color: var(--webde-dim);
   font-size: 12px;
   font-weight: 650;
@@ -126,41 +125,6 @@
   margin-top: 12px;
   max-width: 400px;
   width: 82%;
-}
-
-.accountBar {
-  align-items: center;
-  border-bottom: 1px solid var(--api-line);
-  border-top: 1px solid var(--api-line);
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  min-height: 52px;
-  padding-block: 6px;
-}
-
-.accountBar > div {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-  min-width: 0;
-}
-
-.accountBar code {
-  color: var(--webde-ink);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 13px;
-}
-
-.accountActions {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
-.accountActions p {
-  color: var(--webde-dim);
-  font-size: 13px;
 }
 
 .sectionSwitch {
@@ -303,15 +267,10 @@
 }
 
 .workspace {
-  align-items: stretch;
+  align-items: start;
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  height: clamp(
-    380px,
-    calc(100svh - var(--header-height) - 282px),
-    440px
-  );
 }
 
 .panel {
@@ -321,20 +280,13 @@
   box-shadow: none;
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-width: 0;
-  overflow: hidden;
   padding: 22px;
 }
 
 .createPanel,
 .listPanel {
   min-width: 0;
-}
-
-.createPanel {
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .panelHeading {
@@ -344,10 +296,8 @@
 
 .createForm {
   display: flex;
-  flex: 1;
   flex-direction: column;
   margin-top: 18px;
-  min-height: 0;
 }
 
 .formFields {
@@ -372,8 +322,7 @@
   font-weight: 620;
 }
 
-.field input,
-.field select {
+.field input {
   background: var(--webde-control);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-control);
@@ -384,12 +333,102 @@
   width: 100%;
 }
 
-.field select {
-  appearance: auto;
-}
-
 .field input[aria-invalid="true"] {
   border-color: var(--danger);
+}
+
+.expirySelect {
+  min-width: 0;
+  position: relative;
+}
+
+.expirySelect:has(.expiryTrigger[aria-expanded="true"]) {
+  z-index: 4;
+}
+
+.expiryTrigger {
+  align-items: center;
+  background: var(--webde-control);
+  border: 1px solid var(--api-line);
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-ink);
+  display: flex;
+  font: inherit;
+  font-size: 16px;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding-inline: 12px;
+  text-align: start;
+  transition:
+    background-color 150ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 150ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 150ms cubic-bezier(0.32, 0.72, 0, 1);
+  width: 100%;
+}
+
+.expiryTrigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expiryTrigger > svg {
+  color: var(--webde-dim);
+  flex: none;
+  transition: transform 150ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.expiryTrigger[aria-expanded="true"] {
+  background: var(--api-panel-strong);
+  border-color: color-mix(in srgb, var(--focus) 58%, var(--api-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+
+.expiryTrigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.expiryMenu {
+  background: var(--api-panel-strong);
+  border: 1px solid var(--popover-border);
+  border-radius: calc(var(--webde-radius-control) + 2px);
+  box-shadow: 0 18px 48px var(--overlay-shadow);
+  display: grid;
+  gap: 3px;
+  inset-block-start: calc(100% + 6px);
+  inset-inline: 0;
+  padding: 5px;
+  position: absolute;
+  z-index: 5;
+}
+
+.expiryOption {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--webde-radius-control) - 2px);
+  color: var(--webde-muted);
+  display: flex;
+  font: inherit;
+  font-size: 14px;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding-inline: 10px;
+  text-align: start;
+  width: 100%;
+}
+
+.expiryOption[aria-selected="true"] {
+  background: var(--webde-control);
+  color: var(--webde-ink);
+}
+
+.expiryOption > svg {
+  color: var(--success);
+  flex: none;
 }
 
 .inlineError {
@@ -492,7 +531,7 @@
 }
 
 .createForm > .primaryButton {
-  margin-top: auto;
+  margin-top: 20px;
   width: 100%;
 }
 
@@ -515,6 +554,14 @@
   color: var(--webde-muted);
 }
 
+.textButton {
+  gap: 7px;
+}
+
+.refreshIcon {
+  flex: none;
+}
+
 .revokeButton {
   justify-self: start;
   margin-top: 12px;
@@ -533,13 +580,8 @@
 .keyList {
   align-content: start;
   display: grid;
-  flex: 1;
   gap: 12px;
   margin-top: 20px;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-inline-end: 4px;
 }
 
 .keyItem {
@@ -725,6 +767,11 @@
     background: var(--webde-control);
   }
 
+  .expiryOption:not([aria-selected="true"]):hover {
+    background: color-mix(in srgb, var(--webde-control) 68%, transparent);
+    color: var(--webde-ink);
+  }
+
   .dangerButton:not(:disabled):hover {
     filter: brightness(1.08);
   }
@@ -741,8 +788,10 @@
 .dismissButton:active,
 .revokeButton:active,
 .textButton:active,
-.sectionSwitch button:active {
-  transform: scale(0.98);
+.sectionSwitch button:active,
+.expiryTrigger:active,
+.expiryOption:active {
+  transform: scale(0.96);
 }
 
 .primaryButton:focus-visible,
@@ -753,7 +802,8 @@
 .textButton:focus-visible,
 .scopeLedger summary:focus-visible,
 .field input:focus-visible,
-.field select:focus-visible {
+.expiryTrigger:focus-visible,
+.expiryOption:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
@@ -765,8 +815,7 @@
   }
 
   .panel {
-    min-height: 360px;
-    overflow: visible;
+    min-height: 0;
   }
 }
 
@@ -786,19 +835,6 @@
   .intro {
     font-size: 16px;
     margin-top: 16px;
-  }
-
-  .accountBar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-    padding-block: 12px;
-  }
-
-  .accountBar > div {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
   }
 
   .walletGate,
@@ -866,6 +902,18 @@
   }
 }
 
+@keyframes refreshSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .refreshIcon[data-spinning="true"] {
+    animation: refreshSpin 720ms linear infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .primaryButton,
   .secondaryButton,
@@ -873,7 +921,9 @@
   .dismissButton,
   .revokeButton,
   .textButton,
-  .sectionSwitch button {
+  .sectionSwitch button,
+  .expiryTrigger,
+  .expiryOption {
     transition: none;
   }
 
@@ -895,7 +945,10 @@
   .panel,
   .keyReveal,
   .walletGate,
-  .sectionSwitch {
+  .sectionSwitch,
+  .expiryTrigger,
+  .expiryMenu,
+  .expiryOption {
     border: 1px solid CanvasText;
   }
 

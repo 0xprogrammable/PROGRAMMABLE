@@ -67,11 +67,30 @@ import {
   type PredictionTradeMode,
 } from "@/lib/prediction-market-quote-selection";
 
-type MarketLoadState =
+type MarketLoadIdentity = Readonly<{
+  accountKey: string;
+  semanticKey: string;
+}>;
+
+type MarketLoadState = MarketLoadIdentity & (
   | { kind: "loading" }
   | { kind: "preview"; market: PredictionMarketView }
   | { kind: "live"; market: PredictionMarketView }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+);
+
+type LastMarketState = MarketLoadIdentity & Readonly<{
+  market: PredictionMarketView;
+}>;
+
+export function predictionMarketDetailIdentityMatchesV1(
+  candidate: MarketLoadIdentity | null,
+  expected: MarketLoadIdentity,
+) {
+  return candidate !== null &&
+    candidate.accountKey === expected.accountKey &&
+    candidate.semanticKey === expected.semanticKey;
+}
 
 type LiveQuote =
   | { kind: "BUY"; value: PredictionBuyQuote }
@@ -352,8 +371,12 @@ export function PredictionMarketDetail({
   const walletAccountKey = walletAccount?.toLowerCase() ?? "";
   const normalizedSemanticKey = semanticKey.toLowerCase();
   const [loadState, setLoadState] = useState<MarketLoadState>({
+    accountKey: walletAccountKey,
     kind: "loading",
+    semanticKey: normalizedSemanticKey,
   });
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
   const [mode, setMode] = useState<PredictionTradeMode>("BUY");
   const [outcome, setOutcome] = useState<PredictionOutcome>("YES");
   const [amount, setAmount] = useState("10");
@@ -372,6 +395,7 @@ export function PredictionMarketDetail({
   const activeMarketLoadRequest = useRef<PredictionMarketLoadRequestV1 | null>(
     null,
   );
+  const lastMarketRef = useRef<LastMarketState | null>(null);
   const marketActionGeneration = useRef(0);
   const activeMarketActionRequest =
     useRef<PredictionMarketLoadRequestV1 | null>(null);
@@ -417,6 +441,14 @@ export function PredictionMarketDetail({
       semanticKey: normalizedSemanticKey,
     } satisfies PredictionMarketLoadRequestV1;
     activeMarketLoadRequest.current = request;
+    const requestIsCurrent = () =>
+      isPredictionMarketLoadRequestCurrent(
+        request,
+        activeMarketLoadRequest.current,
+      ) && predictionMarketDetailIdentityMatchesV1(request, {
+        accountKey: walletAccountKeyRef.current,
+        semanticKey: semanticKeyRef.current,
+      });
     quoteRequestId.current += 1;
     if (quotePhaseRequestId.current !== null) {
       quotePhaseRequestId.current = null;
@@ -430,68 +462,94 @@ export function PredictionMarketDetail({
     setLiveQuote(null);
     setShownQuote(null);
     setQuotedSelectionKey(null);
+    setRefreshError("");
+    const preserveCurrentMarket = predictionMarketDetailIdentityMatchesV1(
+      lastMarketRef.current,
+      request,
+    );
+    setRefreshing(preserveCurrentMarket);
+    if (!preserveCurrentMarket) {
+      lastMarketRef.current = null;
+      setLoadState({
+        accountKey: request.accountKey,
+        kind: "loading",
+        semanticKey: request.semanticKey,
+      });
+    }
     await Promise.resolve();
-    if (
-      !isPredictionMarketLoadRequestCurrent(
-        request,
-        activeMarketLoadRequest.current,
-      )
-    )
-      return;
-    if (!release.config) {
-      const market = predictionPreviewMarkets(
-        Math.floor(Date.now() / 1_000),
-      ).find(
-        (candidate) =>
-          candidate.semanticKey.toLowerCase() === semanticKey.toLowerCase(),
-      );
-      if (!market) {
-        if (
-          isPredictionMarketLoadRequestCurrent(
-            request,
-            activeMarketLoadRequest.current,
-          )
-        ) {
+    if (!requestIsCurrent()) return;
+    try {
+      if (!release.config) {
+        const market = predictionPreviewMarkets(
+          Math.floor(Date.now() / 1_000),
+        ).find(
+          (candidate) =>
+            candidate.semanticKey.toLowerCase() === semanticKey.toLowerCase(),
+        );
+        if (!market) {
+          if (requestIsCurrent()) {
+            lastMarketRef.current = null;
+            setLoadState({
+              accountKey: request.accountKey,
+              kind: "error",
+              message: "This preview market does not exist",
+              semanticKey: request.semanticKey,
+            });
+          }
+          return;
+        }
+        if (requestIsCurrent()) {
+          lastMarketRef.current = {
+            accountKey: request.accountKey,
+            market,
+            semanticKey: request.semanticKey,
+          };
           setLoadState({
-            kind: "error",
-            message: "This preview market does not exist",
+            accountKey: request.accountKey,
+            kind: "preview",
+            market,
+            semanticKey: request.semanticKey,
           });
         }
         return;
       }
-      if (
-        isPredictionMarketLoadRequestCurrent(
-          request,
-          activeMarketLoadRequest.current,
-        )
-      ) {
-        setLoadState({ kind: "preview", market });
-      }
-      return;
-    }
-    setLoadState({ kind: "loading" });
-    try {
       const market = await readPredictionMarket({
         account: walletAccount,
         config: release.config,
         semanticKey,
       });
-      if (
-        isPredictionMarketLoadRequestCurrent(
-          request,
-          activeMarketLoadRequest.current,
-        )
-      ) {
-        setLoadState({ kind: "live", market });
+      if (requestIsCurrent()) {
+        lastMarketRef.current = {
+          accountKey: request.accountKey,
+          market,
+          semanticKey: request.semanticKey,
+        };
+        setLoadState({
+          accountKey: request.accountKey,
+          kind: "live",
+          market,
+          semanticKey: request.semanticKey,
+        });
       }
     } catch (error) {
-      if (
-        isPredictionMarketLoadRequestCurrent(
-          request,
-          activeMarketLoadRequest.current,
-        )
-      ) {
-        setLoadState({ kind: "error", message: getErrorMessage(error) });
+      if (requestIsCurrent()) {
+        if (preserveCurrentMarket) {
+          setRefreshError(
+            "Unable to refresh. Showing the last loaded market.",
+          );
+        } else {
+          lastMarketRef.current = null;
+          setLoadState({
+            accountKey: request.accountKey,
+            kind: "error",
+            message: getErrorMessage(error),
+            semanticKey: request.semanticKey,
+          });
+        }
+      }
+    } finally {
+      if (requestIsCurrent()) {
+        setRefreshing(false);
       }
     }
   }, [
@@ -523,9 +581,15 @@ export function PredictionMarketDetail({
     };
   }, [refresh]);
 
-  const market = "market" in loadState ? loadState.market : null;
-  const preview = loadState.kind === "preview";
-  const busy = phase !== "idle";
+  const loadStateIsCurrent = predictionMarketDetailIdentityMatchesV1(
+    loadState,
+    { accountKey: walletAccountKey, semanticKey: normalizedSemanticKey },
+  );
+  const market = loadStateIsCurrent && "market" in loadState
+    ? loadState.market
+    : null;
+  const preview = loadStateIsCurrent && loadState.kind === "preview";
+  const busy = phase !== "idle" || refreshing;
   const currentQuoteSelectionKey = predictionQuoteSelectionKey({
     amount,
     marketIdentity: market
@@ -870,7 +934,7 @@ export function PredictionMarketDetail({
     }
   }
 
-  if (loadState.kind === "loading") {
+  if (!loadStateIsCurrent || loadState.kind === "loading") {
     return (
       <main className={`page-width ${styles.detailPage}`}>
         <div className={styles.detailLoading}>Loading market…</div>
@@ -924,7 +988,10 @@ export function PredictionMarketDetail({
             : null;
 
   return (
-    <main className={`page-width ${styles.detailPage}`}>
+    <main
+      aria-busy={refreshing}
+      className={`page-width ${styles.detailPage}`}
+    >
       <Link className={styles.detailBack} href="/markets">
         <ArrowLeft aria-hidden="true" size={15} /> Predictions
       </Link>
@@ -1398,13 +1465,29 @@ export function PredictionMarketDetail({
               {message}
             </p>
           ) : null}
+          <p
+            aria-atomic="true"
+            aria-live="polite"
+            className="sr-only"
+            role="status"
+          >
+            {refreshing ? "Refreshing market data." : refreshError}
+          </p>
+          {refreshError ? (
+            <p className={styles.refreshMarketStatus} id="market-refresh-status">
+              {refreshError}
+            </p>
+          ) : null}
           <button
+            aria-busy={refreshing}
+            aria-describedby={refreshError ? "market-refresh-status" : undefined}
             className={styles.refreshMarket}
             type="button"
             disabled={busy}
             onClick={() => void refresh()}
           >
-            <RefreshCw aria-hidden="true" size={13} /> Refresh market
+            <RefreshCw aria-hidden="true" size={13} />
+            {refreshing ? "Refreshing" : "Refresh market"}
           </button>
         </aside>
       </div>

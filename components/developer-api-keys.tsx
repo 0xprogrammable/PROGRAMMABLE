@@ -4,11 +4,12 @@ import Image from "next/image";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
+import { Check, ChevronDown, RefreshCw } from "lucide-react";
 
 import styles from "@/components/developer-api-keys.module.css";
 import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
@@ -18,7 +19,7 @@ import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
 import type { CustomLaunchWalletActionV1 } from
   "@/lib/custom-launch/wallet-handoff-v1";
 
-type ApiKeySummary = Readonly<{
+export type ApiKeySummary = Readonly<{
   id: string;
   label: string;
   keyPrefix: string;
@@ -37,6 +38,7 @@ type CreatedApiKey = Readonly<{
 type ListState = "idle" | "loading" | "ready" | "error";
 type CreateState = "idle" | "creating";
 type ActiveSection = "keys" | "history";
+type ApiKeyLoadMode = "initial" | "refresh" | "mutation";
 type DeveloperApiKeysViewProps = Readonly<{
   account: `0x${string}` | null;
   authReady: boolean;
@@ -55,6 +57,7 @@ const expiryOptions = [
   { value: 180, label: "180 days" },
   { value: 366, label: "366 days" },
 ] as const;
+type ExpiryDays = (typeof expiryOptions)[number]["value"];
 
 const fixedScopes = ["custom-launch:create", "custom-launch:read"] as const;
 const schemaVersion = "programmable.custom-launch-api.v1";
@@ -134,6 +137,47 @@ function parseCreatedApiKey(value: unknown): CreatedApiKey | null {
   return { apiKey, apiKeySecret: value.apiKeySecret };
 }
 
+function latestNullableTimestamp(
+  current: string | null,
+  incoming: string | null,
+) {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  const currentTime = Date.parse(current);
+  const incomingTime = Date.parse(incoming);
+  if (!Number.isFinite(currentTime)) return incoming;
+  if (!Number.isFinite(incomingTime)) return current;
+  return incomingTime > currentTime ? incoming : current;
+}
+
+export function mergeApiKeySummaries(
+  current: readonly ApiKeySummary[],
+  incoming: readonly ApiKeySummary[],
+) {
+  const currentById = new Map(
+    current.map((apiKey) => [apiKey.id, apiKey] as const),
+  );
+  const incomingIds = new Set(incoming.map((apiKey) => apiKey.id));
+  return [
+    ...incoming.map((apiKey) => {
+      const existing = currentById.get(apiKey.id);
+      if (!existing) return apiKey;
+      return {
+        ...apiKey,
+        lastUsedAt: latestNullableTimestamp(
+          existing.lastUsedAt,
+          apiKey.lastUsedAt,
+        ),
+        revokedAt: latestNullableTimestamp(
+          existing.revokedAt,
+          apiKey.revokedAt,
+        ),
+      };
+    }),
+    ...current.filter((apiKey) => !incomingIds.has(apiKey.id)),
+  ];
+}
+
 function readApiError(response: Response, value: unknown, fallback: string) {
   if (!isRecord(value) || !isRecord(value.error)) return fallback;
   const message = typeof value.error.message === "string" && value.error.message.trim()
@@ -161,10 +205,6 @@ function formatDate(value: string | null, fallback: string) {
   if (!value) return fallback;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? fallback : dateFormatter.format(date);
-}
-
-function shortenAddress(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
 function keyStatus(key: ApiKeySummary) {
@@ -214,6 +254,162 @@ function KeyListSkeleton() {
   );
 }
 
+function ExpirySelect({
+  onChange,
+  value,
+}: Readonly<{
+  onChange: (value: ExpiryDays) => void;
+  value: ExpiryDays;
+}>) {
+  const [open, setOpen] = useState(false);
+  const selectedIndex = Math.max(
+    0,
+    expiryOptions.findIndex((option) => option.value === value),
+  );
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const selected = expiryOptions[selectedIndex];
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node
+        && !rootRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    return () => document.removeEventListener(
+      "pointerdown",
+      closeOnOutsidePress,
+    );
+  }, [open]);
+
+  useEffect(() => {
+    if (open) optionRefs.current[activeIndex]?.focus();
+  }, [activeIndex, open]);
+
+  const openListbox = (index = selectedIndex) => {
+    setActiveIndex(index);
+    setOpen(true);
+  };
+
+  const closeListbox = (restoreFocus = true) => {
+    setOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  };
+
+  const selectOption = (index: number) => {
+    const option = expiryOptions[index];
+    if (!option) return;
+    onChange(option.value);
+    closeListbox();
+  };
+
+  const handleOptionKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index + 1) % expiryOptions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index - 1 + expiryOptions.length) % expiryOptions.length);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActiveIndex(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActiveIndex(expiryOptions.length - 1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeListbox();
+    } else if (event.key === "Tab") {
+      setOpen(false);
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectOption(index);
+    }
+  };
+
+  return (
+    <div className={styles.field}>
+      <span id="api-key-expiry-label">Expires after</span>
+      <input name="expiresInDays" type="hidden" value={value} />
+      <div className={styles.expirySelect} ref={rootRef}>
+        <button
+          ref={triggerRef}
+          className={styles.expiryTrigger}
+          type="button"
+          aria-controls="api-key-expiry-listbox"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-labelledby="api-key-expiry-label api-key-expiry-value"
+          onClick={() => {
+            if (open) closeListbox(false);
+            else openListbox();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              openListbox(selectedIndex);
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              openListbox(expiryOptions.length - 1);
+            } else if (event.key === "Escape" && open) {
+              event.preventDefault();
+              closeListbox();
+            }
+          }}
+        >
+          <span id="api-key-expiry-value">{selected.label}</span>
+          <ChevronDown aria-hidden="true" size={17} strokeWidth={1.8} />
+        </button>
+        {open ? (
+          <div
+            id="api-key-expiry-listbox"
+            className={styles.expiryMenu}
+            role="listbox"
+            aria-labelledby="api-key-expiry-label"
+          >
+            {expiryOptions.map((option, index) => {
+              const selectedOption = option.value === value;
+              return (
+                <button
+                  ref={(element) => {
+                    optionRefs.current[index] = element;
+                  }}
+                  className={styles.expiryOption}
+                  type="button"
+                  role="option"
+                  aria-selected={selectedOption}
+                  data-active={activeIndex === index ? "true" : "false"}
+                  tabIndex={activeIndex === index ? 0 : -1}
+                  key={option.value}
+                  onClick={() => selectOption(index)}
+                  onKeyDown={(event) => handleOptionKeyDown(event, index)}
+                >
+                  <span>{option.label}</span>
+                  {selectedOption ? (
+                    <Check aria-hidden="true" size={15} strokeWidth={2.1} />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function DeveloperApiKeys() {
   const {
     authReady,
@@ -256,7 +452,7 @@ function DeveloperApiKeysView({
   );
   const [listError, setListError] = useState("");
   const [label, setLabel] = useState("");
-  const [expiresInDays, setExpiresInDays] = useState(90);
+  const [expiresInDays, setExpiresInDays] = useState<ExpiryDays>(90);
   const [labelError, setLabelError] = useState("");
   const [createState, setCreateState] = useState<CreateState>("idle");
   const [createError, setCreateError] = useState("");
@@ -278,6 +474,7 @@ function DeveloperApiKeysView({
   const [revokeError, setRevokeError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
+  const [refreshingKeys, setRefreshingKeys] = useState(false);
   const [walletSessionTimedOut, setWalletSessionTimedOut] = useState(false);
   const labelRef = useRef<HTMLInputElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
@@ -285,6 +482,7 @@ function DeveloperApiKeysView({
   const revokeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmRevokeRef = useRef<HTMLButtonElement>(null);
   const createInFlightRef = useRef(false);
+  const apiKeyReadGenerationRef = useRef(0);
 
   const getAuthHeaders = useCallback(
     async (json = false) => {
@@ -312,7 +510,13 @@ function DeveloperApiKeysView({
   );
 
   const loadApiKeys = useCallback(
-    async (walletAddress: string, signal?: AbortSignal) => {
+    async (
+      walletAddress: string,
+      signal?: AbortSignal,
+      mode: ApiKeyLoadMode = "initial",
+    ) => {
+      const readGeneration = ++apiKeyReadGenerationRef.current;
+      const refreshRequest = mode !== "initial";
       try {
         const headers = await getAuthHeaders();
         const response = await fetch(
@@ -333,25 +537,43 @@ function DeveloperApiKeysView({
         }
         const parsed = parseApiKeyList(body);
         if (!parsed) throw new Error("The API returned an invalid key list.");
-        setApiKeys(parsed);
+        if (readGeneration !== apiKeyReadGenerationRef.current) return;
+        setApiKeys((current) => mergeApiKeySummaries(current, parsed));
         setListState("ready");
+        if (mode === "refresh") setStatusMessage("API keys refreshed.");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
+        if (readGeneration !== apiKeyReadGenerationRef.current) return;
         setListError(
           error instanceof Error ? error.message : "Unable to load API keys.",
         );
-        setListState("error");
+        if (!refreshRequest) setListState("error");
+      } finally {
+        if (
+          refreshRequest
+          && readGeneration === apiKeyReadGenerationRef.current
+        ) {
+          setRefreshingKeys(false);
+        }
       }
     },
     [getAuthHeaders],
   );
 
   const refreshApiKeys = () => {
-    if (!account) return;
-    setListState("loading");
+    if (!account || listState === "loading" || refreshingKeys) return;
+    setRefreshingKeys(true);
     setListError("");
-    void loadApiKeys(account);
+    setStatusMessage("Refreshing API keys.");
+    void loadApiKeys(account, undefined, "refresh");
+  };
+
+  const refreshApiKeysAfterMutation = (walletAddress: string) => {
+    apiKeyReadGenerationRef.current += 1;
+    setRefreshingKeys(true);
+    setListError("");
+    void loadApiKeys(walletAddress, undefined, "mutation");
   };
 
   useEffect(() => {
@@ -382,11 +604,6 @@ function DeveloperApiKeysView({
     }, 8_000);
     return () => window.clearTimeout(timeoutId);
   }, [authReady]);
-
-  const activeCount = useMemo(
-    () => apiKeys.filter((apiKey) => keyStatus(apiKey) === "Active").length,
-    [apiKeys],
-  );
 
   const createApiKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -448,6 +665,7 @@ function DeveloperApiKeysView({
       setStatusMessage(
         `${parsed.apiKey.label} was created. Save the secret now because it will not be shown again.`,
       );
+      refreshApiKeysAfterMutation(account);
     } catch (error) {
       setCreateError(
         error instanceof Error
@@ -547,6 +765,7 @@ function DeveloperApiKeysView({
       );
       setConfirmingRevokeId(null);
       setStatusMessage(`${apiKey.label} was revoked.`);
+      refreshApiKeysAfterMutation(account);
       window.setTimeout(() => revokeTriggerRef.current?.focus(), 0);
     } catch (error) {
       setRevokeError(
@@ -638,18 +857,6 @@ function DeveloperApiKeysView({
         </section>
       ) : (
         <>
-          <div className={styles.accountBar}>
-            <div>
-              <span className={styles.accountLabel}>Key owner</span>
-              <code title={account}>{shortenAddress(account)}</code>
-            </div>
-            <div className={styles.accountActions}>
-              <p>
-                {activeCount} active {activeCount === 1 ? "key" : "keys"}
-              </p>
-            </div>
-          </div>
-
           {createdApiKey ? (
             <div
               ref={revealRef}
@@ -784,23 +991,10 @@ function DeveloperApiKeysView({
                       ) : null}
                     </div>
 
-                    <label className={styles.field} htmlFor="api-key-expiry">
-                      <span>Expires after</span>
-                      <select
-                        id="api-key-expiry"
-                        name="expiresInDays"
-                        value={expiresInDays}
-                        onChange={(event) =>
-                          setExpiresInDays(Number(event.target.value))
-                        }
-                      >
-                        {expiryOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <ExpirySelect
+                      value={expiresInDays}
+                      onChange={setExpiresInDays}
+                    />
                   </div>
 
                   <details className={styles.scopeLedger}>
@@ -847,7 +1041,7 @@ function DeveloperApiKeysView({
               <section
                 className={`${styles.panel} ${styles.listPanel}`}
                 aria-labelledby="api-keys-title"
-                aria-busy={listState === "loading"}
+                aria-busy={listState === "loading" || refreshingKeys}
               >
                 <div className={styles.panelHeading}>
                   <div>
@@ -856,11 +1050,24 @@ function DeveloperApiKeysView({
                   </div>
                   <button
                     className={styles.textButton}
-                    disabled={listState === "loading"}
+                    disabled={listState === "loading" || refreshingKeys}
                     type="button"
                     onClick={refreshApiKeys}
                   >
-                    Refresh
+                    <RefreshCw
+                      aria-hidden="true"
+                      className={styles.refreshIcon}
+                      data-spinning={
+                        listState === "loading" || refreshingKeys
+                          ? "true"
+                          : "false"
+                      }
+                      size={16}
+                      strokeWidth={1.9}
+                    />
+                    {listState === "loading" || refreshingKeys
+                      ? "Refreshing"
+                      : "Refresh keys"}
                   </button>
                 </div>
 
@@ -986,6 +1193,11 @@ function DeveloperApiKeysView({
                       );
                     })}
                   </ul>
+                ) : null}
+                {listState === "ready" && listError ? (
+                  <p className={styles.inlineError} role="alert">
+                    {listError}
+                  </p>
                 ) : null}
               </section>
             </div>

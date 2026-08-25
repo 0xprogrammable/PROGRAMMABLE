@@ -46,17 +46,68 @@ describe("My projects editor opening", () => {
     );
   });
 
-  it("exposes article controls only after a current authenticated read", () => {
+  it("withholds project permissions across owners but preserves a same-owner refresh", () => {
+    const firstOwner = "0x1111111111111111111111111111111111111111";
+    const secondOwner = "0x2222222222222222222222222222222222222222";
+    const ready = {
+      ownerAccount: firstOwner,
+      phase: "ready" as const,
+      projects: [project],
+    };
+
+    expect(profileProjects.scopeCreatorProjectOwnerStateV1(ready, firstOwner))
+      .toBe(ready);
+    expect(profileProjects.scopeCreatorProjectOwnerStateV1(ready, secondOwner))
+      .toBeNull();
+    expect(profileProjects.scopeCreatorProjectOwnerStateV1(ready, null))
+      .toBeNull();
+    expect(profileProjects.beginCreatorProjectOwnerRefreshV1(ready, firstOwner))
+      .toEqual({ ...ready, phase: "loading" });
+    expect(profileProjects.beginCreatorProjectOwnerRefreshV1(ready, secondOwner))
+      .toEqual({ ownerAccount: secondOwner, phase: "loading", projects: [] });
+
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    expect(source).toContain(
+      "const projects = scopedProjectOwnerState?.projects ?? emptyCreatorProjectsV1;",
+    );
+    expect(source).toContain(
+      "const key = `${walletAccount}:${project.tokenAddress.toLowerCase()}`;",
+    );
+  });
+
+  it("keeps the article action slot stable without granting unverified access", () => {
     const source = readFileSync(
       join(process.cwd(), "components/profile-projects.tsx"),
       "utf8",
     );
 
-    expect(source).toMatch(
-      /phase === "ready" &&\s*editableTokens\.has\(project\.tokenAddress\.toLowerCase\(\)\)/u,
-    );
+    expect(source).toContain("const canEditArticle = editableTokens.has(");
+    expect(source).toContain("{canEditArticle ? (");
+    expect(source).toContain("className={styles.articleActionSlot}");
+    expect(source).toContain('aria-hidden="true"');
     expect(source).toContain(
-      "Article controls are temporarily unavailable. Refresh to try again.",
+      "Launch details could not be refreshed. The current list is still shown.",
+    );
+  });
+
+  it("communicates refresh progress without relying on motion", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
+
+    expect(source).toContain('aria-busy={phase === "loading"}');
+    expect(source).toContain('? "Refreshing…" : "Refresh"');
+    expect(source).toContain('data-loading={phase === "loading"}');
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*\.refresh\[data-loading="true"\] \.refreshIcon/u,
     );
   });
 

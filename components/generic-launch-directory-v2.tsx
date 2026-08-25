@@ -53,7 +53,25 @@ export function GenericLaunchDirectoryV2() {
         </div>
       </header>
       {state.status === "loading" ? (
-        <p role="status" className={styles.status}>Loading launch records…</p>
+        <div role="status">
+          <span className={styles.srOnly}>Loading launch records…</span>
+          <section aria-hidden="true" className={`${styles.grid} ${styles.skeletonGrid}`}>
+            {Array.from({ length: 3 }, (_, index) => (
+              <article className={`${styles.card} ${styles.skeletonCard}`} key={index}>
+                <span className={`${styles.skeletonLine} ${styles.skeletonState}`} />
+                <span className={`${styles.skeletonLine} ${styles.skeletonTitle}`} />
+                <span className={`${styles.skeletonLine} ${styles.skeletonMeta}`} />
+                <div className={styles.skeletonFacts}>
+                  <span className={`${styles.skeletonLine} ${styles.skeletonFactLabel}`} />
+                  <span className={`${styles.skeletonLine} ${styles.skeletonFactValue}`} />
+                  <span className={`${styles.skeletonLine} ${styles.skeletonFactLabel}`} />
+                  <span className={`${styles.skeletonLine} ${styles.skeletonFactValue}`} />
+                </div>
+                <span className={`${styles.skeletonLine} ${styles.skeletonLink}`} />
+              </article>
+            ))}
+          </section>
+        </div>
       ) : state.status === "error" ? (
         <p role="status" className={styles.status}>
           Registry records are unavailable right now.

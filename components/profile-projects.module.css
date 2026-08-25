@@ -166,7 +166,21 @@
 
 .refresh {
   gap: 6px;
+  justify-content: center;
+  min-width: 96px;
   padding-inline: 10px;
+}
+
+.refreshIcon {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+}
+
+.refreshLabel {
+  min-width: 60px;
+  text-align: start;
 }
 
 .pagination {
@@ -189,11 +203,15 @@
   text-align: center;
 }
 
-.refresh:disabled,
 .pagination button:disabled,
 .actions button:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+.refresh:disabled {
+  cursor: wait;
+  opacity: 0.78;
 }
 
 .list {
@@ -405,8 +423,11 @@
 }
 
 .actions {
+  display: grid;
   gap: 6px;
+  grid-template-columns: 104px 84px;
   justify-content: flex-end;
+  min-width: 194px;
 }
 
 .actions button,
@@ -417,12 +438,41 @@
   justify-content: center;
   padding-inline: 12px;
   white-space: nowrap;
+  width: 100%;
+}
+
+.articleActionSlot {
+  display: flex;
+  min-width: 0;
+}
+
+.articleActionState {
+  align-items: center;
+  color: var(--muted, rgb(255 255 255 / 52%));
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 620;
+  justify-content: center;
+  min-height: 44px;
+  padding-inline: 12px;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.articleActionState[data-state="loading"] {
+  background: color-mix(in srgb, var(--text, #fff) 4%, transparent);
+  border-radius: 10px;
 }
 
 .actions button {
   background: var(--brand-ivory, #f0eee8);
   border-color: var(--brand-ivory, #f0eee8);
   color: #0a0a0c;
+}
+
+.articleAction[data-opening="true"]:disabled {
+  cursor: wait;
+  opacity: 0.74;
 }
 
 .loading,
@@ -472,7 +522,12 @@
     align-items: flex-start;
   }
 
-  .refresh span {
+  .refresh {
+    min-width: 44px;
+    padding-inline: 0;
+  }
+
+  .refreshLabel {
     display: none;
   }
 
@@ -492,6 +547,8 @@
 
   .actions {
     grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
   }
 
   .actions button,
@@ -509,6 +566,16 @@
     border-width: 1px 0 0;
     max-width: none;
   }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .refresh[data-loading="true"] .refreshIcon {
+    animation: refresh-spin 800ms linear infinite;
+  }
+}
+
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
