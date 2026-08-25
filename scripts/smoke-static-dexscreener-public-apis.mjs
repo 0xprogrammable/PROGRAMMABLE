@@ -423,7 +423,9 @@ function exactCatalogSnapshot(response) {
       generatedAt &&
     launchIdentity?.custom === customStatus &&
     ["current", "last-known-good"].includes(launchIdentity?.canonical) &&
-    ["current", "partial"].includes(launchIdentity?.status) &&
+    ["current", "last-known-good", "partial"].includes(
+      launchIdentity?.status,
+    ) &&
     Number.isSafeInteger(launchIdentity.ageMs) &&
     launchIdentity.ageMs >= 0
   )) return null;
