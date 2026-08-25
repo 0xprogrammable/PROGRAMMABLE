@@ -45,7 +45,7 @@ An authenticated request binds one deterministic bundle to the controller wallet
 and signs the prepared transaction.
 Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
 capabilities, contracts and release evidence live in the public
-[`programmable-prediction-markets`](https://github.com/0xprogrammable/programmable-prediction-markets) repository.
+[`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets) repository.
 Each release defines its funding and signing path. User-funded flows keep the connected wallet in control of its own
 transaction.
 
@@ -146,12 +146,11 @@ supported market types, economics, resolution rules, contract addresses and rele
 
 ## Related repositories
 
-| Repository                                                                                             | Responsibility                                                              |
-| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)                                         | Agent Skill and local tools for building reproducible Uniswap v4 projects   |
-| [`launch-policy`](https://github.com/0xprogrammable/launch-policy)                                     | Versioned Custom launch requirements, policies and schemas                  |
-| [`developers`](https://github.com/0xprogrammable/developers)                                           | Read-only discovery manifests, API contracts and verification rules         |
-| [`programmable-prediction-markets`](https://github.com/0xprogrammable/programmable-prediction-markets) | Prediction market contracts, release specifications and deployment evidence |
+| Repository                                                                                 | Responsibility                                                              |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| [`Launch-Policy`](https://github.com/0xprogrammable/Launch-Policy)                         | Versioned Custom launch requirements, policies and schemas                  |
+| [`Developers`](https://github.com/0xprogrammable/Developers)                               | Read-only discovery manifests, API contracts and verification rules         |
+| [`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets)               | Prediction market contracts, release specifications and deployment evidence |
 
 ## Release and security boundaries
 

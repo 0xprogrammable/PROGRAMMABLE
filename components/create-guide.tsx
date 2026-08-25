@@ -7,11 +7,11 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CircleHelp, Copy, ExternalLink, X } from "lucide-react";
+import { ArrowRight, Check, CircleHelp, Copy, X } from "lucide-react";
 
 import styles from "@/components/create-guide.module.css";
 
-const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Hookbuilder-Skill at https://github.com/0xprogrammable/Hookbuilder-Skill is an optional project starting point; follow https://programmable.market/docs/developers/custom-launch for the exact packaging and API steps. Derive the request and evidence digests from the exact artifacts, never expose the API key, and never invent check results. Poll the single-request status: prepared has no wallet transaction, so stop at authorized and return the exact transaction and permit for my review. Never sign or broadcast.`;
+const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch and https://programmable.market/openapi/custom-launch-v1.json for the exact packaging and API contract. Derive the request and evidence digests from the exact artifacts, never expose the API key, and never invent check results. Poll the single-request status: prepared has no wallet transaction, so stop at authorized and return the exact transaction and permit for my review. Never sign or broadcast.`;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -196,14 +196,6 @@ export function CreateGuide() {
                   the API key cannot authorize, sign or broadcast.
                 </p>
                 <div className={styles.links}>
-                  <a
-                    href="https://github.com/0xprogrammable/Hookbuilder-Skill"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open Hookbuilder-Skill
-                    <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
-                  </a>
                   <Link href="/developers/api-keys">
                     Create a Custom launch API key
                     <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />

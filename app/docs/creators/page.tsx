@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import styles from "@/components/docs-hub.module.css";
 import { DocsShell } from "@/components/docs-shell";
@@ -54,20 +54,6 @@ export default function CreatorsDocsPage() {
               template submissions are not active.
             </small>
           </Link>
-          <a
-            className={styles.pathCard}
-            href="https://github.com/0xprogrammable/Hookbuilder-Skill"
-            rel="noreferrer"
-            target="_blank"
-          >
-            <span>Hookbuilder-Skill</span>
-            <strong>Build with the skill and tools</strong>
-            <small>
-              Use Hookbuilder-Skill as a starting point for a Uniswap v4 project.
-              Package the API request with project-specific tooling.
-            </small>
-            <span className="sr-only">Opens Hookbuilder-Skill on GitHub</span>
-          </a>
         </div>
       </section>
 
@@ -145,23 +131,6 @@ export default function CreatorsDocsPage() {
       <section id="tools">
         <h2>Tools and programs</h2>
         <ul className={styles.linkList}>
-          <li>
-            <a
-              href="https://github.com/0xprogrammable/Hookbuilder-Skill"
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span>
-                <strong>Hookbuilder-Skill</strong>
-                <small>
-                  A starting point for building and testing a Uniswap v4
-                  project; the API schema defines launch packaging.
-                </small>
-              </span>
-              <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.8} />
-              <span className="sr-only">Opens in a new tab</span>
-            </a>
-          </li>
           <li>
             <Link href="/docs/creators/programs">
               <span>

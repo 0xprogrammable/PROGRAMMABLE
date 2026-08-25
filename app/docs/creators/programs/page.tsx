@@ -50,10 +50,9 @@ export default function CreatorProgramsDocsPage() {
       <section id="contributions">
         <h2>Contributions</h2>
         <p>
-          Builders can improve the public product, Hookbuilder-Skill, developer
-          references and submission workflows through their respective
-          repositories. A contribution is reviewed against that
-          repository&apos;s scope and rules.
+          Builders can improve the public product and developer references
+          through their respective repositories. A contribution is reviewed
+          against that repository&apos;s scope and rules.
         </p>
         <p>
           Paid work, bounties or grants are offered only when an issue or
@@ -66,12 +65,6 @@ export default function CreatorProgramsDocsPage() {
             variant="chip"
           >
             Product repository
-          </DocsExternalLink>
-          <DocsExternalLink
-            href="https://github.com/0xprogrammable/Hookbuilder-Skill"
-            variant="chip"
-          >
-            Hookbuilder-Skill
           </DocsExternalLink>
           <DocsExternalLink
             href={PROGRAMMABLE_PUBLIC_REPOSITORIES.developers}

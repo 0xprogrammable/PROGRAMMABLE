@@ -36,7 +36,7 @@ Custom releases are for products whose behavior cannot be represented by the Cla
 
 ## Prediction Markets
 
-Prediction Markets lets a creator configure an available onchain outcome market. The [canonical Prediction Markets repository](https://github.com/0xprogrammable/programmable-prediction-markets) defines the current networks, market types, collateral and activation rules, fees and creator rewards, resolution rules, contract addresses and release evidence.
+Prediction Markets lets a creator configure an available onchain outcome market. The [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) defines the current networks, market types, collateral and activation rules, fees and creator rewards, resolution rules, contract addresses and release evidence.
 
 {% content-ref url="models/prediction-markets.md" %}
 [prediction-markets.md](models/prediction-markets.md)

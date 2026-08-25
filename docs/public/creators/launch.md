@@ -8,7 +8,7 @@ Custom launch preparation is API-first. The submitting workflow packages one det
 
 ## Prepare the source
 
-Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional project starting point; the exact API request still comes from project-specific packaging against the published schema.
+Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request from that project with packaging that follows the published schema.
 
 The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject. Run the checks that apply to the project and keep their underlying evidence. V1 requires check IDs and evidence digests but does not publish a universal check catalog or assess the evidence.
 

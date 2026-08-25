@@ -31,9 +31,7 @@ function preview(
 describe("Prediction V2 development-only local preview", () => {
   it("keeps the non-development launch runtime on the existing BTC V1 path", () => {
     expect(process.env.NODE_ENV).not.toBe("development");
-    const html = renderToStaticMarkup(
-      <LaunchExperience customLaunchPublicEnabled={false} />,
-    );
+    const html = renderToStaticMarkup(<LaunchExperience />);
 
     expect(html).toContain('data-launch-model-option="prediction"');
     expect(html).toContain("Create a BTC prediction with YES and NO.");
@@ -52,6 +50,8 @@ describe("Prediction V2 development-only local preview", () => {
     expect(source).toContain('previewCandidate === "prediction-v2"');
     expect(source).toContain('searchParams.get("predictionState")');
     expect(source).toContain('searchParams.get("fixture")');
+    expect(source).not.toContain("custom-launch-experience");
+    expect(source).not.toContain("custom-launch-local-preview");
   });
 
   it.each([

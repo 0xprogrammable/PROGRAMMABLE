@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated Local preview for the retired GitHub-intake interface. It is
+ * preserved as historical test material and must not be imported by /launch or
+ * any other runtime route.
+ */
+
 import { ArrowRight, CircleCheck } from "lucide-react";
 import { useState } from "react";
 

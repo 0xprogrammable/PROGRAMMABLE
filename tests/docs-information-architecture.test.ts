@@ -238,7 +238,7 @@ describe("Docs information architecture", () => {
       expect(source).toContain("<DocsShell");
     }
 
-    expect(creatorsPage).toContain("Hookbuilder-Skill");
+    expect(creatorsPage).not.toContain("Hookbuilder-Skill");
     expect(creatorsPage).toContain("Custom Launch API");
     expect(creatorsPage).toContain("Public templates are planned");
     expect(creatorTemplatesPage).toContain("Public template intake is closed");
@@ -279,7 +279,7 @@ describe("Docs information architecture", () => {
     for (const path of publicLaunchSurfaces) {
       const source = read(path);
       expect(source, path).not.toMatch(
-        /submit[- a]+launch|submit[- a]+template|public source review|review application|accepted revision|accepted release|individually reviewed/i,
+        /Hookbuilder-Skill|submit[- a]+launch|submit[- a]+template|public source review|review application|accepted revision|accepted release|individually reviewed/i,
       );
     }
 

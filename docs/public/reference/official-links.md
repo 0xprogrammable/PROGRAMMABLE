@@ -11,8 +11,7 @@ description: Official Programmable product, source, community and analytics link
 | Explore                 | [programmable.market/explore](https://programmable.market/explore)                                                 |
 | Prediction Markets      | [programmable.market/markets](https://programmable.market/markets)                                                 |
 | GitHub                  | [github.com/0xprogrammable](https://github.com/0xprogrammable)                                                     |
-| Prediction source       | [programmable-prediction-markets](https://github.com/0xprogrammable/programmable-prediction-markets)               |
-| Hookbuilder-Skill       | [Canonical repository](https://github.com/0xprogrammable/Hookbuilder-Skill)                                      |
+| Prediction source       | [Prediction-Markets](https://github.com/0xprogrammable/Prediction-Markets)                                         |
 | Custom Launch API keys  | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)                         |
 | Custom Launch API guide | [programmable.market/developers/custom-launch-api-v1.md](https://programmable.market/developers/custom-launch-api-v1.md) |
 | Custom write API        | [api.programmable.market](https://api.programmable.market)                                                         |

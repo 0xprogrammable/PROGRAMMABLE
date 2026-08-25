@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated Retired GitHub-intake interface retained for compatibility tests
+ * only. Custom launches are API-first through /developers/api-keys and this
+ * module must not be imported into a production or development route.
+ */
+
 import Image from "next/image";
 import Link from "next/link";
 import {

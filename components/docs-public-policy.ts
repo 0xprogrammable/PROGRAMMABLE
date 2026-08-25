@@ -14,13 +14,12 @@ export type DocsProductState = Readonly<{
 }>;
 
 export const PROGRAMMABLE_PUBLIC_REPOSITORIES = {
-  developers: "https://github.com/0xprogrammable/developers",
-  hookbuilder: "https://github.com/0xprogrammable/hookbuilder",
+  developers: "https://github.com/0xprogrammable/Developers",
   predictionMarkets:
-    "https://github.com/0xprogrammable/programmable-prediction-markets",
-  product: "https://github.com/0xprogrammable/programmable",
-  productIssues: "https://github.com/0xprogrammable/programmable/issues",
-  launchPolicy: "https://github.com/0xprogrammable/launch-policy",
+    "https://github.com/0xprogrammable/Prediction-Markets",
+  product: "https://github.com/0xprogrammable/PROGRAMMABLE",
+  productIssues: "https://github.com/0xprogrammable/PROGRAMMABLE/issues",
+  launchPolicy: "https://github.com/0xprogrammable/Launch-Policy",
 } as const;
 
 export const PROGRAMMABLE_PRODUCT_STATES = {

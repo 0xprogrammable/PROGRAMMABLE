@@ -42,7 +42,7 @@ export function PredictionMarketsDocs() {
             Open Prediction Markets
           </DocsExternalLink>
           <DocsExternalLink
-            href="https://github.com/0xprogrammable/programmable-prediction-markets"
+            href="https://github.com/0xprogrammable/Prediction-Markets"
             variant="chip"
           >
             Current source and release details
