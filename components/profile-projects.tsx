@@ -36,6 +36,8 @@ const CreatorArticleEditor = dynamic(
 );
 
 export const creatorProjectPageSize = 5;
+const emptyCreatorProjectsV1: readonly CreatorProjectSummaryV1[] =
+  Object.freeze([]);
 
 export type CreatorProjectMarketCapV1 = Readonly<{
   tokenAddress: `0x${string}`;
@@ -57,6 +59,30 @@ export type CreatorProjectInitialBuyV1 = Readonly<{
   releaseAt: string;
 }>;
 
+export type CreatorProjectOwnerStateV1 = Readonly<{
+  ownerAccount: string;
+  phase: "loading" | "ready" | "error";
+  projects: readonly CreatorProjectSummaryV1[];
+}>;
+
+export function scopeCreatorProjectOwnerStateV1(
+  state: CreatorProjectOwnerStateV1 | null,
+  walletAccount: string | null,
+) {
+  return state !== null && state.ownerAccount === walletAccount
+    ? state
+    : null;
+}
+
+export function beginCreatorProjectOwnerRefreshV1(
+  state: CreatorProjectOwnerStateV1 | null,
+  ownerAccount: string,
+): CreatorProjectOwnerStateV1 {
+  return state?.ownerAccount === ownerAccount
+    ? { ...state, phase: "loading" }
+    : { ownerAccount, phase: "loading", projects: [] };
+}
+
 export function ProfileProjects({
   initialBuys = [],
   marketCaps = [],
@@ -69,15 +95,43 @@ export function ProfileProjects({
   walletProjects?: readonly CreatorProjectSummaryV1[];
 }>) {
   const { wallet, getAccessToken, getIdentityToken } = useWallet();
-  const [projects, setProjects] = useState<readonly CreatorProjectSummaryV1[]>([]);
-  const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
-  const [editor, setEditor] = useState<EditorState | null>(null);
-  const [openingProject, setOpeningProject] = useState<CreatorProjectSummaryV1 | null>(null);
+  const walletAccount = wallet?.account.toLowerCase() ?? null;
+  const [projectOwnerState, setProjectOwnerState] =
+    useState<CreatorProjectOwnerStateV1 | null>(null);
+  const [editor, setEditor] = useState<Readonly<{
+    ownerAccount: string;
+    state: EditorState;
+  }> | null>(null);
+  const [openingProject, setOpeningProject] = useState<Readonly<{
+    ownerAccount: string;
+    project: CreatorProjectSummaryV1;
+  }> | null>(null);
   const [projectPage, setProjectPage] = useState(1);
-  const [projectError, setProjectError] = useState("");
+  const [projectError, setProjectError] = useState<Readonly<{
+    ownerAccount: string;
+    message: string;
+  }> | null>(null);
   const editorRequestsRef = useRef(new Map<string, Promise<EditorState>>());
   const editorTriggerRef = useRef<HTMLButtonElement | null>(null);
   const openRequestRef = useRef(0);
+  const projectRequestRef = useRef(0);
+
+  const scopedProjectOwnerState = scopeCreatorProjectOwnerStateV1(
+    projectOwnerState,
+    walletAccount,
+  );
+  const projects = scopedProjectOwnerState?.projects ?? emptyCreatorProjectsV1;
+  const phase = scopedProjectOwnerState?.phase ?? "loading";
+  const scopedEditor = editor?.ownerAccount === walletAccount
+    ? editor.state
+    : null;
+  const scopedEditorOwnerAccount = scopedEditor === null ? null : walletAccount;
+  const scopedOpeningProject = openingProject?.ownerAccount === walletAccount
+    ? openingProject.project
+    : null;
+  const scopedProjectError = projectError?.ownerAccount === walletAccount
+    ? projectError.message
+    : "";
 
   const getAuthHeaders = useCallback(
     () => acquireCreatorArticleAuthHeadersV1({
@@ -88,9 +142,12 @@ export function ProfileProjects({
   );
 
   const loadProjects = useCallback(async (signal?: AbortSignal) => {
-    if (!wallet) return;
-    setProjectError("");
-    setPhase("loading");
+    if (walletAccount === null) return;
+    const requestedAccount = walletAccount;
+    const requestId = ++projectRequestRef.current;
+    setProjectError(null);
+    setProjectOwnerState((current) =>
+      beginCreatorProjectOwnerRefreshV1(current, requestedAccount));
     try {
       const response = await fetch("/api/profile/projects", {
         headers: { Accept: "application/json", ...(await getAuthHeaders()) },
@@ -99,25 +156,40 @@ export function ProfileProjects({
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(readError(body));
       const nextProjects = parseProjectList(body);
-      setProjects(nextProjects);
+      if (projectRequestRef.current !== requestId) return;
+      setProjectOwnerState({
+        ownerAccount: requestedAccount,
+        phase: "ready",
+        projects: nextProjects,
+      });
       setProjectPage(1);
       editorRequestsRef.current.clear();
-      setPhase("ready");
     } catch {
-      if (signal?.aborted) return;
-      setPhase("error");
+      if (
+        signal?.aborted ||
+        projectRequestRef.current !== requestId
+      ) return;
+      setProjectOwnerState((current) => current?.ownerAccount === requestedAccount
+        ? { ...current, phase: "error" }
+        : current);
     }
-  }, [getAuthHeaders, wallet]);
+  }, [
+    getAuthHeaders,
+    setProjectError,
+    setProjectOwnerState,
+    setProjectPage,
+    walletAccount,
+  ]);
 
   useEffect(() => {
-    if (!wallet) return;
+    if (walletAccount === null) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => void loadProjects(controller.signal), 0);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [loadProjects, wallet]);
+  }, [loadProjects, walletAccount]);
 
   const visibleProjects = useMemo(
     () => mergeCreatorWalletProjectsV1(walletProjects, projects),
@@ -142,7 +214,10 @@ export function ProfileProjects({
   ), [initialBuys]);
 
   const getEditorState = useCallback((project: CreatorProjectSummaryV1) => {
-    const key = project.tokenAddress.toLowerCase();
+    if (walletAccount === null) {
+      return Promise.reject(new Error("Connect your wallet to edit this article"));
+    }
+    const key = `${walletAccount}:${project.tokenAddress.toLowerCase()}`;
     const current = editorRequestsRef.current.get(key);
     if (current) return current;
     const request = loadCreatorArticleEditorV1(project, getAuthHeaders).catch((error) => {
@@ -151,7 +226,7 @@ export function ProfileProjects({
     });
     editorRequestsRef.current.set(key, request);
     return request;
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, walletAccount]);
 
   const warmEditor = useCallback((project: CreatorProjectSummaryV1) => {
     preloadCreatorArticleEditorModule();
@@ -166,23 +241,30 @@ export function ProfileProjects({
     project: CreatorProjectSummaryV1,
     trigger: HTMLButtonElement,
   ) {
+    if (walletAccount === null) return;
+    const requestedAccount = walletAccount;
     const requestId = ++openRequestRef.current;
     editorTriggerRef.current = trigger;
-    setOpeningProject(project);
-    setProjectError("");
+    setOpeningProject({ ownerAccount: requestedAccount, project });
+    setProjectError(null);
     try {
       const [, nextEditor] = await Promise.all([
         loadCreatorArticleEditorModule(),
         getEditorState(project),
       ]);
       if (openRequestRef.current !== requestId) return;
-      editorRequestsRef.current.delete(project.tokenAddress.toLowerCase());
-      setEditor(nextEditor);
+      editorRequestsRef.current.delete(
+        `${requestedAccount}:${project.tokenAddress.toLowerCase()}`,
+      );
+      setEditor({ ownerAccount: requestedAccount, state: nextEditor });
     } catch (error) {
       if (openRequestRef.current !== requestId) return;
-      setProjectError(error instanceof Error
-        ? error.message
-        : "Creator article unavailable");
+      setProjectError({
+        ownerAccount: requestedAccount,
+        message: error instanceof Error
+          ? error.message
+          : "Creator article unavailable",
+      });
       focusEditorTrigger();
     } finally {
       if (openRequestRef.current === requestId) setOpeningProject(null);
@@ -193,12 +275,12 @@ export function ProfileProjects({
     openRequestRef.current += 1;
     setOpeningProject(null);
     focusEditorTrigger();
-  }, [focusEditorTrigger]);
+  }, [focusEditorTrigger, setOpeningProject]);
 
   const closeEditor = useCallback(() => {
     setEditor(null);
     focusEditorTrigger();
-  }, [focusEditorTrigger]);
+  }, [focusEditorTrigger, setEditor]);
 
   if (!wallet) return null;
   return (
@@ -259,7 +341,9 @@ export function ProfileProjects({
         {phase === "loading" ? "Refreshing launches" : ""}
       </span>
 
-      {projectError ? <p className={styles.error} role="alert">{projectError}</p> : null}
+      {scopedProjectError ? (
+        <p className={styles.error} role="alert">{scopedProjectError}</p>
+      ) : null}
       {phase === "error" && visibleProjects.length > 0 ? (
         <p className={styles.error} role="alert">
           Launch details could not be refreshed. The current list is still shown.
@@ -328,15 +412,15 @@ export function ProfileProjects({
                     <button
                       className={styles.articleAction}
                       type="button"
-                      aria-busy={openingProject?.tokenAddress === project.tokenAddress}
-                      data-opening={openingProject?.tokenAddress === project.tokenAddress}
-                      disabled={openingProject !== null}
+                      aria-busy={scopedOpeningProject?.tokenAddress === project.tokenAddress}
+                      data-opening={scopedOpeningProject?.tokenAddress === project.tokenAddress}
+                      disabled={scopedOpeningProject !== null}
                       onPointerEnter={() => warmEditor(project)}
                       onPointerDown={() => warmEditor(project)}
                       onFocus={() => warmEditor(project)}
                       onClick={(event) => void openEditor(project, event.currentTarget)}
                     >
-                      {openingProject?.tokenAddress === project.tokenAddress
+                      {scopedOpeningProject?.tokenAddress === project.tokenAddress
                         ? "Opening…"
                         : project.article ? "Edit article" : "Create article"}
                     </button>
@@ -360,31 +444,40 @@ export function ProfileProjects({
         </div>
       )}
 
-      {editor ? (
+      {scopedEditor ? (
         <CreatorArticleEditor
-          project={editor.project}
-          initialArticle={editor.article}
-          initialEtag={editor.etag}
+          project={scopedEditor.project}
+          initialArticle={scopedEditor.article}
+          initialEtag={scopedEditor.etag}
           getAuthHeaders={getAuthHeaders}
           onClose={closeEditor}
           onPublished={(article) => {
-            setProjects((current) => current.map((project) =>
-              project.tokenAddress === article.tokenAddress
-                ? {
-                    ...project,
-                    article: {
-                      revision: article.revision,
-                      title: article.title,
-                      updatedAt: article.updatedAt,
-                    },
-                  }
-                : project));
+            setProjectOwnerState((current) => {
+              if (
+                current === null ||
+                current.ownerAccount !== scopedEditorOwnerAccount
+              ) return current;
+              return {
+                ...current,
+                projects: current.projects.map((project) =>
+                  project.tokenAddress === article.tokenAddress
+                    ? {
+                        ...project,
+                        article: {
+                          revision: article.revision,
+                          title: article.title,
+                          updatedAt: article.updatedAt,
+                        },
+                      }
+                    : project),
+              };
+            });
           }}
         />
       ) : null}
-      {openingProject ? (
+      {scopedOpeningProject ? (
         <CreatorArticleEditorOpening
-          project={openingProject}
+          project={scopedOpeningProject}
           onClose={closeOpeningEditor}
         />
       ) : null}
