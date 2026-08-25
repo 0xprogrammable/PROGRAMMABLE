@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import * as creatorArticleEditor from "../components/creator-article-editor";
@@ -11,6 +13,23 @@ const {
 } = creatorArticleEditor;
 
 describe("creator article editor normalization", () => {
+  it("assigns one vertical scroll owner at each editor breakpoint", () => {
+    const styles = readFileSync(
+      join(process.cwd(), "components/creator-article-editor.module.css"),
+      "utf8",
+    );
+
+    expect(styles).toMatch(
+      /\.editorLayout\s*\{[^}]*overflow:\s*clip;/su,
+    );
+    expect(styles).toMatch(
+      /\.editorPane,\s*\.previewPane\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/su,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 64rem\)[\s\S]*?\.editorLayout\s*\{[^}]*overflow-y:\s*auto;[\s\S]*?\.editorPane,\s*\.previewPane\s*\{[^}]*overflow:\s*visible;/su,
+    );
+  });
+
   it("turns a standalone HTTPS paste into a readable bound link", () => {
     expect(standaloneArticleLinkPasteV1(" https://www.Programmable.market/path?q=1 "))
       .toEqual({
