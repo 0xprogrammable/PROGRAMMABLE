@@ -239,7 +239,7 @@
   display: grid;
   gap: 9px;
   grid-template-columns: 42px minmax(0, 1fr) auto;
-  min-height: 68px;
+  min-height: 71px;
   min-width: 0;
   padding: 7px 8px;
   transition: background-color 150ms ease;
@@ -326,7 +326,7 @@
 .skeletonList {
   display: grid;
   gap: 3px;
-  min-height: 352px;
+  min-height: 367px;
 }
 
 .skeletonProject {
@@ -334,7 +334,7 @@
   display: grid;
   gap: 9px;
   grid-template-columns: 42px minmax(0, 1fr) 104px;
-  min-height: 68px;
+  min-height: 71px;
   padding: 7px 8px;
 }
 
@@ -547,11 +547,13 @@
   .project {
     align-items: center;
     grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 143px;
     padding-block: 9px;
   }
 
   .skeletonProject {
     grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 143px;
   }
 
   .skeletonAction {

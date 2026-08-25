@@ -142,7 +142,13 @@ describe("My projects editor opening", () => {
     expect(source).toContain(
       "Array.from({ length: creatorProjectPageSize }, (_, item)",
     );
-    expect(styles).toMatch(/\.skeletonList\s*\{[^}]*min-height:\s*352px;/s);
+    expect(styles).toMatch(/\.skeletonList\s*\{[^}]*min-height:\s*367px;/s);
+    expect(styles).toMatch(
+      /@media \(max-width:\s*42rem\)[\s\S]*?\.project\s*\{[^}]*min-height:\s*143px;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*42rem\)[\s\S]*?\.skeletonProject\s*\{[^}]*min-height:\s*143px;/s,
+    );
     expect(source).toContain(
       'phase === "loading" && visibleProjects.length === 0',
     );

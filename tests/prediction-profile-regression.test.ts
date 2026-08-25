@@ -331,11 +331,23 @@ describe("prediction profile regression contract", () => {
       "predictionPortfolioLoadingPlaceholderCount = 3",
     );
     expect(portfolioSource).toContain("<PredictionPortfolioLoadingState />");
+    expect(portfolioSource).toContain(
+      "? Math.min(visibleItems.length, 2)",
+    );
     expect(portfolioStyles).toMatch(
       /\.portfolioLoadingCard\s*\{[^}]*min-height:\s*82px;/s,
     );
     expect(portfolioStyles).toMatch(
-      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioLoadingCard\s*\{[^}]*min-height:\s*256px;/s,
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioLoadingCard\s*\{[^}]*min-height:\s*322px;/s,
+    );
+    expect(portfolioStyles).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioLoadingCard:nth-child\(n \+ 3\)\s*\{[^}]*display:\s*none;/s,
+    );
+    expect(portfolioStyles).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioSection\[data-visible-card-count="1"\]\s*\{[^}]*min-height:\s*476px;/s,
+    );
+    expect(portfolioStyles).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioSection\[data-visible-card-count="2"\]\s*\{[^}]*min-height:\s*806px;/s,
     );
   });
 

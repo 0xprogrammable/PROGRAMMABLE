@@ -4410,7 +4410,7 @@ function ProfileLoadingSkeleton({
         </div>
         <div className={styles.profileSkeletonClaims}>
           <span className={styles.profileSkeletonHeading} />
-          {[0, 1].map((item) => (
+          {Array.from({ length: profileClaimPageSize }, (_, item) => (
             <span className={styles.profileSkeletonRow} key={item}>
               <span />
               <span />
@@ -4712,6 +4712,7 @@ function ProfileAccountWorkspace({
             claimableEntries.length ? "" : styles.claimablePanelEmpty
           }`}
           aria-labelledby="profile-claimable-title"
+          data-visible-count={claimPageData.items.length}
         >
           <header className={styles.panelHeader}>
             <h2 id="profile-claimable-title">Claim rewards</h2>
@@ -5434,13 +5435,15 @@ function ProfileActionState({
   ) {
     return null;
   }
+  if (state.status !== "error") {
+    return (
+      <span className={styles.visuallyHidden} role="status">
+        {state.message}
+      </span>
+    );
+  }
   return (
-    <p
-      className={
-        state.status === "error" ? styles.rowError : styles.actionState
-      }
-      role={state.status === "error" ? "alert" : "status"}
-    >
+    <p className={styles.rowError} role="alert">
       {state.message}
     </p>
   );
