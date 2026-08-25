@@ -49,7 +49,7 @@ describe("interaction state regressions", () => {
     expect(actionAccessibleName).toContain("${tokenSymbol}");
   });
 
-  it("reconciles submitted profile claims without a manual status action", () => {
+  it("auto-reconciles submitted claims while preserving a manual status check", () => {
     const source = readFileSync(
       join(root, "components/profile-view.tsx"),
       "utf8",
@@ -57,7 +57,10 @@ describe("interaction state regressions", () => {
 
     expect(source).toContain("autoResumingProfileTransactionsRef");
     expect(source).toContain('message: "Confirming on Ethereum"');
-    expect(source).not.toContain('return "Check status"');
+    expect(source).toContain(
+      'message: "Waiting for confirmation. Select Check status to check again."',
+    );
+    expect(source).toContain('return "Check status"');
     expect(source).not.toContain("View transaction");
   });
 

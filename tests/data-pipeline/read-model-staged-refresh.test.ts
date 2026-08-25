@@ -400,22 +400,22 @@ describe("staged Envio catalog probe source contract", () => {
     [
       "drops the exact Envio source",
       (step: string) =>
-        step.replace('            body?.catalog?.source !== "envio-classic-v3" ||\n', ""),
+        step.replace('              body?.catalog?.source === "envio-classic-v3" &&\n', ""),
     ],
     [
       "drops Classic catalog completeness",
       (step: string) =>
-        step.replace('            body.catalog.completeness?.classic !== "current" ||\n', ""),
+        step.replace('              body.catalog.completeness?.classic === "current" &&\n', ""),
     ],
     [
       "allows stock families",
       (step: string) =>
-        step.replace('            body.catalog.completeness?.stock !== "excluded" ||\n', ""),
+        step.replace('              body.catalog.completeness?.stock === "excluded" &&\n', ""),
     ],
     [
       "accepts an empty catalog",
       (step: string) =>
-        step.replace("            !Number.isSafeInteger(body.total) || body.total < 1 ||\n", ""),
+        step.replace("              Number.isSafeInteger(body.total) && body.total >= 1 &&\n", ""),
     ],
   ])("fails when the workflow %s", (_label, mutate) => {
     const path = ".github/workflows/deploy-production.yml";
