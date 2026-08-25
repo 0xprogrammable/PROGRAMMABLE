@@ -155,7 +155,7 @@ export default function CustomLaunchApiDocsPage() {
             <code>PROGRAMMABLE_API_KEY</code>.
           </li>
           <li>
-            Run <code>submit launch.json --config programmable-launch.config.json</code>.
+            Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
             At <code>authorized</code>, stop for exact wallet review and signing,
             then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>

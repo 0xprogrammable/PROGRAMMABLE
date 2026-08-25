@@ -69,6 +69,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "## Custom Launch API availability",
     "",
     `Public V2 creation, list and single-resource reads are live for wallet-bound requests on Ethereum Mainnet at ${customLaunchApiOrigin}/v2/custom-launches. V1 history reads remain live and V1 creation stays read-only with non-retryable \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. Legacy Registry and GitHub submission intake is closed.`,
+    `Custom launch preparation is the separate authenticated write path at ${customLaunchApiOrigin}/v2/custom-launches; the retained ${customLaunchApiOrigin}/v1/custom-launches endpoint remains read-only.`,
     `The exact public request, lifecycle, idempotency and wallet-handoff contract is ${customLaunchApiV2OpenApiUrl}.`,
     "",
     `Install the pinned public CLI with \`npm install --global ${customLaunchCliReleaseUrl}\`. The package is \`@programmable/launch\` and the binary is \`programmable-launch\`.`,

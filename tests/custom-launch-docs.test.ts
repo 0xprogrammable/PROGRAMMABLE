@@ -106,7 +106,7 @@ describe("Custom Launch API documentation", () => {
     }
     expect(gitBookGuide).toContain("examples/fee-enforced-v2-no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
-    expect(gitBookGuide).toContain("programmable-launch submit launch.json");
+    expect(gitBookGuide).toContain("programmable-launch submit ./launch.json");
   });
 
   it("publishes public V2 while retaining the exact V1 write fence", () => {

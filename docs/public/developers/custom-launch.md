@@ -60,7 +60,7 @@ programmable-launch pack \
   --output launch.json
 programmable-launch validate launch.json \
   --config programmable-launch.config.json
-programmable-launch submit launch.json \
+programmable-launch submit ./launch.json \
   --config programmable-launch.config.json
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```

@@ -4,7 +4,7 @@ description: Package, submit and track one deterministic Custom project
 
 # Launch a project
 
-Public V2 Custom launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history remains readable, while authenticated V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
+Public V2 Custom launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history remains readable at `https://api.programmable.market/v1/custom-launches`, while authenticated V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
 ## Prepare the source
 
