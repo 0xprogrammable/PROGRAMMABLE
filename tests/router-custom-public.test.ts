@@ -23,6 +23,7 @@ import {
   readFinalizedRouterCustomExploreEntriesV1,
   ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS,
   ROUTER_CUSTOM_SNAPSHOT_MAX_IDENTITIES,
+  routerCustomSnapshotPreservesFinalizedIdentitiesV1,
   routerCustomEntriesAtOrBeforeBlockV1,
   routerCustomExploreEntriesFromModelV1,
   routerCustomIdentitySnapshotFromSourceV1,
@@ -35,6 +36,7 @@ import { mapCreatorProfileResponse } from "../lib/profile/onchain-profile";
 import type {
   CustomProjectExploreEntry,
   ExploreEntry,
+  LauncherToken,
 } from "../lib/tokens";
 import {
   customGraphExploreEntry,
@@ -59,7 +61,7 @@ function model(tokens = [customGraphToken, stampedClassicToken]) {
 }
 
 function source(
-  tokens = [customGraphToken, stampedClassicToken],
+  tokens: readonly LauncherToken[] = [customGraphToken, stampedClassicToken],
   input: Readonly<{
     blockNumber?: string;
     blockHash?: `0x${string}`;
@@ -287,6 +289,120 @@ describe("finalized Router Custom public projection", () => {
     });
   });
 
+  it("accepts a newer boundary only when every finalized identity is unchanged", () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const next = routerCustomIdentitySnapshotFromSourceV1(source(undefined, {
+      blockNumber: "25740100",
+      blockHash: `0x${"bd".repeat(32)}`,
+      generatedAt: "2026-08-25T06:01:00.000Z",
+    }));
+    const rewritten = {
+      ...next,
+      entries: [{
+        ...next.entries[0],
+        launchStampProvenance: {
+          ...next.entries[0]!.launchStampProvenance!,
+          routePayloadHash: `0x${"de".repeat(32)}` as `0x${string}`,
+        },
+      }],
+    };
+    const rehydrated = routerCustomIdentitySnapshotFromSourceV1(source([
+      {
+        ...customGraphToken,
+        launchStampProvenance: {
+          ...customGraphToken.launchStampProvenance!,
+          finalizedAtBlockNumber: "25740099",
+          finalizedAtBlockHash: `0x${"df".repeat(32)}` as `0x${string}`,
+        },
+      },
+      stampedClassicToken,
+    ], {
+      blockNumber: "25740100",
+      blockHash: `0x${"bd".repeat(32)}`,
+      generatedAt: "2026-08-25T06:01:00.000Z",
+    }));
+
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      durable,
+      next,
+    )).toBe(true);
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      durable,
+      { ...next, entries: [] },
+    )).toBe(false);
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      durable,
+      rewritten,
+    )).toBe(false);
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      durable,
+      rehydrated,
+    )).toBe(true);
+  });
+
+  it("serves the durable LKG instead of accepting a newer shrinking snapshot", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const shrinking = source([], {
+      blockNumber: "25740100",
+      blockHash: `0x${"bd".repeat(32)}`,
+      generatedAt: "2026-08-25T06:01:00.000Z",
+    });
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:02:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(shrinking),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot,
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      asOfBlock: "25740001",
+      entries: [customGraphExploreEntry],
+    });
+    expect(persistDurableSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("does not replace a warm finalized identity with a newer shrinking durable snapshot", async () => {
+    const startedAt = Date.parse("2026-08-25T06:01:00.000Z");
+    let now = startedAt;
+    const current = source();
+    const shrinkingDurable = routerCustomIdentitySnapshotFromSourceV1(source(
+      [],
+      {
+        blockNumber: "25740100",
+        blockHash: `0x${"bd".repeat(32)}`,
+        generatedAt: "2026-08-25T06:01:30.000Z",
+      },
+    ));
+    const advancedCurrent = source(undefined, {
+      blockNumber: "25740200",
+      blockHash: `0x${"be".repeat(32)}`,
+      generatedAt: "2026-08-25T06:02:00.000Z",
+    });
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => now,
+      readCurrentSource: vi.fn()
+        .mockResolvedValueOnce(current)
+        .mockResolvedValueOnce(advancedCurrent),
+      readDurableSnapshot: vi.fn()
+        .mockRejectedValueOnce(new Error("missing"))
+        .mockResolvedValueOnce(shrinkingDurable),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(reader()).resolves.toMatchObject({
+      status: "current",
+      entries: [customGraphExploreEntry],
+    });
+    now += ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS + 1;
+    await expect(reader()).resolves.toMatchObject({
+      status: "current",
+      asOfBlock: "25740200",
+      entries: [customGraphExploreEntry],
+    });
+  });
+
   it("fails closed on a warm-cache same-boundary conflict", async () => {
     const startedAt = Date.parse("2026-08-25T06:01:00.000Z");
     let now = startedAt;
@@ -314,7 +430,7 @@ describe("finalized Router Custom public projection", () => {
     );
   });
 
-  it("replaces a stale durable snapshot after an explicit Router reorg", async () => {
+  it("does not delete finalized durable identities after an explicit Router reorg", async () => {
     const durable = routerCustomIdentitySnapshotFromSourceV1(source());
     const rebuilt = {
       ...source([], {
@@ -334,13 +450,10 @@ describe("finalized Router Custom public projection", () => {
 
     await expect(reader()).resolves.toMatchObject({
       status: "last-known-good",
-      asOfBlock: "25718016",
-      entries: [],
+      asOfBlock: "25740001",
+      entries: [customGraphExploreEntry],
     });
-    expect(persistDurableSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ asOfBlock: "25718016" }),
-      { replaceAfterReorg: true },
-    );
+    expect(persistDurableSnapshot).not.toHaveBeenCalled();
   });
 
   it("falls back durably when the cold current read never settles", async () => {

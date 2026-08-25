@@ -36,11 +36,11 @@ export const ROUTER_CUSTOM_SNAPSHOT_SCHEMA_VERSION =
   "programmable.router-custom-identity-snapshot.v1" as const;
 export const ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS = 15_000;
 export const ROUTER_CUSTOM_SNAPSHOT_MAX_IDENTITIES = 10_000;
+export const ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES = 16 * 1_024 * 1_024;
 export const ROUTER_CUSTOM_SNAPSHOT_CURRENT_READ_TIMEOUT_MS = 3_000;
 const ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_FUTURE_SKEW_MS = 60_000;
 const ROUTER_CUSTOM_SNAPSHOT_DURABLE_READ_TIMEOUT_MS = 2_000;
 const ROUTER_CUSTOM_SNAPSHOT_PERSIST_TIMEOUT_MS = 2_000;
-const ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES = 16 * 1_024 * 1_024;
 const ROUTER_CUSTOM_SNAPSHOT_ENVELOPE_SCHEMA_VERSION =
   "programmable.router-custom-identity-snapshot-envelope.v1" as const;
 const ROUTER_CUSTOM_SNAPSHOT_BLOB_PATH = [
@@ -247,6 +247,70 @@ function lastKnownGoodRouterCustomSnapshotV1(
     : Object.freeze({ ...snapshot, status: "last-known-good" as const });
 }
 
+function immutableRouterCustomIdentityV1(entry: CanonicalTokenExploreEntry) {
+  requireRouterCustomEntryV1(entry);
+  const {
+    finalizedAtBlockNumber: _finalizedAtBlockNumber,
+    finalizedAtBlockHash: _finalizedAtBlockHash,
+    ...immutableLaunchStampProvenance
+  } = entry.launchStampProvenance!;
+  void _finalizedAtBlockNumber;
+  void _finalizedAtBlockHash;
+  return {
+    id: entry.id,
+    name: entry.name,
+    symbol: entry.symbol ?? null,
+    tokenAddress: entry.tokenAddress.toLowerCase(),
+    tokenDecimals: entry.tokenDecimals ?? null,
+    hookAddress: entry.hookAddress.toLowerCase(),
+    poolId: entry.poolId.toLowerCase(),
+    creatorAddress: entry.creatorAddress?.toLowerCase() ?? null,
+    launchBlockNumber: entry.launchBlockNumber ?? null,
+    launchTransactionHash:
+      entry.launchTransactionHash?.toLowerCase() ?? null,
+    launchTransactionIndex: entry.launchTransactionIndex ?? null,
+    launchLogIndex: entry.launchLogIndex ?? null,
+    launchedAt: entry.launchedAt,
+    launchModel: entry.launchModel ?? null,
+    launchModelVersion: entry.launchModelVersion ?? null,
+    launchCategoryProvenance: entry.launchCategoryProvenance,
+    // These two fields record when finality was observed, not launch identity.
+    // A reorg-safe rebuild may legitimately rehydrate them at a later block.
+    launchStampProvenance: immutableLaunchStampProvenance,
+  };
+}
+
+export function routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+  previous: RouterCustomIdentitySnapshotV1,
+  next: RouterCustomIdentitySnapshotV1,
+) {
+  try {
+    const nextByLaunchId = new Map<string, CanonicalTokenExploreEntry>();
+    for (const entry of next.entries) {
+      const launchId = entry.launchStampProvenance?.launchId.toLowerCase();
+      if (!launchId || nextByLaunchId.has(launchId)) return false;
+      nextByLaunchId.set(launchId, entry);
+    }
+    const previousLaunchIds = new Set<string>();
+    for (const entry of previous.entries) {
+      const launchId = entry.launchStampProvenance?.launchId.toLowerCase();
+      if (!launchId || previousLaunchIds.has(launchId)) return false;
+      previousLaunchIds.add(launchId);
+      const candidate = nextByLaunchId.get(launchId);
+      if (
+        !candidate ||
+        candidate.tokenAddress.toLowerCase() !==
+          entry.tokenAddress.toLowerCase() ||
+        canonicalizeJson(immutableRouterCustomIdentityV1(candidate)) !==
+          canonicalizeJson(immutableRouterCustomIdentityV1(entry))
+      ) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function jsonRecord(
   value: JsonValue | undefined,
 ): Readonly<Record<string, JsonValue>> {
@@ -378,8 +442,15 @@ async function persistDurableRouterCustomIdentitySnapshotV1(
   if (existing) {
     const previousBlock = BigInt(existing.snapshot.asOfBlock);
     const nextBlock = BigInt(snapshot.asOfBlock);
-    if (!options.replaceAfterReorg && previousBlock > nextBlock) return;
-    if (!options.replaceAfterReorg && previousBlock === nextBlock) {
+    if (previousBlock > nextBlock) {
+      if (options.replaceAfterReorg) {
+        throw new RouterCustomSnapshotConflictError(
+          "Router Custom durable snapshot cannot delete finalized identities after a reorg",
+        );
+      }
+      return;
+    }
+    if (previousBlock === nextBlock) {
       if (existing.snapshot.identityCommitment !== snapshot.identityCommitment) {
         throw new RouterCustomSnapshotConflictError(
           "Router Custom durable snapshot conflicts at one block",
@@ -388,10 +459,15 @@ async function persistDurableRouterCustomIdentitySnapshotV1(
       return;
     }
     if (
-      options.replaceAfterReorg &&
-      previousBlock === nextBlock &&
-      existing.snapshot.identityCommitment === snapshot.identityCommitment
-    ) return;
+      !routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+        existing.snapshot,
+        snapshot,
+      )
+    ) {
+      throw new RouterCustomSnapshotConflictError(
+        "Router Custom durable snapshot cannot rewrite finalized identities",
+      );
+    }
   }
   const { put } = await import("@vercel/blob");
   await put(
@@ -456,51 +532,86 @@ export function createRouterCustomIdentitySnapshotReaderV1(
 
   const refresh = async () => {
     try {
+      let previous = cached
+        ? lastKnownGoodRouterCustomSnapshotV1(cached.snapshot)
+        : null;
       const source = await withinDuration(
         readCurrentSource,
         currentReadTimeoutMs,
       );
       const snapshot = routerCustomIdentitySnapshotFromSourceV1(source);
-      if (!source.reorgDetected) {
-        try {
-          const durable = lastKnownGoodRouterCustomSnapshotV1(
-            await withinDuration(
-              readDurableSnapshot,
-              ROUTER_CUSTOM_SNAPSHOT_DURABLE_READ_TIMEOUT_MS,
-            ),
+      try {
+        const durable = lastKnownGoodRouterCustomSnapshotV1(
+          await withinDuration(
+            readDurableSnapshot,
+            ROUTER_CUSTOM_SNAPSHOT_DURABLE_READ_TIMEOUT_MS,
+          ),
+        );
+        const generatedAtMs = Date.parse(durable.generatedAt);
+        const ageMs = now() - generatedAtMs;
+        if (
+          !Number.isFinite(generatedAtMs) ||
+          ageMs < -ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_FUTURE_SKEW_MS
+        ) {
+          throw new Error(
+            "Router Custom durable snapshot timestamp is invalid",
           );
-          const generatedAtMs = Date.parse(durable.generatedAt);
-          const ageMs = now() - generatedAtMs;
-          if (
-            !Number.isFinite(generatedAtMs) ||
-            ageMs < -ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_FUTURE_SKEW_MS
-          ) {
-            throw new Error(
-              "Router Custom durable snapshot timestamp is invalid",
-            );
-          }
+        }
+        if (previous) {
+          const previousBlock = BigInt(previous.asOfBlock);
           const durableBlock = BigInt(durable.asOfBlock);
-          const currentBlock = BigInt(snapshot.asOfBlock);
-          if (durableBlock > currentBlock) {
-            return cacheSnapshot(durable);
-          }
           if (
-            durableBlock === currentBlock &&
-            (durable.asOfBlockHash.toLowerCase() !==
-                snapshot.asOfBlockHash.toLowerCase() ||
-              durable.identityCommitment !== snapshot.identityCommitment)
+            previousBlock === durableBlock &&
+            (previous.asOfBlockHash.toLowerCase() !==
+                durable.asOfBlockHash.toLowerCase() ||
+              previous.identityCommitment !== durable.identityCommitment)
           ) {
             throw new RouterCustomSnapshotConflictError(
-              "Router Custom snapshots conflict at one boundary",
+              "Router Custom cached and durable snapshots conflict",
             );
           }
-        } catch (error) {
-          if (error instanceof RouterCustomSnapshotConflictError) throw error;
-          console.warn("Router Custom durable snapshot comparison unavailable", {
-            name: error instanceof Error
-              ? error.name
-              : "RouterCustomSnapshotCompareError",
-          });
+          if (
+            durableBlock > previousBlock &&
+            routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+              previous,
+              durable,
+            )
+          ) previous = durable;
+        } else {
+          previous = durable;
+        }
+      } catch (error) {
+        if (error instanceof RouterCustomSnapshotConflictError) throw error;
+        console.warn("Router Custom durable snapshot comparison unavailable", {
+          name: error instanceof Error
+            ? error.name
+            : "RouterCustomSnapshotCompareError",
+        });
+      }
+      if (previous) {
+        const previousBlock = BigInt(previous.asOfBlock);
+        const currentBlock = BigInt(snapshot.asOfBlock);
+        if (previousBlock > currentBlock) {
+          return cacheSnapshot(previous);
+        }
+        if (
+          previousBlock === currentBlock &&
+          (previous.asOfBlockHash.toLowerCase() !==
+              snapshot.asOfBlockHash.toLowerCase() ||
+            previous.identityCommitment !== snapshot.identityCommitment)
+        ) {
+          throw new RouterCustomSnapshotConflictError(
+            "Router Custom snapshots conflict at one boundary",
+          );
+        }
+        if (
+          currentBlock > previousBlock &&
+          !routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+            previous,
+            snapshot,
+          )
+        ) {
+          return cacheSnapshot(previous);
         }
       }
       cacheSnapshot(snapshot);
@@ -596,10 +707,18 @@ async function withinDuration<T>(
 const readProductionRouterCustomIdentitySnapshotV1 =
   createRouterCustomIdentitySnapshotReaderV1();
 
+export async function readFinalizedRouterCustomIdentitySnapshotCoreV1(
+  options: RouterCustomReadOptionsV1 = {},
+) {
+  return await readProductionRouterCustomIdentitySnapshotV1(options);
+}
+
 export async function readFinalizedRouterCustomIdentitySnapshotV1(
   options: RouterCustomReadOptionsV1 = {},
 ) {
-  const snapshot = await readProductionRouterCustomIdentitySnapshotV1(options);
+  const snapshot = await readFinalizedRouterCustomIdentitySnapshotCoreV1(
+    options,
+  );
   // Fee policy evidence is deliberately derived after the durable identity
   // commitment. A fee-provider failure can therefore remove only the optional
   // evidence block; it can never hide a finalized Router identity.

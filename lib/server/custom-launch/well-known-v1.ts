@@ -25,6 +25,8 @@ export function programmableWellKnownDocumentV1(
     manifestUrl: "https://developers.programmable.family/api/v2/manifest",
     launchesUrl: "https://developers.programmable.family/api/v2/launches",
     tokenListUrl: "https://developers.programmable.family/api/v2/token-list",
+    routerCustomIdentitySnapshotUrl:
+      "https://programmable.market/api/indexers/v1/router-custom-identities",
     openApiUrl:
       "https://developers.programmable.family/openapi/programmable-v2.yaml",
     schemasBaseUrl: "https://developers.programmable.family/schemas/v2/",
