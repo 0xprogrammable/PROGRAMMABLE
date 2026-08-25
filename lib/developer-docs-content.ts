@@ -68,6 +68,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "## Custom Launch API availability",
     "",
     `V1 list and single-resource reads remain live for existing wallet-bound requests. V1 creation is read-only: authenticated \`POST /v1/custom-launches\` returns non-retryable \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. The fee-enforced V2 release candidate is held until canary and explicit public activation; unavailable V2 requests return \`503 CUSTOM_LAUNCH_V2_UNAVAILABLE\` with \`Retry-After\`. Its exact future/private-canary machine contract is ${customLaunchApiV2OpenApiUrl}; publication of that contract does not activate public submission. There is currently no public Custom launch-creation route. Legacy Registry and GitHub submission intake is closed.`,
+    `Custom launch preparation is the separate authenticated write path at ${customLaunchApiOrigin}/v1/custom-launches. That V1 method is write-fenced, and the V2 method remains unavailable outside the private canary until explicit public activation.`,
     "",
     `Install the pinned public CLI with \`npm install --global ${customLaunchCliReleaseUrl}\`. The package is \`@programmable/launch\` and the binary is \`programmable-launch\`.`,
     "",
