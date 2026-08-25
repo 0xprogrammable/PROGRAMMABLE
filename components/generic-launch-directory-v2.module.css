@@ -90,12 +90,77 @@
   overflow: hidden;
 }
 
+.skeletonGrid {
+  user-select: none;
+}
+
 .card {
   background: var(--webde-surface, #0d0d0d);
   display: flex;
   flex-direction: column;
   min-height: 280px;
   padding: 22px;
+}
+
+.skeletonCard {
+  pointer-events: none;
+}
+
+.skeletonLine {
+  animation: generic-launch-skeleton-pulse 1.4s ease-in-out infinite alternate;
+  background: var(--skeleton-base, rgb(248 240 233 / 10%));
+  border-radius: 999px;
+  display: block;
+}
+
+.skeletonState {
+  height: 12px;
+  width: 42%;
+}
+
+.skeletonTitle {
+  height: 23px;
+  margin-top: 28px;
+  width: 72%;
+}
+
+.skeletonMeta {
+  height: 13px;
+  margin-top: 10px;
+  width: 54%;
+}
+
+.skeletonFacts {
+  display: grid;
+  gap: 7px;
+  margin: 24px 0;
+}
+
+.skeletonFactLabel {
+  height: 10px;
+  width: 28%;
+}
+
+.skeletonFactValue {
+  height: 12px;
+  margin-bottom: 7px;
+  width: 62%;
+}
+
+.skeletonLink {
+  height: 13px;
+  margin-top: auto;
+  width: 46%;
+}
+
+@keyframes generic-launch-skeleton-pulse {
+  from {
+    opacity: 0.48;
+  }
+
+  to {
+    opacity: 0.9;
+  }
 }
 
 .card h2 {
@@ -220,5 +285,11 @@
   .actions a {
     justify-content: center;
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonLine {
+    animation: none;
   }
 }
