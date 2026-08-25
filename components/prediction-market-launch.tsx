@@ -54,6 +54,28 @@ function formatEthMaximum(value: bigint) {
   return `${whole}${shortFraction ? `.${shortFraction}` : ""} ETH`;
 }
 
+export function predictionObservationUtcPartsV1(observationUtc: string) {
+  const separatorIndex = observationUtc.indexOf("T");
+  if (separatorIndex === -1) {
+    return { date: observationUtc, time: "" } as const;
+  }
+  return {
+    date: observationUtc.slice(0, separatorIndex),
+    time: observationUtc.slice(separatorIndex + 1),
+  } as const;
+}
+
+export function updatePredictionObservationUtcPartV1(
+  observationUtc: string,
+  part: "date" | "time",
+  value: string,
+) {
+  const current = predictionObservationUtcPartsV1(observationUtc);
+  return part === "date"
+    ? `${value}T${current.time}`
+    : `${current.date}T${value}`;
+}
+
 export function PredictionMarketLaunch({
   onBack,
 }: PredictionMarketLaunchProps) {
@@ -109,6 +131,9 @@ export function PredictionMarketLaunch({
   );
   const market = validation.ok ? validation.market : null;
   const errors = validation.ok ? {} : validation.errors;
+  const observationUtcParts = predictionObservationUtcPartsV1(
+    draft.observationUtc,
+  );
   const busy =
     phase === "checking" ||
     phase === "signing" ||
@@ -289,38 +314,82 @@ export function PredictionMarketLaunch({
               </small>
             </label>
 
-            <label className={styles.field}>
-              <span>Result time (UTC)</span>
+            <fieldset className={`${styles.field} ${styles.utcField}`}>
+              <legend>Result time (UTC)</legend>
               <input
-                aria-describedby={
-                  errors.observationUtc ? "prediction-time-error" : undefined
-                }
-                aria-invalid={Boolean(errors.observationUtc)}
                 name="observationUtc"
-                min={
-                  nowMs
-                    ? new Date(nowMs + (24 * 60 * 60 + 60) * 1_000)
-                        .toISOString()
-                        .slice(0, 16)
-                    : undefined
-                }
-                max={
-                  nowMs
-                    ? new Date(nowMs + 30 * 24 * 60 * 60 * 1_000)
-                        .toISOString()
-                        .slice(0, 16)
-                    : undefined
-                }
-                onChange={(event) =>
-                  setDraft((currentDraft) => ({
-                    ...currentDraft,
-                    observationUtc: event.target.value,
-                  }))
-                }
-                step={60}
-                type="datetime-local"
+                type="hidden"
                 value={draft.observationUtc}
               />
+              <div
+                className={styles.utcControl}
+                data-invalid={Boolean(errors.observationUtc)}
+              >
+                <label className={styles.utcSegment}>
+                  <span>Date</span>
+                  <input
+                    aria-describedby={
+                      errors.observationUtc
+                        ? "prediction-time-error"
+                        : undefined
+                    }
+                    aria-invalid={Boolean(errors.observationUtc)}
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    inputMode="text"
+                    maxLength={10}
+                    name="observationDate"
+                    onChange={(event) =>
+                      setDraft((currentDraft) => ({
+                        ...currentDraft,
+                        observationUtc: updatePredictionObservationUtcPartV1(
+                          currentDraft.observationUtc,
+                          "date",
+                          event.target.value,
+                        ),
+                      }))
+                    }
+                    placeholder="YYYY-MM-DD"
+                    spellCheck={false}
+                    type="text"
+                    value={observationUtcParts.date}
+                  />
+                </label>
+                <span className={styles.utcDivider} aria-hidden="true">
+                  ·
+                </span>
+                <label className={styles.utcSegment}>
+                  <span>Time</span>
+                  <input
+                    aria-describedby={
+                      errors.observationUtc
+                        ? "prediction-time-error"
+                        : undefined
+                    }
+                    aria-invalid={Boolean(errors.observationUtc)}
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    inputMode="text"
+                    maxLength={5}
+                    name="observationTime"
+                    onChange={(event) =>
+                      setDraft((currentDraft) => ({
+                        ...currentDraft,
+                        observationUtc: updatePredictionObservationUtcPartV1(
+                          currentDraft.observationUtc,
+                          "time",
+                          event.target.value,
+                        ),
+                      }))
+                    }
+                    placeholder="HH:MM"
+                    spellCheck={false}
+                    type="text"
+                    value={observationUtcParts.time}
+                  />
+                </label>
+                <span className={styles.utcZone}>UTC</span>
+              </div>
               <small
                 className={`${styles.fieldFeedback} ${errors.observationUtc ? styles.error : ""}`}
                 id="prediction-time-error"
@@ -328,7 +397,7 @@ export function PredictionMarketLaunch({
               >
                 {errors.observationUtc ?? ""}
               </small>
-            </label>
+            </fieldset>
           </div>
 
           <div className={styles.costRow}>
