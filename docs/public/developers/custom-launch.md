@@ -52,7 +52,10 @@ Build the project from one pinned source revision and preserve:
 - project-specific check evidence;
 - exact constructor values, initializer values, salts and declared hook permissions.
 
-Create the closed `programmable.launch-pack-config.v1` file described in the installed package README, then run:
+Create the closed `programmable.launch-pack-config.v2` file described in the installed package README. Set
+`source.publicOrigin.url` to the public HTTPS source repository and `source.publicOrigin.revision` to the exact
+lowercase merged production commit used for the release (`PROGRAMMABLE_SOURCE_REVISION` in the packaged Rev3 sample),
+then run:
 
 ```bash
 programmable-launch pack \

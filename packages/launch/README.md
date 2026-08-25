@@ -72,14 +72,14 @@ use `status REQUEST_UUID --watch --until finalized`. `finalized`, `failed`, and 
 
 The included rehearsal proves only offline pack and validation. It does not submit, poll, sign, or broadcast.
 
-## Pack config V1
+## Pack config V2
 
 The top-level fields are:
 
-- `schemaVersion`: `programmable.launch-pack-config.v1`
+- `schemaVersion`: `programmable.launch-pack-config.v2`
 - `launchWallet`, `chainId: "1"`, and a nonzero lowercase bytes32 `nonce`
-- `source`: relative `root`, non-empty exact `paths`, decimal `sourceLineageNonce`, and public HTTPS `url` plus exact
-  lowercase Git `revision`
+- `source`: relative `root`, non-empty exact `paths`, decimal `sourceLineageNonce`, and `publicOrigin` containing a
+  public HTTPS `url` plus the exact lowercase merged production Git `revision` used for the release
 - `compilationUnits`: unique `{ compilationUnitId, standardJson }` entries
 - `targets`: 1–16 target definitions
 - `pool`: exact token/hook target IDs, fee, and tick spacing
