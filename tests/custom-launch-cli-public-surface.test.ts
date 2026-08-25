@@ -17,6 +17,9 @@ describe("public Custom Launch CLI surface", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
+    expect(document.routerCustomIdentitySnapshotUrl).toBe(
+      "https://programmable.market/api/indexers/v1/router-custom-identities",
+    );
     expect(document.customLaunchApi).toMatchObject({
       status: "read-only",
       readStatus: "live",
