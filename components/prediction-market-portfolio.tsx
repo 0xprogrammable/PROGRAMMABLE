@@ -35,6 +35,7 @@ import {
   type PredictionPortfolioRequest,
 } from "@/lib/prediction-market-portfolio";
 import {
+  PredictionPortfolioReadTimeoutError,
   readPredictionPortfolioWithRetry,
   type PredictionPortfolioLoadMode,
 } from "@/lib/prediction-portfolio-load-policy";
@@ -115,6 +116,8 @@ const INITIAL_INTERNAL_STATE: InternalPortfolioState = Object.freeze({
 const OUTCOME_FACE_SCALE = 10n;
 const PORTFOLIO_ERROR =
   "Unable to load your prediction activity. Check your connection and try again.";
+const PORTFOLIO_TIMEOUT_ERROR =
+  "Prediction activity took too long. Any existing results are unchanged; try again.";
 const PORTFOLIO_PARTIAL_ERROR =
   "Some markets could not be verified. Refresh to try them again.";
 const PORTFOLIO_INITIAL_VISIBLE_ITEMS = 12;
@@ -643,17 +646,22 @@ export function PredictionMarketPortfolio({
         ? error.request
         : request;
       if (!isPredictionPortfolioRequestCurrent(failedRequest, activeRequestRef.current)) return;
+      const errorMessage = error instanceof PredictionPortfolioReadTimeoutError
+        ? PORTFOLIO_TIMEOUT_ERROR
+        : PORTFOLIO_ERROR;
       setState((current) => current.accountKey === accountKey
         && current.phase === "ready"
         && current.data
-        ? { ...current, errorMessage: PORTFOLIO_ERROR }
+        ? { ...current, errorMessage }
         : {
             ...INITIAL_INTERNAL_STATE,
             accountKey,
-            errorMessage: PORTFOLIO_ERROR,
+            errorMessage,
             phase: "error",
           });
-      setAnnouncement("Prediction activity could not be loaded.");
+      setAnnouncement(error instanceof PredictionPortfolioReadTimeoutError
+        ? "Prediction activity refresh stopped after taking too long."
+        : "Prediction activity could not be loaded.");
     } finally {
       if (isPredictionPortfolioRequestCurrent(request, activeRequestRef.current)) {
         setRefreshing(false);

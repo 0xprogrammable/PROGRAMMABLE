@@ -340,6 +340,10 @@ describe("prediction profile regression contract", () => {
     expect(portfolioStyles).toMatch(
       /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*\.portfolioRefresh\[aria-busy="true"\] \.portfolioRefreshIcon\s*\{[^}]*animation:\s*prediction-market-refresh-spin 800ms linear infinite;/u,
     );
+    expect(portfolioSource).toContain("PredictionPortfolioReadTimeoutError");
+    expect(portfolioSource).toContain(
+      "Prediction activity took too long. Any existing results are unchanged; try again.",
+    );
   });
 
   it("reserves the populated profile geometry while prediction activity loads", () => {
