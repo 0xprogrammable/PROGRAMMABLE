@@ -980,6 +980,14 @@
   width: 100%;
 }
 
+.portfolioSection[data-visible-card-count="1"] {
+  min-height: 252px;
+}
+
+.portfolioSection[data-visible-card-count="2"] {
+  min-height: 424px;
+}
+
 .portfolioHeading {
   align-items: center;
   display: flex;
@@ -1685,6 +1693,10 @@
 }
 
 @media (max-width: 52rem) {
+  .portfolioSection[data-visible-card-count="2"] {
+    min-height: 748px;
+  }
+
   .portfolioLoadingCard {
     align-items: start;
     grid-template-columns: 52px minmax(0, 1fr);
@@ -1924,9 +1936,12 @@
     flex-direction: column;
   }
 
-  .portfolioEmpty,
-  .portfolioError {
+  .portfolioEmpty {
     grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .portfolioError {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .portfolioEmptyAction,
