@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -33,6 +32,7 @@ type CreatedApiKey = Readonly<{
 
 type ListState = "idle" | "loading" | "ready" | "error";
 type CreateState = "idle" | "creating";
+type ActiveSection = "keys" | "history";
 type DeveloperApiKeysViewProps = Readonly<{
   account: `0x${string}` | null;
   authReady: boolean;
@@ -180,15 +180,18 @@ async function copyToClipboard(value: string) {
 
 function KeyListSkeleton() {
   return (
-    <div className={styles.skeletonList} aria-hidden="true">
-      {[0, 1].map((index) => (
-        <div className={styles.skeletonRow} key={index}>
+    <>
+      <span className={styles.visuallyHidden} role="status">
+        Loading API keys
+      </span>
+      <div className={styles.skeletonList} aria-hidden="true">
+        <div className={styles.skeletonRow}>
           <span className={styles.skeletonTitle} />
           <span className={styles.skeletonLine} />
           <span className={styles.skeletonLineShort} />
         </div>
-      ))}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -247,6 +250,8 @@ function DeveloperApiKeysView({
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokeError, setRevokeError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
+  const [walletSessionTimedOut, setWalletSessionTimedOut] = useState(false);
   const labelRef = useRef<HTMLInputElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
   const createButtonRef = useRef<HTMLButtonElement>(null);
@@ -339,6 +344,14 @@ function DeveloperApiKeysView({
     if (confirmingRevokeId) confirmRevokeRef.current?.focus();
   }, [confirmingRevokeId]);
 
+  useEffect(() => {
+    if (authReady) return;
+    const timeoutId = window.setTimeout(() => {
+      setWalletSessionTimedOut(true);
+    }, 8_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [authReady]);
+
   const activeCount = useMemo(
     () => apiKeys.filter((apiKey) => keyStatus(apiKey) === "Active").length,
     [apiKeys],
@@ -355,7 +368,7 @@ function DeveloperApiKeysView({
 
     const cleanLabel = label.trim();
     if (!cleanLabel) {
-      setLabelError("Enter a name that identifies this agent or workflow.");
+      setLabelError("Enter a name for this key.");
       labelRef.current?.focus();
       return;
     }
@@ -426,8 +439,15 @@ function DeveloperApiKeysView({
   const dismissApiKey = () => {
     setCreatedApiKey(null);
     setCopyState("idle");
-    setStatusMessage("The one time key display was cleared.");
+    setStatusMessage("Key hidden.");
     window.setTimeout(() => createButtonRef.current?.focus(), 0);
+  };
+
+  const showSection = (section: ActiveSection) => {
+    setActiveSection(section);
+    setStatusMessage(
+      section === "keys" ? "Showing API keys." : "Showing launch history.",
+    );
   };
 
   const beginRevoke = (apiKeyId: string, trigger: HTMLButtonElement) => {
@@ -500,41 +520,45 @@ function DeveloperApiKeysView({
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
           <p className={styles.kicker}>Developer access</p>
-          <h1>Give your agent a launch key</h1>
+          <h1>API keys</h1>
           <p className={styles.intro}>
-            Create a scoped API key for custom launches. Your agent can submit
-            and read launch preparations, while your wallet keeps control of the
-            final transaction.
+            Create and revoke keys for Custom launch workflows. A key can
+            prepare a launch, but only your wallet can sign it.
           </p>
         </div>
-
-        <ol className={styles.launchPath} aria-label="Custom launch path">
-          <li>
-            <span>1</span>
-            <strong>Connect wallet</strong>
-          </li>
-          <li>
-            <span>2</span>
-            <strong>Give the key to your agent</strong>
-          </li>
-          <li>
-            <span>3</span>
-            <strong>Review the prepared launch</strong>
-          </li>
-          <li>
-            <span>4</span>
-            <strong>Confirm in your wallet</strong>
-          </li>
-        </ol>
       </header>
 
       {!authReady ? (
-        <section className={styles.walletGate} aria-busy="true">
-          <span className={styles.walletGateMark} aria-hidden="true" />
-          <span className={styles.walletGateTitle} aria-hidden="true" />
-          <span className={styles.walletGateLine} aria-hidden="true" />
-          <span className={styles.visuallyHidden}>Loading wallet session</span>
-        </section>
+        walletSessionTimedOut ? (
+          <section className={styles.walletGate} role="alert">
+            <Image
+              className={styles.loopMark}
+              src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
+              alt=""
+              width={1168}
+              height={1536}
+              sizes="52px"
+            />
+            <h2>Wallet access is unavailable</h2>
+            <p>Reload the page or try again shortly.</p>
+            <button
+              className={styles.secondaryButton}
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              Reload page
+            </button>
+          </section>
+        ) : (
+          <section className={styles.walletGate} aria-busy="true">
+            <span className={styles.walletGateMark} aria-hidden="true" />
+            <span className={styles.walletGateTitle} aria-hidden="true" />
+            <span className={styles.walletGateLine} aria-hidden="true" />
+            <span className={styles.visuallyHidden} role="status">
+              Loading wallet session
+            </span>
+          </section>
+        )
       ) : !account ? (
         <section className={styles.walletGate} aria-labelledby="connect-title">
           <Image
@@ -543,12 +567,12 @@ function DeveloperApiKeysView({
             alt=""
             width={1168}
             height={1536}
-            sizes="64px"
+            sizes="52px"
           />
-          <h2 id="connect-title">Connect the wallet that owns your keys</h2>
+          <h2 id="connect-title">Connect your wallet</h2>
           <p>
-            Your wallet session controls key creation and revocation. No wallet
-            signature is requested just to manage keys.
+            Use the wallet that will own these keys. Connecting does not request
+            a signature.
           </p>
           <button
             className={styles.primaryButton}
@@ -570,7 +594,6 @@ function DeveloperApiKeysView({
               <p>
                 {activeCount} active {activeCount === 1 ? "key" : "keys"}
               </p>
-              <Link href="/profile">View finalized launches</Link>
             </div>
           </div>
 
@@ -589,9 +612,8 @@ function DeveloperApiKeysView({
                 <span className={styles.oneTimeBadge}>Shown once</span>
               </div>
               <p className={styles.revealWarning}>
-                This secret will not be available again. Store it in your
-                agent&apos;s secret manager. Do not commit it or paste it into a
-                public chat.
+                Copy this secret now. It will not be shown again. Store it in
+                your agent&apos;s secret manager and keep it out of source control.
               </p>
               <div className={styles.secretRow}>
                 <code>{createdApiKey.apiKeySecret}</code>
@@ -618,279 +640,287 @@ function DeveloperApiKeysView({
             </div>
           ) : null}
 
-          <div className={styles.workspace}>
-            <section
-              className={`${styles.panel} ${styles.createPanel}`}
-              aria-labelledby="create-key-title"
+          <div
+            className={styles.sectionSwitch}
+            role="group"
+            aria-label="Developer access view"
+          >
+            <button
+              aria-pressed={activeSection === "keys"}
+              type="button"
+              onClick={() => showSection("keys")}
             >
-              <div className={styles.panelHeading}>
-                <div>
-                  <p className={styles.kicker}>New credential</p>
-                  <h2 id="create-key-title">Create an API key</h2>
-                </div>
-              </div>
+              API keys
+            </button>
+            <button
+              aria-pressed={activeSection === "history"}
+              type="button"
+              onClick={() => showSection("history")}
+            >
+              Launch history
+            </button>
+          </div>
 
-              <form className={styles.createForm} onSubmit={createApiKey}>
-                <label className={styles.field} htmlFor="api-key-label">
-                  <span>Key name</span>
-                  <input
-                    ref={labelRef}
-                    id="api-key-label"
-                    aria-describedby={
-                      labelError ? "api-key-label-error" : "api-key-label-help"
-                    }
-                    aria-invalid={Boolean(labelError)}
-                    autoComplete="off"
-                    maxLength={64}
-                    name="label"
-                    placeholder="Launch agent"
-                    spellCheck={false}
-                    type="text"
-                    value={label}
-                    onChange={(event) => {
-                      setLabel(event.target.value);
-                      if (labelError) setLabelError("");
-                    }}
-                  />
-                </label>
-                <p
-                  className={labelError ? styles.inlineError : styles.fieldHelp}
-                  id={labelError ? "api-key-label-error" : "api-key-label-help"}
-                >
-                  {labelError || "Use a name you will recognize later."}
-                </p>
-
-                <label className={styles.field} htmlFor="api-key-expiry">
-                  <span>Expires after</span>
-                  <select
-                    id="api-key-expiry"
-                    name="expiresInDays"
-                    value={expiresInDays}
-                    onChange={(event) =>
-                      setExpiresInDays(Number(event.target.value))
-                    }
-                  >
-                    {expiryOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className={styles.fieldHelp}>
-                  You can revoke the key immediately at any time.
-                </p>
-
-                <div className={styles.scopeLedger}>
-                  <div className={styles.scopeHeading}>
-                    <span>Granted now</span>
-                    <strong>2 scopes</strong>
+          {activeSection === "keys" ? (
+            <div className={styles.workspace}>
+              <section
+                className={`${styles.panel} ${styles.createPanel}`}
+                aria-labelledby="create-key-title"
+              >
+                <div className={styles.panelHeading}>
+                  <div>
+                    <p className={styles.kicker}>New key</p>
+                    <h2 id="create-key-title">Create key</h2>
                   </div>
-                  <ul>
-                    {fixedScopes.map((scope) => (
-                      <li key={scope}>
-                        <code>{scope}</code>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
 
-                <p className={styles.securityNote}>
-                  This key cannot sign or broadcast wallet transactions. Fee
-                  claims and automated buybacks will require separate scopes
-                  when those API operations become available.
-                </p>
+                <form className={styles.createForm} onSubmit={createApiKey}>
+                  <div className={styles.formFields}>
+                    <div>
+                      <label className={styles.field} htmlFor="api-key-label">
+                        <span>Name</span>
+                        <input
+                          ref={labelRef}
+                          id="api-key-label"
+                          aria-describedby={
+                            labelError ? "api-key-label-error" : undefined
+                          }
+                          aria-invalid={Boolean(labelError)}
+                          autoComplete="off"
+                          maxLength={64}
+                          name="label"
+                          placeholder="Launch agent"
+                          spellCheck={false}
+                          type="text"
+                          value={label}
+                          onChange={(event) => {
+                            setLabel(event.target.value);
+                            if (labelError) setLabelError("");
+                          }}
+                        />
+                      </label>
+                      {labelError ? (
+                        <p
+                          className={styles.inlineError}
+                          id="api-key-label-error"
+                        >
+                          {labelError}
+                        </p>
+                      ) : null}
+                    </div>
 
-                {createError ? (
-                  <p className={styles.inlineError} role="alert">
-                    {createError}
+                    <label className={styles.field} htmlFor="api-key-expiry">
+                      <span>Expires after</span>
+                      <select
+                        id="api-key-expiry"
+                        name="expiresInDays"
+                        value={expiresInDays}
+                        onChange={(event) =>
+                          setExpiresInDays(Number(event.target.value))
+                        }
+                      >
+                        {expiryOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <details className={styles.scopeLedger}>
+                    <summary>
+                      <span>Permissions</span>
+                      <strong>2 launch scopes</strong>
+                    </summary>
+                    <ul>
+                      {fixedScopes.map((scope) => (
+                        <li key={scope}>
+                          <code>{scope}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+
+                  <p className={styles.securityNote}>
+                    API keys cannot sign or broadcast wallet transactions.
                   </p>
-                ) : null}
 
-                <button
-                  ref={createButtonRef}
-                  className={styles.primaryButton}
-                  disabled={createState === "creating" || Boolean(createdApiKey)}
-                  type="submit"
-                >
-                  {createState === "creating"
-                    ? "Creating key"
-                    : createdApiKey
-                      ? "Save current key first"
-                      : "Create key"}
-                </button>
-              </form>
-            </section>
+                  {createError ? (
+                    <p className={styles.inlineError} role="alert">
+                      {createError}
+                    </p>
+                  ) : null}
 
-            <section
-              className={`${styles.panel} ${styles.listPanel}`}
-              aria-labelledby="api-keys-title"
-              aria-busy={listState === "loading"}
-            >
-              <div className={styles.panelHeading}>
-                <div>
-                  <p className={styles.kicker}>Credentials</p>
-                  <h2 id="api-keys-title">Your API keys</h2>
-                </div>
-                <button
-                  className={styles.textButton}
-                  disabled={listState === "loading"}
-                  type="button"
-                  onClick={refreshApiKeys}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {listState === "loading" ? <KeyListSkeleton /> : null}
-
-              {listState === "error" ? (
-                <div className={styles.statePanel} role="alert">
-                  <h3>API keys are unavailable</h3>
-                  <p>{listError}</p>
                   <button
-                    className={styles.secondaryButton}
+                    ref={createButtonRef}
+                    className={styles.primaryButton}
+                    disabled={
+                      createState === "creating" || Boolean(createdApiKey)
+                    }
+                    type="submit"
+                  >
+                    {createState === "creating"
+                      ? "Creating key"
+                      : createdApiKey
+                        ? "Save current key first"
+                        : "Create key"}
+                  </button>
+                </form>
+              </section>
+
+              <section
+                className={`${styles.panel} ${styles.listPanel}`}
+                aria-labelledby="api-keys-title"
+                aria-busy={listState === "loading"}
+              >
+                <div className={styles.panelHeading}>
+                  <div>
+                    <p className={styles.kicker}>Existing</p>
+                    <h2 id="api-keys-title">Your keys</h2>
+                  </div>
+                  <button
+                    className={styles.textButton}
+                    disabled={listState === "loading"}
                     type="button"
                     onClick={refreshApiKeys}
                   >
-                    Try again
+                    Refresh
                   </button>
                 </div>
-              ) : null}
 
-              {listState === "ready" && apiKeys.length === 0 ? (
-                <div className={styles.statePanel}>
-                  <h3>No API keys yet</h3>
-                  <p>
-                    Create a key for the agent or workflow that prepares your
-                    first custom launch.
-                  </p>
-                </div>
-              ) : null}
+                {listState === "loading" ? <KeyListSkeleton /> : null}
 
-              {listState === "ready" && apiKeys.length > 0 ? (
-                <ul className={styles.keyList}>
-                  {apiKeys.map((apiKey) => {
-                    const status = keyStatus(apiKey);
-                    const confirming = confirmingRevokeId === apiKey.id;
-                    const revoking = revokingId === apiKey.id;
-                    return (
-                      <li className={styles.keyItem} key={apiKey.id}>
-                        <div className={styles.keyIdentity}>
-                          <div>
-                            <h3>{apiKey.label}</h3>
-                            <span
-                              className={styles.keyStatus}
-                              data-status={status.toLowerCase()}
-                            >
-                              {status}
-                            </span>
-                          </div>
-                          <code>{displayPrefix(apiKey.keyPrefix)}</code>
-                        </div>
+                {listState === "error" ? (
+                  <div className={styles.statePanel} role="alert">
+                    <h3>Unable to load keys</h3>
+                    <p>{listError}</p>
+                    <button
+                      className={styles.secondaryButton}
+                      type="button"
+                      onClick={refreshApiKeys}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : null}
 
-                        <dl className={styles.keyMetadata}>
-                          <div>
-                            <dt>Created</dt>
-                            <dd>{formatDate(apiKey.createdAt, "Unknown")}</dd>
-                          </div>
-                          <div>
-                            <dt>Expires</dt>
-                            <dd>
-                              {formatDate(apiKey.expiresAt, "Unavailable")}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Last used</dt>
-                            <dd>{formatDate(apiKey.lastUsedAt, "Never")}</dd>
-                          </div>
-                          {apiKey.revokedAt ? (
+                {listState === "ready" && apiKeys.length === 0 ? (
+                  <div className={styles.statePanel}>
+                    <h3>No keys yet</h3>
+                    <p>Create a key to start preparing Custom launches.</p>
+                  </div>
+                ) : null}
+
+                {listState === "ready" && apiKeys.length > 0 ? (
+                  <ul className={styles.keyList}>
+                    {apiKeys.map((apiKey) => {
+                      const status = keyStatus(apiKey);
+                      const confirming = confirmingRevokeId === apiKey.id;
+                      const revoking = revokingId === apiKey.id;
+                      return (
+                        <li className={styles.keyItem} key={apiKey.id}>
+                          <div className={styles.keyIdentity}>
                             <div>
-                              <dt>Revoked</dt>
+                              <h3>{apiKey.label}</h3>
+                              <span
+                                className={styles.keyStatus}
+                                data-status={status.toLowerCase()}
+                              >
+                                {status}
+                              </span>
+                            </div>
+                            <code>{displayPrefix(apiKey.keyPrefix)}</code>
+                          </div>
+
+                          <dl className={styles.keyMetadata}>
+                            <div>
+                              <dt>Expires</dt>
                               <dd>
-                                {formatDate(apiKey.revokedAt, "Unavailable")}
+                                {formatDate(apiKey.expiresAt, "Unavailable")}
                               </dd>
                             </div>
-                          ) : null}
-                        </dl>
-
-                        <ul
-                          className={styles.keyScopes}
-                          aria-label="Key scopes"
-                        >
-                          {apiKey.scopes.map((scope) => (
-                            <li key={scope}>
-                              <code>{scope}</code>
-                            </li>
-                          ))}
-                        </ul>
-
-                        {confirming ? (
-                          <div
-                            className={styles.revokeConfirmation}
-                            role="group"
-                            aria-label={`Revoke ${apiKey.label}`}
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape" && !revoking) {
-                                event.preventDefault();
-                                cancelRevoke();
-                              }
-                            }}
-                          >
-                            <p>
-                              Revoke this key? Requests using it will stop
-                              immediately.
-                            </p>
-                            {revokeError ? (
-                              <p className={styles.inlineError} role="alert">
-                                {revokeError}
-                              </p>
-                            ) : null}
                             <div>
-                              <button
-                                className={styles.secondaryButton}
-                                disabled={revoking}
-                                type="button"
-                                onClick={cancelRevoke}
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                ref={confirmRevokeRef}
-                                className={styles.dangerButton}
-                                disabled={revoking}
-                                type="button"
-                                data-confirm-revoke
-                                onClick={() => void revokeApiKey(apiKey)}
-                              >
-                                {revoking ? "Revoking key" : "Revoke key"}
-                              </button>
+                              <dt>Last used</dt>
+                              <dd>{formatDate(apiKey.lastUsedAt, "Never")}</dd>
                             </div>
-                          </div>
-                        ) : status === "Active" ? (
-                          <button
-                            className={styles.revokeButton}
-                            type="button"
-                            onClick={(event) =>
-                              beginRevoke(apiKey.id, event.currentTarget)
-                            }
-                          >
-                            Revoke key
-                          </button>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : null}
-            </section>
-          </div>
+                            {apiKey.revokedAt ? (
+                              <div>
+                                <dt>Revoked</dt>
+                                <dd>
+                                  {formatDate(apiKey.revokedAt, "Unavailable")}
+                                </dd>
+                              </div>
+                            ) : null}
+                          </dl>
 
-          <DeveloperLaunchHistory
-            account={account}
-            getAccessToken={getAccessToken}
-            getIdentityToken={getIdentityToken}
-          />
+                          {confirming ? (
+                            <div
+                              className={styles.revokeConfirmation}
+                              role="group"
+                              aria-label={`Revoke ${apiKey.label}`}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape" && !revoking) {
+                                  event.preventDefault();
+                                  cancelRevoke();
+                                }
+                              }}
+                            >
+                              <p>
+                                Revoke this key? Requests using it will stop
+                                immediately.
+                              </p>
+                              {revokeError ? (
+                                <p className={styles.inlineError} role="alert">
+                                  {revokeError}
+                                </p>
+                              ) : null}
+                              <div>
+                                <button
+                                  className={styles.secondaryButton}
+                                  disabled={revoking}
+                                  type="button"
+                                  onClick={cancelRevoke}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  ref={confirmRevokeRef}
+                                  className={styles.dangerButton}
+                                  disabled={revoking}
+                                  type="button"
+                                  data-confirm-revoke
+                                  onClick={() => void revokeApiKey(apiKey)}
+                                >
+                                  {revoking ? "Revoking key" : "Revoke key"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : status === "Active" ? (
+                            <button
+                              className={styles.revokeButton}
+                              type="button"
+                              onClick={(event) =>
+                                beginRevoke(apiKey.id, event.currentTarget)
+                              }
+                            >
+                              Revoke key
+                            </button>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </section>
+            </div>
+          ) : (
+            <DeveloperLaunchHistory
+              account={account}
+              getAccessToken={getAccessToken}
+              getIdentityToken={getIdentityToken}
+            />
+          )}
         </>
       )}
     </div>
