@@ -227,6 +227,7 @@ type ProfileClaimActionState = {
     | "error";
   message: string;
   transactionHash?: Hex;
+  recoverable?: true;
 };
 
 type ClassicV3ActionState = {
@@ -241,6 +242,7 @@ type ClassicV3ActionState = {
     | "error";
   message: string;
   transactionHash?: Hex;
+  recoverable?: true;
 };
 
 type DeepActionState = ClassicV3ActionState;
@@ -749,6 +751,7 @@ export function resolveProfileNotFoundTransaction(retryAllowed: boolean) {
         release: true,
         status: "error" as const,
         message: "No transaction was found. You can submit the claim again.",
+        recoverable: true as const,
       })
     : Object.freeze({
         release: false,
@@ -2194,6 +2197,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             status: resolution.status,
             message: resolution.message,
             transactionHash,
+            ...(resolution.release ? { recoverable: true as const } : {}),
           });
           return;
         }
@@ -2932,6 +2936,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           );
           if (gate.outcome === "hold") {
             if (receiptStatus === "not-found" && retryNotFound) {
+              const resolution = resolveProfileNotFoundTransaction(true);
               const checkpoint = stockPairedCheckpointAfterReceipt(
                 pendingTransaction,
                 "reverted",
@@ -2942,9 +2947,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                 forgetPendingProfileTransaction(pendingTransaction);
               }
               setActionState({
-                status: "error",
-                message: "Transaction not found. You can try again.",
+                status: resolution.status,
+                message: resolution.message,
                 transactionHash,
+                recoverable: true,
                 ...(pendingStage === "claim"
                   ? {}
                   : {
@@ -4897,6 +4903,14 @@ export function actionSettling(
   return actionPending(state);
 }
 
+export function profileActionStateUsesNeutralStatus(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+) {
+  return Boolean(
+    state && (state.status !== "error" || state.recoverable === true),
+  );
+}
+
 export function prioritizedProfileActionState(
   states: readonly (
     | ProfileClaimActionState
@@ -5435,7 +5449,7 @@ function ProfileActionState({
   ) {
     return null;
   }
-  if (state.status !== "error") {
+  if (profileActionStateUsesNeutralStatus(state)) {
     return (
       <span className={styles.visuallyHidden} role="status">
         {state.message}
