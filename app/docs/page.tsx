@@ -112,15 +112,15 @@ export default function DocsIndexPage() {
             <h3>Creators</h3>
             <p>
               Build a concrete project, prepare it through the Custom Launch API
-              and review the exact wallet action before launch.
+              and review the exact transaction after it is authorized.
             </p>
           </div>
           <div>
             <h3>Builders</h3>
             <p>
-              Use Hook Builder as the skill and tooling layer. It produces the
-              reproducible project that can become a deterministic Custom
-              Launch API bundle.
+              Use Hookbuilder-Skill as an optional project starting point.
+              Derive the launch request with project-specific packaging that
+              follows the Custom Launch API schema.
             </p>
           </div>
           <div>
@@ -151,7 +151,7 @@ export default function DocsIndexPage() {
           </div>
           <div className={docsStyles.flowItem}>
             <span>03</span>
-            <strong>Review the prepared wallet action</strong>
+            <strong>Wait for authorization, then review the transaction</strong>
           </div>
           <div className={docsStyles.flowItem}>
             <span>04</span>
@@ -160,10 +160,11 @@ export default function DocsIndexPage() {
         </div>
 
         <p>
-          Bundle checks and transaction preparation do not sign or broadcast a
-          launch. The controller wallet still reviews the exact action and
-          authorizes any transaction. Public integrations can then verify the
-          resulting onchain record.
+          Bundle checks and artifact preparation do not produce a wallet
+          transaction. Platform authorization attaches the exact transaction,
+          but does not wallet-sign or broadcast it. The controller wallet still
+          reviews and authorizes its own transaction. Public integrations can
+          then verify the resulting onchain record.
         </p>
       </section>
 
@@ -241,8 +242,8 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Creator paths</strong>
                 <small>
-                  Use Hook Builder and the Custom Launch API. The public template
-                  program remains separate and is not open for submissions.
+                  Build the project, package it against the Custom Launch API
+                  schema and keep the closed public-template program separate.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
@@ -253,8 +254,8 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Custom Launch API keys</strong>
                 <small>
-                  Create a wallet-bound key for bundle checks and prepared
-                  launches.
+                  Create a wallet-bound key for Custom launch requests and
+                  status reads.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />

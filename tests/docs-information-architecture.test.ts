@@ -25,6 +25,7 @@ const creatorEarningsPage = read("app/docs/creators/earnings/page.tsx");
 const creatorProgramsPage = read("app/docs/creators/programs/page.tsx");
 const infrastructurePage = read("app/docs/infrastructure/page.tsx");
 const developerOverview = read("app/docs/developers/page.tsx");
+const customLaunchPage = read("app/docs/developers/custom-launch/page.tsx");
 const verifyPage = read("app/docs/developers/verify/page.tsx");
 const indexingPage = read("app/docs/developers/indexing/page.tsx");
 const machineReadablePage = read(
@@ -123,6 +124,11 @@ describe("Docs information architecture", () => {
           { depth: 0, href: "/docs/developers", label: "Overview" },
           {
             depth: 1,
+            href: "/docs/developers/custom-launch",
+            label: "Custom Launch API",
+          },
+          {
+            depth: 1,
             href: "/docs/developers/verify",
             label: "Verify a token or pool",
           },
@@ -158,6 +164,7 @@ describe("Docs information architecture", () => {
           "/docs/creators/earnings",
           "/docs/creators/programs",
           "/docs/developers",
+          "/docs/developers/custom-launch",
           "/docs/developers/verify",
           "/docs/developers/indexing",
           "/docs/developers/machine-readable",
@@ -171,7 +178,7 @@ describe("Docs information architecture", () => {
     );
   });
 
-  it("keeps the three developer tasks in the same shell and breadcrumb hierarchy", () => {
+  it("keeps the developer tasks in the same shell and breadcrumb hierarchy", () => {
     for (const [source, path, title] of [
       [
         developerOverview,
@@ -180,6 +187,11 @@ describe("Docs information architecture", () => {
       ],
       [verifyPage, "/docs/developers/verify", "Verify a token or pool"],
       [indexingPage, "/docs/developers/indexing", "Index new launches"],
+      [
+        customLaunchPage,
+        "/docs/developers/custom-launch",
+        "Custom Launch API",
+      ],
       [
         machineReadablePage,
         "/docs/developers/machine-readable",
@@ -190,7 +202,12 @@ describe("Docs information architecture", () => {
       expect(source).toContain(`title="${title}"`);
       expect(source).toContain("<DocsShell");
     }
-    for (const source of [verifyPage, indexingPage, machineReadablePage]) {
+    for (const source of [
+      customLaunchPage,
+      verifyPage,
+      indexingPage,
+      machineReadablePage,
+    ]) {
       expect(source).toContain('parentHref="/docs/developers"');
       expect(source).toContain('parentLabel="Developers"');
     }
@@ -221,7 +238,7 @@ describe("Docs information architecture", () => {
       expect(source).toContain("<DocsShell");
     }
 
-    expect(creatorsPage).toContain("Hook Builder");
+    expect(creatorsPage).toContain("Hookbuilder-Skill");
     expect(creatorsPage).toContain("Custom Launch API");
     expect(creatorsPage).toContain("Public templates are planned");
     expect(creatorTemplatesPage).toContain("Public template intake is closed");
@@ -245,6 +262,7 @@ describe("Docs information architecture", () => {
       "docs/public/economics.md",
       "docs/public/infrastructure.md",
       "docs/public/models/custom.md",
+      "docs/public/developers/custom-launch.md",
       "docs/public/tokens.md",
       "docs/public/trust.md",
       "docs/public/reference/official-links.md",
@@ -252,6 +270,7 @@ describe("Docs information architecture", () => {
       "app/docs/creators/page.tsx",
       "app/docs/creators/launch/page.tsx",
       "app/docs/creators/templates/page.tsx",
+      "app/docs/developers/custom-launch/page.tsx",
       "app/docs/launch-stamps/page.tsx",
       "app/docs/models/[model]/page.tsx",
       "app/docs/trust/page.tsx",

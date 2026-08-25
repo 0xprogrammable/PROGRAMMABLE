@@ -9,7 +9,7 @@ Programmable separates direct public models from deterministic Custom graph laun
 | Model              | What it creates                                                            | Market                                        | Access                                |
 | ------------------ | -------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------- |
 | Classic            | Fixed supply tokens with configurable buy and sell transaction fees        | ETH on Uniswap v4                             | Open through Create                   |
-| Custom             | Tokens or applications that need their own deterministic hook graph         | The pool and route in the prepared action      | Wallet-bound Custom Launch API         |
+| Custom             | Tokens or applications that need their own deterministic hook graph         | The pool and route in the authorized transaction | Wallet-bound Custom Launch API       |
 | Prediction Markets | Onchain outcome markets                                                    | A separately versioned Uniswap v4 release     | Open through Create                   |
 
 ## What is a hook

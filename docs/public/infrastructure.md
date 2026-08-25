@@ -12,7 +12,7 @@ Classic uses the current launcher and shared hook on Ethereum. One transaction c
 
 ## Custom execution
 
-Custom begins with one deterministic source and graph bundle submitted through the authenticated API. The platform validates the declared manifest digest, graph constraints, required agent evidence and permit binding, then prepares an exact wallet action. It does not compile the source, reproduce the build or audit the project. The controller wallet still submits the transaction, and the resulting launch must agree with the prepared action and final chain record.
+Custom begins with one deterministic source and graph bundle submitted through the authenticated API. The platform validates the declared manifest digest, graph constraints, attestation shape, evidence digests and permit binding. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the permit-attached transaction for separate controller-wallet signing and broadcast. The platform does not compile the source, reproduce the build or audit the project, and the resulting launch must agree with the authorized transaction and final chain record.
 
 ## Prediction Markets execution
 

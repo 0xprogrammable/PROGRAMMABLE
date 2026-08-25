@@ -46,6 +46,15 @@ export default function MachineReadableDocsPage() {
 
         <ul className={styles.linkList}>
           <li>
+            <Link href="/docs/developers/custom-launch">
+              Custom Launch API guide
+            </Link>
+            <span>
+              Canonical human guide for authentication, request construction,
+              lifecycle, errors, discovery and claims.
+            </span>
+          </li>
+          <li>
             <a href="/openapi.json">
               <code>/openapi.json</code>
             </a>
@@ -69,8 +78,7 @@ export default function MachineReadableDocsPage() {
               <code>/developers/custom-launch-api-v1.md</code>
             </a>
             <span>
-              Concise agent guide for required bundle evidence, idempotency and
-              wallet handoff.
+              Existing raw guide for agent and script compatibility.
             </span>
           </li>
           <li>
@@ -208,9 +216,9 @@ export default function MachineReadableDocsPage() {
           <div>
             <dt>Custom Launch API contract</dt>
             <dd>
-              Defines the authenticated request, required manifest and agent
-              evidence, graph constraints, permit binding and wallet handoff.
-              It does not define a safety review.
+              Defines the authenticated request, manifest and attestation
+              shapes, graph constraints, permit binding and wallet handoff. It
+              does not define a universal check-ID catalog or a safety review.
             </dd>
           </div>
           <div>
@@ -244,14 +252,15 @@ export default function MachineReadableDocsPage() {
             bypass launch quota.
           </li>
           <li>
-            The platform validates manifest digest, graph, required agent
+            The platform validates manifest digest, graph, attestation shape,
             evidence digests and permit bindings. It does not compile source,
             simulate the transaction, audit the project or attest safety.
           </li>
           <li>
-            The API key is not wallet signing authority. The bound wallet, or
-            an agent with separate wallet authority, signs and broadcasts the
-            prepared Router action.
+            <code>prepared</code> contains an artifact but no wallet transaction.
+            <code>authorized</code> contains the permit-attached transaction for
+            the bound wallet to review, sign and broadcast. The API key is not
+            wallet authority.
           </li>
           <li>
             <code>GET /v1/custom-launches</code> returns a wallet-owned,
@@ -297,7 +306,9 @@ export default function MachineReadableDocsPage() {
         <p>Continue</p>
         <ul>
           <li>
-            <Link href="/developers/api-keys">Create or manage API keys</Link>
+            <Link href="/docs/developers/custom-launch">
+              Use the Custom Launch API
+            </Link>
           </li>
           <li>
             <Link href="/docs/developers/verify">Verify a token or pool</Link>

@@ -12,9 +12,9 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## API-first preparation
 
-Start with the stable [Programmable v4 Builder](https://github.com/0xprogrammable/hookbuilder/releases/latest). The Builder prepares one deterministic source and graph bundle with the required agent evidence. The controller wallet creates a [wallet-bound API key](https://programmable.market/developers/api-keys), and the agent submits the bundle to `https://api.programmable.market/v1/custom-launches`.
+Build and test the exact project. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional starting point, not a claim that the current stable Builder packages the API request. Project-specific tooling derives the deterministic source manifest, graph bundle and evidence digests against the [Custom Launch API schema](../developers/custom-launch.md). The controller wallet creates a [wallet-bound API key](https://programmable.market/developers/api-keys), and the workflow submits the bundle to `https://api.programmable.market/v1/custom-launches`.
 
-The API checks the declared bundle commitments and prepares the exact wallet action. It does not compile the project, reproduce its tests, audit it, sign the transaction or broadcast it. The API key is not wallet authority; the controller wallet must review and confirm the prepared action.
+The API checks the declared bundle commitments. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. `authorized` supplies the permit-attached transaction for separate controller-wallet review. The API does not compile the project, reproduce its tests, audit it, sign the transaction or broadcast it, and the API key is not wallet authority.
 
 ## Release binding
 
@@ -30,4 +30,4 @@ The canonical Launch Stamp Router is live on Ethereum at `0x8622DD5bAb44185f2A45
 A launch stamp is provenance, not an audit or guarantee. It does not prove current liquidity, sellability, terminal support or economic outcome.
 {% endhint %}
 
-The public developer feed discovers Classic records and verified Custom records. Custom execution remains bundle specific, so users should follow the exact prepared action rather than assume that any repository or hook is launchable.
+The public developer feed discovers Classic records and verified Custom records. Custom execution remains bundle specific, so users should inspect the exact authorized transaction rather than assume that any repository or hook is launchable.

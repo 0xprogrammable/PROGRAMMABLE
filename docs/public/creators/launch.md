@@ -4,13 +4,13 @@ description: Prepare one deterministic Custom project through the authenticated 
 
 # Launch a project
 
-Custom launch preparation is API-first. The Builder packages one deterministic source and graph bundle, the authenticated API validates its declared commitments, and the controller wallet separately reviews and signs the prepared transaction. No GitHub pull request submits the launch.
+Custom launch preparation is API-first. The submitting workflow packages one deterministic source and graph bundle, and the authenticated API validates its declared commitments. A `prepared` result contains no wallet transaction. After the request becomes `authorized`, the controller wallet separately reviews, signs and broadcasts the exact transaction. No GitHub pull request submits the launch.
 
 ## Prepare the source
 
-Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Use the latest stable [Programmable v4 Builder release](https://github.com/0xprogrammable/hookbuilder/releases/latest) rather than the moving development branch.
+Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional project starting point; the exact API request still comes from project-specific packaging against the published schema.
 
-The Builder preserves the product intent, chooses the smallest complete architecture and runs the checks that apply to that project. The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject.
+The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject. Run the checks that apply to the project and keep their underlying evidence. V1 requires check IDs and evidence digests but does not publish a universal check catalog or assess the evidence.
 
 ## Create an API key
 
@@ -20,13 +20,13 @@ The key grants only `custom-launch:create` and `custom-launch:read`. It is not a
 
 ## Submit the bundle
 
-Send one closed request to `https://api.programmable.market/v1/custom-launches` with the API key as a Bearer credential and a stable idempotency key. Follow the [Custom Launch API V1 guide](https://programmable.market/developers/custom-launch-api-v1.md) for the exact schema, graph limits, evidence fields and response states.
+Send one closed request to `https://api.programmable.market/v1/custom-launches` with the API key as a Bearer credential and a stable idempotency key. Follow the [Custom Launch API guide](../developers/custom-launch.md) for authentication, the exact schema, graph limits, evidence fields and response states.
 
-The platform validates the manifest digest, graph constraints, required agent evidence and permit binding. It does not compile the source, reproduce the build, audit the project or adopt the agent's claims as a safety conclusion.
+The platform validates the manifest digest, graph constraints, attestation shape, evidence digests and permit binding. It does not compile the source, reproduce the build, audit the project or adopt the agent's claims as a safety conclusion.
 
 ## Launch from the bound wallet
 
-When the request is prepared, the controller wallet checks the network, transaction destination, calldata and value, then signs the transaction itself. A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees with the public Router record.
+When the request is `prepared`, only the exact artifact exists. Wait for `authorized`, then have the controller wallet check the network, destination, calldata and value before it signs and broadcasts. A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees with the public Router record.
 
 ## Keep the record useful
 

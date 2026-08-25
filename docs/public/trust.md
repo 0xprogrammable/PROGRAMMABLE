@@ -12,7 +12,7 @@ Each Custom request binds one source descriptor, manifest digest, graph bundle a
 
 ## API preparation
 
-A prepared result means the exact action exists for the controller wallet. It is not an approval, audit, signed transaction or broadcast. The API key cannot authorize the wallet; the controller inspects and signs the final transaction separately.
+A `prepared` result means the exact artifact exists, while the signed permit and wallet transaction are still null. An `authorized` result supplies the permit-attached transaction, but it is not wallet-signed or broadcast. The API key cannot authorize the wallet; the controller inspects, signs and broadcasts separately.
 
 ## Finality and public projection
 

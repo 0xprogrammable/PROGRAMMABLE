@@ -21,6 +21,7 @@ const PUBLIC_ROUTES = [
   "/docs/creators/earnings",
   "/docs/creators/programs",
   "/docs/developers",
+  "/docs/developers/custom-launch",
   "/docs/developers/verify",
   "/docs/developers/indexing",
   "/docs/developers/machine-readable",

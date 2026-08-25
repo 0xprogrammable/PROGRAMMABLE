@@ -4,13 +4,12 @@ import Link from "next/link";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
-import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Launch a project · Programmable",
   description:
-    "Use a wallet-bound API key to check a Custom launch bundle and prepare the exact wallet action.",
+    "Use a wallet-bound API key to validate a Custom launch bundle, wait for authorization and track finality.",
   alternates: { canonical: "/docs/creators/launch" },
 };
 
@@ -28,7 +27,7 @@ export default function CreatorLaunchDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators/launch"
-      description="Create a wallet-bound API key, submit one deterministic bundle for checks and review the prepared launch in your wallet."
+      description="Create a wallet-bound API key, submit one deterministic bundle, then review the wallet transaction only after authorization."
       parentHref="/docs/creators"
       parentLabel="Creators"
       sections={sections}
@@ -44,9 +43,9 @@ export default function CreatorLaunchDocsPage() {
         <div className={docsStyles.callout}>
           <strong>The API does not control your wallet.</strong>
           <p>
-            An API key can submit and read launch preparations. It cannot sign
-            or broadcast the prepared transaction. The controller wallet must
-            review and confirm the final action separately.
+            An API key can submit and read launch preparations. It cannot
+            authorize, sign or broadcast the wallet transaction. The controller
+            wallet reviews it only after the API status becomes authorized.
           </p>
         </div>
       </section>
@@ -85,10 +84,10 @@ export default function CreatorLaunchDocsPage() {
           </li>
         </ol>
         <DocsExternalLink
-          href={PROGRAMMABLE_PUBLIC_REPOSITORIES.hookbuilder}
+          href="https://github.com/0xprogrammable/Hookbuilder-Skill"
           variant="chip"
         >
-          Open Hook Builder
+          Open Hookbuilder-Skill as a project starting point
         </DocsExternalLink>
       </section>
 
@@ -112,11 +111,11 @@ export default function CreatorLaunchDocsPage() {
           <code>https://api.programmable.market/v1/custom-launches</code> with
           the key as a Bearer credential. The API validates the declared
           manifest commitment, wallet binding, graph, hook permissions and
-          launch constraints before it prepares an action. It does not compile
-          or simulate the submitted project.
+          launch constraints before it prepares an artifact. It does not
+          compile or simulate the submitted project.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/developers/custom-launch-api-v1.md">
+          <Link href="/docs/developers/custom-launch">
             Read the Custom Launch API guide
           </Link>
         </p>
@@ -126,18 +125,20 @@ export default function CreatorLaunchDocsPage() {
         <h2>Prepared launch</h2>
         <p>
           A <code>prepared</code> result means the exact launch artifact exists.
-          It is not a signed transaction, a broadcast, an approval, an audit or
-          a safety claim. Read the launch status with the same API key and stop
-          on any failed or mismatched check.
+          Its signed permit and wallet transaction are still null. It is not a
+          wallet authorization, approval, audit or safety claim. Read the launch
+          status with the same API key and stop on any failed or mismatched
+          binding.
         </p>
       </section>
 
       <section id="launch">
         <h2>Wallet confirmation</h2>
         <p>
-          Review the exact prepared action with the controller wallet. Only that
-          wallet, or an agent separately authorized to use it, can sign and
-          broadcast the transaction. The API key alone cannot do either.
+          Wait for <code>authorized</code>, then review the exact permit-attached
+          transaction with the controller wallet. Only that wallet, or an agent
+          separately authorized to use it, can sign and broadcast. The API key
+          alone cannot do either.
         </p>
         <p>
           The launch is not complete when a transaction is merely submitted. It
