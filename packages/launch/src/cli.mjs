@@ -1,8 +1,10 @@
 import {
   GUIDE_URL,
-  OPENAPI_URL,
+  OPENAPI_URL_V1,
+  OPENAPI_URL_V2,
   PACKAGE_VERSION,
   RELEASE_URL,
+  RELEASE_URL_V1,
 } from "./constants.mjs";
 import { packLaunch } from "./pack.mjs";
 import { validateLaunchFile } from "./validate.mjs";
@@ -52,6 +54,7 @@ export async function main(argv) {
     rejectPositionals(parsed, 1, "status");
     result = await statusLaunch({
       requestId: parsed.positionals[0],
+      apiVersion: parsed.flags["api-version"],
       watch: parsed.booleans.has("watch"),
       until: parsed.flags.until,
       apiOrigin: parsed.flags["api-origin"],
@@ -81,6 +84,7 @@ function parseArguments(argv) {
     "timeout-ms",
     "poll-ms",
     "until",
+    "api-version",
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -146,7 +150,7 @@ function usage(command) {
       "The API key is read only from PROGRAMMABLE_API_KEY or the OS secret store.",
     ],
     status: [
-      "Usage: programmable-launch status <request-id> [--watch] [--until authorized|finalized]",
+      "Usage: programmable-launch status <request-id> [--api-version 1|2] [--watch] [--until authorized|finalized]",
       "This command never signs or broadcasts a wallet transaction.",
     ],
   };
@@ -154,7 +158,9 @@ function usage(command) {
     ...(command && details[command] ? details[command] : header),
     "",
     `Guide: ${GUIDE_URL}`,
-    `OpenAPI: ${OPENAPI_URL}`,
-    `Release: ${RELEASE_URL}`,
+    `OpenAPI V1 (read-only create): ${OPENAPI_URL_V1}`,
+    `OpenAPI V2 (release candidate; public create held): ${OPENAPI_URL_V2}`,
+    `Stable V1 release: ${RELEASE_URL_V1}`,
+    `V2 release candidate: ${RELEASE_URL}`,
   ].join("\n");
 }

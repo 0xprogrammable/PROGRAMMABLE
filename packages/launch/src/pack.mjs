@@ -6,12 +6,16 @@ import { getAddress, keccak256 } from "viem";
 import { loadCompilationUnits, loadTargetArtifact, canonicalIdentifier } from "./build.mjs";
 import { canonicalizeJson } from "./canonical-json.mjs";
 import {
-  AGENT_ATTESTATION_SCHEMA,
-  CREATE_REQUEST_SCHEMA,
+  AGENT_ATTESTATION_SCHEMA_V1,
+  AGENT_ATTESTATION_SCHEMA_V2,
+  CREATE_REQUEST_SCHEMA_V1,
+  CREATE_REQUEST_SCHEMA_V2,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
-  OPENAPI_URL,
-  PACK_CONFIG_SCHEMA,
+  OPENAPI_URL_V1,
+  OPENAPI_URL_V2,
+  PACK_CONFIG_SCHEMA_V1,
+  PACK_CONFIG_SCHEMA_V2,
   PACKAGE_VERSION,
   SOURCE_DESCRIPTOR_SCHEMA,
 } from "./constants.mjs";
@@ -26,6 +30,15 @@ import {
 } from "./io.mjs";
 import { buildSourceBundle } from "./source-bundle.mjs";
 import { buildVerificationBundle } from "./verification.mjs";
+import {
+  buildLaunchProfileBinding,
+  buildLaunchIntentHash,
+  hashLaunchProfile,
+  resolveLaunchProfile,
+  validateFeeEnforcedProfileBuilds,
+  validateFeeEnforcedProfileGraph,
+  validateLaunchProfileSelection,
+} from "./profile-v2.mjs";
 
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
@@ -34,7 +47,10 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 export async function buildLaunch({ configPath }) {
   const absoluteConfig = path.resolve(configPath);
   const { value: config } = await readStrictJsonFile(absoluteConfig, 2_097_152);
-  assertPackConfig(config);
+  const apiVersion = assertPackConfig(config);
+  const launchProfileSelection = apiVersion === "v2"
+    ? validateLaunchProfileSelection(config.launchProfile)
+    : null;
   const configDirectory = path.dirname(absoluteConfig);
   const sourceRoot = resolveSourceRoot(configDirectory, config.source.root);
   const launchWallet = getAddress(config.launchWallet);
@@ -44,7 +60,7 @@ export async function buildLaunch({ configPath }) {
   const unitsById = new Map(units.map((unit) => [unit.compilationUnitId, unit]));
   const targets = [];
   for (const [index, target] of config.targets.entries()) {
-    targets.push(await loadTargetArtifact(target, index, sourceRoot, unitsById));
+    targets.push(await loadTargetArtifact(target, index, sourceRoot, unitsById, { apiVersion }));
   }
 
   const attestationEvidence = await buildAttestationEvidence(
@@ -71,58 +87,129 @@ export async function buildLaunch({ configPath }) {
     bundleContentSha256: sourceBundle.bundleContentSha256,
     publicOriginCommitment,
   };
-  const { graphBundle, graphBundleHash, predictions } = buildGraphBundle({
+  const { graphBundle, graphBundleHash, predictions, runtimeCodes } = buildGraphBundle({
     targets,
     pool: config.pool,
     sourceBundleSha256: sourceBundle.bundleContentSha256,
     launchWallet,
     nonce,
+    noDelegationRuntimeTargetIds: launchProfileSelection === null
+      ? []
+      : [launchProfileSelection.targetRoles.customModuleTargetId],
   });
   const { verificationBundle, verificationBundleHash } = buildVerificationBundle(
     units,
     targets,
     predictions,
+    { apiVersion, runtimeCodes },
   );
   const checks = attestationEvidence.map(({ checkId, evidenceSha256 }) => ({
     checkId,
     evidenceSha256,
   }));
-  const agentAttestation = {
-    schemaVersion: AGENT_ATTESTATION_SCHEMA,
-    subjectGraphBundleHash: graphBundleHash,
-    agentId: canonicalIdentifier(config.agentAttestation.agentId, "agentAttestation.agentId"),
-    checkedAt: canonicalCheckedAt(config.agentAttestation.checkedAt),
-    checks,
-  };
-  const request = {
-    schemaVersion: CREATE_REQUEST_SCHEMA,
-    launchWallet,
-    chainId: MAINNET_CHAIN_ID,
-    nonce,
-    sourceDescriptor,
-    sourceBundleManifest: sourceBundle.manifest,
-    graphBundle,
-    agentAttestation,
-    verificationBundle,
-  };
+  let request;
+  let launchProfileHash = null;
+  let launchIntentHash = null;
+  if (apiVersion === "v1") {
+    const agentAttestation = {
+      schemaVersion: AGENT_ATTESTATION_SCHEMA_V1,
+      subjectGraphBundleHash: graphBundleHash,
+      agentId: canonicalIdentifier(config.agentAttestation.agentId, "agentAttestation.agentId"),
+      checkedAt: canonicalCheckedAt(config.agentAttestation.checkedAt),
+      checks,
+    };
+    request = {
+      schemaVersion: CREATE_REQUEST_SCHEMA_V1,
+      launchWallet,
+      chainId: MAINNET_CHAIN_ID,
+      nonce,
+      sourceDescriptor,
+      sourceBundleManifest: sourceBundle.manifest,
+      graphBundle,
+      agentAttestation,
+      verificationBundle,
+    };
+  } else {
+    const launchProfile = resolveLaunchProfile(launchProfileSelection);
+    const launchProfileBinding = buildLaunchProfileBinding(launchProfileSelection, {
+      graphBundle,
+      predictions,
+    });
+    validateFeeEnforcedProfileGraph(
+      launchProfile,
+      launchProfileBinding,
+      graphBundle,
+      launchWallet,
+    );
+    validateFeeEnforcedProfileBuilds(
+      launchProfile,
+      launchProfileBinding,
+      graphBundle,
+      verificationBundle,
+    );
+    launchProfileHash = hashLaunchProfile(launchProfile);
+    launchIntentHash = buildLaunchIntentHash({
+      launchWallet,
+      chainId: MAINNET_CHAIN_ID,
+      nonce,
+      sourceDescriptor,
+      sourceBundleManifest: sourceBundle.manifest,
+      graphBundleHash,
+      verificationBundleHash,
+      launchProfileHash,
+      launchProfileSelection: launchProfileBinding,
+    });
+    const agentAttestation = {
+      schemaVersion: AGENT_ATTESTATION_SCHEMA_V2,
+      subjectLaunchIntentHash: launchIntentHash,
+      agentId: canonicalIdentifier(config.agentAttestation.agentId, "agentAttestation.agentId"),
+      checkedAt: canonicalCheckedAt(config.agentAttestation.checkedAt),
+      checks,
+    };
+    request = {
+      schemaVersion: CREATE_REQUEST_SCHEMA_V2,
+      launchWallet,
+      chainId: MAINNET_CHAIN_ID,
+      nonce,
+      sourceDescriptor,
+      sourceBundleManifest: sourceBundle.manifest,
+      graphBundle,
+      launchProfile,
+      launchProfileSelection: launchProfileBinding,
+      launchProfileHash,
+      launchIntentHash,
+      agentAttestation,
+      verificationBundle,
+    };
+  }
   const requestBytes = Buffer.from(`${canonicalizeJson(request)}\n`, "utf8");
   if (requestBytes.byteLength > MAX_REQUEST_BYTES) {
     throw new TypeError(`packed launch request exceeds the ${MAX_REQUEST_BYTES}-byte limit`);
   }
   const requestSha256 = sha256Digest(requestBytes);
   const receipt = {
-    schemaVersion: "programmable.launch-pack-receipt.v1",
+    schemaVersion: apiVersion === "v1"
+      ? "programmable.launch-pack-receipt.v1"
+      : "programmable.launch-pack-receipt.v2",
     package: { name: "@programmable/launch", version: PACKAGE_VERSION },
-    openapi: OPENAPI_URL,
+    openapi: apiVersion === "v1" ? OPENAPI_URL_V1 : OPENAPI_URL_V2,
+    apiVersion,
     requestSha256,
     sourceBundleDigest: sourceBundle.sourceBundleDigest,
     bundleContentSha256: sourceBundle.bundleContentSha256,
     graphBundleHash,
     verificationBundleHash,
+    launchProfileHash,
+    launchIntentHash,
     predictions,
   };
+  if (apiVersion === "v1") {
+    delete receipt.apiVersion;
+    delete receipt.launchProfileHash;
+    delete receipt.launchIntentHash;
+  }
   const receiptBytes = Buffer.from(`${canonicalizeJson(receipt)}\n`, "utf8");
-  return {
+  const result = {
     configDirectory,
     request,
     requestBytes,
@@ -133,6 +220,11 @@ export async function buildLaunch({ configPath }) {
     verificationBundleHash,
     predictions,
   };
+  if (apiVersion === "v2") {
+    result.launchProfileHash = launchProfileHash;
+    result.launchIntentHash = launchIntentHash;
+  }
+  return result;
 }
 
 export async function packLaunch({ configPath, outputPath, receiptPath }) {
@@ -141,7 +233,7 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
   const resolvedReceipt = path.resolve(receiptPath ?? `${resolvedOutput}.receipt.json`);
   await atomicWrite(resolvedOutput, built.requestBytes, 0o600);
   await atomicWrite(resolvedReceipt, built.receiptBytes, 0o600);
-  return {
+  const result = {
     outputPath: resolvedOutput,
     receiptPath: resolvedReceipt,
     requestSha256: built.requestSha256,
@@ -149,10 +241,15 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     verificationBundleHash: built.verificationBundleHash,
     predictions: built.predictions,
   };
+  if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V2) {
+    result.launchProfileHash = built.launchProfileHash;
+    result.launchIntentHash = built.launchIntentHash;
+  }
+  return result;
 }
 
 function assertPackConfig(config) {
-  assertExactKeys(config, [
+  const commonKeys = [
     "schemaVersion",
     "launchWallet",
     "chainId",
@@ -162,9 +259,19 @@ function assertPackConfig(config) {
     "targets",
     "pool",
     "agentAttestation",
-  ], "pack config");
-  if (config.schemaVersion !== PACK_CONFIG_SCHEMA) {
-    throw new TypeError(`pack config schemaVersion must be ${PACK_CONFIG_SCHEMA}`);
+  ];
+  let apiVersion;
+  if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V1) {
+    apiVersion = "v1";
+    assertExactKeys(config, commonKeys, "pack config");
+  } else if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V2) {
+    apiVersion = "v2";
+    assertExactKeys(config, [...commonKeys, "launchProfile"], "pack config");
+    validateLaunchProfileSelection(config.launchProfile);
+  } else {
+    throw new TypeError(
+      `pack config schemaVersion must be ${PACK_CONFIG_SCHEMA_V1} or ${PACK_CONFIG_SCHEMA_V2}`,
+    );
   }
   if (config.chainId !== MAINNET_CHAIN_ID) throw new TypeError("pack config chainId must be string 1");
   if (!Array.isArray(config.targets) || config.targets.length === 0 || config.targets.length > 16) {
@@ -199,6 +306,7 @@ function assertPackConfig(config) {
     || config.agentAttestation.checks.length > 64) {
     throw new TypeError("agentAttestation.checks must contain between 1 and 64 checks");
   }
+  return apiVersion;
 }
 
 async function buildAttestationEvidence(attestation, sourceRoot) {

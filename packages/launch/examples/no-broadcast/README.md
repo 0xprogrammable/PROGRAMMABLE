@@ -1,8 +1,8 @@
 # No-broadcast clean-room example
 
-This example uses real Solidity 0.8.26 sources, exact Standard JSON input and matching compiler artifacts. It derives a
-wallet-specific request and provides separate commands that can submit it to the production API and stop at
-`authorized`. It must never be signed or broadcast. It creates no Mainnet coin.
+This retained V1 compatibility example uses real Solidity 0.8.26 sources, exact Standard JSON input and matching
+compiler artifacts. It derives and validates a wallet-specific V1 request offline. New V1 submissions are read-only
+fenced, so this rehearsal never submits, polls, signs, broadcasts, or creates a Mainnet coin.
 
 After installing the pinned CLI release, copy only the immutable project files into a clean directory:
 
@@ -48,16 +48,7 @@ programmable-launch validate launch.json \
   --config programmable-launch.config.json
 ```
 
-Inject the API key through the encrypted environment or OS secret store. Do not paste it into this file, a prompt, chat
-or shell history. Then use the config-bound submit path and poll one resource:
-
-```sh
-programmable-launch submit launch.json \
-  --config programmable-launch.config.json
-programmable-launch status REQUEST_UUID --watch --until authorized
-```
-
-Stop at `authorized`. Record the request UUID and confirm that the response contains a wallet transaction for separate
-review, but do not sign and do not call `eth_sendTransaction`. The generated `evidence/rehearsal.json` proves only the
-inspected build inputs before `pack`. The command output and API resource are the separate evidence for any packaging,
-validation, idempotent submission or status polling that is actually performed.
+Stop after `validate`. The generated `evidence/rehearsal.json` proves only the inspected build inputs before `pack`.
+Calling V1 `submit` would return the non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`; this example does not present that as a
+successful wallet handoff. Use the separate fee-enforced V2 no-broadcast example to exercise the held five-role RC
+profile offline.

@@ -18,7 +18,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and Custom launches, including the live wallet-bound Custom Launch API.",
+      "Canonical discovery for Programmable Classic and Custom launches. V1 launch history reads remain live while public launch creation is held for the fee-enforced V2 release candidate.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -31,7 +31,8 @@ export function programmableWellKnownDocumentV1(
     documentationUrl: "https://developers.programmable.family/",
     sourceUrl: "https://github.com/0xprogrammable/developers",
     customLaunchApi: Object.freeze({
-      status: "live" as const,
+      status: "read-only" as const,
+      readStatus: "live" as const,
       apiBaseUrl: "https://api.programmable.market",
       readyzUrl: "https://api.programmable.market/readyz",
       openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
@@ -46,8 +47,37 @@ export function programmableWellKnownDocumentV1(
         tarballUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
       }),
+      releaseCandidate: Object.freeze({
+        status: "private-canary-held" as const,
+        publicAuthorization: false as const,
+        packageName: "@programmable/launch",
+        binary: "programmable-launch",
+        releaseVersion: "2.0.0-rc.1",
+        releaseTag: "programmable-launch-v2.0.0-rc.1",
+        releaseUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.1",
+        tarballUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz",
+        openApiUrl:
+          "https://programmable.market/openapi/custom-launch-v2.json",
+      }),
       authentication: "wallet-bound-api-key" as const,
       walletAuthority: "separate-review-and-sign" as const,
+      versions: Object.freeze({
+        v1: Object.freeze({
+          reads: "live" as const,
+          create: "read-only" as const,
+          createHttpStatus: 409 as const,
+          createErrorCode: "CUSTOM_LAUNCH_V1_READ_ONLY" as const,
+          retryable: false as const,
+        }),
+        v2: Object.freeze({
+          status: "release-candidate-held" as const,
+          createHttpStatus: 503 as const,
+          createErrorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE" as const,
+          retryAfter: "honor" as const,
+        }),
+      }),
       legacyIntake: Object.freeze({
         registry: "closed" as const,
         github: "closed" as const,
@@ -64,7 +94,7 @@ export function programmableWellKnownDocumentV1(
       classic: Object.freeze({ discoveryStatus: "live" as const }),
       custom: Object.freeze({
         discoveryStatus: "live" as const,
-        publicSubmissionStatus: "api-live" as const,
+        publicSubmissionStatus: "release-candidate-held" as const,
         registryDiscoveryStatus: manifest.status,
         legacyRegistrySubmissionStatus: "closed" as const,
         legacyGithubSubmissionStatus: "closed" as const,
@@ -74,8 +104,8 @@ export function programmableWellKnownDocumentV1(
           ? "1"
           : null,
         note: manifest.status === "live"
-          ? "The Custom Launch API is live. Finalized Router and approved Custom Registry identities are discoverable. Legacy Registry and GitHub submission intake is closed."
-          : "The Custom Launch API is live and finalized Router identities are discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
+          ? "V1 launch history reads are live, V1 launch creation is read-only, and the fee-enforced V2 release candidate is held until canary and public activation. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
+          : "V1 launch history reads are live, V1 launch creation is read-only, and the fee-enforced V2 release candidate is held until canary and public activation. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
       }),
     }),
     compatibility: Object.freeze({

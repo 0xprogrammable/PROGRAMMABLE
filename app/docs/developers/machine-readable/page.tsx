@@ -11,7 +11,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Public-read and Bearer-authenticated Custom Launch API contracts, Markdown guides, manifests and canonical verification files.",
+    "Public-read contracts, wallet-owned V1 history, Markdown guides, manifests and canonical verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
@@ -50,7 +50,7 @@ export default function MachineReadableDocsPage() {
               Custom Launch API guide
             </Link>
             <span>
-              Canonical human guide for authentication, request construction,
+              Canonical human guide for V1 reads, the public write fence,
               lifecycle, errors, discovery and claims.
             </span>
           </li>
@@ -69,8 +69,17 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v1.json</code>
             </a>
             <span>
-              Standalone OpenAPI contract for the Bearer-authenticated Custom
-              Launch API.
+              Standalone OpenAPI contract for live Bearer-authenticated V1
+              reads and the explicit V1 write fence.
+            </span>
+          </li>
+          <li>
+            <a href="/openapi/custom-launch-v2.json">
+              <code>/openapi/custom-launch-v2.json</code>
+            </a>
+            <span>
+              Held 2.0.0-rc.1 machine contract for offline and private-canary
+              integration. It does not activate public V2 submission.
             </span>
           </li>
           <li>
@@ -243,13 +252,14 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             <code>https://api.programmable.market/v1/custom-launches</code>{" "}
-            requires a wallet-bound <code>pm_live_</code> Bearer key.
+            requires a wallet-bound <code>pm_live_</code> Bearer key for reads.
           </li>
           <li>
-            Keys default to 90 days, are capped at 366 days and are limited to
-            10 active keys per wallet. New launch reservations are limited to
-            30 per rolling hour and 100 per rolling day; exact idempotent replays
-            bypass launch quota.
+            V1 list and single-resource reads remain live. Authenticated V1 POST
+            returns non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+            V2 remains held and returns{" "}
+            <code>503 CUSTOM_LAUNCH_V2_UNAVAILABLE</code> with{" "}
+            <code>Retry-After</code> until activation.
           </li>
           <li>
             The platform validates manifest digest, graph, attestation shape,
@@ -310,7 +320,7 @@ export default function MachineReadableDocsPage() {
         <ul>
           <li>
             <Link href="/docs/developers/custom-launch">
-              Use the Custom Launch API
+              Read Custom Launch API availability
             </Link>
           </li>
           <li>

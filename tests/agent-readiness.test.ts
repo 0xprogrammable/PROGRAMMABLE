@@ -115,7 +115,7 @@ describe("agent-readable public surface", () => {
     await expect(response.json()).resolves.toEqual(programmablePublicOpenApi);
   });
 
-  it("limits writes to Custom launch preparation without granting wallet authority", () => {
+  it("keeps V1 reads live and exposes only the explicit V1 write fence", () => {
     const prohibitedSegments = new Set([
       "claim",
       "profile",
@@ -134,6 +134,15 @@ describe("agent-readable public surface", () => {
       Object.keys(programmablePublicOpenApi.paths["/v1/custom-launches"]),
     ).toEqual(["get", "post"]);
     expect(
+      programmablePublicOpenApi.paths["/v1/custom-launches"].post,
+    ).toMatchObject({
+      deprecated: true,
+      summary: "V1 launch creation is read-only",
+    });
+    expect(Object.keys(
+      programmablePublicOpenApi.paths["/v1/custom-launches"].post.responses,
+    )).toEqual(["401", "403", "409"]);
+    expect(
       programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
     ).toContain("pending rows receive bounded best-effort chain reconciliation");
     expect(
@@ -145,6 +154,7 @@ describe("agent-readable public surface", () => {
       ),
     ).toEqual(["get"]);
     expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
+      "custom-launch:create": { state: "write-fenced" },
       "fees:claim": { state: "reserved-disabled" },
       "buybacks:manage": { state: "reserved-disabled" },
     });
@@ -201,7 +211,10 @@ describe("agent-readable public surface", () => {
     expect(
       standalone.components.schemas.CustomLaunchResourceV1.required,
     ).not.toContain("sourceVerification");
-    expect(standaloneSource).toContain('"code": "IDEMPOTENCY_CONFLICT"');
+    expect(standaloneSource).toContain('"code": "CUSTOM_LAUNCH_V1_READ_ONLY"');
+    expect(Object.keys(
+      standalone.paths["/v1/custom-launches"].post.responses,
+    )).toEqual(["401", "403", "409"]);
     expect(standaloneSource).not.toContain("IDEMPOTENCY_KEY_REUSED");
   });
 

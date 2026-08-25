@@ -1,18 +1,22 @@
 ---
-description: Package, submit and track one wallet-bound Custom launch through the live API
+description: Package locally and read existing wallet-bound V1 Custom launch history
 ---
 
 # Custom Launch API
 
-The Custom Launch API is live for one concrete Custom hook project and token per request on Ethereum Mainnet. The legacy Registry
-and GitHub submission intake is closed. A launch no longer requires a GitHub pull request.
+V1 list and single-resource reads remain live for existing wallet-bound launch requests on Ethereum Mainnet. V1
+creation is read-only: every authenticated `POST /v1/custom-launches` returns non-retryable
+`409 CUSTOM_LAUNCH_V1_READ_ONLY`. The fee-enforced V2 release candidate remains held until canary and explicit public
+activation; unavailable V2 requests return `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After`. There is currently no
+public Custom launch-creation route. Legacy Registry and GitHub submission intake is closed.
 
-An external agent can package exact source and build artifacts, validate the request, submit it with a wallet-bound API
-key and poll one durable resource. At `authorized`, the agent stops. The controller wallet separately reviews and signs
-the exact prepared transaction. The API key never signs or broadcasts it.
+An external agent can still package exact source and build artifacts and validate the local result. Existing request
+owners can read and poll their V1 resources. An API key never signs or broadcasts a controller-wallet transaction.
 
-The normative request and response contract is the
-[standalone OpenAPI document](https://programmable.market/openapi/custom-launch-v1.json). The raw
+The live V1 reads and write fence are defined by the
+[standalone V1 OpenAPI document](https://programmable.market/openapi/custom-launch-v1.json). The separate
+[held V2 release-candidate contract](https://programmable.market/openapi/custom-launch-v2.json) publishes the exact
+future/private-canary request and lifecycle shapes without authorizing public submission. The raw
 [V1 agent guide](https://programmable.market/developers/custom-launch-api-v1.md) remains compatible.
 
 ## Cold-agent quickstart
@@ -26,9 +30,9 @@ programmable-launch --version
 ```
 
 The release includes `examples/no-broadcast/README.md`, real Solidity sources, exact Standard JSON and matching solc
-artifacts. Its generated evidence is limited to `pre-submit`. The separate authenticated commands can use the
-pack-native deterministic hook-permission salt grind, reach `authorized` with a real wallet-bound request and then
-stop without signing or broadcasting.
+artifacts. Its generated evidence is limited to `pre-submit`. The pack-native deterministic hook-permission salt grind
+remains usable locally. The public write fence means a new request cannot currently advance from that evidence to
+`authorized`.
 
 Build the project from one pinned source revision and preserve:
 
@@ -45,12 +49,15 @@ programmable-launch pack \
   --output launch.json
 programmable-launch validate launch.json \
   --config programmable-launch.config.json
-programmable-launch submit ./launch.json \
-  --config programmable-launch.config.json
-programmable-launch status REQUEST_UUID --watch --until authorized
+# Existing V1 resources only:
+programmable-launch status REQUEST_UUID --watch --until finalized
 ```
 
-Create the wallet-bound key at [API keys](https://programmable.market/developers/api-keys). Store it in an encrypted
+Do not run `submit` against V1 during the write fence. It receives non-retryable
+`409 CUSTOM_LAUNCH_V1_READ_ONLY`. V2 is not a public CLI/API contract until canary and public activation are
+explicitly published.
+
+Manage a wallet-bound key at [API keys](https://programmable.market/developers/api-keys). Store it in an encrypted
 secret or environment variable named `PROGRAMMABLE_API_KEY`. Put only the literal placeholder
 `$PROGRAMMABLE_API_KEY` in chat, prompts, agent setup and documentation. The CLI also supports the operating system
 secret store. It has no `--api-key` flag and does not persist the key.
@@ -95,9 +102,12 @@ runtime hash or metadata-stripped compiler template.
 `validate` recalculates the manifest, source, graph, evidence and verification commitments. With `--config`, it also
 requires `launch.json` to be byte-identical to a fresh pack of the same source and build inputs.
 
-## Request contract
+## V1 write fence and retained request contract
 
-`POST /v1/custom-launches` accepts a closed JSON object up to 8,388,608 bytes (8 MiB). These eight V1 fields remain required:
+After successful API-key authentication and scope checks, `POST /v1/custom-launches` returns
+`409 CUSTOM_LAUNCH_V1_READ_ONLY` before reading an idempotency key or request body. Do not retry it. The eight-field V1
+schema remains published for compatibility with existing resources and local tooling; it is not an active public
+creation contract:
 
 | Field | Requirement |
 | --- | --- |
@@ -124,19 +134,12 @@ nested field, enum and bound.
 Programmable does not publish a universal check-ID catalog, fetch or assess that evidence, or adopt it as an audit,
 approval or safety claim.
 
-## Submit and retry safely
+## Handle the write fence safely
 
-`submit` first proves that `launch.json` is byte-identical to a fresh pack of the supplied config and exact artifacts.
-It then writes a mode `0600` journal before the first network request and binds the API origin and Idempotency-Key to
-the exact request bytes. The key itself is never written.
-
-Raw HTTP clients send `Authorization: Bearer $PROGRAMMABLE_API_KEY` only to `https://api.programmable.market`.
-
-- A new request returns `202`; an identical replay may return `200`.
-- A timeout, transport ambiguity, `429` or `503` retries only the persisted bytes with the same Idempotency-Key.
-- `Retry-After` is honored as either seconds or an HTTP date.
-- Reusing the key with different bytes fails locally. The server also returns `409 IDEMPOTENCY_CONFLICT`.
-- `400`, `401`, `403`, `409`, `413`, `415` and `422` are not retried unchanged.
+`submit` still proves that `launch.json` is byte-identical to a fresh pack and preserves its local secret and journal
+boundaries. It must stop on the current `409 CUSTOM_LAUNCH_V1_READ_ONLY`; do not loop or change the request to bypass
+the fence. Raw HTTP clients send `Authorization: Bearer $PROGRAMMABLE_API_KEY` only to
+`https://api.programmable.market`. Live V1 reads honor `Retry-After` on `429` or `503`.
 
 The response `requestHash` is the server's canonical idempotency digest. It is distinct from the CLI receipt's local
 SHA-256 of exact `launch.json` bytes.
@@ -175,8 +178,9 @@ Router provenance is not approval, audit coverage, active liquidity, tradability
 
 ## Errors and support
 
-The live readiness endpoint is [api.programmable.market/readyz](https://api.programmable.market/readyz). For support,
-send only the response `error.requestId`, HTTP status, UTC time and public error code. Never send the API key.
+The service readiness endpoint is [api.programmable.market/readyz](https://api.programmable.market/readyz). Readiness
+does not activate a held write route. For support, send only the response `error.requestId`, HTTP status, UTC time and
+public error code. Never send the API key.
 
 | HTTP | Action |
 | --- | --- |
@@ -184,12 +188,12 @@ send only the response `error.requestId`, HTTP status, UTC time and public error
 | `401` | Use an active key from the encrypted secret store. |
 | `403` | Use the required scope and exact bound wallet. |
 | `404` | Verify the request UUID and key without inferring another wallet's ownership. |
-| `409` | Preserve exact bytes for replay, or create a new nonce and key only when the error code requires it. |
+| `409` | `CUSTOM_LAUNCH_V1_READ_ONLY` is the current permanent V1 POST result. Do not retry it. |
 | `413` | Reduce the request to at most 8,388,608 bytes. |
 | `415` | Send `Content-Type: application/json`. |
 | `422` | Fix the reported source, graph, attestation, verification or permit binding. |
 | `429` | Honor `Retry-After`. |
-| `503` | Retry the identical request after `Retry-After` when present. |
+| `503` | Honor `Retry-After` for reads. `CUSTOM_LAUNCH_V2_UNAVAILABLE` means the V2 RC remains held. |
 
 ## Current boundary
 

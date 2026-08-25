@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "programmable.fee-enforced-profile-assets.v1",
+  "profileId": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
+  "profileRevision": 1,
+  "profileVersion": "2.0.0-rc.1",
+  "activationStatus": "canary",
+  "productionLaunchAuthorized": false,
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizer": {
+      "enabled": true,
+      "runs": 1000
+    },
+    "viaIR": false,
+    "metadata": {
+      "bytecodeHash": "ipfs",
+      "appendCBOR": true
+    },
+    "settingsHash": "0xd8985cd6554daab2848a8df4d90f9d5e0d81f15d062ee04bcd8414f292ccaf43"
+  },
+  "policy": {
+    "domain": "0x33cc5abe080f32ea2b4807d880e066addaf5e95d32d2f9004a9978cc79de3ed9",
+    "basisId": "0xcef243267fe4fe76e78f4e2d8930c8e4c08ebb084d5ac1366bd94e2727748b2c",
+    "assetModeId": "0x8c14f942404691d75bd9939170ccaff13ea802db838c3840be078bef75218320",
+    "profileId": "0x4609b37c12248e1e8c98997685cc2e399a287344dea932b6ed703e4a99c532c2",
+    "policyId": "0xb7ff874d418bc714d0ec6c36a2df03ea6251bc8b6eb125adc4f5b6b4899d2517",
+    "deploymentProfileDomain": "0x488c459f8205469dce228b8c9066c76c51ab7e052e9737aa51c40426858774ca",
+    "compositionDomain": "0xa73855a80721b25f863bf5a3a2709f5cd205f7d63b238913eadc82f3d981868e",
+    "requiredHookPermissionMask": "0x2044",
+    "ratePpm": "1000",
+    "denominator": "1000000",
+    "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
+  "dependencies": {
+    "router": {
+      "address": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+      "runtimeCodeHash": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546"
+    },
+    "graphFactory": {
+      "address": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+      "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+    },
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    }
+  },
+  "sources": [
+    {
+      "sourcePath": "src/ProgrammableAdditiveFeeHookV1.sol",
+      "assetPath": "contracts/profile-v2/sources/ProgrammableAdditiveFeeHookV1.sol",
+      "contentSha256": "sha256:fd513f9f35d530825513704cbcbd946a59bf1ab364bfa4644e786e7d4dfeec85"
+    },
+    {
+      "sourcePath": "src/ProgrammableAdditiveFeeHookV2.sol",
+      "assetPath": "contracts/profile-v2/sources/ProgrammableAdditiveFeeHookV2.sol",
+      "contentSha256": "sha256:56708ada8fe424b293dbc91031c62b28d8307734df20fce1c1fec695060b46fc"
+    },
+    {
+      "sourcePath": "src/ProgrammableFeePoolInitializerV2.sol",
+      "assetPath": "contracts/profile-v2/sources/ProgrammableFeePoolInitializerV2.sol",
+      "contentSha256": "sha256:a2375221162cbac05a50b621ad8715ac9f75e83207838795f3582eb3afb3a6ec"
+    },
+    {
+      "sourcePath": "src/ProgrammableFeeVaultV2.sol",
+      "assetPath": "contracts/profile-v2/sources/ProgrammableFeeVaultV2.sol",
+      "contentSha256": "sha256:4fd21c7757bdba5d2ae004efe4a8f931e96e465e503fb68e021d3ca69a58254a"
+    },
+    {
+      "sourcePath": "src/ProgrammableLaunchTokenV2.sol",
+      "assetPath": "contracts/profile-v2/sources/ProgrammableLaunchTokenV2.sol",
+      "contentSha256": "sha256:ee9f003620ebfe290f70caff835186acb53a9d267aa474118d0d7a6ebb9d47c1"
+    }
+  ],
+  "components": [
+    {
+      "role": "token",
+      "sourcePath": "src/ProgrammableLaunchTokenV2.sol",
+      "contractName": "ProgrammableLaunchTokenV2",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "standardJsonAssetPath": "contracts/profile-v2/standard-json/token.json",
+      "standardJsonInputSha256": "sha256:72af5d9faedef9188f1d9e20e2d8a37557e2bb14d44be54ce3aacb11c71ef877",
+      "artifactAssetPath": "contracts/profile-v2/artifacts/token.json",
+      "artifactContentSha256": "sha256:096b23e12a0fe091fd302aeafdaefcffc64cc99bc52c73255afdc9301c646797",
+      "creationBytecodeSha256": "sha256:963532489c0d8546e7a20ab53f7a9acd6a43572fefe5180b2a0678ce941dcf05",
+      "creationBytecodeHash": "0x71660c7252993788cbab7c257ce654622c5661611623c4cb288f68f157d1b25d",
+      "runtimeTemplateSha256": "sha256:db814ae78127e1a46807f5c2a6fab670bdcf1ce7b45e352d6e239d8bdf8c17cb",
+      "runtimeTemplateCodeHash": "0xf98eb029ee9c1face4b56fafd83612be8b813bf15a402a959ac107de8b203eef",
+      "runtimeCodeHash": "0xf98eb029ee9c1face4b56fafd83612be8b813bf15a402a959ac107de8b203eef",
+      "immutableReferences": [],
+      "runtimeImmutables": [],
+      "constructorBindingSchema": "string-name,string-symbol,uint256-fixed-supply,address-launch-controller",
+      "initializerBindingSchema": "none"
+    },
+    {
+      "role": "feeVault",
+      "sourcePath": "src/ProgrammableFeeVaultV2.sol",
+      "contractName": "ProgrammableFeeVaultV2",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "standardJsonAssetPath": "contracts/profile-v2/standard-json/vault.json",
+      "standardJsonInputSha256": "sha256:af2508146771a53b2c44b0be2b108a4dc3d692148595cae2ce63f1bf815667a3",
+      "artifactAssetPath": "contracts/profile-v2/artifacts/vault.json",
+      "artifactContentSha256": "sha256:446d6a14b6b5ca989f61158fcd01672dd55fb489ae18d89532b073ee096e4789",
+      "creationBytecodeSha256": "sha256:4c1e5953f9e9337a1fbd5e6fa79c2aede1ee08951dc790a14bf68b52b507a643",
+      "creationBytecodeHash": "0x053476bd624631357dfe15ec172bd046f6a4621003d3293a16fb87dce1ba70bd",
+      "runtimeTemplateSha256": "sha256:60b4ca144117f94aaf9b8da1b095acdbb9ce0afab43cd8173ca4b5eb18fe34d7",
+      "runtimeTemplateCodeHash": "0x8a55169728ba90b1fdb275b06c6b6be0467282327c73e9324c08c78e5f62c359",
+      "runtimeCodeHash": "0xf9638e198b83c2ada6cfb34d108d2b0a8356fb4679847bd1d5f3127dee1f24d5",
+      "immutableReferences": [
+        {
+          "immutableId": "196",
+          "ranges": [
+            { "start": 620, "length": 32 },
+            { "start": 1094, "length": 32 },
+            { "start": 1418, "length": 32 },
+            { "start": 1642, "length": 32 },
+            { "start": 2493, "length": 32 },
+            { "start": 2815, "length": 32 },
+            { "start": 3417, "length": 32 },
+            { "start": 3702, "length": 32 },
+            { "start": 4022, "length": 32 },
+            { "start": 4198, "length": 32 },
+            { "start": 4840, "length": 32 },
+            { "start": 6241, "length": 32 }
+          ]
+        },
+        {
+          "immutableId": "2511",
+          "ranges": [
+            { "start": 1133, "length": 32 },
+            { "start": 6315, "length": 32 }
+          ]
+        }
+      ],
+      "runtimeImmutables": [
+        {
+          "immutableId": "196",
+          "abiType": "address",
+          "literal": "0x000000000004444c5dc75cB358380D2e3dE08A90"
+        },
+        {
+          "immutableId": "2511",
+          "abiType": "address",
+          "literal": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887"
+        }
+      ],
+      "constructorBindingSchema": "no-arguments-canonical-dependencies",
+      "initializerBindingSchema": "bindAdapter(address-fee-hook)"
+    },
+    {
+      "role": "feeHook",
+      "sourcePath": "src/ProgrammableAdditiveFeeHookV2.sol",
+      "contractName": "ProgrammableIsolatedAfterSwapFeeHookV2",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "standardJsonAssetPath": "contracts/profile-v2/standard-json/hook.json",
+      "standardJsonInputSha256": "sha256:58b041ccea068f16f6b9a93e57c7b29578bdfc93a72306ced57800145f0db019",
+      "artifactAssetPath": "contracts/profile-v2/artifacts/isolated-hook.json",
+      "artifactContentSha256": "sha256:30789597e425dbc39b57e6ca9fef7a595acab4efe428bed8d303c3a45279e28c",
+      "creationBytecodeSha256": "sha256:a37e9be2cf12fef996f5e8aef063235643123151f686d86f4f566cabefabb2f8",
+      "creationBytecodeHash": "0x1a54813e879edb214d24e97b1f50575f290503f46ea35c1fe40b45114983cdf9",
+      "runtimeTemplateSha256": "sha256:3e9e23308d8c2de233d1e0cc992ed2b0b06c81eab502bc52f04b7bf7c7a75d11",
+      "runtimeTemplateCodeHash": "0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067",
+      "runtimeCodeHash": "0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067",
+      "immutableReferences": [],
+      "runtimeImmutables": [],
+      "constructorBindingSchema": "address-fee-vault,address-custom-module",
+      "initializerBindingSchema": "bindPool(pool-key,address-authorized-initializer,uint160-initial-sqrt-price)"
+    },
+    {
+      "role": "poolInitializer",
+      "sourcePath": "src/ProgrammableFeePoolInitializerV2.sol",
+      "contractName": "ProgrammableFeePoolInitializerV2",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "standardJsonAssetPath": "contracts/profile-v2/standard-json/initializer.json",
+      "standardJsonInputSha256": "sha256:3c2b96af0fc57aea1925fe4ccf6efb937f70df4358bba8889d8406c00607695f",
+      "artifactAssetPath": "contracts/profile-v2/artifacts/initializer.json",
+      "artifactContentSha256": "sha256:789edf8ca22d613b891196160fec6593c20d37709fbbb18b8aa8679c6105d3f5",
+      "creationBytecodeSha256": "sha256:23b231213b9c6a5df7e9741f70bfcdcd39fcf66c83ef47b33eb901e3869b1473",
+      "creationBytecodeHash": "0x690a30ab2f5ee0c42856a9627cb46d79b5ebc4fa0a2f4c75c3a6f3e077cbbbeb",
+      "runtimeTemplateSha256": "sha256:464c68ce01516737ebf69f02f1d24f3b6236f4c3439d372c08bf529cb8232d1b",
+      "runtimeTemplateCodeHash": "0xe7210ee2a0edac8fe7e90387445d9c0ca26b7fa342e6828371d2db5969ae3c4d",
+      "runtimeCodeHash": "0xe7210ee2a0edac8fe7e90387445d9c0ca26b7fa342e6828371d2db5969ae3c4d",
+      "immutableReferences": [],
+      "runtimeImmutables": [],
+      "constructorBindingSchema": "address-fee-vault,address-fee-hook,address-token,uint24-static-lp-fee,int24-tick-spacing,uint160-initial-sqrt-price",
+      "initializerBindingSchema": "initializePool()"
+    }
+  ]
+}

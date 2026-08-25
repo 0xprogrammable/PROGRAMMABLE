@@ -59,6 +59,7 @@ import {
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import {
   isLaunchStampProvenanceV1,
+  isPlatformFeePolicyReadbackV2,
   type CustomProjectExploreEntry,
   type LauncherToken,
   type TokenLink,
@@ -445,6 +446,19 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     return null;
   }
   const provenance = value.launchCategoryProvenance;
+  const platformFeePolicy = value.platformFeePolicy === undefined
+    ? undefined
+    : isPlatformFeePolicyReadbackV2(value.platformFeePolicy, {
+        tokenAddress: value.tokenAddress,
+        hookAddress: value.hookAddress,
+        poolId: value.poolId,
+      })
+      ? value.platformFeePolicy
+      : null;
+  if (
+    platformFeePolicy === null
+    || (platformFeePolicy && (!stamp || stamp.kind !== "custom-graph"))
+  ) return null;
   if (stamp) {
     const unknownStampedFees = value.totalSwapFeeBps === null;
     if (
@@ -512,6 +526,7 @@ function parseLauncherToken(value: unknown): DetailToken | null {
       typeof value.description === "string" ? value.description : undefined,
     imageUrl: safeImageUrl(value.imageUrl),
     uniswapV4Pool: uniswapV4Pool ?? undefined,
+    ...(platformFeePolicy ? { platformFeePolicy } : {}),
   };
   const valuation = value.valuation === undefined
     ? exploreValuation(token)
@@ -970,7 +985,7 @@ function detailStateFromResponse(
     throw new Error("The token registry returned the wrong token");
   }
   if (!payload.snapshot) {
-    throw new Error("The token registry returned no verified snapshot");
+    throw new Error("The token registry returned no finalized snapshot");
   }
 
     return {
@@ -1293,6 +1308,12 @@ export function buildTokenDetailMetrics(
       metric !== null &&
       (metric.value.length > 0 || metric.label === "Market cap"),
   );
+}
+
+export function platformFeePolicyDisclosure(token: LauncherToken) {
+  return token.platformFeePolicy?.status === "onchain-confirmed"
+    ? "Platform fee confirmed: 10 bps accrue in an unspecified pool asset and are claimable by the fixed Programmable reward wallet."
+    : null;
 }
 
 export function canUseClassicTokenTrade(token: LauncherToken) {
@@ -1637,6 +1658,7 @@ function TokenDetailContent({
       buildChartVolumeMetric(chartVolume),
     );
   }, [chartVolume, token]);
+  const platformFeeDisclosure = platformFeePolicyDisclosure(token);
 
   const explorerBase =
     chainId === 1
@@ -1936,6 +1958,12 @@ function TokenDetailContent({
                 </p>
               ) : null}
 
+              {platformFeeDisclosure ? (
+                <p className={styles.sourceVerification}>
+                  {platformFeeDisclosure}
+                </p>
+              ) : null}
+
               {token.description?.trim() ? (
                 <p className={styles.description}>{token.description.trim()}</p>
               ) : null}
@@ -2154,7 +2182,7 @@ function TokenDetailContent({
 }
 
 function customMarketStatus(project: CustomProjectExploreEntry): string {
-  if (project.markets.length === 0) return "No verified market";
+  if (project.markets.length === 0) return "No supported market";
   const statuses = [...new Set(project.markets.map(({ status }) => status))];
   if (statuses.length > 1) return `${project.markets.length} canonical markets`;
   const status = statuses[0]!;
@@ -2655,7 +2683,7 @@ export function TokenDetailView({
     activeState.phase === "not-found"
       ? "This token is not in the Programmable index yet"
       : activeState.phase === "not-deployed"
-        ? "No verified token data is available"
+        ? "No finalized token data is available"
         : activeState.message;
 
   return (

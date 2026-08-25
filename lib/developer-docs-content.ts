@@ -15,6 +15,8 @@ const customLaunchApiOrigin = "https://api.programmable.market";
 const apiKeysUrl = "https://programmable.market/developers/api-keys";
 const customLaunchApiOpenApiUrl =
   "https://programmable.market/openapi/custom-launch-v1.json";
+const customLaunchApiV2OpenApiUrl =
+  "https://programmable.market/openapi/custom-launch-v2.json";
 const customLaunchApiGuideUrl =
   "https://programmable.market/developers/custom-launch-api-v1.md";
 const customLaunchHumanGuideUrl =
@@ -44,11 +46,12 @@ export function buildDeveloperDocsMarkdown(): string {
   return [
     "# Programmable developer APIs",
     "",
-    "> API-key Custom launch preparation plus read-only verification of Router-stamped Programmable provenance on Ethereum.",
+    "> Wallet-owned V1 Custom launch history plus read-only verification of Router-stamped Programmable provenance on Ethereum.",
     "",
     `Custom Launch API: ${customLaunchApiOrigin}`,
-    `Create and revoke API keys: ${apiKeysUrl}`,
+    `Manage API keys: ${apiKeysUrl}`,
     `Custom Launch API OpenAPI: ${customLaunchApiOpenApiUrl}`,
+    `Held V2 RC OpenAPI: ${customLaunchApiV2OpenApiUrl}`,
     `Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `Raw Custom Launch API guide: ${customLaunchApiGuideUrl}`,
     `Custom Launch API readiness: ${customLaunchReadyzUrl}`,
@@ -62,40 +65,25 @@ export function buildDeveloperDocsMarkdown(): string {
     "Ethereum RPC authentication: provider-specific",
     "Read-only Developer API: https://developers.programmable.family",
     "",
-    "## API-first Custom launches",
+    "## Custom Launch API availability",
     "",
-    "The Custom Launch API is live. Legacy Registry and GitHub submission intake is closed. A Custom launch no longer requires a GitHub pull request.",
+    `V1 list and single-resource reads remain live for existing wallet-bound requests. V1 creation is read-only: authenticated \`POST /v1/custom-launches\` returns non-retryable \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. The fee-enforced V2 release candidate is held until canary and explicit public activation; unavailable V2 requests return \`503 CUSTOM_LAUNCH_V2_UNAVAILABLE\` with \`Retry-After\`. Its exact future/private-canary machine contract is ${customLaunchApiV2OpenApiUrl}; publication of that contract does not activate public submission. There is currently no public Custom launch-creation route. Legacy Registry and GitHub submission intake is closed.`,
     "",
     `Install the pinned public CLI with \`npm install --global ${customLaunchCliReleaseUrl}\`. The package is \`@programmable/launch\` and the binary is \`programmable-launch\`.`,
     "",
-    "Run `pack`, `validate`, `submit launch.json --config programmable-launch.config.json`, then `status REQUEST_UUID --watch --until authorized`. Submit requires the config and proves byte-identical fresh packing before network access. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. It does not accept hand-written derived hashes. The release contains an executable `examples/no-broadcast/` that uses real compiler artifacts and stops at authorized without a wallet signature or broadcast.",
+    "Run `pack` and `validate` locally. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. It does not accept hand-written derived hashes. The release contains an executable `examples/no-broadcast/` that stops at `pre-submit` without a wallet signature or broadcast. `status REQUEST_UUID --watch --until finalized` remains available for existing V1 resources. Do not run `submit` against V1 during the write fence.",
     "",
     `Connect a wallet and create a key at ${apiKeysUrl}. Store the one-time \`pm_live_\` secret only as the encrypted environment secret \`PROGRAMMABLE_API_KEY\` or in the OS secret store. Put only \`$PROGRAMMABLE_API_KEY\` in chat, prompts and agent setup.`,
     "",
-    "V1 keys receive exactly `custom-launch:create` and `custom-launch:read`. `fees:claim` and `buybacks:manage` are reserved and disabled. Future endpoints and scopes are additive, and existing keys never inherit a newly enabled scope.",
+    "Existing V1 keys can use `custom-launch:read` for their wallet-owned history. A legacy `custom-launch:create` scope does not override the V1 write fence. `fees:claim` and `buybacks:manage` are reserved and disabled. Future endpoints and scopes are additive, and existing keys never inherit a newly enabled scope.",
     "",
     "Keys expire after 90 days by default, may be issued for at most 366 days, and are limited to 10 active keys per wallet.",
     "",
-    "An API key is not a wallet or private key. The platform validates the submitted manifest digest, graph constraints, attestation shape and evidence digests, optional exact-source build inputs, and exact permit binding. `prepared` contains an exact artifact but no wallet transaction. `authorized` contains the permit-attached wallet transaction, which the controller wallet reviews, signs and broadcasts separately. Programmable does not simulate the wallet transaction, audit the project or attest safety. The API key alone never grants wallet signing authority.",
+    "An API key is not a wallet or private key. Existing durable resources record the platform's manifest, graph, attestation, exact-source and permit checks. `prepared` contains an exact artifact but no wallet transaction. `authorized` contains the permit-attached wallet transaction, which the controller wallet reviews, signs and broadcasts separately. Programmable does not audit the project or attest safety. The API key alone never grants wallet signing authority.",
     "",
-    "### Create a launch",
+    "### V1 write fence",
     "",
-    "Send one closed JSON request to `POST /v1/custom-launches`. Use the same `Idempotency-Key` and identical body to resolve an ambiguous timeout without creating duplicate work.",
-    "",
-    "```sh",
-    `curl --fail-with-body ${customLaunchApiOrigin}/v1/custom-launches` + " \\",
-    "  --request POST \\",
-    "  --header \"Authorization: Bearer $PROGRAMMABLE_API_KEY\" \\",
-    "  --header \"Content-Type: application/json\" \\",
-    "  --header \"Idempotency-Key: agent-launch-2026-0001\" \\",
-    "  --data-binary @launch.json",
-    "```",
-    "",
-    "`Idempotency-Key` is 16 to 128 characters from `[A-Za-z0-9._:-]`. A new request returns `202`; an exact replay may return `200`. Reusing the key with a different body or reusing a conflicting wallet nonce returns `409`.",
-    "",
-    "New reservations are limited to 30 per rolling hour and 100 per rolling day for the wallet principal and route. Exact idempotent replays bypass quota. A `429 LAUNCH_QUOTA_EXCEEDED` response includes `limit`, `windowSeconds`, and `retryAfterSeconds`, plus the same delay in the `Retry-After` header.",
-    "",
-    "If a durable prepared permit expires before platform signing, the request becomes terminal `failed` with `failure.code: PERMIT_EXPIRED` and `failure.retryable: false`. Submit a new request with a new nonce and Idempotency-Key.",
+    "After successful authentication and scope checks, `POST /v1/custom-launches` returns `409 CUSTOM_LAUNCH_V1_READ_ONLY` before reading an idempotency key or request body. This response is permanent and non-retryable. Do not change bytes, rotate a nonce or loop to bypass the fence. V2 remains held and returns `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After` until canary and public activation.",
     "",
     "### Closed request body",
     "",
@@ -290,7 +278,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "It does not establish safety, tradability, current liquidity or pool state, audit coverage, review status, approval, endorsement, permission to launch, or terminal support. It does not automatically list or label a launch in GMGN, Axiom, FOMO, or any other terminal; each consumer must implement the published verification procedure.",
     "",
-    `Router verification and the Developer API are read-only. Custom launch preparation is the separate authenticated write path: create a wallet-bound key at ${apiKeysUrl} and use ${customLaunchApiOrigin}/v1/custom-launches. The provenance reference alone grants neither access nor launch authorization.`,
+    `Router verification and the Developer API are read-only. V1 Custom launch history remains readable with a wallet-bound key from ${apiKeysUrl}; V1 creation is write-fenced and V2 remains held. The provenance reference alone grants neither access nor launch authorization.`,
   ].join("\n");
 }
 
@@ -350,7 +338,7 @@ export function buildProgrammableLlmsIndex(): string {
   return [
     "# Programmable",
     "",
-    "> Agent guide for API-key Custom launch preparation and verified Programmable launch discovery.",
+    "> Agent guide for existing V1 Custom launch history and verified Programmable launch discovery.",
     "",
     "## When to use Programmable",
     "",
@@ -359,8 +347,8 @@ export function buildProgrammableLlmsIndex(): string {
     "- Look up one displayed token by Ethereum address without depending on optional market enrichment for identity.",
     "- Understand the public scope, creator information, launch provenance, and available market context before directing a user to the website.",
     "- Integrate a read-only terminal, wallet, scanner, catalog, or research tool with the documented public endpoints.",
-    `- Prepare a Custom launch with a wallet-bound API key from ${apiKeysUrl} and \`POST ${customLaunchApiOrigin}/v1/custom-launches\`.`,
-    "- Use the live Custom Launch API and pinned public CLI. Legacy Registry and GitHub submission intake is closed.",
+    "- Package and validate a prospective Custom launch locally with the pinned public CLI; public launch creation is currently held.",
+    "- Read existing wallet-owned V1 Custom launch history. V1 POST is read-only, V2 is held, and legacy Registry and GitHub submission intake is closed.",
     "- Direct a human to trade, manage a project, claim rewards, or sign an authorized Custom launch transaction through the website. A prepared Custom launch has no wallet transaction. Every wallet action requires explicit wallet authority.",
     "",
     "## Do not use Programmable to infer",
@@ -384,11 +372,12 @@ export function buildProgrammableLlmsIndex(): string {
     "",
     "- OpenAPI: https://programmable.market/openapi.json",
     `- Custom Launch OpenAPI: ${customLaunchApiOpenApiUrl}`,
+    `- Held V2 RC OpenAPI: ${customLaunchApiV2OpenApiUrl}`,
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
     `- Programmable Launch CLI 1.0.1: ${customLaunchCliReleaseUrl}`,
-    `- Create a Custom launch: POST ${customLaunchApiOrigin}/v1/custom-launches`,
+    `- V1 write fence: POST ${customLaunchApiOrigin}/v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY`,
     `- List wallet-owned Custom launches: GET ${customLaunchApiOrigin}/v1/custom-launches`,
     `- Read a Custom launch: GET ${customLaunchApiOrigin}/v1/custom-launches/{launchId}`,
     "- API index: https://programmable.market/api",
@@ -435,7 +424,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Protocol fee claim discovery is a separate index: complete Classic Launcher and Custom Registry scans plus the fixed Stock release set. Unknown or unverified sources fail closed, and Custom V2 stays unavailable until its exact deployed release is finalized.",
     "- The live claim boundary is published at https://claimhazard.vercel.app/claim-discovery.json and requires one wallet-declared atomic batch from the fixed reward wallet.",
     "- A Router record establishes provenance only after the required address, runtime, binding, lookup, and cross-check verification passes. It does not establish safety, tradability, current liquidity, audit coverage, endorsement, terminal support, or launch authorization.",
-    `- Launch access is a separate authenticated write path from this read-only provenance reference. Use ${apiKeysUrl} for API-first Custom launch access and ${customLaunchApiOrigin}/v1/custom-launches for launch preparation; the provenance reference alone grants neither access nor launch authorization.`,
+    `- Existing V1 history is a separate authenticated read path from this provenance reference. V1 creation is write-fenced and V2 remains held until canary and explicit public activation; the provenance reference grants neither access nor launch authorization.`,
   ].join("\n");
 }
 

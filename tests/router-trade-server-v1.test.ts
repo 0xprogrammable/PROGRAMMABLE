@@ -132,7 +132,7 @@ describe("FADE Router trade server boundary", () => {
     await expect(prepareCustomMarketTradeV1({
       client: unusedRuntimeClient,
       request: request(FADE_ROUTER_TRADE_PROJECT_ID, "not-fade"),
-    })).rejects.toThrow("does not match the verified market capability");
+    })).rejects.toThrow("does not match the supported market capability");
 
     expect(unusedRuntimeClient.getChainId).not.toHaveBeenCalled();
     expect(unusedRuntimeClient.call).not.toHaveBeenCalled();

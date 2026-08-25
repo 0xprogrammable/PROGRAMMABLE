@@ -17,8 +17,16 @@ import {
 
 export const CUSTOM_LAUNCH_LIST_SCHEMA_V1 =
   "programmable.custom-launch-list.v1" as const;
+export const CUSTOM_LAUNCH_LIST_SCHEMA_V2 =
+  "programmable.custom-launch-list.v2" as const;
+export const CUSTOM_LAUNCH_HISTORY_SCHEMA_V1 =
+  "programmable.custom-launch-history.v1" as const;
 
-const MAXIMUM_BACKEND_BODY_BYTES = 131_072;
+// Wallet-admin lists are deliberately compact (`output: null`). A single
+// authorized resource carries the exact graph transaction and can exceed
+// 128 KiB because initcode is bound in both the artifact and calldata.
+const MAXIMUM_BACKEND_LIST_BODY_BYTES = 262_144;
+const MAXIMUM_BACKEND_RESOURCE_BODY_BYTES = 1_048_576;
 const DEFAULT_BACKEND_TIMEOUT_MS = 5_000;
 const DEFAULT_PAGE_SIZE = 5;
 const MAXIMUM_PAGE_SIZE = 10;
@@ -26,7 +34,7 @@ const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const REQUEST_HASH = /^sha256:[0-9a-f]{64}$/u;
-const STATUSES = new Set([
+const STATUSES_V1 = new Set([
   "received",
   "validating",
   "prepared",
@@ -36,6 +44,7 @@ const STATUSES = new Set([
   "failed",
   "cancelled",
 ]);
+const STATUSES_V2 = new Set([...STATUSES_V1, "simulating"]);
 const RESPONSE_HEADERS = Object.freeze({
   "Cache-Control": "no-store",
   "Content-Type": "application/json; charset=utf-8",
@@ -61,6 +70,26 @@ export type DeveloperCustomLaunchV1 = Readonly<{
     retryable: boolean;
   }> | null;
 }>;
+
+export type DeveloperCustomLaunchV2 = Readonly<{
+  schemaVersion: "programmable.custom-launch.v2";
+  launchId: string;
+  requestId: string;
+  onchainLaunchId: `0x${string}` | null;
+  routeId: "custom-launch:create:v2";
+  ownerWallet: `0x${string}`;
+  status: string;
+  requestHash: string;
+  launchProfileHash: `sha256:${string}`;
+  launchIntentHash: `sha256:${string}`;
+  createdAt: string;
+  updatedAt: string;
+  output: Readonly<Record<string, JsonValue>> | null;
+  failure: DeveloperCustomLaunchV1["failure"];
+}>;
+
+type DeveloperCustomLaunch = DeveloperCustomLaunchV1 | DeveloperCustomLaunchV2;
+type BackendHistoryVersion = "v1" | "v2";
 
 export interface DeveloperLaunchHistoryBridgeV1 {
   list(request: Request): Promise<Response>;
@@ -100,48 +129,88 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         const query = exactHistoryQuery(request);
         const principal = await input.authenticator.authenticate(request);
         const walletAddress = requireLinkedWallet(principal, query.walletAddress);
-        const backendUrl = new URL(
-          "/v1/wallet-admin/custom-launches",
-          backendBaseUrl,
-        );
-        backendUrl.searchParams.set("limit", String(query.limit));
-        if (query.cursor !== null) {
-          backendUrl.searchParams.set("cursor", query.cursor);
-        }
         const headers = new Headers({
           Accept: "application/json",
           Authorization: `Bearer ${websiteToken}`,
           "X-Programmable-Privy-User-Id": principal.privyUserId,
           "X-Programmable-Wallet-Address": walletAddress,
         });
-        const backend = await input.fetchBackend(backendUrl, {
-          method: "GET",
-          headers,
-          cache: "no-store",
-          redirect: "error",
-          signal: AbortSignal.any([
-            request.signal,
-            AbortSignal.timeout(timeoutMs),
-          ]),
-        });
-        if (!backend.ok) throw await mappedBackendError(backend);
-        const value = await readBoundedBackendJson(backend);
-        const record = jsonRecord(value);
-        if (record.schemaVersion !== CUSTOM_LAUNCH_LIST_SCHEMA_V1) {
-          throw new BackendContractErrorV1();
-        }
-        if (!Array.isArray(record.launches) || record.launches.length > query.limit) {
-          throw new BackendContractErrorV1();
-        }
         const expectedWallet = walletAddress.toLowerCase();
-        const launches = Object.freeze(record.launches.map((launch) =>
-          parseLaunch(launch, expectedWallet)
-        ));
-        const nextCursor = record.nextCursor === null
+        const readVersion = async (version: BackendHistoryVersion) => {
+          const cursorState = query.cursor?.[version];
+          if (cursorState?.done) {
+            return Object.freeze({
+              version,
+              launches: Object.freeze([] as DeveloperCustomLaunch[]),
+              nextCursor: null,
+              done: true,
+            });
+          }
+          const backendUrl = new URL(
+            `/${version}/wallet-admin/custom-launches`,
+            backendBaseUrl,
+          );
+          backendUrl.searchParams.set("limit", String(query.limit));
+          if (cursorState?.cursor) {
+            backendUrl.searchParams.set("cursor", cursorState.cursor);
+          }
+          const backend = await input.fetchBackend(backendUrl, {
+            method: "GET",
+            headers,
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.any([
+              request.signal,
+              AbortSignal.timeout(timeoutMs),
+            ]),
+          });
+          // During the route-isolated rollout, a missing V2 list is an empty
+          // lane. V1 history must remain available until V2 is deployed.
+          if (version === "v2" && backend.status === 404) {
+            return Object.freeze({
+              version,
+              launches: Object.freeze([] as DeveloperCustomLaunch[]),
+              nextCursor: null,
+              done: true,
+            });
+          }
+          if (!backend.ok) throw await mappedBackendError(backend);
+          const record = jsonRecord(await readBoundedBackendJson(
+            backend,
+            MAXIMUM_BACKEND_LIST_BODY_BYTES,
+          ));
+          const expectedSchema = version === "v1"
+            ? CUSTOM_LAUNCH_LIST_SCHEMA_V1
+            : CUSTOM_LAUNCH_LIST_SCHEMA_V2;
+          if (
+            record.schemaVersion !== expectedSchema ||
+            !Array.isArray(record.launches) ||
+            record.launches.length > query.limit
+          ) throw new BackendContractErrorV1();
+          const launches = Object.freeze(record.launches.map((launch) =>
+            parseLaunch(launch, expectedWallet, version)
+          ));
+          const nextCursor = record.nextCursor === null
+            ? null
+            : canonicalCursor(record.nextCursor, "backend");
+          return Object.freeze({
+            version,
+            launches,
+            nextCursor,
+            done: nextCursor === null,
+          });
+        };
+        const [v1, v2] = await Promise.all([
+          readVersion("v1"),
+          readVersion("v2"),
+        ]);
+        const launches = Object.freeze([...v1.launches, ...v2.launches]
+          .sort(compareLaunchHistoryEntries));
+        const nextCursor = v1.done && v2.done
           ? null
-          : canonicalCursor(record.nextCursor, "backend");
+          : encodeCombinedHistoryCursor({ v1, v2 });
         return jsonResponse(200, {
-          schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V1,
+          schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
           launches,
           nextCursor,
         });
@@ -161,10 +230,9 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         }
         const walletInput = exactWalletQuery(request);
         const principal = await input.authenticator.authenticate(request);
-        const walletAddress = requireLinkedWallet(principal, walletInput);
-        const backendUrl = new URL(
-          `/v1/wallet-admin/custom-launches/${encodeURIComponent(launchId.toLowerCase())}`,
-          backendBaseUrl,
+        const walletAddress = requireLinkedWallet(
+          principal,
+          walletInput.walletAddress,
         );
         const headers = new Headers({
           Accept: "application/json",
@@ -172,24 +240,41 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           "X-Programmable-Privy-User-Id": principal.privyUserId,
           "X-Programmable-Wallet-Address": walletAddress,
         });
-        const backend = await input.fetchBackend(backendUrl, {
-          method: "GET",
-          headers,
-          cache: "no-store",
-          redirect: "error",
-          signal: AbortSignal.any([
-            request.signal,
-            AbortSignal.timeout(timeoutMs),
-          ]),
-        });
-        if (backend.status === 404) {
-          throw new BrowserRequestErrorV1(404, "launch_not_found");
+        const readVersion = async (version: BackendHistoryVersion) => {
+          const backendUrl = new URL(
+            `/${version}/wallet-admin/custom-launches/${
+              encodeURIComponent(launchId.toLowerCase())
+            }`,
+            backendBaseUrl,
+          );
+          const backend = await input.fetchBackend(backendUrl, {
+            method: "GET",
+            headers,
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.any([
+              request.signal,
+              AbortSignal.timeout(timeoutMs),
+            ]),
+          });
+          if (backend.status === 404) return null;
+          if (!backend.ok) throw await mappedBackendError(backend);
+          return parseLaunch(
+            await readBoundedBackendJson(
+              backend,
+              MAXIMUM_BACKEND_RESOURCE_BODY_BYTES,
+            ),
+            walletAddress.toLowerCase(),
+            version,
+          );
+        };
+        let launch: DeveloperCustomLaunch | null = null;
+        if (walletInput.version) {
+          launch = await readVersion(walletInput.version);
+        } else {
+          launch = await readVersion("v1") ?? await readVersion("v2");
         }
-        if (!backend.ok) throw await mappedBackendError(backend);
-        const launch = parseLaunch(
-          await readBoundedBackendJson(backend),
-          walletAddress.toLowerCase(),
-        );
+        if (!launch) throw new BrowserRequestErrorV1(404, "launch_not_found");
         if (launch.requestId !== launchId.toLowerCase()) {
           throw new BackendContractErrorV1();
         }
@@ -239,18 +324,32 @@ function exactHistoryQuery(request: Request) {
   return Object.freeze({
     walletAddress,
     limit,
-    cursor: cursorValue === null ? null : canonicalCursor(cursorValue, "browser"),
+    cursor: cursorValue === null
+      ? null
+      : parseCombinedHistoryCursor(cursorValue),
   });
 }
 
 function exactWalletQuery(request: Request) {
-  const entries = [...new URL(request.url).searchParams.entries()];
+  const search = new URL(request.url).searchParams;
+  for (const key of search.keys()) {
+    if (key !== "walletAddress" && key !== "version") {
+      throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+    }
+    if (search.getAll(key).length !== 1) {
+      throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+    }
+  }
+  const walletAddress = search.get("walletAddress");
+  const versionValue = search.get("version");
   if (
-    entries.length !== 1
-    || entries[0]?.[0] !== "walletAddress"
-    || !entries[0][1]
+    !walletAddress ||
+    (versionValue !== null && versionValue !== "v1" && versionValue !== "v2")
   ) throw new BrowserRequestErrorV1(400, "request_schema_invalid");
-  return entries[0][1];
+  return Object.freeze({
+    walletAddress,
+    version: versionValue as BackendHistoryVersion | null,
+  });
 }
 
 function parsePageSize(value: string) {
@@ -262,6 +361,111 @@ function parsePageSize(value: string) {
     throw new BrowserRequestErrorV1(400, "pagination_invalid");
   }
   return parsed;
+}
+
+type CombinedHistoryCursorLane = Readonly<{
+  cursor: string | null;
+  done: boolean;
+}>;
+
+type CombinedHistoryCursor = Readonly<{
+  v1: CombinedHistoryCursorLane;
+  v2: CombinedHistoryCursorLane;
+}>;
+
+function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
+  const invalid = () => {
+    throw new BrowserRequestErrorV1(400, "pagination_invalid");
+  };
+  if (
+    value.length < 16 ||
+    value.length > 2_048 ||
+    !/^[A-Za-z0-9_-]+$/u.test(value)
+  ) return invalid();
+  try {
+    const bytes = Buffer.from(value, "base64url");
+    if (bytes.toString("base64url") !== value) return invalid();
+    const decoded = parseStrictJson(bytes.toString("utf8"), {
+      maximumBytes: 2_048,
+      maximumDepth: 4,
+    });
+    if (decoded === null || Array.isArray(decoded) || typeof decoded !== "object") {
+      return invalid();
+    }
+    // One-release compatibility for a browser that still holds the old V1
+    // backend cursor. V2 starts at its first bounded page and dedupes by route.
+    if ("createdAt" in decoded || "launchId" in decoded) {
+      const legacy = canonicalCursor(value, "browser");
+      return Object.freeze({
+        v1: Object.freeze({ cursor: legacy, done: false }),
+        v2: Object.freeze({ cursor: null, done: false }),
+      });
+    }
+    if (
+      Object.keys(decoded).length !== 2 ||
+      !("v1" in decoded) ||
+      !("v2" in decoded)
+    ) return invalid();
+    const lane = (candidate: JsonValue | undefined) => {
+      if (
+        candidate === null ||
+        candidate === undefined ||
+        Array.isArray(candidate) ||
+        typeof candidate !== "object" ||
+        Object.keys(candidate).length !== 2 ||
+        typeof candidate.done !== "boolean" ||
+        (candidate.cursor !== null && typeof candidate.cursor !== "string") ||
+        (candidate.done && candidate.cursor !== null) ||
+        (!candidate.done && candidate.cursor === null)
+      ) return invalid();
+      return Object.freeze({
+        cursor: candidate.cursor === null
+          ? null
+          : canonicalCursor(candidate.cursor, "browser"),
+        done: candidate.done,
+      });
+    };
+    const result = Object.freeze({
+      v1: lane(decoded.v1),
+      v2: lane(decoded.v2),
+    });
+    if (result.v1.done && result.v2.done) return invalid();
+    const canonical = Buffer.from(JSON.stringify(result), "utf8")
+      .toString("base64url");
+    if (canonical !== value) return invalid();
+    return result;
+  } catch (error) {
+    if (error instanceof BrowserRequestErrorV1) throw error;
+    return invalid();
+  }
+}
+
+function encodeCombinedHistoryCursor(input: Readonly<{
+  v1: Readonly<{ done: boolean; nextCursor: string | null }>;
+  v2: Readonly<{ done: boolean; nextCursor: string | null }>;
+}>) {
+  const lane = (value: Readonly<{ done: boolean; nextCursor: string | null }>) =>
+    Object.freeze({
+      cursor: value.done
+        ? null
+        : canonicalCursor(value.nextCursor ?? undefined, "backend"),
+      done: value.done,
+    });
+  return Buffer.from(JSON.stringify(Object.freeze({
+    v1: lane(input.v1),
+    v2: lane(input.v2),
+  })), "utf8").toString("base64url");
+}
+
+function compareLaunchHistoryEntries(
+  left: DeveloperCustomLaunch,
+  right: DeveloperCustomLaunch,
+) {
+  const timeOrder = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  if (timeOrder !== 0) return timeOrder;
+  const idOrder = left.requestId.localeCompare(right.requestId);
+  if (idOrder !== 0) return idOrder;
+  return left.routeId.localeCompare(right.routeId);
 }
 
 function canonicalCursor(value: JsonValue | undefined, source: "browser" | "backend") {
@@ -315,10 +519,18 @@ function canonicalCursor(value: JsonValue | undefined, source: "browser" | "back
 function parseLaunch(
   value: JsonValue,
   expectedWallet: string,
-): DeveloperCustomLaunchV1 {
+  version: BackendHistoryVersion,
+): DeveloperCustomLaunch {
   const record = jsonRecord(value);
+  const expectedSchema = version === "v1"
+    ? "programmable.custom-launch.v1"
+    : "programmable.custom-launch.v2";
+  const expectedRoute = version === "v1"
+    ? "custom-launch:create:v1"
+    : "custom-launch:create:v2";
+  const statuses = version === "v1" ? STATUSES_V1 : STATUSES_V2;
   if (
-    record.schemaVersion !== "programmable.custom-launch.v1"
+    record.schemaVersion !== expectedSchema
     || typeof record.launchId !== "string"
     || !UUID.test(record.launchId)
     || typeof record.requestId !== "string"
@@ -328,14 +540,20 @@ function parseLaunch(
       typeof record.onchainLaunchId !== "string"
       || !/^0x[0-9a-f]{64}$/u.test(record.onchainLaunchId)
     ))
-    || record.routeId !== "custom-launch:create:v1"
+    || record.routeId !== expectedRoute
     || typeof record.ownerWallet !== "string"
     || !isAddress(record.ownerWallet)
     || record.ownerWallet.toLowerCase() !== expectedWallet
     || typeof record.status !== "string"
-    || !STATUSES.has(record.status)
+    || !statuses.has(record.status)
     || typeof record.requestHash !== "string"
     || !REQUEST_HASH.test(record.requestHash)
+    || (version === "v2" && (
+      typeof record.launchProfileHash !== "string"
+      || !REQUEST_HASH.test(record.launchProfileHash)
+      || typeof record.launchIntentHash !== "string"
+      || !REQUEST_HASH.test(record.launchIntentHash)
+    ))
   ) throw new BackendContractErrorV1();
   const output = record.output === null
     ? null
@@ -343,12 +561,10 @@ function parseLaunch(
   const failure = record.failure === null
     ? null
     : parseFailure(record.failure);
-  return Object.freeze({
-    schemaVersion: "programmable.custom-launch.v1" as const,
+  const base = {
     launchId: record.launchId.toLowerCase(),
     requestId: record.requestId.toLowerCase(),
     onchainLaunchId: record.onchainLaunchId as `0x${string}` | null,
-    routeId: "custom-launch:create:v1" as const,
     ownerWallet: record.ownerWallet.toLowerCase() as `0x${string}`,
     status: record.status,
     requestHash: record.requestHash,
@@ -356,7 +572,20 @@ function parseLaunch(
     updatedAt: requiredTimestamp(record.updatedAt),
     output,
     failure,
-  });
+  };
+  return version === "v1"
+    ? Object.freeze({
+        ...base,
+        schemaVersion: "programmable.custom-launch.v1" as const,
+        routeId: "custom-launch:create:v1" as const,
+      })
+    : Object.freeze({
+        ...base,
+        schemaVersion: "programmable.custom-launch.v2" as const,
+        routeId: "custom-launch:create:v2" as const,
+        launchProfileHash: record.launchProfileHash as `sha256:${string}`,
+        launchIntentHash: record.launchIntentHash as `sha256:${string}`,
+      });
 }
 
 function parseFailure(value: JsonValue) {
@@ -392,19 +621,44 @@ function requireLinkedWallet(
   return walletAddress;
 }
 
-async function readBoundedBackendJson(response: Response): Promise<JsonValue> {
-  const declaredLength = Number(response.headers.get("content-length") ?? "0");
+async function readBoundedBackendJson(
+  response: Response,
+  maximumBytes: number,
+): Promise<JsonValue> {
+  const contentLength = response.headers.get("content-length");
+  const declaredLength = contentLength === null ? null : Number(contentLength);
   if (
-    Number.isFinite(declaredLength)
-    && declaredLength > MAXIMUM_BACKEND_BODY_BYTES
+    declaredLength !== null && (
+      !Number.isSafeInteger(declaredLength) ||
+      declaredLength < 0 ||
+      declaredLength > maximumBytes
+    )
   ) throw new BackendContractErrorV1();
-  const text = await response.text();
-  if (!text || Buffer.byteLength(text, "utf8") > MAXIMUM_BACKEND_BODY_BYTES) {
+  if (!response.body) throw new BackendContractErrorV1();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let totalBytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumBytes) {
+        await reader.cancel();
+        throw new BackendContractErrorV1();
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } catch (error) {
+    if (error instanceof BackendContractErrorV1) throw error;
     throw new BackendContractErrorV1();
   }
+  if (!text) throw new BackendContractErrorV1();
   try {
     return parseStrictJson(text, {
-      maximumBytes: MAXIMUM_BACKEND_BODY_BYTES,
+      maximumBytes,
       maximumDepth: 16,
     });
   } catch {
@@ -526,7 +780,7 @@ function errorResponse(
   retryAfter?: string | null,
 ) {
   return jsonResponse(status, {
-    schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V1,
+    schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
     error: Object.freeze({
       code,
       message: publicMessage ?? (status >= 500

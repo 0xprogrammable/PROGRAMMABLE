@@ -1,0 +1,11 @@
+{
+  "name": "programmable-fee-enforced-v2-no-broadcast",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build-and-configure.mjs"
+  },
+  "devDependencies": {
+    "solc": "0.8.26"
+  }
+}

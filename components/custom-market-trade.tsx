@@ -93,7 +93,7 @@ function CustomMarketSelector({
   if (markets.length === 1) {
     return (
       <div className={styles.customMarketSelect}>
-        <span>Verified market</span>
+        <span>Supported market</span>
         <div className={styles.customMarketValue}>
           {customMarketLabel(selected)}
         </div>
@@ -103,7 +103,7 @@ function CustomMarketSelector({
 
   return (
     <fieldset className={styles.customMarketSelect}>
-      <legend>Verified market</legend>
+      <legend>Supported market</legend>
       <div className={styles.customMarketOptions}>
         {markets.map((market) => {
           const selectedOption = market.marketId === value;

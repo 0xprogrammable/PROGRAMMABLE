@@ -171,10 +171,11 @@ export default function CreatorTemplateDocsPage() {
         <h2>Current status</h2>
         <p>
           Public template submissions and fee share activation are not active.
-          For a concrete Custom project, use the current API-first launch path.
+          Public Custom creation is also held. Package concrete projects locally
+          and follow the Custom Launch API guide for activation status.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/developers/api-keys">Create a Custom launch API key</Link>
+          <Link href="/docs/developers/custom-launch">Read API availability</Link>
         </p>
       </section>
     </DocsShell>

@@ -9,11 +9,14 @@ import {
   formatStockPairedGrossVolume,
   getValuationMetricLabel,
   parseDetailPayload,
+  platformFeePolicyDisclosure,
   TOKEN_DETAIL_REQUEST_TIMEOUT_MS,
 } from "../components/token-detail-view";
 import type { PreparedTokenTrade } from "../components/token-trade";
 import type { TokenMarketDataV1 } from "../lib/market-data/market-data-v1";
 import type { CanonicalTokenExploreEntry, LauncherToken } from "../lib/tokens";
+import { customGraphToken } from "./launch-stamp-surface-fixture";
+import { confirmedPlatformFeePolicyV2 } from "./platform-fee-policy-fixture";
 
 const token = {
   id: "programmable",
@@ -165,6 +168,19 @@ describe("token detail metrics", () => {
     expect(labels).not.toContain("Creator fees");
     expect(labels).not.toContain("Launcher fees");
     expect(labels).not.toContain("Network fee");
+  });
+
+  it("keeps the confirmed platform fee in contract disclosure, not metrics", () => {
+    const confirmed = {
+      ...customGraphToken,
+      platformFeePolicy: confirmedPlatformFeePolicyV2,
+    };
+    expect(buildTokenDetailMetrics(confirmed).map((metric) => metric.label))
+      .not.toContain("Programmable fee");
+    expect(platformFeePolicyDisclosure(confirmed)).toBe(
+      "Platform fee confirmed: 10 bps accrue in an unspecified pool asset and are claimable by the fixed Programmable reward wallet.",
+    );
+    expect(platformFeePolicyDisclosure(customGraphToken)).toBeNull();
   });
 
   it("shows unavailable instead of inventing FDV without reliable supply or liquidity", () => {

@@ -357,7 +357,7 @@ export function ProfileProjects({
           Launches could not be refreshed. Select Refresh to try again.
         </p>
       ) : visibleProjects.length === 0 ? (
-        <p className={styles.empty}>Your verified launches will appear here.</p>
+        <p className={styles.empty}>Your finalized launches will appear here.</p>
       ) : (
         <div className={styles.list}>
           {pageData.items.map((project) => {
@@ -385,7 +385,7 @@ export function ProfileProjects({
               <div className={styles.copy}>
                 <strong>{project.name}</strong>
                 <span>
-                  {project.symbol ? `$${project.symbol}` : "Verified launch"}
+                  {project.symbol ? `$${project.symbol}` : "Finalized launch"}
                   <small className={styles.launchType}>{launchType}</small>
                 </span>
                 {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label ? (
@@ -543,7 +543,7 @@ function CreatorArticleEditorOpening({
             ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
           </div>
           <div>
-            <p>{project.symbol ? `$${project.symbol}` : "Verified project"}</p>
+            <p>{project.symbol ? `$${project.symbol}` : "Finalized project"}</p>
             <h2 id="opening-creator-article-title">Opening article…</h2>
           </div>
         </div>

@@ -1,0 +1,1436 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Programmable Custom Launch API V2 release candidate",
+    "version": "2.0.0-rc.1",
+    "summary": "Held fee-enforced V2 Custom launch contract for private canary integration.",
+    "description": "This machine contract describes the immutable 2.0.0-rc.1 request, lifecycle and wallet-handoff shapes. It does not activate public V2 launch creation. Public V2 requests currently receive 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After until an explicit canary and public activation. V1 history reads remain governed by the separate V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [
+    {
+      "url": "https://api.programmable.market",
+      "description": "Programmable Custom Launch API; V2 public access is held"
+    }
+  ],
+  "externalDocs": {
+    "description": "Custom Launch API guide and current availability",
+    "url": "https://programmable.market/docs/developers/custom-launch"
+  },
+  "security": [
+    {
+      "CustomLaunchApiKey": []
+    }
+  ],
+  "x-programmable-availability": {
+    "status": "release-candidate-held",
+    "release": "2.0.0-rc.1",
+    "publicAuthorized": false,
+    "privateCanaryOnly": true,
+    "publicCreate": {
+      "status": "held",
+      "httpStatus": 503,
+      "errorCode": "CUSTOM_LAUNCH_V2_UNAVAILABLE",
+      "retryAfterSeconds": 30
+    },
+    "activationRule": "A published profile allowlist, canary evidence and explicit public activation are required. This document or a successful local pack does not satisfy that rule.",
+    "v1Contract": "https://programmable.market/openapi/custom-launch-v1.json"
+  },
+  "x-programmable-release-candidate": {
+    "packageName": "@programmable/launch",
+    "binary": "programmable-launch",
+    "version": "2.0.0-rc.1",
+    "tag": "programmable-launch-v2.0.0-rc.1",
+    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.1",
+    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz",
+    "launchProfileHash": "sha256:c2c8df0ce28ef4eea1d5124bc366c634675873d095e9978bc7e968792a4c738d",
+    "productionLaunchAuthorized": false
+  },
+  "x-programmable-error-status": {
+    "400": [
+      "INVALID_IDEMPOTENCY_KEY",
+      "INVALID_JSON",
+      "INVALID_REQUEST",
+      "INVALID_URL",
+      "LAUNCH_INTENT_HASH_MISMATCH",
+      "PROFILE_HASH_MISMATCH",
+      "SOURCE_BUNDLE_SUBSTITUTION"
+    ],
+    "401": [
+      "UNAUTHENTICATED"
+    ],
+    "403": [
+      "INSUFFICIENT_SCOPE",
+      "WALLET_BINDING_MISMATCH"
+    ],
+    "404": [
+      "NOT_FOUND"
+    ],
+    "409": [
+      "IDEMPOTENCY_CONFLICT",
+      "NONCE_CONFLICT",
+      "PERMIT_EXPIRED"
+    ],
+    "413": [
+      "REQUEST_TOO_LARGE"
+    ],
+    "415": [
+      "UNSUPPORTED_MEDIA_TYPE"
+    ],
+    "422": [
+      "BUNDLE_INVALID",
+      "HOOK_PERMISSION_ADDRESS_MISMATCH",
+      "PROFILE_INVALID",
+      "SIMULATION_REVERTED"
+    ],
+    "429": [
+      "LAUNCH_QUOTA_EXCEEDED"
+    ],
+    "503": [
+      "CUSTOM_LAUNCH_V2_UNAVAILABLE",
+      "LAUNCH_UNAVAILABLE",
+      "SIMULATION_UNAVAILABLE"
+    ],
+    "500": [
+      "INTERNAL_ERROR"
+    ]
+  },
+  "paths": {
+    "/v2/custom-launches": {
+      "get": {
+        "operationId": "listCustomLaunchesV2",
+        "summary": "List wallet-owned V2 launch requests",
+        "description": "Private-canary contract. Returns newest-first compact rows for the wallet bound to the API key. List output is always null; use the version-matched single-resource route for a full handoff. Public availability remains held and can return 503 with Retry-After.",
+        "x-programmable-public-availability": "held",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Defaults to 10 and never exceeds 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque route-local nextCursor returned by the previous V2 page.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private-canary wallet-owned V2 page. This response is not a claim of public activation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchListPageV2"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/V2Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCustomLaunchV2",
+        "summary": "Prepare a fee-enforced V2 launch (held/private canary)",
+        "description": "The request is byte- and hash-bound to the frozen fee-enforced profile, five-target graph, exact source, runtime materialization and agent attestation. Public authorization is held. Approved private-canary traffic may receive 202, or 200 only when replaying the same Idempotency-Key with byte-identical request bytes. Public traffic receives 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After. Never mutate request bytes when retrying a transient response.",
+        "x-programmable-public-availability": "held",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Persistently bound to the exact request bytes. Reuse only for byte-identical retries.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Closed JSON object. The streaming body limit is 8,388,608 bytes.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomLaunchCreateRequestV2"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Private-canary idempotent replay of an existing byte-identical request.",
+            "headers": {
+              "Location": {
+                "$ref": "#/components/headers/ResourceLocation"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchResourceV2"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Private-canary request durably accepted. Poll the Location resource. This response is not available to public traffic while held.",
+            "headers": {
+              "Location": {
+                "$ref": "#/components/headers/ResourceLocation"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchResourceV2"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/LaunchQuotaExceeded"
+          },
+          "503": {
+            "$ref": "#/components/responses/V2Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v2/custom-launches/{launchId}": {
+      "get": {
+        "operationId": "getCustomLaunchV2",
+        "summary": "Read one wallet-owned V2 launch request",
+        "description": "Private-canary single-resource polling contract. The simulating state exposes no output. Only an authorized resource can contain the exact simulation-passed wallet transaction for separate wallet review. The service never signs or broadcasts for the controller wallet. A missing launch and another principal's launch both return 404. Public availability remains held and can return 503 with Retry-After.",
+        "x-programmable-public-availability": "held",
+        "parameters": [
+          {
+            "name": "launchId",
+            "in": "path",
+            "required": true,
+            "description": "Durable V2 request identifier, not the bytes32 onchainLaunchId.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current durable private-canary V2 resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchResourceV2"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/V2Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CustomLaunchApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "pm_live_<22-char-key-id>_<43-char-secret>",
+        "description": "Wallet-bound key created at https://programmable.market/developers/api-keys. Private-canary V2 requires the route scope and an approved wallet/profile grant. Possessing a key or scope does not activate public V2 and never grants wallet signing authority."
+      }
+    },
+    "headers": {
+      "RetryAfterSeconds": {
+        "description": "Whole seconds to wait before retrying the identical request. Current V2 held responses use 30.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "example": "30"
+        }
+      },
+      "ResourceLocation": {
+        "description": "Version-matched V2 single-resource path.",
+        "schema": {
+          "type": "string",
+          "pattern": "^/v2/custom-launches/[A-Za-z0-9_-]{16,128}$"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid query, idempotency key, JSON, hash binding, source binding or closed request shape.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "API key is missing, malformed, expired, revoked or unknown.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Bearer challenge.",
+            "schema": {
+              "const": "Bearer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Required route scope or linked-wallet binding is missing. A held or unavailable V2 profile is reported as 503 instead.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Launch not found for this wallet principal.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            },
+            "example": {
+              "schemaVersion": "programmable.api-error.v1",
+              "error": {
+                "code": "NOT_FOUND",
+                "message": "Launch not found",
+                "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The idempotency key, nonce or permit lifetime conflicts with durable state. Do not change bytes merely to bypass a conflict.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "RequestTooLarge": {
+        "description": "Streaming body exceeded 8,388,608 bytes.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            },
+            "example": {
+              "schemaVersion": "programmable.api-error.v1",
+              "error": {
+                "code": "REQUEST_TOO_LARGE",
+                "message": "Request body exceeds 8 MiB",
+                "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+              }
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Content-Type must be application/json, optionally with charset=utf-8.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "The closed request parsed but failed graph, hook-permission, profile or exact simulation validation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "LaunchQuotaExceeded": {
+        "description": "Private-canary launch quota reached. Retry identical bytes after the stated delay.",
+        "headers": {
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfterSeconds"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "V2Unavailable": {
+        "description": "V2 is held, unavailable or awaiting a retryable simulation dependency. Preserve exact request bytes. Honor Retry-After when present: CUSTOM_LAUNCH_V2_UNAVAILABLE and SIMULATION_UNAVAILABLE include it, while generic LAUNCH_UNAVAILABLE can omit it. CUSTOM_LAUNCH_V2_UNAVAILABLE is the expected public response while held.",
+        "headers": {
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfterSeconds"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            },
+            "example": {
+              "schemaVersion": "programmable.api-error.v1",
+              "error": {
+                "code": "CUSTOM_LAUNCH_V2_UNAVAILABLE",
+                "message": "The fee-enforced V2 profile is held until its production security commitments are activated",
+                "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25",
+                "details": {
+                  "retryAfterSeconds": 30
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected server failure. The response carries a correlation requestId and no secret.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+            },
+            "example": {
+              "schemaVersion": "programmable.api-error.v1",
+              "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "The request could not be completed",
+                "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "EthereumAddress": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/EthereumAddress"
+      },
+      "CanonicalIdentifier": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/CanonicalIdentifier"
+      },
+      "CanonicalUint256": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/CanonicalUint256"
+      },
+      "HexData": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/HexData"
+      },
+      "LowerHex32": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/LowerHex32"
+      },
+      "NonzeroLowerHex32": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/NonzeroLowerHex32"
+      },
+      "Sha256Digest": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/Sha256Digest"
+      },
+      "DeterministicSourceBundleV2": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/DeterministicSourceBundleV2"
+      },
+      "SourceBundleManifestV2": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/SourceBundleManifestV2"
+      },
+      "CustomGraphBundleV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/CustomGraphBundleV1"
+      },
+      "ExactSourceCompilationUnitV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/ExactSourceCompilationUnitV1"
+      },
+      "PreparedLaunchArtifactV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1"
+      },
+      "SignedPreparedLaunchPermitV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/SignedPreparedLaunchPermitV1"
+      },
+      "CustomLaunchWalletTransactionV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/CustomLaunchWalletTransactionV1"
+      },
+      "CustomLaunchObservationWindowV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/CustomLaunchObservationWindowV1"
+      },
+      "CustomLaunchOnchainEvidenceV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/CustomLaunchOnchainEvidenceV1"
+      },
+      "CustomLaunchApiErrorV2": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "error"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.api-error.v1"
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "requestId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "HTTP correlation identifier, not the launch resource requestId."
+              },
+              "details": {}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "FeeEnforcedLaunchProfileV2": {
+        "type": "object",
+        "description": "Frozen server-allowlisted profile. The server requires the canonical JSON to match the private durable profile byte for byte; the 2.0.0-rc.1 public package carries a non-production-authorized candidate for offline pack and validation.",
+        "required": [
+          "schemaVersion",
+          "profileId",
+          "profileRevision",
+          "profileVersion",
+          "productionLaunchAuthorized",
+          "chainId",
+          "router",
+          "routerRuntimeCodeHash",
+          "graphFactory",
+          "graphFactoryRuntimeCodeHash",
+          "poolManager",
+          "poolManagerRuntimeCodeHash",
+          "policy",
+          "feePolicy",
+          "lpFeePolicy",
+          "customHookPolicy",
+          "contractBuildBindings",
+          "graphRolePolicy",
+          "requiredHookPermissions",
+          "requiredHookPermissionMask"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.fee-enforced-launch-profile.v1"
+          },
+          "profileId": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9.-]{2,127}$"
+          },
+          "profileRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "profileVersion": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+          },
+          "productionLaunchAuthorized": {
+            "type": "boolean"
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "router": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "routerRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "graphFactory": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "graphFactoryRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "poolManager": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "poolManagerRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "policy": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "feePolicy": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "lpFeePolicy": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "customHookPolicy": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "contractBuildBindings": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "graphRolePolicy": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "requiredHookPermissions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiredHookPermissionMask": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{4}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FeeEnforcedLaunchTargetRolesV2": {
+        "type": "object",
+        "description": "Five distinct graph target IDs with fixed semantic roles.",
+        "required": [
+          "tokenTargetId",
+          "customModuleTargetId",
+          "feeVaultTargetId",
+          "feeHookTargetId",
+          "poolInitializerTargetId"
+        ],
+        "properties": {
+          "tokenTargetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "customModuleTargetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "feeVaultTargetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "feeHookTargetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "poolInitializerTargetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FeeEnforcedLaunchProfileParametersV2": {
+        "type": "object",
+        "description": "Request-specific pool, initializer, composition and exact materialized runtime bindings.",
+        "required": [
+          "customDeltaAccount",
+          "customModuleRuntimeCodeHash",
+          "maximumCustomDeltaAbsolute",
+          "poolId",
+          "initialSqrtPriceX96",
+          "authorizedInitializer",
+          "tokenRuntimeCodeHash",
+          "feeVaultRuntimeCodeHash",
+          "feeHookRuntimeCodeHash",
+          "poolInitializerRuntimeCodeHash",
+          "deploymentProfileHash",
+          "compositionHash"
+        ],
+        "properties": {
+          "customDeltaAccount": {
+            "const": "0x0000000000000000000000000000000000000000"
+          },
+          "customModuleRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "maximumCustomDeltaAbsolute": {
+            "const": "0"
+          },
+          "poolId": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "initialSqrtPriceX96": {
+            "type": "string",
+            "pattern": "^(?:[1-9][0-9]*)$",
+            "description": "Canonical decimal uint160 greater than zero."
+          },
+          "authorizedInitializer": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "tokenRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "feeVaultRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "feeHookRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "poolInitializerRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "deploymentProfileHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "compositionHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FeeEnforcedLaunchProfileBindingV2": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "profileId",
+          "profileRevision",
+          "targetRoles",
+          "profileParameters"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.fee-enforced-launch-profile-binding.v1"
+          },
+          "profileId": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9.-]{2,127}$"
+          },
+          "profileRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "targetRoles": {
+            "$ref": "#/components/schemas/FeeEnforcedLaunchTargetRolesV2"
+          },
+          "profileParameters": {
+            "$ref": "#/components/schemas/FeeEnforcedLaunchProfileParametersV2"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentLaunchAttestationCheckV2": {
+        "type": "object",
+        "required": [
+          "checkId",
+          "evidenceSha256"
+        ],
+        "properties": {
+          "checkId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "evidenceSha256": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentLaunchAttestationV2": {
+        "type": "object",
+        "description": "Caller self-attestation bound to launchIntentHash. The platform validates its shape and subject but does not adopt its claims.",
+        "required": [
+          "schemaVersion",
+          "subjectLaunchIntentHash",
+          "agentId",
+          "checkedAt",
+          "checks"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.agent-launch-attestation.v2"
+          },
+          "subjectLaunchIntentHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "agentId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/AgentLaunchAttestationCheckV2"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuntimeImmutableReferenceRangeV2": {
+        "type": "object",
+        "required": [
+          "start",
+          "length"
+        ],
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "length": {
+            "const": 32
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuntimeImmutableReferenceV2": {
+        "type": "object",
+        "required": [
+          "immutableId",
+          "ranges"
+        ],
+        "properties": {
+          "immutableId": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "ranges": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/RuntimeImmutableReferenceRangeV2"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuntimeImmutableLiteralV2": {
+        "type": "object",
+        "required": [
+          "immutableId",
+          "abiType",
+          "literal"
+        ],
+        "properties": {
+          "immutableId": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "abiType": {
+            "type": "string",
+            "minLength": 1
+          },
+          "literal": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuntimeImmutableTargetV2": {
+        "type": "object",
+        "required": [
+          "immutableId",
+          "abiType",
+          "target"
+        ],
+        "properties": {
+          "immutableId": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "abiType": {
+            "const": "address"
+          },
+          "target": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExactRuntimeMaterializationV2": {
+        "type": "object",
+        "description": "Exact deployed runtime bytes plus compiler immutable ranges and the intent-bound values used to materialize those bytes.",
+        "required": [
+          "immutableReferences",
+          "runtimeImmutables",
+          "deployedRuntimeCodeBase64",
+          "deployedRuntimeCodeHash"
+        ],
+        "properties": {
+          "immutableReferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeImmutableReferenceV2"
+            }
+          },
+          "runtimeImmutables": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RuntimeImmutableLiteralV2"
+                },
+                {
+                  "$ref": "#/components/schemas/RuntimeImmutableTargetV2"
+                }
+              ]
+            }
+          },
+          "deployedRuntimeCodeBase64": {
+            "type": "string",
+            "minLength": 4,
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "description": "Canonical base64 of 1 to 24,576 deployed runtime bytes."
+          },
+          "deployedRuntimeCodeHash": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExactSourceVerificationComponentV2": {
+        "type": "object",
+        "required": [
+          "targetId",
+          "compilationUnitId",
+          "sourcePath",
+          "contractName",
+          "constructorArguments",
+          "runtimeMaterialization"
+        ],
+        "properties": {
+          "targetId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "compilationUnitId": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "sourcePath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contractName": {
+            "$ref": "#/components/schemas/CanonicalIdentifier"
+          },
+          "constructorArguments": {
+            "$ref": "#/components/schemas/HexData"
+          },
+          "runtimeMaterialization": {
+            "$ref": "#/components/schemas/ExactRuntimeMaterializationV2"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExactSourceVerificationBundleV2": {
+        "type": "object",
+        "description": "Required V2 exact-source bundle. Components uniquely and canonically cover all five graph targets and bind exact Standard JSON, constructor arguments and materialized runtime bytes.",
+        "required": [
+          "schemaVersion",
+          "compilationUnits",
+          "components"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.exact-source-verification-bundle.v2"
+          },
+          "compilationUnits": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ExactSourceCompilationUnitV1"
+            }
+          },
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ExactSourceVerificationComponentV2"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchCreateRequestV2": {
+        "type": "object",
+        "description": "Closed canonical V2 request. The public packager derives every digest and exact materialization from source/build artifacts; callers must not enter derived hashes by hand.",
+        "required": [
+          "schemaVersion",
+          "launchWallet",
+          "chainId",
+          "nonce",
+          "sourceDescriptor",
+          "sourceBundleManifest",
+          "graphBundle",
+          "launchProfile",
+          "launchProfileSelection",
+          "launchProfileHash",
+          "launchIntentHash",
+          "agentAttestation",
+          "verificationBundle"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-create-request.v2"
+          },
+          "launchWallet": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "nonce": {
+            "$ref": "#/components/schemas/NonzeroLowerHex32"
+          },
+          "sourceDescriptor": {
+            "$ref": "#/components/schemas/DeterministicSourceBundleV2"
+          },
+          "sourceBundleManifest": {
+            "$ref": "#/components/schemas/SourceBundleManifestV2"
+          },
+          "graphBundle": {
+            "$ref": "#/components/schemas/CustomGraphBundleV1"
+          },
+          "launchProfile": {
+            "$ref": "#/components/schemas/FeeEnforcedLaunchProfileV2"
+          },
+          "launchProfileSelection": {
+            "$ref": "#/components/schemas/FeeEnforcedLaunchProfileBindingV2"
+          },
+          "launchProfileHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchIntentHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "agentAttestation": {
+            "$ref": "#/components/schemas/AgentLaunchAttestationV2"
+          },
+          "verificationBundle": {
+            "$ref": "#/components/schemas/ExactSourceVerificationBundleV2"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExactSimulationEvidenceV2": {
+        "type": "object",
+        "description": "Server-authored same-transaction simulation evidence. The wallet handoff is exposed only after this object is complete and fresh.",
+        "required": [
+          "outcome",
+          "transactionPreimageHash",
+          "profileHash",
+          "blockNumber",
+          "blockHash",
+          "responseDigest",
+          "gasEstimate"
+        ],
+        "properties": {
+          "outcome": {
+            "const": "passed"
+          },
+          "transactionPreimageHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "profileHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "blockNumber": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "blockHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "responseDigest": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "gasEstimate": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchPreparedOutputV2": {
+        "type": "object",
+        "description": "Prepared V2 artifact. It contains no permit, wallet transaction, observation window or simulation evidence.",
+        "required": [
+          "schemaVersion",
+          "launchProfileHash",
+          "launchIntentHash",
+          "launchProfileSelection",
+          "artifact",
+          "agentAttestation",
+          "signedPermit",
+          "observationWindow",
+          "onchain",
+          "walletTransaction",
+          "simulation"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-authorization-result.v2"
+          },
+          "launchProfileHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchIntentHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchProfileSelection": {
+            "$ref": "#/components/schemas/FeeEnforcedLaunchProfileBindingV2"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/PreparedLaunchArtifactV1"
+          },
+          "agentAttestation": {
+            "$ref": "#/components/schemas/AgentLaunchAttestationV2"
+          },
+          "signedPermit": {
+            "type": "null"
+          },
+          "observationWindow": {
+            "type": "null"
+          },
+          "onchain": {
+            "type": "null"
+          },
+          "walletTransaction": {
+            "type": "null"
+          },
+          "simulation": {
+            "type": "null"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchAuthorizedOutputV2": {
+        "type": "object",
+        "description": "Simulation-passed permit-attached wallet handoff. The controller wallet must independently review, sign and broadcast this exact transaction.",
+        "required": [
+          "schemaVersion",
+          "launchProfileHash",
+          "launchIntentHash",
+          "launchProfileSelection",
+          "artifact",
+          "agentAttestation",
+          "signedPermit",
+          "observationWindow",
+          "onchain",
+          "walletTransaction",
+          "simulation"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-authorization-result.v2"
+          },
+          "launchProfileHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchIntentHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchProfileSelection": {
+            "$ref": "#/components/schemas/FeeEnforcedLaunchProfileBindingV2"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/PreparedLaunchArtifactV1"
+          },
+          "agentAttestation": {
+            "$ref": "#/components/schemas/AgentLaunchAttestationV2"
+          },
+          "signedPermit": {
+            "$ref": "#/components/schemas/SignedPreparedLaunchPermitV1"
+          },
+          "observationWindow": {
+            "$ref": "#/components/schemas/CustomLaunchObservationWindowV1"
+          },
+          "onchain": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CustomLaunchOnchainEvidenceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "walletTransaction": {
+            "$ref": "#/components/schemas/CustomLaunchWalletTransactionV1"
+          },
+          "simulation": {
+            "$ref": "#/components/schemas/ExactSimulationEvidenceV2"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchFailureV2": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchResourceV2": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "launchId",
+          "requestId",
+          "onchainLaunchId",
+          "routeId",
+          "ownerWallet",
+          "status",
+          "requestHash",
+          "launchProfileHash",
+          "launchIntentHash",
+          "createdAt",
+          "updatedAt",
+          "output",
+          "failure"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch.v2"
+          },
+          "launchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "onchainLaunchId": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LowerHex32"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "routeId": {
+            "const": "custom-launch:create:v2"
+          },
+          "ownerWallet": {
+            "$ref": "#/components/schemas/EthereumAddress"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received",
+              "validating",
+              "prepared",
+              "simulating",
+              "authorized",
+              "submitted",
+              "finalized",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "requestHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchProfileHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "launchIntentHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "output": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CustomLaunchPreparedOutputV2"
+              },
+              {
+                "$ref": "#/components/schemas/CustomLaunchAuthorizedOutputV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CustomLaunchFailureV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchSummaryV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CustomLaunchResourceV2"
+          },
+          {
+            "type": "object",
+            "description": "Compact list projection; output is always null even when the detail resource is authorized.",
+            "properties": {
+              "output": {
+                "type": "null"
+              }
+            }
+          }
+        ]
+      },
+      "CustomLaunchListPageV2": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "launches",
+          "nextCursor"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-list.v2"
+          },
+          "launches": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CustomLaunchSummaryV2"
+            }
+          },
+          "nextCursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 512,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

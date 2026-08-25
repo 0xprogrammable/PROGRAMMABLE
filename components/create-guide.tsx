@@ -11,7 +11,7 @@ import { ArrowRight, Check, CircleHelp, Copy, X } from "lucide-react";
 
 import styles from "@/components/create-guide.module.css";
 
-const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch and https://programmable.market/openapi/custom-launch-v1.json for the exact packaging and API contract. Derive the request and evidence digests from the exact artifacts, never expose the API key, and never invent check results. Poll the single-request status: prepared has no wallet transaction, so stop at authorized and return the exact transaction and permit for my review. Never sign or broadcast.`;
+const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch, https://programmable.market/openapi/custom-launch-v1.json for the live V1 reads/write fence, and https://programmable.market/openapi/custom-launch-v2.json for the held V2 release-candidate shapes. Derive the request and evidence digests from the exact artifacts, never expose an API key, and never invent check results. Stop after local pack and validate. Do not submit: V1 creation returns 409 CUSTOM_LAUNCH_V1_READ_ONLY and V2 is not public until explicit activation. Never sign or broadcast.`;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -186,18 +186,17 @@ export function CreateGuide() {
                 4
               </span>
               <div>
-                <h3>Prepare the launch through the API</h3>
+                <h3>Package locally and check availability</h3>
                 <p>
                   Package the request with project-specific tooling that follows
-                  the API schema. Create a wallet-bound API key, submit the
-                  deterministic bundle and wait for <code>authorized</code>. The
-                  controller wallet reviews the exact transaction separately.
-                  A <code>prepared</code> result has no wallet transaction, and
-                  the API key cannot authorize, sign or broadcast.
+                  the API schema, then validate it locally. Do not submit to V1:
+                  creation returns <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+                  V2 remains held until canary and explicit public activation.
+                  An API key never authorizes, signs or broadcasts.
                 </p>
                 <div className={styles.links}>
                   <Link href="/developers/api-keys">
-                    Create a Custom launch API key
+                    Manage Custom launch API keys
                     <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
                   </Link>
                   <Link href="/docs/developers/custom-launch">

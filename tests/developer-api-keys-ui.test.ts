@@ -8,6 +8,7 @@ import {
 } from "../components/developer-api-keys";
 import {
   mergeLaunchResources,
+  parseHistoryPage,
   selectMonotonicLaunchResource,
   type LaunchResource,
   type LaunchStatus,
@@ -62,11 +63,15 @@ function launch(
   updatedAt: string,
 ): LaunchResource {
   return {
+    schemaVersion: "programmable.custom-launch.v1",
     launchId: requestId,
     requestId,
     onchainLaunchId: null,
+    routeId: "custom-launch:create:v1",
     ownerWallet: "0x0000000000000000000000000000000000000001",
     status,
+    launchProfileHash: null,
+    launchIntentHash: null,
     createdAt: "2026-08-25T10:00:00.000Z",
     updatedAt,
     output: null,
@@ -139,6 +144,15 @@ describe("developer API key interface", () => {
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi,
     );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2ReleaseCandidate,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cliV2ReleaseCandidate,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "V2 is held for private canary",
+    );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
   });
 
@@ -197,6 +211,37 @@ describe("developer API key interface", () => {
 });
 
 describe("developer launch history interface", () => {
+  it("accepts compact authorized V2 list rows and defers output to detail", () => {
+    const resource = {
+      schemaVersion: "programmable.custom-launch.v2",
+      launchId: "50000000-0000-4000-8000-000000000005",
+      requestId: "50000000-0000-4000-8000-000000000005",
+      onchainLaunchId: null,
+      routeId: "custom-launch:create:v2",
+      ownerWallet: "0x0000000000000000000000000000000000000001",
+      status: "authorized",
+      requestHash: `sha256:${"11".repeat(32)}`,
+      launchProfileHash: `sha256:${"22".repeat(32)}`,
+      launchIntentHash: `sha256:${"33".repeat(32)}`,
+      createdAt: "2026-08-25T10:00:00.000Z",
+      updatedAt: "2026-08-25T10:01:00.000Z",
+      output: null,
+      failure: null,
+    } as const;
+    const { requestHash: _requestHash, ...projectedResource } = resource;
+    expect(parseHistoryPage({
+      schemaVersion: "programmable.custom-launch-history.v1",
+      launches: [resource],
+      nextCursor: null,
+    }, resource.ownerWallet)).toEqual({
+      launches: [projectedResource],
+      nextCursor: null,
+    });
+    expect(historySource).toContain(
+      "const current = await readLaunchResource(launch);",
+    );
+  });
+
   it("stays behind the compact view switch and keeps the signing boundary clear", () => {
     expect(historySource).toContain("Launch history");
     expect(historySource).toContain(
@@ -205,7 +250,10 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("Check onchain status");
     expect(historySource).toContain("Review and sign in wallet");
     expect(historySource).toContain("sendCustomLaunchWalletAction(action)");
-    expect(historySource).toContain("startStatusPolling(launch.requestId)");
+    expect(historySource).toContain("startStatusPolling(current)");
+    expect(historySource).toContain('launch.routeId === "custom-launch:create:v2"');
+    expect(historySource).toContain("prepareCustomLaunchWalletActionV2(");
+    expect(historySource).toContain("&version=${version}");
     expect(historySource).toContain("Wallet action required");
     expect(historySource).toContain(
       "Review and sign the prepared transaction in your wallet.",
@@ -271,6 +319,32 @@ describe("developer launch history interface", () => {
       true,
     );
     expect(merged).toEqual([submitted, finalized]);
+  });
+
+  it("advances V2 through simulation without colliding with a V1 UUID", () => {
+    const v1 = launch(
+      "shared-request",
+      "prepared",
+      "2026-08-25T10:01:00.000Z",
+    );
+    const simulating = {
+      ...v1,
+      schemaVersion: "programmable.custom-launch.v2" as const,
+      routeId: "custom-launch:create:v2" as const,
+      status: "simulating" as const,
+      launchProfileHash: `sha256:${"11".repeat(32)}` as const,
+      launchIntentHash: `sha256:${"22".repeat(32)}` as const,
+    };
+    const authorized = {
+      ...simulating,
+      status: "authorized" as const,
+      updatedAt: "2026-08-25T10:02:00.000Z",
+    };
+
+    expect(selectMonotonicLaunchResource(simulating, authorized))
+      .toBe(authorized);
+    expect(mergeLaunchResources([v1], [simulating], false))
+      .toEqual([v1, simulating]);
   });
 
   it("rechecks the Custom launch action at the final wallet boundary", () => {

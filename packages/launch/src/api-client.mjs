@@ -3,11 +3,15 @@ import path from "node:path";
 
 import {
   API_ORIGIN,
-  CREATE_PATH,
+  CREATE_PATH_V1,
+  CREATE_PATH_V2,
+  CREATE_REQUEST_SCHEMA_V1,
+  CREATE_REQUEST_SCHEMA_V2,
   TERMINAL_STATUSES,
   WALLET_HANDOFF_STATUS,
 } from "./constants.mjs";
 import {
+  atomicCreate,
   atomicWrite,
   defaultStateDirectory,
   loadApiKey,
@@ -35,9 +39,15 @@ export async function submitLaunch(options) {
   if (typeof options.configPath !== "string" || options.configPath.length === 0) {
     throw new TypeError("submit requires --config so exact source and build artifacts are freshly repacked");
   }
-  await validateLaunchFile({ launchPath, configPath: options.configPath });
-  const requestBytes = await readFile(launchPath);
+  const validation = await validateLaunchFile({ launchPath, configPath: options.configPath });
+  const requestPath = createPathForRequestSchema(validation.schemaVersion);
+  const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
   const requestSha256 = sha256Digest(requestBytes);
+  if (requestSha256 !== validation.requestSha256) {
+    throw new TypeError(
+      "SUBMISSION_BYTES_CHANGED_AFTER_VALIDATION: launch.json changed after exact config validation",
+    );
+  }
   const idempotencyKey = normalizeIdempotencyKey(
     options.idempotencyKey ?? `programmable-${sha256Hex(requestBytes)}`,
   );
@@ -51,7 +61,7 @@ export async function submitLaunch(options) {
   const binding = {
     schemaVersion: "programmable.launch-submit-journal.v1",
     apiOrigin,
-    requestPath: CREATE_PATH,
+    requestPath,
     idempotencyKey,
     requestSha256,
     requestBodyBase64: requestBytes.toString("base64"),
@@ -61,7 +71,7 @@ export async function submitLaunch(options) {
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const result = await requestWithRetry({
     method: "POST",
-    url: `${apiOrigin}${CREATE_PATH}`,
+    url: `${apiOrigin}${requestPath}`,
     headers: {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
@@ -89,6 +99,7 @@ export async function statusLaunch(options) {
     throw new TypeError("status requires the Custom launch request UUID");
   }
   const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const requestPath = createPathForApiVersion(options.apiVersion ?? 1);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const until = options.until ?? WALLET_HANDOFF_STATUS;
   if (until !== WALLET_HANDOFF_STATUS && until !== "finalized") {
@@ -101,7 +112,7 @@ export async function statusLaunch(options) {
   while (true) {
     const result = await requestWithRetry({
       method: "GET",
-      url: `${apiOrigin}${CREATE_PATH}/${encodeURIComponent(options.requestId)}`,
+      url: `${apiOrigin}${requestPath}/${encodeURIComponent(options.requestId)}`,
       headers: { authorization: `Bearer ${apiKey}` },
       maxAttempts: options.maxAttempts,
       timeoutMs: options.timeoutMs,
@@ -133,20 +144,20 @@ export async function statusLaunch(options) {
 }
 
 async function bindJournal(journalPath, binding) {
-  let existing;
   try {
-    existing = (await readStrictJsonFile(journalPath, MAX_SUBMISSION_JOURNAL_BYTES)).value;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
-  if (existing === undefined) {
-    await atomicWrite(
+    await atomicCreate(
       journalPath,
       Buffer.from(`${canonicalizeJson(binding)}\n`, "utf8"),
       0o600,
     );
     return binding;
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
   }
+  const existing = (await readStrictJsonFile(
+    journalPath,
+    MAX_SUBMISSION_JOURNAL_BYTES,
+  )).value;
   for (const key of [
     "schemaVersion",
     "apiOrigin",
@@ -194,6 +205,8 @@ async function requestWithRetry(options) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error("request timed out")), timeoutMs);
     let response;
+    let retryAfter = null;
+    let responseBytes;
     try {
       response = await fetchImpl(options.url, {
         method: options.method,
@@ -202,17 +215,23 @@ async function requestWithRetry(options) {
         redirect: "error",
         signal: controller.signal,
       });
+      retryAfter = response.headers.get("retry-after");
+      responseBytes = Buffer.from(await response.arrayBuffer());
     } catch (error) {
       lastError = error;
       if (attempt === maxAttempts) break;
-      await sleepImpl(retryDelayMs(null, attempt));
+      await sleepImpl(retryDelayMs(retryAfter, attempt));
       continue;
     } finally {
       clearTimeout(timeout);
     }
-    const retryAfter = response.headers.get("retry-after");
-    const responseBytes = Buffer.from(await response.arrayBuffer());
-    const body = parseResponseBody(responseBytes, response.status);
+    let body;
+    try {
+      body = parseResponseBody(responseBytes, response.status);
+    } catch (error) {
+      if (response.status !== 429 && response.status !== 503) throw error;
+      body = null;
+    }
     if (response.status === 429 || response.status === 503) {
       if (attempt === maxAttempts) {
         throw apiError(response.status, body, retryAfter);
@@ -277,6 +296,18 @@ function normalizeApiOrigin(value) {
     throw new TypeError("API origin must be https://api.programmable.market or an explicit loopback test origin");
   }
   return url.origin;
+}
+
+function createPathForRequestSchema(schemaVersion) {
+  if (schemaVersion === CREATE_REQUEST_SCHEMA_V1) return CREATE_PATH_V1;
+  if (schemaVersion === CREATE_REQUEST_SCHEMA_V2) return CREATE_PATH_V2;
+  throw new TypeError("launch request schema does not map to a Custom Launch API route");
+}
+
+function createPathForApiVersion(value) {
+  if (value === 1 || value === "1" || value === "v1") return CREATE_PATH_V1;
+  if (value === 2 || value === "2" || value === "v2") return CREATE_PATH_V2;
+  throw new TypeError("apiVersion must be 1 or 2");
 }
 
 function errorRequestId(body) {

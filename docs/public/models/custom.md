@@ -10,11 +10,11 @@ Custom is the release path for products that need their own Uniswap v4 hook, app
 
 A hook is a smart contract that a Uniswap v4 pool calls at defined points in a transaction. It can apply product specific behavior directly around swaps and other pool actions. What it can do depends on its declared permissions and exact code, which is why each Custom request is bound to one exact bundle rather than to a project name.
 
-## API-first preparation
+## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` CLI derives the deterministic source manifest, graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API schema](../developers/custom-launch.md). The controller wallet creates a [wallet-bound API key](https://programmable.market/developers/api-keys), and the workflow submits the bundle to `https://api.programmable.market/v1/custom-launches`.
+Build and test the exact project. The public `programmable-launch` CLI derives the deterministic source manifest, graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API schema](../developers/custom-launch.md). Pack and validate locally. Do not submit to V1: authenticated POST returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. V2 remains held until canary and explicit public activation.
 
-The API checks the declared bundle commitments. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. `authorized` supplies the permit-attached transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never revises it. The API does not reproduce project tests, audit the project, sign the transaction or broadcast it, and the API key is not wallet authority.
+Existing durable resources record the API's declared bundle checks. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. An already `authorized` resource supplies the permit-attached transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never revises it. The API does not audit the project, sign the transaction or broadcast it, and the API key is not wallet authority.
 
 ## Release binding
 

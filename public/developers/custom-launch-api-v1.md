@@ -1,9 +1,18 @@
 # Programmable Custom Launch API V1
 
-The Custom Launch API is live at `https://api.programmable.market`. It prepares and tracks one concrete Custom hook
-launch per request for the wallet bound to an API key. Legacy Registry and GitHub submission intake is closed.
+V1 list and single-resource reads remain live at `https://api.programmable.market` for existing wallet-bound launch
+requests. V1 creation is read-only: every authenticated `POST /v1/custom-launches` returns
+`409 CUSTOM_LAUNCH_V1_READ_ONLY`, which is non-retryable. The fee-enforced V2 release candidate remains held until
+canary and explicit public activation; unavailable V2 requests return `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with
+`Retry-After`. There is currently no public Custom launch-creation route. Legacy Registry and GitHub submission intake
+is closed.
 
 Normative OpenAPI: <https://programmable.market/openapi/custom-launch-v1.json>
+
+Held V2 release-candidate OpenAPI: <https://programmable.market/openapi/custom-launch-v2.json>
+
+The V2 contract is published for offline integration and private-canary compatibility only. It does not activate a
+public create route.
 
 Human guide: <https://programmable.market/docs/developers/custom-launch>
 
@@ -29,10 +38,14 @@ programmable-launch submit launch.json --config programmable-launch.config.json
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
+`pack` and `validate` remain usable locally. `status` remains usable for an existing V1 request UUID. Do not run
+`submit` against V1 during the write fence: it receives the non-retryable 409 above. The V2 release candidate is not a
+public CLI/API contract until its canary and public activation are published.
+
 The release tarball includes `examples/no-broadcast/README.md` with real Solidity source, exact Standard JSON, matching
 solc artifacts and a config generator. Its pack-native hook salt grind is deterministic after source, wallet and nonce
-are fixed. Generated evidence stops truthfully at `pre-submit`; separately recorded commands can submit and poll to
-`authorized`, then stop without a wallet signature or broadcast.
+are fixed. Generated evidence stops truthfully at `pre-submit`, without signing or broadcasting. The held public write
+surface does not currently provide a path from that evidence to a new authorized resource.
 
 `pack` derives the sorted manifest, source descriptor, ABI-encoded arguments, graph, target locators, CREATE2
 predictions, evidence digests, canonical hashes and exact-source verification bundle from exact source, Standard JSON,
@@ -48,12 +61,15 @@ environment variable named `PROGRAMMABLE_API_KEY`, or in the supported operating
 `$PROGRAMMABLE_API_KEY` in chat, prompts and agent setup. The CLI has no API-key argument, never prints the key and
 never stores it in its journal.
 
-V1 grants `custom-launch:create` and `custom-launch:read`. The key is not a wallet key and cannot sign or broadcast.
+Existing V1 keys can use `custom-launch:read` for their wallet-owned history. A key may still contain the legacy
+`custom-launch:create` scope, but that scope does not override the V1 write fence. The key is not a wallet key and
+cannot sign or broadcast.
 
-## Create request
+## V1 write fence and retained request schema
 
-`POST /v1/custom-launches` uses `Authorization: Bearer $PROGRAMMABLE_API_KEY`, `Content-Type: application/json` and a
-16 to 128 character `Idempotency-Key`. The closed body is limited to 8,388,608 bytes (8 MiB).
+After successful API-key authentication and scope checks, `POST /v1/custom-launches` returns
+`409 CUSTOM_LAUNCH_V1_READ_ONLY` before reading an Idempotency-Key or request body. Do not retry it. The schema below
+is retained for compatibility with existing resources and tooling; it is not an active public creation contract.
 
 The eight legacy V1 fields remain required:
 
@@ -95,17 +111,15 @@ Compilation units are unique and UTF-8 sorted by `compilationUnitId`. Components
 commit. Constructor arguments are lowercase even hex after graph locators are resolved.
 Decoded Standard JSON is limited to 5,242,880 bytes per compilation unit and across all units in one request.
 
-The server checks `creationBytecode || constructorArguments` against the prepared init code and binds the canonical
-verification bundle hash into the prepared artifact only when the bundle exists. Legacy requests without the field
-remain accepted and unverified.
+For existing resources, the durable server record reflects whether `creationBytecode || constructorArguments` matched
+the prepared init code and whether a canonical verification bundle hash was bound. Legacy requests without the field
+remain readable and unverified.
 
-## Idempotent transport
+## Transport during the write fence
 
-Before its first POST, `submit` proves that `launch.json` is byte-identical to a fresh pack of the supplied exact
-artifacts. It then persists the exact request bytes, local byte SHA-256, API origin and Idempotency-Key in a mode `0600`
-journal. It retries identical bytes after a timeout, transport ambiguity, `429` or `503` and honors
-`Retry-After` as seconds or an HTTP date. A changed body with the same key fails locally. It does not retry permanent
-`400`, `401`, `403`, `409`, `413`, `415` or `422` responses.
+The CLI still proves that `launch.json` is byte-identical to a fresh pack before any `submit` network access and keeps
+its request journal and key boundary. During the V1 write fence, however, the definitive response is
+`409 CUSTOM_LAUNCH_V1_READ_ONLY`; stop and do not retry. For live V1 reads, honor `Retry-After` on `429` or `503`.
 
 The resource `requestHash` is the server's canonical idempotency digest. It is not the local SHA-256 of the exact HTTP
 body stored by the CLI.
@@ -147,8 +161,10 @@ enrichment or an explorer is unavailable. Provenance is not an audit, safety cla
 
 ## Errors and support
 
-Honor `Retry-After` on `429` and `503`. For support, send only `error.requestId`, HTTP status, UTC time and the public
-error code. Never send the API key.
+For V1 POST, `409 CUSTOM_LAUNCH_V1_READ_ONLY` is permanent and non-retryable. The held V2 release candidate returns
+`503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After` until canary and public activation. For live V1 reads, honor
+`Retry-After` on `429` and `503`. For support, send only `error.requestId`, HTTP status, UTC time and the public error
+code. Never send the API key.
 
 Generic fee claiming and buyback management for arbitrary hooks are not live. FADE uses a specifically bound adapter.
 The reserved `fees:claim` and `buybacks:manage` scopes are disabled and promise no future behavior. Public Hookbuilder

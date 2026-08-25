@@ -66,6 +66,84 @@ export type LaunchStampProvenanceV1 = Readonly<{
   }>;
 }>;
 
+export type PlatformFeePolicyRuntimeRoleV2 =
+  | "router"
+  | "route-launcher"
+  | "pool-manager"
+  | "state-view"
+  | "token"
+  | "hook"
+  | "vault"
+  | "initializer"
+  | "custom-module";
+
+export const CANONICAL_PLATFORM_FEE_POLICY_V2 = Object.freeze({
+  chainId: "1",
+  policyVersion: 2,
+  graphFactoryAddress: "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+  graphFactoryRuntimeCodeHash:
+    "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+  ratePpm: 1000,
+  denominatorPpm: 1_000_000,
+  recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  requiredHookFlags: 0x2044,
+  finalityConfirmations: 64,
+} as const);
+
+/**
+ * A separately derived fee-policy proof for a finalized Router launch.
+ *
+ * This does not replace the launch stamp and deliberately does not grant a
+ * trade or claim capability. The Website may attach it only after one trusted
+ * profile build and every runtime/binding read below match at one finalized
+ * Ethereum block.
+ */
+export type PlatformFeePolicyReadbackV2 = Readonly<{
+  schemaVersion: "programmable.platform-fee-policy-readback.v2";
+  status: "onchain-confirmed";
+  chainId: "1";
+  profileBuildId: `sha256:${string}`;
+  sourceBundleDigest: `sha256:${string}`;
+  compilerArtifactDigest: `sha256:${string}`;
+  compilerSettingsHash: `0x${string}`;
+  profile: "zero-custom" | "isolated-after-swap-zero-delta-opcode-safe";
+  policyVersion: 2;
+  policyId: `0x${string}`;
+  profileId: `0x${string}`;
+  basis: Readonly<{
+    id: `0x${string}`;
+    kind: "gross-unspecified-pool-currency-amount";
+  }>;
+  assetMode: Readonly<{
+    id: `0x${string}`;
+    kind: "unspecified-pool-currency-per-swap";
+  }>;
+  ratePpm: 1000;
+  denominatorPpm: 1_000_000;
+  recipient: `0x${string}`;
+  requiredHookFlags: 0x2044;
+  poolId: `0x${string}`;
+  initialSqrtPriceX96: string;
+  initializer: `0x${string}`;
+  deploymentProfileHash: `0x${string}`;
+  compositionHash: `0x${string}`;
+  customModule: `0x${string}` | null;
+  customModuleRuntimeCodeHash: `0x${string}` | null;
+  customDeltaAccount: `0x${string}` | null;
+  maximumCustomDeltaAbsolute: string;
+  evidence: Readonly<{
+    source: "ethereum-mainnet-finalized-state";
+    blockNumber: string;
+    blockHash: `0x${string}`;
+    finalityConfirmations: 64;
+    contracts: readonly Readonly<{
+      role: PlatformFeePolicyRuntimeRoleV2;
+      address: `0x${string}`;
+      runtimeCodeHash: `0x${string}`;
+    }>[];
+  }>;
+}>;
+
 export const CANONICAL_LAUNCH_STAMP_V1 = Object.freeze({
   chainId: 1,
   routerAddress: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
@@ -129,6 +207,146 @@ function sameHex(left: unknown, right: unknown) {
   return typeof left === "string" &&
     typeof right === "string" &&
     left.toLowerCase() === right.toLowerCase();
+}
+
+function isSha256Digest(value: unknown): value is `sha256:${string}` {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
+}
+
+function isPlatformFeeRuntimeRoleV2(
+  value: unknown,
+): value is PlatformFeePolicyRuntimeRoleV2 {
+  return value === "router" ||
+    value === "route-launcher" ||
+    value === "pool-manager" ||
+    value === "state-view" ||
+    value === "token" ||
+    value === "hook" ||
+    value === "vault" ||
+    value === "initializer" ||
+    value === "custom-module";
+}
+
+export function isPlatformFeePolicyReadbackV2(
+  value: unknown,
+  expected: Readonly<{
+    tokenAddress?: `0x${string}`;
+    hookAddress?: `0x${string}`;
+    poolId?: `0x${string}`;
+  }> = {},
+): value is PlatformFeePolicyReadbackV2 {
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== "programmable.platform-fee-policy-readback.v2" ||
+    value.status !== "onchain-confirmed" ||
+    value.chainId !== CANONICAL_PLATFORM_FEE_POLICY_V2.chainId ||
+    !isSha256Digest(value.profileBuildId) ||
+    !isSha256Digest(value.sourceBundleDigest) ||
+    !isSha256Digest(value.compilerArtifactDigest) ||
+    !isNonZeroBytes32(value.compilerSettingsHash) ||
+    (value.profile !== "zero-custom" &&
+      value.profile !== "isolated-after-swap-zero-delta-opcode-safe") ||
+    value.policyVersion !== CANONICAL_PLATFORM_FEE_POLICY_V2.policyVersion ||
+    !isNonZeroBytes32(value.policyId) ||
+    !isNonZeroBytes32(value.profileId) ||
+    !isRecord(value.basis) ||
+    !isNonZeroBytes32(value.basis.id) ||
+    value.basis.kind !== "gross-unspecified-pool-currency-amount" ||
+    !isRecord(value.assetMode) ||
+    !isNonZeroBytes32(value.assetMode.id) ||
+    value.assetMode.kind !== "unspecified-pool-currency-per-swap" ||
+    value.ratePpm !== CANONICAL_PLATFORM_FEE_POLICY_V2.ratePpm ||
+    value.denominatorPpm !==
+      CANONICAL_PLATFORM_FEE_POLICY_V2.denominatorPpm ||
+    !sameHex(value.recipient, CANONICAL_PLATFORM_FEE_POLICY_V2.recipient) ||
+    value.requiredHookFlags !==
+      CANONICAL_PLATFORM_FEE_POLICY_V2.requiredHookFlags ||
+    !isNonZeroBytes32(value.poolId) ||
+    !isUnsignedDecimal(value.initialSqrtPriceX96) ||
+    value.initialSqrtPriceX96 === "0" ||
+    !isNonZeroAddress(value.initializer) ||
+    !isNonZeroBytes32(value.deploymentProfileHash) ||
+    !isNonZeroBytes32(value.compositionHash) ||
+    !isUnsignedDecimal(value.maximumCustomDeltaAbsolute) ||
+    !isRecord(value.evidence) ||
+    value.evidence.source !== "ethereum-mainnet-finalized-state" ||
+    !isUnsignedDecimal(value.evidence.blockNumber) ||
+    !isBytes32(value.evidence.blockHash) ||
+    value.evidence.finalityConfirmations !==
+      CANONICAL_PLATFORM_FEE_POLICY_V2.finalityConfirmations ||
+    !Array.isArray(value.evidence.contracts)
+  ) {
+    return false;
+  }
+
+  if (
+    (expected.poolId !== undefined &&
+      !sameHex(value.poolId, expected.poolId)) ||
+    (value.profile === "zero-custom" &&
+      (value.customModule !== null ||
+        value.customModuleRuntimeCodeHash !== null ||
+        value.customDeltaAccount !== null ||
+        value.maximumCustomDeltaAbsolute !== "0")) ||
+    (value.profile === "isolated-after-swap-zero-delta-opcode-safe" &&
+      (!isNonZeroAddress(value.customModule) ||
+        !isNonZeroBytes32(value.customModuleRuntimeCodeHash) ||
+        value.customDeltaAccount !== null ||
+        value.maximumCustomDeltaAbsolute !== "0"))
+  ) {
+    return false;
+  }
+
+  const requiredRoles = new Set<PlatformFeePolicyRuntimeRoleV2>([
+    "router",
+    "route-launcher",
+    "pool-manager",
+    "state-view",
+    "token",
+    "hook",
+    "vault",
+    "initializer",
+  ]);
+  const roles = new Set<PlatformFeePolicyRuntimeRoleV2>();
+  const addresses = new Set<string>();
+  for (const contract of value.evidence.contracts) {
+    if (
+      !isRecord(contract) ||
+      !isPlatformFeeRuntimeRoleV2(contract.role) ||
+      !isNonZeroAddress(contract.address) ||
+      !isNonZeroBytes32(contract.runtimeCodeHash) ||
+      roles.has(contract.role) ||
+      addresses.has(contract.address.toLowerCase())
+    ) {
+      return false;
+    }
+    roles.add(contract.role);
+    addresses.add(contract.address.toLowerCase());
+    requiredRoles.delete(contract.role);
+    if (
+      contract.role === "initializer" &&
+      !sameHex(contract.address, value.initializer)
+    ) {
+      return false;
+    }
+    if (
+      contract.role === "token" &&
+      expected.tokenAddress !== undefined &&
+      !sameHex(contract.address, expected.tokenAddress)
+    ) {
+      return false;
+    }
+    if (
+      contract.role === "hook" &&
+      expected.hookAddress !== undefined &&
+      !sameHex(contract.address, expected.hookAddress)
+    ) {
+      return false;
+    }
+  }
+
+  return requiredRoles.size === 0 &&
+    roles.has("custom-module") ===
+      (value.profile === "isolated-after-swap-zero-delta-opcode-safe");
 }
 
 /**
@@ -575,6 +793,7 @@ export type LauncherToken = {
   deepV2Provenance?: DeepV2IndexedLaunchProvenance;
   deepV3Provenance?: DeepV3IndexedLaunchProvenance;
   launchStampProvenance?: LaunchStampProvenanceV1;
+  platformFeePolicy?: PlatformFeePolicyReadbackV2;
   uniswapV4Pool?: {
     source: "official-uniswap-v4-subgraph";
     indexedBlockNumber: string;

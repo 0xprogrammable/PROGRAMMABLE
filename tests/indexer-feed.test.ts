@@ -301,7 +301,7 @@ describe("public indexer fee disclosure", () => {
 
     expect(() =>
       buildUniswapTokenList(emptyModel, 1),
-    ).toThrow("before the first verified launch");
+    ).toThrow("before the first finalized launch");
   });
 
   it("rejects an impossible fee split", () => {

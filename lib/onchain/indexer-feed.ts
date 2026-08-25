@@ -1,5 +1,6 @@
 import {
   isLaunchStampProvenanceV1,
+  isPlatformFeePolicyReadbackV2,
   type LaunchStampProvenanceV1,
   type LauncherToken,
   type TokenLinkKind,
@@ -55,6 +56,11 @@ export type ProgrammableIndexerToken = {
     lpFeePips: number | null;
     launcherFeeIncludedInHookFee: true | null;
   };
+  /**
+   * Independent proof of the mandatory Programmable fee path. Overall Custom
+   * hook fees remain unknown unless their own onchain disclosure is proven.
+   */
+  platformFeePolicy: LauncherToken["platformFeePolicy"] | null;
   launch: {
     /**
      * Backwards-compatible display identifier. Integrators should prefer
@@ -335,6 +341,22 @@ export function serializeIndexerToken(
   }
   const hasUnknownFees = isStamped;
   if (
+    token.platformFeePolicy !== undefined &&
+    (
+      !isCustomGraph ||
+      launchStampProvenance?.kind !== "custom-graph" ||
+      !isPlatformFeePolicyReadbackV2(token.platformFeePolicy, {
+        tokenAddress: token.tokenAddress,
+        hookAddress: token.hookAddress,
+        poolId: token.poolId,
+      })
+    )
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} has invalid platform fee policy evidence`,
+    );
+  }
+  if (
     hasUnknownFees &&
     (token.buyHookFeeBps !== undefined ||
       token.sellHookFeeBps !== undefined ||
@@ -538,6 +560,7 @@ export function serializeIndexerToken(
       lpFeePips: hasUnknownFees ? null : token.lpFeePips ?? 0,
       launcherFeeIncludedInHookFee: hasUnknownFees ? null : true,
     },
+    platformFeePolicy: token.platformFeePolicy ?? null,
     launch: {
       ...launch,
       category:
@@ -601,7 +624,7 @@ export function buildUniswapTokenListResult(
 ) {
   if (model.tokens.length === 0) {
     throw new Error(
-      "A token list cannot be published before the first verified launch",
+      "A token list cannot be published before the first finalized launch",
     );
   }
 
@@ -659,6 +682,7 @@ export function buildUniswapTokenListResult(
             feeStatus: serialized.fees.status,
             feeIncluded:
               serialized.fees.launcherFeeIncludedInHookFee,
+            platformFeePolicy: serialized.platformFeePolicy,
             liquidityGrowth: serialized.liquidityGrowth,
           },
         },

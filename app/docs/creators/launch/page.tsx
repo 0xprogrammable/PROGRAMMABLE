@@ -8,7 +8,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Launch a project · Programmable",
   description:
-    "Use a wallet-bound API key to validate a Custom launch bundle, wait for authorization and track finality.",
+    "Package a Custom launch bundle locally and understand the held public creation boundary.",
   alternates: { canonical: "/docs/creators/launch" },
 };
 
@@ -16,7 +16,7 @@ const sections = [
   { id: "access", label: "Start here" },
   { id: "prepare", label: "Prepare the project" },
   { id: "key", label: "Create an API key" },
-  { id: "submit", label: "Submit the bundle" },
+  { id: "submit", label: "Public write fence" },
   { id: "prepared", label: "Prepared launch" },
   { id: "launch", label: "Wallet confirmation" },
   { id: "after", label: "After launch" },
@@ -26,7 +26,7 @@ export default function CreatorLaunchDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators/launch"
-      description="Create a wallet-bound API key, submit one deterministic bundle, then review the wallet transaction only after authorization."
+      description="Package one deterministic bundle locally, then read existing V1 history while public launch creation is held."
       parentHref="/docs/creators"
       parentLabel="Creators"
       sections={sections}
@@ -35,16 +35,16 @@ export default function CreatorLaunchDocsPage() {
       <section id="access">
         <h2>Start here</h2>
         <p>
-          Custom launch access is API-first. Connect the controller wallet,
-          create a scoped API key and give it only to the agent or workflow that
-          should prepare launches for that wallet.
+          Public Custom launch creation is currently held. You can package and
+          validate locally, and use an existing scoped API key to read the
+          bound wallet&apos;s existing V1 launch history.
         </p>
         <div className={docsStyles.callout}>
           <strong>The API does not control your wallet.</strong>
           <p>
-            An API key can submit and read launch preparations. It cannot
-            authorize, sign or broadcast the wallet transaction. The controller
-            wallet reviews it only after the API status becomes authorized.
+            An API key can read its wallet-owned V1 launch history. A legacy
+            create scope does not override the V1 write fence, and a key cannot
+            authorize, sign or broadcast a wallet transaction.
           </p>
         </div>
       </section>
@@ -85,27 +85,26 @@ export default function CreatorLaunchDocsPage() {
       </section>
 
       <section id="key">
-        <h2>Create an API key</h2>
+        <h2>Manage an API key</h2>
         <p>
-          Connect the wallet that will control the launch and create a scoped
-          key. The key receives only <code>custom-launch:create</code> and
-          <code>custom-launch:read</code>. Save the secret when it is shown and
-          keep it out of source control and public chats.
+          Connect the controller wallet to manage its scoped keys. Existing
+          keys can use <code>custom-launch:read</code>; a legacy{" "}
+          <code>custom-launch:create</code> scope does not reopen V1 creation.
+          Keep every secret out of source control and public chats.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/developers/api-keys">Create a Custom launch API key</Link>
+          <Link href="/developers/api-keys">Manage Custom launch API keys</Link>
         </p>
       </section>
 
       <section id="submit">
-        <h2>Submit the bundle</h2>
+        <h2>Stop at the public write fence</h2>
         <p>
-          Send the source descriptor and executable graph bundle to{" "}
-          <code>https://api.programmable.market/v1/custom-launches</code> with
-          the key as a Bearer credential. The API validates the declared
-          manifest commitment, wallet binding, graph, hook permissions and
-          launch constraints before it prepares an artifact. It does not
-          compile or simulate the submitted project.
+          Do not submit the bundle to V1. Authenticated{" "}
+          <code>POST /v1/custom-launches</code> returns non-retryable{" "}
+          <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>. The fee-enforced V2
+          release candidate returns <code>503 CUSTOM_LAUNCH_V2_UNAVAILABLE</code>{" "}
+          with <code>Retry-After</code> until canary and public activation.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/developers/custom-launch">

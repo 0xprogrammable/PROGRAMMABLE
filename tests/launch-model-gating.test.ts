@@ -167,7 +167,7 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("routes Custom to the API-first entry instead of the legacy runtime", () => {
+  it("routes Custom to the held release boundary instead of the legacy runtime", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
@@ -202,20 +202,20 @@ describe("unreleased launch model gating", () => {
     const customCard = html.match(
       /<a[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
-    expect(customCard).toContain('data-launch-model-available="true"');
-    expect(customCard).toContain('data-launch-model-entry="api-first"');
+    expect(customCard).toContain('data-launch-model-available="false"');
+    expect(customCard).toContain('data-launch-model-entry="release-held"');
     expect(customCard).toContain('data-launch-model-launchable="false"');
-    expect(customCard).toContain('href="/developers/api-keys"');
+    expect(customCard).toContain('href="/docs/developers/custom-launch"');
     expect(customCard).not.toContain("disabled");
     expect(html).toContain(
       'id="launch-model-custom-title">Custom</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain('data-status="api">API</small>');
+    expect(html).toContain('data-status="held">Held</small>');
     expect(html).toContain(
-      "Create an API key, submit a deterministic bundle for checks, then receive a prepared launch for your wallet to review.",
+      "Package and validate a deterministic bundle locally. Public Custom creation remains held until the fee-enforced V2 release is activated.",
     );
-    expect(html).toContain("Create a Custom launch API key");
+    expect(html).toContain("Read API availability");
     expect(html).not.toContain("approved GitHub revision");
     expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
       html.indexOf('data-launch-model-option="custom"'),
@@ -230,7 +230,6 @@ describe("unreleased launch model gating", () => {
     // asset identity without coupling this contract to that transport detail.
     expect(html.match(/programmable-floral-hooks-v1\.avif/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain("In development");
-    expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");
     expect(html).not.toContain('data-launch-model-option="stock-paired"');
     expect(html).not.toContain("<strong>Stock-Paired</strong>");
@@ -241,7 +240,7 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("keeps the API-first Custom entry independent of the legacy gate", () => {
+  it("keeps the held Custom entry independent of the legacy gate", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
@@ -251,12 +250,12 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-option="prediction"');
     expect(html).toContain('data-launch-model-option="custom"');
     expect(html).toContain('id="launch-model-custom-title"');
-    expect(html).toContain('data-launch-model-available="true"');
-    expect(html).toContain('data-launch-model-entry="api-first"');
+    expect(html).toContain('data-launch-model-available="false"');
+    expect(html).toContain('data-launch-model-entry="release-held"');
     expect(html).toContain('data-launch-model-launchable="false"');
-    expect(html).toContain('data-status="api">API</small>');
-    expect(html).toContain('href="/developers/api-keys"');
-    expect(html).toContain("Create a Custom launch API key");
+    expect(html).toContain('data-status="held">Held</small>');
+    expect(html).toContain('href="/docs/developers/custom-launch"');
+    expect(html).toContain("Read API availability");
     expect(html).not.toContain("approved GitHub revision");
     expect(html).not.toContain("Build or resume");
   });
