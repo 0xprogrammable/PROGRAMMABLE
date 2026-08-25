@@ -148,7 +148,7 @@
     },
     "runtime": {
       "path": "lib/alchemy/explore.server.ts",
-      "sha256": "9e05971ef410de2b368def0ea2a78c863e6dc4ebb996eec9dd45f715a41d9db8"
+      "sha256": "e7e7c0431c53532e54a969821b4b2fe63ff936c6ff91f018c2db4a98af89cc5a"
     },
     "store": {
       "path": "lib/alchemy/launch-registry.server.ts",
@@ -156,7 +156,11 @@
     },
     "routerReader": {
       "path": "lib/alchemy/launch-stamp.server.ts",
-      "sha256": "159d0be7fd708d0e91d5bf0c0a9494ef47ff3a8cda905286edf468f211305f81"
+      "sha256": "694991e411ee416b7fb03b25bf9b4ed3aab574b4c8e39963eb3f1551df97a7e9"
+    },
+    "publicSnapshot": {
+      "path": "lib/alchemy/router-custom-public.server.ts",
+      "sha256": "f4d3b022955c677148deabb7b2cc7af5a7e8283d2cbbb82d3f546ed37392cddd"
     }
   },
   "workers": [
