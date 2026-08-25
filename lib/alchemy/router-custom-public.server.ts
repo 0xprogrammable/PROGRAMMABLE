@@ -393,6 +393,16 @@ async function persistDurableRouterCustomIdentitySnapshotV1(
   );
 }
 
+export async function persistRouterCustomIdentitySnapshotFromSourceV1(
+  source: AlchemyRouterCustomIdentitySourceV1,
+) {
+  const snapshot = routerCustomIdentitySnapshotFromSourceV1(source);
+  await persistDurableRouterCustomIdentitySnapshotV1(snapshot, {
+    replaceAfterReorg: source.reorgDetected,
+  });
+  return snapshot;
+}
+
 export function createRouterCustomIdentitySnapshotReaderV1(
   dependencies: RouterCustomIdentitySnapshotDependenciesV1 = {},
 ) {
