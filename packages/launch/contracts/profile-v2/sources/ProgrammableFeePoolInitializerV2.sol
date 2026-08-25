@@ -36,9 +36,9 @@ import {
 } from "./ProgrammableFeeVaultV2.sol";
 
 bytes32 constant PROGRAMMABLE_ZERO_CUSTOM_FEE_HOOK_V2_RUNTIME_CODE_HASH =
-    0x10267e0a2727fa81bc905bbe17f8d573d98ffea9ba5ef4dfec29a3fd4c582d46;
+    0xd260db72a157291f1e860bdac61286188a5926b1e109ea00997a2a01608b1664;
 bytes32 constant PROGRAMMABLE_ISOLATED_FEE_HOOK_V2_RUNTIME_CODE_HASH =
-    0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067;
+    0x0a461fa65d04305fa2e583d9a6fba369b3b2ff66aa5856f56d0782c2ff72e19c;
 
 interface IProgrammableV4PoolInitializerManagerV2 {
     function initialize(ProgrammablePoolKey calldata key, uint160 sqrtPriceX96) external returns (int24 tick);

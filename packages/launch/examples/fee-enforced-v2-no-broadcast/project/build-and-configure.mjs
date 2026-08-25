@@ -162,12 +162,12 @@ const config = {
       declaredHookPermissions: null,
       runtimeImmutables: [
         {
-          immutableId: "196",
+          immutableId: "2534",
           abiType: "address",
           literal: "0x000000000004444c5dc75cB358380D2e3dE08A90",
         },
         {
-          immutableId: "2511",
+          immutableId: "2536",
           abiType: "address",
           literal: "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
         },
@@ -224,7 +224,7 @@ const config = {
   launchProfile: {
     schemaVersion: "programmable.fee-enforced-launch-profile-selection.v1",
     profileId: "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-    profileRevision: 1,
+    profileRevision: 2,
     targetRoles: {
       tokenTargetId: "token",
       customModuleTargetId: "custom-module",

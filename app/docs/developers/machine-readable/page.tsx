@@ -78,7 +78,7 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v2.json</code>
             </a>
             <span>
-              Held 2.0.0-rc.1 machine contract for offline and private-canary
+              Held 2.0.0-rc.2 machine contract for offline and private-canary
               integration. It does not activate public V2 submission.
             </span>
           </li>

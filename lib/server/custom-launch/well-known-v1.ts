@@ -52,12 +52,12 @@ export function programmableWellKnownDocumentV1(
         publicAuthorization: false as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "2.0.0-rc.1",
-        releaseTag: "programmable-launch-v2.0.0-rc.1",
+        releaseVersion: "2.0.0-rc.2",
+        releaseTag: "programmable-launch-v2.0.0-rc.2",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.1",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.2",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
       }),

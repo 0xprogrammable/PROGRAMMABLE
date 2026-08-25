@@ -40,7 +40,7 @@ bytes32 constant PROGRAMMABLE_DEPLOYMENT_PROFILE_DOMAIN_V2 = keccak256("programm
 bytes32 constant PROGRAMMABLE_COMPOSITION_DOMAIN_V2 = keccak256("programmable.fee-composition.v2");
 
 bytes32 constant PROGRAMMABLE_FEE_VAULT_V2_RUNTIME_CODE_HASH =
-    0xf9638e198b83c2ada6cfb34d108d2b0a8356fb4679847bd1d5f3127dee1f24d5;
+    0xf2cbc21a3f07c05909d664ba8d8b66fe6576eb8a5d016faa53e31e73ed6acbd4;
 bytes32 constant PROGRAMMABLE_LAUNCH_TOKEN_V2_RUNTIME_CODE_HASH =
     0xf98eb029ee9c1face4b56fafd83612be8b813bf15a402a959ac107de8b203eef;
 

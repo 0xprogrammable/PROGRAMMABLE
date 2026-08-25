@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V2 release candidate",
-    "version": "2.0.0-rc.1",
+    "version": "2.0.0-rc.2",
     "summary": "Held fee-enforced V2 Custom launch contract for private canary integration.",
-    "description": "This machine contract describes the immutable 2.0.0-rc.1 request, lifecycle and wallet-handoff shapes. It does not activate public V2 launch creation. Public V2 requests currently receive 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After until an explicit canary and public activation. V1 history reads remain governed by the separate V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
+    "description": "This machine contract describes the immutable 2.0.0-rc.2 request, lifecycle and wallet-handoff shapes. It does not activate public V2 launch creation. Public V2 requests currently receive 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After until an explicit canary and public activation. V1 history reads remain governed by the separate V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -24,7 +24,7 @@
   ],
   "x-programmable-availability": {
     "status": "release-candidate-held",
-    "release": "2.0.0-rc.1",
+    "release": "2.0.0-rc.2",
     "publicAuthorized": false,
     "privateCanaryOnly": true,
     "publicCreate": {
@@ -39,11 +39,11 @@
   "x-programmable-release-candidate": {
     "packageName": "@programmable/launch",
     "binary": "programmable-launch",
-    "version": "2.0.0-rc.1",
-    "tag": "programmable-launch-v2.0.0-rc.1",
-    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.1",
-    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz",
-    "launchProfileHash": "sha256:c2c8df0ce28ef4eea1d5124bc366c634675873d095e9978bc7e968792a4c738d",
+    "version": "2.0.0-rc.2",
+    "tag": "programmable-launch-v2.0.0-rc.2",
+    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0-rc.2",
+    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
+    "launchProfileHash": "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
     "productionLaunchAuthorized": false
   },
   "x-programmable-error-status": {
@@ -580,7 +580,7 @@
       },
       "FeeEnforcedLaunchProfileV2": {
         "type": "object",
-        "description": "Frozen server-allowlisted profile. The server requires the canonical JSON to match the private durable profile byte for byte; the 2.0.0-rc.1 public package carries a non-production-authorized candidate for offline pack and validation.",
+        "description": "Frozen server-allowlisted profile. The server requires the canonical JSON to match the private durable profile byte for byte; the 2.0.0-rc.2 public package carries a non-production-authorized candidate for offline pack and validation.",
         "required": [
           "schemaVersion",
           "profileId",

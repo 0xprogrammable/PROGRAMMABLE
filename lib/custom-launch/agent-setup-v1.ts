@@ -5,7 +5,7 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
   openApiV2ReleaseCandidate:
     "https://programmable.market/openapi/custom-launch-v2.json",
   cliV2ReleaseCandidate:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
 });
 
 export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([

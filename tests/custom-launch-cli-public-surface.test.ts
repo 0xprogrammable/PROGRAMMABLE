@@ -33,10 +33,10 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "private-canary-held",
         publicAuthorization: false,
-        releaseVersion: "2.0.0-rc.1",
-        releaseTag: "programmable-launch-v2.0.0-rc.1",
+        releaseVersion: "2.0.0-rc.2",
+        releaseTag: "programmable-launch-v2.0.0-rc.2",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
       },
@@ -77,7 +77,7 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v2.openapi).toBe("3.1.0");
-    expect(v2.info.version).toBe("2.0.0-rc.1");
+    expect(v2.info.version).toBe("2.0.0-rc.2");
     expect(v2["x-programmable-availability"]).toMatchObject({
       status: "release-candidate-held",
       publicAuthorized: false,

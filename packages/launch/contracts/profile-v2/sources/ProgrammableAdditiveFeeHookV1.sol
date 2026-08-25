@@ -150,7 +150,6 @@ contract ProgrammableFeeVaultV1 {
     /// atomic launch route after both vault and hook have been deployed.
     function bindAdapter(address adapter) external {
         if (msg.sender != bindingAuthority) revert UnauthorizedBinding(msg.sender);
-        _beforeAdapterBinding();
         if (bindingInProgress) revert ReentrantAdapterBinding();
         if (authorizedAdapter != address(0)) revert AdapterAlreadyBound(authorizedAdapter);
         // The adapter getters below are external calls. Lock before validating
@@ -159,9 +158,8 @@ contract ProgrammableFeeVaultV1 {
         bindingInProgress = true;
         bytes32 adapterCodeHash = adapter.codehash;
         uint160 flags = uint160(adapter) & ALL_HOOK_MASK;
-        uint160 requiredFlags = requiredAdapterFlags();
-        if (adapter == address(0) || adapter.code.length == 0 || flags != requiredFlags) {
-            revert HookAddressPermissionMismatch(flags, requiredFlags);
+        if (adapter == address(0) || adapter.code.length == 0 || flags != REQUIRED_ADAPTER_FLAGS) {
+            revert HookAddressPermissionMismatch(flags, REQUIRED_ADAPTER_FLAGS);
         }
         try IProgrammableFeeAdapterBindingV1(adapter).poolManager() returns (address manager) {
             if (manager != poolManager) revert InvalidAdapterBinding(adapter);
@@ -190,15 +188,6 @@ contract ProgrammableFeeVaultV1 {
         bindingInProgress = false;
         emit AdapterBound(adapter);
     }
-
-    /// @notice Exact address permission mask accepted by this vault version.
-    /// V1 remains 0x0044; versioned descendants can strengthen the mask while
-    /// retaining the proven accounting and claim implementation.
-    function requiredAdapterFlags() public pure virtual returns (uint160) {
-        return REQUIRED_ADAPTER_FLAGS;
-    }
-
-    function _beforeAdapterBinding() internal view virtual { }
 
     /// @notice Returns the exact context that the bound adapter must expose
     /// during the private mandatory fee phase for these immutable inputs.

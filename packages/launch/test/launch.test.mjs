@@ -418,8 +418,8 @@ test("the bundled no-broadcast example derives a real graph and deterministic ho
   });
   assert.equal(
     first.requestSha256,
-    "sha256:b44f9dc43b51bc69ca52ec6769b9e3d64cd9472387e2f5a3b83cf73078a029aa",
-    "V1 request golden bytes must remain compatible with @programmable/launch 1.0.1",
+    "sha256:0de407187c0edc2f1e9ddb8146d03f31b8f07565c597c1c62e6473ceada5636f",
+    "V1 request golden bytes must remain deterministic in @programmable/launch 2.0.0-rc.2",
   );
   assert.deepEqual(await readFile(first.outputPath), await readFile(second.outputPath));
   const request = JSON.parse(await readFile(first.outputPath, "utf8"));
@@ -450,7 +450,7 @@ test("V2 binds a closed fee profile, launch intent, and compiler immutables", as
     request.launchProfile.profileId,
     "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
   );
-  assert.equal(request.launchProfile.profileRevision, 1);
+  assert.equal(request.launchProfile.profileRevision, 2);
   assert.equal(request.launchProfile.productionLaunchAuthorized, false);
   assert.equal(request.launchProfile.contractBuildBindings.activationStatus, "canary");
   assert.equal(
@@ -496,8 +496,8 @@ test("V2 binds a closed fee profile, launch intent, and compiler immutables", as
       [fixture.immutableIds.customModule.controller]: ["address", fixture.launchWallet],
     },
     "fee-vault": {
-      196: ["address", "0x000000000004444c5dc75cB358380D2e3dE08A90"],
-      2511: ["address", "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887"],
+      2534: ["address", "0x000000000004444c5dc75cB358380D2e3dE08A90"],
+      2536: ["address", "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887"],
     },
     "fee-hook": {},
     "pool-initializer": {},
@@ -537,7 +537,7 @@ test("V2 embedded profile matches every distributed fixed-build asset digest", a
   assert.equal(profile.contractBuildBindings.activationStatus, manifest.activationStatus);
   assert.equal(
     hashLaunchProfile(profile),
-    "sha256:c2c8df0ce28ef4eea1d5124bc366c634675873d095e9978bc7e968792a4c738d",
+    "sha256:1eca209637922b9a8627d073a6d92fede0ae355fb5bd2dfebe3e5382f12f55f8",
   );
   const distributedOnly = new Set([
     "standardJsonAssetPath",
@@ -958,12 +958,12 @@ async function materializeV2CompiledFixture({ dangerousCustomModule = false } = 
         declaredHookPermissions: null,
         runtimeImmutables: [
           {
-            immutableId: "196",
+            immutableId: "2534",
             abiType: "address",
             literal: "0x000000000004444c5dc75cB358380D2e3dE08A90",
           },
           {
-            immutableId: "2511",
+            immutableId: "2536",
             abiType: "address",
             literal: "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
           },
@@ -1028,7 +1028,7 @@ async function materializeV2CompiledFixture({ dangerousCustomModule = false } = 
     launchProfile: {
       schemaVersion: "programmable.fee-enforced-launch-profile-selection.v1",
       profileId: "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-      profileRevision: 1,
+      profileRevision: 2,
       targetRoles: {
         tokenTargetId: "token",
         customModuleTargetId: "custom-module",

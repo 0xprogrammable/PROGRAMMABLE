@@ -15,16 +15,16 @@ programmable-launch --version
 That immutable release remains the V1 compatibility package. V1 request preparation and status reads remain valid,
 but new V1 submissions are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`.
 
-This source tree is the dual-version `2.0.0-rc.1` candidate. After its immutable release asset and digest are
+This source tree is the dual-version `2.0.0-rc.2` candidate. After its immutable release asset and digest are
 published, install that exact asset rather than an unverified npm-registry package with the same name:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.1/programmable-launch-2.0.0-rc.1.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz
 programmable-launch --version
 ```
 
-The V2 Rev1 profile is a canary artifact with `productionLaunchAuthorized:false`; package installation is not launch
+The V2 Rev2 profile is a canary artifact with `productionLaunchAuthorized:false`; package installation is not launch
 authority. The human guide is <https://programmable.market/docs/developers/custom-launch>.
 
 ## Cold-agent flow

@@ -202,20 +202,20 @@ export function resolveLaunchProfile(selection) {
           contractName: "ProgrammableFeeVaultV2",
           compilerVersion: "0.8.26+commit.8a97fa7a",
           standardJsonInputSha256:
-            "sha256:af2508146771a53b2c44b0be2b108a4dc3d692148595cae2ce63f1bf815667a3",
+            "sha256:788d188b7f8fa86ecf49db7c0371c70a147f8ef99e4d617597feb2cdef2a9995",
           creationBytecodeSha256:
-            "sha256:4c1e5953f9e9337a1fbd5e6fa79c2aede1ee08951dc790a14bf68b52b507a643",
+            "sha256:6c076e3c8c7c06190973205adf186630bf93f5dd05cb8d00c12a39f2803def5d",
           creationBytecodeHash:
-            "0x053476bd624631357dfe15ec172bd046f6a4621003d3293a16fb87dce1ba70bd",
+            "0x0167ff8e72e4739491a8fbf1647cc4f583986f3a43ce16ae5289dd149b9a040c",
           runtimeTemplateSha256:
-            "sha256:60b4ca144117f94aaf9b8da1b095acdbb9ce0afab43cd8173ca4b5eb18fe34d7",
+            "sha256:228c49d3eb3efd2515d0eebc2ad246d2521c1e9a789f7cb5892fa1148c6bce2a",
           runtimeTemplateCodeHash:
-            "0x8a55169728ba90b1fdb275b06c6b6be0467282327c73e9324c08c78e5f62c359",
+            "0x2c1d5986b9356fb81dbc37051b13effec4ad1e403fcb0d4c5cb236610ee2522d",
           runtimeCodeHash:
-            "0xf9638e198b83c2ada6cfb34d108d2b0a8356fb4679847bd1d5f3127dee1f24d5",
+            "0xf2cbc21a3f07c05909d664ba8d8b66fe6576eb8a5d016faa53e31e73ed6acbd4",
           immutableReferences: [
             {
-              immutableId: "196",
+              immutableId: "2534",
               ranges: [
                 { start: 620, length: 32 },
                 { start: 1094, length: 32 },
@@ -227,26 +227,26 @@ export function resolveLaunchProfile(selection) {
                 { start: 3702, length: 32 },
                 { start: 4022, length: 32 },
                 { start: 4198, length: 32 },
-                { start: 4840, length: 32 },
-                { start: 6241, length: 32 },
+                { start: 4814, length: 32 },
+                { start: 6214, length: 32 },
               ],
             },
             {
-              immutableId: "2511",
+              immutableId: "2536",
               ranges: [
                 { start: 1133, length: 32 },
-                { start: 6315, length: 32 },
+                { start: 6288, length: 32 },
               ],
             },
           ],
           runtimeImmutables: [
             {
-              immutableId: "196",
+              immutableId: "2534",
               abiType: "address",
               literal: POOL_MANAGER,
             },
             {
-              immutableId: "2511",
+              immutableId: "2536",
               abiType: "address",
               literal: GRAPH_FACTORY,
             },
@@ -260,17 +260,17 @@ export function resolveLaunchProfile(selection) {
           contractName: "ProgrammableIsolatedAfterSwapFeeHookV2",
           compilerVersion: "0.8.26+commit.8a97fa7a",
           standardJsonInputSha256:
-            "sha256:58b041ccea068f16f6b9a93e57c7b29578bdfc93a72306ced57800145f0db019",
+            "sha256:fad58023346d0d09d5508a4493854bcf0bb3d360e966a411d715a6a971aac803",
           creationBytecodeSha256:
-            "sha256:a37e9be2cf12fef996f5e8aef063235643123151f686d86f4f566cabefabb2f8",
+            "sha256:8adff8b70acd33b57b7d7a059efee7e6fc56ea431ccb577ed76a9ad484fb3695",
           creationBytecodeHash:
-            "0x1a54813e879edb214d24e97b1f50575f290503f46ea35c1fe40b45114983cdf9",
+            "0x6cd2dbd66351cf83194fb942ace4b4f4356c9499d567619b15a922d5cad730b3",
           runtimeTemplateSha256:
-            "sha256:3e9e23308d8c2de233d1e0cc992ed2b0b06c81eab502bc52f04b7bf7c7a75d11",
+            "sha256:671ee2655a6bb86ca8fa3a678d051fa8ad5abd93ea63d54862635dde276e0684",
           runtimeTemplateCodeHash:
-            "0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067",
+            "0x0a461fa65d04305fa2e583d9a6fba369b3b2ff66aa5856f56d0782c2ff72e19c",
           runtimeCodeHash:
-            "0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067",
+            "0x0a461fa65d04305fa2e583d9a6fba369b3b2ff66aa5856f56d0782c2ff72e19c",
           immutableReferences: [],
           runtimeImmutables: [],
           constructorBindingSchema: "address-fee-vault,address-custom-module",
@@ -283,17 +283,17 @@ export function resolveLaunchProfile(selection) {
           contractName: "ProgrammableFeePoolInitializerV2",
           compilerVersion: "0.8.26+commit.8a97fa7a",
           standardJsonInputSha256:
-            "sha256:3c2b96af0fc57aea1925fe4ccf6efb937f70df4358bba8889d8406c00607695f",
+            "sha256:ebda2869af9fb1dcd567913768cd37547ccb68171e07e5aff645ea6053f3414c",
           creationBytecodeSha256:
-            "sha256:23b231213b9c6a5df7e9741f70bfcdcd39fcf66c83ef47b33eb901e3869b1473",
+            "sha256:9ea1c403abb3fe3ee5b65db03ab30788fa6e5c158aa524b577660c6590ff87e9",
           creationBytecodeHash:
-            "0x690a30ab2f5ee0c42856a9627cb46d79b5ebc4fa0a2f4c75c3a6f3e077cbbbeb",
+            "0xf6e047132a68eb0692f314975b45af88c6dd873ab7ecaa7b0c3c84a490b9454c",
           runtimeTemplateSha256:
-            "sha256:464c68ce01516737ebf69f02f1d24f3b6236f4c3439d372c08bf529cb8232d1b",
+            "sha256:ac526fd77fa003f6bb33c774a16f76d7f739f941d3d90d0eaeab42b2aa85d66b",
           runtimeTemplateCodeHash:
-            "0xe7210ee2a0edac8fe7e90387445d9c0ca26b7fa342e6828371d2db5969ae3c4d",
+            "0x4df0f570bc27f05baa99ad297e4b7666d15f3101f43ba2e2863ce026432f43e4",
           runtimeCodeHash:
-            "0xe7210ee2a0edac8fe7e90387445d9c0ca26b7fa342e6828371d2db5969ae3c4d",
+            "0x4df0f570bc27f05baa99ad297e4b7666d15f3101f43ba2e2863ce026432f43e4",
           immutableReferences: [],
           runtimeImmutables: [],
           constructorBindingSchema:

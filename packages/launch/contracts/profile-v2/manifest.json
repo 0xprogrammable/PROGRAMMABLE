@@ -1,8 +1,8 @@
 {
   "schemaVersion": "programmable.fee-enforced-profile-assets.v1",
   "profileId": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-  "profileRevision": 1,
-  "profileVersion": "2.0.0-rc.1",
+  "profileRevision": 2,
+  "profileVersion": "2.0.0-rc.2",
   "activationStatus": "canary",
   "productionLaunchAuthorized": false,
   "compiler": {
@@ -50,22 +50,22 @@
     {
       "sourcePath": "src/ProgrammableAdditiveFeeHookV1.sol",
       "assetPath": "contracts/profile-v2/sources/ProgrammableAdditiveFeeHookV1.sol",
-      "contentSha256": "sha256:fd513f9f35d530825513704cbcbd946a59bf1ab364bfa4644e786e7d4dfeec85"
+      "contentSha256": "sha256:9fe81cc992313fa45bb0a334659f3f5ac9d5549edfa991bea9acc66a80b2e20c"
     },
     {
       "sourcePath": "src/ProgrammableAdditiveFeeHookV2.sol",
       "assetPath": "contracts/profile-v2/sources/ProgrammableAdditiveFeeHookV2.sol",
-      "contentSha256": "sha256:56708ada8fe424b293dbc91031c62b28d8307734df20fce1c1fec695060b46fc"
+      "contentSha256": "sha256:fcc9d11c178f21fded18cc497e5c4e0608fef390dc617304d9c5fafd304098f2"
     },
     {
       "sourcePath": "src/ProgrammableFeePoolInitializerV2.sol",
       "assetPath": "contracts/profile-v2/sources/ProgrammableFeePoolInitializerV2.sol",
-      "contentSha256": "sha256:a2375221162cbac05a50b621ad8715ac9f75e83207838795f3582eb3afb3a6ec"
+      "contentSha256": "sha256:a2daccd4b2e5f8dc18263db85b2c116e7b45401f3ae325a5492c088cfd23f57b"
     },
     {
       "sourcePath": "src/ProgrammableFeeVaultV2.sol",
       "assetPath": "contracts/profile-v2/sources/ProgrammableFeeVaultV2.sol",
-      "contentSha256": "sha256:4fd21c7757bdba5d2ae004efe4a8f931e96e465e503fb68e021d3ca69a58254a"
+      "contentSha256": "sha256:c10f2f58ed8f7032d5d92bb8d49426210286e60ad1c5cd6afcc83fbb8eba9547"
     },
     {
       "sourcePath": "src/ProgrammableLaunchTokenV2.sol",
@@ -99,48 +99,90 @@
       "contractName": "ProgrammableFeeVaultV2",
       "compilerVersion": "0.8.26+commit.8a97fa7a",
       "standardJsonAssetPath": "contracts/profile-v2/standard-json/vault.json",
-      "standardJsonInputSha256": "sha256:af2508146771a53b2c44b0be2b108a4dc3d692148595cae2ce63f1bf815667a3",
+      "standardJsonInputSha256": "sha256:788d188b7f8fa86ecf49db7c0371c70a147f8ef99e4d617597feb2cdef2a9995",
       "artifactAssetPath": "contracts/profile-v2/artifacts/vault.json",
-      "artifactContentSha256": "sha256:446d6a14b6b5ca989f61158fcd01672dd55fb489ae18d89532b073ee096e4789",
-      "creationBytecodeSha256": "sha256:4c1e5953f9e9337a1fbd5e6fa79c2aede1ee08951dc790a14bf68b52b507a643",
-      "creationBytecodeHash": "0x053476bd624631357dfe15ec172bd046f6a4621003d3293a16fb87dce1ba70bd",
-      "runtimeTemplateSha256": "sha256:60b4ca144117f94aaf9b8da1b095acdbb9ce0afab43cd8173ca4b5eb18fe34d7",
-      "runtimeTemplateCodeHash": "0x8a55169728ba90b1fdb275b06c6b6be0467282327c73e9324c08c78e5f62c359",
-      "runtimeCodeHash": "0xf9638e198b83c2ada6cfb34d108d2b0a8356fb4679847bd1d5f3127dee1f24d5",
+      "artifactContentSha256": "sha256:d6e461a86dcabe61b0a038cc693409ce30f54aff2d149bc112e07ec3fda977aa",
+      "creationBytecodeSha256": "sha256:6c076e3c8c7c06190973205adf186630bf93f5dd05cb8d00c12a39f2803def5d",
+      "creationBytecodeHash": "0x0167ff8e72e4739491a8fbf1647cc4f583986f3a43ce16ae5289dd149b9a040c",
+      "runtimeTemplateSha256": "sha256:228c49d3eb3efd2515d0eebc2ad246d2521c1e9a789f7cb5892fa1148c6bce2a",
+      "runtimeTemplateCodeHash": "0x2c1d5986b9356fb81dbc37051b13effec4ad1e403fcb0d4c5cb236610ee2522d",
+      "runtimeCodeHash": "0xf2cbc21a3f07c05909d664ba8d8b66fe6576eb8a5d016faa53e31e73ed6acbd4",
       "immutableReferences": [
         {
-          "immutableId": "196",
+          "immutableId": "2534",
           "ranges": [
-            { "start": 620, "length": 32 },
-            { "start": 1094, "length": 32 },
-            { "start": 1418, "length": 32 },
-            { "start": 1642, "length": 32 },
-            { "start": 2493, "length": 32 },
-            { "start": 2815, "length": 32 },
-            { "start": 3417, "length": 32 },
-            { "start": 3702, "length": 32 },
-            { "start": 4022, "length": 32 },
-            { "start": 4198, "length": 32 },
-            { "start": 4840, "length": 32 },
-            { "start": 6241, "length": 32 }
+            {
+              "length": 32,
+              "start": 620
+            },
+            {
+              "length": 32,
+              "start": 1094
+            },
+            {
+              "length": 32,
+              "start": 1418
+            },
+            {
+              "length": 32,
+              "start": 1642
+            },
+            {
+              "length": 32,
+              "start": 2493
+            },
+            {
+              "length": 32,
+              "start": 2815
+            },
+            {
+              "length": 32,
+              "start": 3417
+            },
+            {
+              "length": 32,
+              "start": 3702
+            },
+            {
+              "length": 32,
+              "start": 4022
+            },
+            {
+              "length": 32,
+              "start": 4198
+            },
+            {
+              "length": 32,
+              "start": 4814
+            },
+            {
+              "length": 32,
+              "start": 6214
+            }
           ]
         },
         {
-          "immutableId": "2511",
+          "immutableId": "2536",
           "ranges": [
-            { "start": 1133, "length": 32 },
-            { "start": 6315, "length": 32 }
+            {
+              "length": 32,
+              "start": 1133
+            },
+            {
+              "length": 32,
+              "start": 6288
+            }
           ]
         }
       ],
       "runtimeImmutables": [
         {
-          "immutableId": "196",
+          "immutableId": "2534",
           "abiType": "address",
           "literal": "0x000000000004444c5dc75cB358380D2e3dE08A90"
         },
         {
-          "immutableId": "2511",
+          "immutableId": "2536",
           "abiType": "address",
           "literal": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887"
         }
@@ -154,14 +196,14 @@
       "contractName": "ProgrammableIsolatedAfterSwapFeeHookV2",
       "compilerVersion": "0.8.26+commit.8a97fa7a",
       "standardJsonAssetPath": "contracts/profile-v2/standard-json/hook.json",
-      "standardJsonInputSha256": "sha256:58b041ccea068f16f6b9a93e57c7b29578bdfc93a72306ced57800145f0db019",
+      "standardJsonInputSha256": "sha256:fad58023346d0d09d5508a4493854bcf0bb3d360e966a411d715a6a971aac803",
       "artifactAssetPath": "contracts/profile-v2/artifacts/isolated-hook.json",
-      "artifactContentSha256": "sha256:30789597e425dbc39b57e6ca9fef7a595acab4efe428bed8d303c3a45279e28c",
-      "creationBytecodeSha256": "sha256:a37e9be2cf12fef996f5e8aef063235643123151f686d86f4f566cabefabb2f8",
-      "creationBytecodeHash": "0x1a54813e879edb214d24e97b1f50575f290503f46ea35c1fe40b45114983cdf9",
-      "runtimeTemplateSha256": "sha256:3e9e23308d8c2de233d1e0cc992ed2b0b06c81eab502bc52f04b7bf7c7a75d11",
-      "runtimeTemplateCodeHash": "0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067",
-      "runtimeCodeHash": "0xe2bbc60d8e8fbe2fa16576f02785445063acf342cdeb1acfea1539d7cb96f067",
+      "artifactContentSha256": "sha256:01d3c93490dadeb015f104da3c0a40da85fb5913f6bdbe3889ec427bc4e526c0",
+      "creationBytecodeSha256": "sha256:8adff8b70acd33b57b7d7a059efee7e6fc56ea431ccb577ed76a9ad484fb3695",
+      "creationBytecodeHash": "0x6cd2dbd66351cf83194fb942ace4b4f4356c9499d567619b15a922d5cad730b3",
+      "runtimeTemplateSha256": "sha256:671ee2655a6bb86ca8fa3a678d051fa8ad5abd93ea63d54862635dde276e0684",
+      "runtimeTemplateCodeHash": "0x0a461fa65d04305fa2e583d9a6fba369b3b2ff66aa5856f56d0782c2ff72e19c",
+      "runtimeCodeHash": "0x0a461fa65d04305fa2e583d9a6fba369b3b2ff66aa5856f56d0782c2ff72e19c",
       "immutableReferences": [],
       "runtimeImmutables": [],
       "constructorBindingSchema": "address-fee-vault,address-custom-module",
@@ -173,14 +215,14 @@
       "contractName": "ProgrammableFeePoolInitializerV2",
       "compilerVersion": "0.8.26+commit.8a97fa7a",
       "standardJsonAssetPath": "contracts/profile-v2/standard-json/initializer.json",
-      "standardJsonInputSha256": "sha256:3c2b96af0fc57aea1925fe4ccf6efb937f70df4358bba8889d8406c00607695f",
+      "standardJsonInputSha256": "sha256:ebda2869af9fb1dcd567913768cd37547ccb68171e07e5aff645ea6053f3414c",
       "artifactAssetPath": "contracts/profile-v2/artifacts/initializer.json",
-      "artifactContentSha256": "sha256:789edf8ca22d613b891196160fec6593c20d37709fbbb18b8aa8679c6105d3f5",
-      "creationBytecodeSha256": "sha256:23b231213b9c6a5df7e9741f70bfcdcd39fcf66c83ef47b33eb901e3869b1473",
-      "creationBytecodeHash": "0x690a30ab2f5ee0c42856a9627cb46d79b5ebc4fa0a2f4c75c3a6f3e077cbbbeb",
-      "runtimeTemplateSha256": "sha256:464c68ce01516737ebf69f02f1d24f3b6236f4c3439d372c08bf529cb8232d1b",
-      "runtimeTemplateCodeHash": "0xe7210ee2a0edac8fe7e90387445d9c0ca26b7fa342e6828371d2db5969ae3c4d",
-      "runtimeCodeHash": "0xe7210ee2a0edac8fe7e90387445d9c0ca26b7fa342e6828371d2db5969ae3c4d",
+      "artifactContentSha256": "sha256:e460325c01daa6d8745d510db3dc70e872ccb6d3275b8dc9a56d7eb308d4c4c2",
+      "creationBytecodeSha256": "sha256:9ea1c403abb3fe3ee5b65db03ab30788fa6e5c158aa524b577660c6590ff87e9",
+      "creationBytecodeHash": "0xf6e047132a68eb0692f314975b45af88c6dd873ab7ecaa7b0c3c84a490b9454c",
+      "runtimeTemplateSha256": "sha256:ac526fd77fa003f6bb33c774a16f76d7f739f941d3d90d0eaeab42b2aa85d66b",
+      "runtimeTemplateCodeHash": "0x4df0f570bc27f05baa99ad297e4b7666d15f3101f43ba2e2863ce026432f43e4",
+      "runtimeCodeHash": "0x4df0f570bc27f05baa99ad297e4b7666d15f3101f43ba2e2863ce026432f43e4",
       "immutableReferences": [],
       "runtimeImmutables": [],
       "constructorBindingSchema": "address-fee-vault,address-fee-hook,address-token,uint24-static-lp-fee,int24-tick-spacing,uint160-initial-sqrt-price",
