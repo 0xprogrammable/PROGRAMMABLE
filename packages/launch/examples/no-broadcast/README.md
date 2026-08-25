@@ -50,5 +50,5 @@ programmable-launch validate launch.json \
 
 Stop after `validate`. The generated `evidence/rehearsal.json` proves only the inspected build inputs before `pack`.
 Calling V1 `submit` would return the non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`; this example does not present that as a
-successful wallet handoff. Use the separate fee-enforced V2 no-broadcast example to exercise the held five-role RC
-profile offline.
+successful wallet handoff. Use the separate fee-enforced V2 no-broadcast example to exercise the public Rev3 five-role
+profile offline without submitting, signing or broadcasting.

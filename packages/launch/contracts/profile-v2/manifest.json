@@ -1,10 +1,10 @@
 {
   "schemaVersion": "programmable.fee-enforced-profile-assets.v1",
   "profileId": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-  "profileRevision": 2,
-  "profileVersion": "2.0.0-rc.2",
-  "activationStatus": "canary",
-  "productionLaunchAuthorized": false,
+  "profileRevision": 3,
+  "profileVersion": "2.0.0",
+  "activationStatus": "production",
+  "productionLaunchAuthorized": true,
   "compiler": {
     "version": "0.8.26+commit.8a97fa7a",
     "evmVersion": "cancun",

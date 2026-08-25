@@ -25,17 +25,16 @@ export default function CreatorsDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators"
-      description="Package a Custom project locally, understand the held public launch path and review current creator programs."
+      description="Package, submit and track a Custom project, then review current creator programs."
       sections={sections}
       title="Create with Programmable"
     >
       <section id="paths">
         <h2>Choose a creator path</h2>
         <p>
-          Public Custom launch creation is currently held. V1 reads remain live
-          for existing requests, while the fee-enforced V2 release candidate
-          awaits canary and public activation. Reusable-template intake is also
-          closed.
+          Public V2 Custom launch creation and lifecycle reads are live on
+          Ethereum Mainnet. Wallet review and signing remain separate.
+          Reusable-template intake is closed.
         </p>
 
         <div className={styles.pathGrid}>
@@ -63,8 +62,7 @@ export default function CreatorsDocsPage() {
         <p>
           Build and test the project, then create a deterministic source and
           graph bundle with project-specific tooling. Package and validate it
-          locally. V1 POST is read-only, and V2 is not public until its canary
-          and activation evidence is published.
+          locally, then submit and track the byte-identical public V2 request.
         </p>
         <p>
           A prepared result contains the artifact but no wallet transaction.

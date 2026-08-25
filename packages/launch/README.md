@@ -15,22 +15,23 @@ programmable-launch --version
 That immutable release remains the V1 compatibility package. V1 request preparation and status reads remain valid,
 but new V1 submissions are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`.
 
-This source tree is the dual-version `2.0.0-rc.2` candidate. After its immutable release asset and digest are
-published, install that exact asset rather than an unverified npm-registry package with the same name:
+For public V2 preparation and submission, install the immutable `2.0.0` GitHub Release asset rather than an
+unverified npm-registry package with the same name:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz
 programmable-launch --version
 ```
 
-The V2 Rev2 profile is a canary artifact with `productionLaunchAuthorized:false`; package installation is not launch
-authority. The human guide is <https://programmable.market/docs/developers/custom-launch>.
+The V2 Rev3 profile is the public production profile. Package installation is not wallet authority: the API prepares
+the exact Router transaction, then the connected controller reviews and signs it separately. The human guide is
+<https://programmable.market/docs/developers/custom-launch>.
 
-## RC2 fee policy (private canary)
+## Rev3 fee policy
 
-This disclosure describes only the frozen RC2 profile. It does not activate public V2 submission. The profile is for
-Ethereum Mainnet only (`chainId: "1"`) and has `productionLaunchAuthorized: false`.
+The frozen Rev3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
+`productionLaunchAuthorized: true`.
 
 For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the documented
 `gross-unspecified-pool-currency-amount` basis: `1,000 ppm = 0.10% = 10 bps`. It accrues in the profile's unspecified
@@ -56,22 +57,20 @@ programmable-launch pack --config programmable-launch.config.json --output launc
 programmable-launch validate launch.json --config programmable-launch.config.json
 ```
 
-For an executable V2 cold-room rehearsal, use `examples/fee-enforced-v2-no-broadcast/README.md` from the installed RC.
+For an executable V2 cold-room rehearsal, use `examples/fee-enforced-v2-no-broadcast/README.md` from the installed package.
 It invokes real solc 0.8.26, uses the exact distributed profile sources and artifacts, and ends after byte-reproducible
 `pack` and `validate`. The older `examples/no-broadcast` fixture remains only for V1 golden compatibility.
 
-If a later API activation authorizes this exact profile revision, save the API key only as the encrypted environment
-secret `PROGRAMMABLE_API_KEY` or in the supported OS
+Save the API key only as the encrypted environment secret `PROGRAMMABLE_API_KEY` or in the supported OS
 secret store. Put the literal text `$PROGRAMMABLE_API_KEY` in agent setup or chat, never the key. On macOS, the fallback
 secret-store lookup is the Keychain service `api.programmable.market`, account `PROGRAMMABLE_API_KEY`.
 
-V2 `submit` routes only to `/v2/custom-launches`; while the profile is held it stops on
-`CUSTOM_LAUNCH_V2_UNAVAILABLE` and preserves `Retry-After` and `requestId`. It never falls back to V1. If a future
-authorized response is returned, stop the agent flow: the controller reviews the exact `walletTransaction` and signs
-it in a separate wallet flow. After a human broadcast, use `status REQUEST_UUID --api-version 2 --watch --until
-finalized`. `finalized`, `failed`, and `cancelled` always stop polling.
+V2 `submit` routes only to `/v2/custom-launches`. It never falls back to V1. Preserve the exact request bytes and
+idempotency key across timeout, `429`, or `503` retries and honor `Retry-After`. At `authorized`, stop the agent flow:
+the controller reviews the exact `walletTransaction` and signs it in a separate wallet flow. After a human broadcast,
+use `status REQUEST_UUID --watch --until finalized`. `finalized`, `failed`, and `cancelled` always stop polling.
 
-Neither included rehearsal claims authenticated submit, status, authorization, signing, or broadcast evidence.
+The included rehearsal proves only offline pack and validation. It does not submit, poll, sign, or broadcast.
 
 ## Pack config V1
 

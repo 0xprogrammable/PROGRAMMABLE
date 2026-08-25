@@ -11,7 +11,7 @@ import { ArrowRight, Check, CircleHelp, Copy, X } from "lucide-react";
 
 import styles from "@/components/create-guide.module.css";
 
-const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch, https://programmable.market/openapi/custom-launch-v1.json for the live V1 reads/write fence, and https://programmable.market/openapi/custom-launch-v2.json for the held V2 release-candidate shapes. Derive the request and evidence digests from the exact artifacts, never expose an API key, and never invent check results. Stop after local pack and validate. Do not submit: V1 creation returns 409 CUSTOM_LAUNCH_V1_READ_ONLY and V2 is not public until explicit activation. Never sign or broadcast.`;
+const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch and the public V2 contract at https://programmable.market/openapi/custom-launch-v2.json. Derive the request and evidence digests from the exact artifacts, never expose an API key, and never invent check results. Run local pack and validate, then submit the byte-identical request with $PROGRAMMABLE_API_KEY. Stop at authorized so the connected controller can review and sign the exact transaction separately. Never sign or broadcast automatically.`;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -186,13 +186,13 @@ export function CreateGuide() {
                 4
               </span>
               <div>
-                <h3>Package locally and check availability</h3>
+                <h3>Package, validate and submit</h3>
                 <p>
                   Package the request with project-specific tooling that follows
-                  the API schema, then validate it locally. Do not submit to V1:
-                  creation returns <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
-                  V2 remains held until canary and explicit public activation.
-                  An API key never authorizes, signs or broadcasts.
+                  the public V2 API schema, validate it locally, then submit the
+                  byte-identical request. Stop at <code>authorized</code> for
+                  separate controller-wallet review and signing. An API key
+                  never authorizes, signs or broadcasts.
                 </p>
                 <div className={styles.links}>
                   <Link href="/developers/api-keys">

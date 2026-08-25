@@ -50,8 +50,8 @@ export default function MachineReadableDocsPage() {
               Custom Launch API guide
             </Link>
             <span>
-              Canonical human guide for V1 reads, the public write fence,
-              lifecycle, errors, discovery and claims.
+              Canonical human guide for public V2 creation, lifecycle, wallet
+              handoff, errors, discovery and claims.
             </span>
           </li>
           <li>
@@ -78,8 +78,8 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v2.json</code>
             </a>
             <span>
-              Held 2.0.0-rc.2 machine contract for offline and private-canary
-              integration. It does not activate public V2 submission.
+              Public 2.0.0 machine contract for creation, idempotent retries,
+              lifecycle reads and separate wallet signing.
             </span>
           </li>
           <li>
@@ -251,20 +251,18 @@ export default function MachineReadableDocsPage() {
             no authentication.
           </li>
           <li>
-            <code>https://api.programmable.market/v1/custom-launches</code>{" "}
-            requires a wallet-bound <code>pm_live_</code> Bearer key for reads.
+            <code>https://api.programmable.market/v2/custom-launches</code>{" "}
+            requires a wallet-bound <code>pm_live_</code> Bearer key.
           </li>
           <li>
-            V1 list and single-resource reads remain live. Authenticated V1 POST
-            returns non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
-            V2 remains held and returns{" "}
-            <code>503 CUSTOM_LAUNCH_V2_UNAVAILABLE</code> with{" "}
-            <code>Retry-After</code> until activation.
+            Public V2 creation, list and single-resource reads are live. V1
+            history remains readable, while authenticated V1 POST returns
+            non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
           </li>
           <li>
             The platform validates manifest digest, graph, attestation shape,
-            evidence digests, optional exact-source build inputs and permit
-            bindings. It does not simulate the wallet transaction, audit the
+            evidence digests, exact-source build inputs, the Rev3 profile,
+            simulation and permit bindings. It does not audit the
             project or attest safety.
           </li>
           <li>
@@ -274,7 +272,7 @@ export default function MachineReadableDocsPage() {
             wallet authority.
           </li>
           <li>
-            <code>GET /v1/custom-launches</code> returns a wallet-owned,
+            <code>GET /v2/custom-launches</code> returns a wallet-owned,
             cursor-paginated snapshot. It makes a bounded best-effort
             reconciliation pass over pending rows and still returns durable
             history when RPC is unavailable.
@@ -302,7 +300,7 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             Fee claims and automated buybacks are not active Custom Launch API
-            operations in V1.
+            operations for arbitrary hooks.
           </li>
           <li>Ethereum RPC authentication depends on your provider.</li>
           <li>

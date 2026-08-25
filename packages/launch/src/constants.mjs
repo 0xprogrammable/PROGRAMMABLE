@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "2.0.0-rc.2";
+export const PACKAGE_VERSION = "2.0.0";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA = PACK_CONFIG_SCHEMA_V1;
@@ -19,8 +19,8 @@ export const LAUNCH_PROFILE_BINDING_SCHEMA =
 export const LAUNCH_PROFILE_SCHEMA = "programmable.fee-enforced-launch-profile.v1";
 export const LAUNCH_PROFILE_ID =
   "programmable.fee-enforced-isolated-after-swap.zero-delta.v1";
-export const LAUNCH_PROFILE_REVISION = 2;
-export const LAUNCH_PROFILE_VERSION = "2.0.0-rc.2";
+export const LAUNCH_PROFILE_REVISION = 3;
+export const LAUNCH_PROFILE_VERSION = "2.0.0";
 export const LAUNCH_PROFILE_HASH_DOMAIN = "programmable.fee-enforced-launch-profile.v2";
 export const LAUNCH_INTENT_HASH_DOMAIN = "programmable.custom-launch-intent.v2";
 
@@ -38,8 +38,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v2.0.0-rc.2";
-export const RELEASE_TARBALL = "programmable-launch-2.0.0-rc.2.tgz";
+export const RELEASE_TAG = "programmable-launch-v2.0.0";
+export const RELEASE_TARBALL = "programmable-launch-2.0.0.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 

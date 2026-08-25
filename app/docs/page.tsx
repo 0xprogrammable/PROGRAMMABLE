@@ -111,9 +111,8 @@ export default function DocsIndexPage() {
           <div>
             <h3>Creators</h3>
             <p>
-              Build and package a concrete project locally. Public Custom
-              creation remains held until the V2 release is explicitly
-              activated.
+              Build and package a concrete project locally, then use the public
+              V2 API for a wallet-owned Custom launch on Ethereum Mainnet.
             </p>
           </div>
           <div>

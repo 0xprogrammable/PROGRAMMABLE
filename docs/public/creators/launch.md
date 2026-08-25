@@ -1,10 +1,10 @@
 ---
-description: Package one deterministic Custom project locally and understand the held public launch path
+description: Package, submit and track one deterministic Custom project
 ---
 
 # Launch a project
 
-Public Custom launch creation is currently held. V1 list and single-resource reads remain live for existing requests, while authenticated V1 POST returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. The fee-enforced V2 release candidate returns `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After` until canary and explicit public activation. Legacy Registry and GitHub submission intake is closed.
+Public V2 Custom launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history remains readable, while authenticated V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
 ## Prepare the source
 
@@ -16,11 +16,11 @@ The source descriptor, manifest digest, graph bundle and agent evidence must all
 
 Connect the controller wallet at [Custom Launch API keys](https://programmable.market/developers/api-keys) and create a scoped key. Store it only as `PROGRAMMABLE_API_KEY` in an encrypted environment or secret store. Put only `$PROGRAMMABLE_API_KEY` in source, chat, prompts and agent setup.
 
-Existing keys can use `custom-launch:read` for their wallet-owned V1 history. A legacy `custom-launch:create` scope does not override the write fence. The key is not a wallet key and cannot sign or broadcast a transaction.
+The key is bound to its controller wallet and API scopes. It is not a wallet key and cannot sign or broadcast a transaction.
 
-## Stop at the public write fence
+## Submit the V2 request
 
-Do not submit the bundle to V1. Authenticated `POST https://api.programmable.market/v1/custom-launches` returns `409 CUSTOM_LAUNCH_V1_READ_ONLY`; do not retry, rotate the nonce or change bytes to bypass it. V2 is not a public API contract until its canary and activation evidence are explicitly published. Follow the [Custom Launch API guide](../developers/custom-launch.md) for the current read and write-fence contract.
+Submit the bundle to `POST https://api.programmable.market/v2/custom-launches` with the CLI. Preserve the exact request bytes and idempotency key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the [Custom Launch API guide](../developers/custom-launch.md) for the exact public contract.
 
 Existing durable resources record the platform's manifest, graph, attestation, exact-source and permit checks. Post-finality provider verification is independent from launch finality. Programmable does not reproduce project tests, audit the project or adopt the agent's claims as a safety conclusion.
 

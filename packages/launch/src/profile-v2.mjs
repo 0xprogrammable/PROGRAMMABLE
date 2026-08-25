@@ -87,7 +87,7 @@ export function validateLaunchProfileSelection(selection) {
   if (selection.schemaVersion !== LAUNCH_PROFILE_SELECTION_SCHEMA
     || selection.profileId !== LAUNCH_PROFILE_ID
     || selection.profileRevision !== LAUNCH_PROFILE_REVISION) {
-    throw new TypeError("launchProfile selection does not resolve to an embedded RC profile");
+    throw new TypeError("launchProfile selection does not resolve to the embedded production profile");
   }
   return {
     schemaVersion: LAUNCH_PROFILE_SELECTION_SCHEMA,
@@ -104,7 +104,7 @@ export function resolveLaunchProfile(selection) {
     profileId: LAUNCH_PROFILE_ID,
     profileRevision: LAUNCH_PROFILE_REVISION,
     profileVersion: LAUNCH_PROFILE_VERSION,
-    productionLaunchAuthorized: false,
+    productionLaunchAuthorized: true,
     chainId: MAINNET_CHAIN_ID,
     router: ROUTER,
     routerRuntimeCodeHash: "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
@@ -114,17 +114,17 @@ export function resolveLaunchProfile(selection) {
     poolManagerRuntimeCodeHash: "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
     policy: {
       policyId: "programmable-central-launch-policy",
-      policyVersion: "2.1.0",
-      effectiveAt: "2026-08-20T00:00:00Z",
-      sourceRepository: "https://github.com/0xprogrammable/submit-launch",
-      sourceCommit: "afafed19da43f0246d5ba8827aec634fa596e091",
-      sourceBlob: "af10761f1643297969295aef894ea664f61a2686",
-      sourceContentSha256: "sha256:9f081e02b626b421bcdc38d84f25b5cf3cfb92bd77f27a987520fa0bae675b67",
-      productionLaunchEnabled: false,
+      policyVersion: "2.2.0",
+      effectiveAt: "2026-08-25T20:30:00Z",
+      sourceRepository: "https://github.com/0xprogrammable/Launch-Policy",
+      sourceCommit: "5f8b633dc8e43b3300bc9e05cb32d7d7b7ac406d",
+      sourceBlob: "b00aa38438813ebddaea55aa3ff3aa057c2b8e6a",
+      sourceContentSha256: "sha256:8ec75c79d37535d9c9469f7662f9bf760387de34df55157df0203c6dd1b8b808",
+      productionLaunchEnabled: true,
       requiredRuleIds: [
         "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+        "LAUNCH.ETHEREUM_EXACT_FEE_TEMPLATE_BEFORE_AUTHORIZATION",
         "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
-        "LAUNCH.ETHEREUM_FINALIZED_RUNTIME_FEE_SETTLEMENT_BEFORE_PROMOTION",
         "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS",
       ],
     },
@@ -162,7 +162,7 @@ export function resolveLaunchProfile(selection) {
       externalCallRisk: "custom-risk-disclosed",
     },
     contractBuildBindings: {
-      activationStatus: "canary",
+      activationStatus: "production",
       compilerVersion: "0.8.26+commit.8a97fa7a",
       compilerSettingsHash: "0xd8985cd6554daab2848a8df4d90f9d5e0d81f15d062ee04bcd8414f292ccaf43",
       compilerSettings: {

@@ -155,13 +155,10 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2ReleaseCandidate,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cliV2ReleaseCandidate,
-    );
-    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "V2 is held for private canary",
+      "Stop at authorized",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
   });

@@ -151,6 +151,7 @@ function usage(command) {
     ],
     status: [
       "Usage: programmable-launch status <request-id> [--api-version 1|2] [--watch] [--until authorized|finalized]",
+      "V2 is the default. Use --api-version 1 only for retained V1 history.",
       "This command never signs or broadcasts a wallet transaction.",
     ],
   };
@@ -159,8 +160,8 @@ function usage(command) {
     "",
     `Guide: ${GUIDE_URL}`,
     `OpenAPI V1 (read-only create): ${OPENAPI_URL_V1}`,
-    `OpenAPI V2 (release candidate; public create held): ${OPENAPI_URL_V2}`,
+    `OpenAPI V2 (public create): ${OPENAPI_URL_V2}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
-    `V2 release candidate: ${RELEASE_URL}`,
+    `Public V2 release: ${RELEASE_URL}`,
   ].join("\n");
 }
