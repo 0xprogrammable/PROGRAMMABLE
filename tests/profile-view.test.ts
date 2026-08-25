@@ -25,6 +25,7 @@ import {
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileNativeClaimMeetsVisibilityThreshold,
+  prioritizedProfileActionState,
   profileRouterLaunchEntries,
   profileRewardsForAccount,
   profileRewardActionErrorMessage,
@@ -1134,6 +1135,32 @@ describe("profile transaction status", () => {
       "disabled={rowActionPending || claimGroups.length === 0}",
     );
     expect(profileViewSource.match(/actionSettling\(/gu)).toHaveLength(1);
+  });
+
+  it("prioritizes the active claim phase over stale checkable states", () => {
+    const stalePending = {
+      account: firstAddress,
+      status: "pending" as const,
+      message: "Still pending on Ethereum",
+      transactionHash,
+    };
+    const activeWallet = {
+      account: firstAddress,
+      status: "wallet" as const,
+      message: "Confirm in wallet",
+    };
+
+    expect(
+      prioritizedProfileActionState([stalePending, activeWallet]),
+    ).toEqual(activeWallet);
+    expect(
+      actionLabel(
+        prioritizedProfileActionState([stalePending, activeWallet]),
+      ),
+    ).toBe("Confirm in wallet");
+    expect(profileViewSource).toContain(
+      "<ProfileActionState state={rowActionState} />",
+    );
   });
 
   it("releases a repeatedly missing hash so the next claim can retry", () => {

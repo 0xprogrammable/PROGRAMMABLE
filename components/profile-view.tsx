@@ -4867,6 +4867,21 @@ export function actionSettling(
   return actionPending(state);
 }
 
+export function prioritizedProfileActionState(
+  states: readonly (
+    | ProfileClaimActionState
+    | ClassicV3ActionState
+    | undefined
+  )[],
+) {
+  return (
+    states.find((state) => actionPending(state)) ??
+    states.find((state) => state?.status === "error") ??
+    states.find((state) => actionCanCheckStatus(state)) ??
+    states.find((state) => state?.status === "confirmed")
+  );
+}
+
 export function actionLabel(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
 ) {
@@ -5305,24 +5320,10 @@ function ProfileClaimRow({
   const rowActionPending = claimGroups.some((group) =>
     group.actions.some((action) => actionPending(action.state)),
   );
-  const rowActionState = claimGroups
+  const rowActionStates = claimGroups
     .flatMap((group) => group.actions)
-    .map((action) => action.state)
-    .find((state) => actionPending(state) || actionCanCheckStatus(state));
-  const rowStatusStates = [
-    activeClaimState,
-    ...classicClaims.map(({ state }) => state),
-    ...deepClaims.map(({ state }) => state),
-    ...stockPairedClaims.flatMap(({ claimState, ethState }) => [
-      claimState,
-      ethState,
-    ]),
-  ];
-  const rowStatusState =
-    rowStatusStates.find((state) => state?.status === "error") ??
-    rowStatusStates.find((state) => state?.status === "not-found") ??
-    rowStatusStates.find((state) => state?.status === "pending") ??
-    rowStatusStates.find((state) => state?.status === "confirmed");
+    .map((action) => action.state);
+  const rowActionState = prioritizedProfileActionState(rowActionStates);
 
   return (
     <article className={styles.claimRow}>
@@ -5385,7 +5386,7 @@ function ProfileClaimRow({
         onClose={closeClaimDialog}
       />
 
-      <ProfileActionState state={rowStatusState} />
+      <ProfileActionState state={rowActionState} />
     </article>
   );
 }
