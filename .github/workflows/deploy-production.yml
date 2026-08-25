@@ -679,6 +679,9 @@ jobs:
             process.env.STAGED_TARGET_URL,
           );
           let response;
+          let body;
+          let expectedLaunchSource;
+          let exactCatalog = false;
           for (let attempt = 0; attempt < 5; attempt += 1) {
             response = await fetch(target, {
               redirect: "error",
@@ -689,47 +692,69 @@ jobs:
               },
               signal: AbortSignal.timeout(30_000),
             });
-            if (response.status !== 503 || attempt === 4) break;
-            await response.body?.cancel().catch(() => {});
-            await new Promise((resolve) => setTimeout(resolve, 5_000));
+            body = undefined;
+            if (response.status === 200) {
+              try {
+                body = JSON.parse(await readBoundedResponseText(response, {
+                  maximumBytes: 4 * 1024 * 1024,
+                  label: "staged Envio catalog probe",
+                }));
+              } catch (error) {
+                if (attempt === 4) throw error;
+              }
+            } else {
+              await response.body?.cancel().catch(() => {});
+            }
+            const registryCustomCurrent =
+              body?.catalog?.completeness?.registryCustom === "current";
+            const routerCustomStatus =
+              body?.catalog?.completeness?.routerCustom;
+            const routerCustomAvailable =
+              routerCustomStatus === "current" ||
+              routerCustomStatus === "last-known-good";
+            expectedLaunchSource = registryCustomCurrent
+              ? routerCustomAvailable
+                ? "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
+                : "envio-classic-v3+registry.custom-launched"
+              : routerCustomAvailable
+                ? "envio-classic-v3+canonical-launch-stamp-router"
+                : "envio-classic-v3";
+            const expectedCustomStatus =
+              registryCustomCurrent && routerCustomStatus === "current"
+                ? "current"
+                : registryCustomCurrent && routerCustomStatus === "last-known-good"
+                  ? "last-known-good"
+                  : "unavailable";
+            exactCatalog =
+              body?.status === "ready" &&
+              body?.catalog?.source === "envio-classic-v3" &&
+              body.catalog.launchSource === expectedLaunchSource &&
+              body.catalog.completeness?.classic === "current" &&
+              body.catalog.completeness?.custom === expectedCustomStatus &&
+              ["current", "unavailable"].includes(
+                body.catalog.completeness?.registryCustom,
+              ) &&
+              ["current", "last-known-good", "unavailable"].includes(
+                routerCustomStatus,
+              ) &&
+              body.catalog.completeness?.stock === "excluded" &&
+              body.catalog.evidence?.kind === "envio-indexer-state" &&
+              body.catalog.evidence?.progressBlock === body.catalog.asOfBlock &&
+              /^sha256:[0-9a-f]{64}$/u.test(
+                body.catalog.evidence?.commitment ?? "",
+              ) &&
+              JSON.stringify(body.catalog.scope?.publicCategories) ===
+                JSON.stringify(["classic", "custom"]) &&
+              Number.isSafeInteger(body.total) && body.total >= 1 &&
+              Array.isArray(body.tokens) && body.tokens.length === 1 &&
+              response.headers.get("x-programmable-launch-source") ===
+                expectedLaunchSource;
+            if (exactCatalog) break;
+            if (attempt < 4) {
+              await new Promise((resolve) => setTimeout(resolve, 5_000));
+            }
           }
-          const body = JSON.parse(await readBoundedResponseText(response, {
-            maximumBytes: 4 * 1024 * 1024,
-            label: "staged Envio catalog probe",
-          }));
-          const registryCustomCurrent =
-            body?.catalog?.completeness?.registryCustom === "current";
-          const routerCustomCurrent =
-            body?.catalog?.completeness?.routerCustom === "current";
-          const expectedLaunchSource = registryCustomCurrent
-            ? routerCustomCurrent
-              ? "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
-              : "envio-classic-v3+registry.custom-launched"
-            : routerCustomCurrent
-              ? "envio-classic-v3+canonical-launch-stamp-router"
-              : "envio-classic-v3";
-          const expectedCustomStatus =
-            registryCustomCurrent && routerCustomCurrent
-              ? "current"
-              : "unavailable";
-          if (
-            response.status !== 200 ||
-            body?.status !== "ready" ||
-            body?.catalog?.source !== "envio-classic-v3" ||
-            body.catalog.launchSource !== expectedLaunchSource ||
-            body.catalog.completeness?.classic !== "current" ||
-            body.catalog.completeness?.custom !== expectedCustomStatus ||
-            body.catalog.completeness?.stock !== "excluded" ||
-            body.catalog.evidence?.kind !== "envio-indexer-state" ||
-            body.catalog.evidence?.progressBlock !== body.catalog.asOfBlock ||
-            !/^sha256:[0-9a-f]{64}$/u.test(body.catalog.evidence?.commitment ?? "") ||
-            JSON.stringify(body.catalog.scope?.publicCategories) !==
-              JSON.stringify(["classic", "custom"]) ||
-            !Number.isSafeInteger(body.total) || body.total < 1 ||
-            !Array.isArray(body.tokens) || body.tokens.length !== 1 ||
-            response.headers.get("x-programmable-launch-source") !==
-              expectedLaunchSource
-          ) {
+          if (!exactCatalog || !body || !response) {
             throw new Error("staged Envio Classic V3 catalog probe is invalid");
           }
           appendFileSync(

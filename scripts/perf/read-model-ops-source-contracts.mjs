@@ -2378,12 +2378,16 @@ export function evaluateReadModelOperationsSourceContracts(
       includesEverySourceFragment(stagedCatalogProbeBlock, [
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
         '"/api/explore?limit=1&page=1&sort=newest"',
-        "response.status !== 200",
-        'body?.catalog?.source !== "envio-classic-v3"',
-        'body.catalog.completeness?.classic !== "current"',
-        'body.catalog.completeness?.stock !== "excluded"',
-        'body.catalog.evidence?.kind !== "envio-indexer-state"',
-        "body.total < 1",
+        "response.status === 200",
+        'body?.catalog?.source === "envio-classic-v3"',
+        'body.catalog.completeness?.classic === "current"',
+        'body.catalog.completeness?.stock === "excluded"',
+        'body.catalog.evidence?.kind === "envio-indexer-state"',
+        "body.total >= 1",
+        'routerCustomStatus === "last-known-good"',
+        "let exactCatalog = false",
+        "attempt < 5",
+        "if (exactCatalog) break",
       ]) &&
       !stagedCatalogProbeBlock.includes("body.tokens[0]?.launchModel") &&
       !stagedCatalogProbeBlock.includes("CRON_SECRET") &&

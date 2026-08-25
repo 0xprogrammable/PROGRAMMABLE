@@ -277,24 +277,28 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   );
   assert.match(probe, /VERCEL_AUTOMATION_BYPASS_SECRET:/u);
   assert.match(probe, /\/api\/explore\?limit=1&page=1&sort=newest/u);
-  assert.match(probe, /catalog\?\.source !== "envio-classic-v3"/u);
-  assert.match(probe, /completeness\?\.classic !== "current"/u);
-  assert.match(probe, /completeness\?\.stock !== "excluded"/u);
+  assert.match(probe, /catalog\?\.source === "envio-classic-v3"/u);
+  assert.match(probe, /completeness\?\.classic === "current"/u);
+  assert.match(probe, /completeness\?\.stock === "excluded"/u);
   assert.match(
     probe,
     /completeness\?\.registryCustom === "current"/u,
   );
   assert.match(
     probe,
-    /completeness\?\.routerCustom === "current"/u,
+    /routerCustomStatus === "last-known-good"/u,
   );
   assert.match(
     probe,
     /envio-classic-v3\+registry\.custom-launched\+canonical-launch-stamp-router/u,
   );
   assert.match(probe, /expectedCustomStatus/u);
+  assert.match(probe, /routerCustomAvailable/u);
   assert.doesNotMatch(probe, /tokens\[0\].*launchModel/u);
-  assert.match(probe, /body\.total < 1/u);
+  assert.match(probe, /body\.total >= 1/u);
+  assert.match(probe, /let exactCatalog = false/u);
+  assert.match(probe, /attempt < 5/u);
+  assert.match(probe, /if \(exactCatalog\) break/u);
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
   assert.doesNotMatch(probe, /\n        if:/u);
 

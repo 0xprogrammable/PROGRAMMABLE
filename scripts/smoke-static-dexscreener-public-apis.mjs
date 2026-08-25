@@ -348,24 +348,31 @@ function exactCatalogSnapshot(response) {
   const customStatus = catalog?.completeness?.custom;
   const registryCustomStatus = catalog?.completeness?.registryCustom;
   const routerCustomStatus = catalog?.completeness?.routerCustom;
+  const routerCustomAvailable =
+    routerCustomStatus === "current" ||
+    routerCustomStatus === "last-known-good";
   const launchSource = [
     source,
     ...(registryCustomStatus === "current"
       ? ["registry.custom-launched"]
       : []),
-    ...(routerCustomStatus === "current"
+    ...(routerCustomAvailable
       ? ["canonical-launch-stamp-router"]
       : []),
   ].join("+");
   const expectedCustomStatus =
-    registryCustomStatus === "current" && routerCustomStatus === "current"
+    registryCustomStatus === "current" &&
+      routerCustomStatus === "current"
       ? "current"
-      : "unavailable";
+      : registryCustomStatus === "current" &&
+          routerCustomStatus === "last-known-good"
+        ? "last-known-good"
+        : "unavailable";
   const expectedIncluded = [
     "classic-v3",
     "official-main-token",
     "registry.custom-launched",
-    ...(routerCustomStatus === "current"
+    ...(routerCustomAvailable
       ? ["canonical-launch-stamp-router"]
       : []),
   ];
@@ -380,7 +387,9 @@ function exactCatalogSnapshot(response) {
     catalog.completeness?.stock === "excluded" &&
     customStatus === expectedCustomStatus &&
     ["current", "unavailable"].includes(registryCustomStatus) &&
-    ["current", "unavailable"].includes(routerCustomStatus) &&
+    ["current", "last-known-good", "unavailable"].includes(
+      routerCustomStatus,
+    ) &&
     JSON.stringify(catalog.scope?.included) ===
       JSON.stringify(expectedIncluded) &&
     JSON.stringify(catalog.scope?.excluded) === JSON.stringify([
