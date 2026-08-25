@@ -37,20 +37,38 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('activeSection === "keys" ?');
     expect(apiKeysSource).not.toContain("launchPath");
     expect(apiKeysSource).not.toContain("Fee claims and automated buybacks");
+    expect(apiKeysSource).not.toContain("Key owner");
+    expect(apiKeysSource).not.toContain("activeCount");
 
     expect(apiKeysStyles).toMatch(
-      /\.workspace\s*\{[^}]*align-items:\s*stretch;/su,
+      /\.workspace\s*\{[^}]*align-items:\s*start;/su,
     );
     expect(apiKeysStyles).toMatch(
       /\.workspace\s*\{[^}]*grid-template-columns:\s*repeat\(2,/su,
     );
-    expect(apiKeysStyles).toContain("height: clamp(");
+    expect(apiKeysStyles).not.toContain("height: clamp(");
+    expect(apiKeysStyles).not.toMatch(
+      /\.keyList\s*\{[^}]*overflow-y:\s*auto;/su,
+    );
     expect(apiKeysStyles).toContain("--api-panel: var(--webde-surface)");
     expect(apiKeysStyles).toContain("--api-line: var(--webde-line)");
     expect(apiKeysStyles).not.toContain("liquid-glass");
-    expect(apiKeysStyles).toMatch(
-      /@media \(max-width: 760px\)[\s\S]*?\.workspace\s*\{[^}]*height:\s*auto;/u,
-    );
+  });
+
+  it("uses a styled expiry listbox with complete keyboard and form behavior", () => {
+    expect(apiKeysSource).toContain('aria-haspopup="listbox"');
+    expect(apiKeysSource).toContain('role="listbox"');
+    expect(apiKeysSource).toContain('role="option"');
+    expect(apiKeysSource).toContain('name="expiresInDays"');
+    expect(apiKeysSource).toContain('type="hidden"');
+    expect(apiKeysSource).toContain('event.key === "ArrowDown"');
+    expect(apiKeysSource).toContain('event.key === "ArrowUp"');
+    expect(apiKeysSource).toContain('event.key === "Home"');
+    expect(apiKeysSource).toContain('event.key === "End"');
+    expect(apiKeysSource).toContain('event.key === "Escape"');
+    expect(apiKeysStyles).toContain(".expiryTrigger");
+    expect(apiKeysStyles).toContain(".expiryMenu");
+    expect(apiKeysStyles).not.toContain("appearance: auto");
   });
 
   it("preserves wallet authority and one-time secret handling", () => {
@@ -86,6 +104,9 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain("Unable to load keys");
     expect(apiKeysSource).toContain("No keys yet");
     expect(apiKeysSource).toContain("Try again");
+    expect(apiKeysSource).toContain("API keys refreshed.");
+    expect(apiKeysSource).toContain("Refresh keys");
+    expect(apiKeysSource).toContain("data-spinning=");
     expect(apiKeysSource).toContain("8_000");
     expect(apiKeysStyles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(apiKeysStyles).toContain("min-height: 44px");
@@ -102,24 +123,27 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("Review and sign in wallet");
     expect(historySource).toContain("sendCustomLaunchWalletAction(action)");
     expect(historySource).toContain("startStatusPolling(launch.requestId)");
+    expect(historySource).toContain("Wallet action required");
+    expect(historySource).toContain(
+      "Review and sign the prepared transaction in your wallet.",
+    );
     expect(historySource).not.toContain("Your agent&apos;s first accepted request");
-    expect(historyStyles).toContain("height: clamp(");
+    expect(historyStyles).not.toContain("height: clamp(");
     expect(historyStyles).toContain("background: var(--webde-surface)");
     expect(historyStyles).toContain("background: var(--webde-surface-raised)");
     expect(historyStyles).not.toContain("liquid-glass");
-    expect(historyStyles).toMatch(
+    expect(historyStyles).not.toMatch(
       /\.launchList\s*\{[^}]*overflow-y:\s*auto;/su,
-    );
-    expect(historyStyles).toMatch(
-      /@media \(max-width: 600px\)[\s\S]*?\.history\s*\{[^}]*height:\s*auto;/u,
     );
   });
 
   it("announces loading and refreshed status without changing wallet authority", () => {
     expect(historySource).toContain("Loading launch history");
     expect(historySource).toContain("Launch status updated.");
+    expect(historySource).toContain("Launch history refreshed.");
+    expect(historySource).toContain("Refresh history");
     expect(historySource).toContain('aria-live="polite"');
-    expect(historySource).toContain('disabled={state === "loading" || loadingMore}');
+    expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
   });
 

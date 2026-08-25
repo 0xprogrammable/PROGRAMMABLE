@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { RefreshCw } from "lucide-react";
 
 import styles from "@/components/developer-launch-history.module.css";
 import {
@@ -206,14 +207,27 @@ function shortId(value: string) {
 
 function statusCopy(status: LaunchStatus) {
   switch (status) {
-    case "received": return "Request saved";
-    case "validating": return "Checks in progress";
-    case "prepared": return "Launch prepared";
-    case "authorized": return "Review and sign in wallet";
-    case "submitted": return "Submitted onchain";
-    case "finalized": return "Finalized onchain";
-    case "failed": return "Launch failed";
+    case "received": return "Received";
+    case "validating": return "Validating";
+    case "prepared": return "Prepared";
+    case "authorized": return "Wallet action required";
+    case "submitted": return "Confirming onchain";
+    case "finalized": return "Finalized";
+    case "failed": return "Failed";
     case "cancelled": return "Cancelled";
+  }
+}
+
+function statusDescription(status: LaunchStatus) {
+  switch (status) {
+    case "received": return "The API accepted this request.";
+    case "validating": return "The API is validating the request.";
+    case "prepared": return "The launch transaction has been prepared.";
+    case "authorized": return "Review and sign the prepared transaction in your wallet.";
+    case "submitted": return "The wallet transaction is being tracked onchain.";
+    case "finalized": return "The Router recorded this launch.";
+    case "failed": return "This request did not complete.";
+    case "cancelled": return "This request was cancelled.";
   }
 }
 
@@ -276,6 +290,7 @@ export function DeveloperLaunchHistory({
   const [launches, setLaunches] = useState<LaunchResource[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -312,6 +327,7 @@ export function DeveloperLaunchHistory({
   const load = useCallback(async (
     cursor: string | null,
     signal?: AbortSignal,
+    refreshRequest = false,
   ) => {
     if (cursor !== null && loadMoreInFlightRef.current) return;
     if (cursor !== null) {
@@ -349,16 +365,18 @@ export function DeveloperLaunchHistory({
           ]);
       setNextCursor(page.nextCursor);
       setState("ready");
+      if (refreshRequest) setStatusMessage("Launch history refreshed.");
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       if (requestSequence !== requestSequenceRef.current) return;
       setError(
         cause instanceof Error ? cause.message : "Unable to load launch history.",
       );
-      if (cursor === null) setState("error");
+      if (cursor === null && !refreshRequest) setState("error");
     } finally {
       if (cursor !== null) loadMoreInFlightRef.current = false;
       if (requestSequence === requestSequenceRef.current) setLoadingMore(false);
+      if (refreshRequest) setRefreshing(false);
     }
   }, [account, getAuthHeaders]);
 
@@ -414,9 +432,11 @@ export function DeveloperLaunchHistory({
   }, []);
 
   const refresh = () => {
-    setState("loading");
-    setNextCursor(null);
-    void load(null);
+    if (state === "loading" || loadingMore || refreshing) return;
+    setRefreshing(true);
+    setError("");
+    setStatusMessage("Refreshing launch history.");
+    void load(null, undefined, true);
   };
 
   const checkOnchainStatus = async (launch: LaunchResource) => {
@@ -548,7 +568,7 @@ export function DeveloperLaunchHistory({
   return (
     <section
       className={styles.history}
-      aria-busy={state === "loading" || loadingMore}
+      aria-busy={state === "loading" || loadingMore || refreshing}
       aria-labelledby="launch-history-title"
     >
       <p className={styles.visuallyHidden} role="status" aria-live="polite">
@@ -561,11 +581,18 @@ export function DeveloperLaunchHistory({
         </div>
         <button
           className={styles.textButton}
-          disabled={state === "loading" || loadingMore}
+          disabled={state === "loading" || loadingMore || refreshing}
           type="button"
           onClick={refresh}
         >
-          Refresh
+          <RefreshCw
+            aria-hidden="true"
+            className={styles.refreshIcon}
+            data-spinning={state === "loading" || refreshing ? "true" : "false"}
+            size={16}
+            strokeWidth={1.9}
+          />
+          {state === "loading" || refreshing ? "Refreshing" : "Refresh history"}
         </button>
       </div>
       <p className={styles.intro}>
@@ -603,12 +630,15 @@ export function DeveloperLaunchHistory({
               <li className={styles.launchItem} key={launch.launchId}>
                 <div className={styles.launchTopline}>
                   <div>
-                    <h3>Request {shortId(launch.requestId)}</h3>
+                    <h3>Launch {shortId(launch.requestId)}</h3>
                   </div>
                   <span className={styles.status} data-status={launch.status}>
                     {statusCopy(launch.status)}
                   </span>
                 </div>
+                <p className={styles.statusDescription}>
+                  {statusDescription(launch.status)}
+                </p>
                 <dl className={styles.metadata}>
                   <div>
                     <dt>Created</dt>
