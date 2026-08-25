@@ -59,11 +59,11 @@ export function programmableWellKnownDocumentV1(
         cli: Object.freeze({
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "2.0.0",
+          releaseVersion: "2.0.1",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
         }),
       }),
       releaseCandidate: Object.freeze({
@@ -71,12 +71,12 @@ export function programmableWellKnownDocumentV1(
         publicAuthorization: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "2.0.0",
-        releaseTag: "programmable-launch-v2.0.0",
+        releaseVersion: "2.0.1",
+        releaseTag: "programmable-launch-v2.0.1",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
         feePolicy: Object.freeze({
@@ -141,7 +141,9 @@ export function programmableWellKnownDocumentV1(
         discoveryStatus: "live" as const,
         publicSubmissionStatus: "closed" as const,
         customLaunchApiStatus: "live" as const,
-        registryDiscoveryStatus: manifest.status,
+        registryDiscoveryStatus: manifest.status === "live"
+          ? "live" as const
+          : "legacy-closed" as const,
         legacyRegistrySubmissionStatus: "closed" as const,
         legacyGithubSubmissionStatus: "closed" as const,
         registryAddress: manifest.contracts.registry.address?.toLowerCase() ?? null,

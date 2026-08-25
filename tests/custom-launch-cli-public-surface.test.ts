@@ -43,18 +43,18 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "2.0.0",
+          releaseVersion: "2.0.1",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
         },
       },
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "2.0.0",
-        releaseTag: "programmable-launch-v2.0.0",
+        releaseVersion: "2.0.1",
+        releaseTag: "programmable-launch-v2.0.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v2.json",
         feePolicy: {
@@ -104,11 +104,12 @@ describe("public Custom Launch CLI surface", () => {
       discoveryStatus: "live",
       publicSubmissionStatus: "closed",
       customLaunchApiStatus: "live",
-      registryDiscoveryStatus: "prelaunch",
+      registryDiscoveryStatus: "legacy-closed",
       legacyRegistrySubmissionStatus: "closed",
       legacyGithubSubmissionStatus: "closed",
     });
     expect(JSON.stringify(document)).not.toContain("api-live");
+    expect(JSON.stringify(document)).not.toContain("prelaunch");
   });
 
   it("publishes a public, reference-complete V2 contract", () => {
@@ -133,7 +134,7 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(v2["x-programmable-release-candidate"]).toMatchObject({
       status: "promoted-to-public",
-      version: "2.0.0",
+      version: "2.0.1",
       launchProfileHash:
         "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
       productionLaunchAuthorized: true,

@@ -15,12 +15,12 @@ programmable-launch --version
 That immutable release remains the V1 compatibility package. V1 request preparation and status reads remain valid,
 but new V1 submissions are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`.
 
-For public V2 preparation and submission, install the immutable `2.0.0` GitHub Release asset rather than an
+For public V2 preparation and submission, install the immutable `2.0.1` GitHub Release asset rather than an
 unverified npm-registry package with the same name:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz
 programmable-launch --version
 ```
 

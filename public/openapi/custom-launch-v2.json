@@ -37,20 +37,20 @@
     "status": "promoted-to-public",
     "packageName": "@programmable/launch",
     "binary": "programmable-launch",
-    "version": "2.0.0",
-    "tag": "programmable-launch-v2.0.0",
-    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
-    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+    "version": "2.0.1",
+    "tag": "programmable-launch-v2.0.1",
+    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
+    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
     "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
     "productionLaunchAuthorized": true
   },
   "x-programmable-release": {
     "packageName": "@programmable/launch",
     "binary": "programmable-launch",
-    "version": "2.0.0",
-    "tag": "programmable-launch-v2.0.0",
-    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.0",
-    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0/programmable-launch-2.0.0.tgz",
+    "version": "2.0.1",
+    "tag": "programmable-launch-v2.0.1",
+    "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
+    "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
     "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
     "productionLaunchAuthorized": true
   },
@@ -622,7 +622,7 @@
       },
       "FeeEnforcedLaunchProfileV2": {
         "type": "object",
-        "description": "Frozen Rev3 production profile. The server requires the canonical JSON to match the durable public profile byte for byte; the 2.0.0 package derives it from the exact distributed assets.",
+        "description": "Frozen Rev3 production profile. The server requires the canonical JSON to match the durable public profile byte for byte; the 2.0.1 package derives it from the exact distributed assets.",
         "required": [
           "schemaVersion",
           "profileId",

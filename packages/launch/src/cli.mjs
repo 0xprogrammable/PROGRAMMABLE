@@ -8,7 +8,42 @@ import {
 } from "./constants.mjs";
 import { packLaunch } from "./pack.mjs";
 import { validateLaunchFile } from "./validate.mjs";
-import { statusLaunch, submitLaunch } from "./api-client.mjs";
+import { ProgrammableApiError, statusLaunch, submitLaunch } from "./api-client.mjs";
+
+const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const SAFE_ERROR_REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function formatCliError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!(error instanceof ProgrammableApiError)) return message;
+  const details = error.details && typeof error.details === "object"
+    ? error.details
+    : {};
+  const safeDetails = {};
+  if (typeof details.code === "string" && SAFE_API_CODE.test(details.code)) {
+    safeDetails.code = details.code;
+  }
+  if (Number.isInteger(details.httpStatus)
+    && details.httpStatus >= 100
+    && details.httpStatus <= 599) {
+    safeDetails.httpStatus = details.httpStatus;
+  }
+  if (typeof details.requestId === "string"
+    && SAFE_ERROR_REQUEST_ID.test(details.requestId)) {
+    safeDetails.requestId = details.requestId;
+  }
+  if (typeof details.retryAfter === "string") {
+    if (/^[0-9]{1,10}$/.test(details.retryAfter)) {
+      safeDetails.retryAfter = details.retryAfter;
+    } else {
+      const retryAt = Date.parse(details.retryAfter);
+      if (Number.isFinite(retryAt)) safeDetails.retryAfter = new Date(retryAt).toUTCString();
+    }
+  }
+  return Object.keys(safeDetails).length === 0
+    ? message
+    : `${message}\nProgrammable API error details: ${JSON.stringify(safeDetails)}`;
+}
 
 export async function main(argv) {
   if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
