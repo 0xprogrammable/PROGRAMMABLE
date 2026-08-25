@@ -1,10 +1,10 @@
 ---
-description: Prepare one deterministic Custom project through the authenticated API and creator signed launch
+description: Package one deterministic Custom project locally and understand the held public launch path
 ---
 
 # Launch a project
 
-Custom launch preparation is API-first. The submitting workflow packages one deterministic source and graph bundle, and the authenticated API validates its declared commitments. A `prepared` result contains no wallet transaction. After the request becomes `authorized`, the controller wallet separately reviews, signs and broadcasts the exact transaction. No GitHub pull request submits the launch.
+Public Custom launch creation is currently held. V1 list and single-resource reads remain live for existing requests, while authenticated V1 POST returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. The fee-enforced V2 release candidate returns `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After` until canary and explicit public activation. Legacy Registry and GitHub submission intake is closed.
 
 ## Prepare the source
 
@@ -16,17 +16,17 @@ The source descriptor, manifest digest, graph bundle and agent evidence must all
 
 Connect the controller wallet at [Custom Launch API keys](https://programmable.market/developers/api-keys) and create a scoped key. Store it only as `PROGRAMMABLE_API_KEY` in an encrypted environment or secret store. Put only `$PROGRAMMABLE_API_KEY` in source, chat, prompts and agent setup.
 
-The key grants only `custom-launch:create` and `custom-launch:read`. It is not a wallet key and cannot sign or broadcast a transaction.
+Existing keys can use `custom-launch:read` for their wallet-owned V1 history. A legacy `custom-launch:create` scope does not override the write fence. The key is not a wallet key and cannot sign or broadcast a transaction.
 
-## Submit the bundle
+## Stop at the public write fence
 
-Send one closed request to `https://api.programmable.market/v1/custom-launches` with the API key as a Bearer credential and a stable idempotency key. Follow the [Custom Launch API guide](../developers/custom-launch.md) for authentication, the exact schema, graph limits, evidence fields and response states.
+Do not submit the bundle to V1. Authenticated `POST https://api.programmable.market/v1/custom-launches` returns `409 CUSTOM_LAUNCH_V1_READ_ONLY`; do not retry, rotate the nonce or change bytes to bypass it. V2 is not a public API contract until its canary and activation evidence are explicitly published. Follow the [Custom Launch API guide](../developers/custom-launch.md) for the current read and write-fence contract.
 
-The platform validates the manifest digest, graph constraints, attestation shape, evidence digests, optional exact-source build inputs and permit binding. Post-finality provider verification is independent from launch finality. Programmable does not reproduce project tests, audit the project or adopt the agent's claims as a safety conclusion.
+Existing durable resources record the platform's manifest, graph, attestation, exact-source and permit checks. Post-finality provider verification is independent from launch finality. Programmable does not reproduce project tests, audit the project or adopt the agent's claims as a safety conclusion.
 
 ## Launch from the bound wallet
 
-When the request is `prepared`, only the exact artifact exists. Wait for `authorized`, then have the controller wallet check the network, destination, calldata and value before it signs and broadcasts. A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees with the public Router record.
+For an existing request, `prepared` means only the exact artifact exists. An already `authorized` resource still requires the controller wallet to check the network, destination, calldata and value before signing and broadcasting. A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees with the public Router record.
 
 ## Keep the record useful
 

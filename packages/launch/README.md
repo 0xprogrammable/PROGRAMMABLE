@@ -4,7 +4,7 @@
 has exactly four commands: `pack`, `validate`, `submit`, and `status`. It never signs or broadcasts a wallet
 transaction.
 
-## Install the versioned public release
+## Install a versioned release
 
 ```sh
 npm install --global \
@@ -12,9 +12,20 @@ npm install --global \
 programmable-launch --version
 ```
 
-The release asset is the installation authority. Do not substitute an unverified npm-registry package with the same
-name. The human guide is <https://programmable.market/docs/developers/custom-launch> and the normative API contract is
-<https://programmable.market/openapi/custom-launch-v1.json>.
+That immutable release remains the V1 compatibility package. V1 request preparation and status reads remain valid,
+but new V1 submissions are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`.
+
+This source tree is the dual-version `2.0.0-rc.2` candidate. After its immutable release asset and digest are
+published, install that exact asset rather than an unverified npm-registry package with the same name:
+
+```sh
+npm install --global \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.0-rc.2/programmable-launch-2.0.0-rc.2.tgz
+programmable-launch --version
+```
+
+The V2 Rev2 profile is a canary artifact with `productionLaunchAuthorized:false`; package installation is not launch
+authority. The human guide is <https://programmable.market/docs/developers/custom-launch>.
 
 ## Cold-agent flow
 
@@ -23,27 +34,29 @@ name. The human guide is <https://programmable.market/docs/developers/custom-lau
    per compilation unit and across all units in one request.
 2. Create `programmable-launch.config.json` using the closed config contract below. Use exact file paths, constructor
    values, initializer values, salts, public source revision, and evidence files. Do not enter derived hashes.
-3. Run the four commands:
+3. Run the offline commands first:
 
 ```sh
 programmable-launch pack --config programmable-launch.config.json --output launch.json
 programmable-launch validate launch.json --config programmable-launch.config.json
-programmable-launch submit launch.json --config programmable-launch.config.json
-programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
-Before `submit`, save the API key only as the encrypted environment secret `PROGRAMMABLE_API_KEY` or in the supported OS
+For an executable V2 cold-room rehearsal, use `examples/fee-enforced-v2-no-broadcast/README.md` from the installed RC.
+It invokes real solc 0.8.26, uses the exact distributed profile sources and artifacts, and ends after byte-reproducible
+`pack` and `validate`. The older `examples/no-broadcast` fixture remains only for V1 golden compatibility.
+
+If a later API activation authorizes this exact profile revision, save the API key only as the encrypted environment
+secret `PROGRAMMABLE_API_KEY` or in the supported OS
 secret store. Put the literal text `$PROGRAMMABLE_API_KEY` in agent setup or chat, never the key. On macOS, the fallback
 secret-store lookup is the Keychain service `api.programmable.market`, account `PROGRAMMABLE_API_KEY`.
 
-At `authorized`, stop the agent flow. The controller reviews the exact returned `walletTransaction` and signs it in a
-separate wallet flow. After broadcast, use `status REQUEST_UUID --watch --until finalized`. `finalized`, `failed`, and
-`cancelled` always stop polling.
+V2 `submit` routes only to `/v2/custom-launches`; while the profile is held it stops on
+`CUSTOM_LAUNCH_V2_UNAVAILABLE` and preserves `Retry-After` and `requestId`. It never falls back to V1. If a future
+authorized response is returned, stop the agent flow: the controller reviews the exact `walletTransaction` and signs
+it in a separate wallet flow. After a human broadcast, use `status REQUEST_UUID --api-version 2 --watch --until
+finalized`. `finalized`, `failed`, and `cancelled` always stop polling.
 
-For an executable cold-room rehearsal, use `examples/no-broadcast/README.md` from the installed package. It contains
-real Solidity sources, exact Standard JSON, matching solc artifacts and a config generator. The generated evidence is
-truthfully scoped to `pre-submit`; separate commands can then pack, validate, submit and poll to `authorized`, where
-the workflow explicitly stops without signing or broadcasting.
+Neither included rehearsal claims authenticated submit, status, authorization, signing, or broadcast evidence.
 
 ## Pack config V1
 

@@ -313,6 +313,19 @@ describe("prediction profile regression contract", () => {
     expect(portfolioStyles).not.toContain(".portfolioEyebrow");
   });
 
+  it("communicates refresh progress without relying on motion", () => {
+    expect(portfolioSource).toContain("aria-busy={isBusy || undefined}");
+    expect(portfolioSource).toContain(
+      "className={styles.portfolioRefreshIcon}",
+    );
+    expect(portfolioSource).toContain(
+      '<span>{isBusy ? "Refreshing" : "Refresh"}</span>',
+    );
+    expect(portfolioStyles).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*\.portfolioRefresh\[aria-busy="true"\] \.portfolioRefreshIcon\s*\{[^}]*animation:\s*prediction-market-refresh-spin 800ms linear infinite;/u,
+    );
+  });
+
   it("uses vivid yes and no colors with AA text contrast and non-color labels", () => {
     const yes = cssHexVariable(portfolioStyles, "--portfolio-yes");
     const no = cssHexVariable(portfolioStyles, "--portfolio-no");

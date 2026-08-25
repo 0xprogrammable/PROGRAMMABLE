@@ -21,11 +21,11 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.3.0",
+    version: "1.4.0",
     summary:
-      "Verified launch discovery plus wallet-bound Custom launch preparation with exact-source commitments on Ethereum.",
+      "Verified launch discovery plus existing wallet-owned V1 Custom launch history on Ethereum.",
     description:
-      "The programmable.market read endpoints remain unauthenticated and read-only. The separately hosted Custom Launch API accepts wallet-bound pm_live_ API keys, binds optional exact Solidity build inputs to prepared artifacts, prepares exact Router launch actions, and reconciles an onchain launch when its single-resource status route is polled. Post-finality provider verification is independent of launch finality. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market read endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, V1 list and single-resource reads remain live for existing wallet-owned requests. V1 launch creation is read-only and returns non-retryable 409 CUSTOM_LAUNCH_V1_READ_ONLY. The fee-enforced V2 release candidate is held until canary and explicit public activation; unavailable V2 requests return 503 CUSTOM_LAUNCH_V2_UNAVAILABLE with Retry-After. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -53,7 +53,7 @@ export const programmablePublicOpenApi = {
     {
       name: "Custom launch",
       description:
-        "Wallet-bound, provenance-only Custom launch intake and status. Create API keys at programmable.market/developers/api-keys.",
+        "Wallet-bound V1 launch history and explicit public write fence. Manage API keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {
@@ -274,9 +274,10 @@ export const programmablePublicOpenApi = {
       },
       post: {
         operationId: "createCustomLaunch",
-        summary: "Prepare a Custom launch",
+        deprecated: true,
+        summary: "V1 launch creation is read-only",
         description:
-          "Validates the submitted manifest digest, executable graph, required agent attestation and evidence digests, optional exact-source verification bundle, and exact permit binding; reserves the request idempotently; captures a bounded Router observation window; and prepares the Mainnet Router action for the API key's bound wallet. Programmable does not simulate the wallet transaction, audit the project, attest safety, sign the wallet transaction, or broadcast it.",
+          "The V1 creation route is retained only as an explicit write fence. After successful API-key authentication and scope checks it returns 409 CUSTOM_LAUNCH_V1_READ_ONLY before reading an idempotency key or request body. This response is non-retryable. Use the live V1 GET operations for existing history. V2 remains held until canary and explicit public activation.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -285,92 +286,31 @@ export const programmablePublicOpenApi = {
           },
         ],
         security: [{ CustomLaunchApiKey: [] }],
-        externalDocs: {
-          description: "Create or revoke a wallet-bound API key",
-          url: API_KEYS_URL,
-        },
-        parameters: [
-          {
-            name: "Idempotency-Key",
-            in: "header",
-            required: true,
-            description:
-              "Caller-generated operation key. Retry an ambiguous request with the same key and identical body.",
-            schema: {
-              type: "string",
-              minLength: 16,
-              maxLength: 128,
-              pattern: "^[A-Za-z0-9._:-]{16,128}$",
-            },
-          },
-        ],
-        requestBody: {
-          required: true,
-          description:
-            "Closed JSON request, limited to 8,388,608 bytes (8 MiB). Unknown top-level fields fail before launch preparation.",
-          content: {
-            "application/json": {
-              schema: component("CustomLaunchCreateRequest"),
-            },
-          },
-        },
         responses: {
-          "200": jsonResponse(
-            component("CustomLaunchResource"),
-            "Idempotent replay of the original launch request.",
-          ),
-          "202": jsonResponse(
-            component("CustomLaunchResource"),
-            "Launch request accepted for validation and preparation.",
-          ),
-          "400": jsonResponse(
-            component("CustomLaunchApiError"),
-            "Invalid request or Idempotency-Key.",
-          ),
           "401": jsonResponse(
             component("CustomLaunchApiError"),
             "API key is missing, malformed, expired, revoked, or unknown.",
           ),
           "403": jsonResponse(
             component("CustomLaunchApiError"),
-            "Missing custom-launch:create scope or wallet binding mismatch.",
+            "API key lacks the legacy custom-launch:create scope.",
           ),
-          "409": jsonResponse(
-            component("CustomLaunchApiError"),
-            "The Idempotency-Key is bound to a different request, the wallet nonce conflicts with another launch, or a durable prepared permit expired before signing.",
-          ),
-          "413": jsonResponse(
-            component("CustomLaunchApiError"),
-            "Request body exceeds 8,388,608 bytes (8 MiB).",
-          ),
-          "415": jsonResponse(
-            component("CustomLaunchApiError"),
-            "Content-Type must be application/json.",
-          ),
-          "422": jsonResponse(
-            component("CustomLaunchApiError"),
-            "The manifest digest, graph, attestation subject/evidence digest, or permit binding is invalid.",
-          ),
-          "429": {
-            description:
-              "The wallet principal reached the launch reservation limit. Exact idempotent replays bypass this quota.",
-            headers: {
-              "Retry-After": {
-                description:
-                  "Seconds until the currently blocking quota window permits another reservation.",
-                schema: { type: "integer", minimum: 1 },
-              },
-            },
+          "409": {
+            description: "V1 launch creation is read-only. Do not retry this request.",
             content: {
               "application/json": {
                 schema: component("CustomLaunchApiError"),
+                example: {
+                  schemaVersion: "programmable.api-error.v1",
+                  error: {
+                    code: "CUSTOM_LAUNCH_V1_READ_ONLY",
+                    message: "V1 launch creation is read-only; use the fee-enforced V2 launch profile",
+                    requestId: "018f1f8e-7d93-7c2f-8d7f-e114942e7f25",
+                  },
+                },
               },
             },
           },
-          "503": jsonResponse(
-            component("CustomLaunchApiError"),
-            "Launch preparation is temporarily unavailable.",
-          ),
         },
       },
     },
@@ -379,7 +319,7 @@ export const programmablePublicOpenApi = {
         operationId: "getCustomLaunch",
         summary: "Read a Custom launch",
         description:
-          "Returns one launch owned by the API key's wallet principal. After the controller wallet broadcasts the prepared transaction, polling this single-resource route performs request-driven Router reconciliation for authorized and submitted launches. There is no background reconciliation timer. A missing launch and another principal's launch both return 404.",
+          "Returns one existing launch owned by the API key's wallet principal. After the controller wallet broadcasts a previously authorized transaction, polling this single-resource route performs request-driven Router reconciliation for authorized and submitted launches. There is no background reconciliation timer. A missing launch and another principal's launch both return 404.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -471,7 +411,7 @@ export const programmablePublicOpenApi = {
         scheme: "bearer",
         bearerFormat: "pm_live_<22-char-key-id>_<43-char-secret>",
         description:
-          "Wallet-bound API key created at https://programmable.market/developers/api-keys. V1 keys receive only custom-launch:create and custom-launch:read. They are not wallet keys and cannot sign or broadcast transactions.",
+          "Wallet-bound API key managed at https://programmable.market/developers/api-keys. Existing keys can read their wallet-owned V1 history. A legacy custom-launch:create scope does not override the V1 write fence. Keys are not wallets and cannot sign or broadcast transactions.",
       },
     },
     schemas: {
@@ -1711,6 +1651,22 @@ export const programmablePublicOpenApi = {
       },
     },
   },
+  "x-programmable-availability": {
+    v1Reads: "live",
+    v1Create: {
+      status: "read-only",
+      httpStatus: 409,
+      errorCode: "CUSTOM_LAUNCH_V1_READ_ONLY",
+      retryable: false,
+    },
+    v2ReleaseCandidate: {
+      status: "held",
+      httpStatus: 503,
+      errorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE",
+      retryAfter: "honor-until-canary-and-public-activation",
+    },
+    legacyIntake: { registry: "closed", github: "closed" },
+  },
   "x-programmable-boundary": {
     identity:
       "Verified Classic V3, Registry-verified Custom, finalized Router-stamped Custom provenance, and the sole official Classic V2 main-token exception.",
@@ -1723,12 +1679,13 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, optional exact-source build inputs, and permit bindings, prepares one exact wallet action, reconciles exact state when its single-resource status is polled, and makes a bounded best-effort reconciliation pass over pending history rows. Exact-source provider verification runs independently after finality and never revises launch finality. Programmable does not assess attestation evidence, simulate the wallet transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "V1 list and single-resource reads preserve existing durable launch history, including a bounded best-effort reconciliation pass over pending history rows and precise single-resource polling. V1 creation is write-fenced and V2 remains held. Exact-source provider verification for existing finalized resources runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {
-      state: "grantable",
-      description: "Create and prepare a provenance-only Custom launch.",
+      state: "write-fenced",
+      description:
+        "A legacy key scope may exist, but V1 POST returns non-retryable CUSTOM_LAUNCH_V1_READ_ONLY.",
     },
     "custom-launch:read": {
       state: "grantable",

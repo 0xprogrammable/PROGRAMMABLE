@@ -40,9 +40,9 @@ Programmable is a launch platform for Uniswap v4 products. This repository conta
 contract workspace, the public read model and the evidence that binds what the product shows to deployed code.
 
 Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
-rewards. Custom is the API-first path for products that need their own hook, application logic or execution graph.
-An authenticated request binds one deterministic bundle to the controller wallet, and the wallet separately reviews
-and signs the prepared transaction.
+rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or
+execution graph. Public Custom creation is currently held: V1 reads remain live, V1 POST is read-only and V2 awaits
+canary and explicit public activation.
 Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
 capabilities, contracts and release evidence live in the public
 [`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets) repository.
@@ -135,9 +135,11 @@ provider availability or onchain lifecycle completion.
 | Prediction Markets           | [programmable.market/markets](https://programmable.market/markets)                                       |
 | Documentation                | [programmable.market/docs](https://programmable.market/docs)                                             |
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
-| Authenticated Custom writes  | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
+| Wallet-owned V1 launch reads | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
 | Custom Launch API readiness  | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                  |
 | Custom Launch CLI 1.0.1      | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
+| Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
+| Custom Launch V2 RC OpenAPI  | [held/private-canary contract](https://programmable.market/openapi/custom-launch-v2.json)                  |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
@@ -146,8 +148,10 @@ Ethereum contract addresses and integration data should come from the versioned 
 token names or third-party metadata. For Prediction Markets, use the canonical repository for the current networks,
 supported market types, economics, resolution rules, contract addresses and release evidence.
 
-The Custom Launch API is the live path for concrete Custom projects. Legacy Registry and GitHub submission intake is
-closed. API keys prepare and track a request but never sign or broadcast a controller-wallet transaction.
+V1 list and single-resource launch reads remain live for existing wallet-owned requests. V1 POST is read-only and
+returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. The fee-enforced V2 release candidate remains held until canary
+and explicit public activation; unavailable V2 requests return `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After`.
+There is currently no public Custom launch-creation route. Legacy Registry and GitHub submission intake is closed.
 
 ## Related repositories
 

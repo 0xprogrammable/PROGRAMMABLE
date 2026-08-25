@@ -26,13 +26,26 @@
 
 .openingBackdrop {
   align-items: center;
-  background: rgb(0 0 0 / 78%);
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  color: inherit;
   display: flex;
+  height: 100dvh;
   inset: 0;
   justify-content: center;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  overflow: hidden;
   padding: 1rem;
   position: fixed;
+  width: 100%;
   z-index: 1001;
+}
+
+.openingBackdrop::backdrop {
+  background: rgb(0 0 0 / 78%);
 }
 
 .openingDialog {

@@ -7,7 +7,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Package exact build artifacts, submit and track one wallet-bound Custom launch through the live V1 API.",
+    "Package exact build artifacts locally and read existing wallet-bound V1 Custom launch history.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
@@ -17,7 +17,7 @@ const customLaunchSections = [
   { id: "request", label: "Request contract" },
   { id: "verification", label: "Exact-source verification" },
   { id: "checks", label: "Attested checks" },
-  { id: "submit", label: "Submit and retry" },
+  { id: "submit", label: "Write fence" },
   { id: "lifecycle", label: "Lifecycle" },
   { id: "discovery", label: "Explore, Profile and claims" },
   { id: "errors", label: "Errors" },
@@ -79,7 +79,7 @@ const errors = [
   ],
   [
     "409",
-    "Replay an ambiguous request with its original body. For nonce conflict or permit expiry, use a new nonce and idempotency key as directed by the error code.",
+    "CUSTOM_LAUNCH_V1_READ_ONLY is the permanent V1 POST result. Do not retry it.",
   ],
   ["413", "Reduce the body to at most 8,388,608 bytes."],
   ["415", "Send Content-Type: application/json."],
@@ -93,7 +93,7 @@ const errors = [
   ],
   [
     "503",
-    "Retry later. If create is ambiguous, keep the same idempotency key and identical body.",
+    "Honor Retry-After for reads. CUSTOM_LAUNCH_V2_UNAVAILABLE means the V2 release candidate remains held.",
   ],
 ] as const;
 
@@ -101,7 +101,7 @@ export default function CustomLaunchApiDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers/custom-launch"
-      description="Submit one deterministic launch request, wait for an authorized wallet transaction and track the exact onchain result."
+      description="Package and validate exact launch artifacts locally, then read existing V1 launch history while public creation is held."
       kicker="Developer integration"
       parentHref="/docs/developers"
       parentLabel="Developers"
@@ -112,10 +112,15 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            The Custom Launch API is live. Legacy Registry and GitHub
-            submission intake is closed. Install the pinned public CLI, create
-            a key, derive <code>launch.json</code> from the exact build and stop
-            at the controller-wallet handoff.
+            V1 launch-history reads remain live, but V1 creation is read-only.
+            The fee-enforced V2 release candidate remains held until canary and
+            explicit public activation. Legacy Registry and GitHub submission
+            intake is closed. Its separate{" "}
+            <a href="/openapi/custom-launch-v2.json">
+              V2 machine contract
+            </a>{" "}
+            is for offline and private-canary integration, not public
+            authorization.
           </p>
         </div>
 
@@ -135,16 +140,15 @@ export default function CustomLaunchApiDocsPage() {
             derived hashes by hand.
           </li>
           <li>
-            Connect the controller wallet at{" "}
-            <Link href="/developers/api-keys">API keys</Link>, store the new key
-            as <code>PROGRAMMABLE_API_KEY</code>, then run <code>submit</code>{" "}
-            with the same pack config. Submit freshly repacks and requires
-            byte-identical request bytes before network access.
+            Use <Link href="/developers/api-keys">API keys</Link> to manage the
+            wallet-bound key for existing history. Store it as{" "}
+            <code>PROGRAMMABLE_API_KEY</code>.
           </li>
           <li>
-            Run <code>status REQUEST_UUID --watch --until authorized</code>.
-            The controller wallet reviews and signs separately. After
-            broadcast, poll until <code>finalized</code>.
+            Run <code>status REQUEST_UUID --watch --until finalized</code> only
+            for an existing V1 request. Do not run <code>submit</code> against
+            V1; it receives non-retryable{" "}
+            <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
           </li>
         </ol>
 
@@ -175,7 +179,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Connect the controller wallet on <code>programmable.market</code> to
-            create, list or revoke its keys.
+            list or revoke its keys.
           </li>
           <li>
             Send <code>Authorization: Bearer pm_live_...</code> only to{" "}
@@ -186,9 +190,9 @@ export default function CustomLaunchApiDocsPage() {
             API.
           </li>
           <li>
-            V1 keys have <code>custom-launch:create</code> and{" "}
-            <code>custom-launch:read</code>. A key can access only requests owned
-            by its bound wallet.
+            Existing V1 keys can use <code>custom-launch:read</code>. A legacy
+            <code>custom-launch:create</code> scope does not override the write
+            fence. A key can access only requests owned by its bound wallet.
           </li>
           <li>
             Store the secret outside source control and logs. Key lists never
@@ -205,11 +209,13 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="request">
         <div className={styles.sectionIntro}>
-          <h2>Use the closed request contract</h2>
+          <h2>Understand the retained V1 request contract</h2>
           <p>
-            <code>POST /v1/custom-launches</code> accepts a JSON object up to 8
-            MiB. The eight original V1 fields remain required; the exact-source
-            bundle is additive and optional for legacy compatibility.
+            After successful authentication and scope checks,{" "}
+            <code>POST /v1/custom-launches</code> returns{" "}
+            <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code> before reading an
+            idempotency key or body. The schema below remains available for
+            compatibility with existing resources and local tooling.
           </p>
         </div>
 
@@ -232,7 +238,9 @@ export default function CustomLaunchApiDocsPage() {
           per-target init code is limited to 49,152 bytes and initializer
           calldata to 131,072 bytes. Use the{" "}
           <a href="/openapi/custom-launch-v1.json">OpenAPI contract</a> for every
-          nested field, enum and bound.
+          V1 nested field, enum and bound. The held V2 profile, exact runtime
+          materialization and simulation response are defined separately in the{" "}
+          <a href="/openapi/custom-launch-v2.json">V2 RC contract</a>.
         </p>
 
         <p className={styles.bodyCopy}>
@@ -257,8 +265,8 @@ export default function CustomLaunchApiDocsPage() {
         <p className={styles.bodyCopy}>
           Standard JSON sources contain inline <code>content</code>; URL-only
           sources fail. Compilation units and components are uniquely UTF-8
-          sorted, and components exactly cover the graph. Legacy requests
-          without a bundle remain accepted and unverified.
+          sorted, and components exactly cover the graph. Existing legacy
+          resources without a bundle remain readable and unverified.
         </p>
 
         <aside className={styles.callout}>
@@ -295,46 +303,34 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="submit">
         <div className={styles.sectionIntro}>
-          <h2>Submit and retry safely</h2>
+          <h2>Stop at the public write fence</h2>
           <p>
-            <code>Idempotency-Key</code> must contain 16 to 128 characters from{" "}
-            <code>[A-Za-z0-9._:-]</code>.
+            V1 POST is not an active public creation path. Its authenticated
+            result is <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
           </p>
         </div>
 
         <ul className={styles.checkList}>
-          <li>A new request returns <code>202</code>.</li>
           <li>
-            An identical replay may return <code>200</code> with the original
-            resource.
+            Do not retry, rotate a nonce or change request bytes to bypass the
+            fence.
           </li>
           <li>
-            After an ambiguous timeout, <code>429</code> or <code>503</code>,
-            retry with the same key and byte-identical body. Honor{" "}
-            <code>Retry-After</code> as seconds or an HTTP date.
+            V1 list and single-resource reads remain live. Honor{" "}
+            <code>Retry-After</code> on read <code>429</code> or <code>503</code>.
           </li>
           <li>
-            Reusing the key with a changed body returns{" "}
-            <code>409 IDEMPOTENCY_CONFLICT</code>.
-          </li>
-          <li>
-            A conflicting wallet nonce returns <code>409 NONCE_CONFLICT</code>.
-            An expired permit requires a new request with a new nonce and
-            idempotency key.
+            The V2 release candidate is not public. Until canary and public
+            activation, unavailable V2 requests return{" "}
+            <code>503 CUSTOM_LAUNCH_V2_UNAVAILABLE</code> with{" "}
+            <code>Retry-After</code>.
           </li>
         </ul>
 
         <p className={styles.bodyCopy}>
-          The V1 contract states limits of 30 new reservations per rolling hour
-          and 100 per rolling day for the wallet principal and route. Exact
-          idempotent replays bypass quota. For <code>429</code>, wait for the{" "}
-          <code>Retry-After</code> delay.
-        </p>
-
-        <p className={styles.bodyCopy}>
-          Resource <code>requestHash</code> is the server&apos;s canonical
-          idempotency digest. It is distinct from the CLI receipt&apos;s local
-          SHA-256 of the exact <code>launch.json</code> bytes.
+          Service readiness does not activate a held write route. Wait for a
+          versioned public V2 contract and explicit activation notice before
+          treating launch creation as available.
         </p>
       </section>
 
@@ -467,6 +463,11 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             <a href="/openapi/custom-launch-v1.json">Open the V1 contract</a>
+          </li>
+          <li>
+            <a href="/openapi/custom-launch-v2.json">
+              Inspect the held V2 RC contract
+            </a>
           </li>
           <li>
             <Link href="/docs/developers/verify">Verify a token or pool</Link>

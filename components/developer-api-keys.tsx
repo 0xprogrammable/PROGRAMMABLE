@@ -331,8 +331,6 @@ function ExpirySelect({
     } else if (event.key === "Escape") {
       event.preventDefault();
       closeListbox();
-    } else if (event.key === "Tab") {
-      setOpen(false);
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       selectOption(index);
@@ -343,7 +341,17 @@ function ExpirySelect({
     <div className={styles.field}>
       <span id="api-key-expiry-label">Expires after</span>
       <input name="expiresInDays" type="hidden" value={value} />
-      <div className={styles.expirySelect} ref={rootRef}>
+      <div
+        className={styles.expirySelect}
+        ref={rootRef}
+        onBlurCapture={(event) => {
+          if (
+            event.relatedTarget instanceof Node
+            && event.currentTarget.contains(event.relatedTarget)
+          ) return;
+          setOpen(false);
+        }}
+      >
         <button
           ref={triggerRef}
           className={styles.expiryTrigger}

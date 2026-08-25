@@ -21,7 +21,7 @@ describe("Custom market selector UI", () => {
 
   it("uses branded native radio semantics when more markets exist", () => {
     expect(tradeSource).toContain("<fieldset");
-    expect(tradeSource).toContain("<legend>Verified market</legend>");
+    expect(tradeSource).toContain("<legend>Supported market</legend>");
     expect(tradeSource).toContain('type="radio"');
     expect(tradeSource).toContain("checked={selectedOption}");
     expect(tradeSource).toContain("onChange={() => onChange(market.marketId)}");

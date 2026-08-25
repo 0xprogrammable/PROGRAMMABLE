@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, open, readFile, rename, stat } from "node:fs/promises";
+import { chmod, link, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -94,17 +94,72 @@ export async function atomicWrite(filePath, bytes, mode = 0o600) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const temporary = path.join(
     directory,
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`,
   );
   const handle = await open(temporary, "wx", mode);
+  let prepared = false;
   try {
     await handle.writeFile(bytes);
+    await handle.sync();
+    prepared = true;
+  } finally {
+    await handle.close();
+    if (!prepared) {
+      await unlink(temporary).catch((error) => {
+        if (error?.code !== "ENOENT") throw error;
+      });
+    }
+  }
+  try {
+    await rename(temporary, filePath);
+    await chmod(filePath, mode);
+    await syncDirectory(directory);
+  } finally {
+    await unlink(temporary).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
+}
+
+export async function atomicCreate(filePath, bytes, mode = 0o600) {
+  const directory = path.dirname(filePath);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const temporary = path.join(
+    directory,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`,
+  );
+  const handle = await open(temporary, "wx", mode);
+  let prepared = false;
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+    prepared = true;
+  } finally {
+    await handle.close();
+    if (!prepared) {
+      await unlink(temporary).catch((error) => {
+        if (error?.code !== "ENOENT") throw error;
+      });
+    }
+  }
+  try {
+    await link(temporary, filePath);
+    await chmod(filePath, mode);
+  } finally {
+    await unlink(temporary).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
+  await syncDirectory(directory);
+}
+
+async function syncDirectory(directory) {
+  const handle = await open(directory, "r");
+  try {
     await handle.sync();
   } finally {
     await handle.close();
   }
-  await rename(temporary, filePath);
-  await chmod(filePath, mode);
 }
 
 export function defaultStateDirectory() {

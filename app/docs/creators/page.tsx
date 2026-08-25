@@ -8,7 +8,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Creators · Programmable",
   description:
-    "Prepare a Custom launch through the API and understand current creator paths and earnings.",
+    "Package a Custom project locally and understand current creator paths and earnings.",
   alternates: { canonical: "/docs/creators" },
 };
 
@@ -25,25 +25,26 @@ export default function CreatorsDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators"
-      description="Prepare a Custom launch through the API, understand the planned template policy or work with Programmable through a creator program."
+      description="Package a Custom project locally, understand the held public launch path and review current creator programs."
       sections={sections}
       title="Create with Programmable"
     >
       <section id="paths">
         <h2>Choose a creator path</h2>
         <p>
-          Custom project launches are available through the API. A reusable
-          template would be a different product for other people to use in
-          future launches, and its public intake is not open.
+          Public Custom launch creation is currently held. V1 reads remain live
+          for existing requests, while the fee-enforced V2 release candidate
+          awaits canary and public activation. Reusable-template intake is also
+          closed.
         </p>
 
         <div className={styles.pathGrid}>
           <Link className={styles.pathCard} href="/docs/creators/launch">
             <span>Custom Launch API</span>
-            <strong>Prepare one Custom launch</strong>
+            <strong>Package one Custom project</strong>
             <small>
-              Create a wallet-bound API key, submit one deterministic bundle and
-              wait for an authorized wallet transaction.
+              Build and validate one deterministic bundle locally, then review
+              the current API availability boundary.
             </small>
           </Link>
           <Link className={styles.pathCard} href="/docs/creators/templates">
@@ -61,9 +62,9 @@ export default function CreatorsDocsPage() {
         <h2>Launch a project</h2>
         <p>
           Build and test the project, then create a deterministic source and
-          graph bundle with project-specific tooling. Submit it through the
-          Custom Launch API with a wallet-bound key. The API validates the
-          declared commitments and graph bindings without reproducing the build.
+          graph bundle with project-specific tooling. Package and validate it
+          locally. V1 POST is read-only, and V2 is not public until its canary
+          and activation evidence is published.
         </p>
         <p>
           A prepared result contains the artifact but no wallet transaction.
@@ -86,9 +87,9 @@ export default function CreatorsDocsPage() {
           before the program, registry and recipient path are activated.
         </p>
         <p>
-          Public template intake is not active. The Custom Launch API accepts
-          one concrete project and token bundle; it does not publish reusable
-          templates.
+          Public template intake is not active. The retained Custom Launch API
+          contract models one concrete project and token bundle; it does not
+          publish reusable templates.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/templates">Read the template model</Link>
@@ -98,11 +99,11 @@ export default function CreatorsDocsPage() {
       <section id="review">
         <h2>Checks and wallet action</h2>
         <p>
-          The Custom Launch API checks one deterministic bundle and prepares an
-          exact artifact. After platform authorization, it exposes the exact
-          transaction for separate wallet review. A future template program
-          would separately bind one reusable version, parameter range and payout
-          identity.
+          Existing Custom Launch resources record checks for one deterministic
+          bundle and an exact artifact. An already authorized resource exposes
+          the exact transaction for separate wallet review. A future template
+          program would separately bind one reusable version, parameter range
+          and payout identity.
         </p>
         <p>
           Preparation and wallet execution are separate. An API result does not

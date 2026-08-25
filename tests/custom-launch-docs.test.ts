@@ -57,24 +57,27 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/prepared[\s\S]{0,240}(?:no wallet transaction|walletTransaction[^\n]{0,80}(?:null|both null))/i);
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
-    expect(createGuide).toContain("prepared has no wallet transaction");
-    expect(createGuide).toContain("stop at authorized");
+    expect(createGuide).toContain("Stop after local pack and validate");
+    expect(createGuide).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
   });
 
   it("documents the real packager and schema boundary without invented checks", () => {
     for (const source of [gitBookGuide, websiteGuide]) {
       expect(source).toContain("/openapi/custom-launch-v1.json");
+      expect(source).toContain("/openapi/custom-launch-v2.json");
       expect(source).toContain("does not publish a universal check-ID catalog");
       expect(source).toContain("programmable-launch");
       expect(source).toMatch(/do not (?:copy test-only hashes|enter\s+derived hashes by hand)/i);
     }
     expect(createGuide).toContain("/openapi/custom-launch-v1.json");
+    expect(createGuide).toContain("/openapi/custom-launch-v2.json");
     expect(createGuide).not.toMatch(/Hookbuilder-Skill|Hook Builder packages/);
   });
 
   it("keeps the raw guide and OpenAPI URLs compatible", () => {
     for (const source of [gitBookGuide, websiteGuide, developerDocsMarkdown]) {
       expect(source).toContain("/openapi/custom-launch-v1.json");
+      expect(source).toContain("/openapi/custom-launch-v2.json");
       expect(source).toContain("/developers/custom-launch-api-v1.md");
     }
   });
@@ -98,12 +101,57 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("verificationBundle");
       expect(source).toContain("exact_match");
       expect(source).toContain("PROGRAMMABLE_API_KEY");
-      expect(source).toMatch(/without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast/i);
+      expect(source).toMatch(/(?:without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast(?:ing)?|never[^\n]{0,80}sign[^\n]{0,40}broadcast)/i);
     }
     expect(gitBookGuide).toContain("examples/no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
-    expect(gitBookGuide).toContain("submit ./launch.json");
-    expect(gitBookGuide).toMatch(/submit[\s\S]{0,120}--config programmable-launch\.config\.json/);
+    expect(gitBookGuide).toContain("Do not run `submit` against V1");
+    expect(gitBookGuide).not.toMatch(/programmable-launch submit\s+\.\/launch\.json/);
+  });
+
+  it("publishes the exact dark-cutover contract without claiming a live write path", () => {
+    for (const source of [
+      gitBookGuide,
+      websiteGuide,
+      rawGuide,
+      developerDocsMarkdown,
+    ]) {
+      expect(source).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
+      expect(source).toMatch(/V1[^\n]{0,100}(?:read-only|write fence)/i);
+      expect(source).not.toContain("The Custom Launch API is live");
+    }
+    expect(createGuide).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
+    expect(createGuide).toContain("Do not submit");
+    for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
+      expect(source).toContain("CUSTOM_LAUNCH_V2_UNAVAILABLE");
+      expect(source).toContain("Retry-After");
+      expect(source).toMatch(/V2[^\n]{0,120}held/i);
+      expect(source).toContain("/openapi/custom-launch-v2.json");
+    }
+
+    const combinedPost =
+      programmablePublicOpenApi.paths["/v1/custom-launches"].post;
+    expect(combinedPost).toMatchObject({
+      deprecated: true,
+      summary: "V1 launch creation is read-only",
+    });
+    expect(Object.keys(combinedPost.responses)).toEqual(["401", "403", "409"]);
+    expect(programmablePublicOpenApi["x-programmable-availability"])
+      .toMatchObject({
+        v1Reads: "live",
+        v1Create: {
+          status: "read-only",
+          httpStatus: 409,
+          errorCode: "CUSTOM_LAUNCH_V1_READ_ONLY",
+          retryable: false,
+        },
+        v2ReleaseCandidate: {
+          status: "held",
+          httpStatus: 503,
+          errorCode: "CUSTOM_LAUNCH_V2_UNAVAILABLE",
+        },
+        legacyIntake: { registry: "closed", github: "closed" },
+      });
   });
 
   it("describes request-driven reconciliation consistently", () => {

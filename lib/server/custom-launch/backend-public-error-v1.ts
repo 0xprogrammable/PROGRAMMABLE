@@ -3,7 +3,7 @@ import "server-only";
 import { parseStrictJson } from "../projection-target/canonical-json";
 
 const MAXIMUM_ERROR_BODY_BYTES = 16_384;
-const PRESERVED_STATUSES = new Set([400, 409, 429]);
+const PRESERVED_STATUSES = new Set([400, 409, 429, 503]);
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$/u;
 const ERROR_CODE = /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/u;
 const RETRY_AFTER_SECONDS = /^[1-9][0-9]{0,4}$/u;
@@ -47,6 +47,8 @@ export async function readPreservedBackendPublicErrorV1(
       value.schemaVersion !== "programmable.api-error.v1"
       && value.schemaVersion !== "programmable.custom-launch-api.v1"
       && value.schemaVersion !== "programmable.custom-launch-list.v1"
+      && value.schemaVersion !== "programmable.custom-launch-list.v2"
+      && value.schemaVersion !== "programmable.custom-launch.v2"
     ) return null;
     const error = value.error;
     if (error === null || Array.isArray(error) || typeof error !== "object") {
@@ -60,6 +62,10 @@ export async function readPreservedBackendPublicErrorV1(
       || error.message.length > 512
       || /[\u0000-\u001f\u007f]/u.test(error.message)
     ) return null;
+    if (
+      response.status === 503
+      && error.code !== "CUSTOM_LAUNCH_V2_UNAVAILABLE"
+    ) return null;
 
     const bodyRequestId = error.requestId;
     const headerRequestId = response.headers.get("x-request-id");
@@ -69,7 +75,8 @@ export async function readPreservedBackendPublicErrorV1(
     if (requestId !== null && !REQUEST_ID.test(requestId)) return null;
 
     const retryAfterHeader = response.headers.get("retry-after");
-    const retryAfter = response.status === 429 && retryAfterHeader !== null
+    const retryAfter = (response.status === 429 || response.status === 503)
+      && retryAfterHeader !== null
       && RETRY_AFTER_SECONDS.test(retryAfterHeader)
       && Number(retryAfterHeader) <= 86_400
       ? retryAfterHeader

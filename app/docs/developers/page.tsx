@@ -14,7 +14,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Developer integration · Programmable",
   description:
-    "Prepare Custom launches with a wallet-bound API key, verify Router stamps or index new launches.",
+    "Read existing Custom launch history, verify Router stamps or index new launches.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
     type: "website",
@@ -53,7 +53,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Prepare a Custom launch with a wallet-bound API key, verify Router-stamped tokens and pools, or index new launches."
+      description="Read existing wallet-bound V1 launch history, verify Router-stamped tokens and pools, or index new launches."
       kicker="Developer integration"
       sections={developerSections}
       title="Integrate Programmable launches"
@@ -62,9 +62,9 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Choose a path</h2>
           <p>
-            Start with the task your product needs. Launch preparation is an
-            authenticated write path; verification and indexing are public read
-            paths.
+            Start with the task your product needs. V1 launch history remains
+            an authenticated read path; public launch creation is held.
+            Verification and indexing are public read paths.
           </p>
         </div>
 
@@ -72,13 +72,13 @@ export default function DeveloperDocsPage() {
           <li id="custom-api">
             <h3>
               <Link href="/docs/developers/custom-launch">
-                Prepare a Custom launch
+                Package locally and read launch history
               </Link>
             </h3>
             <p>
-              Create a wallet-bound key, submit one deterministic graph bundle
-              with caller-attested evidence and track it to an authorized wallet
-              transaction. The key cannot authorize, sign or broadcast.
+              Package and validate one deterministic graph locally, then use a
+              wallet-bound key to read existing V1 resources. V1 POST is
+              read-only and V2 is held until public activation.
             </p>
             <Link
               className={styles.textLink}
@@ -332,7 +332,7 @@ export default function DeveloperDocsPage() {
         <ul>
           <li>
             <Link href="/docs/developers/custom-launch">
-              Prepare a Custom launch
+              Read Custom launch availability
             </Link>
           </li>
           <li>

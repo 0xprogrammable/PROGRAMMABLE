@@ -16,6 +16,10 @@ import {
   resolveInside,
   sha256Digest,
 } from "./io.mjs";
+import {
+  hasCompilerImmutableReferences,
+  normalizeRuntimeMaterialization,
+} from "./runtime-immutables.mjs";
 
 const COMPILER_VERSION = /^0\.[0-9]+\.[0-9]+\+commit\.[0-9a-f]{8}$/;
 const HEX_BYTES = /^0x(?:[0-9a-f]{2})*$/;
@@ -104,21 +108,31 @@ export function validateStandardJsonInput(input, label) {
   }
 }
 
-export async function loadTargetArtifact(configured, index, sourceRoot, unitsById) {
+export async function loadTargetArtifact(
+  configured,
+  index,
+  sourceRoot,
+  unitsById,
+  { apiVersion = "v1" } = {},
+) {
+  if (apiVersion !== "v1" && apiVersion !== "v2") {
+    throw new TypeError("target artifact apiVersion must be v1 or v2");
+  }
+  const requiredTargetFields = [
+    "targetId",
+    "compilationUnitId",
+    "artifact",
+    "applicantSalt",
+    "constructorArguments",
+    "initializer",
+    "deploymentValueWei",
+    "initializerValueWei",
+    "componentKind",
+    "declaredHookPermissions",
+  ];
   assertAllowedKeys(
     configured,
-    [
-      "targetId",
-      "compilationUnitId",
-      "artifact",
-      "applicantSalt",
-      "constructorArguments",
-      "initializer",
-      "deploymentValueWei",
-      "initializerValueWei",
-      "componentKind",
-      "declaredHookPermissions",
-    ],
+    apiVersion === "v2" ? [...requiredTargetFields, "runtimeImmutables"] : requiredTargetFields,
     [],
     `targets[${index}]`,
   );
@@ -166,7 +180,7 @@ export async function loadTargetArtifact(configured, index, sourceRoot, unitsByI
     `artifact ${targetId} bytecode`,
   );
   const immutableReferences = bytecodeReferences(runtime, "immutableReferences");
-  if (Object.keys(immutableReferences).length !== 0) {
+  if (apiVersion === "v1" && hasCompilerImmutableReferences(immutableReferences)) {
     const error = new TypeError(
       `RUNTIME_MATERIALIZATION_REQUIRED: target ${targetId} has immutable references; this packer does not guess the deployed runtime`,
     );
@@ -182,6 +196,14 @@ export async function loadTargetArtifact(configured, index, sourceRoot, unitsByI
   if (!HEX_BYTES.test(runtimeCode) || runtimeCode === "0x") {
     throw new TypeError(`target ${targetId} resolved runtime code is invalid`);
   }
+  const runtimeMaterialization = apiVersion === "v2"
+    ? normalizeRuntimeMaterialization({
+      runtimeCode,
+      immutableReferences,
+      runtimeImmutables: configured.runtimeImmutables,
+      label: `target ${targetId}`,
+    })
+    : null;
 
   return {
     ...configured,
@@ -195,7 +217,8 @@ export async function loadTargetArtifact(configured, index, sourceRoot, unitsByI
     contractName,
     creationBytecode,
     runtimeCode,
-    expectedRuntimeCodeHash: keccak256(runtimeCode),
+    runtimeMaterialization,
+    expectedRuntimeCodeHash: runtimeMaterialization === null ? keccak256(runtimeCode) : null,
   };
 }
 
@@ -294,10 +317,21 @@ function assertCriticalSettingsMatch(inputSettings, metadataSettings, targetId) 
   assertPlainObject(metadataSettings, `artifact ${targetId} metadata.settings`);
   for (const key of ["optimizer", "evmVersion", "viaIR", "libraries", "remappings"]) {
     if (!Object.hasOwn(inputSettings, key) || !Object.hasOwn(metadataSettings, key)) continue;
-    if (canonicalizeJson(inputSettings[key] ?? null) !== canonicalizeJson(metadataSettings[key] ?? null)) {
+    const inputValue = key === "remappings"
+      ? normalizeMetadataRemappings(inputSettings[key])
+      : inputSettings[key] ?? null;
+    const metadataValue = key === "remappings"
+      ? normalizeMetadataRemappings(metadataSettings[key])
+      : metadataSettings[key] ?? null;
+    if (canonicalizeJson(inputValue) !== canonicalizeJson(metadataValue)) {
       throw new TypeError(`artifact ${targetId} ${key} settings differ from the exact Standard JSON input`);
     }
   }
+}
+
+function normalizeMetadataRemappings(value) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) return value;
+  return value.map((entry) => entry.startsWith(":") ? entry.slice(1) : entry).sort();
 }
 
 export function canonicalIdentifier(value, label) {

@@ -164,14 +164,14 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Creator overview",
     description:
-      "Prepare a Custom launch, understand earnings and read the planned template policy.",
+      "Package a Custom project locally, understand earnings and read the planned template policy.",
     href: "/docs/creators",
     keywords: ["creator", "earn", "launch"],
   },
   {
     title: "Launch a project",
     description:
-      "Create an API key, submit a deterministic bundle and review the transaction after authorization.",
+      "Package a deterministic bundle locally and check the held public launch boundary.",
     href: "/docs/creators/launch",
   },
   {
@@ -259,13 +259,13 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Developer overview",
     description:
-      "Prepare a Custom launch or choose a verification and indexing path.",
+      "Read existing Custom launch history or choose a verification and indexing path.",
     href: "/docs/developers",
   },
   {
     title: "Custom Launch API",
     description:
-      "Authenticate, submit and track one wallet-bound Custom launch.",
+      "Read existing V1 history and the explicit public write-fence contract.",
     href: "/docs/developers/custom-launch",
     keywords: [
       "custom API",

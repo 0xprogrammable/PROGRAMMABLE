@@ -133,7 +133,7 @@ async function assertCapabilityRuntimeV1(
   capability: DiscoverableMarketTradeCapabilityV1,
 ) {
   if (market.uniswapV4 === null) {
-    throw new CustomMarketTradeUnavailableErrorV1("The Custom market has no verified PoolKey");
+    throw new CustomMarketTradeUnavailableErrorV1("The Custom market has no supported PoolKey");
   }
   const dependencies = [
     ...capability.dependencies.map((dependency) => ({
@@ -191,7 +191,7 @@ async function currentPoolStateV1(
   const liquidity = uint(rawLiquidity, "StateView liquidity");
   if (sqrtPriceX96 === 0n || liquidity === 0n || tick === null) {
     throw new CustomMarketTradeUnavailableErrorV1(
-      "The verified Custom pool has no current tradable state",
+      "The supported Custom pool has no current tradable state",
     );
   }
   return { sqrtPriceX96, tick, liquidity };
@@ -371,7 +371,7 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
     || capability.deadlinePolicy.deadlineRequired !== true
     || input.request.slippageBps > capability.slippagePolicy.maximumSlippageBps) {
     throw new CustomMarketTradeUnavailableErrorV1(
-      "The Custom trade request does not match the verified market capability",
+      "The Custom trade request does not match the supported market capability",
     );
   }
   const actualChainId = await input.client.getChainId();
@@ -476,7 +476,7 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
     }
   } else if (inputCurrency.toLowerCase() !== ZERO_ADDRESS) {
     throw new CustomMarketTradeUnavailableErrorV1(
-      "The verified native-input side does not use native ETH",
+      "The supported native-input side does not use native ETH",
     );
   }
 

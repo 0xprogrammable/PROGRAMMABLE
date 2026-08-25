@@ -10,8 +10,10 @@ import {
 } from "./build.mjs";
 import { canonicalizeJson, parseStrictJson } from "./canonical-json.mjs";
 import {
-  AGENT_ATTESTATION_SCHEMA,
-  CREATE_REQUEST_SCHEMA,
+  AGENT_ATTESTATION_SCHEMA_V1,
+  AGENT_ATTESTATION_SCHEMA_V2,
+  CREATE_REQUEST_SCHEMA_V1,
+  CREATE_REQUEST_SCHEMA_V2,
   GRAPH_BUNDLE_SCHEMA,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
@@ -30,7 +32,24 @@ import {
   sha256Digest,
 } from "./io.mjs";
 import { buildLaunch } from "./pack.mjs";
-import { VERIFICATION_BUNDLE_SCHEMA } from "./verification.mjs";
+import {
+  assertDeployableRuntimeCode,
+  assertNoDelegatingRuntimeOpcodes,
+  materializeRuntimeCode,
+  normalizeRuntimeMaterialization,
+} from "./runtime-immutables.mjs";
+import {
+  buildLaunchIntentHash,
+  hashLaunchProfile,
+  validateEmbeddedLaunchProfile,
+  validateFeeEnforcedProfileBuilds,
+  validateFeeEnforcedProfileGraph,
+  validateLaunchProfileBinding,
+} from "./profile-v2.mjs";
+import {
+  VERIFICATION_BUNDLE_SCHEMA_V1,
+  VERIFICATION_BUNDLE_SCHEMA_V2,
+} from "./verification.mjs";
 
 const HEX32 = /^0x[0-9a-f]{64}$/;
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/;
@@ -65,6 +84,18 @@ export async function validateLaunchFile({ launchPath, configPath }) {
 }
 
 export function validateLaunchRequest(request) {
+  if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V1) {
+    return validateV1LaunchRequest(request);
+  }
+  if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V2) {
+    return validateV2LaunchRequest(request);
+  }
+  throw new TypeError(
+    `schemaVersion must be ${CREATE_REQUEST_SCHEMA_V1} or ${CREATE_REQUEST_SCHEMA_V2}`,
+  );
+}
+
+function validateV1LaunchRequest(request) {
   assertAllowedKeys(
     request,
     [
@@ -80,9 +111,107 @@ export function validateLaunchRequest(request) {
     ["verificationBundle"],
     "launch request",
   );
-  if (request.schemaVersion !== CREATE_REQUEST_SCHEMA) {
-    throw new TypeError(`schemaVersion must be ${CREATE_REQUEST_SCHEMA}`);
+  const common = validateCommonRequest(request);
+  validateAttestationV1(request.agentAttestation, common.graph.graphBundleHash);
+  const verification = request.verificationBundle === undefined
+    ? { verificationBundleHash: null, exactSourceIncluded: false }
+    : validateVerificationBundle(
+      request.verificationBundle,
+      common.graph.graphBundle,
+      common.graph.predictions,
+      "v1",
+    );
+  return {
+    schemaVersion: request.schemaVersion,
+    graphBundleHash: common.graph.graphBundleHash,
+    verificationBundleHash: verification.verificationBundleHash,
+    exactSourceIncluded: verification.exactSourceIncluded,
+    predictions: common.graph.predictions,
+  };
+}
+
+function validateV2LaunchRequest(request) {
+  assertExactKeys(request, [
+    "schemaVersion",
+    "launchWallet",
+    "chainId",
+    "nonce",
+    "sourceDescriptor",
+    "sourceBundleManifest",
+    "graphBundle",
+    "launchProfile",
+    "launchProfileSelection",
+    "launchProfileHash",
+    "launchIntentHash",
+    "agentAttestation",
+    "verificationBundle",
+  ], "launch request");
+  const common = validateCommonRequest(request);
+  if (canonicalizeJson(request.graphBundle) !== canonicalizeJson(common.graph.graphBundle)) {
+    throw new TypeError("V2 graphBundle must use the exact canonical target order and encoding");
   }
+  const verification = validateVerificationBundle(
+    request.verificationBundle,
+    common.graph.graphBundle,
+    common.graph.predictions,
+    "v2",
+  );
+  const launchProfile = validateEmbeddedLaunchProfile(request.launchProfile);
+  const launchProfileSelection = validateLaunchProfileBinding(request.launchProfileSelection, {
+    launchProfile,
+    graphBundle: common.graph.graphBundle,
+    predictions: common.graph.predictions,
+  });
+  const customModuleRuntime = verification.runtimeCodes.get(
+    launchProfileSelection.targetRoles.customModuleTargetId,
+  );
+  if (customModuleRuntime === undefined) {
+    throw new TypeError("verificationBundle does not contain the selected custom module runtime");
+  }
+  assertNoDelegatingRuntimeOpcodes(customModuleRuntime, "submitted custom module runtime");
+  const launchProfileHash = hashLaunchProfile(launchProfile);
+  if (request.launchProfileHash !== launchProfileHash) {
+    throw new TypeError("launchProfileHash does not match the closed embedded launchProfile");
+  }
+  validateFeeEnforcedProfileGraph(
+    launchProfile,
+    launchProfileSelection,
+    common.graph.graphBundle,
+    common.launchWallet,
+  );
+  validateFeeEnforcedProfileBuilds(
+    launchProfile,
+    launchProfileSelection,
+    common.graph.graphBundle,
+    request.verificationBundle,
+  );
+  const launchIntentHash = buildLaunchIntentHash({
+    launchWallet: common.launchWallet,
+    chainId: request.chainId,
+    nonce: request.nonce,
+    sourceDescriptor: common.sourceDescriptor,
+    sourceBundleManifest: common.manifest,
+    graphBundleHash: common.graph.graphBundleHash,
+    verificationBundleHash: verification.verificationBundleHash,
+    launchProfileHash,
+    launchProfileSelection,
+  });
+  if (request.launchIntentHash !== launchIntentHash) {
+    throw new TypeError("launchIntentHash does not match the normalized V2 launch intent");
+  }
+  validateAttestationV2(request.agentAttestation, launchIntentHash);
+  return {
+    schemaVersion: request.schemaVersion,
+    graphBundleHash: common.graph.graphBundleHash,
+    verificationBundleHash: verification.verificationBundleHash,
+    launchProfileHash,
+    launchIntentHash,
+    exactSourceIncluded: true,
+    predictions: common.graph.predictions,
+  };
+}
+
+function validateCommonRequest(request) {
   const launchWallet = getAddress(request.launchWallet);
   if (request.chainId !== MAINNET_CHAIN_ID) throw new TypeError("chainId must be string 1");
   if (typeof request.nonce !== "string" || !NONZERO_HEX32.test(request.nonce)) {
@@ -105,16 +234,11 @@ export function validateLaunchRequest(request) {
     throw new TypeError("graphBundle.sourceBundleSha256 does not match sourceDescriptor.bundleContentSha256");
   }
   const graph = normalizeAndPredictSubmittedGraph(request.graphBundle, launchWallet, request.nonce);
-  validateAttestation(request.agentAttestation, graph.graphBundleHash);
-  const verification = request.verificationBundle === undefined
-    ? { verificationBundleHash: null, exactSourceIncluded: false }
-    : validateVerificationBundle(request.verificationBundle, graph.graphBundle, graph.predictions);
   return {
-    schemaVersion: request.schemaVersion,
-    graphBundleHash: graph.graphBundleHash,
-    verificationBundleHash: verification.verificationBundleHash,
-    exactSourceIncluded: verification.exactSourceIncluded,
-    predictions: graph.predictions,
+    launchWallet,
+    manifest,
+    sourceDescriptor,
+    graph,
   };
 }
 
@@ -187,7 +311,7 @@ function validateSourceDescriptor(value, launchWallet) {
   return value;
 }
 
-function validateAttestation(value, graphBundleHash) {
+function validateAttestationV1(value, graphBundleHash) {
   assertExactKeys(value, [
     "schemaVersion",
     "subjectGraphBundleHash",
@@ -195,10 +319,29 @@ function validateAttestation(value, graphBundleHash) {
     "checkedAt",
     "checks",
   ], "agentAttestation");
-  if (value.schemaVersion !== AGENT_ATTESTATION_SCHEMA
+  if (value.schemaVersion !== AGENT_ATTESTATION_SCHEMA_V1
     || value.subjectGraphBundleHash !== graphBundleHash) {
     throw new TypeError("agentAttestation is not bound to the normalized graph bundle");
   }
+  validateAttestationMetadata(value);
+}
+
+function validateAttestationV2(value, launchIntentHash) {
+  assertExactKeys(value, [
+    "schemaVersion",
+    "subjectLaunchIntentHash",
+    "agentId",
+    "checkedAt",
+    "checks",
+  ], "agentAttestation");
+  if (value.schemaVersion !== AGENT_ATTESTATION_SCHEMA_V2
+    || value.subjectLaunchIntentHash !== launchIntentHash) {
+    throw new TypeError("agentAttestation is not bound to the normalized launch intent");
+  }
+  validateAttestationMetadata(value);
+}
+
+function validateAttestationMetadata(value) {
   canonicalIdentifier(value.agentId, "agentAttestation.agentId");
   if (typeof value.checkedAt !== "string" || !ISO_UTC.test(value.checkedAt)
     || new Date(value.checkedAt).toISOString() !== value.checkedAt) {
@@ -219,10 +362,13 @@ function validateAttestation(value, graphBundleHash) {
   }
 }
 
-function validateVerificationBundle(value, graphBundle, predictions) {
+function validateVerificationBundle(value, graphBundle, predictions, apiVersion) {
   assertExactKeys(value, ["schemaVersion", "compilationUnits", "components"], "verificationBundle");
-  if (value.schemaVersion !== VERIFICATION_BUNDLE_SCHEMA) {
-    throw new TypeError(`verificationBundle.schemaVersion must be ${VERIFICATION_BUNDLE_SCHEMA}`);
+  const expectedSchema = apiVersion === "v2"
+    ? VERIFICATION_BUNDLE_SCHEMA_V2
+    : VERIFICATION_BUNDLE_SCHEMA_V1;
+  if (value.schemaVersion !== expectedSchema) {
+    throw new TypeError(`verificationBundle.schemaVersion must be ${expectedSchema}`);
   }
   if (!Array.isArray(value.compilationUnits) || value.compilationUnits.length === 0
     || value.compilationUnits.length > 16) {
@@ -270,16 +416,26 @@ function validateVerificationBundle(value, graphBundle, predictions) {
     throw new TypeError("verificationBundle.components must exactly cover graph targets");
   }
   const predictionByTarget = new Map(predictions.map((prediction) => [prediction.targetId, prediction]));
+  const identities = new Map(predictions.map(({ targetId, predictedAddress }) => [
+    targetId,
+    predictedAddress,
+  ]));
   let priorTarget = null;
+  const runtimeCodes = new Map();
   for (const [index, component] of value.components.entries()) {
     const label = `verificationBundle.components[${index}]`;
-    assertExactKeys(component, [
+    const commonComponentKeys = [
       "targetId",
       "compilationUnitId",
       "sourcePath",
       "contractName",
       "constructorArguments",
-    ], label);
+    ];
+    assertExactKeys(
+      component,
+      apiVersion === "v2" ? [...commonComponentKeys, "runtimeMaterialization"] : commonComponentKeys,
+      label,
+    );
     const targetId = canonicalIdentifier(component.targetId, `${label}.targetId`);
     if (priorTarget !== null && compareUtf8(priorTarget, targetId) >= 0) {
       throw new TypeError("verification components must be uniquely UTF-8 sorted");
@@ -298,6 +454,15 @@ function validateVerificationBundle(value, graphBundle, predictions) {
     if (!prediction || prediction.resolvedConstructorArguments !== component.constructorArguments) {
       throw new TypeError(`${label}.constructorArguments do not match the resolved graph init code`);
     }
+    if (apiVersion === "v2") {
+      const runtimeCode = validateSubmittedRuntimeMaterialization(
+        component.runtimeMaterialization,
+        graphBundle.targets.find((target) => target.targetId === targetId),
+        identities,
+        label,
+      );
+      runtimeCodes.set(targetId, runtimeCode);
+    }
   }
   const graphIds = graphBundle.targets.map(({ targetId }) => targetId).sort(compareUtf8);
   const componentIds = value.components.map(({ targetId }) => targetId);
@@ -305,16 +470,110 @@ function validateVerificationBundle(value, graphBundle, predictions) {
     throw new TypeError("verification components do not exactly cover graph targets");
   }
   const normalized = {
-    schemaVersion: VERIFICATION_BUNDLE_SCHEMA,
+    schemaVersion: expectedSchema,
     compilationUnits: value.compilationUnits,
     components: value.components,
   };
   const verificationBundleHash = sha256Digest(Buffer.concat([
-    Buffer.from(VERIFICATION_BUNDLE_SCHEMA, "utf8"),
+    Buffer.from(expectedSchema, "utf8"),
     Buffer.from([0]),
     Buffer.from(canonicalizeJson(normalized), "utf8"),
   ]));
-  return { verificationBundleHash, exactSourceIncluded: true };
+  return { verificationBundleHash, exactSourceIncluded: true, runtimeCodes };
+}
+
+function validateSubmittedRuntimeMaterialization(value, graphTarget, identities, label) {
+  assertExactKeys(value, [
+    "immutableReferences",
+    "runtimeImmutables",
+    "deployedRuntimeCodeBase64",
+    "deployedRuntimeCodeHash",
+  ], `${label}.runtimeMaterialization`);
+  const runtimeBytes = decodeCanonicalBase64(
+    value.deployedRuntimeCodeBase64,
+    `${label}.runtimeMaterialization.deployedRuntimeCodeBase64`,
+  );
+  if (runtimeBytes.byteLength === 0) {
+    throw new TypeError(`${label}.runtimeMaterialization deployed runtime must not be empty`);
+  }
+  const runtimeCode = `0x${runtimeBytes.toString("hex")}`;
+  assertDeployableRuntimeCode(runtimeCode, `${label}.runtimeMaterialization deployed runtime`);
+  const runtimeHash = keccak256(runtimeCode);
+  if (typeof value.deployedRuntimeCodeHash !== "string"
+    || !/^0x(?!0{64}$)[0-9a-f]{64}$/.test(value.deployedRuntimeCodeHash)
+    || value.deployedRuntimeCodeHash !== runtimeHash
+    || graphTarget?.expectedRuntimeCodeHash !== runtimeHash) {
+    throw new TypeError(`${label}.runtimeMaterialization runtime hash does not match graph target`);
+  }
+  if (!Array.isArray(value.immutableReferences) || !Array.isArray(value.runtimeImmutables)) {
+    throw new TypeError(`${label}.runtimeMaterialization immutable metadata must be arrays`);
+  }
+  const occupied = [];
+  const referenceIds = [];
+  for (const [index, reference] of value.immutableReferences.entries()) {
+    const referenceLabel = `${label}.runtimeMaterialization.immutableReferences[${index}]`;
+    assertExactKeys(reference, ["immutableId", "ranges"], referenceLabel);
+    if (typeof reference.immutableId !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(reference.immutableId)
+      || !Array.isArray(reference.ranges) || reference.ranges.length === 0) {
+      throw new TypeError(`${referenceLabel} is invalid`);
+    }
+    if (referenceIds.length > 0
+      && BigInt(referenceIds.at(-1)) >= BigInt(reference.immutableId)) {
+      throw new TypeError(`${label}.runtimeMaterialization immutable ids must be uniquely sorted`);
+    }
+    referenceIds.push(reference.immutableId);
+    for (const [rangeIndex, range] of reference.ranges.entries()) {
+      assertExactKeys(range, ["start", "length"], `${referenceLabel}.ranges[${rangeIndex}]`);
+      if (!Number.isSafeInteger(range.start) || range.start < 0 || range.length !== 32
+        || range.start + range.length > runtimeBytes.byteLength) {
+        throw new TypeError(`${referenceLabel}.ranges[${rangeIndex}] is not an in-bounds 32-byte range`);
+      }
+      occupied.push({ start: range.start, end: range.start + range.length });
+    }
+  }
+  occupied.sort((left, right) => left.start - right.start);
+  for (let index = 1; index < occupied.length; index += 1) {
+    if (occupied[index].start < occupied[index - 1].end) {
+      throw new TypeError(`${label}.runtimeMaterialization immutable ranges overlap`);
+    }
+  }
+  const configuredIds = [];
+  for (const [index, immutable] of value.runtimeImmutables.entries()) {
+    const immutableLabel = `${label}.runtimeMaterialization.runtimeImmutables[${index}]`;
+    const keys = Object.keys(immutable).sort(compareUtf8).join(",");
+    if (keys !== "abiType,immutableId,literal" && keys !== "abiType,immutableId,target") {
+      throw new TypeError(`${immutableLabel} has invalid fields`);
+    }
+    if (typeof immutable.immutableId !== "string"
+      || !/^(?:0|[1-9][0-9]*)$/.test(immutable.immutableId)
+      || typeof immutable.abiType !== "string") {
+      throw new TypeError(`${immutableLabel} is invalid`);
+    }
+    configuredIds.push(immutable.immutableId);
+  }
+  if (referenceIds.length !== configuredIds.length
+    || referenceIds.some((immutableId, index) => immutableId !== configuredIds[index])) {
+    throw new TypeError(`${label}.runtimeMaterialization immutable metadata does not exactly cover compiler ids`);
+  }
+  const templateBytes = Buffer.from(runtimeBytes);
+  const compilerReferences = Object.fromEntries(value.immutableReferences.map((reference) => {
+    for (const range of reference.ranges) {
+      templateBytes.fill(0, range.start, range.start + range.length);
+    }
+    return [reference.immutableId, reference.ranges];
+  }));
+  const plan = normalizeRuntimeMaterialization({
+    runtimeCode: `0x${templateBytes.toString("hex")}`,
+    immutableReferences: compilerReferences,
+    runtimeImmutables: value.runtimeImmutables,
+    label: `${label}.runtimeMaterialization`,
+  });
+  if (materializeRuntimeCode(plan, identities, `${label}.runtimeMaterialization`) !== runtimeCode) {
+    throw new TypeError(
+      `${label}.runtimeMaterialization immutable values do not reproduce the submitted runtime`,
+    );
+  }
+  return runtimeCode;
 }
 
 function decodeCanonicalBase64(value, label) {

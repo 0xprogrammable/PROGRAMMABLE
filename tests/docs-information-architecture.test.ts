@@ -244,7 +244,8 @@ describe("Docs information architecture", () => {
     expect(creatorTemplatesPage).toContain("Public template intake is closed");
     expect(creatorTemplatesPage).not.toMatch(/submit[- a]+template/i);
     expect(creatorLaunchPage).toContain("The API does not control your wallet");
-    expect(creatorLaunchPage).toContain("Create a Custom launch API key");
+    expect(creatorLaunchPage).toContain("Manage Custom launch API keys");
+    expect(creatorLaunchPage).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
     expect(creatorLaunchPage).toContain("does not reproduce your build");
     expect(creatorLaunchPage).not.toContain(
       "Open public wallet self-service is not active",

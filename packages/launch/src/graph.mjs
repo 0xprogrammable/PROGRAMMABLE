@@ -28,6 +28,11 @@ import {
 } from "./constants.mjs";
 import { canonicalIdentifier } from "./build.mjs";
 import { compareUtf8, sha256Digest } from "./io.mjs";
+import {
+  assertDeployableRuntimeCode,
+  assertNoDelegatingRuntimeOpcodes,
+  materializeRuntimeCode,
+} from "./runtime-immutables.mjs";
 
 const LOWER_HEX32 = /^0x[0-9a-f]{64}$/;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
@@ -35,17 +40,42 @@ const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 const ROUTE_NAMESPACE_TYPEHASH = keccak256(stringToHex(API_ROUTE_NAMESPACE_TYPE));
 const TARGET_SALT_TYPEHASH = keccak256(stringToHex(GRAPH_TARGET_SALT_TYPE));
 
-export function buildGraphBundle({ targets, pool, sourceBundleSha256, launchWallet, nonce }) {
+export function buildGraphBundle({
+  targets,
+  pool,
+  sourceBundleSha256,
+  launchWallet,
+  nonce,
+  noDelegationRuntimeTargetIds = [],
+}) {
   if (!Array.isArray(targets) || targets.length === 0 || targets.length > MAX_GRAPH_TARGETS) {
     throw new TypeError("targets must contain between 1 and 16 targets");
   }
   const parsed = targets.map((target, index) => buildTargetInput(target, index));
   const ordered = topologicalTargetOrder(parsed);
   const byId = new Map(ordered.map((target) => [target.targetId, target]));
+  if (!Array.isArray(noDelegationRuntimeTargetIds)
+    || new Set(noDelegationRuntimeTargetIds).size !== noDelegationRuntimeTargetIds.length) {
+    throw new TypeError("noDelegationRuntimeTargetIds must be a unique target-id array");
+  }
+  const noDelegationTargets = new Set(noDelegationRuntimeTargetIds.map((targetId) => {
+    const normalized = canonicalIdentifier(targetId, "noDelegationRuntimeTargetIds entry");
+    if (!byId.has(normalized)) {
+      throw new TypeError(`runtime opcode policy references unknown target ${normalized}`);
+    }
+    return normalized;
+  }));
   for (const target of ordered) {
     for (const locator of [...target.constructorAddressLocators, ...target.initializerAddressLocators]) {
       if (!byId.has(locator.targetId)) {
         throw new TypeError(`target ${target.targetId} references unknown target ${locator.targetId}`);
+      }
+    }
+    for (const immutable of target.internal?.runtimeMaterialization?.runtimeImmutables ?? []) {
+      if (Object.hasOwn(immutable, "target") && !byId.has(immutable.target)) {
+        throw new TypeError(
+          `target ${target.targetId} runtime immutable references unknown target ${immutable.target}`,
+        );
       }
     }
   }
@@ -55,11 +85,12 @@ export function buildGraphBundle({ targets, pool, sourceBundleSha256, launchWall
     throw new TypeError("the graph requires exactly one token target and one hook target");
   }
   const normalizedPool = normalizePool(pool, tokenTargets[0].targetId, hookTargets[0].targetId);
-  const { predictions, resolvedTargets } = predictGraph({
+  const { predictions, resolvedTargets, runtimeCodes } = predictGraph({
     ordered,
     sourceBundleSha256,
     launchWallet: getAddress(launchWallet),
     nonce,
+    noDelegationTargets,
   });
   const graphBundle = {
     schemaVersion: GRAPH_BUNDLE_SCHEMA,
@@ -68,7 +99,7 @@ export function buildGraphBundle({ targets, pool, sourceBundleSha256, launchWall
     pool: normalizedPool,
   };
   const graphBundleHash = sha256Digest(Buffer.from(canonicalizeJson(graphBundle), "utf8"));
-  return { graphBundle, graphBundleHash, predictions };
+  return { graphBundle, graphBundleHash, predictions, runtimeCodes };
 }
 
 export function normalizeAndPredictSubmittedGraph(graphInput, launchWallet, nonce) {
@@ -233,11 +264,13 @@ function buildTargetInput(target, index) {
     initializerAddressLocators: initializer.locators,
     deploymentValueWei,
     initializerValueWei,
-    expectedRuntimeCodeHash: canonicalHex32(
-      target.expectedRuntimeCodeHash,
-      `target ${targetId}.expectedRuntimeCodeHash`,
-      false,
-    ),
+    expectedRuntimeCodeHash: target.runtimeMaterialization === null
+      ? canonicalHex32(
+        target.expectedRuntimeCodeHash,
+        `target ${targetId}.expectedRuntimeCodeHash`,
+        false,
+      )
+      : null,
     componentKind,
     declaredHookPermissions,
     internal: {
@@ -245,6 +278,8 @@ function buildTargetInput(target, index) {
       compilationUnitId: target.compilationUnitId,
       sourcePath: target.sourcePath,
       contractName: target.contractName,
+      runtimeCode: target.runtimeCode,
+      runtimeMaterialization: target.runtimeMaterialization,
     },
   };
 }
@@ -435,7 +470,13 @@ function topologicalTargetOrder(targets) {
   return ordered;
 }
 
-function predictGraph({ ordered, sourceBundleSha256, launchWallet, nonce }) {
+function predictGraph({
+  ordered,
+  sourceBundleSha256,
+  launchWallet,
+  nonce,
+  noDelegationTargets = new Set(),
+}) {
   const sourceHash = `0x${sourceBundleSha256.slice("sha256:".length)}`;
   const routeNamespace = keccak256(encodeAbiParameters(
     parseAbiParameters("bytes32,bytes32,address,address,address"),
@@ -444,6 +485,7 @@ function predictGraph({ ordered, sourceBundleSha256, launchWallet, nonce }) {
   const identities = new Map();
   const predictions = [];
   const resolvedTargets = [];
+  const runtimeCodes = [];
   let totalBytes = 0;
   for (const target of ordered) {
     const constructorArguments = patchAddressLocators(
@@ -484,7 +526,6 @@ function predictGraph({ ordered, sourceBundleSha256, launchWallet, nonce }) {
       }
     }
     totalBytes += initCodeBytes;
-    resolvedTargets.push({ ...target, applicantSalt });
     predictions.push({
       targetId: target.targetId,
       applicantSalt,
@@ -496,6 +537,30 @@ function predictGraph({ ordered, sourceBundleSha256, launchWallet, nonce }) {
     });
   }
   for (const [index, target] of ordered.entries()) {
+    const runtimeCode = target.internal?.runtimeMaterialization === null
+      || target.internal?.runtimeMaterialization === undefined
+      ? target.internal?.runtimeCode ?? null
+      : materializeRuntimeCode(
+        target.internal.runtimeMaterialization,
+        identities,
+        `runtime for ${target.targetId}`,
+      );
+    const expectedRuntimeCodeHash = runtimeCode === null
+      ? canonicalHex32(
+        target.expectedRuntimeCodeHash,
+        `target ${target.targetId}.expectedRuntimeCodeHash`,
+        false,
+      )
+      : keccak256(runtimeCode);
+    if (runtimeCode !== null) {
+      assertDeployableRuntimeCode(runtimeCode, `target ${target.targetId} deployed runtime`);
+    }
+    if (noDelegationTargets.has(target.targetId)) {
+      if (runtimeCode === null) {
+        throw new TypeError(`runtime opcode policy cannot inspect target ${target.targetId}`);
+      }
+      assertNoDelegatingRuntimeOpcodes(runtimeCode, `custom module ${target.targetId}`);
+    }
     const initializerCalldata = patchAddressLocators(
       target.initializerCalldata,
       target.initializerAddressLocators,
@@ -510,10 +575,12 @@ function predictGraph({ ordered, sourceBundleSha256, launchWallet, nonce }) {
       throw new TypeError(`target ${target.targetId} has initializer value without calldata`);
     }
     totalBytes += byteLength;
+    resolvedTargets.push({ ...target, expectedRuntimeCodeHash, applicantSalt: predictions[index].applicantSalt });
+    if (runtimeCode !== null) runtimeCodes.push({ targetId: target.targetId, runtimeCode });
     predictions[index].resolvedInitializerCalldata = initializerCalldata;
   }
   if (totalBytes > MAX_GRAPH_INPUT_BYTES) throw new TypeError("graph exceeds the aggregate byte limit");
-  return { predictions, resolvedTargets };
+  return { predictions, resolvedTargets, runtimeCodes };
 }
 
 function resolveSaltAndAddress({ target, routeNamespace, nonce, targetIdHash, initCodeHash }) {

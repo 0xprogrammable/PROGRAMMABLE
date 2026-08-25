@@ -9,7 +9,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Documentation · Programmable",
   description:
-    "Understand Programmable, prepare a Custom launch through the API or integrate verified launch data.",
+    "Understand Programmable, package a Custom project locally or integrate verified launch data.",
   alternates: { canonical: "/docs" },
 };
 
@@ -32,7 +32,7 @@ const paths = [
   },
   {
     description:
-      "Build a project, prepare it through the API and understand how creators earn.",
+      "Build and package a project locally, then read the current public activation boundary.",
     href: "/docs/creators",
     label: "Create with Programmable",
     meta: "Creators",
@@ -111,8 +111,9 @@ export default function DocsIndexPage() {
           <div>
             <h3>Creators</h3>
             <p>
-              Build a concrete project, prepare it through the Custom Launch API
-              and review the exact transaction after it is authorized.
+              Build and package a concrete project locally. Public Custom
+              creation remains held until the V2 release is explicitly
+              activated.
             </p>
           </div>
           <div>
@@ -254,8 +255,8 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Custom Launch API keys</strong>
                 <small>
-                  Create a wallet-bound key for Custom launch requests and
-                  status reads.
+                  Manage wallet-bound keys for existing V1 launch-history
+                  reads.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />

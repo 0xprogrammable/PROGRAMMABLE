@@ -19,6 +19,7 @@ export const CUSTOM_LAUNCH_MAINNET_ROUTER_V1 =
   CANONICAL_LAUNCH_STAMP_V1.routerAddress;
 
 const UINT256_MAXIMUM = (1n << 256n) - 1n;
+const MINIMUM_WALLET_SUBMISSION_WINDOW_SECONDS = 30n;
 const WALLET_TRANSACTION_KEYS = Object.freeze([
   "schemaVersion",
   "chainId",
@@ -53,6 +54,10 @@ export type CustomLaunchWalletActionV1 = Readonly<{
   valueWei: string;
 }>;
 
+export type CustomLaunchAuthorizationResultSchema =
+  | "programmable.custom-launch-authorization-result.v1"
+  | "programmable.custom-launch-authorization-result.v2";
+
 export class CustomLaunchWalletHandoffErrorV1 extends Error {
   constructor() {
     super(
@@ -66,9 +71,26 @@ export function prepareCustomLaunchWalletActionV1(
   output: unknown,
   connectedController: string,
 ): CustomLaunchWalletActionV1 {
+  return prepareCustomLaunchWalletActionForAuthorizationSchema(
+    output,
+    connectedController,
+    "programmable.custom-launch-authorization-result.v1",
+  );
+}
+
+/**
+ * Shared exact Router parser for the additive V1 and V2 authorization
+ * envelopes. The transaction, permit, and calldata contracts remain V1; only
+ * the top-level result schema is route-versioned.
+ */
+export function prepareCustomLaunchWalletActionForAuthorizationSchema(
+  output: unknown,
+  connectedController: string,
+  expectedResultSchema: CustomLaunchAuthorizationResultSchema,
+): CustomLaunchWalletActionV1 {
   const controller = requiredAddress(connectedController);
   const result = record(output);
-  if (result.schemaVersion !== "programmable.custom-launch-authorization-result.v1") {
+  if (result.schemaVersion !== expectedResultSchema) {
     return invalid();
   }
 
@@ -115,6 +137,7 @@ export function prepareCustomLaunchWalletActionV1(
   const valueWei = canonicalUint256(transaction.valueWei);
   const validAfter = canonicalUint256(permit.validAfter);
   const deadline = canonicalUint256(permit.deadline);
+  const nowUnixSeconds = BigInt(Math.floor(Date.now() / 1_000));
   const routePayloadHash = exactBytes32(permit.routePayloadHash);
   const expectedResultHash = exactBytes32(permit.expectedResultHash);
   const stampRequestHash = exactBytes32(permit.stampRequestHash);
@@ -127,6 +150,9 @@ export function prepareCustomLaunchWalletActionV1(
     || unsignedTransaction.valueWei !== valueWei.source
     || signedPermit.validAfter !== validAfter.source
     || signedPermit.deadline !== deadline.source
+    || validAfter.parsed > nowUnixSeconds
+    || deadline.parsed <=
+      nowUnixSeconds + MINIMUM_WALLET_SUBMISSION_WINDOW_SECONDS
     || !sameHex(signedPermitDigest, permitDigest)
     || !sameSha256(signedPermit.artifactHash, artifact.artifactHash)
   ) return invalid();

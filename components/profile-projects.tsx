@@ -357,7 +357,7 @@ export function ProfileProjects({
           Launches could not be refreshed. Select Refresh to try again.
         </p>
       ) : visibleProjects.length === 0 ? (
-        <p className={styles.empty}>Your verified launches will appear here.</p>
+        <p className={styles.empty}>Your finalized launches will appear here.</p>
       ) : (
         <div className={styles.list}>
           {pageData.items.map((project) => {
@@ -385,7 +385,7 @@ export function ProfileProjects({
               <div className={styles.copy}>
                 <strong>{project.name}</strong>
                 <span>
-                  {project.symbol ? `$${project.symbol}` : "Verified launch"}
+                  {project.symbol ? `$${project.symbol}` : "Finalized launch"}
                   <small className={styles.launchType}>{launchType}</small>
                 </span>
                 {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label ? (
@@ -509,32 +509,42 @@ function CreatorArticleEditorOpening({
   project,
   onClose,
 }: Readonly<{ project: CreatorProjectSummaryV1; onClose(): void }>) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previouslyFocused = window.document.activeElement instanceof HTMLElement
+      ? window.document.activeElement
+      : null;
     const previousOverflow = window.document.body.style.overflow;
     window.document.body.style.overflow = "hidden";
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
+    if (!dialog.open) dialog.showModal();
+    closeRef.current?.focus({ preventScroll: true });
     return () => {
       window.document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
+      if (dialog.open) dialog.close();
+      previouslyFocused?.focus({ preventScroll: true });
     };
-  }, [onClose]);
+  }, []);
 
   if (typeof document === "undefined") return null;
   return createPortal((
-    <div className={styles.openingBackdrop} role="presentation">
+    <dialog
+      ref={dialogRef}
+      className={styles.openingBackdrop}
+      aria-labelledby="opening-creator-article-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className={styles.openingDialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="opening-creator-article-title"
       >
         <div className={styles.openingIdentity}>
           <div className={styles.openingArt}>
@@ -543,7 +553,7 @@ function CreatorArticleEditorOpening({
             ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
           </div>
           <div>
-            <p>{project.symbol ? `$${project.symbol}` : "Verified project"}</p>
+            <p>{project.symbol ? `$${project.symbol}` : "Finalized project"}</p>
             <h2 id="opening-creator-article-title">Opening article…</h2>
           </div>
         </div>
@@ -552,7 +562,7 @@ function CreatorArticleEditorOpening({
           <X aria-hidden="true" size={18} />
         </button>
       </section>
-    </div>
+    </dialog>
   ), document.body);
 }
 
