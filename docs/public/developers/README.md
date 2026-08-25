@@ -8,9 +8,9 @@ Programmable has two separate developer surfaces. The Developer API at `https://
 
 ## Prepare a Custom launch
 
-Start with the [Custom Launch API guide](custom-launch.md). Create or revoke a key at [Custom Launch API keys](https://programmable.market/developers/api-keys), then send deterministic bundles only to `https://api.programmable.market/v1/custom-launches`.
+Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` CLI, create or revoke a key at [Custom Launch API keys](https://programmable.market/developers/api-keys), then send deterministic bundles only to `https://api.programmable.market/v1/custom-launches`. The API is live; legacy Registry and GitHub submission intake is closed.
 
-The key can create and read launch preparations for its wallet principal. It cannot authorize, sign or broadcast. A `prepared` response contains an exact artifact but no wallet transaction. Only `authorized` contains the exact transaction for the controller wallet to review, sign and broadcast separately.
+The key can create and read launch preparations for its wallet principal. Keep it only as `PROGRAMMABLE_API_KEY` in an encrypted secret store. It cannot authorize, sign or broadcast. A `prepared` response contains an exact artifact but no wallet transaction. Only `authorized` contains the exact transaction for the controller wallet to review, sign and broadcast separately.
 
 ## Start with discovery
 

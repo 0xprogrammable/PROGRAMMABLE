@@ -197,6 +197,18 @@
   flex: none;
 }
 
+.sourceVerification {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+
+.sourceVerification[data-status="verified"] {
+  color: var(--token-accent);
+  font-weight: 650;
+}
+
 .explorerLink {
   flex: none;
   justify-content: center;

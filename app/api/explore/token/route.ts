@@ -15,19 +15,22 @@ import {
 import {
   mergeRouterCustomExploreEntriesV1,
   publicLaunchSourceV1,
-  readFinalizedRouterCustomExploreEntriesV1,
+  readFinalizedRouterCustomIdentitySnapshotV1,
   ROUTER_CUSTOM_FINALITY_CONFIRMATIONS,
   ROUTER_CUSTOM_LAUNCH_SOURCE,
-  routerCustomEntriesAtOrBeforeBlockV1,
 } from "../../../../lib/alchemy/router-custom-public.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
+import { readProductionSourceVerificationDisplayV1 } from
+  "../../../../lib/server/custom-launch/source-verification-display-v1";
 import { routerTradeProjectForEntryV1 } from
   "../../../../lib/custom-launch/router-trade-adapter-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
 import { readPublicCreatorArticleV1 } from
   "../../../../lib/server/creator-article/public-read.server";
+import { canonicalSha256 } from
+  "../../../../lib/server/projection-target/hashing";
 import type {
   CanonicalTokenExploreEntry,
   ExploreEntry,
@@ -50,7 +53,8 @@ function canonicalResponseHeaders(input: Readonly<{
   marketStatus: "complete" | "partial" | "unavailable";
   launchSource: string;
   lastIndexedAt: string;
-  routerStatus: "current" | "unavailable";
+  canonicalStatus: "current" | "last-known-good" | "unavailable";
+  routerStatus: "current" | "last-known-good" | "unavailable";
 }>) {
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
@@ -58,6 +62,7 @@ function canonicalResponseHeaders(input: Readonly<{
     "X-Programmable-Read-Source": `${input.launchSource}+dexscreener`,
     "X-Programmable-Market-Provider": "dexscreener",
     "X-Programmable-Market-Read-Status": input.marketStatus,
+    "X-Programmable-Canonical-Read-Status": input.canonicalStatus,
     "X-Programmable-Router-Read-Status": input.routerStatus,
     "X-Programmable-Identity-Last-Indexed-At": input.lastIndexedAt,
     ...(input.hasDexscreenerPrice
@@ -115,27 +120,18 @@ export async function GET(request: NextRequest) {
 
   const requestedTokenAddress = getAddress(input);
   const address = requestedTokenAddress.toLowerCase();
-  let catalog;
-  try {
-    catalog = await readEnvioClassicV3CatalogV1({
-      signal: readSignal,
-      deadlineMs,
-    });
-  } catch (error) {
-    console.error("Token detail identity read failed", {
-      name: error instanceof Error ? error.name : "LaunchCatalogError",
-    });
-    return unavailableResponse({
-      "X-Programmable-Launch-Source": "envio-classic-v3",
-      "X-Programmable-Market-Provider": "dexscreener",
-      "X-Programmable-Read-Source": "envio-classic-v3+dexscreener",
-    });
-  }
-
-  const canonicalEntry = catalog.entries.find(
-    (candidate) => candidate.exploreKind === "token" &&
-      tokenAddress(candidate) === address,
-  ) ?? null;
+  const catalogRead = readEnvioClassicV3CatalogV1({
+    signal: readSignal,
+    deadlineMs,
+  }).then(
+    (catalog) => catalog,
+    () => {
+      console.error("Token detail Envio identity read unavailable", {
+        name: "EnvioClassicV3ReadError",
+      });
+      return null;
+    },
+  );
   const registryEnabled = isCustomLaunchRegistryPublicReadEnabled();
   const registryRead = registryEnabled
     ? readProductionCustomExploreDirectoryV1(readSignal).then(
@@ -160,18 +156,16 @@ export async function GET(request: NextRequest) {
         failed: false,
         status: "unavailable" as const,
       });
-  const routerRead = readFinalizedRouterCustomExploreEntriesV1({
+  const routerRead = readFinalizedRouterCustomIdentitySnapshotV1({
     signal: readSignal,
     deadlineMs,
   }).then(
-    (verified) => ({
-      entries: routerCustomEntriesAtOrBeforeBlockV1(
-        verified,
-        catalog.asOfBlock,
-      ),
-      failed: false,
-      status: "current" as const,
-      verifiedIdentityCount: verified.length,
+    (snapshot) => ({
+      entries: snapshot.entries,
+      failed: snapshot.status !== "current",
+      status: snapshot.status,
+      snapshot,
+      verifiedIdentityCount: snapshot.entries.length,
     }),
     () => {
       console.error("Token detail Router Custom read unavailable", {
@@ -181,14 +175,17 @@ export async function GET(request: NextRequest) {
         entries: [] as readonly CanonicalTokenExploreEntry[],
         failed: true,
         status: "unavailable" as const,
+        snapshot: null,
         verifiedIdentityCount: 0,
       };
     },
   );
-  const [registryReadResult, routerReadResult] = await Promise.all([
+  const [catalog, registryReadResult, routerReadResult] = await Promise.all([
+    catalogRead,
     registryRead,
     routerRead,
   ]);
+  const canonicalReadFailed = catalog === null || catalog.status !== "current";
   let registryCustomStatus = registryReadResult.status;
   let routerCustomStatus = routerReadResult.status;
   let registryReadFailed = registryReadResult.failed;
@@ -198,10 +195,21 @@ export async function GET(request: NextRequest) {
   const requestedRouterIdentityRead = routerEntries.some(
     (candidate) => tokenAddress(candidate) === address,
   );
+  const canonicalEntry = catalog?.entries.find(
+    (candidate) => candidate.exploreKind === "token" &&
+      tokenAddress(candidate) === address,
+  ) ?? null;
+  if (catalog === null) {
+    // Registry projects do not carry an independent onchain snapshot.
+    // Only the Router lane may stand alone on its bound durable cursor.
+    customEntries = [];
+    registryCustomStatus = "unavailable";
+    registryReadFailed = registryEnabled;
+  }
   let registryIdentityEntries: readonly ExploreEntry[];
   try {
     registryIdentityEntries = mergeEnvioClassicV3CatalogEntriesV1(
-      catalog.entries,
+      catalog?.entries ?? [],
       customEntries,
     );
   } catch {
@@ -209,7 +217,7 @@ export async function GET(request: NextRequest) {
       name: "CustomRegistryIdentityError",
     });
     customEntries = [];
-    registryIdentityEntries = catalog.entries;
+    registryIdentityEntries = catalog?.entries ?? [];
     registryCustomStatus = "unavailable";
     registryReadFailed = registryEnabled;
   }
@@ -231,54 +239,121 @@ export async function GET(request: NextRequest) {
   const entry: ExploreEntry | null = identityEntries.find(
     (candidate) => tokenAddress(candidate) === address,
   ) ?? null;
+  if (
+    catalog === null &&
+    (routerReadResult.snapshot === null ||
+      routerCustomStatus === "unavailable")
+  ) {
+    return unavailableResponse({
+      "X-Programmable-Launch-Source": ROUTER_CUSTOM_LAUNCH_SOURCE,
+      "X-Programmable-Read-Source": ROUTER_CUSTOM_LAUNCH_SOURCE,
+      "X-Programmable-Router-Read-Status": routerCustomStatus,
+    });
+  }
   const customStatus =
     registryCustomStatus === "current" && routerCustomStatus === "current"
       ? "current" as const
+      : registryCustomStatus === "current" &&
+          routerCustomStatus === "last-known-good"
+        ? "last-known-good" as const
       : "unavailable" as const;
+  const routerAvailable = routerCustomStatus !== "unavailable";
+  const acceptedRouterSnapshot = routerAvailable
+    ? routerReadResult.snapshot
+    : null;
   const launchSource = publicLaunchSourceV1({
+    envioAvailable: catalog !== null,
     registryCustomCurrent: registryCustomStatus === "current",
-    routerCustomCurrent: routerCustomStatus === "current",
+    routerCustomCurrent: routerAvailable,
   });
   const projectedRouterIdentityCount = identityEntries.filter(
     (candidate) => candidate.exploreKind === "token" &&
       candidate.launchCategoryProvenance.source ===
         ROUTER_CUSTOM_LAUNCH_SOURCE,
   ).length;
+  const routerOwnsAggregateBoundary = acceptedRouterSnapshot !== null &&
+    (catalog === null ||
+      BigInt(acceptedRouterSnapshot.asOfBlock) > BigInt(catalog.asOfBlock));
+  const identityAsOfBlock = routerOwnsAggregateBoundary
+    ? acceptedRouterSnapshot!.asOfBlock
+    : catalog?.asOfBlock ?? "0";
+  const identityAsOfBlockHash = routerOwnsAggregateBoundary
+    ? acceptedRouterSnapshot!.asOfBlockHash
+    : catalog?.asOfBlockHash;
+  const identityGeneratedAt = catalog?.generatedAt ??
+    acceptedRouterSnapshot!.generatedAt;
+  const identityCommitment = catalog === null
+    ? canonicalSha256("programmable.public-identity-fallback.v1", {
+        chainId: 1,
+        launchSource: ROUTER_CUSTOM_LAUNCH_SOURCE,
+        asOfBlock: identityAsOfBlock,
+        entries: identityEntries,
+      })
+    : envioClassicV3IdentityCommitmentV1(catalog, identityEntries);
+  const catalogScope = catalog?.scope ?? {
+    included: [] as readonly string[],
+    excluded: [
+      "classic-v1",
+      "classic-v2",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ] as const,
+    publicCategories: ["classic", "custom"] as const,
+  };
+  const includedSources = new Set<string>(catalogScope.included);
+  if (registryCustomStatus === "current") {
+    includedSources.add("registry.custom-launched");
+  }
+  if (routerAvailable) includedSources.add(ROUTER_CUSTOM_LAUNCH_SOURCE);
   const catalogBoundary = {
-    source: catalog.source,
+    source: "envio-classic-v3" as const,
     launchSource,
-    status: catalog.status,
-    lastIndexedAt: catalog.generatedAt,
-    asOfBlock: catalog.asOfBlock,
-    asOfBlockHash: catalog.asOfBlockHash,
+    status: catalog?.status ?? "last-known-good" as const,
+    lastIndexedAt: identityGeneratedAt,
+    asOfBlock: identityAsOfBlock,
+    asOfBlockHash: identityAsOfBlockHash,
     identityCount: identityEntries.length,
-    identityCommitment: envioClassicV3IdentityCommitmentV1(
-      catalog,
-      identityEntries,
-    ),
+    identityCommitment,
     completeness: {
-      ...catalog.completeness,
+      ...(catalog?.completeness ?? {
+        classic: "unavailable" as const,
+        stock: "excluded" as const,
+        custom: "unavailable" as const,
+      }),
       custom: customStatus,
       registryCustom: registryCustomStatus,
       routerCustom: routerCustomStatus,
     },
     scope: {
-      ...catalog.scope,
-      included: routerCustomStatus === "current"
-        ? [...catalog.scope.included, ROUTER_CUSTOM_LAUNCH_SOURCE]
-        : catalog.scope.included,
+      ...catalogScope,
+      included: [...includedSources],
     },
-    evidence: catalog.evidence,
+    ...(catalog ? { evidence: catalog.evidence } : {}),
     routerStamp: {
       source: ROUTER_CUSTOM_LAUNCH_SOURCE,
       status: routerCustomStatus,
       finalityConfirmations: ROUTER_CUSTOM_FINALITY_CONFIRMATIONS,
-      verifiedIdentityCount: routerReadResult.verifiedIdentityCount,
+      verifiedIdentityCount: routerAvailable
+        ? routerReadResult.verifiedIdentityCount
+        : 0,
       projectedIdentityCount: projectedRouterIdentityCount,
+      ...(acceptedRouterSnapshot
+        ? {
+            generatedAt: acceptedRouterSnapshot.generatedAt,
+            asOfBlock: acceptedRouterSnapshot.asOfBlock,
+            asOfBlockHash: acceptedRouterSnapshot.asOfBlockHash,
+            identityCommitment:
+              acceptedRouterSnapshot.identityCommitment,
+          }
+        : {}),
     },
   };
-
-  if (routerReadFailed && requestedRouterIdentityRead && canonicalEntry === null) {
+  if (
+    requestedRouterIdentityRead &&
+    entry?.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE &&
+    canonicalEntry === null
+  ) {
     return unavailableResponse({
       "X-Programmable-Launch-Source": launchSource,
       "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
@@ -287,7 +362,7 @@ export async function GET(request: NextRequest) {
     });
   }
   if (!entry) {
-    if (registryReadFailed || routerReadFailed) {
+    if (canonicalReadFailed || registryReadFailed || routerReadFailed) {
       return unavailableResponse({
         "X-Programmable-Launch-Source": launchSource,
         "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
@@ -301,6 +376,7 @@ export async function GET(request: NextRequest) {
         token: null,
         customProject: null,
         routerTradeProject: null,
+        sourceVerification: null,
         creatorArticle: null,
         snapshot: null,
         catalog: catalogBoundary,
@@ -311,7 +387,8 @@ export async function GET(request: NextRequest) {
           hasDexscreenerPrice: false,
           marketStatus: "complete",
           launchSource,
-          lastIndexedAt: catalog.generatedAt,
+          lastIndexedAt: identityGeneratedAt,
+          canonicalStatus: catalog?.status ?? "unavailable",
           routerStatus: routerCustomStatus,
         }),
       },
@@ -321,6 +398,14 @@ export async function GET(request: NextRequest) {
   const routerTradeProject = entry.exploreKind === "token"
     ? routerTradeProjectForEntryV1(entry)
     : null;
+  const sourceVerificationPromise = entry.exploreKind === "token"
+      && entry.launchCategoryProvenance.category === "custom"
+      && entry.launchCategoryProvenance.source === ROUTER_CUSTOM_LAUNCH_SOURCE
+    ? readProductionSourceVerificationDisplayV1(
+        entry.tokenAddress!,
+        readSignal,
+      )
+    : Promise.resolve(null);
 
   try {
     const creatorArticlePromise = readPublicCreatorArticleV1(
@@ -345,6 +430,7 @@ export async function GET(request: NextRequest) {
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         routerTradeProject,
+        sourceVerification: await sourceVerificationPromise,
         creatorArticle: await creatorArticlePromise,
         snapshot:
           publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
@@ -355,7 +441,8 @@ export async function GET(request: NextRequest) {
           hasDexscreenerPrice,
           marketStatus: market.marketRead.status,
           launchSource,
-          lastIndexedAt: catalog.generatedAt,
+          lastIndexedAt: identityGeneratedAt,
+          canonicalStatus: catalog?.status ?? "unavailable",
           routerStatus: routerCustomStatus,
           ...(marketAsOf ? { marketAsOf } : {}),
         }),
@@ -379,6 +466,7 @@ export async function GET(request: NextRequest) {
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         routerTradeProject,
+        sourceVerification: await sourceVerificationPromise,
         creatorArticle,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,
         catalog: catalogBoundary,
@@ -388,7 +476,8 @@ export async function GET(request: NextRequest) {
           hasDexscreenerPrice: false,
           marketStatus: "unavailable",
           launchSource,
-          lastIndexedAt: catalog.generatedAt,
+          lastIndexedAt: identityGeneratedAt,
+          canonicalStatus: catalog?.status ?? "unavailable",
           routerStatus: routerCustomStatus,
         }),
       },

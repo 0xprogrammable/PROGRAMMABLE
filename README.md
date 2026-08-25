@@ -136,6 +136,8 @@ provider availability or onchain lifecycle completion.
 | Documentation                | [programmable.market/docs](https://programmable.market/docs)                                             |
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
 | Authenticated Custom writes  | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
+| Custom Launch API readiness  | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                  |
+| Custom Launch CLI 1.0.0      | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
@@ -143,6 +145,9 @@ provider availability or onchain lifecycle completion.
 Ethereum contract addresses and integration data should come from the versioned manifest rather than screenshots,
 token names or third-party metadata. For Prediction Markets, use the canonical repository for the current networks,
 supported market types, economics, resolution rules, contract addresses and release evidence.
+
+The Custom Launch API is the live path for concrete Custom projects. Legacy Registry and GitHub submission intake is
+closed. API keys prepare and track a request but never sign or broadcast a controller-wallet transaction.
 
 ## Related repositories
 

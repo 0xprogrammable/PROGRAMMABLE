@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "programmable.exact-source-verification-vector.v1",
+  "standardJsonInputUtf8": "{\"language\":\"Solidity\",\"sources\":{\"Token.sol\":{\"content\":\"pragma solidity 0.8.26; contract Token { constructor(address) {} }\"}},\"settings\":{\"evmVersion\":\"cancun\",\"libraries\":{},\"optimizer\":{\"enabled\":true,\"runs\":200},\"outputSelection\":{\"*\":{\"*\":[\"abi\",\"evm.bytecode.object\",\"evm.deployedBytecode.object\",\"metadata\"]}}}}",
+  "verificationBundle": {
+    "schemaVersion": "programmable.exact-source-verification-bundle.v1",
+    "compilationUnits": [
+      {
+        "compilationUnitId": "unit-0",
+        "compilerVersion": "0.8.26+commit.8a97fa7a",
+        "standardJsonInputBase64": "eyJsYW5ndWFnZSI6IlNvbGlkaXR5Iiwic291cmNlcyI6eyJUb2tlbi5zb2wiOnsiY29udGVudCI6InByYWdtYSBzb2xpZGl0eSAwLjguMjY7IGNvbnRyYWN0IFRva2VuIHsgY29uc3RydWN0b3IoYWRkcmVzcykge30gfSJ9fSwic2V0dGluZ3MiOnsiZXZtVmVyc2lvbiI6ImNhbmN1biIsImxpYnJhcmllcyI6e30sIm9wdGltaXplciI6eyJlbmFibGVkIjp0cnVlLCJydW5zIjoyMDB9LCJvdXRwdXRTZWxlY3Rpb24iOnsiKiI6eyIqIjpbImFiaSIsImV2bS5ieXRlY29kZS5vYmplY3QiLCJldm0uZGVwbG95ZWRCeXRlY29kZS5vYmplY3QiLCJtZXRhZGF0YSJdfX19fQ==",
+        "standardJsonInputSha256": "sha256:053a5077ea19f56f514a3a4209f98c98e62a429dee3c0a4f9945426ca2ac5a9f"
+      }
+    ],
+    "components": [
+      {
+        "targetId": "token",
+        "compilationUnitId": "unit-0",
+        "sourcePath": "Token.sol",
+        "contractName": "Token",
+        "constructorArguments": "0x0000000000000000000000001111111111111111111111111111111111111111"
+      }
+    ]
+  },
+  "expected": {
+    "standardJsonInputSha256": "sha256:053a5077ea19f56f514a3a4209f98c98e62a429dee3c0a4f9945426ca2ac5a9f",
+    "canonicalBundleJson": "{\"compilationUnits\":[{\"compilationUnitId\":\"unit-0\",\"compilerVersion\":\"0.8.26+commit.8a97fa7a\",\"standardJsonInputBase64\":\"eyJsYW5ndWFnZSI6IlNvbGlkaXR5Iiwic291cmNlcyI6eyJUb2tlbi5zb2wiOnsiY29udGVudCI6InByYWdtYSBzb2xpZGl0eSAwLjguMjY7IGNvbnRyYWN0IFRva2VuIHsgY29uc3RydWN0b3IoYWRkcmVzcykge30gfSJ9fSwic2V0dGluZ3MiOnsiZXZtVmVyc2lvbiI6ImNhbmN1biIsImxpYnJhcmllcyI6e30sIm9wdGltaXplciI6eyJlbmFibGVkIjp0cnVlLCJydW5zIjoyMDB9LCJvdXRwdXRTZWxlY3Rpb24iOnsiKiI6eyIqIjpbImFiaSIsImV2bS5ieXRlY29kZS5vYmplY3QiLCJldm0uZGVwbG95ZWRCeXRlY29kZS5vYmplY3QiLCJtZXRhZGF0YSJdfX19fQ==\",\"standardJsonInputSha256\":\"sha256:053a5077ea19f56f514a3a4209f98c98e62a429dee3c0a4f9945426ca2ac5a9f\"}],\"components\":[{\"compilationUnitId\":\"unit-0\",\"constructorArguments\":\"0x0000000000000000000000001111111111111111111111111111111111111111\",\"contractName\":\"Token\",\"sourcePath\":\"Token.sol\",\"targetId\":\"token\"}],\"schemaVersion\":\"programmable.exact-source-verification-bundle.v1\"}",
+    "verificationBundleHash": "sha256:823621b96ba089179250387b60bdd78c6866014fed1805236573a7022ee6f3fc"
+  }
+}

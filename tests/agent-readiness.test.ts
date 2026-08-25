@@ -152,6 +152,13 @@ describe("agent-readable public surface", () => {
 
   it("publishes typed and unambiguous Custom launch lifecycle identifiers", () => {
     const schemas = programmablePublicOpenApi.components.schemas;
+    expect(schemas.CustomLaunchCreateRequest.required).not.toContain(
+      "verificationBundle",
+    );
+    expect(schemas.CustomLaunchCreateRequest.properties.verificationBundle)
+      .toMatchObject({
+        $ref: "#/components/schemas/ExactSourceVerificationBundleV1",
+      });
     expect(schemas.CustomLaunchResource.required).toEqual(
       expect.arrayContaining([
         "launchId",
@@ -161,6 +168,16 @@ describe("agent-readable public surface", () => {
         "output",
       ]),
     );
+    expect(schemas.CustomLaunchResource.required).not.toContain(
+      "sourceVerification",
+    );
+    expect(schemas.CustomLaunchResource.properties.sourceVerification)
+      .toMatchObject({
+        oneOf: expect.arrayContaining([
+          { $ref: "#/components/schemas/SourceVerificationStatusV1" },
+          { type: "null" },
+        ]),
+      });
     expect(schemas.CustomLaunchOutput.oneOf).toEqual([
       { $ref: "#/components/schemas/CustomLaunchPreparedOutput" },
       { $ref: "#/components/schemas/CustomLaunchAuthorizedOutput" },
@@ -177,6 +194,13 @@ describe("agent-readable public surface", () => {
       "utf8",
     );
     expect(() => JSON.parse(standaloneSource)).not.toThrow();
+    const standalone = JSON.parse(standaloneSource);
+    expect(
+      standalone.components.schemas.CustomLaunchCreateRequestV1.required,
+    ).not.toContain("verificationBundle");
+    expect(
+      standalone.components.schemas.CustomLaunchResourceV1.required,
+    ).not.toContain("sourceVerification");
     expect(standaloneSource).toContain('"code": "IDEMPOTENCY_CONFLICT"');
     expect(standaloneSource).not.toContain("IDEMPOTENCY_KEY_REUSED");
   });

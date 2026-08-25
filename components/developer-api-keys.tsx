@@ -13,6 +13,10 @@ import {
 import styles from "@/components/developer-api-keys.module.css";
 import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
 import { useWallet } from "@/components/wallet-provider";
+import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
+  "@/lib/custom-launch/agent-setup-v1";
+import type { CustomLaunchWalletActionV1 } from
+  "@/lib/custom-launch/wallet-handoff-v1";
 
 type ApiKeySummary = Readonly<{
   id: string;
@@ -40,6 +44,9 @@ type DeveloperApiKeysViewProps = Readonly<{
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
   openWallet: () => void;
+  sendCustomLaunchWalletAction: (
+    input: CustomLaunchWalletActionV1,
+  ) => Promise<`0x${string}`>;
 }>;
 
 const expiryOptions = [
@@ -127,11 +134,23 @@ function parseCreatedApiKey(value: unknown): CreatedApiKey | null {
   return { apiKey, apiKeySecret: value.apiKeySecret };
 }
 
-function readApiError(value: unknown, fallback: string) {
+function readApiError(response: Response, value: unknown, fallback: string) {
   if (!isRecord(value) || !isRecord(value.error)) return fallback;
-  return typeof value.error.message === "string" && value.error.message.trim()
+  const message = typeof value.error.message === "string" && value.error.message.trim()
     ? value.error.message
     : fallback;
+  const requestId = typeof value.error.requestId === "string"
+    && /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$/u.test(value.error.requestId)
+    ? value.error.requestId
+    : null;
+  const retryAfter = response.headers.get("retry-after");
+  const retryCopy = response.status === 429
+    && retryAfter !== null
+    && /^[1-9][0-9]{0,4}$/u.test(retryAfter)
+    ? ` Try again in ${retryAfter} seconds.`
+    : "";
+  const requestCopy = requestId ? ` Request ID: ${requestId}.` : "";
+  return `${message}${retryCopy}${requestCopy}`;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -202,6 +221,7 @@ export function DeveloperApiKeys() {
     getAccessToken,
     getIdentityToken,
     openWallet,
+    sendCustomLaunchWalletAction,
     wallet,
   } = useWallet();
   const account = wallet?.account ?? null;
@@ -216,6 +236,7 @@ export function DeveloperApiKeys() {
       getAccessToken={getAccessToken}
       getIdentityToken={getIdentityToken}
       openWallet={openWallet}
+      sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
     />
   );
 }
@@ -227,6 +248,7 @@ function DeveloperApiKeysView({
   getAccessToken,
   getIdentityToken,
   openWallet,
+  sendCustomLaunchWalletAction,
 }: DeveloperApiKeysViewProps) {
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
   const [listState, setListState] = useState<ListState>(() =>
@@ -241,7 +263,12 @@ function DeveloperApiKeysView({
   const [createdApiKey, setCreatedApiKey] = useState<CreatedApiKey | null>(
     null,
   );
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
+  const [keyCopyState, setKeyCopyState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
+  const [setupCopyState, setSetupCopyState] = useState<
+    "idle" | "copied" | "error"
+  >(
     "idle",
   );
   const [confirmingRevokeId, setConfirmingRevokeId] = useState<string | null>(
@@ -298,7 +325,11 @@ function DeveloperApiKeysView({
         );
         const body = await readJson(response);
         if (!response.ok) {
-          throw new Error(readApiError(body, "Unable to load API keys."));
+          throw new Error(readApiError(
+            response,
+            body,
+            "Unable to load API keys.",
+          ));
         }
         const parsed = parseApiKeyList(body);
         if (!parsed) throw new Error("The API returned an invalid key list.");
@@ -380,7 +411,8 @@ function DeveloperApiKeysView({
 
     setLabelError("");
     setCreateError("");
-    setCopyState("idle");
+    setKeyCopyState("idle");
+    setSetupCopyState("idle");
     createInFlightRef.current = true;
     setCreateState("creating");
     try {
@@ -397,7 +429,11 @@ function DeveloperApiKeysView({
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(readApiError(body, "Unable to create the API key."));
+        throw new Error(readApiError(
+          response,
+          body,
+          "Unable to create the API key.",
+        ));
       }
       const parsed = parseCreatedApiKey(body);
       if (!parsed) throw new Error("The API returned an invalid new key.");
@@ -428,17 +464,30 @@ function DeveloperApiKeysView({
     if (!createdApiKey) return;
     try {
       await copyToClipboard(createdApiKey.apiKeySecret);
-      setCopyState("copied");
+      setKeyCopyState("copied");
       setStatusMessage("API key copied.");
     } catch {
-      setCopyState("error");
+      setKeyCopyState("error");
       setStatusMessage("Copy failed. Select the key and copy it manually.");
+    }
+  };
+
+  const copyAgentSetup = async () => {
+    if (!createdApiKey) return;
+    try {
+      await copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1);
+      setSetupCopyState("copied");
+      setStatusMessage("Agent setup copied without the API key.");
+    } catch {
+      setSetupCopyState("error");
+      setStatusMessage("Agent setup could not be copied.");
     }
   };
 
   const dismissApiKey = () => {
     setCreatedApiKey(null);
-    setCopyState("idle");
+    setKeyCopyState("idle");
+    setSetupCopyState("idle");
     setStatusMessage("Key hidden.");
     window.setTimeout(() => createButtonRef.current?.focus(), 0);
   };
@@ -474,7 +523,11 @@ function DeveloperApiKeysView({
       );
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(readApiError(body, "Unable to revoke the API key."));
+        throw new Error(readApiError(
+          response,
+          body,
+          "Unable to revoke the API key.",
+        ));
       }
       if (
         !isRecord(body) ||
@@ -613,21 +666,43 @@ function DeveloperApiKeysView({
               </div>
               <p className={styles.revealWarning}>
                 Copy this secret now. It will not be shown again. Store it in
-                your agent&apos;s secret manager and keep it out of source control.
+                encrypted secrets or the environment, never in chat, a prompt,
+                source code, or command history.
               </p>
               <div className={styles.secretRow}>
                 <code>{createdApiKey.apiKeySecret}</code>
-                <button
-                  className={styles.secondaryButton}
-                  type="button"
-                  onClick={() => void copyApiKey()}
-                >
-                  {copyState === "copied" ? "Copied" : "Copy key"}
-                </button>
+                <div className={styles.secretActions}>
+                  <button
+                    className={styles.secondaryButton}
+                    type="button"
+                    onClick={() => void copyApiKey()}
+                  >
+                    {keyCopyState === "copied" ? "Copied" : "Copy key"}
+                  </button>
+                  <button
+                    className={styles.secondaryButton}
+                    type="button"
+                    onClick={() => void copyAgentSetup()}
+                  >
+                    {setupCopyState === "copied"
+                      ? "Setup copied"
+                      : "Copy agent setup"}
+                  </button>
+                </div>
               </div>
-              {copyState === "error" ? (
+              <p className={styles.setupNote}>
+                Agent setup contains only <code>$PROGRAMMABLE_API_KEY</code>,
+                install instructions, and public CLI, guide, and OpenAPI links.
+                It never includes this key.
+              </p>
+              {keyCopyState === "error" ? (
                 <p className={styles.inlineError} role="alert">
                   Copy failed. Select the key and copy it manually.
+                </p>
+              ) : null}
+              {setupCopyState === "error" ? (
+                <p className={styles.inlineError} role="alert">
+                  Agent setup could not be copied. Try again.
                 </p>
               ) : null}
               <button
@@ -919,6 +994,7 @@ function DeveloperApiKeysView({
               account={account}
               getAccessToken={getAccessToken}
               getIdentityToken={getIdentityToken}
+              sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
             />
           )}
         </>

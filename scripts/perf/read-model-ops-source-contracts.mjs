@@ -173,7 +173,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     runtime: Object.freeze({
       path: "lib/alchemy/explore.server.ts",
       sha256:
-        "9e05971ef410de2b368def0ea2a78c863e6dc4ebb996eec9dd45f715a41d9db8",
+        "e7e7c0431c53532e54a969821b4b2fe63ff936c6ff91f018c2db4a98af89cc5a",
     }),
     store: Object.freeze({
       path: "lib/alchemy/launch-registry.server.ts",
@@ -183,7 +183,12 @@ const APPROVED_OPERATIONS = Object.freeze({
     routerReader: Object.freeze({
       path: "lib/alchemy/launch-stamp.server.ts",
       sha256:
-        "159d0be7fd708d0e91d5bf0c0a9494ef47ff3a8cda905286edf468f211305f81",
+        "694991e411ee416b7fb03b25bf9b4ed3aab574b4c8e39963eb3f1551df97a7e9",
+    }),
+    publicSnapshot: Object.freeze({
+      path: "lib/alchemy/router-custom-public.server.ts",
+      sha256:
+        "f4d3b022955c677148deabb7b2cc7af5a7e8283d2cbbb82d3f546ed37392cddd",
     }),
   }),
   independentCrons: Object.freeze([
@@ -1293,10 +1298,11 @@ export function evaluateReadModelOperationsSourceContracts(
       routerRefresher.runtime,
       routerRefresher.store,
       routerRefresher.routerReader,
+      routerRefresher.publicSnapshot,
     ].every((binding) =>
       sourceBindingMatches(source, binding, expectedSha256Overrides),
     ),
-    "the Router refresh is byte-bound to its route, runtime, durable store and canonical reader",
+    "the Router refresh is byte-bound to its route, runtime, durable store, canonical reader and public snapshot",
   );
   check(
     "ops-router-launch-refresher-route-auth",
@@ -2176,11 +2182,12 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
-      "readFinalizedRouterCustomExploreEntriesV1({",
-      "const [registryCustom, routerCustom] = await Promise.all([",
+      "readFinalizedRouterCustomIdentitySnapshotV1({",
+      "const [catalog, registryCustom, routerCustom] = await Promise.all([",
       "mergeEnvioClassicV3CatalogEntriesV1(",
       "mergeRouterCustomExploreEntriesV1(",
-      "routerCustomEntriesAtOrBeforeBlockV1(",
+      "const acceptedRouterSnapshot = routerAvailable",
+      'routerCustomStatus === "last-known-good"',
       "envioClassicV3IdentityCommitmentV1(",
       "readDexscreenerExploreEntriesV1(filtered, {",
       "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
@@ -2193,7 +2200,7 @@ export function evaluateReadModelOperationsSourceContracts(
       '"X-Programmable-Read-Source": `${launchSource}+dexscreener`',
       '"X-Programmable-Market-Provider": "dexscreener"',
       '"X-Programmable-Router-Read-Status": routerCustomStatus',
-      '"X-Programmable-Identity-Last-Indexed-At": catalog.generatedAt',
+      '"X-Programmable-Identity-Last-Indexed-At": identityGeneratedAt',
     ]) &&
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
       publicExplore,
@@ -2201,11 +2208,12 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(publicToken, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
-      "readFinalizedRouterCustomExploreEntriesV1({",
-      "const [registryReadResult, routerReadResult] = await Promise.all([",
+      "readFinalizedRouterCustomIdentitySnapshotV1({",
+      "const [catalog, registryReadResult, routerReadResult] = await Promise.all([",
       "mergeEnvioClassicV3CatalogEntriesV1(",
       "mergeRouterCustomExploreEntriesV1(",
-      "routerCustomEntriesAtOrBeforeBlockV1(",
+      "const acceptedRouterSnapshot = routerAvailable",
+      'routerCustomStatus === "last-known-good"',
       "envioClassicV3IdentityCommitmentV1(",
       "const entry: ExploreEntry | null = identityEntries.find(",
       "readDexscreenerExploreEntriesV1([entry], {",
@@ -2239,7 +2247,15 @@ export function evaluateReadModelOperationsSourceContracts(
     includesEverySourceFragment(routerCustomPublic, [
       "canonicalTokenExploreEntryV1",
       'token.launchStampProvenance?.kind === "custom-graph"',
-      "readAlchemyExploreModel",
+      "readAlchemyRouterCustomIdentitySourceV1",
+      "resolveDurableExploreBlobToken",
+      "readDurableRouterCustomIdentitySnapshotV1",
+      "persistDurableRouterCustomIdentitySnapshotV1",
+      "RouterCustomSnapshotConflictError",
+      "lastKnownGoodRouterCustomSnapshotV1",
+      "source.reorgDetected",
+      "ROUTER_CUSTOM_SNAPSHOT_MAX_IDENTITIES = 10_000",
+      "ROUTER_CUSTOM_SNAPSHOT_CURRENT_READ_TIMEOUT_MS = 3_000",
       "suppressRouterBoundCustomProjectDuplicates",
       "routerCustomEntriesAtOrBeforeBlockV1",
       "mergeRouterCustomCreatorProfileV1",
@@ -2249,7 +2265,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list, token detail and creator identity use the validated Envio Classic V3 catalog; Dexscreener remains bounded exact-identity enrichment, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
+    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Dexscreener remains bounded exact-identity enrichment, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2263,16 +2279,19 @@ export function evaluateReadModelOperationsSourceContracts(
       "readEnvioCreatorProfile",
       "readEnvioClassicV3CatalogV1",
       "readEnvioClassicV2CreatorClaimsV1",
-      "readFinalizedRouterCustomExploreEntriesV1",
+      "readFinalizedRouterCustomIdentitySnapshotV1",
       "mergeRouterCustomCreatorProfileV1",
       "projectRouterCustomCreatorClaimProfileV1",
+      "emptyRouterCustomCreatorProfile(",
+      "result === null && routerResult.snapshot === null",
       "LEGACY_RPC_PROFILE_FALLBACK_ENABLED: boolean = false",
       "getWebsiteReadOnchainDeployment",
       "withOperationalRpcFailover",
       "profileRpcProviderHeader",
       "const [result, routerResult] = await Promise.all([",
-      "let rpcProvider = result.provider",
-      'const launchSource = routerStatus === "current"',
+      "let rpcProvider = result?.provider ?? ROUTER_CUSTOM_LAUNCH_SOURCE",
+      "const launchSource = result === null",
+      'routerStatus !== "unavailable"',
       ': "envio-classic-v3"',
       ': `${launchSource}+rpc`',
       '"X-Programmable-Router-Read-Status": routerStatus',
@@ -2346,7 +2365,7 @@ export function evaluateReadModelOperationsSourceContracts(
         (route) =>
           !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
-    "Profile identity is Envio-first and fail-closed, while reviewed reward reads, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
+    "Profile identity combines Envio with the bounded durable Router Custom snapshot and remains fail-closed without either identity source, while reviewed reward reads, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
   );
   check(
     "ops-staged-envio-catalog-gate",

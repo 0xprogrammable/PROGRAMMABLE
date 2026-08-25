@@ -16,6 +16,12 @@ const mocks = vi.hoisted(() => ({
   customEnabled: vi.fn(() => false),
   readCustom: vi.fn(),
   readRouter: vi.fn(),
+  mergeRouter: vi.fn((existing: readonly unknown[], router: readonly unknown[]) => [
+    ...existing,
+    ...router,
+  ]),
+  routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
+  readSourceVerification: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -32,20 +38,35 @@ vi.mock("../lib/server/custom-launch/public-readiness", () => ({
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.readCustom,
 }));
+vi.mock("../lib/server/custom-launch/source-verification-display-v1", () => ({
+  readProductionSourceVerificationDisplayV1: mocks.readSourceVerification,
+}));
 vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ROUTER_CUSTOM_FINALITY_CONFIRMATIONS: 64,
   ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
   readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  readFinalizedRouterCustomIdentitySnapshotV1: async (...args: unknown[]) => {
+    const entries = await mocks.readRouter(...args);
+    return {
+      schemaVersion: "programmable.router-custom-identity-snapshot.v1",
+      source: "canonical-launch-stamp-router",
+      status: mocks.routerStatus(),
+      generatedAt: "2026-08-16T08:00:01.000Z",
+      asOfBlock: "25740001",
+      asOfBlockHash: `0x${"bc".repeat(32)}`,
+      finalityConfirmations: 64,
+      identityCommitment: `sha256:${"ac".repeat(32)}`,
+      entries,
+    };
+  },
   routerCustomEntriesAtOrBeforeBlockV1: (entries: readonly unknown[]) => entries,
-  mergeRouterCustomExploreEntriesV1: (
-    existing: readonly unknown[],
-    router: readonly unknown[],
-  ) => [...existing, ...router],
+  mergeRouterCustomExploreEntriesV1: mocks.mergeRouter,
   publicLaunchSourceV1: (input: Readonly<{
+    envioAvailable?: boolean;
     registryCustomCurrent: boolean;
     routerCustomCurrent: boolean;
   }>) => [
-    "envio-classic-v3",
+    ...(input.envioAvailable === false ? [] : ["envio-classic-v3"]),
     ...(input.registryCustomCurrent ? ["registry.custom-launched"] : []),
     ...(input.routerCustomCurrent ? ["canonical-launch-stamp-router"] : []),
   ].join("+"),
@@ -111,10 +132,12 @@ const customEntry = {
   launchCategoryProvenance: {},
 } as unknown as ExploreEntry;
 
-function catalog() {
+function catalog(
+  input: Readonly<{ status?: "current" | "last-known-good" }> = {},
+) {
   return {
     source: "envio-classic-v3",
-    status: "last-known-good",
+    status: input.status ?? "current",
     generatedAt: NOW,
     asOfBlock: "25740000",
     asOfBlockHash: `0x${"ab".repeat(32)}`,
@@ -185,6 +208,19 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     mocks.customEnabled.mockReturnValue(false);
     mocks.readCustom.mockResolvedValue([]);
     mocks.readRouter.mockResolvedValue([]);
+    mocks.mergeRouter.mockImplementation(
+      (existing: readonly unknown[], router: readonly unknown[]) => [
+        ...existing,
+        ...router,
+      ],
+    );
+    mocks.routerStatus.mockReturnValue("current");
+    mocks.readSourceVerification.mockResolvedValue({
+      schemaVersion: "programmable.source-verification-display.v1",
+      status: "not-verified",
+      label: "Source not verified",
+      updatedAt: null,
+    });
     mocks.readDex.mockResolvedValue({
       entries: [{
         ...entry,
@@ -257,6 +293,7 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
   it("resolves a finalized Router Custom identity from its Explore card URL", async () => {
     mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    mocks.mergeRouter.mockReturnValue([customGraphExploreEntry]);
     mocks.readDex.mockResolvedValueOnce({
       entries: [{
         ...customGraphExploreEntry,
@@ -281,9 +318,82 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       verifiedIdentityCount: 1,
       projectedIdentityCount: 1,
     });
+    expect(body.sourceVerification).toEqual({
+      schemaVersion: "programmable.source-verification-display.v1",
+      status: "not-verified",
+      label: "Source not verified",
+      updatedAt: null,
+    });
+    expect(mocks.readSourceVerification).toHaveBeenCalledWith(
+      customGraphExploreEntry.tokenAddress,
+      expect.any(AbortSignal),
+    );
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3+canonical-launch-stamp-router",
     );
+  });
+
+  it("serves the exact Router token when Envio is unavailable", async () => {
+    mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...customGraphExploreEntry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: marketRead("unavailable"),
+    });
+
+    const response = await GET(request(customGraphExploreEntry.tokenAddress));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.token).toMatchObject({
+      tokenAddress: customGraphExploreEntry.tokenAddress,
+      launchModel: "custom-graph",
+    });
+    expect(body.catalog).toMatchObject({
+      launchSource: "canonical-launch-stamp-router",
+      completeness: {
+        classic: "unavailable",
+        routerCustom: "current",
+      },
+    });
+    expect(response.headers.get("x-programmable-canonical-read-status")).toBe(
+      "unavailable",
+    );
+  });
+
+  it("fails closed when a requested Router identity conflicts during merge", async () => {
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([customEntry]);
+    mocks.readRouter.mockResolvedValue([{
+      ...customGraphExploreEntry,
+      tokenAddress: customAddress,
+    }]);
+    mocks.mergeRouter.mockImplementationOnce(() => {
+      throw new Error("Registry and Router disagree on token pool binding");
+    });
+
+    const response = await GET(request(customAddress));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "unavailable",
+    );
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
+  it("does not publish a Registry-only identity without an onchain boundary", async () => {
+    mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue([customEntry]);
+    mocks.readRouter.mockRejectedValue(new Error("Router unavailable"));
+
+    const response = await GET(request(customAddress));
+
+    expect(response.status).toBe(503);
+    expect(mocks.readDex).not.toHaveBeenCalled();
   });
 
   it("attaches a trade project only to the exact finalized FADE Router stamp", async () => {
@@ -330,6 +440,31 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
   it("returns 503 for an unknown identity while Router discovery is unavailable", async () => {
     mocks.readRouter.mockRejectedValue(new Error("router unavailable"));
+    const response = await GET(
+      request("0x8888888888888888888888888888888888888888"),
+    );
+
+    expect(response.status).toBe(503);
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
+  it("does not claim absence from a last-known-good Router snapshot", async () => {
+    mocks.routerStatus.mockReturnValue("last-known-good");
+    const response = await GET(
+      request("0x8888888888888888888888888888888888888888"),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "last-known-good",
+    );
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
+  it("does not claim absence from a last-known-good Envio catalog", async () => {
+    mocks.readCatalog.mockResolvedValue(catalog({
+      status: "last-known-good",
+    }));
     const response = await GET(
       request("0x8888888888888888888888888888888888888888"),
     );

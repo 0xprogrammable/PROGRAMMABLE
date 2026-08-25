@@ -932,6 +932,27 @@ describe("canonical Launch Stamp Router reader", () => {
     expect(result.slice.cursor.blockNumber).toBe(
       (LAUNCH_STAMP_ROUTER_START_BLOCK - 1n + 50_000n).toString(),
     );
+    expect(result.caughtUp).toBe(false);
+    expect(result.highestSafeBlockNumber).toBe(
+      (latest - LAUNCH_STAMP_FINALITY_CONFIRMATIONS).toString(),
+    );
+  });
+
+  it("reports current only when the cursor already equals the safe head", async () => {
+    const latest = LAUNCH_STAMP_ROUTER_START_BLOCK + 100n;
+    const highestSafe = latest - LAUNCH_STAMP_FINALITY_CONFIRMATIONS;
+    const { client } = clientFor([], { latestBlock: latest });
+    const result = await advanceLaunchStampRouterSlice(deployment, {
+      cursor: {
+        blockNumber: highestSafe.toString(),
+        blockHash: hex32(Number(highestSafe % 10_000n) + 0xd00),
+      },
+      tokens: [],
+    }, { client });
+
+    expect(result.scannedFromBlock).toBeNull();
+    expect(result.caughtUp).toBe(true);
+    expect(result.highestSafeBlockNumber).toBe(highestSafe.toString());
   });
 
   it("moves the cursor only to a canonical prefix when launch density exceeds the hydration bound", async () => {
@@ -953,6 +974,7 @@ describe("canonical Launch Stamp Router reader", () => {
       { client },
     );
     expect(result.boundedByDensity).toBe(true);
+    expect(result.caughtUp).toBe(false);
     expect(result.slice.cursor.blockNumber).toBe(
       LAUNCH_STAMP_ROUTER_START_BLOCK.toString(),
     );

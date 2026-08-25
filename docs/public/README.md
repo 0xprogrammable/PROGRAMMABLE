@@ -48,7 +48,7 @@ To inspect an existing token, begin with [Explore](https://programmable.market/e
 
 Each supported launch has one or more tokens, a pool identity and a launch model. Router based Ethereum launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical Ethereum launches remain discoverable through the public data service even when they predate the Router. Prediction Markets has its own versioned identity and release records.
 
-Programmable keeps caller-declared source evidence, API preparation, wallet execution, chain finality and public indexing separate. That separation is deliberate: it makes it possible to say exactly what has been proven without turning one green check into a broader claim.
+Programmable keeps agent evidence, exact-source provider status, API preparation, wallet execution, chain finality and public indexing separate. That separation is deliberate: it makes it possible to say exactly what has been proven without turning one green check into a broader claim.
 
 ## Official sources
 

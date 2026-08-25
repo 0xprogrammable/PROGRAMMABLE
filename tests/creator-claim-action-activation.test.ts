@@ -211,6 +211,7 @@ vi.mock("../lib/onchain", async (importOriginal) => {
 
 vi.mock("../lib/alchemy/explore.server", () => ({
   readAlchemyExploreModel: mocks.readAlchemy,
+  readAlchemyRouterCustomIdentitySourceV1: mocks.readAlchemy,
 }));
 
 vi.mock("../lib/market-data/bitquery-explore-model.server", () => ({

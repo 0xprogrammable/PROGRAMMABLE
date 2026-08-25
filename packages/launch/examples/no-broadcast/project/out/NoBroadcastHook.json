@@ -1,0 +1,122 @@
+{
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token_",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "poolManager_",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "components": [
+            {
+              "internalType": "Currency",
+              "name": "currency0",
+              "type": "address"
+            },
+            {
+              "internalType": "Currency",
+              "name": "currency1",
+              "type": "address"
+            },
+            {
+              "internalType": "uint24",
+              "name": "fee",
+              "type": "uint24"
+            },
+            {
+              "internalType": "int24",
+              "name": "tickSpacing",
+              "type": "int24"
+            },
+            {
+              "internalType": "contract IHooks",
+              "name": "hooks",
+              "type": "address"
+            }
+          ],
+          "internalType": "struct PoolKey",
+          "name": "",
+          "type": "tuple"
+        },
+        {
+          "internalType": "uint160",
+          "name": "",
+          "type": "uint160"
+        },
+        {
+          "internalType": "int24",
+          "name": "",
+          "type": "int24"
+        },
+        {
+          "internalType": "bytes",
+          "name": "",
+          "type": "bytes"
+        }
+      ],
+      "name": "afterInitialize",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "poolManager",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "token",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": {
+    "object": "608060405234801561000f575f80fd5b5060405161036a38038061036a83398101604081905261002e91610100565b6001600160a01b0382166100715760405162461bcd60e51b81526020600482015260056024820152643a37b5b2b760d91b60448201526064015b60405180910390fd5b6001600160a01b0381166100b55760405162461bcd60e51b815260206004820152600b60248201526a3837b7b626b0b730b3b2b960a91b6044820152606401610068565b5f80546001600160a01b039384166001600160a01b03199182161790915560018054929093169116179055610131565b80516001600160a01b03811681146100fb575f80fd5b919050565b5f8060408385031215610111575f80fd5b61011a836100e5565b9150610128602084016100e5565b90509250929050565b61022c8061013e5f395ff3fe608060405234801561000f575f80fd5b506004361061003f575f3560e01c8063a910f80f14610043578063dc4c90d314610074578063fc0c546a1461009f575b5f80fd5b61005661005136600461012e565b6100b1565b6040516001600160e01b031990911681526020015b60405180910390f35b600154610087906001600160a01b031681565b6040516001600160a01b03909116815260200161006b565b5f54610087906001600160a01b031681565b6001545f906001600160a01b031633146101045760405162461bcd60e51b815260206004820152601060248201526f506f6f6c4d616e61676572206f6e6c7960801b604482015260640160405180910390fd5b5063a910f80f60e01b9695505050505050565b6001600160a01b038116811461012b575f80fd5b50565b5f805f805f80868803610120811215610145575f80fd5b873561015081610117565b965060a0601f1982011215610163575f80fd5b5060208701945060c087013561017881610117565b935060e0870135600281900b811461018e575f80fd5b925061010087013567ffffffffffffffff8111156101aa575f80fd5b8701601f810189136101ba575f80fd5b803567ffffffffffffffff8111156101d0575f80fd5b8960208284010111156101e1575f80fd5b6020820193508092505050929550929550929556fea26469706673582212207df6fa69e15ec75f9cf5b7bb79d5a10386822cb8735c4f0813f80d01f3fa0bc264736f6c634300081a0033",
+    "linkReferences": {}
+  },
+  "deployedBytecode": {
+    "object": "608060405234801561000f575f80fd5b506004361061003f575f3560e01c8063a910f80f14610043578063dc4c90d314610074578063fc0c546a1461009f575b5f80fd5b61005661005136600461012e565b6100b1565b6040516001600160e01b031990911681526020015b60405180910390f35b600154610087906001600160a01b031681565b6040516001600160a01b03909116815260200161006b565b5f54610087906001600160a01b031681565b6001545f906001600160a01b031633146101045760405162461bcd60e51b815260206004820152601060248201526f506f6f6c4d616e61676572206f6e6c7960801b604482015260640160405180910390fd5b5063a910f80f60e01b9695505050505050565b6001600160a01b038116811461012b575f80fd5b50565b5f805f805f80868803610120811215610145575f80fd5b873561015081610117565b965060a0601f1982011215610163575f80fd5b5060208701945060c087013561017881610117565b935060e0870135600281900b811461018e575f80fd5b925061010087013567ffffffffffffffff8111156101aa575f80fd5b8701601f810189136101ba575f80fd5b803567ffffffffffffffff8111156101d0575f80fd5b8960208284010111156101e1575f80fd5b6020820193508092505050929550929550929556fea26469706673582212207df6fa69e15ec75f9cf5b7bb79d5a10386822cb8735c4f0813f80d01f3fa0bc264736f6c634300081a0033",
+    "linkReferences": {},
+    "immutableReferences": {}
+  },
+  "metadata": "{\"compiler\":{\"version\":\"0.8.26+commit.8a97fa7a\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token_\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"poolManager_\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"components\":[{\"internalType\":\"Currency\",\"name\":\"currency0\",\"type\":\"address\"},{\"internalType\":\"Currency\",\"name\":\"currency1\",\"type\":\"address\"},{\"internalType\":\"uint24\",\"name\":\"fee\",\"type\":\"uint24\"},{\"internalType\":\"int24\",\"name\":\"tickSpacing\",\"type\":\"int24\"},{\"internalType\":\"contract IHooks\",\"name\":\"hooks\",\"type\":\"address\"}],\"internalType\":\"struct PoolKey\",\"name\":\"\",\"type\":\"tuple\"},{\"internalType\":\"uint160\",\"name\":\"\",\"type\":\"uint160\"},{\"internalType\":\"int24\",\"name\":\"\",\"type\":\"int24\"},{\"internalType\":\"bytes\",\"name\":\"\",\"type\":\"bytes\"}],\"name\":\"afterInitialize\",\"outputs\":[{\"internalType\":\"bytes4\",\"name\":\"\",\"type\":\"bytes4\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"poolManager\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"token\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/NoBroadcastHook.sol\":\"NoBroadcastHook\"},\"evmVersion\":\"cancun\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[]},\"sources\":{\"src/NoBroadcastHook.sol\":{\"content\":\"// SPDX-License-Identifier: UNLICENSED\\npragma solidity 0.8.26;\\n\\ntype Currency is address;\\n\\ninterface IHooks {\\n    function afterInitialize(\\n        address sender,\\n        PoolKey calldata key,\\n        uint160 sqrtPriceX96,\\n        int24 tick,\\n        bytes calldata hookData\\n    ) external returns (bytes4);\\n}\\n\\nstruct PoolKey {\\n    Currency currency0;\\n    Currency currency1;\\n    uint24 fee;\\n    int24 tickSpacing;\\n    IHooks hooks;\\n}\\n\\ncontract NoBroadcastHook is IHooks {\\n    address public token;\\n    address public poolManager;\\n\\n    constructor(address token_, address poolManager_) {\\n        require(token_ != address(0), \\\"token\\\");\\n        require(poolManager_ != address(0), \\\"poolManager\\\");\\n        token = token_;\\n        poolManager = poolManager_;\\n    }\\n\\n    function afterInitialize(\\n        address,\\n        PoolKey calldata,\\n        uint160,\\n        int24,\\n        bytes calldata\\n    ) external view returns (bytes4) {\\n        require(msg.sender == poolManager, \\\"PoolManager only\\\");\\n        return this.afterInitialize.selector;\\n    }\\n}\\n\",\"keccak256\":\"0x602e0fdd41e48fbe408727f8c34887c45af2674eb55223c41888f31df2da3688\",\"license\":\"UNLICENSED\"}},\"version\":1}"
+}

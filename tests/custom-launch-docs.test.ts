@@ -61,12 +61,12 @@ describe("Custom Launch API documentation", () => {
     expect(createGuide).toContain("stop at authorized");
   });
 
-  it("documents the real schema boundary without a copied fixture or invented checks", () => {
+  it("documents the real packager and schema boundary without invented checks", () => {
     for (const source of [gitBookGuide, websiteGuide]) {
       expect(source).toContain("/openapi/custom-launch-v1.json");
       expect(source).toContain("does not publish a universal check-ID catalog");
-      expect(source).toMatch(/project-specific (?:bytecode|packaging)/);
-      expect(source).toMatch(/do not (?:copy test-only hashes|publish a hand-written launch fixture)/i);
+      expect(source).toContain("programmable-launch");
+      expect(source).toMatch(/do not (?:copy test-only hashes|enter\s+derived hashes by hand)/i);
     }
     expect(createGuide).toContain("/openapi/custom-launch-v1.json");
     expect(createGuide).not.toMatch(/Hookbuilder-Skill|Hook Builder packages/);
@@ -90,6 +90,20 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("error.requestId");
       expect(source).toContain("resource-level");
     }
+  });
+
+  it("publishes the exact-source and no-broadcast cold-agent path", () => {
+    for (const source of [gitBookGuide, rawGuide, developerDocsMarkdown]) {
+      expect(source).toContain("programmable-launch-1.0.0.tgz");
+      expect(source).toContain("verificationBundle");
+      expect(source).toContain("exact_match");
+      expect(source).toContain("PROGRAMMABLE_API_KEY");
+      expect(source).toMatch(/without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast/i);
+    }
+    expect(gitBookGuide).toContain("examples/no-broadcast/README.md");
+    expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
+    expect(gitBookGuide).toContain("submit ./launch.json");
+    expect(gitBookGuide).toMatch(/submit[\s\S]{0,120}--config programmable-launch\.config\.json/);
   });
 
   it("describes request-driven reconciliation consistently", () => {

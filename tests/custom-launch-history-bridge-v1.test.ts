@@ -149,6 +149,47 @@ describe("developer launch history same-origin bridge", () => {
     );
   });
 
+  it.each([
+    [400, "REQUEST_SCHEMA_INVALID", null],
+    [409, "RECONCILIATION_CONFLICT", null],
+    [429, "LAUNCH_QUOTA_EXCEEDED", "19"],
+  ] as const)(
+    "preserves bounded backend HTTP %i errors and correlation metadata",
+    async (status, code, retryAfter) => {
+      const requestId = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
+      fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
+        schemaVersion: "programmable.api-error.v1",
+        error: {
+          code,
+          message: "The request could not be completed.",
+          requestId,
+        },
+      }), {
+        status,
+        headers: {
+          "content-type": "application/json",
+          ...(retryAfter ? { "retry-after": retryAfter } : {}),
+        },
+      }));
+
+      const response = await bridge().list(new Request(
+        `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}`,
+      ));
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get("x-request-id")).toBe(requestId);
+      expect(response.headers.get("retry-after")).toBe(retryAfter);
+      expect(await response.json()).toEqual({
+        schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V1,
+        error: {
+          code,
+          message: "The request could not be completed.",
+          requestId,
+        },
+      });
+    },
+  );
+
   it("rejects non-linked wallets and malformed opaque cursors before backend access", async () => {
     const foreign = await bridge().list(new Request(
       `https://programmable.market/api/developer/custom-launches?walletAddress=${OTHER_WALLET}`,

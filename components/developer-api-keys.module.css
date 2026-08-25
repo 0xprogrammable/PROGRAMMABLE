@@ -270,6 +270,26 @@
   user-select: all;
 }
 
+.secretActions {
+  align-content: start;
+  display: grid;
+  gap: 8px;
+}
+
+.setupNote {
+  color: var(--webde-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 10px;
+  max-width: 760px;
+  text-wrap: pretty;
+}
+
+.setupNote code {
+  color: var(--webde-muted);
+  font-family: var(--font-plex-mono), monospace;
+}
+
 .dismissButton {
   background: transparent;
   color: var(--webde-muted);

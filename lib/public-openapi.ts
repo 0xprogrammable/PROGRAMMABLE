@@ -21,11 +21,11 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.2.0",
+    version: "1.3.0",
     summary:
-      "Verified launch discovery plus wallet-bound Custom launch preparation on Ethereum.",
+      "Verified launch discovery plus wallet-bound Custom launch preparation with exact-source commitments on Ethereum.",
     description:
-      "The programmable.market read endpoints remain unauthenticated and read-only. The separately hosted Custom Launch API accepts wallet-bound pm_live_ API keys, prepares exact Router launch actions, and reconciles an onchain launch when its single-resource status route is polled. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market read endpoints remain unauthenticated and read-only. The separately hosted Custom Launch API accepts wallet-bound pm_live_ API keys, binds optional exact Solidity build inputs to prepared artifacts, prepares exact Router launch actions, and reconciles an onchain launch when its single-resource status route is polled. Post-finality provider verification is independent of launch finality. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -276,7 +276,7 @@ export const programmablePublicOpenApi = {
         operationId: "createCustomLaunch",
         summary: "Prepare a Custom launch",
         description:
-          "Validates the submitted manifest digest, executable graph, required agent attestation and evidence digests, and exact permit binding; reserves the request idempotently; captures a bounded Router observation window; and prepares the Mainnet Router action for the API key's bound wallet. The platform does not compile source, simulate the transaction, audit the project, attest safety, sign the wallet transaction, or broadcast it.",
+          "Validates the submitted manifest digest, executable graph, required agent attestation and evidence digests, optional exact-source verification bundle, and exact permit binding; reserves the request idempotently; captures a bounded Router observation window; and prepares the Mainnet Router action for the API key's bound wallet. Programmable does not simulate the wallet transaction, audit the project, attest safety, sign the wallet transaction, or broadcast it.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -307,7 +307,7 @@ export const programmablePublicOpenApi = {
         requestBody: {
           required: true,
           description:
-            "Closed JSON request, limited to 2 MiB. Unknown top-level fields fail before launch preparation.",
+            "Closed JSON request, limited to 8,388,608 bytes (8 MiB). Unknown top-level fields fail before launch preparation.",
           content: {
             "application/json": {
               schema: component("CustomLaunchCreateRequest"),
@@ -341,7 +341,7 @@ export const programmablePublicOpenApi = {
           ),
           "413": jsonResponse(
             component("CustomLaunchApiError"),
-            "Request body exceeds 2 MiB.",
+            "Request body exceeds 8,388,608 bytes (8 MiB).",
           ),
           "415": jsonResponse(
             component("CustomLaunchApiError"),
@@ -415,6 +415,37 @@ export const programmablePublicOpenApi = {
             component("CustomLaunchApiError"),
             "Launch not found for this wallet principal.",
           ),
+          "429": {
+            description:
+              "The read rate limit was reached. Retry the same single-resource read after the indicated delay.",
+            headers: {
+              "Retry-After": {
+                description:
+                  "Delay in seconds or an HTTP date after which the request may be retried.",
+                schema: { type: "string" },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: component("CustomLaunchApiError"),
+              },
+            },
+          },
+          "503": {
+            description: "The Custom Launch API is temporarily unavailable.",
+            headers: {
+              "Retry-After": {
+                description:
+                  "Optional delay in seconds or an HTTP date after which the same request may be retried.",
+                schema: { type: "string" },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: component("CustomLaunchApiError"),
+              },
+            },
+          },
         },
       },
     },
@@ -766,6 +797,86 @@ export const programmablePublicOpenApi = {
           "Required agent self-attestation with evidence digests for the submitted graph subject. It is excluded from permit and launch authorization. Programmable does not fetch or assess the evidence, adopt the attestation, or make a safety, audit, approval, compilation, or simulation claim.",
         additionalProperties: false,
       },
+      ExactSourceCompilationUnitV1: {
+        type: "object",
+        description:
+          "One exact Solidity Standard JSON compilation input. The decoded UTF-8 bytes, not a reconstructed object, are the hash preimage. The input is closed to language, sources and settings; every source entry contains only inline content and no URL.",
+        required: [
+          "compilationUnitId",
+          "compilerVersion",
+          "standardJsonInputBase64",
+          "standardJsonInputSha256",
+        ],
+        properties: {
+          compilationUnitId: component("CanonicalIdentifier"),
+          compilerVersion: {
+            type: "string",
+            pattern: "^0\\.[0-9]+\\.[0-9]+\\+commit\\.[0-9a-f]{8}$",
+            description:
+              "Exact solc build identifier, including the eight-character commit suffix.",
+          },
+          standardJsonInputBase64: {
+            type: "string",
+            minLength: 4,
+            maxLength: 6_990_508,
+            pattern:
+              "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            description:
+              "Canonical base64 of the exact UTF-8 Solidity Standard JSON input bytes. Decoded input is limited to 5,242,880 bytes per compilation unit and across all units in the request.",
+          },
+          standardJsonInputSha256: component("Sha256Digest"),
+        },
+        additionalProperties: false,
+      },
+      ExactSourceComponentV1: {
+        type: "object",
+        description:
+          "Exact compiler target identity and resolved constructor arguments for one graph target.",
+        required: [
+          "targetId",
+          "compilationUnitId",
+          "sourcePath",
+          "contractName",
+          "constructorArguments",
+        ],
+        properties: {
+          targetId: component("CanonicalIdentifier"),
+          compilationUnitId: component("CanonicalIdentifier"),
+          sourcePath: { type: "string", minLength: 1 },
+          contractName: component("CanonicalIdentifier"),
+          constructorArguments: {
+            type: "string",
+            pattern: "^0x(?:[0-9a-f]{2})*$",
+            description:
+              "Lowercase ABI-encoded constructor arguments after graph address locators are resolved.",
+          },
+        },
+        additionalProperties: false,
+      },
+      ExactSourceVerificationBundleV1: {
+        type: "object",
+        description:
+          "Optional exact-source material bound to the prepared artifact. Compilation units are uniquely sorted by UTF-8 compilationUnitId; components are uniquely sorted by UTF-8 targetId and exactly cover every graph target. Decoded Standard JSON is limited to 5,242,880 bytes per compilation unit and in aggregate.",
+        required: ["schemaVersion", "compilationUnits", "components"],
+        properties: {
+          schemaVersion: {
+            const: "programmable.exact-source-verification-bundle.v1",
+          },
+          compilationUnits: {
+            type: "array",
+            minItems: 1,
+            maxItems: 16,
+            items: component("ExactSourceCompilationUnitV1"),
+          },
+          components: {
+            type: "array",
+            minItems: 1,
+            maxItems: 16,
+            items: component("ExactSourceComponentV1"),
+          },
+        },
+        additionalProperties: false,
+      },
       CustomLaunchCreateRequest: {
         type: "object",
         required: [
@@ -792,6 +903,11 @@ export const programmablePublicOpenApi = {
           sourceBundleManifest: component("SourceBundleManifestV2"),
           graphBundle: component("CustomGraphBundleV1"),
           agentAttestation: component("AgentLaunchAttestationV1"),
+          verificationBundle: {
+            ...component("ExactSourceVerificationBundleV1"),
+            description:
+              "Optional for V1 compatibility. When present, the exact bundle is cryptographically bound to the prepared artifact and enables post-finality exact-match verification.",
+          },
         },
         additionalProperties: false,
       },
@@ -1176,6 +1292,50 @@ export const programmablePublicOpenApi = {
           component("CustomLaunchAuthorizedOutput"),
         ],
       },
+      SourceVerificationComponentV1: {
+        type: "object",
+        required: ["targetId", "address", "status", "provider"],
+        properties: {
+          targetId: component("CanonicalIdentifier"),
+          address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
+          status: {
+            type: "string",
+            enum: ["queued", "retrying", "exact_match", "needs_attention"],
+          },
+          provider: {
+            type: ["string", "null"],
+            enum: ["sourcify", "etherscan", "blockscout", null],
+          },
+        },
+        additionalProperties: false,
+      },
+      SourceVerificationStatusV1: {
+        type: "object",
+        description:
+          "Server-authored exact-source verification state. Only literal exact_match for every exclusive component means Source verified; clients must not infer or submit this object.",
+        required: ["schemaVersion", "status", "components", "updatedAt"],
+        properties: {
+          schemaVersion: {
+            const: "programmable.source-verification-status.v1",
+          },
+          status: {
+            type: "string",
+            enum: ["queued", "retrying", "exact_match", "needs_attention"],
+          },
+          components: {
+            type: "array",
+            minItems: 1,
+            maxItems: 16,
+            items: component("SourceVerificationComponentV1"),
+          },
+          updatedAt: {
+            type: "string",
+            format: "date-time",
+            pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+          },
+        },
+        additionalProperties: false,
+      },
       CustomLaunchResource: {
         type: "object",
         description:
@@ -1228,6 +1388,8 @@ export const programmablePublicOpenApi = {
           requestHash: {
             type: "string",
             pattern: "^sha256:[0-9a-f]{64}$",
+            description:
+              "Server-side canonical idempotency request digest. It is distinct from a caller's local SHA-256 of the exact HTTP request bytes.",
           },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
@@ -1238,6 +1400,14 @@ export const programmablePublicOpenApi = {
           },
           failure: {
             oneOf: [component("CustomLaunchFailure"), { type: "null" }],
+          },
+          sourceVerification: {
+            description:
+              "Optional server-authored post-finality verification state. It is absent or null for legacy requests, requests without an exact-source bundle, and requests that have not created verification jobs.",
+            oneOf: [
+              component("SourceVerificationStatusV1"),
+              { type: "null" },
+            ],
           },
         },
         additionalProperties: false,
@@ -1553,7 +1723,7 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, and permit bindings, prepares one exact wallet action, reconciles exact state when its single-resource status is polled, and makes a bounded best-effort reconciliation pass over pending history rows. It does not compile source, assess attestation evidence, simulate the transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "The Custom Launch API validates manifest digest, graph, attestation subject, evidence digest, optional exact-source build inputs, and permit bindings, prepares one exact wallet action, reconciles exact state when its single-resource status is polled, and makes a bounded best-effort reconciliation pass over pending history rows. Exact-source provider verification runs independently after finality and never revises launch finality. Programmable does not assess attestation evidence, simulate the wallet transaction, audit, or attest safety. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {

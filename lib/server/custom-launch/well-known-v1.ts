@@ -18,7 +18,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and approved Programmable Custom launches.",
+      "Canonical discovery for Programmable Classic and Custom launches, including the live wallet-bound Custom Launch API.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -30,6 +30,29 @@ export function programmableWellKnownDocumentV1(
     schemasBaseUrl: "https://developers.programmable.family/schemas/v2/",
     documentationUrl: "https://developers.programmable.family/",
     sourceUrl: "https://github.com/0xprogrammable/developers",
+    customLaunchApi: Object.freeze({
+      status: "live" as const,
+      apiBaseUrl: "https://api.programmable.market",
+      readyzUrl: "https://api.programmable.market/readyz",
+      openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
+      apiKeysUrl: "https://programmable.market/developers/api-keys",
+      guideUrl: "https://programmable.market/docs/developers/custom-launch",
+      cli: Object.freeze({
+        packageName: "@programmable/launch",
+        binary: "programmable-launch",
+        releaseVersion: "1.0.0",
+        releaseUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v1.0.0",
+        tarballUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.0/programmable-launch-1.0.0.tgz",
+      }),
+      authentication: "wallet-bound-api-key" as const,
+      walletAuthority: "separate-review-and-sign" as const,
+      legacyIntake: Object.freeze({
+        registry: "closed" as const,
+        github: "closed" as const,
+      }),
+    }),
     chains: Object.freeze([Object.freeze({
       chainId: 1,
       caip2: "eip155:1" as const,
@@ -40,16 +63,19 @@ export function programmableWellKnownDocumentV1(
     publicCategories: Object.freeze({
       classic: Object.freeze({ discoveryStatus: "live" as const }),
       custom: Object.freeze({
-        discoveryStatus: manifest.status,
-        publicSubmissionStatus: "prelaunch" as const,
+        discoveryStatus: "live" as const,
+        publicSubmissionStatus: "api-live" as const,
+        registryDiscoveryStatus: manifest.status,
+        legacyRegistrySubmissionStatus: "closed" as const,
+        legacyGithubSubmissionStatus: "closed" as const,
         registryAddress: manifest.contracts.registry.address?.toLowerCase() ?? null,
         registryStartBlock: manifest.startBlock,
         registryGeneration: manifest.status === "live"
           ? "1"
           : null,
         note: manifest.status === "live"
-          ? "Finalized approved Custom Registry launches are discoverable. General public submissions remain prelaunch."
-          : "Only approved Custom Registry launches qualify. No registry deployment is published yet.",
+          ? "The Custom Launch API is live. Finalized Router and approved Custom Registry identities are discoverable. Legacy Registry and GitHub submission intake is closed."
+          : "The Custom Launch API is live and finalized Router identities are discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
       }),
     }),
     compatibility: Object.freeze({

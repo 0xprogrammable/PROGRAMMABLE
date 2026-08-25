@@ -253,8 +253,9 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             The platform validates manifest digest, graph, attestation shape,
-            evidence digests and permit bindings. It does not compile source,
-            simulate the transaction, audit the project or attest safety.
+            evidence digests, optional exact-source build inputs and permit
+            bindings. It does not simulate the wallet transaction, audit the
+            project or attest safety.
           </li>
           <li>
             <code>prepared</code> contains an artifact but no wallet transaction.
@@ -285,8 +286,9 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             Router verification proves initialization and fixed runtime and pool
-            bindings, not active liquidity or tradability. Source evidence and
-            agent checks remain caller-declared and are not an audit.
+            bindings, not active liquidity or tradability. Agent checks remain
+            caller-declared and are not an audit. Exact-source status is
+            server-authored only after a real provider exact match.
           </li>
           <li>
             Fee claims and automated buybacks are not active Custom Launch API

@@ -16,9 +16,9 @@ Prediction Markets is available from [Create](https://programmable.market/launch
 
 ## Build a Custom project
 
-Build and test the exact hook project. Create the deterministic source manifest, graph bundle and evidence digests with project-specific packaging that follows the [Custom Launch API schema](../developers/custom-launch.md).
+Build and test the exact hook project. Use the versioned public `programmable-launch` CLI to derive the deterministic source manifest, graph bundle, address locators, evidence digests and exact-source verification metadata described by the [Custom Launch API schema](../developers/custom-launch.md).
 
-Connect the controller wallet and create a [wallet-bound API key](https://programmable.market/developers/api-keys). The authenticated write endpoint is `https://api.programmable.market/v1/custom-launches`. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the transaction for separate controller-wallet review, signing and broadcast. The API key cannot perform those wallet actions.
+Connect the controller wallet and create a [wallet-bound API key](https://programmable.market/developers/api-keys). Store it only as `PROGRAMMABLE_API_KEY` in an encrypted environment or secret store, never in chat or prompts. The authenticated write endpoint is `https://api.programmable.market/v1/custom-launches`. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the transaction for separate controller-wallet review, signing and broadcast. The API key cannot perform those wallet actions.
 
 ## Reusable work
 

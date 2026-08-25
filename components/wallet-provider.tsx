@@ -37,6 +37,10 @@ import {
 import {
   requestGitHubLaunchAppAuthorizationV1,
 } from "@/lib/custom-launch/github-app-authorization-v1";
+import {
+  assertCustomLaunchWalletActionV1,
+  type CustomLaunchWalletActionV1,
+} from "@/lib/custom-launch/wallet-handoff-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
 import {
@@ -149,6 +153,9 @@ type WalletContextValue = {
     data: `0x${string}`;
     value: `0x${string}`;
   }>) => Promise<Hex>;
+  sendCustomLaunchWalletAction: (
+    input: CustomLaunchWalletActionV1,
+  ) => Promise<Hex>;
   sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
   sendPredictionV2Transaction: (
     transaction: ParsedPredictionV2PreparedTransactionV2,
@@ -873,6 +880,9 @@ function DeferredWalletProvider({
         throw new Error("Wallet sign-in is still loading");
       },
       sendBrowserWalletAction: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      sendCustomLaunchWalletAction: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
       sendTransaction: async () => {
@@ -1954,6 +1964,16 @@ function PrivyWalletBridge({
     }
   }, [connectedWallet, sendPrivyTransaction, user?.id, wallet]);
 
+  const sendCustomLaunchWalletAction = useCallback(async (
+    input: CustomLaunchWalletActionV1,
+  ) => {
+    if (!wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+    const checked = assertCustomLaunchWalletActionV1(input, wallet.account);
+    return sendBrowserWalletAction(checked);
+  }, [sendBrowserWalletAction, wallet]);
+
   const readTradeBalances = useCallback(
     async (token: `0x${string}`) => {
       if (!connectedWallet || !wallet) {
@@ -2066,6 +2086,7 @@ function PrivyWalletBridge({
       signPredictionPermit,
       signPredictionTokenPermit,
       sendBrowserWalletAction,
+      sendCustomLaunchWalletAction,
       sendTransaction,
       sendPredictionV2Transaction,
       readNativeBalance,
@@ -2092,6 +2113,7 @@ function PrivyWalletBridge({
       refreshApplicantSession,
       reauthorizeGithub,
       sendBrowserWalletAction,
+      sendCustomLaunchWalletAction,
       sendPredictionV2Transaction,
       sendTransaction,
       signLaunchMessage,
@@ -2178,6 +2200,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendBrowserWalletAction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      sendCustomLaunchWalletAction: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendTransaction: async () => {

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   customEnabled: vi.fn(() => false),
   readCustom: vi.fn(),
   readRouter: vi.fn(),
+  routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -39,16 +40,31 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ROUTER_CUSTOM_FINALITY_CONFIRMATIONS: 64,
   ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
   readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  readFinalizedRouterCustomIdentitySnapshotV1: async (...args: unknown[]) => {
+    const entries = await mocks.readRouter(...args);
+    return {
+      schemaVersion: "programmable.router-custom-identity-snapshot.v1",
+      source: "canonical-launch-stamp-router",
+      status: mocks.routerStatus(),
+      generatedAt: "2026-08-16T08:00:01.000Z",
+      asOfBlock: "25740001",
+      asOfBlockHash: `0x${"bc".repeat(32)}`,
+      finalityConfirmations: 64,
+      identityCommitment: `sha256:${"ac".repeat(32)}`,
+      entries,
+    };
+  },
   routerCustomEntriesAtOrBeforeBlockV1: (entries: readonly unknown[]) => entries,
   mergeRouterCustomExploreEntriesV1: (
     existing: readonly unknown[],
     router: readonly unknown[],
   ) => [...existing, ...router],
   publicLaunchSourceV1: (input: Readonly<{
+    envioAvailable?: boolean;
     registryCustomCurrent: boolean;
     routerCustomCurrent: boolean;
   }>) => [
-    "envio-classic-v3",
+    ...(input.envioAvailable === false ? [] : ["envio-classic-v3"]),
     ...(input.registryCustomCurrent ? ["registry.custom-launched"] : []),
     ...(input.routerCustomCurrent ? ["canonical-launch-stamp-router"] : []),
   ].join("+"),
@@ -225,6 +241,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.customEnabled.mockReturnValue(false);
     mocks.readCustom.mockResolvedValue([]);
     mocks.readRouter.mockResolvedValue([]);
+    mocks.routerStatus.mockReturnValue("current");
     mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
       entries: valued(input),
       marketRead: marketRead({ requested: input.length, qualified: input.length }),
@@ -279,6 +296,73 @@ describe("Explore static identity and Dexscreener market contract", () => {
     });
     expect(response.headers.get("x-programmable-router-read-status")).toBe(
       "current",
+    );
+  });
+
+  it("keeps a finalized Router identity visible when Envio is unavailable", async () => {
+    mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.tokens[0]).toMatchObject({
+      tokenAddress: customGraphExploreEntry.tokenAddress,
+      launchCategoryProvenance: {
+        source: "canonical-launch-stamp-router",
+      },
+    });
+    expect(body.catalog).toMatchObject({
+      launchSource: "canonical-launch-stamp-router",
+      completeness: {
+        classic: "unavailable",
+        routerCustom: "current",
+      },
+      routerStamp: {
+        status: "current",
+        asOfBlock: "25740001",
+      },
+    });
+    expect(body.dataQuality.launchIdentity.canonical).toBe("unavailable");
+    expect(response.headers.get("x-programmable-canonical-read-status")).toBe(
+      "unavailable",
+    );
+  });
+
+  it("does not clip Router finality to an older Envio snapshot", async () => {
+    mocks.readCatalog.mockResolvedValue(catalog({
+      status: "last-known-good",
+      asOfBlock: "25718016",
+    }));
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+
+    const body = await json(await GET(
+      request("sort=newest&page=1&limit=100"),
+    ));
+    expect(body.tokens).toContainEqual(expect.objectContaining({
+      tokenAddress: customGraphExploreEntry.tokenAddress,
+    }));
+    expect(body.catalog.routerStamp.asOfBlock).toBe("25740001");
+    expect(body.catalog.asOfBlock).toBe("25740001");
+    expect(body.dataQuality.launchIdentity.asOfBlock).toBe("25740001");
+  });
+
+  it("keeps a last-known-good Router identity visible without claiming current coverage", async () => {
+    mocks.routerStatus.mockReturnValue("last-known-good");
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.tokens).toContainEqual(expect.objectContaining({
+      tokenAddress: customGraphExploreEntry.tokenAddress,
+    }));
+    expect(body.catalog.routerStamp.status).toBe("last-known-good");
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "last-known-good",
     );
   });
 

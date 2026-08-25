@@ -26,6 +26,7 @@ import {
   writeAlchemyLaunchRegistry,
   type AlchemyLaunchCursor,
   type AlchemyLaunchRegistry,
+  type AlchemyLaunchStampRouterRegistry,
 } from "./launch-registry.server";
 
 export const ALCHEMY_EXPLORE_CACHE_TAG = "alchemy-explore-v1";
@@ -130,6 +131,30 @@ const readCachedAlchemyExploreModel = unstable_cache(
 
 export async function readAlchemyExploreModel() {
   return readCachedAlchemyExploreModel();
+}
+
+export type AlchemyRouterCustomIdentitySourceV1 = Readonly<{
+  generatedAt: string;
+  status: "current" | "last-known-good";
+  reorgDetected: boolean;
+  slice: AlchemyLaunchStampRouterRegistry;
+}>;
+
+export async function readAlchemyRouterCustomIdentitySourceV1(): Promise<
+  AlchemyRouterCustomIdentitySourceV1
+> {
+  const refreshed = await refreshAlchemyExploreRegistry({
+    includeLatest: false,
+    requirePersistence: false,
+  });
+  return Object.freeze({
+    generatedAt: refreshed.registryGeneratedAt,
+    status: refreshed.launchStampRouterCaughtUp
+      ? "current"
+      : "last-known-good",
+    reorgDetected: refreshed.launchStampRouterRebuiltAfterReorg,
+    slice: refreshed.launchStampRouter,
+  });
 }
 
 type AlchemyRegistryRefreshOptions = Readonly<{
@@ -473,6 +498,10 @@ async function refreshAlchemyExploreRegistryOnce(
     servedBlockNumber: servedCursorModel.snapshot.blockNumber,
     launchStampRouterBlockNumber:
       confirmedRegistry.launchStampRouter.cursor.blockNumber,
+    launchStampRouter: confirmedRegistry.launchStampRouter,
+    launchStampRouterCaughtUp: routerAdvance.caughtUp === true,
+    launchStampRouterRebuiltAfterReorg: routerAdvance.rebuiltAfterReorg,
+    registryGeneratedAt: confirmedRegistry.generatedAt,
     persisted,
     registryChanged,
   } as const;
