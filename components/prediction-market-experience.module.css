@@ -1037,6 +1037,10 @@
   opacity: 0.42;
 }
 
+.portfolioRefreshIcon {
+  flex: none;
+}
+
 .portfolioTabs {
   background: var(
     --profile-subtle,
@@ -1550,6 +1554,10 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .portfolioRefresh[aria-busy="true"] .portfolioRefreshIcon {
+    animation: prediction-market-refresh-spin 800ms linear infinite;
+  }
+
   .portfolioRefresh,
   .portfolioPrimaryAction,
   .portfolioSecondaryAction,

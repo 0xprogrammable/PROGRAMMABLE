@@ -765,11 +765,17 @@ export function PredictionMarketPortfolio({
           <button
             className={styles.portfolioRefresh}
             type="button"
+            aria-busy={isBusy || undefined}
             disabled={isBusy}
             onClick={refreshPortfolio}
           >
-            <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-            <span>{model.refreshing ? "Refreshing" : "Refresh"}</span>
+            <RefreshCw
+              className={styles.portfolioRefreshIcon}
+              aria-hidden="true"
+              size={15}
+              strokeWidth={2}
+            />
+            <span>{isBusy ? "Refreshing" : "Refresh"}</span>
           </button>
         ) : null}
       </header>

@@ -509,32 +509,42 @@ function CreatorArticleEditorOpening({
   project,
   onClose,
 }: Readonly<{ project: CreatorProjectSummaryV1; onClose(): void }>) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previouslyFocused = window.document.activeElement instanceof HTMLElement
+      ? window.document.activeElement
+      : null;
     const previousOverflow = window.document.body.style.overflow;
     window.document.body.style.overflow = "hidden";
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
+    if (!dialog.open) dialog.showModal();
+    closeRef.current?.focus({ preventScroll: true });
     return () => {
       window.document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
+      if (dialog.open) dialog.close();
+      previouslyFocused?.focus({ preventScroll: true });
     };
-  }, [onClose]);
+  }, []);
 
   if (typeof document === "undefined") return null;
   return createPortal((
-    <div className={styles.openingBackdrop} role="presentation">
+    <dialog
+      ref={dialogRef}
+      className={styles.openingBackdrop}
+      aria-labelledby="opening-creator-article-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className={styles.openingDialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="opening-creator-article-title"
       >
         <div className={styles.openingIdentity}>
           <div className={styles.openingArt}>
@@ -552,7 +562,7 @@ function CreatorArticleEditorOpening({
           <X aria-hidden="true" size={18} />
         </button>
       </section>
-    </div>
+    </dialog>
   ), document.body);
 }
 

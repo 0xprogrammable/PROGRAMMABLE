@@ -107,6 +107,11 @@ describe("developer API key interface", () => {
   });
 
   it("uses a styled expiry listbox with complete keyboard and form behavior", () => {
+    const expirySelectSource = apiKeysSource.slice(
+      apiKeysSource.indexOf("function ExpirySelect"),
+      apiKeysSource.indexOf("export function DeveloperApiKeys"),
+    );
+
     expect(apiKeysSource).toContain('aria-haspopup="listbox"');
     expect(apiKeysSource).toContain('role="listbox"');
     expect(apiKeysSource).toContain('role="option"');
@@ -117,6 +122,11 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('event.key === "Home"');
     expect(apiKeysSource).toContain('event.key === "End"');
     expect(apiKeysSource).toContain('event.key === "Escape"');
+    expect(expirySelectSource).toContain("onBlurCapture={(event) => {");
+    expect(expirySelectSource).toContain(
+      "event.currentTarget.contains(event.relatedTarget)",
+    );
+    expect(expirySelectSource).not.toContain('event.key === "Tab"');
     expect(apiKeysStyles).toContain(".expiryTrigger");
     expect(apiKeysStyles).toContain(".expiryMenu");
     expect(apiKeysStyles).not.toContain("appearance: auto");

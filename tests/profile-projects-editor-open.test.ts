@@ -93,6 +93,24 @@ describe("My projects editor opening", () => {
     );
   });
 
+  it("uses a native modal while the article editor opens and restores focus", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
+
+    expect(source).toContain("const dialogRef = useRef<HTMLDialogElement>(null)");
+    expect(source).toContain("if (!dialog.open) dialog.showModal()");
+    expect(source).toContain("previouslyFocused?.focus({ preventScroll: true })");
+    expect(source).toContain("onCancel={(event) => {");
+    expect(source).not.toContain('className={styles.openingDialog}\n        role="dialog"');
+    expect(styles).toContain(".openingBackdrop::backdrop");
+  });
+
   it("communicates refresh progress without relying on motion", () => {
     const source = readFileSync(
       join(process.cwd(), "components/profile-projects.tsx"),
