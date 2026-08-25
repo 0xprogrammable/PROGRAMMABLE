@@ -170,6 +170,49 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(v2.components.schemas.CustomLaunchResourceV2.properties.status.enum)
       .toContain("simulating");
+    const sourceVerification =
+      v2.components.schemas.CustomLaunchResourceV2.properties.sourceVerification;
+    expect(v2.components.schemas.CustomLaunchResourceV2.required)
+      .not.toContain("sourceVerification");
+    expect(sourceVerification).toEqual({
+      description:
+        "Optional server-authored post-finality verification state returned by the single-resource GET. It is absent or null when no durable status exists; create and list responses do not populate it.",
+      oneOf: [
+        { $ref: "#/components/schemas/SourceVerificationStatusV1" },
+        { type: "null" },
+      ],
+    });
+    expect(v2.components.schemas.SourceVerificationStatusV1).toEqual({
+      $ref:
+        "./custom-launch-v1.json#/components/schemas/SourceVerificationStatusV1",
+    });
+    expect(v1.components.schemas.SourceVerificationStatusV1).toMatchObject({
+      additionalProperties: false,
+      required: ["schemaVersion", "status", "components", "updatedAt"],
+      properties: {
+        schemaVersion: {
+          const: "programmable.source-verification-status.v1",
+        },
+        status: {
+          enum: ["queued", "retrying", "exact_match", "needs_attention"],
+        },
+      },
+    });
+    expect(v1.components.schemas.SourceVerificationComponentV1).toMatchObject({
+      additionalProperties: false,
+      required: ["targetId", "address", "status", "provider"],
+      properties: {
+        status: {
+          enum: ["queued", "retrying", "exact_match", "needs_attention"],
+        },
+        provider: {
+          enum: ["sourcify", "etherscan", "blockscout", null],
+        },
+      },
+    });
+    expect(
+      v1.components.schemas.SourceVerificationStatusV1.description,
+    ).toContain("clients must not infer or submit this object");
     expect(
       v2.components.schemas.CustomLaunchSummaryV2.allOf[1].properties.output,
     ).toEqual({ type: "null" });

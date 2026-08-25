@@ -564,6 +564,9 @@
       "CustomLaunchOnchainEvidenceV1": {
         "$ref": "./custom-launch-v1.json#/components/schemas/CustomLaunchOnchainEvidenceV1"
       },
+      "SourceVerificationStatusV1": {
+        "$ref": "./custom-launch-v1.json#/components/schemas/SourceVerificationStatusV1"
+      },
       "CustomLaunchApiErrorV2": {
         "type": "object",
         "required": [
@@ -1396,6 +1399,17 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/CustomLaunchFailureV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceVerification": {
+            "description": "Optional server-authored post-finality verification state returned by the single-resource GET. It is absent or null when no durable status exists; create and list responses do not populate it.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SourceVerificationStatusV1"
               },
               {
                 "type": "null"
