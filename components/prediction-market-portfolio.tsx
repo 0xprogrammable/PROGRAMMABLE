@@ -753,6 +753,7 @@ export function PredictionMarketPortfolio({
       className={styles.portfolioSection}
       aria-busy={isBusy}
       aria-labelledby="prediction-portfolio-title"
+      data-populated={visibleItems.length > 0 || undefined}
     >
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement || model.statusMessage}

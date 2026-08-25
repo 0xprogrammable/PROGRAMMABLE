@@ -1857,8 +1857,16 @@
 
   .portfolioLoadingCard {
     grid-template-columns: minmax(0, 1fr);
-    min-height: 256px;
+    min-height: 322px;
     position: relative;
+  }
+
+  .portfolioLoadingCard:nth-child(n + 3) {
+    display: none;
+  }
+
+  .portfolioSection[data-populated="true"] {
+    min-height: 806px;
   }
 
   .portfolioLoadingArtwork {

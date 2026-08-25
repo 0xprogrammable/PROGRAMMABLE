@@ -1304,7 +1304,7 @@
 
 .profileSkeletonInline {
   margin-block-start: 34px;
-  min-height: 360px;
+  min-height: 398px;
   padding-block-start: 0;
 }
 
@@ -1318,7 +1318,7 @@
   display: grid;
   gap: 0 20px;
   grid-template-columns: 96px minmax(0, 1fr);
-  min-height: 227px;
+  min-height: 282px;
 }
 
 .profileSkeletonBanner,
@@ -1382,7 +1382,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-height: 360px;
+  min-height: 398px;
 }
 
 .profileSkeletonWorkspacePage {
@@ -1402,7 +1402,7 @@
 
 .profileSkeletonSummary,
 .profileSkeletonClaims {
-  min-height: 360px;
+  min-height: 398px;
 }
 
 .profileSkeletonSection {
@@ -1412,7 +1412,7 @@
 
 .profileSkeletonLaunch {
   margin-block-start: 40px;
-  min-height: 448px;
+  min-height: 463px;
 }
 
 .profileSkeletonPrediction {
@@ -2558,7 +2558,7 @@
 
   .profileSkeletonLaunch .profileSkeletonRow {
     grid-template-columns: 44px minmax(0, 1fr);
-    min-height: 109px;
+    min-height: 142.5px;
   }
 
   .profileSkeletonLaunch .profileSkeletonRow > span:last-child {
@@ -2566,13 +2566,22 @@
   }
 
   .profileSkeletonPredictionRow {
-    min-height: 256px;
+    min-height: 322px;
+  }
+
+  .profileSkeletonPredictionRow:nth-child(n + 3) {
+    display: none;
   }
 
   .profileSkeletonHero {
     gap: 0 14px;
     grid-template-columns: 76px minmax(0, 1fr);
-    min-height: 175px;
+    min-height: 350px;
+  }
+
+  .profileSkeletonClaims,
+  .claimablePanel:not(.claimablePanelEmpty) {
+    min-height: 637px !important;
   }
 
   .profileSkeletonBanner {
