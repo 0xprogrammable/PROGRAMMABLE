@@ -17,8 +17,6 @@ import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import type { LaunchModel } from "@/lib/launch";
-import type { TrustedLaunchPermitSignerV2 } from "@/lib/custom-launch/contract-v2";
-import type { CustomLaunchStageV1 } from "@/components/custom-launch-experience";
 
 const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -26,14 +24,6 @@ const launchEnvironment =
     : "production";
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
-const LOCAL_PREVIEW_STAGES = new Set<CustomLaunchStageV1>([
-  "github",
-  "repositories",
-  "approval",
-  "prepare",
-  "wallet",
-  "registry",
-]);
 const PREDICTION_V2_LOCAL_PREVIEW_STATES = new Set([
   "address",
   "asset",
@@ -60,30 +50,14 @@ function loadLaunchForm() {
   return import("@/components/launch-builder");
 }
 
-function loadCustomLaunch() {
-  return import("@/components/custom-launch-experience");
-}
-
 function loadPredictionMarket() {
   return import("@/components/prediction-market-launch");
 }
-
-const LazyCustomLaunchExperience = lazy(async () => {
-  const customModule = await loadCustomLaunch();
-  return { default: customModule.CustomLaunchExperience };
-});
 
 const LazyPredictionMarketLaunch = lazy(async () => {
   const predictionModule = await loadPredictionMarket();
   return { default: predictionModule.PredictionMarketLaunch };
 });
-
-const LazyDevelopmentCustomLaunchPreview = process.env.NODE_ENV === "development"
-  ? lazy(async () => {
-      const previewModule = await import("@/components/custom-launch-local-preview");
-      return { default: previewModule.CustomLaunchLocalPreview };
-    })
-  : null;
 
 const LazyDevelopmentPredictionV2Preview = process.env.NODE_ENV === "development"
   ? lazy(async () => {
@@ -96,7 +70,7 @@ const LazyDevelopmentPredictionV2Preview = process.env.NODE_ENV === "development
 
 type LaunchBuilderComponent =
   (typeof import("@/components/launch-builder"))["LaunchBuilderForm"];
-type LaunchPickerChoice = LaunchModel | "custom" | "prediction";
+type LaunchPickerChoice = LaunchModel | "prediction";
 
 function LaunchFormLoading({
   onBack,
@@ -136,24 +110,19 @@ function LaunchFormLoading({
   );
 }
 
-type LaunchExperienceProps = Readonly<{
-  customLaunchPublicEnabled: boolean;
-  trustedLaunchPermitSigners?: readonly TrustedLaunchPermitSignerV2[];
-}>;
-
-export function LaunchExperience(props: LaunchExperienceProps) {
+export function LaunchExperience() {
   if (process.env.NODE_ENV !== "development") {
-    return <LaunchExperienceRuntime {...props} />;
+    return <LaunchExperienceRuntime />;
   }
 
   return (
-    <Suspense fallback={<LaunchExperienceRuntime {...props} />}>
-      <DevelopmentLaunchPreviewRoute {...props} />
+    <Suspense fallback={<LaunchExperienceRuntime />}>
+      <DevelopmentLaunchPreviewRoute />
     </Suspense>
   );
 }
 
-function DevelopmentLaunchPreviewRoute(props: LaunchExperienceProps) {
+function DevelopmentLaunchPreviewRoute() {
   const searchParams = useSearchParams();
   const previewCandidate = searchParams.get("localPreview");
   if (
@@ -185,45 +154,22 @@ function DevelopmentLaunchPreviewRoute(props: LaunchExperienceProps) {
       </Suspense>
     );
   }
-  const localPreviewStage = previewCandidate
-    && LOCAL_PREVIEW_STAGES.has(previewCandidate as CustomLaunchStageV1)
-    ? previewCandidate as CustomLaunchStageV1
-    : undefined;
-  if (localPreviewStage === undefined || LazyDevelopmentCustomLaunchPreview === null) {
-    return <LaunchExperienceRuntime {...props} />;
-  }
-  return (
-    <Suspense fallback={<LaunchFormLoading title="Approved project launch" onBack={() => undefined} />}>
-      <LazyDevelopmentCustomLaunchPreview
-        initialStage={localPreviewStage}
-        onBack={() => window.location.assign("/launch")}
-      />
-    </Suspense>
-  );
+  return <LaunchExperienceRuntime />;
 }
 
-function LaunchExperienceRuntime({
-  customLaunchPublicEnabled,
-  trustedLaunchPermitSigners = [],
-}: LaunchExperienceProps) {
+function LaunchExperienceRuntime() {
   const [selectedModel, setSelectedModel] = useState<LaunchPickerChoice | null>(null);
   const [loadedLaunchBuilder, setLoadedLaunchBuilder] =
     useState<LaunchBuilderComponent | null>(null);
   const [preparingModel, setPreparingModel] = useState<LaunchModel | null>(null);
   const [modelLoadError, setModelLoadError] = useState("");
-  const customLaunchButtonRef = useRef<HTMLAnchorElement>(null);
   const predictionButtonRef = useRef<HTMLButtonElement>(null);
-  const restorePickerFocusRef = useRef<"custom" | "prediction" | null>(null);
+  const restorePickerFocusRef = useRef<"prediction" | null>(null);
 
   useEffect(() => {
     if (selectedModel !== null || restorePickerFocusRef.current === null) return;
-    const modelToRestore = restorePickerFocusRef.current;
     restorePickerFocusRef.current = null;
-    if (modelToRestore === "prediction") {
-      predictionButtonRef.current?.focus();
-      return;
-    }
-    customLaunchButtonRef.current?.focus();
+    predictionButtonRef.current?.focus();
   }, [selectedModel]);
 
   useEffect(() => {
@@ -234,12 +180,6 @@ function LaunchExperienceRuntime({
     if (candidate === "prediction") {
       window.scrollTo({ left: 0, top: 0, behavior: "auto" });
       setSelectedModel("prediction");
-      return;
-    }
-    if (candidate === "custom") {
-      if (!customLaunchPublicEnabled) return;
-      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-      setSelectedModel("custom");
       return;
     }
     const model = resolveImplementedLaunchModel(candidate);
@@ -268,10 +208,9 @@ function LaunchExperienceRuntime({
   }
 
   function returnToModels() {
-    restorePickerFocusRef.current =
-      selectedModel === "custom" || selectedModel === "prediction"
-        ? selectedModel
-        : null;
+    restorePickerFocusRef.current = selectedModel === "prediction"
+      ? "prediction"
+      : null;
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(null);
   }
@@ -279,24 +218,11 @@ function LaunchExperienceRuntime({
   if (!selectedModel) {
     return (
       <LaunchModelPicker
-        customLaunchPublicEnabled={customLaunchPublicEnabled}
-        customLaunchButtonRef={customLaunchButtonRef}
         predictionButtonRef={predictionButtonRef}
         modelLoadError={modelLoadError}
         onChoose={chooseModel}
         preparingModel={preparingModel}
       />
-    );
-  }
-
-  if (selectedModel === "custom") {
-    return (
-      <Suspense fallback={<LaunchFormLoading title="Custom launch" onBack={returnToModels} />}>
-        <LazyCustomLaunchExperience
-          onBack={returnToModels}
-          trustedLaunchPermitSigners={trustedLaunchPermitSigners}
-        />
-      </Suspense>
     );
   }
 
@@ -321,15 +247,11 @@ function LaunchExperienceRuntime({
 }
 
 export function LaunchModelPicker({
-  customLaunchButtonRef,
   predictionButtonRef,
   modelLoadError = "",
   onChoose,
   preparingModel = null,
 }: {
-  /** Retained for callers that also host the internal legacy launch runtime. */
-  customLaunchPublicEnabled?: boolean;
-  customLaunchButtonRef?: RefObject<HTMLAnchorElement | null>;
   predictionButtonRef?: RefObject<HTMLButtonElement | null>;
   modelLoadError?: string;
   onChoose: (model: LaunchPickerChoice) => void | Promise<void>;
@@ -478,7 +400,6 @@ export function LaunchModelPicker({
         </button>
 
         <Link
-          ref={customLaunchButtonRef}
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="custom"
           data-launch-model-available="true"

@@ -170,7 +170,6 @@ describe("unreleased launch model gating", () => {
   it("routes Custom to the API-first entry instead of the legacy runtime", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
-        customLaunchPublicEnabled: true,
         onChoose: () => undefined,
       }),
     );

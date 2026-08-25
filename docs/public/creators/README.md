@@ -12,11 +12,11 @@ Classic is available from [Create](https://programmable.market/launch). The laun
 
 ## Create a Prediction Market
 
-Prediction Markets is available from [Create](https://programmable.market/launch). The creator configures an available market and reviews the transaction required by the active release. Check the [canonical Prediction Markets repository](https://github.com/0xprogrammable/programmable-prediction-markets) for current networks, market types, costs, fees, creator rewards and resolution rules.
+Prediction Markets is available from [Create](https://programmable.market/launch). The creator configures an available market and reviews the transaction required by the active release. Check the [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) for current networks, market types, costs, fees, creator rewards and resolution rules.
 
 ## Build a Custom project
 
-Build and test the exact hook project. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional starting point. Create the deterministic source manifest, graph bundle and evidence digests with project-specific packaging that follows the [Custom Launch API schema](../developers/custom-launch.md); do not assume the current stable Builder emits that request.
+Build and test the exact hook project. Create the deterministic source manifest, graph bundle and evidence digests with project-specific packaging that follows the [Custom Launch API schema](../developers/custom-launch.md).
 
 Connect the controller wallet and create a [wallet-bound API key](https://programmable.market/developers/api-keys). The authenticated write endpoint is `https://api.programmable.market/v1/custom-launches`. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the transaction for separate controller-wallet review, signing and broadcast. The API key cannot perform those wallet actions.
 

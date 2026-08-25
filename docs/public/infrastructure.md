@@ -16,7 +16,7 @@ Custom begins with one deterministic source and graph bundle submitted through t
 
 ## Prediction Markets execution
 
-Prediction Markets uses a separately versioned Uniswap v4 protocol release. Its [canonical repository](https://github.com/0xprogrammable/programmable-prediction-markets) defines the current network, market components, transaction paths, resolution rules and deployment evidence. The public Ethereum developer feed covers Ethereum Router records; use the canonical repository for Prediction Markets integrations.
+Prediction Markets uses a separately versioned Uniswap v4 protocol release. Its [canonical repository](https://github.com/0xprogrammable/Prediction-Markets) defines the current network, market components, transaction paths, resolution rules and deployment evidence. The public Ethereum developer feed covers Ethereum Router records; use the canonical repository for Prediction Markets integrations.
 
 ## Launch stamps
 

@@ -24,7 +24,7 @@ const vercelConfig = JSON.parse(read("vercel.json")) as {
 };
 const predictionModelPage = predictionDocsComponent;
 const canonicalSource =
-  "https://github.com/0xprogrammable/programmable-prediction-markets";
+  "https://github.com/0xprogrammable/Prediction-Markets";
 const releaseBridgeSources = [
   predictionModelPage,
   gitBookPage,

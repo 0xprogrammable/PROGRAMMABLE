@@ -2,7 +2,9 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const PRODUCTION_BUNDLE_ROOTS = [".next/static", ".next/server"];
-const DEVELOPMENT_ONLY_MARKERS = [
+const FORBIDDEN_PRODUCTION_MARKERS = [
+  "programmable.custom-launch-session.v3:",
+  "Open a GitHub application, then return when an exact revision has been approved.",
   "programmable-custom-launch-local-preview-v1",
   "programmable-prediction-v2-local-preview-v1",
   "example-labs/approved-module",
@@ -33,20 +35,20 @@ export function verifyCustomLaunchProductionBundle(root = process.cwd()) {
   const bundleFiles = bundleRoots.flatMap(filesUnder);
   for (const file of bundleFiles) {
     const source = readFileSync(file);
-    for (const marker of DEVELOPMENT_ONLY_MARKERS) {
+    for (const marker of FORBIDDEN_PRODUCTION_MARKERS) {
       if (source.includes(Buffer.from(marker))) {
         findings.push(`${relative(absoluteRoot, file)} contains ${JSON.stringify(marker)}`);
       }
     }
   }
   if (findings.length > 0) {
-    throw new Error(`Development-only launch preview leaked into production:\n${findings.join("\n")}`);
+    throw new Error(`Retired launch UI or development preview leaked into production:\n${findings.join("\n")}`);
   }
   return Object.freeze({
     schemaVersion: "programmable.custom-launch-production-bundle-scan.v1",
     scannedRoots: PRODUCTION_BUNDLE_ROOTS,
     scannedFileCount: bundleFiles.length,
-    forbiddenMarkerCount: DEVELOPMENT_ONLY_MARKERS.length,
+    forbiddenMarkerCount: FORBIDDEN_PRODUCTION_MARKERS.length,
   });
 }
 

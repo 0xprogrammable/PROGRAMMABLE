@@ -10,7 +10,7 @@ Prediction Markets is Programmable's open-source Uniswap v4 launch model for onc
 
 ## Current release
 
-The [canonical Prediction Markets repository](https://github.com/0xprogrammable/programmable-prediction-markets) is the source of truth for the active protocol release. It defines:
+The [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) is the source of truth for the active protocol release. It defines:
 
 - Current networks and supported market types.
 - Collateral and activation rules.

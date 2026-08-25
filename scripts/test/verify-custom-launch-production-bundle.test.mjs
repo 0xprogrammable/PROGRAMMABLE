@@ -15,7 +15,7 @@ function bundleFixture() {
   return root;
 }
 
-test("accepts a production bundle without development-only launch seeds", () => {
+test("accepts a production bundle without retired UI or development-only launch seeds", () => {
   const root = bundleFixture();
   try {
     assert.equal(
@@ -27,8 +27,13 @@ test("accepts a production bundle without development-only launch seeds", () => 
   }
 });
 
-test("rejects a local seed in source maps and non-JavaScript production artifacts", () => {
+test("rejects retired UI and local seeds in every production artifact", () => {
   for (const [path, marker] of [
+    [".next/static/chunks/retired-custom.js", "programmable.custom-launch-session.v3:"],
+    [
+      ".next/server/app/retired-custom.rsc",
+      "Open a GitHub application, then return when an exact revision has been approved.",
+    ],
     [".next/static/chunks/leak.js.map", "programmable-custom-launch-local-preview-v1"],
     [".next/static/chunks/prediction-leak.js.map", "programmable-prediction-v2-local-preview-v1"],
     [".next/server/app/leak.rsc", "Local seed"],
@@ -38,7 +43,7 @@ test("rejects a local seed in source maps and non-JavaScript production artifact
       writeFileSync(join(root, path), marker, "utf8");
       assert.throws(
         () => verifyCustomLaunchProductionBundle(root),
-        /Development-only launch preview leaked into production/u,
+        /Retired launch UI or development preview leaked into production/u,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

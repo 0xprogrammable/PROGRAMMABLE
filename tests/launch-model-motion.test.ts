@@ -44,6 +44,7 @@ describe("launch model artwork", () => {
 
   it("uses native card semantics and keeps decorative art out of the accessibility tree", () => {
     const source = read("components/launch-entry.tsx");
+    const route = read("app/launch/page.tsx");
 
     expect(source).toContain('data-launch-model-option="classic"');
     expect(source).toContain('type="button"');
@@ -73,8 +74,13 @@ describe("launch model artwork", () => {
     expect(source).toContain('data-launch-model-available="true"');
     expect(source).toContain('data-launch-model-entry="api-first"');
     expect(source).toContain('href="/developers/api-keys"');
-    expect(source).not.toContain('? () => void onChoose("custom")');
-    expect(source).not.toContain("disabled={!customLaunchPublicEnabled}");
+    expect(source).not.toContain('onChoose("custom")');
+    expect(source).not.toContain("customLaunchPublicEnabled");
+    expect(source).not.toContain("custom-launch-experience");
+    expect(source).not.toContain("custom-launch-local-preview");
+    expect(route).toContain("return <LaunchExperience />;");
+    expect(route).not.toContain("isCustomLaunchPublicEnabled");
+    expect(route).not.toContain("configuredLaunchPermitSignersV2");
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }

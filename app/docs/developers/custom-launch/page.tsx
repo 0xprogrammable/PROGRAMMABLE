@@ -119,11 +119,8 @@ export default function CustomLaunchApiDocsPage() {
 
         <ol className={styles.steps}>
           <li>
-            Build and test the hook and every launch component. The{" "}
-            <a href="https://github.com/0xprogrammable/Hookbuilder-Skill">
-              Hookbuilder-Skill
-            </a>{" "}
-            is an optional way to build and check the project.
+            Build and test the hook and every launch component from one exact
+            source revision.
           </li>
           <li>
             Generate <code>launch.json</code> from that exact build with the

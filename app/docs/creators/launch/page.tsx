@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
 import { DocsShell } from "@/components/docs-shell";
@@ -83,12 +82,6 @@ export default function CreatorLaunchDocsPage() {
             </span>
           </li>
         </ol>
-        <DocsExternalLink
-          href="https://github.com/0xprogrammable/Hookbuilder-Skill"
-          variant="chip"
-        >
-          Open Hookbuilder-Skill as a project starting point
-        </DocsExternalLink>
       </section>
 
       <section id="key">

@@ -68,8 +68,8 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/project-specific (?:bytecode|packaging)/);
       expect(source).toMatch(/do not (?:copy test-only hashes|publish a hand-written launch fixture)/i);
     }
-    expect(createGuide).toContain("optional project starting point");
-    expect(createGuide).not.toContain("Hook Builder packages");
+    expect(createGuide).toContain("/openapi/custom-launch-v1.json");
+    expect(createGuide).not.toMatch(/Hookbuilder-Skill|Hook Builder packages/);
   });
 
   it("keeps the raw guide and OpenAPI URLs compatible", () => {

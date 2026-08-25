@@ -10,7 +10,7 @@ The human guide on the website is [programmable.market/docs/developers/custom-la
 
 ## Quickstart
 
-1. Build and test the hook and every launch component. [Hookbuilder-Skill](https://github.com/0xprogrammable/Hookbuilder-Skill) is an optional way to build and check the project.
+1. Build and test the hook and every launch component from one exact source revision.
 2. Generate `launch.json` from that exact build with the project's packaging tooling, then validate it against the [OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json).
 3. Connect the controller wallet at [API keys](https://programmable.market/developers/api-keys), create a key and submit `launch.json` with a stable idempotency key.
 4. Poll the request until it is `authorized`. The controller wallet then reviews, signs and broadcasts `output.walletTransaction`. Keep polling until the request is `finalized` or terminally failed.

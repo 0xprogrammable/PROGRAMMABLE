@@ -1,6 +1,10 @@
 # Custom Hook launch experience V1
 
-Status: local implementation contract; not deployed
+Status: superseded historical implementation contract; not deployed
+
+Superseded on 2026-08-25 by the API-first Custom launch path. `/launch` now
+routes Custom directly to `/developers/api-keys`; this GitHub-intake interface
+must not be imported into a production or development route.
 
 This document is the product and integration contract for the Custom Hook path under
 `Create a token`. It keeps the visible experience simple while preserving the signed

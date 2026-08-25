@@ -118,9 +118,9 @@ export default function DocsIndexPage() {
           <div>
             <h3>Builders</h3>
             <p>
-              Use Hookbuilder-Skill as an optional project starting point.
-              Derive the launch request with project-specific packaging that
-              follows the Custom Launch API schema.
+              Build and test one exact project, then derive the launch request
+              with project-specific packaging that follows the Custom Launch
+              API schema.
             </p>
           </div>
           <div>

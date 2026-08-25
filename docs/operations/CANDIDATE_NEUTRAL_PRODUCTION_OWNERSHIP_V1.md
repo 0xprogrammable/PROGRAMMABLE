@@ -4,7 +4,9 @@ This inventory separates the Programmable launch platform from external applican
 
 ## Preserved platform surfaces
 
-- `components/custom-launch-experience.tsx` is the descriptor-driven Launch Console used by `/launch`.
+- `components/launch-entry.tsx` routes Custom directly to `/developers/api-keys`. The retired
+  `components/custom-launch-experience.tsx` compatibility source is not imported by `/launch` or
+  any other runtime route and is forbidden in production bundles.
 - `lib/custom-launch/{client-v2,contract-v2,response-contract-v2}.ts` owns the neutral browser/API contract.
 - `lib/server/custom-launch/{generic-launch-contract-v1,generic-launch-read-v1}.ts` owns neutral public discovery.
 - `app/api/custom-launch/generic/v1/launches/**` owns the neutral feed and detail API.

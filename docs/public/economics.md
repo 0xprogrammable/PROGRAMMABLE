@@ -25,7 +25,7 @@ Custom fees are specific to each release. The published standard production poli
 
 ## Prediction Markets
 
-Prediction Markets economics are separately versioned. Use the [canonical Prediction Markets repository](https://github.com/0xprogrammable/programmable-prediction-markets) for current activation costs, trading and pool fees, fee recipients, creator rewards and the treatment of protocol or liquidity-provider fees. Do not infer those terms from Classic or an older Prediction Markets release.
+Prediction Markets economics are separately versioned. Use the [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) for current activation costs, trading and pool fees, fee recipients, creator rewards and the treatment of protocol or liquidity-provider fees. Do not infer those terms from Classic or an older Prediction Markets release.
 
 ## Protocol revenue
 
