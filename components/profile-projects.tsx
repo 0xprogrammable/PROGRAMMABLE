@@ -162,7 +162,6 @@ export function ProfileProjects({
         phase: "ready",
         projects: nextProjects,
       });
-      setProjectPage(1);
       editorRequestsRef.current.clear();
     } catch {
       if (
@@ -177,7 +176,6 @@ export function ProfileProjects({
     getAuthHeaders,
     setProjectError,
     setProjectOwnerState,
-    setProjectPage,
     walletAccount,
   ]);
 
