@@ -504,6 +504,9 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).toContain(
       "length: predictionPortfolioLoadingPlaceholderCount",
     );
+    expect(profileViewSource).toContain(
+      "Array.from({ length: profileClaimPageSize }, (_, item)",
+    );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonLaunch\s*\{[^}]*min-height:\s*463px;/s,
     );
@@ -520,13 +523,28 @@ describe("profile workspace loading state", () => {
       /\.profileSkeletonWorkspace\s*\{[^}]*min-height:\s*398px;/s,
     );
     expect(profileExperienceCss).toMatch(
-      /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonPredictionRow\s*\{[^}]*min-height:\s*322px;[\s\S]*?\.profileSkeletonPredictionRow:nth-child\(n \+ 3\)\s*\{[^}]*display:\s*none;/s,
+      /\.profileSkeletonPredictionRow\s*\{[^}]*min-height:\s*322px;/s,
     );
     expect(profileExperienceCss).toMatch(
-      /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonHero\s*\{[^}]*min-height:\s*350px;/s,
+      /\.profileSkeletonPredictionRow:nth-child\(n \+ 3\)\s*\{[^}]*display:\s*none;/s,
     );
     expect(profileExperienceCss).toMatch(
-      /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonClaims,[\s\S]*?\.claimablePanel:not\(\.claimablePanelEmpty\)\s*\{[^}]*min-height:\s*637px !important;/s,
+      /\.profileSkeletonHero\s*\{[^}]*min-height:\s*350px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileSkeletonClaims\s*\{[^}]*min-height:\s*591px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.claimablePanel\[data-visible-count="2"\]\s*\{[^}]*min-height:\s*361px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.claimablePanel\[data-visible-count="3"\]\s*\{[^}]*min-height:\s*476px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.claimablePanel\[data-visible-count="4"\]\s*\{[^}]*min-height:\s*591px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(max-width:\s*42rem\)[\s\S]*?\.profileSkeletonLaunch \.profileSkeletonRow\s*\{[^}]*min-height:\s*142\.5px;/s,
     );
     expect(profileExperienceCss).not.toContain("profile-content-reveal");
     expect(profileExperienceCss).toContain("profile-skeleton-pulse");
@@ -542,6 +560,10 @@ describe("profile workspace loading state", () => {
     );
     expect(profileViewSource).toContain("aria-busy={refreshing || undefined}");
     expect(profileViewSource).toContain("disabled={refreshing}");
+    expect(profileViewSource).toContain(
+      'data-visible-count={claimPageData.items.length}',
+    );
+    expect(profileViewSource).toContain('if (state.status !== "error")');
     expect(profileViewSource).toContain(
       '{refreshing ? "Refreshing rewards" : ""}',
     );

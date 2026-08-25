@@ -1865,7 +1865,11 @@
     display: none;
   }
 
-  .portfolioSection[data-populated="true"] {
+  .portfolioSection[data-visible-card-count="1"] {
+    min-height: 476px;
+  }
+
+  .portfolioSection[data-visible-card-count="2"] {
     min-height: 806px;
   }
 

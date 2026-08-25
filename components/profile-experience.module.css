@@ -2543,26 +2543,12 @@
     margin-block-start: 28px;
   }
 
-  .profileSkeletonLaunch,
   .profileSkeletonPrediction {
     padding: 16px;
   }
 
-  .profileSkeletonLaunch {
-    margin-block-start: 16px;
-  }
-
   .profileSkeletonWorkspacePage {
     margin-block-start: 12px;
-  }
-
-  .profileSkeletonLaunch .profileSkeletonRow {
-    grid-template-columns: 44px minmax(0, 1fr);
-    min-height: 142.5px;
-  }
-
-  .profileSkeletonLaunch .profileSkeletonRow > span:last-child {
-    grid-column: 1 / -1;
   }
 
   .profileSkeletonPredictionRow {
@@ -2579,9 +2565,24 @@
     min-height: 350px;
   }
 
-  .profileSkeletonClaims,
-  .claimablePanel:not(.claimablePanelEmpty) {
-    min-height: 637px !important;
+  .profileSkeletonClaims {
+    min-height: 591px;
+  }
+
+  .profileSkeletonClaims .profileSkeletonRow {
+    min-height: 112px;
+  }
+
+  .claimablePanel[data-visible-count="2"] {
+    min-height: 361px;
+  }
+
+  .claimablePanel[data-visible-count="3"] {
+    min-height: 476px;
+  }
+
+  .claimablePanel[data-visible-count="4"] {
+    min-height: 591px;
   }
 
   .profileSkeletonBanner {
@@ -2604,5 +2605,21 @@
   .profileSkeletonCopy span:first-child {
     height: 27px;
     width: 62%;
+  }
+}
+
+@media (max-width: 42rem) {
+  .profileSkeletonLaunch {
+    margin-block-start: 16px;
+    padding: 16px;
+  }
+
+  .profileSkeletonLaunch .profileSkeletonRow {
+    grid-template-columns: 44px minmax(0, 1fr);
+    min-height: 142.5px;
+  }
+
+  .profileSkeletonLaunch .profileSkeletonRow > span:last-child {
+    grid-column: 1 / -1;
   }
 }

@@ -332,7 +332,7 @@ describe("prediction profile regression contract", () => {
     );
     expect(portfolioSource).toContain("<PredictionPortfolioLoadingState />");
     expect(portfolioSource).toContain(
-      "data-populated={visibleItems.length > 0 || undefined}",
+      "? Math.min(visibleItems.length, 2)",
     );
     expect(portfolioStyles).toMatch(
       /\.portfolioLoadingCard\s*\{[^}]*min-height:\s*82px;/s,
@@ -344,7 +344,10 @@ describe("prediction profile regression contract", () => {
       /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioLoadingCard:nth-child\(n \+ 3\)\s*\{[^}]*display:\s*none;/s,
     );
     expect(portfolioStyles).toMatch(
-      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioSection\[data-populated="true"\]\s*\{[^}]*min-height:\s*806px;/s,
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioSection\[data-visible-card-count="1"\]\s*\{[^}]*min-height:\s*476px;/s,
+    );
+    expect(portfolioStyles).toMatch(
+      /@media \(max-width:\s*620px\)[\s\S]*?\.portfolioSection\[data-visible-card-count="2"\]\s*\{[^}]*min-height:\s*806px;/s,
     );
   });
 
