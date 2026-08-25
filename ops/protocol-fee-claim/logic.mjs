@@ -51,6 +51,113 @@ export const CUSTOM_V2_POLICY = Object.freeze({
 
 export const CUSTOM_V2_RELEASE_PATH = "./custom-v2-release.json";
 
+export const LAUNCH_STAMP_ROUTER = Object.freeze({
+  address: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+  startBlock: 25_717_612n,
+  endBlock: null,
+  finalizedTag: "finalized",
+  maximumFinalizedSpread: 32n,
+  runtimeCodeHash:
+    "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+  sourceCommit: "0a7134bbb912222639627fb9078df2f8dd3a6c38",
+  sourceTree: "24ffb0c6b04af7993254560b4f03608de8f52231",
+  abiSha256:
+    "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
+  permitAuthority: Object.freeze({
+    address: "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+    runtimeCodeHash:
+      "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+  }),
+  graphFactory: Object.freeze({
+    address: "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+    runtimeCodeHash:
+      "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+  }),
+  poolManager: Object.freeze({
+    address: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    runtimeCodeHash:
+      "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+  }),
+});
+
+export const LAUNCH_STAMP_TOPICS = Object.freeze({
+  launchStamped:
+    "0x6cf479a102f1eebc9244f48f8d68f6aa52b4c5a4516318df58ba46614a5b14f2",
+  launchRouteStamped:
+    "0x45e7cc355b63ca67d6278a0d8d23470ce2a0741a9c60283d7dee712df7a877a5",
+  componentStamped:
+    "0x8147265e7396d6400cee8d049456a1f7438fdfbe2a7c81c976d51ba67e52ff4b",
+});
+
+export const LAUNCH_STAMP_SELECTORS = Object.freeze({
+  chainId: "0x85e1f4d0",
+  permitAuthority: "0xc3a3d03c",
+  permitAuthorityRuntimeCodeHash: "0xa497c61c",
+  graphFactory: "0x1cc9e5ce",
+  graphFactoryRuntimeCodeHash: "0x92989a00",
+  poolManager: "0x62308e85",
+  poolManagerRuntimeCodeHash: "0x38d831c4",
+  launchIdByToken: "0x1dad847c",
+  launchIdByPool: "0x361df6f3",
+  launchIdByComponent: "0x58c5e373",
+  componentRuntimeCodeHash: "0xc892d353",
+  launchStamp: "0x4c9e4764",
+  stampProof: "0x174b9f9d",
+});
+
+export const ROUTER_CUSTOM_CLAIM_PROFILES = Object.freeze({
+  nativeAccumulatorV1: Object.freeze({
+    id: "native-accumulator-v1",
+    bindings: Object.freeze([
+      Object.freeze({
+        launchId:
+          "0x6d6ed0e1e69a7cd6afa177e3454c9e32eed61cbd3f855ee56aff1915a6776fc2",
+        source: "0xd7451a039373f54e493deE42A751fEcBfAFBa0cc",
+        runtimeCodeHash:
+          "0xff70a4d3d889b730a064b270fc187f0cba40582f1fa6f5875893066b17a1257b",
+      }),
+    ]),
+    recipient: "0x4968150a",
+    feeBps: "0xb6c7448d",
+    accrued: "0x0986bdb6",
+    claim: "0xa95e4f21",
+    expectedFeeBps: 10n,
+  }),
+  protocolFeeSourceV1: Object.freeze({
+    id: "protocol-fee-source-v1",
+    bindings: Object.freeze([]),
+    recipient: CUSTOM_V2_SELECTORS.programmableFeeRecipient,
+    feeBps: `${CUSTOM_V2_SELECTORS.programmableFeeBps}${"0".repeat(64)}`,
+    accrued: `${CUSTOM_V2_SELECTORS.accruedProgrammableFees}${"0".repeat(64)}`,
+    claim: `${CUSTOM_V2_SELECTORS.claimProgrammableFees}${"0".repeat(64)}`,
+    expectedFeeBps: 10n,
+  }),
+  dualCurrencyRedeemerV1: Object.freeze({
+    id: "dual-currency-redeemer-v1",
+    bindings: Object.freeze([
+      Object.freeze({
+        launchId:
+          "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+        source: "0xEBa46F25dff528141DE5317109aCB5a989296044",
+        runtimeCodeHash:
+          "0xd59d31add7a3b206972725889dbb726782c0fbd82514710cf2d645749dc3fa25",
+      }),
+    ]),
+    recipient: "0x46904840",
+    feePips: "0x9fa59765",
+    poolManager: "0xdc4c90d3",
+    currency0: "0x79f1232b",
+    currency1: "0x10d737b8",
+    poolId: "0x3e0dc34e",
+    balanceOf: "0x00fdd58e",
+    claim:
+      "0xfc656ac500000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000",
+    expectedFeePips: 1_000n,
+    secondaryUnit: "PCAN",
+    secondaryDecimals: 18,
+  }),
+});
+
 export const CUSTOM_REGISTRY = Object.freeze({
   status: "retired",
   address: "0x0000000000000000000000000000000000000000",
@@ -328,6 +435,25 @@ export function normalizeAddress(value) {
   return typeof value === "string" ? value.toLowerCase() : "";
 }
 
+export async function withTimeout(promise, timeoutMs, message) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    throw new Error("Ungültiges RPC-Zeitlimit");
+  let timeout;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(message || "RPC-Zeitlimit überschritten")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function isTreasury(value) {
   return normalizeAddress(value) === normalizeAddress(TREASURY);
 }
@@ -464,8 +590,197 @@ export function reduceClassicLaunchLogs(entries) {
   });
 }
 
+export function decodeLaunchStampLog(log) {
+  if (
+    !log ||
+    log.removed === true ||
+    normalizeAddress(log.address) !== normalizeAddress(LAUNCH_STAMP_ROUTER.address) ||
+    !Array.isArray(log.topics) ||
+    log.topics.length !== 4 ||
+    log.topics[0]?.toLowerCase() !== LAUNCH_STAMP_TOPICS.launchStamped ||
+    typeof log.data !== "string" ||
+    !/^0x[0-9a-fA-F]{192}$/.test(log.data)
+  )
+    throw new Error("Launch-Stamp-Event ist nicht kanonisch");
+
+  const launchId = decodeBytes32(log.topics[1]);
+  const token = topicAddress(log.topics[2]);
+  const hook = topicAddress(log.topics[3]);
+  requireAbiWords(log.data, 3, "Launch-Stamp-Event");
+  const poolManager = wordAddress(abiWord(log.data, 0));
+  const poolId = decodeBytes32(abiWord(log.data, 1));
+  const stampHash = decodeBytes32(abiWord(log.data, 2));
+  if (
+    normalizeAddress(token) === normalizeAddress("0x0000000000000000000000000000000000000000") ||
+    normalizeAddress(poolManager) !== normalizeAddress(LAUNCH_STAMP_ROUTER.poolManager.address) ||
+    /^0x0{64}$/i.test(launchId) ||
+    /^0x0{64}$/i.test(poolId) ||
+    /^0x0{64}$/i.test(stampHash) ||
+    !/^0x[0-9a-fA-F]{64}$/.test(log.blockHash ?? "") ||
+    !/^0x[0-9a-fA-F]{64}$/.test(log.transactionHash ?? "")
+  )
+    throw new Error("Launch-Stamp-Identität ist unvollständig");
+
+  return Object.freeze({
+    launchId,
+    token,
+    hook,
+    poolManager,
+    poolId,
+    stampHash,
+    blockHash: log.blockHash.toLowerCase(),
+    blockNumber: BigInt(log.blockNumber),
+    transactionIndex: BigInt(log.transactionIndex),
+    logIndex: BigInt(log.logIndex),
+    transactionHash: log.transactionHash.toLowerCase(),
+  });
+}
+
+export function reduceLaunchStampLogs(logs) {
+  if (!Array.isArray(logs)) throw new Error("Launch-Stamp-Events fehlen");
+  const launches = new Map();
+  for (const log of logs) {
+    const launch = decodeLaunchStampLog(log);
+    if (launches.has(launch.launchId))
+      throw new Error("Doppelter Launch-Stamp");
+    launches.set(launch.launchId, launch);
+  }
+  return [...launches.values()].sort((left, right) => {
+    if (left.blockNumber !== right.blockNumber)
+      return left.blockNumber > right.blockNumber ? -1 : 1;
+    if (left.logIndex !== right.logIndex)
+      return left.logIndex > right.logIndex ? -1 : 1;
+    return left.launchId.localeCompare(right.launchId);
+  });
+}
+
+export function launchStampLogSetFingerprint(logs) {
+  if (!Array.isArray(logs)) throw new Error("Launch-Stamp-Events fehlen");
+  const tuples = logs.map((log) => {
+    const decoded = decodeLaunchStampLog(log);
+    return {
+      address: log.address.toLowerCase(),
+      blockHash: decoded.blockHash,
+      blockNumber: decoded.blockNumber.toString(),
+      transactionHash: decoded.transactionHash,
+      transactionIndex: decoded.transactionIndex.toString(),
+      logIndex: decoded.logIndex.toString(),
+      topics: log.topics.map((topic) => topic.toLowerCase()),
+      data: log.data.toLowerCase(),
+    };
+  });
+  tuples.sort((left, right) =>
+    JSON.stringify(left).localeCompare(JSON.stringify(right)),
+  );
+  return JSON.stringify(tuples);
+}
+
+function parseRouterCheckpoints(blocks) {
+  if (!Array.isArray(blocks) || blocks.length !== 3)
+    throw new Error("Finalisierter Router-Block fehlt im RPC-Quorum");
+  return blocks.map((block) => {
+    if (
+      !block ||
+      typeof block.number !== "string" ||
+      !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(block.number) ||
+      typeof block.hash !== "string" ||
+      !/^0x[0-9a-fA-F]{64}$/.test(block.hash)
+    )
+      throw new Error("Finalisierter Router-Block fehlt im RPC-Quorum");
+    return Object.freeze({
+      number: BigInt(block.number),
+      hash: block.hash.toLowerCase(),
+    });
+  });
+}
+
+export function routerFinalizedBoundary(
+  blocks,
+  minimumBlock = 0n,
+  maximumSpread = 32n,
+) {
+  const checkpoints = parseRouterCheckpoints(blocks);
+  const numbers = checkpoints.map(({ number }) => number);
+  const first = numbers.reduce((minimum, number) =>
+    number < minimum ? number : minimum,
+  );
+  const last = numbers.reduce((maximum, number) =>
+    number > maximum ? number : maximum,
+  );
+  if (maximumSpread < 0n || last - first > maximumSpread)
+    throw new Error(
+      "Finalisierte Router-Stände liegen im RPC-Quorum zu weit auseinander",
+    );
+  if (first < BigInt(minimumBlock))
+    throw new Error("Launch-Stamp-Router hat noch keinen finalisierten Bereich");
+  return first;
+}
+
+export function exactRouterFinalizedCheckpoint(blocks, minimumBlock = 0n) {
+  const checkpoints = parseRouterCheckpoints(blocks);
+  if (
+    new Set(
+      checkpoints.map(({ number, hash }) => `${number.toString()}:${hash}`),
+    ).size !== 1
+  )
+    throw new Error(
+      "Finalisierter Router-Block stimmt im RPC-Quorum nicht überein",
+    );
+  if (checkpoints[0].number < BigInt(minimumBlock))
+    throw new Error("Launch-Stamp-Router hat noch keinen finalisierten Bereich");
+  return checkpoints[0];
+}
+
+export function decodeLaunchStampRecord(value) {
+  requireAbiWords(value, 14, "Launch-Stamp-Record");
+  const kind = Number(decodeUint256(abiWord(value, 0)));
+  if (kind !== 1 && kind !== 2)
+    throw new Error("Launch-Stamp-Art wird nicht unterstützt");
+  const record = {
+    kind,
+    launchWallet: wordAddress(abiWord(value, 1)),
+    token: wordAddress(abiWord(value, 2)),
+    hook: wordAddress(abiWord(value, 3)),
+    poolManager: wordAddress(abiWord(value, 4)),
+    poolId: decodeBytes32(abiWord(value, 5)),
+    poolKeyHash: decodeBytes32(abiWord(value, 6)),
+    componentSetHash: decodeBytes32(abiWord(value, 7)),
+    routePayloadHash: decodeBytes32(abiWord(value, 8)),
+    routeLauncher: wordAddress(abiWord(value, 9)),
+    routeLauncherRuntimeCodeHash: decodeBytes32(abiWord(value, 10)),
+    expectedResultHash: decodeBytes32(abiWord(value, 11)),
+    permitDigest: decodeBytes32(abiWord(value, 12)),
+    stampHash: decodeBytes32(abiWord(value, 13)),
+  };
+  for (const key of [
+    "poolId",
+    "poolKeyHash",
+    "componentSetHash",
+    "routePayloadHash",
+    "routeLauncherRuntimeCodeHash",
+    "expectedResultHash",
+    "permitDigest",
+    "stampHash",
+  ]) {
+    if (/^0x0{64}$/i.test(record[key]))
+      throw new Error(`Launch-Stamp ${key} ist null`);
+  }
+  return Object.freeze(record);
+}
+
+export function decodeLaunchStampProof(value) {
+  requireAbiWords(value, 2, "Launch-Stamp-Proof");
+  return Object.freeze({
+    launchId: decodeBytes32(abiWord(value, 0)),
+    stampHash: decodeBytes32(abiWord(value, 1)),
+  });
+}
+
 function topicAddress(topic) {
-  if (typeof topic !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(topic))
+  if (
+    typeof topic !== "string" ||
+    !/^0x0{24}[0-9a-fA-F]{40}$/.test(topic)
+  )
     throw new Error("Ungültige Custom-Eventadresse");
   return `0x${topic.slice(-40)}`;
 }
@@ -733,15 +1048,69 @@ export function customV2SourceClassification(source) {
   if (!source || source.bindingVerified !== true) return "blocked";
   if (!source.registered || source.quarantined || !source.executable)
     return "quarantined";
+  if (typeof source.amount !== "bigint" || source.amount < 0n) return "blocked";
   if (source.amount === 0n) return "empty";
   return "ready";
 }
 
+export function routerCustomClaimClassification(source) {
+  if (
+    !source ||
+    source.origin !== "launch-stamp-router" ||
+    source.provenanceVerified !== true ||
+    source.runtimeVerified !== true
+  )
+    return "blocked";
+  if (source.claimMode === "no-manual-claim") return "no-manual-claim";
+  if (
+    source.claimMode !== "manual" ||
+    source.claimBindingVerified !== true ||
+    typeof source.amount !== "bigint" ||
+    source.amount < 0n ||
+    (source.secondaryAmount !== undefined &&
+      (typeof source.secondaryAmount !== "bigint" ||
+        source.secondaryAmount < 0n))
+  )
+    return "blocked";
+  return source.amount === 0n && (source.secondaryAmount ?? 0n) === 0n
+    ? "empty"
+    : "ready";
+}
+
 export function customClaimDefinitionClassification(claim, current = {}) {
   const source = { ...claim, ...current };
+  if (claim?.origin === "launch-stamp-router")
+    return routerCustomClaimClassification(source);
   return claim?.standardClaimBindingVerified === true
     ? customLaunchClassification(source)
     : customV2SourceClassification(source);
+}
+
+export function createRefreshQueue(run) {
+  if (typeof run !== "function")
+    throw new Error("Refresh-Runner fehlt");
+  let requested = false;
+  let active = null;
+
+  return async function requestRefresh() {
+    requested = true;
+    while (true) {
+      if (!active) {
+        active = (async () => {
+          try {
+            while (requested) {
+              requested = false;
+              await run();
+            }
+          } finally {
+            active = null;
+          }
+        })();
+      }
+      await active;
+      if (!requested && active === null) return;
+    }
+  };
 }
 
 export function formatEth(value, maximumFractionDigits = 6) {
@@ -786,7 +1155,42 @@ export function customV2Bytes32ReadData(selector, value) {
   return `${selector}${encodeBytes32Argument(value)}`;
 }
 
+export function launchStampBytes32ReadData(selector, value) {
+  if (typeof selector !== "string" || !/^0x[0-9a-fA-F]{8}$/.test(selector))
+    throw new Error("Launch-Stamp-Selector ist ungültig");
+  return `${selector.toLowerCase()}${encodeBytes32Argument(value)}`;
+}
+
+export function launchStampAddressReadData(selector, value) {
+  if (typeof selector !== "string" || !/^0x[0-9a-fA-F]{8}$/.test(selector))
+    throw new Error("Launch-Stamp-Selector ist ungültig");
+  return `${selector.toLowerCase()}${encodeAddressArgument(value)}`;
+}
+
+export function launchStampPoolReadData(selector, poolManager, poolId) {
+  if (typeof selector !== "string" || !/^0x[0-9a-fA-F]{8}$/.test(selector))
+    throw new Error("Launch-Stamp-Selector ist ungültig");
+  return `${selector.toLowerCase()}${encodeAddressArgument(poolManager)}${encodeBytes32Argument(poolId)}`;
+}
+
+export function poolManagerBalanceOfData(selector, owner, currency) {
+  if (typeof selector !== "string" || !/^0x[0-9a-fA-F]{8}$/.test(selector))
+    throw new Error("PoolManager-Selector ist ungültig");
+  return `${selector.toLowerCase()}${encodeAddressArgument(owner)}${encodeAddressArgument(currency)}`;
+}
+
+function exactCallData(value, label) {
+  if (
+    typeof value !== "string" ||
+    !/^0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{64})*$/.test(value)
+  )
+    throw new Error(`${label} ist ungültig`);
+  return value.toLowerCase();
+}
+
 export function readAccruedData(claim) {
+  if (claim?.readData !== undefined)
+    return exactCallData(claim.readData, "Claim-Lesedaten");
   if (claim.kind === "custom")
     return `${CUSTOM_V2_SELECTORS.accruedProgrammableFees}${encodeAddressArgument(CUSTOM_V2_POLICY.nativeAsset)}`;
   return claim.kind === "asset"
@@ -795,6 +1199,8 @@ export function readAccruedData(claim) {
 }
 
 export function claimData(claim) {
+  if (claim?.claimData !== undefined)
+    return exactCallData(claim.claimData, "Claim-Calldata");
   if (claim.kind === "custom")
     return `${CUSTOM_V2_SELECTORS.claimProgrammableFees}${encodeAddressArgument(CUSTOM_V2_POLICY.nativeAsset)}`;
   return claim.kind === "asset"
@@ -835,16 +1241,22 @@ export function buildWalletSendCalls(account, claims) {
     throw new Error("Die Treasury-Wallet muss verbunden sein");
   if (!Array.isArray(claims) || claims.length === 0)
     throw new Error("Keine Claims verfügbar");
+  const calls = claims.map((claim) => ({
+    to: claim.address,
+    data: claimData(claim),
+    value: "0x0",
+  }));
+  const callKeys = calls.map(
+    ({ to, data }) => `${normalizeAddress(to)}:${data.toLowerCase()}`,
+  );
+  if (new Set(callKeys).size !== callKeys.length)
+    throw new Error("Doppelter Claim im atomaren Batch");
   return {
     version: "2.0.0",
     from: account,
     chainId: MAINNET_CHAIN_ID,
     atomicRequired: true,
-    calls: claims.map((claim) => ({
-      to: claim.address,
-      data: claimData(claim),
-      value: "0x0",
-    })),
+    calls,
   };
 }
 

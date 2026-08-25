@@ -22,10 +22,20 @@ inventory follows the exact execution contracts:
 - Classic V2 and V3 coin rows come from complete canonical Launcher event
   scans. Fee execution remains one aggregate claim per verified version hook;
   the legacy V1 aggregate hook remains a separate row.
-- Custom V1 replays the complete Registry history and verifies every current
-  source state, runtime, reward wallet, fee policy and accrued amount at one
-  block. Future finalized standard 5 or 10 bps sources are discovered without
-  editing a static coin list.
+- The complete Registry history remains available for audit, but Custom
+  Registry V1 is retired as a live discovery or claim source.
+- Router-stamped Custom launches come from a consensus-finalized Router event
+  replay. The claim console requires the Wallet RPC and two independent public
+  RPCs to report `finalized` views no more than 32 blocks apart. It uses the
+  oldest view as the safe boundary, requires all three RPCs to return its exact
+  block hash, then requires the exact same complete raw log tuples through that
+  checkpoint. It then verifies every launch record, token or pool lookup,
+  component proof, runtime and displayed claim balance at that same checkpoint.
+- A Custom claim is executable only through an exact reviewed profile bound to
+  its launch ID, fee source and runtime. The current profiles cover FADE's
+  native accumulator and PCAN's dual-currency PoolManager redemption. A new or
+  unknown profile remains visible and blocks the combined claim until reviewed;
+  the console never guesses calldata from a selector match.
 - Stock claims use the published fixed release asset set. New Stock assets are
   not inferred or silently added.
 - Custom V2 remains unavailable until an exact deployed and finalized release
@@ -35,4 +45,7 @@ inventory follows the exact execution contracts:
 The live console publishes this boundary at
 [`claimhazard.vercel.app/claim-discovery.json`](https://claimhazard.vercel.app/claim-discovery.json).
 It rescans before every claim and includes only positive verified entries in one
-wallet-declared atomic batch from the fixed reward wallet.
+wallet-declared atomic batch from the fixed reward wallet. Its immediate latest
+simulation can include fees accrued after the displayed finalized balance. The
+current safe limit is 64 calls; overflow blocks execution instead of silently
+omitting a claim.

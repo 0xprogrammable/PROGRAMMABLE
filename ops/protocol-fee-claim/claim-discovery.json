@@ -1,11 +1,92 @@
 {
-  "schemaVersion": "programmable.fee-claim-discovery.v1",
+  "schemaVersion": "programmable.fee-claim-discovery.v2",
   "chainId": "1",
   "rewardWallet": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
   "execution": {
     "method": "wallet_sendCalls",
     "atomicRequired": true,
+    "preflightEveryCallImmediatelyBeforeWallet": true,
+    "maximumCallsPerAtomicBatch": 64,
     "unsupportedWalletBehavior": "fail_closed"
+  },
+  "launchStampRouter": {
+    "discoveryMode": "complete_consensus_finalized_event_replay_plus_onchain_stamp_verification",
+    "address": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+    "startBlock": "25717612",
+    "finality": {
+      "blockTag": "finalized",
+      "maximumProviderSpreadBlocks": "32",
+      "policy": "bounded_three_provider_finalized_views_then_exact_common_block_hash_or_block"
+    },
+    "runtimeCodeHash": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+    "eventTopic": "0x6cf479a102f1eebc9244f48f8d68f6aa52b4c5a4516318df58ba46614a5b14f2",
+    "futureRouterLaunchesAutoDiscovered": true,
+    "maximumScannedLaunches": 4096,
+    "logQuorum": {
+      "policy": "wallet_plus_two_independent_rpc_exact_raw_match_or_block",
+      "publicRpcEndpoints": [
+        "https://eth.drpc.org",
+        "https://rpc.mevblocker.io"
+      ],
+      "canonicalTuple": [
+        "address",
+        "blockHash",
+        "blockNumber",
+        "transactionHash",
+        "transactionIndex",
+        "logIndex",
+        "topics",
+        "data"
+      ]
+    },
+    "verification": [
+      "router_and_trust_root_runtime_hashes",
+      "exact_consensus_finalized_checkpoint_quorum",
+      "independent_rpc_log_quorum",
+      "router_claim_bindings_and_displayed_balances_at_finalized_checkpoint",
+      "launch_id_by_token",
+      "launch_id_by_pool_manager_and_pool_id",
+      "launch_stamp_record_and_component_proofs",
+      "route_and_hook_runtime_hashes_at_finalized_checkpoint"
+    ],
+    "trustRoots": {
+      "permitAuthority": {
+        "address": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+        "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+      },
+      "graphFactory": {
+        "address": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+        "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+      },
+      "poolManager": {
+        "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+      }
+    },
+    "claimProfiles": [
+      {
+        "id": "native-accumulator-v1",
+        "launchId": "0x6d6ed0e1e69a7cd6afa177e3454c9e32eed61cbd3f855ee56aff1915a6776fc2",
+        "source": "0xd7451a039373f54e493deE42A751fEcBfAFBa0cc",
+        "runtimeCodeHash": "0xff70a4d3d889b730a064b270fc187f0cba40582f1fa6f5875893066b17a1257b",
+        "accruedSelector": "0x0986bdb6",
+        "claimSelector": "0xa95e4f21"
+      },
+      {
+        "id": "dual-currency-redeemer-v1",
+        "launchId": "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+        "source": "0xEBa46F25dff528141DE5317109aCB5a989296044",
+        "runtimeCodeHash": "0xd59d31add7a3b206972725889dbb726782c0fbd82514710cf2d645749dc3fa25",
+        "claimSelector": "0xfc656ac5",
+        "claimCalldata": "0xfc656ac500000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000",
+        "balanceSelector": "0x00fdd58e",
+        "currencies": [
+          "0x0000000000000000000000000000000000000000",
+          "0x9DEeB39D2590b0cAD5fc473F755C5F97Dcc8f7cE"
+        ]
+      }
+    ],
+    "unknownClaimProfile": "visible_and_block_all_claims"
   },
   "classic": {
     "claimMode": "one_aggregate_claim_per_hook_version",
@@ -45,6 +126,6 @@
   "customV2": {
     "status": "HOLD",
     "futureFinalizedStandardSourcesAutoAdded": false,
-    "reason": "No exact Mainnet deployment and finalized release binding exists yet."
+    "reason": "The proposed universal revenue registry is not deployed. Official future launches are discovered through the Launch Stamp Router and require an exact approved claim profile."
   }
 }
