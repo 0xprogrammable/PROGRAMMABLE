@@ -188,6 +188,9 @@ export async function submitLaunch(options) {
     idempotencyKey,
     requestSha256,
     journalPath,
+    ...(Array.isArray(validation.diagnostics) && validation.diagnostics.length !== 0
+      ? { diagnostics: validation.diagnostics }
+      : {}),
     httpStatus: result.status,
     retryAfter: result.retryAfter,
     resource: result.body,
