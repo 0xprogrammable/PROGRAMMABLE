@@ -298,6 +298,20 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("Prepared transaction");
   });
 
+  it("releases a stalled history refresh with a clear retry state", () => {
+    expect(historySource).toContain("launchHistoryRefreshTimeoutMs = 12_000");
+    expect(historySource).toContain(
+      "controller.abort(launchHistoryRefreshTimeoutReason)",
+    );
+    expect(historySource).toContain(
+      "Launch history refresh took too long. Try again.",
+    );
+    expect(historySource).toContain(
+      "Launch history refresh timed out.",
+    );
+    expect(historySource).toContain("setRefreshing(false)");
+  });
+
   it("hydrates compact V3 rows and rechecks the reviewed bytes before either wallet action", () => {
     expect(historySource).toContain(
       "const reviewLaunch = reviewResourceForLaunch(",

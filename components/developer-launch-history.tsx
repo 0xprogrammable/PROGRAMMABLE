@@ -115,6 +115,8 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 });
 const submittedPollIntervalMs = 12_000;
 const authorizedPollIntervalMs = 4_000;
+const launchHistoryRefreshTimeoutMs = 12_000;
+const launchHistoryRefreshTimeoutReason = "launch-history-refresh-timeout";
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
 const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
 const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
@@ -573,6 +575,7 @@ export function DeveloperLaunchHistory({
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const requestSequenceRef = useRef(0);
+  const refreshControllerRef = useRef<AbortController | null>(null);
   const loadMoreInFlightRef = useRef(false);
   const checkInFlightRef = useRef(false);
   const hydrateInFlightRef = useRef(false);
@@ -665,11 +668,25 @@ export function DeveloperLaunchHistory({
       setState("ready");
       if (refreshRequest) setStatusMessage("Launch history refreshed.");
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      const refreshTimedOut =
+        signal?.aborted
+        && signal.reason === launchHistoryRefreshTimeoutReason;
+      if (
+        cause instanceof DOMException
+        && cause.name === "AbortError"
+        && !refreshTimedOut
+      ) return;
       if (requestSequence !== requestSequenceRef.current) return;
       setError(
-        cause instanceof Error ? cause.message : "Unable to load launch history.",
+        refreshTimedOut
+          ? "Launch history refresh took too long. Try again."
+          : cause instanceof Error
+            ? cause.message
+            : "Unable to load launch history.",
       );
+      if (refreshTimedOut) {
+        setStatusMessage("Launch history refresh timed out.");
+      }
       if (cursor === null && !refreshRequest) setState("error");
     } finally {
       if (cursor !== null) loadMoreInFlightRef.current = false;
@@ -730,6 +747,8 @@ export function DeveloperLaunchHistory({
   }, [load]);
 
   useEffect(() => () => {
+    refreshControllerRef.current?.abort();
+    refreshControllerRef.current = null;
     for (const controller of pollControllersRef.current.values()) {
       controller.abort();
     }
@@ -748,10 +767,22 @@ export function DeveloperLaunchHistory({
 
   const refresh = () => {
     if (state === "loading" || loadingMore || refreshing) return;
+    const controller = new AbortController();
+    refreshControllerRef.current?.abort();
+    refreshControllerRef.current = controller;
+    const timeout = window.setTimeout(
+      () => controller.abort(launchHistoryRefreshTimeoutReason),
+      launchHistoryRefreshTimeoutMs,
+    );
     setRefreshing(true);
     setError("");
     setStatusMessage("Refreshing launch history.");
-    void load(null, undefined, true);
+    void load(null, controller.signal, true).finally(() => {
+      window.clearTimeout(timeout);
+      if (refreshControllerRef.current === controller) {
+        refreshControllerRef.current = null;
+      }
+    });
   };
 
   const checkOnchainStatus = async (launch: LaunchResource) => {
