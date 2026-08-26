@@ -35,6 +35,7 @@ const runtimeMigrations = Object.freeze([
   "0008_direct_native_platform_admission_v3.sql",
   "0009_admit_eip3009_authorization_patch_v2.sql",
   "0010_durable_launch_lifecycle_queue_v3.sql",
+  "0011_custom_launch_project_metadata_v3.sql",
 ]);
 const supabaseMigrations = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -47,11 +48,13 @@ const supabaseMigrations = Object.freeze([
   "20260826045034_direct_native_platform_admission_v3.sql",
   "20260826105310_admit_eip3009_authorization_patch_v2.sql",
   "20260826135927_durable_launch_lifecycle_queue_v3.sql",
+  "20260826175335_custom_launch_project_metadata_v3.sql",
 ]);
 const apiRoutes = Object.freeze([
   Object.freeze({ method: "GET", path: "/v3/capabilities" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches/{id}" }),
+  Object.freeze({ method: "GET", path: "/v3/finalized-custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches/{id}" }),
   Object.freeze({ method: "POST", path: "/v3/custom-launches" }),
@@ -133,28 +136,28 @@ async function releaseFixture(t) {
   const backendRoot = join(root, "backend");
   await json(join(websiteRoot, "public/openapi/custom-launch-v3.json"), {
     openapi: "3.1.0",
-    info: { title: "fixture", version: "3.3.1" },
+    info: { title: "fixture", version: "3.3.2" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.1.0",
+      profileVersion: "3.2.0",
       profileRevision: 3,
       productionLaunchAuthorized: true,
     },
     "x-programmable-admission-policy": {
-      currentProfileVersion: "3.1.0",
-      legacyExactProfileVersions: ["3.0.0"],
+      currentProfileVersion: "3.2.0",
+      legacyExactProfileVersions: ["3.1.0", "3.0.0"],
       manualProjectAllowlist: false,
       hardBlockFindingRules: platformAdmissionPolicy.blockingFindingRules,
     },
   });
   await json(join(websiteRoot, "packages/launch/package.json"), {
     name: "@programmable/launch",
-    version: "3.3.1",
+    version: "3.3.2",
   });
   const profile = {
     schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.1.0",
+    profileVersion: "3.2.0",
     profileRevision: 3,
     productionLaunchAuthorized: true,
     platformAdmissionPolicy,
@@ -164,7 +167,7 @@ async function releaseFixture(t) {
     schemaVersion: "programmable.custom-launch-api-contract.v3",
     requestSchemaVersion: "programmable.custom-launch-create-request.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.1.0",
+    profileVersion: "3.2.0",
     routes: apiRoutes,
   };
   await json(join(
@@ -301,7 +304,7 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.backend.candidateTreeSha, fixture.backend.tree);
   assert.equal(binding.website.candidateCommitSha, fixture.website.commit);
   assert.equal(binding.website.candidateTreeSha, fixture.website.tree);
-  assert.equal(binding.api.profileVersion, "3.1.0");
+  assert.equal(binding.api.profileVersion, "3.2.0");
   assert.match(binding.api.publicProfilePath, /admission-profile\.v3\.json$/u);
   assert.equal(binding.fly.imageTag, `main-${fixture.backend.commit.slice(0, 12)}`);
   assert.equal(binding.fly.imageDigest, `sha256:${"9".repeat(64)}`);
@@ -310,9 +313,9 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.database.schemaEvidenceSha256, sha256(databaseEvidenceBytes));
   assert.equal(databaseEvidence.status, "passed");
   assert.equal(binding.database.lastMigration,
-    "migrations/0010_durable_launch_lifecycle_queue_v3.sql");
-  assert.equal(databaseEvidence.supabaseMigrationList.migrations.length, 10);
-  assert.equal(databaseEvidence.mirrorByteChecks.length, 10);
+    "migrations/0011_custom_launch_project_metadata_v3.sql");
+  assert.equal(databaseEvidence.supabaseMigrationList.migrations.length, 11);
+  assert.equal(databaseEvidence.mirrorByteChecks.length, 11);
   assert.ok(databaseEvidence.mirrorByteChecks.every((check) => check.byteEqual));
   assert.equal((await stat(result.outputPath)).mode & 0o777, 0o600);
   const beforeRetry = Buffer.from(bindingBytes);
