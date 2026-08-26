@@ -133,7 +133,7 @@ async function stagingFixture() {
     },
     database: {
       migrationInventorySha256: record.subject.apiService.migrationInventorySha256,
-      lastMigration: "migrations/0010_durable_launch_lifecycle_queue_v3.sql",
+      lastMigration: "migrations/0011_custom_launch_project_metadata_v3.sql",
       schemaEvidenceSha256: hashes.nine,
     },
     api: {
@@ -175,15 +175,25 @@ test("V2 template validates without granting staging authority", async () => {
   assert.equal(record.recordStatus, "draft");
 });
 
-test("backend binding schema pairs current 3.1 and compatible 3.0/2.0 evidence", async () => {
+test("backend binding schema pairs current 3.2 and compatible 3.1/3.0/2.0 evidence", async () => {
   const currentBytes = await readFile(new URL(
     "../../docs/operations/releases/custom-launch-v2/backend-release-binding.template.json",
     import.meta.url,
   ));
   const current = parseDeterministicCustomLaunchApiReleaseBindingV1(currentBytes);
-  assert.equal(current.api.profileVersion, "3.1.0");
+  assert.equal(current.api.profileVersion, "3.2.0");
   assert.match(current.api.publicProfilePath, /admission-profile\.v3\.json$/u);
-  assert.match(current.database.lastMigration, /0010_durable_launch_lifecycle_queue_v3/u);
+  assert.match(current.database.lastMigration, /0011_custom_launch_project_metadata_v3/u);
+
+  const prior = clone(current);
+  prior.api.profileVersion = "3.1.0";
+  prior.database.lastMigration =
+    "migrations/0010_durable_launch_lifecycle_queue_v3.sql";
+  const priorBytes = Buffer.from(`${JSON.stringify(prior, null, 2)}\n`);
+  assert.equal(
+    parseDeterministicCustomLaunchApiReleaseBindingV1(priorBytes).api.profileVersion,
+    "3.1.0",
+  );
 
   const compatible = clone(current);
   compatible.api.profileVersion = "3.0.0";

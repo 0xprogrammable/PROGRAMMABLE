@@ -33,8 +33,8 @@ const LAUNCH_PACKAGE_MANIFEST_PATH = "packages/launch/package.json";
 const PUBLIC_PROFILE_SCHEMA_VERSION =
   "programmable.direct-native-hook-graph-admission-profile.v3";
 const PUBLIC_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
-const PUBLIC_PROFILE_VERSION = "3.1.0";
-const LAUNCH_PACKAGE_VERSION = "3.3.1";
+const PUBLIC_PROFILE_VERSION = "3.2.0";
+const LAUNCH_PACKAGE_VERSION = "3.3.2";
 const PLATFORM_ADMISSION_POLICY = Object.freeze({
   schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
   mode: "deterministic-exact-source-graph-static-baseline-v1",
@@ -93,6 +93,7 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   "0008_direct_native_platform_admission_v3.sql",
   "0009_admit_eip3009_authorization_patch_v2.sql",
   "0010_durable_launch_lifecycle_queue_v3.sql",
+  "0011_custom_launch_project_metadata_v3.sql",
 ]);
 const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -105,11 +106,13 @@ const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260826045034_direct_native_platform_admission_v3.sql",
   "20260826105310_admit_eip3009_authorization_patch_v2.sql",
   "20260826135927_durable_launch_lifecycle_queue_v3.sql",
+  "20260826175335_custom_launch_project_metadata_v3.sql",
 ]);
 const EXPECTED_API_ROUTES = Object.freeze([
   Object.freeze({ method: "GET", path: "/v3/capabilities" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches/{id}" }),
+  Object.freeze({ method: "GET", path: "/v3/finalized-custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches/{id}" }),
   Object.freeze({ method: "POST", path: "/v3/custom-launches" }),
@@ -401,7 +404,7 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
     || openApi?.["x-programmable-admission-policy"]?.currentProfileVersion
       !== PUBLIC_PROFILE_VERSION
     || canonicalize(openApi?.["x-programmable-admission-policy"]
-      ?.legacyExactProfileVersions) !== canonicalize(["3.0.0"])
+      ?.legacyExactProfileVersions) !== canonicalize(["3.1.0", "3.0.0"])
     || openApi?.["x-programmable-admission-policy"]?.manualProjectAllowlist !== false
     || canonicalize(openApi?.["x-programmable-admission-policy"]
       ?.hardBlockFindingRules) !== canonicalize(
@@ -411,7 +414,7 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   }
   if (launchPackage?.name !== "@programmable/launch"
     || launchPackage?.version !== LAUNCH_PACKAGE_VERSION) {
-    throw new Error("launch package manifest is not the 3.3.1 public CLI contract");
+    throw new Error("launch package manifest is not the 3.3.2 public CLI contract");
   }
 }
 
