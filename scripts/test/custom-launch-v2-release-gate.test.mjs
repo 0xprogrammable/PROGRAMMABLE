@@ -489,6 +489,11 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   };
   observation.api.readinessIdentitySha256 = digest(Buffer.from(canonicalize(readiness)));
   const calls = [];
+  let listBody = {
+    schemaVersion: "programmable.custom-launch-list.v3",
+    launches: [],
+    nextCursor: null,
+  };
   const fetchImpl = async (input, init) => {
     const url = new URL(input);
     calls.push({ url: url.href, method: init.method, authorization: init.headers.authorization });
@@ -502,9 +507,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     if (url.pathname === "/readyz") return Response.json(readiness, {
       headers: { "cache-control": "no-store" },
     });
-    if (url.pathname === "/v3/custom-launches") return Response.json({
-      schemaVersion: "programmable.custom-launch-list.v3", items: [],
-    });
+    if (url.pathname === "/v3/custom-launches") return Response.json(listBody);
     return new Response("not found", { status: 404 });
   };
   const evidence = await probeCustomLaunchV3Release({
@@ -522,6 +525,21 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   assert.equal(JSON.stringify(evidence).includes("canary-secret-value"), false);
   assert.deepEqual(new Set(calls.map((call) => call.method)), new Set(["GET"]));
   assert.equal(calls.at(-1).authorization, "Bearer canary-secret-value");
+
+  listBody = {
+    schemaVersion: "programmable.custom-launch-list.v3",
+    items: [],
+    nextCursor: null,
+  };
+  await assert.rejects(() => probeCustomLaunchV3Release({
+    websiteUrl: "https://launcher-candidate.vercel.app",
+    websiteDeploymentId: "dpl_candidateProduction123456789",
+    expectedWebsiteCommitSha: hashes.a,
+    apiReleaseObservation: observation,
+    apiKey: "canary-secret-value",
+    vercelBypassSecret: "bypass-secret-value",
+    fetchImpl,
+  }), /Custom Launch API V3 list has an unexpected shape/u);
 });
 
 test("production workflow has an additive V3 stage lane and no promotion mutation", async () => {
