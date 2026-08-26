@@ -301,13 +301,14 @@ export default function MachineReadableDocsPage() {
             The default V3 profile uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
-            <code>profileVersion: 3.0.0</code>. It supports project-owned tokens,
+            <code>profileVersion: 3.1.0</code>. It supports project-owned tokens,
             hooks, 3–16 exact direct graph targets and every valid Uniswap v4
             permission mask. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
-            . Revision 2 remains compatible.
+            . Exact 3.0.0 requests remain readable and byte-identical retryable
+            under their original policy. Revision 2 also remains compatible.
           </li>
           <li>
             Revision 3 pins exact{" "}
@@ -315,11 +316,20 @@ export default function MachineReadableDocsPage() {
             5,242,880 bytes per unit and in aggregate and 2,048 inline sources.
           </li>
           <li>
-            Role-aware exact-source static admission binds every finding. A
-            configured blocking code and target-role match returns{" "}
-            <code>action_required</code>; all other findings remain visible
-            warnings. A final Router simulation is mandatory before
-            authorization.
+            Role-aware exact-source static admission binds every finding.
+            Profile 3.1.0 has exactly seven objective hard-block rules. Proxy,
+            delegatecall, mint, tax, pause, liquidity and return-delta surfaces
+            require evidence instead of categorical rejection. A hard-block
+            code-and-role match returns <code>action_required</code>; other
+            findings remain visible. There is no manual project allowlist. A
+            final Router simulation is mandatory before authorization.
+          </li>
+          <li>
+            Public <code>GET /v3/capabilities</code> and authenticated,
+            side-effect-free <code>POST /v3/custom-launches/preflight</code>
+            expose risk classification, platform-owned behavior evidence and
+            six separate product-truth axes. A not-executed behavior vector is
+            outstanding, not verified.
           </li>
           <li>
             Admission and simulation are not an audit or a guarantee of safety,
@@ -335,12 +345,15 @@ export default function MachineReadableDocsPage() {
             <code>GET /v3/custom-launches</code> returns a wallet-owned,
             cursor-paginated snapshot. It makes a bounded best-effort
             reconciliation pass over pending rows and still returns durable
-            history when RPC is unavailable.
+            history when RPC is unavailable. Resource
+            <code> lifecycleQueue</code> is bounded worker scheduling guidance,
+            not launch finality.
           </li>
           <li>
-            After broadcast, poll the single-launch status route. It reconciles
-            the canonical Router event and getter on demand; there is no
-            background reconciliation timer. Finality requires 64 confirmations.
+            After broadcast, poll the single-launch status route. It is the
+            canonical full-resource path while the durable worker and bounded
+            list reconciliation may also advance pending state. Finality
+            requires 64 confirmations.
           </li>
           <li>
             The API request UUID is returned as <code>requestId</code> and the

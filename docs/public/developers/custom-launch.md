@@ -46,9 +46,10 @@ repeats the exact local validation and byte reproduction, then sends those same 
 `POST /v3/custom-launches/preflight` with the wallet-bound Bearer API key. Preflight consumes no launch quota, allocates
 no nonce and persists no launch. It never signs or broadcasts. A successful response is
 `programmable.custom-launch-preflight.v1` and carries the exact `requestHash`, `profileRevision`, `serverTime`,
-`disposition`, `launchEligibility`, `evidenceTier`, hard-block, needs-evidence and warning code arrays, the bounded
-`staticBaseline`, typed `remediations`, and the five fixed side-effect fields. Unknown additive fields may be preserved;
-they never relax a required false or true invariant.
+`disposition`, `launchEligibility`, `evidenceTier`, `riskClassification`, platform-owned `behaviorEvidence`, all six
+`productTruthAxes`, hard-block, needs-evidence and warning code arrays, the bounded `staticBaseline`, typed
+`remediations`, and the five fixed side-effect fields. A `not_executed` behavior vector is outstanding, not failed or
+verified. Unknown additive fields may be preserved; they never relax a required false or true invariant.
 
 For USDC EIP-3009 funding, the CLI is the derivation authority. Project code must accept and forward the exact
 `from`, predicted-initializer `to`, `value`, validity window and nonce. It must not substitute an application-specific
@@ -78,9 +79,10 @@ of `external-concentrated-liquidity`, `launch-seeded-concentrated-liquidity` or
 The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 defines the live create, list and single-resource shapes. The default profile uses
 `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
-`profileVersion: 3.0.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Revision 2 remains a compatible profile
-contract for existing clients and resources. Discovery reports `productionLaunchAuthorized: true`. Do not fall back
+`profileVersion: 3.1.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact `3.0.0` requests remain readable and
+byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
+for existing clients and resources. Discovery reports `productionLaunchAuthorized: true`. Do not fall back
 to a different create version.
 
 The Router primitive supports 2–16 targets; this V3 profile requires 3–16 direct CREATE2 graph targets because its
@@ -143,15 +145,19 @@ or hold launch inventory that can exchange against incoming assets. Buys can the
 but the token inventory, accounting and redemption or sell path still come from the project graph. `fundingMode: none`
 only means the Router transfers no launch funding; it does not make an empty ordinary pool liquid.
 
-Revision 3 checks exact source/build bindings and hook permission consistency, then applies role-aware static admission.
+Profile `3.1.0` checks exact source/build bindings and hook permission consistency, then applies role-aware static admission.
 Every enabled Uniswap v4 permission must resolve to a concrete reachable callback implementation; an interface
 declaration or fallback-only route does not qualify.
-Every finding remains bound and visible. A configured blocking finding code blocks only its configured target role,
-except analysis-incomplete findings which block any role. A blocking code and role match returns `action_required`;
-findings outside those pairs remain warnings. A final Router simulation is mandatory before authorization.
+Every finding remains bound and visible. Exactly seven objective code-and-role rules hard-block deployment: runtime
+`CALLCODE`, runtime or source `SELFDESTRUCT`, definitively missing or invalid callback authentication, a literal wrong
+PoolManager, and a missing enabled callback implementation. Proxy or delegatecall use, mint/tax/pause/transfer
+controls, liquidity custody or locking, external dependencies and return-delta custom accounting are evidence duties,
+not categorical deployment blocks. A hard-block match returns `action_required`; other findings populate
+`needsEvidenceFindingCodes` or warnings. There is no manual project allowlist. A final Router simulation is mandatory
+before authorization.
 
-When no blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256 and warning
-codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
+When no hard-blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256,
+needs-evidence and warning codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
 `safetyClaim: false` and `feeBehaviorClaim: false`. A blocking match instead exposes the exact static report through
 `action_required`.
 
@@ -195,6 +201,10 @@ Capabilities publishes six independent `productTruthAxes`: `deployment`, `tradin
 The four preflight dispositions are `supported`, `supported_with_warnings`, `needs_evidence` and `unsupported`. They
 classify the exact submitted bytes at the stated evidence tier. None is an audit, universal compatibility statement or
 safety guarantee.
+
+Every durable resource also has additive `lifecycleQueue` readback. It reports bounded worker scheduling, attempts and
+poll guidance only. Queue completion is not launch finality, and a queue retry does not change the durable launch
+status. The single-resource GET remains the canonical polling path.
 
 ## Cold-agent quickstart
 
@@ -362,7 +372,7 @@ failure state.
 | `received` | The request is durably accepted. |
 | `validating` | Request and graph validation are running. |
 | `pending_review` | Exact-source admission or Router preparation is still running. There is no wallet transaction to sign. |
-| `action_required` | A configured static finding code matched its blocking target role. Read the exact bound report and contact support with the request ID when directed; this is not a wallet-signing stage. |
+| `action_required` | One of the current profile's exact hard-blocking code-and-role rules matched. Read the exact bound report and contact support with the request ID when directed; this is not a wallet-signing stage. |
 | `awaiting_funding_authorization` | EIP-3009 mode only: review and sign the exact typed data in the connected controller wallet. |
 | `funding_authorization_verified` | The separate funding signature was verified and final calldata construction can continue. |
 | `simulating` | The final graph and exact Router transaction are being simulated. |

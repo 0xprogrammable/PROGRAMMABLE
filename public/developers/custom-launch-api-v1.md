@@ -62,9 +62,10 @@ Retrying unchanged bytes or asking for a manual allowlist cannot bypass it.
 
 The `programmable.direct-native-hook-graph.v1` document is the V3 production request, resource and wallet-handoff
 contract. The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`,
-`profileRevision: 3` and `profileVersion: 3.0.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Revision 2 remains a
-compatible profile contract for existing clients and resources. The Router primitive supports 2-16 targets; the direct
+`profileRevision: 3` and `profileVersion: 3.1.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact `3.0.0` requests remain readable and
+byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
+for existing clients and resources. The Router primitive supports 2-16 targets; the direct
 native profile requires 3-16 because token, hook and initializer roles are distinct. It accepts a project-owned token,
 a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 permission bits across masks `0` through
 `16383`, and an exact multi-contract graph. It does not substitute a Programmable-owned hook. Every enabled v4
@@ -114,11 +115,14 @@ inventory that can exchange against incoming assets. Buys may then grow assets h
 inventory and the buy, sell, redemption and withdrawal paths still come from the exact project graph. Funding mode
 `none` does not make an empty ordinary pool liquid.
 
-Revision 3 checks exact source/build bindings, hook permissions and address bits, then applies a role-aware static
-baseline. Every finding remains bound and visible. A configured blocking finding code blocks only its configured target
-role, except analysis-incomplete findings which block any role. A blocking code and role match returns
-`action_required`; findings outside those pairs remain warnings. A final Router simulation is mandatory before
-authorization.
+Profile `3.1.0` checks exact source/build bindings, hook permissions and address bits, then applies a role-aware static
+baseline. Exactly seven objective code-and-role rules hard-block deployment: runtime `CALLCODE`, runtime or source
+`SELFDESTRUCT`, a definitively missing or invalid callback authentication guard, a literal noncanonical PoolManager,
+or a missing enabled callback implementation. Proxy or delegatecall use, mint/tax/pause/transfer controls, liquidity
+custody or locking, external dependencies and return-delta custom accounting remain bound evidence duties rather than
+categorical deployment blocks. A hard-block match returns `action_required`; other findings populate
+`needsEvidenceFindingCodes` or warnings. There is no manual project allowlist. A final Router simulation is mandatory
+before authorization.
 
 When no blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256 and warning
 codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
@@ -135,8 +139,9 @@ Capabilities keeps six product-truth axes independent: `deployment`, `trading`, 
 are bounded classifications at the returned `evidenceTier`; they do not prove a deployment occurred, live trading or
 liquidity exists, platform-fee behavior was proven, source verification reached `exact_match`, indexing refreshed, or
 feature placement happened. The response disposition is `supported`, `supported_with_warnings`, `needs_evidence` or
-`unsupported` and includes typed finding-code arrays, `staticBaseline` and `remediations`. None is an audit, universal
-compatibility statement or safety guarantee.
+`unsupported` and includes typed finding-code arrays, `riskClassification`, `behaviorEvidence`, `productTruthAxes`,
+`staticBaseline` and `remediations`. A `not_executed` behavior vector remains outstanding; it is neither a failure nor
+a caller-declared pass. None is an audit, universal compatibility statement or safety guarantee.
 
 ## Install the public CLI
 
@@ -220,7 +225,9 @@ programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
 The list route may make a bounded best-effort reconciliation pass over pending rows, but it returns `output: null`.
-The single resource GET is the precise status and full output path.
+The single resource GET is the precise status and full output path. Its additive `lifecycleQueue` reports only bounded
+worker scheduling and retry state; queue completion is not launch finality, and queue retry never changes the launch
+status.
 
 ```text
 received -> validating
@@ -230,7 +237,7 @@ pending_review -> prepared -> simulating -> authorized -> submitted -> finalized
 ```
 
 `failed` and `cancelled` are terminal alternatives. `pending_review` has no wallet action. `action_required` means a
-configured static finding code matched its blocking target role. Inspect the exact bound report and contact support
+current exact hard-blocking finding code matched its target role. Inspect the exact bound report and contact support
 with the request ID when directed; it is not a wallet-signing stage. Send only the request ID, status, UTC time and
 public error code. Never send the API key. Nonblocking findings remain bound and visible as warnings. With
 `--until authorized`, the CLI also stops at

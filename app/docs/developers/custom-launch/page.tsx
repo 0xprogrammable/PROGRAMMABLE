@@ -57,7 +57,7 @@ const lifecycle = [
   ],
   [
     "action_required",
-    "A configured static finding code matched its blocking target role. Read the exact bound report and contact support with the request ID when directed. This is not a wallet-signing stage.",
+    "One of the current profile's exact hard-blocking code-and-role rules matched. Read the exact bound report and contact support with the request ID when directed. This is not a wallet-signing stage.",
   ],
   [
     "awaiting_funding_authorization",
@@ -325,7 +325,14 @@ export default function CustomLaunchApiDocsPage() {
             request through <code>validate --remote</code>. The authenticated
             <code> POST /v3/custom-launches/preflight</code> uses those same bytes,
             consumes no launch quota, allocates no nonce, persists no launch and
-            never signs or broadcasts.
+            never signs or broadcasts. It returns additive
+             <code> riskClassification</code>, platform-owned
+             <code> behaviorEvidence</code> and all six
+             <code> productTruthAxes</code>: <code>deployment</code>,{" "}
+             <code>trading</code>, <code>platform_fee_evidence</code>,{" "}
+             <code>source_verification</code>, <code>indexing</code> and{" "}
+             <code>featured</code>. A not-executed behavior vector remains
+             outstanding; it is not a caller-declared pass.
           </li>
           <li>
             In EIP-3009 mode, accept the exact CLI-derived funding descriptor.
@@ -383,12 +390,13 @@ export default function CustomLaunchApiDocsPage() {
             multi-contract launch graphs. The default profile uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
-            <code>profileVersion: 3.0.0</code>. Its selection uses{" "}
+            <code>profileVersion: 3.1.0</code>. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
-            . Revision 2 remains compatible; do not reinterpret its receipt as
-            revision-3 admission.
+            . Exact 3.0.0 requests remain readable and byte-identical retryable
+            under their original immutable policy. Revision 2 also remains
+            compatible; do not reinterpret its receipt as revision-3 admission.
           </p>
         </div>
 
@@ -430,11 +438,15 @@ export default function CustomLaunchApiDocsPage() {
             global initializer trust root.
           </li>
           <li>
-            Revision 3 binds every static finding. A configured blocking code
-            blocks only its configured target role, except incomplete target
-            analysis which blocks every role. Blocking matches return{" "}
-            <code>action_required</code>; all other findings remain visible
-            warnings.
+            Profile 3.1.0 binds every static finding but hard-blocks only seven
+            objective code-and-role conditions: CALLCODE, source or runtime
+            SELFDESTRUCT, definitively missing or invalid callback authentication,
+            a literal wrong PoolManager, or a missing enabled callback. Proxy,
+            delegatecall, mint, tax, pause, liquidity and return-delta surfaces
+            require evidence instead of categorical rejection. Hard-blocking
+            matches return <code>action_required</code>; all other findings remain
+            visible as needs-evidence or warning conditions. There is no manual
+            project allowlist.
           </li>
           <li>
             Every enabled v4 permission must resolve to a concrete reachable
@@ -689,7 +701,9 @@ export default function CustomLaunchApiDocsPage() {
           reconciliation. <code>GET /v3/custom-launches</code> is a newest-first
           wallet-owned history view with bounded summaries; its{" "}
           <code>output</code> is always <code>null</code>. Use the single-resource
-          route for the artifact, wallet transaction and durable failure.
+          route for the artifact, wallet transaction and durable failure. Its
+          additive <code>lifecycleQueue</code> reports bounded worker scheduling
+          and retry state only; queue completion is not launch finality.
         </p>
 
         <aside className={styles.callout}>

@@ -29,7 +29,8 @@ description: Official Programmable product, source, community and analytics link
 | V4 token                | [Dexscreener](https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0) |
 
 Use `api.programmable.market` for authenticated public V3 general-hook creation and wallet-owned lifecycle reads. The
-default profile is revision 3 with `profileVersion: 3.0.0`; revision 2 remains compatible. V2 and V1 history remain
+default profile is revision 3 with `profileVersion: 3.1.0`; exact `3.0.0` requests remain readable and byte-identical
+retryable, and revision 2 remains compatible. V2 and V1 history remain
 readable, V1 creation remains read only, and legacy Registry and GitHub submission intake is closed. Use the read-only
 developer service and current deployment manifest when verifying Ethereum source or deployment data. Use the Prediction
 Markets repository for its current networks, contracts and release evidence. Community posts and analytics are useful

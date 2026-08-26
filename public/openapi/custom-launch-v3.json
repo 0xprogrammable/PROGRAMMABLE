@@ -4,7 +4,7 @@
     "title": "Programmable Custom Launch API V3 general hook profile",
     "version": "3.3.0",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests remain readable and retryable with their original exact bytes.",
+    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Profile 3.1.0 is current; exact profile 3.0.0 requests remain readable and retryable under their original immutable policy. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests also remain readable and retryable with their original exact bytes.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -93,7 +93,8 @@
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.0.0",
+    "profileVersion": "3.1.0",
+    "compatibleProfileVersions": ["3.0.0"],
     "productionLaunchAuthorized": true,
     "minimumTargets": 3,
     "maximumTargets": 16,
@@ -105,6 +106,44 @@
     "routerSimulationRequiredBeforeAuthorization": true,
     "safetyClaim": false,
     "feeBehaviorClaim": false
+  },
+  "x-programmable-admission-policy": {
+    "currentProfileVersion": "3.1.0",
+    "legacyExactProfileVersions": ["3.0.0"],
+    "legacySemantics": "readable-and-byte-identical-retryable-only",
+    "manualProjectAllowlist": false,
+    "hardBlockFindingRules": [
+      { "code": "RUNTIME_CALLCODE", "targetRoles": ["any"] },
+      { "code": "RUNTIME_SELFDESTRUCT", "targetRoles": ["any"] },
+      { "code": "SOURCE_SELFDESTRUCT_SURFACE", "targetRoles": ["any"] },
+      { "code": "V4_CALLBACK_AUTHENTICATION_MISSING", "targetRoles": ["hook"] },
+      { "code": "V4_CALLBACK_AUTHENTICATION_INVALID", "targetRoles": ["hook"] },
+      { "code": "V4_CALLBACK_POOL_MANAGER_MISMATCH", "targetRoles": ["hook"] },
+      { "code": "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", "targetRoles": ["hook"] }
+    ],
+    "needsEvidenceFindingCodes": [
+      "RUNTIME_CREATE",
+      "RUNTIME_CREATE2",
+      "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+      "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+      "RUNTIME_DELEGATECALL",
+      "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+      "SOURCE_MUTABLE_PAUSE_SURFACE",
+      "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+      "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+      "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+      "SOURCE_MUTABLE_ADMIN_SURFACE",
+      "SOURCE_PUBLIC_MINT_SURFACE",
+      "SOURCE_EXTERNAL_DEPENDENCY_SURFACE",
+      "SOURCE_TRANSFER_FEE_SURFACE",
+      "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE"
+    ],
+    "advancedSurfacesAreEvidenceDuties": [
+      "proxy-or-delegatecall",
+      "mint-tax-pause-or-transfer-controls",
+      "liquidity-custody-or-locking",
+      "return-delta-custom-accounting"
+    ]
   },
   "x-programmable-funding-boundary": {
     "modes": [
@@ -892,7 +931,7 @@
                 "const": 3
               },
               "profileVersion": {
-                "const": "3.0.0"
+                "const": "3.1.0"
               },
               "productionLaunchAuthorized": {
                 "const": true
@@ -1223,6 +1262,9 @@
           "disposition",
           "launchEligibility",
           "evidenceTier",
+          "riskClassification",
+          "behaviorEvidence",
+          "productTruthAxes",
           "hardBlockFindingCodes",
           "needsEvidenceFindingCodes",
           "warningFindingCodes",
@@ -1290,6 +1332,19 @@
               "governed_external_trust"
             ]
           },
+          "riskClassification": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/PlatformAdmissionRiskClassificationV3" },
+              { "type": "null" }
+            ],
+            "description": "Current revision-3 static classification. Revision-2 compatibility preflight returns null."
+          },
+          "behaviorEvidence": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorEvidenceSummaryV3"
+          },
+          "productTruthAxes": {
+            "$ref": "#/components/schemas/CustomLaunchProductTruthAxesV3"
+          },
           "hardBlockFindingCodes": {
             "$ref": "#/components/schemas/CustomLaunchFindingCodeListV1"
           },
@@ -1331,7 +1386,7 @@
             "const": false
           }
         },
-        "description": "Side-effect-free classification of one exact V3 request. It is not a durable launch resource, deployment proof, trading proof, audit, source-verification result, indexing result or feature-placement promise.",
+        "description": "Side-effect-free classification of one exact V3 request. Risk classification, platform-owned behavior requirements and six independent product-truth axes are explicit. An unexecuted behavior vector is not a failure and never becomes a caller-declared pass. This response is not a durable launch resource, deployment proof, trading proof, audit, source-verification result, indexing result or feature-placement promise.",
         "additionalProperties": true
       },
       "CustomLaunchFindingCodeListV1": {
@@ -1343,6 +1398,649 @@
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
         "uniqueItems": true
+      },
+      "PlatformAdmissionRiskClassificationV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "classifierVersion",
+          "evidenceAuthority",
+          "disposition",
+          "launchEligibility",
+          "evidenceTier",
+          "evidenceTierStatus",
+          "hardBlockFindingCodes",
+          "needsEvidenceFindingCodes",
+          "requiredEvidence",
+          "behaviorEvidenceStatus",
+          "approvalAuthority",
+          "safetyClaim",
+          "feeBehaviorClaim",
+          "limitations"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.platform-admission-risk-classification.v3"
+          },
+          "classifierVersion": { "const": "1.0.0" },
+          "evidenceAuthority": {
+            "const": "deterministic-static-classification"
+          },
+          "disposition": {
+            "enum": ["hard_blocked", "needs_evidence"]
+          },
+          "launchEligibility": {
+            "type": "object",
+            "required": ["deployable", "routable", "featured", "basis"],
+            "properties": {
+              "deployable": { "type": "boolean" },
+              "routable": { "const": false },
+              "featured": { "const": false },
+              "basis": {
+                "enum": [
+                  "hard-blocking-static-finding",
+                  "static-admission-only"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "evidenceTier": {
+            "enum": [
+              "launch_mechanics_verified",
+              "standard_swap_compatible",
+              "advanced_custom_accounting",
+              "governed_external_trust"
+            ]
+          },
+          "evidenceTierStatus": { "enum": ["failed", "required"] },
+          "hardBlockFindingCodes": {
+            "$ref": "#/components/schemas/CustomLaunchFindingCodeListV1"
+          },
+          "needsEvidenceFindingCodes": {
+            "$ref": "#/components/schemas/CustomLaunchFindingCodeListV1"
+          },
+          "requiredEvidence": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "launch.router-simulation",
+                "launch.exact-target-analysis",
+                "launch.child-contract-lifecycle-and-codehash",
+                "callback.pool-manager-authentication",
+                "swap.four-quadrant-multi-size",
+                "swap.second-user-and-time",
+                "liquidity.declared-lifecycle-and-withdrawal",
+                "liquidity.lock-release-and-custody",
+                "custom-accounting.delta-solvency-backing-refund-withdrawal",
+                "governance.authority-bounds-delay-and-upgrade-path",
+                "external-dependency.codehash-liveness-staleness-and-trust",
+                "platform-fee.ten-bps-no-bypass-no-overcharge-claim-isolation"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "needsEvidenceFindingCodes": {
+            "$ref": "#/components/schemas/CustomLaunchFindingCodeListV1",
+            "description": "Conditions that require executable or governance evidence but do not categorically block profile-3.1.0 deployment."
+          },
+          "riskClassification": {
+            "$ref": "#/components/schemas/PlatformAdmissionRiskClassificationV3"
+          },
+          "behaviorEvidence": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorEvidenceSummaryV3"
+          },
+          "productTruthAxes": {
+            "$ref": "#/components/schemas/CustomLaunchProductTruthAxesV3"
+          },
+          "behaviorEvidenceStatus": { "const": "not_executed" },
+          "approvalAuthority": { "const": false },
+          "safetyClaim": { "const": false },
+          "feeBehaviorClaim": { "const": false },
+          "limitations": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1
+          }
+        },
+        "description": "Deterministic static classification. deployable means only that no profile-3.1.0 hard blocker matched; routable and featured remain false until separate evidence exists.",
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorVectorIdV3": {
+        "enum": [
+          "swap.zero-for-one.exact-input.multi-size",
+          "swap.zero-for-one.exact-output.multi-size",
+          "swap.one-for-zero.exact-input.multi-size",
+          "swap.one-for-zero.exact-output.multi-size",
+          "swap.second-user",
+          "swap.time-advance",
+          "liquidity.lifecycle.add-remove-withdraw",
+          "callback.unauthorized-rejected",
+          "fee.programmable-ten-bps",
+          "fee.no-bypass",
+          "fee.no-overcharge",
+          "fee.claim-isolation",
+          "custom-accounting.delta-solvency",
+          "custom-accounting.inventory-backing",
+          "custom-accounting.refund",
+          "custom-accounting.withdrawal"
+        ]
+      },
+      "RequiredCustomLaunchBehaviorVectorV3": {
+        "type": "object",
+        "required": ["vectorId", "category", "requirement", "claimAxes"],
+        "properties": {
+          "vectorId": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3"
+          },
+          "category": {
+            "enum": [
+              "swap",
+              "liquidity",
+              "callback-authentication",
+              "platform-fee",
+              "custom-accounting"
+            ]
+          },
+          "requirement": { "const": "required" },
+          "claimAxes": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "deployability-hard-invariant",
+                "platform-fee-conformance",
+                "routability"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorRequirementsV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "vectorSetVersion",
+          "riskClass",
+          "hookPermissionMask",
+          "liquidityModel",
+          "vectors",
+          "requirementsSha256"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-behavior-requirements.v1"
+          },
+          "vectorSetVersion": { "const": "1.0.0" },
+          "riskClass": {
+            "enum": ["standard-swaps", "advanced-custom-accounting"]
+          },
+          "hookPermissionMask": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16383
+          },
+          "liquidityModel": {
+            "enum": [
+              "external-concentrated-liquidity",
+              "launch-seeded-concentrated-liquidity",
+              "hook-inventory-custom-accounting"
+            ]
+          },
+          "vectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequiredCustomLaunchBehaviorVectorV3"
+            },
+            "minItems": 12,
+            "maxItems": 16,
+            "uniqueItems": true
+          },
+          "requirementsSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorExecutionVectorV3": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["vectorId", "status", "evidenceSha256", "reasonCode"],
+            "properties": {
+              "vectorId": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+              "status": { "const": "verified" },
+              "evidenceSha256": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+              "reasonCode": { "type": "null" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["vectorId", "status", "evidenceSha256", "reasonCode"],
+            "properties": {
+              "vectorId": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+              "status": { "const": "failed" },
+              "evidenceSha256": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+              "reasonCode": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["vectorId", "status", "evidenceSha256", "reasonCode"],
+            "properties": {
+              "vectorId": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+              "status": { "const": "not_executed" },
+              "evidenceSha256": { "type": "null" },
+              "reasonCode": {
+                "enum": [
+                  "GENERIC_ROUTER_SIMULATION_ONLY",
+                  "BEHAVIOR_RUNNER_NOT_CONFIGURED",
+                  "BEHAVIOR_RUNNER_UNAVAILABLE",
+                  "VECTOR_NOT_SUPPORTED_BY_RUNNER",
+                  "VECTOR_PREREQUISITE_UNAVAILABLE"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "CustomLaunchBehaviorExecutionV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "subjectSha256",
+          "requirementsSha256",
+          "evidenceAuthority",
+          "runnerId",
+          "runnerVersion",
+          "runnerBuildSha256",
+          "executedAt",
+          "vectors"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-behavior-execution.v1"
+          },
+          "subjectSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "requirementsSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "evidenceAuthority": { "const": "platform-runtime-executor" },
+          "runnerId": { "type": "string", "minLength": 1 },
+          "runnerVersion": { "type": "string", "minLength": 1 },
+          "runnerBuildSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "executedAt": { "type": "string", "format": "date-time" },
+          "vectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomLaunchBehaviorExecutionVectorV3"
+            },
+            "minItems": 12,
+            "maxItems": 16
+          }
+        },
+        "description": "Accepted only from a platform runtime executor and bound to the exact subject and requirement hashes. Caller or agent declarations never satisfy this schema.",
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorVectorSummaryV3": {
+        "type": "object",
+        "required": [
+          "vectorId",
+          "category",
+          "claimAxes",
+          "status",
+          "evidenceSha256",
+          "reasonCode"
+        ],
+        "properties": {
+          "vectorId": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+          "category": {
+            "enum": [
+              "swap",
+              "liquidity",
+              "callback-authentication",
+              "platform-fee",
+              "custom-accounting"
+            ]
+          },
+          "claimAxes": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "deployability-hard-invariant",
+                "platform-fee-conformance",
+                "routability"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "status": {
+            "enum": ["required", "not_executed", "verified", "failed"]
+          },
+          "evidenceSha256": {
+            "oneOf": [
+              { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+              { "type": "null" }
+            ]
+          },
+          "reasonCode": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "type": "null" }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorClaimAxesV3": {
+        "type": "object",
+        "required": [
+          "deployability",
+          "platformFeeConformance",
+          "routability",
+          "featured",
+          "finality"
+        ],
+        "properties": {
+          "deployability": {
+            "type": "object",
+            "required": ["status", "scope", "requiredVectorIds", "outstandingVectorIds"],
+            "properties": {
+              "status": {
+                "enum": [
+                  "behavior-hard-invariants-required",
+                  "behavior-hard-invariants-verified",
+                  "blocked"
+                ]
+              },
+              "scope": { "const": "behavior-only" },
+              "requiredVectorIds": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+                "uniqueItems": true
+              },
+              "outstandingVectorIds": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+                "uniqueItems": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "platformFeeConformance": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorVerificationAxisV3"
+          },
+          "routability": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorVerificationAxisV3"
+          },
+          "featured": {
+            "type": "object",
+            "required": ["status", "derivedFromBehaviorEvidence"],
+            "properties": {
+              "status": { "const": "external-evidence-required" },
+              "derivedFromBehaviorEvidence": { "const": false }
+            },
+            "additionalProperties": false
+          },
+          "finality": {
+            "type": "object",
+            "required": ["status", "derivedFromBehaviorEvidence"],
+            "properties": {
+              "status": { "const": "independent-evidence-required" },
+              "derivedFromBehaviorEvidence": { "const": false }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorVerificationAxisV3": {
+        "type": "object",
+        "required": ["status", "requiredVectorIds", "outstandingVectorIds"],
+        "properties": {
+          "status": { "enum": ["not_verified", "verified", "blocked"] },
+          "requiredVectorIds": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+            "uniqueItems": true
+          },
+          "outstandingVectorIds": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorEvidenceSummaryV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "subjectSha256",
+          "requirements",
+          "status",
+          "execution",
+          "vectors",
+          "outstandingVectorIds",
+          "claimAxes"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-behavior-summary.v1"
+          },
+          "subjectSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "requirements": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorRequirementsV3"
+          },
+          "status": {
+            "enum": ["required", "not_executed", "verified", "failed"]
+          },
+          "execution": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/CustomLaunchBehaviorExecutionV3" },
+              { "type": "null" }
+            ]
+          },
+          "vectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomLaunchBehaviorVectorSummaryV3"
+            },
+            "minItems": 12,
+            "maxItems": 16
+          },
+          "outstandingVectorIds": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CustomLaunchBehaviorVectorIdV3" },
+            "uniqueItems": true
+          },
+          "claimAxes": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorClaimAxesV3"
+          }
+        },
+        "description": "Platform-owned runtime-evidence summary. not_executed means the vectors remain outstanding; it never means verified and cannot be supplied by the API caller.",
+        "additionalProperties": false
+      },
+      "CustomLaunchProductTruthAxesV3": {
+        "type": "object",
+        "required": [
+          "deployment",
+          "trading",
+          "platform_fee_evidence",
+          "source_verification",
+          "indexing",
+          "featured"
+        ],
+        "properties": {
+          "deployment": {
+            "type": "object",
+            "required": ["status", "basis", "transactionExecuted"],
+            "properties": {
+              "status": { "enum": ["eligible", "blocked"] },
+              "basis": {
+                "enum": [
+                  "static-admission-only",
+                  "hard-blocking-static-finding"
+                ]
+              },
+              "transactionExecuted": { "const": false }
+            },
+            "additionalProperties": false
+          },
+          "trading": {
+            "type": "object",
+            "required": ["status", "basis"],
+            "properties": {
+              "status": { "const": "not_verified" },
+              "basis": { "const": "runtime-behavior-evidence-required" }
+            },
+            "additionalProperties": false
+          },
+          "platform_fee_evidence": {
+            "type": "object",
+            "required": ["status", "basis"],
+            "properties": {
+              "status": { "const": "not_verified" },
+              "basis": { "const": "exact-fee-behavior-evidence-required" }
+            },
+            "additionalProperties": false
+          },
+          "source_verification": {
+            "type": "object",
+            "required": ["status", "basis"],
+            "properties": {
+              "status": { "const": "not_verified" },
+              "basis": { "const": "provider-exact-match-required" }
+            },
+            "additionalProperties": false
+          },
+          "indexing": {
+            "type": "object",
+            "required": ["status", "basis"],
+            "properties": {
+              "status": { "const": "not_indexed" },
+              "basis": { "const": "finalized-router-identity-required" }
+            },
+            "additionalProperties": false
+          },
+          "featured": {
+            "type": "object",
+            "required": ["status", "basis"],
+            "properties": {
+              "status": { "const": "not_featured" },
+              "basis": { "const": "separate-product-evidence-required" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "Six independent product claims. A positive or eligible value on one axis never implies another axis.",
+        "additionalProperties": false
+      },
+      "CustomLaunchLifecycleQueueV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "state",
+          "reason",
+          "generation",
+          "attemptCount",
+          "pollAfterSeconds",
+          "nextAttemptAt",
+          "leaseExpiresAt",
+          "workExpiresAt",
+          "lastErrorCode",
+          "updatedAt",
+          "polling"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-lifecycle-queue.v3"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "processing",
+              "backing_off",
+              "waiting",
+              "completed",
+              "failed",
+              "expired"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "request-created",
+              "funding-authorization-verified",
+              "transaction-submitted",
+              "reconciliation-due",
+              "operator-retry"
+            ]
+          },
+          "generation": { "type": "integer", "minimum": 1 },
+          "attemptCount": { "type": "integer", "minimum": 0 },
+          "pollAfterSeconds": {
+            "oneOf": [
+              { "type": "integer", "minimum": 0 },
+              { "type": "null" }
+            ]
+          },
+          "nextAttemptAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "leaseExpiresAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "workExpiresAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "lastErrorCode": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Z][A-Z0-9_]*$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "polling": {
+            "type": "object",
+            "required": ["method", "path"],
+            "properties": {
+              "method": { "const": "GET" },
+              "path": {
+                "type": "string",
+                "pattern": "^/v3/custom-launches/[0-9a-f-]{36}$"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "Bounded durable-worker readback. Queue completion is not launch finality, and a retry does not change the durable launch status. Worker identity, payloads and raw errors are never exposed.",
+        "additionalProperties": false
       },
       "NonzeroCanonicalUint256": {
         "type": "string",
@@ -1488,7 +2186,58 @@
         },
         "additionalProperties": false
       },
-      "PlatformAdmissionPolicyV1": {
+      "PlatformAdmissionPolicyV3_1_0": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "mode",
+          "receiptSchemaVersion",
+          "engineId",
+          "engineVersion",
+          "exactSourceCompilerGraphBindingRequired",
+          "staticBaselineGateVersion",
+          "blockingFindingRules",
+          "warningDisposition",
+          "noBlockingFindingDisposition",
+          "blockingFindingDisposition",
+          "routerSimulationRequiredBeforeAuthorization",
+          "receiptAuthority",
+          "assurance",
+          "safetyClaim",
+          "feeBehaviorClaim"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.direct-native-platform-admission-policy.v1" },
+          "mode": { "const": "deterministic-exact-source-graph-static-baseline-v1" },
+          "receiptSchemaVersion": { "const": "programmable.platform-admission-receipt.v1" },
+          "engineId": { "const": "programmable.direct-native-static-admission" },
+          "engineVersion": { "const": "1.0.0" },
+          "exactSourceCompilerGraphBindingRequired": { "const": true },
+          "staticBaselineGateVersion": { "const": "1.0.0" },
+          "blockingFindingRules": {
+            "const": [
+              { "code": "RUNTIME_CALLCODE", "targetRoles": ["any"] },
+              { "code": "RUNTIME_SELFDESTRUCT", "targetRoles": ["any"] },
+              { "code": "SOURCE_SELFDESTRUCT_SURFACE", "targetRoles": ["any"] },
+              { "code": "V4_CALLBACK_AUTHENTICATION_MISSING", "targetRoles": ["hook"] },
+              { "code": "V4_CALLBACK_AUTHENTICATION_INVALID", "targetRoles": ["hook"] },
+              { "code": "V4_CALLBACK_POOL_MANAGER_MISMATCH", "targetRoles": ["hook"] },
+              { "code": "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", "targetRoles": ["hook"] }
+            ]
+          },
+          "warningDisposition": { "const": "bound-and-visible" },
+          "noBlockingFindingDisposition": { "const": "router-simulation-eligible" },
+          "blockingFindingDisposition": { "const": "action-required" },
+          "routerSimulationRequiredBeforeAuthorization": { "const": true },
+          "receiptAuthority": { "const": "platform-only" },
+          "assurance": { "const": "launch-admission-only" },
+          "safetyClaim": { "const": false },
+          "feeBehaviorClaim": { "const": false }
+        },
+        "description": "Current immutable profile-3.1.0 launch-admission policy. Exactly seven objective code-and-role rules are hard blockers. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces require evidence but do not categorically block deployment. Admission is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "additionalProperties": false
+      },
+      "PlatformAdmissionPolicyV3_0_0": {
         "type": "object",
         "required": [
           "schemaVersion",
@@ -1542,8 +2291,15 @@
           "safetyClaim": { "const": false },
           "feeBehaviorClaim": { "const": false }
         },
-        "description": "Immutable role-aware launch-admission policy. Findings outside a blocking code and target-role pair remain bound and visible warnings. Admission is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Immutable legacy profile-3.0.0 policy retained only so byte-identical existing requests remain readable and retryable. New packs use profile 3.1.0.",
         "additionalProperties": false
+      },
+      "PlatformAdmissionPolicyV1": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0" },
+          { "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_0_0" }
+        ],
+        "description": "Revision-3 admission policy. Profile version selects one exact immutable policy; clients cannot combine a profile version with the other version's rule set."
       },
       "DirectNativeGraphPolicyV1": {
         "type": "object",
@@ -1688,7 +2444,7 @@
             "enum": [2, 3]
           },
           "profileVersion": {
-            "enum": ["2.0.0", "3.0.0"]
+            "enum": ["2.0.0", "3.0.0", "3.1.0"]
           },
           "productionLaunchAuthorized": {
             "const": true,
@@ -1757,7 +2513,22 @@
             "properties": {
               "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
               "profileRevision": { "const": 3 },
-              "profileVersion": { "const": "3.0.0" }
+              "profileVersion": { "const": "3.1.0" },
+              "platformAdmissionPolicy": {
+                "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
+              }
+            },
+            "not": { "required": ["platformFeeProofPolicy"] }
+          },
+          {
+            "required": ["platformAdmissionPolicy"],
+            "properties": {
+              "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+              "profileRevision": { "const": 3 },
+              "profileVersion": { "const": "3.0.0" },
+              "platformAdmissionPolicy": {
+                "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_0_0"
+              }
             },
             "not": { "required": ["platformFeeProofPolicy"] }
           },
@@ -1771,7 +2542,7 @@
             "not": { "required": ["platformAdmissionPolicy"] }
           }
         ],
-        "description": "Production-authorized revision 3 direct-graph profile. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Warnings stay bound and visible; blocking role matches stop before wallet authorization. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Production-authorized revision 3 direct-graph profile. Profile 3.1.0 is current; exact 3.0.0 requests remain readable and retryable under their original policy. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -2491,6 +3262,29 @@
                     "properties": {
                       "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
                       "profileRevision": { "const": 3 },
+                      "profileVersion": { "const": "3.1.0" }
+                    }
+                  },
+                  "launchProfileSelection": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v3" },
+                      "profileRevision": { "const": 3 }
+                    }
+                  },
+                  "verificationBundle": {
+                    "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
+                  }
+                },
+                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"]
+              },
+              {
+                "properties": {
+                  "launchProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+                      "profileRevision": { "const": 3 },
                       "profileVersion": { "const": "3.0.0" }
                     }
                   },
@@ -3118,7 +3912,7 @@
             "const": false
           }
         },
-        "description": "Revision 3 admission classification after the exact-source static baseline found no blocking code and target-role pair. All other indicators remain bound and visible warnings. Router simulation is still required. This is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Revision 3 admission classification after the exact-source static baseline found no hard-blocking code and target-role pair. Evidence duties remain bound and visible without becoming routing, fee, source, indexing or feature claims. Router simulation is still required. This is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "StaticBaselineSourceLocationV1": {
@@ -3207,6 +4001,12 @@
               "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
               "SOURCE_MUTABLE_ADMIN_SURFACE",
               "SOURCE_PUBLIC_MINT_SURFACE",
+              "SOURCE_TRANSFER_FEE_SURFACE",
+              "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE",
+              "SOURCE_EXTERNAL_DEPENDENCY_SURFACE",
+              "V4_CALLBACK_AUTHENTICATION_MISSING",
+              "V4_CALLBACK_AUTHENTICATION_INVALID",
+              "V4_CALLBACK_POOL_MANAGER_MISMATCH",
               "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
               "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
               "SOURCE_TARGET_ANALYSIS_INCOMPLETE"
@@ -3850,7 +4650,8 @@
           "createdAt",
           "updatedAt",
           "output",
-          "failure"
+          "failure",
+          "lifecycleQueue"
         ],
         "properties": {
           "schemaVersion": {
@@ -3972,6 +4773,13 @@
                 "type": "null"
               }
             ]
+          },
+          "lifecycleQueue": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/CustomLaunchLifecycleQueueV3" },
+              { "type": "null" }
+            ],
+            "description": "Durable worker scheduling state. It is operational readback, not launch finality or transaction evidence."
           },
           "sourceVerification": {
             "oneOf": [

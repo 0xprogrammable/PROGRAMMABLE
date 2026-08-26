@@ -129,6 +129,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
+        profileVersion: "3.1.0",
+        compatibleProfileVersions: ["3.0.0"],
         chainId: "1",
         productionLaunchAuthorized: true,
       },
@@ -283,6 +285,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
     expect(catalog.automaticAdmission).toMatchObject({
       manualAllowlist: false,
       manualProjectApproval: false,
+      currentProfileVersion: "3.1.0",
+      legacyExactProfileVersions: ["3.0.0"],
       routerSimulationBeforeAuthorization: true,
       blockingStatus: "action_required",
       warningDisposition: "continue-to-router-simulation",
@@ -290,6 +294,24 @@ describe("Custom Launch cold-agent remediation contract", () => {
     expect(catalog.automaticAdmission.routerSimulationRole).toContain(
       "not a safety",
     );
+    expect(catalog.automaticAdmission.hardBlockFindingRules).toEqual([
+      { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
+      { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["any"] },
+      { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["any"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: ["hook"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: ["hook"] },
+      { code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: ["hook"] },
+      { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
+    ]);
+    expect(catalog.automaticAdmission.needsEvidenceFindingCodes)
+      .toEqual(expect.arrayContaining([
+        "RUNTIME_DELEGATECALL",
+        "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+        "SOURCE_PUBLIC_MINT_SURFACE",
+        "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+        "SOURCE_MUTABLE_PAUSE_SURFACE",
+        "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE",
+      ]));
   });
 
   it("publishes stable remediation IDs for every cold-agent boundary", () => {

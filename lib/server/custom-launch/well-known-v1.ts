@@ -149,7 +149,12 @@ export function programmableWellKnownDocumentV1(
         apiVersion: "3" as const,
         profileId: "programmable.direct-native-hook-graph.v1" as const,
         profileRevision: 3 as const,
-        profileVersion: "3.0.0" as const,
+        profileVersion: "3.1.0" as const,
+        compatibleProfileVersions: Object.freeze([
+          "3.0.0",
+        ] as const),
+        legacyProfileSemantics:
+          "readable-and-byte-identical-retryable-only" as const,
         productionLaunchAuthorized: true as const,
         createPath: "/v3/custom-launches" as const,
         capabilitiesPath: "/v3/capabilities" as const,
@@ -157,6 +162,36 @@ export function programmableWellKnownDocumentV1(
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         cliReleaseVersion: "3.3.0" as const,
+        admissionPolicy: Object.freeze({
+          manualProjectAllowlist: false as const,
+          hardBlockFindingRules: Object.freeze([
+            Object.freeze({ code: "RUNTIME_CALLCODE" as const, targetRoles: Object.freeze(["any"] as const) }),
+            Object.freeze({ code: "RUNTIME_SELFDESTRUCT" as const, targetRoles: Object.freeze(["any"] as const) }),
+            Object.freeze({ code: "SOURCE_SELFDESTRUCT_SURFACE" as const, targetRoles: Object.freeze(["any"] as const) }),
+            Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_MISSING" as const, targetRoles: Object.freeze(["hook"] as const) }),
+            Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_INVALID" as const, targetRoles: Object.freeze(["hook"] as const) }),
+            Object.freeze({ code: "V4_CALLBACK_POOL_MANAGER_MISMATCH" as const, targetRoles: Object.freeze(["hook"] as const) }),
+            Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING" as const, targetRoles: Object.freeze(["hook"] as const) }),
+          ] as const),
+          needsEvidenceFindingCodes: Object.freeze([
+            "RUNTIME_CREATE",
+            "RUNTIME_CREATE2",
+            "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+            "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+            "RUNTIME_DELEGATECALL",
+            "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+            "SOURCE_MUTABLE_PAUSE_SURFACE",
+            "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+            "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+            "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+            "SOURCE_MUTABLE_ADMIN_SURFACE",
+            "SOURCE_PUBLIC_MINT_SURFACE",
+            "SOURCE_EXTERNAL_DEPENDENCY_SURFACE",
+            "SOURCE_TRANSFER_FEE_SURFACE",
+            "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE",
+          ] as const),
+          returnDeltaRequiresBehaviorEvidence: true as const,
+        }),
       }),
       integrationPreview: Object.freeze({
         status: "live" as const,
@@ -169,6 +204,8 @@ export function programmableWellKnownDocumentV1(
           "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1" as const,
         profileRevision: 3 as const,
+        profileVersion: "3.1.0" as const,
+        compatibleProfileVersions: Object.freeze(["3.0.0"] as const),
         requestSchemaVersion:
           "programmable.custom-launch-create-request.v3" as const,
         minimumTargets: 3 as const,
@@ -180,6 +217,13 @@ export function programmableWellKnownDocumentV1(
           maximum: 16_383 as const,
         }),
         allFourteenHookPermissionsStructurallySupported: true as const,
+        manualProjectAllowlist: false as const,
+        advancedSurfacesRequireEvidence: Object.freeze([
+          "proxy-or-delegatecall",
+          "mint-tax-pause-or-transfer-controls",
+          "liquidity-custody-or-locking",
+          "return-delta-custom-accounting",
+        ] as const),
         quoteCurrencies: Object.freeze([
           "native",
           "erc20",
