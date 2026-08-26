@@ -452,7 +452,7 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.1.0" },
+    info: { version: "3.2.0" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileVersion: "3.0.0",

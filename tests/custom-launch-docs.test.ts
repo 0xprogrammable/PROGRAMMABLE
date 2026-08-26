@@ -117,6 +117,11 @@ describe("Custom Launch API documentation", () => {
     expect(gitBookGuide).toContain("programmable-launch submit ./launch.json");
   });
 
+  it("keeps the website agent prompt on the current public CLI release", () => {
+    expect(createGuide).toContain("public CLI 3.2.0 flow");
+    expect(createGuide).not.toContain("public CLI 3.1.0 flow");
+  });
+
   it("publishes public V3 while retaining the exact V1 write fence", () => {
     for (const source of [
       gitBookGuide,

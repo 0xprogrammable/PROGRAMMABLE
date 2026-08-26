@@ -104,7 +104,7 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.1.0"
+    openApi?.info?.version !== "3.2.0"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || openApi?.["x-programmable-profile"]?.profileVersion !== "3.0.0"
