@@ -46,6 +46,7 @@ const CLASSIC_EXCLUSIONS = Object.freeze([
 
 const EXPLORE_QUERY_PARAMETERS = new Set([
   "limit",
+  "model",
   "page",
   "q",
   "socials",
@@ -185,9 +186,14 @@ function filterExploreEntries(
   entries: readonly ExploreEntry[],
   query: string,
   socials: "yes" | "no" | null,
+  model: "classic" | "custom" | null,
 ): ExploreEntry[] {
   const normalized = query.trim().toLowerCase().replace(/^\$/u, "");
   return entries.filter((entry) => {
+    if (
+      model !== null &&
+      entry.launchCategoryProvenance.category !== model
+    ) return false;
     const hasSocials = entry.links?.some(
       (link) => link.kind === "x" || link.kind === "telegram",
     ) ?? false;
@@ -251,10 +257,16 @@ export function paginateExploreEntriesV1(
     pageSize: number;
     query: string;
     socials: "yes" | "no" | null;
+    model: "classic" | "custom" | null;
     sort: ExploreSort;
   }>,
 ) {
-  const filtered = filterExploreEntries(entries, input.query, input.socials);
+  const filtered = filterExploreEntries(
+    entries,
+    input.query,
+    input.socials,
+    input.model,
+  );
   return paginateEntries(sortExploreEntries(filtered, input.sort), input);
 }
 
@@ -285,6 +297,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const model = search.get("model");
+  if (model !== null && model !== "classic" && model !== "custom") {
+    return NextResponse.json(
+      { error: "Unsupported launch model filter" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   try {
     const options = {
       query: search.get("q")?.trim() ?? "",
@@ -292,6 +312,7 @@ export async function GET(request: NextRequest) {
       page: integerQuery(search.get("page"), 1),
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
+      model,
     } as const;
     const catalogRead = readEnvioClassicV3CatalogV1({
       signal: readSignal,
@@ -454,6 +475,7 @@ export async function GET(request: NextRequest) {
         identityEntries,
         options.query,
         options.socials,
+        options.model,
       );
       const valued = await readDexscreenerExploreEntriesV1(filtered, {
         signal: readSignal,
@@ -467,6 +489,7 @@ export async function GET(request: NextRequest) {
         ...options,
         query: "",
         socials: null,
+        model: null,
       });
     } else {
       const identityPage = paginateExploreEntriesV1(identityEntries, options);

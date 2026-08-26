@@ -7,6 +7,8 @@ vi.mock("next/headers", () => ({ headers: vi.fn() }));
 import {
   INITIAL_EXPLORE_TIMEOUT_MS,
   INITIAL_EXPLORE_QUERY,
+  initialExploreModelFilter,
+  initialExploreQuery,
   readInitialExploreWithinDeadline,
 } from "../app/explore/page";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "../lib/explore-defaults";
@@ -26,6 +28,21 @@ describe("Explore initial server read", () => {
 
     expect(DEFAULT_EXPLORE_VIEW_SORT).toBe("market-cap");
     expect(query.get("sort")).toBe(DEFAULT_EXPLORE_VIEW_SORT);
+  });
+
+  it("hydrates public Classic and Custom links into the matching API filter", () => {
+    expect(initialExploreModelFilter("classic")).toBe("classic");
+    expect(initialExploreModelFilter("custom")).toBe("custom-hook");
+    expect(initialExploreModelFilter("anything")).toBe("all");
+    expect(initialExploreModelFilter(["custom"])).toBe("all");
+
+    expect(new URLSearchParams(initialExploreQuery("classic")).get("model"))
+      .toBe("classic");
+    expect(
+      new URLSearchParams(initialExploreQuery("custom-hook")).get("model"),
+    ).toBe("custom");
+    expect(new URLSearchParams(initialExploreQuery("all")).has("model"))
+      .toBe(false);
   });
 
   it("returns at the total deadline and safely consumes the aborted read", async () => {

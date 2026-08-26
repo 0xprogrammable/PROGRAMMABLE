@@ -23,8 +23,11 @@ describe("Explore UI contract", () => {
     expect(page).toContain("controller.abort()");
     expect(page).not.toContain("AbortSignal.timeout(");
     expect(page).not.toContain('fetch("https://programmable.market');
-    expect(page).toContain("<ExploreView initialResponse={initialResponse} />");
-    expect(source).toContain("if (handledRequestKey.current === requestKey)");
+    expect(page).toContain("initialResponse={initialResponse}");
+    expect(page).toContain("initialModelFilter={modelFilter}");
+    expect(source).not.toContain(
+      "if (handledRequestKey.current === requestKey)",
+    );
     expect(source).toContain(
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
@@ -241,6 +244,13 @@ describe("Explore UI contract", () => {
     expect(source).toContain("ageSortOptions.map((option) => (");
     expect(source).toContain("setValuationSort((current) =>");
     expect(source).toContain("setAgeSort((current) =>");
+    expect(source).toContain('search.set(\n        "model",');
+    expect(source).toContain(
+      'modelFilter === "custom-hook" ? "custom" : "classic"',
+    );
+    expect(source).toContain("initialModelFilter = \"all\"");
+    expect(source).toContain("window.history.replaceState(");
+    expect(source.match(/setModelFilter\(/gu)).toHaveLength(1);
     expect(source).not.toContain("setSort(option.id)");
     expect(styles).toMatch(
       /\.runnersIntro :global\(\.token-filter\)\s*\{[^}]*flex:\s*0 0 122px;[^}]*width:\s*122px;/s,

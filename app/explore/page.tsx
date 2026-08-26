@@ -5,7 +5,10 @@ import { Suspense } from "react";
 
 import { GET as readExploreResponse } from "@/app/api/explore/route";
 import { ExploreView } from "@/components/explore-view";
-import type { ExploreInitialResponse } from "@/components/explore-view";
+import type {
+  ExploreInitialResponse,
+  ExploreModelFilter,
+} from "@/components/explore-view";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +23,29 @@ export const INITIAL_EXPLORE_QUERY = new URLSearchParams({
   page: "1",
   limit: "9",
 }).toString();
+
+type ExplorePageSearchParams = Promise<
+  Record<string, string | string[] | undefined>
+>;
+
+export function initialExploreModelFilter(
+  value: string | string[] | undefined,
+): ExploreModelFilter {
+  if (value === "classic") return "classic";
+  if (value === "custom") return "custom-hook";
+  return "all";
+}
+
+export function initialExploreQuery(modelFilter: ExploreModelFilter) {
+  const query = new URLSearchParams(INITIAL_EXPLORE_QUERY);
+  if (modelFilter !== "all") {
+    query.set(
+      "model",
+      modelFilter === "custom-hook" ? "custom" : "classic",
+    );
+  }
+  return query.toString();
+}
 
 function unavailableInitialExploreResponse(): ExploreInitialResponse {
   return {
@@ -67,17 +93,23 @@ function isLocalPreviewHost(host: string | null) {
   );
 }
 
-async function InitialExploreView() {
-  const requestHeaders = await headers();
+async function InitialExploreView({
+  searchParams,
+}: Readonly<{ searchParams: ExplorePageSearchParams }>) {
+  const [requestHeaders, resolvedSearchParams] = await Promise.all([
+    headers(),
+    searchParams,
+  ]);
+  const modelFilter = initialExploreModelFilter(resolvedSearchParams.model);
   if (isLocalPreviewHost(requestHeaders.get("host"))) {
-    return <ExploreView />;
+    return <ExploreView initialModelFilter={modelFilter} />;
   }
 
   const initialResponse = await readInitialExploreWithinDeadline(
     async (signal) => {
       // prettier-ignore
       const response = await readExploreResponse(new NextRequest(
-        `http://programmable.local/api/explore?${INITIAL_EXPLORE_QUERY}`,
+        `http://programmable.local/api/explore?${initialExploreQuery(modelFilter)}`,
         {
           headers: { Accept: "application/json" },
           signal,
@@ -88,13 +120,20 @@ async function InitialExploreView() {
     },
   );
 
-  return <ExploreView initialResponse={initialResponse} />;
+  return (
+    <ExploreView
+      initialResponse={initialResponse}
+      initialModelFilter={modelFilter}
+    />
+  );
 }
 
-export default function ExplorePage() {
+export default function ExplorePage({
+  searchParams,
+}: Readonly<{ searchParams: ExplorePageSearchParams }>) {
   return (
     <Suspense fallback={<ExploreView loadingOnly />}>
-      <InitialExploreView />
+      <InitialExploreView searchParams={searchParams} />
     </Suspense>
   );
 }

@@ -299,6 +299,34 @@ describe("Explore static identity and Dexscreener market contract", () => {
     );
   });
 
+  it("filters Classic and Custom launch categories before pagination", async () => {
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+
+    const customResponse = await GET(
+      request("sort=market-cap&page=1&limit=9&model=custom"),
+    );
+    const customBody = await json(customResponse);
+    expect(customResponse.status).toBe(200);
+    expect(customBody.total).toBe(1);
+    expect(customBody.tokens).toHaveLength(1);
+    expect(customBody.tokens[0].launchCategoryProvenance.category).toBe(
+      "custom",
+    );
+    expect(mocks.readDex.mock.calls.at(-1)?.[0]).toHaveLength(1);
+
+    const classicResponse = await GET(
+      request("sort=newest&page=1&limit=9&model=classic"),
+    );
+    const classicBody = await json(classicResponse);
+    expect(classicResponse.status).toBe(200);
+    expect(classicBody.total).toBe(TOKEN_COUNT);
+    expect(classicBody.tokens).toHaveLength(9);
+    expect(classicBody.tokens.every((entry: ExploreEntry) =>
+      entry.launchCategoryProvenance.category === "classic"
+    )).toBe(true);
+    expect(mocks.readDex.mock.calls.at(-1)?.[0]).toHaveLength(9);
+  });
+
   it("keeps a finalized Router identity visible when Envio is unavailable", async () => {
     mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
     mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
@@ -605,7 +633,14 @@ describe("Explore static identity and Dexscreener market contract", () => {
     });
   });
 
-  it.each(["unknown=value", "page=0", "limit=abc", "q=a&q=b", "socials=maybe"])(
+  it.each([
+    "unknown=value",
+    "page=0",
+    "limit=abc",
+    "q=a&q=b",
+    "socials=maybe",
+    "model=anything",
+  ])(
     "rejects unsupported query shape: %s",
     async (query) => {
       const response = await GET(request(query));
