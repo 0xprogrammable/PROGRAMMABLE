@@ -195,6 +195,15 @@ function baseConfig() {
       tickSpacing: 60,
       quoteCurrency: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     },
+    projectMetadata: {
+      schemaVersion: "programmable.project-metadata-input.v1",
+      token: { name: "Schema Token", symbol: "SCHEMA" },
+      presentation: {
+        description: "Schema fixture",
+        image: null,
+        links: [{ kind: "website", uri: "https://example.com/" }],
+      },
+    },
     launchProfile: {
       schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
       profileId: "programmable.direct-native-hook-graph.v1",

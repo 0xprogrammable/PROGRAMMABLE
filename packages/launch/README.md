@@ -8,16 +8,16 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.1.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.1.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.2.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.2.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.3.1`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.2`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
 The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
@@ -35,9 +35,9 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Package `3.3.1` supports production general profile
-`programmable.direct-native-hook-graph.v1` version `3.1.0`. New packs use `3.1.0`; exact `3.0.0` requests remain
-reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
+Package `3.3.2` supports production general profile
+`programmable.direct-native-hook-graph.v1` version `3.2.0`. New packs use metadata-bound `3.2.0`; exact metadata-absent
+`3.1.0` and `3.0.0` requests remain reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
 The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
@@ -163,9 +163,62 @@ The top-level fields are:
 - `targets`: 3–16 target definitions
 - `pool`: exact token/hook target IDs, fee, tick spacing, and `quoteCurrency` address; use
   `0x0000000000000000000000000000000000000000` for native ETH or the exact ERC-20 address for a token quote
+- `projectMetadata`: the required public token declaration and presentation input described below
 - `permitWindow`: exact `validAfter` and `deadline`, no more than one hour apart
 - `launchProfile`: target roles, liquidity model, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
+
+Current profile `3.2.0` requires this exact public metadata input. Ask the project owner for these values; do not invent
+them and do not hand-write either derived hash:
+
+```json
+{
+  "schemaVersion": "programmable.project-metadata-input.v1",
+  "token": {
+    "name": "Example Hook",
+    "symbol": "HOOK"
+  },
+  "presentation": {
+    "description": "What the project does",
+    "image": {
+      "sourcePath": "assets/token.png",
+      "uri": "https://example.org/token.png"
+    },
+    "links": [
+      { "kind": "website", "uri": "https://example.org/" },
+      { "kind": "x", "uri": "https://x.com/example" }
+    ]
+  }
+}
+```
+
+`token.name` is 1–64 UTF-8 bytes and `token.symbol` is 1–16 UTF-8 bytes. Both are NFC, already trimmed public
+text; the symbol contains no whitespace. `presentation.description` is present even when it is the empty string.
+`presentation.image` is either `null` or a local PNG, JPEG, WebP or GIF of at most 20 MiB and 8192 pixels per
+dimension paired with its canonical public URI. HTTPS image URIs have no credentials, query or fragment; canonical
+`ipfs://<CID>` and `ar://<transaction-id>` are also accepted. `links` is present even when empty and contains at most
+32 public canonical HTTPS entries of kind `website`, `documentation`, `x`, `telegram`, `discord`, `github`, or
+`other`. The packer sorts links and hashes and adds non-null local image bytes to the source manifest.
+
+Use a stable content URI. For an HTTPS image, enable browser-readable CORS so the wallet review can fetch the raw
+bytes and verify SHA-256, byte length, media type and dimensions before rendering. IPFS and Arweave use the website's
+fixed public gateways for the same check. If remote bytes are unavailable or differ, the review shows the bound digest
+and a placeholder; it does not replace metadata, upload content, sign or broadcast automatically.
+
+The request contains the normalized `programmable.project-metadata.v1`, its domain-framed
+`projectMetadataHash`, and a `programmable.project-token-metadata-binding.v1`. When exactly one selected token
+constructor or initializer string argument clearly represents `name` or `symbol`, `pack` requires an exact match.
+Constant, inherited, proxy, initializer-based and other arbitrary token designs are not rejected when a value cannot
+be extracted deterministically: the declaration is still bound to the request and onchain launch ID, and the API
+requires post-deployment `name()` / `symbol()` readback where supported. A mismatch or unavailable readback is public
+truth; it never silently rewrites the owner's declaration.
+
+`projectMetadataHash` is SHA-256 of UTF-8 `programmable.project-metadata.v1`, one NUL byte, and JCS metadata bytes.
+The launch identity uses a metadata-bound `graphBundleHash`: SHA-256 of UTF-8
+`programmable.custom-graph-project-metadata.v1`, one NUL byte, and JCS
+`{graphBundleHash:<unbound graph SHA-256>,projectMetadataHash}`. The receipt exposes both hashes so the website wallet
+review and finalized public read model can verify the same identity. Exact legacy profile `3.1.0` and `3.0.0` retries preserve
+their original unbound graph hash and omit metadata rather than inventing it.
 
 Each target has exactly `targetId`, `compilationUnitId`, `artifact`, `applicantSalt`, `constructorArguments`,
 `initializer`, `deploymentValueWei`, `initializerValueWei`, `componentKind`, `declaredHookPermissions`, and
@@ -196,7 +249,7 @@ For new requests the patch input contains exactly `targetId`, `nonceArgumentPath
 and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
 initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
 leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
-ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.1
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.2
 schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
 `FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact

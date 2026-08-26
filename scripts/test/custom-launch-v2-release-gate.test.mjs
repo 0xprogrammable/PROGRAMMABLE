@@ -141,7 +141,7 @@ async function stagingFixture() {
       readinessIdentitySha256: record.subject.apiService.readinessIdentitySha256,
       apiContractSha256: record.subject.apiService.apiContractSha256,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.1.0",
+      profileVersion: "3.2.0",
       publicProfilePath:
         "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json",
       publicProfileSha256: hashes.nine,
@@ -462,10 +462,11 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.3.1" },
+    info: { version: "3.3.2" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.1.0",
+      profileVersion: "3.2.0",
+      compatibleProfileVersions: ["3.1.0", "3.0.0"],
       profileRevision: 3,
       productionLaunchAuthorized: true,
       platformAdmissionReceiptRequired: true,
@@ -474,8 +475,8 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
       feeBehaviorClaim: false,
     },
     "x-programmable-admission-policy": {
-      currentProfileVersion: "3.1.0",
-      legacyExactProfileVersions: ["3.0.0"],
+      currentProfileVersion: "3.2.0",
+      legacyExactProfileVersions: ["3.1.0", "3.0.0"],
       manualProjectAllowlist: false,
       hardBlockFindingRules: [
         { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
@@ -494,6 +495,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     paths: {
       "/v3/capabilities": { get: {} },
       "/v3/custom-launches/preflight": { post: {} },
+      "/v3/finalized-custom-launches": { get: {} },
       "/v3/custom-launches": { get: {}, post: {} },
     },
   };
@@ -519,15 +521,15 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   const launchTarballBytes = Buffer.from("fixture programmable launch package", "utf8");
   const launchTarballSha256 = digest(launchTarballBytes);
   const expectedLaunchPackageRelease = {
-    version: "3.3.1",
+    version: "3.3.2",
     tarballUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
     checksumUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
     tarballSha256: launchTarballSha256,
   };
   const launchChecksumBytes = Buffer.from(
-    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.1.tgz\n`,
+    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.2.tgz\n`,
     "utf8",
   );
   let launchTarballBody = launchTarballBytes;
@@ -579,7 +581,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.1.0",
+        profileVersion: "3.2.0",
         productionLaunchAuthorized: true,
       },
       routes: {
@@ -588,6 +590,35 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
         status: "/v3/custom-launches/{launchId}",
         list: "/v3/custom-launches",
         capabilities: "/v3/capabilities",
+        finalizedMetadata: "/v3/finalized-custom-launches",
+      },
+      projectMetadata: {
+        schemaVersion: "programmable.project-metadata.v1",
+        inputSchemaVersion: "programmable.project-metadata-input.v1",
+        requiredForProfileVersion: "3.2.0",
+        legacyWithoutMetadataProfileVersions: ["2.0.0", "3.0.0", "3.1.0"],
+        requiredFields: [
+          "token.name",
+          "token.symbol",
+          "presentation.description",
+          "presentation.image",
+          "presentation.links",
+        ],
+        imageMayBeNull: true,
+        maximumLinks: 32,
+        linkKinds: [
+          "website",
+          "documentation",
+          "x",
+          "telegram",
+          "discord",
+          "github",
+          "other",
+        ],
+        projectMetadataHashDomain: "programmable.project-metadata.v1",
+        graphBundleHashBindingDomain:
+          "programmable.custom-graph-project-metadata.v1",
+        postDeploymentTokenReadbackRequired: true,
       },
       preflight: {
         quotaConsumed: false,
@@ -642,7 +673,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     calls.find(({ url }) => url.includes("/v3/custom-launches?limit=1"))?.authorization,
     "Bearer canary-secret-value",
   );
-  assert.equal(evidence.website.cli.releaseVersion, "3.3.1");
+  assert.equal(evidence.website.cli.releaseVersion, "3.3.2");
   assert.equal(evidence.website.cli.tarballSha256, launchTarballSha256);
   assert.equal(evidence.api.capabilitiesStatus, 200);
   assert.equal(evidence.api.capabilitiesSchemaVersion,

@@ -42,7 +42,13 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
 
     assert.equal(fixedValidation.reproducedFromConfig, true);
     assert.equal(fixedValidation.requestSha256, fixedPack.requestSha256);
-    assert.equal(fixedRequest.launchProfile.profileVersion, "3.1.0");
+    assert.equal(fixedRequest.launchProfile.profileVersion, "3.2.0");
+    assert.equal(fixedRequest.projectMetadata.token.name, "General Graph Token");
+    assert.equal(fixedRequest.projectMetadata.token.symbol, "GGT");
+    assert.match(fixedRequest.projectMetadataHash, /^sha256:[0-9a-f]{64}$/u);
+    assert.equal(fixedPack.projectMetadataHash, fixedRequest.projectMetadataHash);
+    assert.match(fixedPack.unboundGraphBundleHash, /^sha256:[0-9a-f]{64}$/u);
+    assert.notEqual(fixedPack.graphBundleHash, fixedPack.unboundGraphBundleHash);
     assert.equal(fixedRequest.graphBundle.targets.length, 9);
     assert.equal(fixedRequest.verificationBundle.components.length, 9);
     assert.deepEqual(fixedRequest.launchProfileSelection.targetRoles, {
@@ -108,6 +114,21 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
     });
     assert.equal(Object.hasOwn(fixedRequest, "signature"), false);
 
+    const legacyConfig = structuredClone(fixture.config);
+    delete legacyConfig.projectMetadata;
+    await writeFile(
+      fixture.configPath,
+      `${JSON.stringify(legacyConfig, null, 2)}\n`,
+      "utf8",
+    );
+    const preMetadataBuilt = await buildLaunch({
+      configPath: fixture.configPath,
+      directNativeProfileVersion: "3.1.0",
+    });
+    assert.equal(preMetadataBuilt.request.launchProfile.profileVersion, "3.1.0");
+    assert.equal(Object.hasOwn(preMetadataBuilt.request, "projectMetadata"), false);
+    assert.equal(Object.hasOwn(preMetadataBuilt.receipt, "projectMetadataHash"), false);
+
     const legacyBuilt = await buildLaunch({
       configPath: fixture.configPath,
       directNativeProfileVersion: "3.0.0",
@@ -119,6 +140,8 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
       configPath: fixture.configPath,
     });
     assert.equal(legacyBuilt.request.launchProfile.profileVersion, "3.0.0");
+    assert.equal(Object.hasOwn(legacyBuilt.request, "projectMetadata"), false);
+    assert.equal(Object.hasOwn(legacyBuilt.receipt, "projectMetadataHash"), false);
     assert.equal(legacyValidation.reproducedFromConfig, true);
     assert.equal(legacyValidation.requestSha256, legacyBuilt.requestSha256);
 
@@ -492,6 +515,15 @@ contract AuxiliaryComponent {
       fee: 3_000,
       tickSpacing: 60,
       quoteCurrency: MAINNET_USDC,
+    },
+    projectMetadata: {
+      schemaVersion: "programmable.project-metadata-input.v1",
+      token: { name: "General Graph Token", symbol: "GGT" },
+      presentation: {
+        description: "Nine-target general graph fixture",
+        image: null,
+        links: [{ kind: "website", uri: "https://example.com/general-v3-source" }],
+      },
     },
     launchProfile: {
       schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",

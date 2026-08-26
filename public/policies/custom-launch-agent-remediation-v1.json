@@ -5,8 +5,9 @@
   "profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.1.0",
+    "profileVersion": "3.2.0",
     "compatibleProfileVersions": [
+      "3.1.0",
       "3.0.0"
     ],
     "legacyProfileSemantics": "readable-and-byte-identical-retryable-only",
@@ -21,12 +22,13 @@
     "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
     "openApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
     "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
+    "finalizedMetadataUrl": "https://api.programmable.market/v3/finalized-custom-launches",
     "preflightUrl": "https://api.programmable.market/v3/custom-launches/preflight",
-    "cliReleaseVersion": "3.3.1",
-    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.1",
-    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
-    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
-    "cliTarballSha256": "sha256:1d5a2649c899b85512bdeca160fd24998b2f0898c042deecb3c5d43e4ae60da2"
+    "cliReleaseVersion": "3.3.2",
+    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.2",
+    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
+    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
+    "cliTarballSha256": "sha256:096b2e09514437907c50fd3f7dc9415c426f4496d65572316d208f22a7ef389f"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
@@ -64,12 +66,12 @@
     {
       "step": 2,
       "id": "inspect-project",
-      "action": "Pin one public exact source revision, compile every graph target with the required compiler, identify token, hook, initializer and supporting targets, and classify funding, liquidity, hook permissions, fee accounting, custody and withdrawal behavior."
+      "action": "Pin one public exact source revision, compile every graph target with the required compiler, identify token, hook, initializer and supporting targets, collect the canonical project name, symbol, description, optional image and public links, and classify funding, liquidity, hook permissions, fee accounting, custody and withdrawal behavior."
     },
     {
       "step": 3,
       "id": "create-pack-config",
-      "action": "Create programmable-launch.config.json with schemaVersion programmable.launch-pack-config.v3 from exact source, Standard JSON, compiler artifacts and structured ABI values. Do not hand-write any derived hash, address, locator or request field."
+      "action": "Create programmable-launch.config.json with schemaVersion programmable.launch-pack-config.v3 from exact source, Standard JSON, compiler artifacts, structured ABI values and projectMetadata using programmable.project-metadata-input.v1. Do not hand-write any derived hash, address, locator or request field."
     },
     {
       "step": 4,
@@ -127,6 +129,7 @@
       "Map every deployment and initializer address dependency to a target reference so the CLI derives locators and CREATE2 predictions.",
       "Declare the hook's complete 14-bit permission mask and implement every enabled callback as concrete reachable code authenticated to the canonical PoolManager.",
       "Choose one funding mode, one liquidity model, exact pool key, fee accounting mode, platform fee binding, custody path and withdrawal disclosure.",
+      "Bind canonical project name and symbol to the primary token target, include a canonical description, set image to null or one exact public image, and list only canonical public links.",
       "Preserve project-specific check evidence and attest only checks that actually ran."
     ]
   },
@@ -143,6 +146,7 @@
       "compilationUnits",
       "targets",
       "pool",
+      "projectMetadata",
       "permitWindow",
       "launchProfile",
       "agentAttestation"
@@ -156,6 +160,8 @@
       "CREATE2 addresses",
       "runtime hashes",
       "graph hash",
+      "project metadata hash",
+      "metadata-bound graph hash",
       "launch profile hash",
       "launch intent hash",
       "funding intent hash",
@@ -163,6 +169,38 @@
       "verification bundle hash",
       "request bytes"
     ]
+  },
+  "projectMetadata": {
+    "schemaVersion": "programmable.project-metadata.v1",
+    "inputSchemaVersion": "programmable.project-metadata-input.v1",
+    "requiredForProfileVersion": "3.2.0",
+    "legacyWithoutMetadataProfileVersions": [
+      "2.0.0",
+      "3.0.0",
+      "3.1.0"
+    ],
+    "requiredFields": [
+      "token.name",
+      "token.symbol",
+      "presentation.description",
+      "presentation.image",
+      "presentation.links"
+    ],
+    "imageMayBeNull": true,
+    "maximumLinks": 32,
+    "linkKinds": [
+      "website",
+      "documentation",
+      "x",
+      "telegram",
+      "discord",
+      "github",
+      "other"
+    ],
+    "projectMetadataHashDomain": "programmable.project-metadata.v1",
+    "graphBundleHashBindingDomain": "programmable.custom-graph-project-metadata.v1",
+    "postDeploymentTokenReadbackRequired": true,
+    "meaning": "The CLI derives canonical launch presentation metadata, binds its digest into the graph and launch intent, and includes exact image bytes in the source manifest. The API preserves submitted metadata and reports post-deployment token name and symbol readback without silently rewriting either value."
   },
   "funding": {
     "quoteCurrencies": [
@@ -288,8 +326,9 @@
   "automaticAdmission": {
     "manualAllowlist": false,
     "manualProjectApproval": false,
-    "currentProfileVersion": "3.1.0",
+    "currentProfileVersion": "3.2.0",
     "legacyExactProfileVersions": [
+      "3.1.0",
       "3.0.0"
     ],
     "legacyProfileSemantics": "readable-and-byte-identical-retryable-only",
@@ -351,7 +390,7 @@
     "routerSimulationRole": "Final execution-compatibility detector for the exact prepared Router transaction. It is not a safety, fee-behavior, liquidity or economic-solvency claim.",
     "blockingStatus": "action_required",
     "warningDisposition": "continue-to-router-simulation",
-    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.1.0 deployment blocks. No warning is an admission, conformance or safety claim.",
+    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.2.0 deployment blocks. No warning is an admission, conformance or safety claim.",
     "actionRequiredInstruction": "Read the exact single-resource report, match each hard-blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
     "supportInstruction": "When the resource directs you to support, send only requestId, status, UTC time and the public finding or error code. Never send the API key."
   },

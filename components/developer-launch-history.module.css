@@ -176,6 +176,179 @@
   text-underline-offset: 3px;
 }
 
+.projectReview {
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.projectReviewHeading {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.projectArtwork {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
+  border-radius: 12px;
+  color: var(--webde-muted);
+  display: flex;
+  flex: 0 0 72px;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 16px;
+  font-weight: 650;
+  justify-content: center;
+  overflow: hidden;
+  width: 72px;
+}
+
+.projectArtwork img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.projectIdentity {
+  min-width: 0;
+}
+
+.projectIdentity > span {
+  color: var(--webde-dim);
+  display: block;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.projectIdentity h4 {
+  color: var(--webde-ink);
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.25;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.projectIdentity strong {
+  color: var(--webde-muted);
+  display: block;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.projectDescription {
+  color: var(--webde-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin-top: 14px;
+  max-width: 720px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.projectAssetNote {
+  color: var(--webde-dim);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
+.projectAssetNote span {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.projectAssetNote code {
+  color: var(--webde-muted);
+  font-family: var(--font-plex-mono), monospace;
+}
+
+.projectLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.projectLinks a {
+  align-items: center;
+  background: var(--webde-control);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  min-height: 44px;
+  padding-inline: 11px;
+  text-decoration: none;
+}
+
+.projectBinding {
+  display: grid;
+  gap: 12px 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin: 16px 0 0;
+}
+
+.projectBinding > div {
+  min-width: 0;
+}
+
+.projectBinding dt {
+  color: var(--webde-dim);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.projectBinding dd {
+  color: var(--webde-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.projectBinding code {
+  font-family: var(--font-plex-mono), monospace;
+}
+
+.projectBoundary {
+  border-top: 1px solid var(--webde-line);
+  color: var(--webde-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.metadataUnavailable {
+  border-inline-start: 2px solid var(--warning);
+  color: var(--webde-muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+  line-height: 1.5;
+  margin-top: 18px;
+  padding-inline-start: 12px;
+}
+
+.metadataUnavailable strong {
+  color: var(--webde-ink);
+}
+
 .failure,
 .inlineError {
   color: var(--danger);
@@ -715,6 +888,7 @@
 .loadDetailsButton:focus-visible,
 .copyFixButton:focus-visible,
 .metadata a:focus-visible,
+.projectLinks a:focus-visible,
 .admissionNotice a:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
@@ -790,6 +964,11 @@
     text-align: left;
   }
 
+  .projectReviewHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .reviewGrid {
     grid-template-columns: 1fr;
   }
@@ -812,6 +991,15 @@
 
   .metadata {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .projectBinding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .projectLinks a {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 
   .launchActions {
@@ -872,6 +1060,7 @@
   .history,
   .secondaryButton,
   .walletButton,
+  .projectReview,
   .transaction pre {
     border-color: CanvasText;
   }

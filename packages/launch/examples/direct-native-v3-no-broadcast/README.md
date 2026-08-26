@@ -31,6 +31,9 @@ contains these source bytes. The nonce is public launch input, not a private key
 export PROGRAMMABLE_LAUNCH_WALLET="0x1111111111111111111111111111111111111111"
 export PROGRAMMABLE_SOURCE_REVISION="EXACT_40_CHARACTER_PUBLIC_GIT_COMMIT"
 export PROGRAMMABLE_LAUNCH_NONCE="0x$(openssl rand -hex 32)"
+export PROGRAMMABLE_TOKEN_NAME="No Broadcast V3 Token"
+export PROGRAMMABLE_TOKEN_SYMBOL="NBV3"
+export PROGRAMMABLE_PROJECT_DESCRIPTION="Deterministic no-broadcast V3 reference launch"
 npm run build
 
 programmable-launch pack \
@@ -45,6 +48,12 @@ compiler settings match the frozen profile. It recursively embeds every imported
 Standard JSON compilation unit. The build invokes only `project/node_modules/.bin/solcjs`, installed at exact version
 0.8.26 by the frozen project lock; it does not resolve a parent-worktree compiler or a global `solc`. It never accepts
 or writes a derived hash supplied by the operator.
+
+The builder emits required `programmable.project-metadata-input.v1`. This rehearsal deliberately uses no image and no
+links unless the paired public environment variables are supplied. A real project integration must ask the owner for
+the exact public name, symbol, description, image choice and links rather than reuse these fixture defaults. Set both
+`PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH` and `PROGRAMMABLE_PROJECT_IMAGE_URI` to bind an image; set the documented
+website/X/Discord/Telegram variables to bind links. `npm run build -- --help` lists every bound.
 
 The default market is native ETH against the minted fixture token (`quoteCurrency` is the v4 native zero address),
 with LP fee `3000` and tick spacing `60`. Mainnet USDC is independently fixed as the funding token. Optional public

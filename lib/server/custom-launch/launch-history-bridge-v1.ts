@@ -1,5 +1,8 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+import { isIP } from "node:net";
+
 import { getAddress, isAddress } from "viem";
 
 import {
@@ -10,7 +13,7 @@ import {
   type CustomLaunchRemediationV1,
   type SourceVerificationStatusV1,
 } from "../../custom-launch/developer-launch-truth-v1";
-import { parseStrictJson, type JsonValue } from
+import { canonicalizeJson, parseStrictJson, type JsonValue } from
   "../projection-target/canonical-json";
 import {
   createPrivyWalletPrincipalAuthenticatorV1,
@@ -45,6 +48,26 @@ const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const REQUEST_HASH = /^sha256:[0-9a-f]{64}$/u;
+const PROJECT_METADATA_HASH_DOMAIN = "programmable.project-metadata.v1";
+const PROJECT_GRAPH_METADATA_HASH_DOMAIN =
+  "programmable.custom-graph-project-metadata.v1";
+const PROJECT_TARGET_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,255}$/u;
+const IPFS_CID = /^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|[bB][a-zA-Z2-7]{31,127})$/u;
+const ARWEAVE_TRANSACTION_ID = /^[A-Za-z0-9_-]{43}$/u;
+const UNSAFE_PROJECT_TEXT =
+  /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
+const SENSITIVE_QUERY_KEY =
+  /(?:^|[_-])(?:api[_-]?key|token|secret|password|passwd|signature|sig|credential|authorization|auth)(?:$|[_-])/iu;
+const SECRET_PATTERNS = Object.freeze([
+  /(?:^|[^A-Za-z0-9_-])pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}(?=$|[^A-Za-z0-9_-])/u,
+  /(?:^|[^A-Za-z0-9_])PROGRAMMABLE_API_KEY\s*[:=]\s*["']?[^\s"'&?#]{8,}/iu,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/iu,
+  /\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\b/u,
+  /\b(?:sk|rk|pk)-(?:live|test)?[_-]?[A-Za-z0-9_-]{20,}\b/iu,
+  /\bAKIA[0-9A-Z]{16}\b/u,
+  /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/u,
+  /\b(?:api[_-]?key|access[_-]?token|authorization|password|passwd|secret|private[_-]?key)\b\s*[:=]\s*["']?[^\s"']{8,}/iu,
+] as const);
 const STATUSES_V1 = new Set([
   "received",
   "validating",
@@ -125,8 +148,11 @@ export type DeveloperCustomLaunchV3 = Readonly<{
   ownerWallet: `0x${string}`;
   status: string;
   requestHash: string;
+  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0";
   launchProfileHash: `sha256:${string}`;
   launchIntentHash: `sha256:${string}`;
+  projectMetadata: DeveloperCustomLaunchProjectMetadataV1 | null;
+  projectMetadataHash: `sha256:${string}` | null;
   fundingIntentHash: `0x${string}` | null;
   liquidityIntent: CustomLaunchLiquidityIntentV3;
   walletHandoffUrl?: string | null;
@@ -137,6 +163,45 @@ export type DeveloperCustomLaunchV3 = Readonly<{
   output: Readonly<Record<string, JsonValue>> | null;
   failure: DeveloperCustomLaunchV1["failure"];
   sourceVerification?: SourceVerificationStatusV1;
+}>;
+
+export type DeveloperCustomLaunchProjectMetadataV1 = Readonly<{
+  schemaVersion: "programmable.project-metadata.v1";
+  token: Readonly<{ name: string; symbol: string }>;
+  presentation: Readonly<{
+    schemaVersion: "programmable.launch-presentation-draft.v1";
+    description: string;
+    image: Readonly<{
+      uri: string;
+      contentSha256: `sha256:${string}`;
+      mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+      byteLength: number;
+      width: number;
+      height: number;
+    }> | null;
+    links: readonly Readonly<{
+      kind: "website" | "documentation" | "x" | "telegram" | "discord" | "github" | "other";
+      uri: string;
+    }>[];
+  }>;
+  tokenMetadataBinding: Readonly<{
+    schemaVersion: "programmable.project-token-metadata-binding.v1";
+    tokenTargetId: string;
+    declarationBinding: "request-and-launch-id";
+    standardReadModel: Readonly<{ name: boolean; symbol: boolean }>;
+    name: DeveloperProjectTokenMetadataFieldBindingV1;
+    symbol: DeveloperProjectTokenMetadataFieldBindingV1;
+    postDeploymentReadback: "required";
+  }>;
+}>;
+
+type DeveloperProjectTokenMetadataFieldBindingV1 = Readonly<{
+  staticSource:
+    | "constructor-argument"
+    | "initializer-argument"
+    | "not-deterministically-extractable";
+  argumentIndex: number | null;
+  argumentName: string | null;
 }>;
 
 type DeveloperCustomLaunch = DeveloperCustomLaunchV1
@@ -263,7 +328,9 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
             record.launches.length > query.limit
           ) throw new BackendContractErrorV1();
           const launches = Object.freeze(record.launches.map((launch) =>
-            parseLaunch(launch, expectedWallet, version)
+            parseLaunch(launch, expectedWallet, version, {
+              requireAuthorizedArtifactBinding: false,
+            })
           ));
           const nextCursor = record.nextCursor === null
             ? null
@@ -346,6 +413,7 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
             ),
             walletAddress.toLowerCase(),
             version,
+            { requireAuthorizedArtifactBinding: true },
           );
         };
         let launch: DeveloperCustomLaunch | null = null;
@@ -427,6 +495,7 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           ),
           walletAddress.toLowerCase(),
           "v3",
+          { requireAuthorizedArtifactBinding: true },
         );
         if (launch.requestId !== launchId.toLowerCase()) {
           throw new BackendContractErrorV1();
@@ -686,10 +755,439 @@ function canonicalCursor(value: JsonValue | undefined, source: "browser" | "back
   }
 }
 
+function exactProjectKeys(
+  value: Readonly<Record<string, JsonValue>>,
+  expected: readonly string[],
+) {
+  const keys = Object.keys(value);
+  if (
+    keys.length !== expected.length
+    || !keys.every((key) => expected.includes(key))
+  ) throw new BackendContractErrorV1();
+}
+
+function hasLoneUtf16Surrogate(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function canonicalProjectText(
+  value: JsonValue | undefined,
+  minimumCodePoints: number,
+  maximumCodePoints: number,
+  maximumBytes: number,
+  options: Readonly<{
+    allowLineFeed?: boolean;
+    forbidWhitespace?: boolean;
+  }> = {},
+) {
+  const unsafeText = options.allowLineFeed
+    ? /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u
+    : UNSAFE_PROJECT_TEXT;
+  if (
+    typeof value !== "string"
+    || hasLoneUtf16Surrogate(value)
+    || value !== value.normalize("NFC")
+    || value !== value.trim()
+    || [...value].length < minimumCodePoints
+    || [...value].length > maximumCodePoints
+    || Buffer.byteLength(value, "utf8") > maximumBytes
+    || unsafeText.test(value)
+    || containsProjectSecret(value)
+    || (options.forbidWhitespace && /\s/u.test(value))
+  ) throw new BackendContractErrorV1();
+  return value;
+}
+
+function fullyDecodeProjectUri(value: string): string {
+  let current = value;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const next = decodeURIComponent(current);
+      if (next === current) return current;
+      current = next;
+    } catch {
+      return current;
+    }
+  }
+  return current;
+}
+
+function containsProjectSecret(value: string) {
+  const decoded = fullyDecodeProjectUri(value);
+  return SECRET_PATTERNS.some((pattern) => pattern.test(decoded));
+}
+
+function parsedProjectUrl(value: JsonValue | undefined) {
+  if (
+    typeof value !== "string"
+    || value === ""
+    || value.trim() !== value
+    || Buffer.byteLength(value, "utf8") > 2_048
+    || /[\u0000-\u0020\u007f-\u009f]/u.test(value)
+    || /[\u0000-\u0020\u007f-\u009f]/u.test(fullyDecodeProjectUri(value))
+    || containsProjectSecret(value)
+  ) throw new BackendContractErrorV1();
+  try {
+    const url = new URL(value);
+    if (url.href !== value) throw new BackendContractErrorV1();
+    return url;
+  } catch (error) {
+    if (error instanceof BackendContractErrorV1) throw error;
+    throw new BackendContractErrorV1();
+  }
+}
+
+function canonicalProjectHttpsUri(value: JsonValue | undefined) {
+  const url = parsedProjectUrl(value);
+  if (
+    url.protocol !== "https:"
+    || url.username !== ""
+    || url.password !== ""
+    || url.hostname === ""
+    || url.hostname === "localhost"
+    || url.hostname === "localhost."
+    || url.hostname === "local"
+    || url.hostname === "local."
+    || url.hostname.endsWith(".localhost")
+    || url.hostname.endsWith(".localhost.")
+    || url.hostname.endsWith(".local")
+    || url.hostname.endsWith(".local.")
+    || url.hostname.includes(":")
+    || isIP(url.hostname) !== 0
+    || !/^[a-z0-9.-]+$/u.test(url.hostname)
+    || url.hash !== ""
+  ) throw new BackendContractErrorV1();
+  for (const [key, entry] of url.searchParams) {
+    if (
+      SENSITIVE_QUERY_KEY.test(key)
+      || containsProjectSecret(entry)
+    ) throw new BackendContractErrorV1();
+  }
+  return url.href;
+}
+
+function canonicalProjectImageUri(value: JsonValue | undefined) {
+  const url = parsedProjectUrl(value);
+  if (url.protocol === "https:") {
+    if (url.search !== "") throw new BackendContractErrorV1();
+    return canonicalProjectHttpsUri(value);
+  }
+  if (
+    url.username !== ""
+    || url.password !== ""
+    || url.port !== ""
+    || url.pathname !== ""
+    || url.search !== ""
+    || url.hash !== ""
+  ) throw new BackendContractErrorV1();
+  if (
+    (url.protocol === "ipfs:" && IPFS_CID.test(url.hostname))
+    || (url.protocol === "ar:" && ARWEAVE_TRANSACTION_ID.test(url.hostname))
+  ) return url.href;
+  throw new BackendContractErrorV1();
+}
+
+function parseProjectTokenMetadataFieldBinding(
+  value: JsonValue | undefined,
+): DeveloperProjectTokenMetadataFieldBindingV1 {
+  const record = jsonRecord(value);
+  exactProjectKeys(record, ["staticSource", "argumentIndex", "argumentName"]);
+  if (
+    record.staticSource !== "constructor-argument"
+    && record.staticSource !== "initializer-argument"
+    && record.staticSource !== "not-deterministically-extractable"
+  ) throw new BackendContractErrorV1();
+  const deterministic = record.staticSource !== "not-deterministically-extractable";
+  if (
+    deterministic !== (
+      typeof record.argumentIndex === "number"
+      && Number.isSafeInteger(record.argumentIndex)
+      && record.argumentIndex >= 0
+    )
+    || (!deterministic && record.argumentName !== null)
+    || (record.argumentName !== null && (
+      typeof record.argumentName !== "string"
+      || record.argumentName === ""
+      || record.argumentName !== record.argumentName.normalize("NFC")
+      || record.argumentName !== record.argumentName.trim()
+      || hasLoneUtf16Surrogate(record.argumentName)
+      || containsProjectSecret(record.argumentName)
+      || Buffer.byteLength(record.argumentName, "utf8") > 256
+      || UNSAFE_PROJECT_TEXT.test(record.argumentName)
+    ))
+  ) throw new BackendContractErrorV1();
+  return Object.freeze({
+    staticSource: record.staticSource,
+    argumentIndex: record.argumentIndex as number | null,
+    argumentName: record.argumentName as string | null,
+  });
+}
+
+function parseProjectMetadataV1(
+  value: JsonValue | undefined,
+): DeveloperCustomLaunchProjectMetadataV1 {
+  const metadata = jsonRecord(value);
+  exactProjectKeys(metadata, [
+    "schemaVersion",
+    "token",
+    "presentation",
+    "tokenMetadataBinding",
+  ]);
+  if (metadata.schemaVersion !== "programmable.project-metadata.v1") {
+    throw new BackendContractErrorV1();
+  }
+  const token = jsonRecord(metadata.token);
+  exactProjectKeys(token, ["name", "symbol"]);
+  const name = canonicalProjectText(token.name, 1, 64, 64);
+  const symbol = canonicalProjectText(token.symbol, 1, 16, 16, {
+    forbidWhitespace: true,
+  });
+
+  const presentation = jsonRecord(metadata.presentation);
+  exactProjectKeys(presentation, ["schemaVersion", "description", "image", "links"]);
+  if (presentation.schemaVersion !== "programmable.launch-presentation-draft.v1") {
+    throw new BackendContractErrorV1();
+  }
+  const description = canonicalProjectText(
+    presentation.description,
+    0,
+    4_096,
+    4_096,
+    { allowLineFeed: true },
+  );
+  if (containsProjectSecret(description)) throw new BackendContractErrorV1();
+  let image: DeveloperCustomLaunchProjectMetadataV1["presentation"]["image"] = null;
+  if (presentation.image !== null) {
+    const candidate = jsonRecord(presentation.image);
+    exactProjectKeys(candidate, [
+      "uri",
+      "contentSha256",
+      "mediaType",
+      "byteLength",
+      "width",
+      "height",
+    ]);
+    if (
+      typeof candidate.contentSha256 !== "string"
+      || !REQUEST_HASH.test(candidate.contentSha256)
+      || (
+        candidate.mediaType !== "image/png"
+        && candidate.mediaType !== "image/jpeg"
+        && candidate.mediaType !== "image/webp"
+        && candidate.mediaType !== "image/gif"
+      )
+      || typeof candidate.byteLength !== "number"
+      || !Number.isSafeInteger(candidate.byteLength)
+      || candidate.byteLength < 1
+      || candidate.byteLength > 20 * 1_024 * 1_024
+      || typeof candidate.width !== "number"
+      || !Number.isSafeInteger(candidate.width)
+      || candidate.width < 1
+      || candidate.width > 8_192
+      || typeof candidate.height !== "number"
+      || !Number.isSafeInteger(candidate.height)
+      || candidate.height < 1
+      || candidate.height > 8_192
+    ) throw new BackendContractErrorV1();
+    image = Object.freeze({
+      uri: canonicalProjectImageUri(candidate.uri),
+      contentSha256: candidate.contentSha256 as `sha256:${string}`,
+      mediaType: candidate.mediaType,
+      byteLength: candidate.byteLength,
+      width: candidate.width,
+      height: candidate.height,
+    });
+  }
+  if (!Array.isArray(presentation.links) || presentation.links.length > 32) {
+    throw new BackendContractErrorV1();
+  }
+  const links: DeveloperCustomLaunchProjectMetadataV1["presentation"]["links"][number][] = [];
+  let previousSortKey: Buffer | null = null;
+  for (const candidateValue of presentation.links) {
+    const candidate = jsonRecord(candidateValue);
+    exactProjectKeys(candidate, ["kind", "uri"]);
+    if (
+      candidate.kind !== "website"
+      && candidate.kind !== "documentation"
+      && candidate.kind !== "x"
+      && candidate.kind !== "telegram"
+      && candidate.kind !== "discord"
+      && candidate.kind !== "github"
+      && candidate.kind !== "other"
+    ) throw new BackendContractErrorV1();
+    const uri = canonicalProjectHttpsUri(candidate.uri);
+    const sortKey = Buffer.from(`${candidate.kind}\u0000${uri}`, "utf8");
+    if (previousSortKey !== null && Buffer.compare(previousSortKey, sortKey) >= 0) {
+      throw new BackendContractErrorV1();
+    }
+    previousSortKey = sortKey;
+    links.push(Object.freeze({ kind: candidate.kind, uri }));
+  }
+
+  const binding = jsonRecord(metadata.tokenMetadataBinding);
+  exactProjectKeys(binding, [
+    "schemaVersion",
+    "tokenTargetId",
+    "declarationBinding",
+    "standardReadModel",
+    "name",
+    "symbol",
+    "postDeploymentReadback",
+  ]);
+  const standardReadModel = jsonRecord(binding.standardReadModel);
+  exactProjectKeys(standardReadModel, ["name", "symbol"]);
+  if (
+    binding.schemaVersion !== "programmable.project-token-metadata-binding.v1"
+    || typeof binding.tokenTargetId !== "string"
+    || !PROJECT_TARGET_ID.test(binding.tokenTargetId)
+    || containsProjectSecret(binding.tokenTargetId)
+    || binding.declarationBinding !== "request-and-launch-id"
+    || typeof standardReadModel.name !== "boolean"
+    || typeof standardReadModel.symbol !== "boolean"
+    || binding.postDeploymentReadback !== "required"
+  ) throw new BackendContractErrorV1();
+
+  return Object.freeze({
+    schemaVersion: "programmable.project-metadata.v1",
+    token: Object.freeze({ name, symbol }),
+    presentation: Object.freeze({
+      schemaVersion: "programmable.launch-presentation-draft.v1",
+      description,
+      image,
+      links: Object.freeze(links),
+    }),
+    tokenMetadataBinding: Object.freeze({
+      schemaVersion: "programmable.project-token-metadata-binding.v1",
+      tokenTargetId: binding.tokenTargetId,
+      declarationBinding: "request-and-launch-id",
+      standardReadModel: Object.freeze({
+        name: standardReadModel.name,
+        symbol: standardReadModel.symbol,
+      }),
+      name: parseProjectTokenMetadataFieldBinding(binding.name),
+      symbol: parseProjectTokenMetadataFieldBinding(binding.symbol),
+      postDeploymentReadback: "required",
+    }),
+  });
+}
+
+function projectMetadataHashV1(
+  metadata: DeveloperCustomLaunchProjectMetadataV1,
+): `sha256:${string}` {
+  return canonicalDomainHashV1(PROJECT_METADATA_HASH_DOMAIN, metadata);
+}
+
+function projectGraphBundleHashV1(
+  unboundGraphBundleHash: `sha256:${string}`,
+  projectMetadataHash: `sha256:${string}`,
+): `sha256:${string}` {
+  return canonicalDomainHashV1(PROJECT_GRAPH_METADATA_HASH_DOMAIN, {
+    graphBundleHash: unboundGraphBundleHash,
+    projectMetadataHash,
+  });
+}
+
+function canonicalDomainHashV1(
+  domain: string,
+  value: unknown,
+): `sha256:${string}` {
+  const hash = createHash("sha256");
+  hash.update(domain, "utf8");
+  hash.update(Buffer.from([0]));
+  hash.update(canonicalizeJson(value), "utf8");
+  return `sha256:${hash.digest("hex")}`;
+}
+
+function parseV3ProjectMetadataPair(
+  record: Readonly<Record<string, JsonValue>>,
+  output: Readonly<Record<string, JsonValue>> | null,
+  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0",
+  requireAuthorizedArtifactBinding: boolean,
+) {
+  if (
+    !Object.hasOwn(record, "projectMetadata")
+    || !Object.hasOwn(record, "projectMetadataHash")
+    || (record.projectMetadata === null) !== (record.projectMetadataHash === null)
+  ) throw new BackendContractErrorV1();
+  const artifactValue = output?.artifact;
+  const artifact = artifactValue === undefined
+    ? null
+    : jsonRecord(artifactValue);
+  const artifactMetadataKeys = [
+    "unboundGraphBundleHash",
+    "projectMetadata",
+    "projectMetadataHash",
+  ] as const;
+  const artifactMetadataKeyCount = artifact === null
+    ? 0
+    : artifactMetadataKeys.filter((key) => Object.hasOwn(artifact, key)).length;
+
+  if (launchProfileVersion !== "3.2.0") {
+    if (
+      record.projectMetadata !== null
+      || record.projectMetadataHash !== null
+      || artifactMetadataKeyCount !== 0
+    ) throw new BackendContractErrorV1();
+    return Object.freeze({ projectMetadata: null, projectMetadataHash: null });
+  }
+  if (record.projectMetadata === null) throw new BackendContractErrorV1();
+  const projectMetadata = parseProjectMetadataV1(record.projectMetadata);
+  if (
+    typeof record.projectMetadataHash !== "string"
+    || !REQUEST_HASH.test(record.projectMetadataHash)
+    || record.projectMetadataHash !== projectMetadataHashV1(projectMetadata)
+  ) throw new BackendContractErrorV1();
+  const projectMetadataHash = record.projectMetadataHash as `sha256:${string}`;
+
+  if (
+    artifactMetadataKeyCount !== 0
+    && artifactMetadataKeyCount !== artifactMetadataKeys.length
+  ) throw new BackendContractErrorV1();
+  if (artifact !== null && artifactMetadataKeyCount === 0) {
+    throw new BackendContractErrorV1();
+  }
+  if (artifactMetadataKeyCount === artifactMetadataKeys.length) {
+    if (artifact === null) throw new BackendContractErrorV1();
+    const artifactMetadata = parseProjectMetadataV1(artifact.projectMetadata);
+    if (
+      typeof artifact.unboundGraphBundleHash !== "string"
+        || !REQUEST_HASH.test(artifact.unboundGraphBundleHash)
+        || typeof artifact.graphBundleHash !== "string"
+        || !REQUEST_HASH.test(artifact.graphBundleHash)
+        || artifact.projectMetadataHash !== projectMetadataHash
+        || projectMetadataHashV1(artifactMetadata) !== projectMetadataHash
+        || artifact.graphBundleHash !== projectGraphBundleHashV1(
+          artifact.unboundGraphBundleHash as `sha256:${string}`,
+          projectMetadataHash,
+        )
+        || canonicalizeJson(artifactMetadata) !== canonicalizeJson(projectMetadata)
+    ) throw new BackendContractErrorV1();
+  }
+  if (
+    requireAuthorizedArtifactBinding
+    && record.status === "authorized"
+    && artifactMetadataKeyCount !== 3
+  ) {
+    throw new BackendContractErrorV1();
+  }
+  return Object.freeze({ projectMetadata, projectMetadataHash });
+}
+
 function parseLaunch(
   value: JsonValue,
   expectedWallet: string,
   version: BackendHistoryVersion,
+  options: Readonly<{ requireAuthorizedArtifactBinding: boolean }>,
 ): DeveloperCustomLaunch {
   const record = jsonRecord(value);
   const expectedSchema = version === "v1"
@@ -740,6 +1238,26 @@ function parseLaunch(
   const output = record.output === null
     ? null
     : jsonRecord(record.output);
+  const launchProfileVersion = version === "v3"
+    && (
+      record.launchProfileVersion === "2.0.0"
+      || record.launchProfileVersion === "3.0.0"
+      || record.launchProfileVersion === "3.1.0"
+      || record.launchProfileVersion === "3.2.0"
+    )
+    ? record.launchProfileVersion
+    : null;
+  if (version === "v3" && launchProfileVersion === null) {
+    throw new BackendContractErrorV1();
+  }
+  const projectMetadataPair = version === "v3"
+    ? parseV3ProjectMetadataPair(
+        record,
+        output,
+        launchProfileVersion!,
+        options.requireAuthorizedArtifactBinding,
+      )
+    : null;
   const fundingIntentHash = version === "v3"
     ? validatedV3FundingIntentHash(record, output)
     : null;
@@ -793,8 +1311,10 @@ function parseLaunch(
         ...profileBase,
         schemaVersion: "programmable.custom-launch.v3" as const,
         routeId: "custom-launch:create:v3" as const,
+        launchProfileVersion: launchProfileVersion!,
         fundingIntentHash,
         liquidityIntent: parseV3LiquidityIntent(record.liquidityIntent),
+        ...projectMetadataPair!,
         ...parseOptionalWalletHandoff(record),
       });
 }

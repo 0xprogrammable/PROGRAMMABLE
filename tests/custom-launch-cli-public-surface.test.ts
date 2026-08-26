@@ -35,13 +35,13 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.1",
+        releaseVersion: "3.3.2",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
         tarballSha256:
-          "sha256:1d5a2649c899b85512bdeca160fd24998b2f0898c042deecb3c5d43e4ae60da2",
+          "sha256:096b2e09514437907c50fd3f7dc9415c426f4496d65572316d208f22a7ef389f",
       },
       compatibility: {
         v1: {
@@ -62,13 +62,13 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.3.1",
+          releaseVersion: "3.3.2",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
           tarballSha256:
-            "sha256:1d5a2649c899b85512bdeca160fd24998b2f0898c042deecb3c5d43e4ae60da2",
+            "sha256:096b2e09514437907c50fd3f7dc9415c426f4496d65572316d208f22a7ef389f",
         },
       },
       generalHookProfile: {
@@ -76,15 +76,16 @@ describe("public Custom Launch CLI surface", () => {
         apiVersion: "3",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.1.0",
-        compatibleProfileVersions: ["3.0.0"],
+        profileVersion: "3.2.0",
+        compatibleProfileVersions: ["3.1.0", "3.0.0"],
         legacyProfileSemantics: "readable-and-byte-identical-retryable-only",
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
         capabilitiesPath: "/v3/capabilities",
         preflightPath: "/v3/custom-launches/preflight",
+        finalizedMetadataPath: "/v3/finalized-custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.1",
+        cliReleaseVersion: "3.3.2",
         admissionPolicy: {
           manualProjectAllowlist: false,
           hardBlockFindingRules: [
@@ -109,8 +110,8 @@ describe("public Custom Launch CLI surface", () => {
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.1.0",
-        compatibleProfileVersions: ["3.0.0"],
+        profileVersion: "3.2.0",
+        compatibleProfileVersions: ["3.1.0", "3.0.0"],
         requestSchemaVersion: "programmable.custom-launch-create-request.v3",
         minimumTargets: 3,
         maximumTargets: 16,
@@ -152,14 +153,14 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.3.1",
-        releaseTag: "programmable-launch-v3.3.1",
+        releaseVersion: "3.3.2",
+        releaseTag: "programmable-launch-v3.3.2",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
         tarballSha256:
-          "sha256:1d5a2649c899b85512bdeca160fd24998b2f0898c042deecb3c5d43e4ae60da2",
+          "sha256:096b2e09514437907c50fd3f7dc9415c426f4496d65572316d208f22a7ef389f",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -237,14 +238,14 @@ describe("public Custom Launch CLI surface", () => {
         "--json",
       ], { cwd: root, stdio: "pipe" });
       const tarball = readFileSync(
-        join(temporaryRoot, "programmable-launch-3.3.1.tgz"),
+        join(temporaryRoot, "programmable-launch-3.3.2.tgz"),
       );
       const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
       const document = programmableWellKnownDocumentV1(
         PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
       );
       expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
-      expect(tarball.byteLength).toBe(251_366);
+      expect(tarball.byteLength).toBe(260_272);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -447,7 +448,7 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v3.openapi).toBe("3.1.0");
-    expect(v3.info.version).toBe("3.3.1");
+    expect(v3.info.version).toBe("3.3.2");
     expect(v3["x-programmable-availability"]).toMatchObject({
       status: "live",
       publicAuthorized: true,
@@ -482,6 +483,7 @@ describe("public Custom Launch CLI surface", () => {
       "/v3/custom-launches",
       "/v3/custom-launches/preflight",
       "/v3/custom-launches/{launchId}",
+      "/v3/finalized-custom-launches",
       "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization",
     ]);
     const capabilities = v3.paths["/v3/capabilities"].get;
@@ -639,12 +641,12 @@ describe("public Custom Launch CLI surface", () => {
     ]);
     expect(request.properties.schemaVersion.const)
       .toBe("programmable.custom-launch-create-request.v3");
-    expect(request.allOf[0].oneOf).toHaveLength(3);
+    expect(request.allOf[0].oneOf).toHaveLength(4);
     expect(request.allOf[0].oneOf[0].properties.launchProfile.properties)
       .toMatchObject({
         schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
         profileRevision: { const: 3 },
-        profileVersion: { const: "3.1.0" },
+        profileVersion: { const: "3.2.0" },
       });
     expect(request.allOf[0].oneOf[0].properties.launchProfileSelection
       .properties).toMatchObject({
@@ -659,9 +661,15 @@ describe("public Custom Launch CLI surface", () => {
       .toMatchObject({
         schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
         profileRevision: { const: 3 },
-        profileVersion: { const: "3.0.0" },
+        profileVersion: { const: "3.1.0" },
       });
     expect(request.allOf[0].oneOf[2].properties.launchProfile.properties)
+      .toMatchObject({
+        schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
+        profileRevision: { const: 3 },
+        profileVersion: { const: "3.0.0" },
+      });
+    expect(request.allOf[0].oneOf[3].properties.launchProfile.properties)
       .toMatchObject({
         schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v2" },
         profileRevision: { const: 2 },
@@ -681,8 +689,8 @@ describe("public Custom Launch CLI surface", () => {
     expect(v3["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
-      profileVersion: "3.1.0",
-      compatibleProfileVersions: ["3.0.0"],
+      profileVersion: "3.2.0",
+      compatibleProfileVersions: ["3.1.0", "3.0.0"],
       productionLaunchAuthorized: true,
       minimumHookPermissionMask: 0,
       maximumHookPermissionMask: 16383,
@@ -706,11 +714,11 @@ describe("public Custom Launch CLI surface", () => {
       "permitAuthorityRuntimeCodeHash",
       "platformFeePolicy",
     ]));
-    expect(profile.oneOf).toHaveLength(3);
+    expect(profile.oneOf).toHaveLength(4);
     expect(profile.properties.permitAuthority.const)
       .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
     expect(profile.properties).toMatchObject({
-      profileVersion: { enum: ["2.0.0", "3.0.0", "3.1.0"] },
+      profileVersion: { enum: ["2.0.0", "3.0.0", "3.1.0", "3.2.0"] },
       productionLaunchAuthorized: { const: true },
       routerRuntimeCodeHash: {
         const:
@@ -956,8 +964,14 @@ describe("public Custom Launch CLI surface", () => {
       .toBe(false);
     expect(v1.components.schemas.PreparedLaunchArtifactV1.properties
       .verificationBundleHash.$ref).toBe("#/components/schemas/Sha256Digest");
-    expect(v3.components.schemas.PreparedLaunchArtifactV3.allOf[1].required)
-      .toEqual(["verificationBundleHash"]);
+    expect(v3.components.schemas.PreparedLaunchArtifactV3.required)
+      .toContain("verificationBundleHash");
+    expect(v3.components.schemas.PreparedLaunchArtifactV3.oneOf[0].required)
+      .toEqual([
+        "unboundGraphBundleHash",
+        "projectMetadata",
+        "projectMetadataHash",
+      ]);
     expect(v3.components.schemas.CustomLaunchOnchainEvidenceV3.properties
       .finalizedCheckpoint.$ref)
       .toBe("#/components/schemas/FinalizedCheckpointV1");
@@ -1067,6 +1081,7 @@ describe("public Custom Launch CLI surface", () => {
 
     const documents = new Map<string, unknown>([
       ["", v3],
+      ["./custom-launch-v1.json", v1],
       ["./custom-launch-v2.json", v2],
     ]);
     const resolvePointer = (document: unknown, pointer: string): unknown =>
@@ -1106,10 +1121,10 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "Package `3.3.1` supports production general profile",
+      "Package `3.3.2` supports production general profile",
     );
     expect(packageGuide).toContain(
-      "`programmable.direct-native-hook-graph.v1` version `3.1.0`",
+      "`programmable.direct-native-hook-graph.v1` version `3.2.0`",
     );
     const guide = readFileSync(
       join(root, "packages/launch/examples/no-broadcast/README.md"),
@@ -1161,11 +1176,11 @@ describe("public Custom Launch CLI surface", () => {
       );
       expect(rehearsalEvidence.profile).toMatchObject({
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileVersion: "3.1.0",
+        profileVersion: "3.2.0",
         profileRevision: 3,
         productionLaunchAuthorized: true,
       });
-      expect(exampleBuildSource.match(/profileVersion: "3\.1\.0"/gu))
+      expect(exampleBuildSource.match(/profileVersion: "3\.2\.0"/gu))
         .toHaveLength(2);
       expect(exampleBuildSource).not.toContain('profileVersion: "2.0.0"');
       const packOutput = JSON.parse(execFileSync(process.execPath, [
@@ -1205,7 +1220,7 @@ describe("public Custom Launch CLI surface", () => {
         schemaVersion: "programmable.custom-launch-create-request.v3",
         launchProfile: {
           schemaVersion: "programmable.direct-native-hook-graph-profile.v3",
-          profileVersion: "3.1.0",
+          profileVersion: "3.2.0",
           profileRevision: 3,
           productionLaunchAuthorized: true,
         },
@@ -1264,8 +1279,8 @@ describe("public Custom Launch CLI surface", () => {
         status: "live",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.1.0",
-        compatibleProfileVersions: ["3.0.0"],
+        profileVersion: "3.2.0",
+        compatibleProfileVersions: ["3.1.0", "3.0.0"],
         productionLaunchAuthorized: true,
         createHttpStatus: 202,
         replayHttpStatus: 200,

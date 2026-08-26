@@ -20,13 +20,13 @@ const HARD_BLOCK_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
 ]);
 const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
-  version: "3.3.1",
+  version: "3.3.2",
   tarballUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
   checksumUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
   tarballSha256:
-    "sha256:1d5a2649c899b85512bdeca160fd24998b2f0898c042deecb3c5d43e4ae60da2",
+    "sha256:096b2e09514437907c50fd3f7dc9415c426f4496d65572316d208f22a7ef389f",
 });
 
 function canonicalize(value) {
@@ -182,10 +182,12 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.3.1"
+    openApi?.info?.version !== "3.3.2"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
-    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.1.0"
+    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.2.0"
+    || canonicalize(openApi?.["x-programmable-profile"]
+      ?.compatibleProfileVersions) !== canonicalize(["3.1.0", "3.0.0"])
     || openApi?.["x-programmable-profile"]?.profileRevision !== 3
     || openApi?.["x-programmable-profile"]?.productionLaunchAuthorized !== true
     || openApi?.["x-programmable-profile"]?.platformAdmissionReceiptRequired !== true
@@ -193,9 +195,9 @@ export async function probeCustomLaunchV3Release(input) {
     || openApi?.["x-programmable-profile"]?.safetyClaim !== false
     || openApi?.["x-programmable-profile"]?.feeBehaviorClaim !== false
     || openApi?.["x-programmable-admission-policy"]?.currentProfileVersion
-      !== "3.1.0"
+      !== "3.2.0"
     || canonicalize(openApi?.["x-programmable-admission-policy"]
-      ?.legacyExactProfileVersions) !== canonicalize(["3.0.0"])
+      ?.legacyExactProfileVersions) !== canonicalize(["3.1.0", "3.0.0"])
     || openApi?.["x-programmable-admission-policy"]?.manualProjectAllowlist !== false
     || canonicalize(openApi?.["x-programmable-admission-policy"]
       ?.hardBlockFindingRules) !== canonicalize(HARD_BLOCK_FINDING_RULES)
@@ -203,6 +205,7 @@ export async function probeCustomLaunchV3Release(input) {
     || openApi?.["x-programmable-availability"]?.publicAuthorized !== true
     || openApi?.paths?.["/v3/capabilities"]?.get === undefined
     || openApi?.paths?.["/v3/custom-launches/preflight"]?.post === undefined
+    || openApi?.paths?.["/v3/finalized-custom-launches"]?.get === undefined
     || openApi?.paths?.["/v3/custom-launches"]?.get === undefined
     || openApi?.paths?.["/v3/custom-launches"]?.post === undefined
   ) throw new Error("staged V3 OpenAPI contract is not the enabled profile contract");
@@ -307,13 +310,42 @@ export async function probeCustomLaunchV3Release(input) {
     || capabilities?.profile?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || capabilities?.profile?.profileRevision !== 3
-    || capabilities?.profile?.profileVersion !== "3.1.0"
+    || capabilities?.profile?.profileVersion !== "3.2.0"
     || capabilities?.profile?.productionLaunchAuthorized !== true
     || capabilities?.routes?.capabilities !== "/v3/capabilities"
     || capabilities?.routes?.preflight !== "/v3/custom-launches/preflight"
     || capabilities?.routes?.create !== "/v3/custom-launches"
     || capabilities?.routes?.list !== "/v3/custom-launches"
     || capabilities?.routes?.status !== "/v3/custom-launches/{launchId}"
+    || capabilities?.routes?.finalizedMetadata !== "/v3/finalized-custom-launches"
+    || canonicalize(capabilities?.projectMetadata) !== canonicalize({
+      schemaVersion: "programmable.project-metadata.v1",
+      inputSchemaVersion: "programmable.project-metadata-input.v1",
+      requiredForProfileVersion: "3.2.0",
+      legacyWithoutMetadataProfileVersions: ["2.0.0", "3.0.0", "3.1.0"],
+      requiredFields: [
+        "token.name",
+        "token.symbol",
+        "presentation.description",
+        "presentation.image",
+        "presentation.links",
+      ],
+      imageMayBeNull: true,
+      maximumLinks: 32,
+      linkKinds: [
+        "website",
+        "documentation",
+        "x",
+        "telegram",
+        "discord",
+        "github",
+        "other",
+      ],
+      projectMetadataHashDomain: "programmable.project-metadata.v1",
+      graphBundleHashBindingDomain:
+        "programmable.custom-graph-project-metadata.v1",
+      postDeploymentTokenReadbackRequired: true,
+    })
     || capabilities?.preflight?.quotaConsumed !== false
     || capabilities?.preflight?.nonceAllocated !== false
     || capabilities?.preflight?.persisted !== false

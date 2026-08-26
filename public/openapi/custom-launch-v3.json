@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.3.1",
+    "version": "3.3.2",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Profile 3.1.0 is current; exact profile 3.0.0 requests remain readable and retryable under their original immutable policy. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests also remain readable and retryable with their original exact bytes.",
+    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Metadata-bound profile 3.2.0 is current; exact profiles 3.1.0 and 3.0.0 remain readable and retryable under their original immutable metadata-absent policies. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests also remain readable and retryable with their original exact bytes.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -41,6 +41,12 @@
       "path": "/v3/capabilities",
       "authentication": "none"
     },
+    "publicFinalizedMetadata": {
+      "status": "live",
+      "path": "/v3/finalized-custom-launches",
+      "authentication": "none",
+      "finalizedOnly": true
+    },
     "publicPreflight": {
       "status": "live",
       "path": "/v3/custom-launches/preflight",
@@ -62,6 +68,7 @@
     "packConfigSchemaUrl": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
     "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
     "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
+    "finalizedMetadataUrl": "https://api.programmable.market/v3/finalized-custom-launches",
     "preflightUrl": "https://api.programmable.market/v3/custom-launches/preflight",
     "requiredCommandOrder": [
       "pack",
@@ -93,8 +100,8 @@
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.1.0",
-    "compatibleProfileVersions": ["3.0.0"],
+    "profileVersion": "3.2.0",
+    "compatibleProfileVersions": ["3.1.0", "3.0.0"],
     "productionLaunchAuthorized": true,
     "minimumTargets": 3,
     "maximumTargets": 16,
@@ -108,8 +115,8 @@
     "feeBehaviorClaim": false
   },
   "x-programmable-admission-policy": {
-    "currentProfileVersion": "3.1.0",
-    "legacyExactProfileVersions": ["3.0.0"],
+    "currentProfileVersion": "3.2.0",
+    "legacyExactProfileVersions": ["3.1.0", "3.0.0"],
     "legacySemantics": "readable-and-byte-identical-retryable-only",
     "manualProjectAllowlist": false,
     "hardBlockFindingRules": [
@@ -215,6 +222,79 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
+        }
+      }
+    },
+    "/v3/finalized-custom-launches": {
+      "get": {
+        "operationId": "listFinalizedCustomLaunchMetadataV3",
+        "summary": "List finalized public Custom launch metadata",
+        "description": "Unauthenticated bounded newest-first feed of finalized Router identities and their launch-id-bound project metadata. It contains no API key, controller-private request bytes, pending request or wallet action. Consumers must key identity by routerLaunchId, never resourceId. A 503 has no embedded last-known-good payload; downstream indexers may maintain their own bounded LKG with explicit freshness.",
+        "tags": ["V3 general hooks"],
+        "x-programmable-public-availability": "live",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque continuation cursor returned by nextCursor.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Finalized-only public metadata page.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Short public cache with bounded stale revalidation.",
+                "schema": { "const": "public, max-age=15, stale-while-revalidate=300" }
+              },
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalizedCustomLaunchMetadataListV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown, duplicate or invalid pagination parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+                },
+                "example": {
+                  "schemaVersion": "programmable.api-error.v1",
+                  "error": {
+                    "code": "INVALID_PAGINATION",
+                    "message": "Pagination parameters are invalid",
+                    "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/V3Unavailable" }
         }
       }
     },
@@ -871,6 +951,7 @@
           "preflight",
           "graph",
           "compiler",
+          "projectMetadata",
           "hookPermissions",
           "fundingModes",
           "liquidityModels",
@@ -931,7 +1012,7 @@
                 "const": 3
               },
               "profileVersion": {
-                "const": "3.1.0"
+                "const": "3.2.0"
               },
               "productionLaunchAuthorized": {
                 "const": true
@@ -946,7 +1027,8 @@
               "preflight",
               "status",
               "list",
-              "capabilities"
+              "capabilities",
+              "finalizedMetadata"
             ],
             "properties": {
               "create": {
@@ -963,6 +1045,9 @@
               },
               "capabilities": {
                 "const": "/v3/capabilities"
+              },
+              "finalizedMetadata": {
+                "const": "/v3/finalized-custom-launches"
               }
             },
             "additionalProperties": false
@@ -974,6 +1059,7 @@
               "preflight",
               "status",
               "capabilities",
+              "finalizedMetadata",
               "requiredScopes",
               "apiKeyIsWallet"
             ],
@@ -988,6 +1074,9 @@
                 "const": "bearer-api-key"
               },
               "capabilities": {
+                "const": "none"
+              },
+              "finalizedMetadata": {
                 "const": "none"
               },
               "requiredScopes": {
@@ -1108,6 +1197,50 @@
               "exactCreationAndRuntimeBindingRequired": {
                 "const": true
               }
+            },
+            "additionalProperties": false
+          },
+          "projectMetadata": {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "inputSchemaVersion",
+              "requiredForProfileVersion",
+              "legacyWithoutMetadataProfileVersions",
+              "requiredFields",
+              "imageMayBeNull",
+              "maximumLinks",
+              "linkKinds",
+              "projectMetadataHashDomain",
+              "graphBundleHashBindingDomain",
+              "postDeploymentTokenReadbackRequired"
+            ],
+            "properties": {
+              "schemaVersion": { "const": "programmable.project-metadata.v1" },
+              "inputSchemaVersion": { "const": "programmable.project-metadata-input.v1" },
+              "requiredForProfileVersion": { "const": "3.2.0" },
+              "legacyWithoutMetadataProfileVersions": {
+                "const": ["2.0.0", "3.0.0", "3.1.0"]
+              },
+              "requiredFields": {
+                "const": [
+                  "token.name",
+                  "token.symbol",
+                  "presentation.description",
+                  "presentation.image",
+                  "presentation.links"
+                ]
+              },
+              "imageMayBeNull": { "const": true },
+              "maximumLinks": { "const": 32 },
+              "linkKinds": {
+                "const": ["website", "documentation", "x", "telegram", "discord", "github", "other"]
+              },
+              "projectMetadataHashDomain": { "const": "programmable.project-metadata.v1" },
+              "graphBundleHashBindingDomain": {
+                "const": "programmable.custom-graph-project-metadata.v1"
+              },
+              "postDeploymentTokenReadbackRequired": { "const": true }
             },
             "additionalProperties": false
           },
@@ -1482,7 +1615,7 @@
           },
           "needsEvidenceFindingCodes": {
             "$ref": "#/components/schemas/CustomLaunchFindingCodeListV1",
-            "description": "Conditions that require executable or governance evidence but do not categorically block profile-3.1.0 deployment."
+            "description": "Conditions that require executable or governance evidence but do not categorically block current revision-3 admission."
           },
           "riskClassification": {
             "$ref": "#/components/schemas/PlatformAdmissionRiskClassificationV3"
@@ -1503,7 +1636,7 @@
             "minItems": 1
           }
         },
-        "description": "Deterministic static classification. deployable means only that no profile-3.1.0 hard blocker matched; routable and featured remain false until separate evidence exists.",
+        "description": "Deterministic static classification. deployable means only that no current revision-3 hard blocker matched; routable and featured remain false until separate evidence exists.",
         "additionalProperties": false
       },
       "CustomLaunchBehaviorVectorIdV3": {
@@ -2063,7 +2196,8 @@
         ],
         "properties": {
           "tokenTargetId": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier",
+            "description": "Canonical selected token target identifier. Recognizable secret material is rejected because finalized metadata is public."
           },
           "hookTargetId": {
             "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
@@ -2234,7 +2368,7 @@
           "safetyClaim": { "const": false },
           "feeBehaviorClaim": { "const": false }
         },
-        "description": "Current immutable profile-3.1.0 launch-admission policy. Exactly seven objective code-and-role rules are hard blockers. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces require evidence but do not categorically block deployment. Admission is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Immutable launch-admission policy shared by profiles 3.1.0 and 3.2.0. Exactly seven objective code-and-role rules are hard blockers. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces require evidence but do not categorically block deployment. Admission is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "PlatformAdmissionPolicyV3_0_0": {
@@ -2291,7 +2425,7 @@
           "safetyClaim": { "const": false },
           "feeBehaviorClaim": { "const": false }
         },
-        "description": "Immutable legacy profile-3.0.0 policy retained only so byte-identical existing requests remain readable and retryable. New packs use profile 3.1.0.",
+        "description": "Immutable legacy profile-3.0.0 policy retained only so byte-identical existing requests remain readable and retryable. New packs use profile 3.2.0.",
         "additionalProperties": false
       },
       "PlatformAdmissionPolicyV1": {
@@ -2444,7 +2578,7 @@
             "enum": [2, 3]
           },
           "profileVersion": {
-            "enum": ["2.0.0", "3.0.0", "3.1.0"]
+            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0"]
           },
           "productionLaunchAuthorized": {
             "const": true,
@@ -2513,6 +2647,18 @@
             "properties": {
               "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
               "profileRevision": { "const": 3 },
+              "profileVersion": { "const": "3.2.0" },
+              "platformAdmissionPolicy": {
+                "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
+              }
+            },
+            "not": { "required": ["platformFeeProofPolicy"] }
+          },
+          {
+            "required": ["platformAdmissionPolicy"],
+            "properties": {
+              "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+              "profileRevision": { "const": 3 },
               "profileVersion": { "const": "3.1.0" },
               "platformAdmissionPolicy": {
                 "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
@@ -2542,7 +2688,7 @@
             "not": { "required": ["platformAdmissionPolicy"] }
           }
         ],
-        "description": "Production-authorized revision 3 direct-graph profile. Profile 3.1.0 is current; exact 3.0.0 requests remain readable and retryable under their original policy. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Production-authorized revision 3 direct-graph profile. Metadata-bound profile 3.2.0 is current; exact 3.1.0 and 3.0.0 requests remain readable and retryable under their original policies. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -2917,7 +3063,7 @@
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "Current CLI 3.3.1 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
+            "description": "Current CLI 3.3.2 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
           }
         },
         "allOf": [
@@ -3071,7 +3217,7 @@
             "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
           }
         ],
-        "description": "CLI 3.3.1 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
+        "description": "CLI 3.3.2 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
       },
       "Eip3009FundingAuthorizationDescriptorV1": {
         "type": "object",
@@ -3183,6 +3329,365 @@
         ],
         "description": "Revision 3 exact-source bundle. Every compilation unit uses solc 0.8.26+commit.8a97fa7a. Decoded Standard JSON is limited to 5,242,880 bytes per unit and in aggregate, with at most 2,048 sources per unit. Revision 2 compatibility requests retain their prior compiler contract."
       },
+      "ProjectTokenMetadataStaticBindingV1": {
+        "type": "object",
+        "required": ["staticSource", "argumentIndex", "argumentName"],
+        "properties": {
+          "staticSource": {
+            "enum": [
+              "constructor-argument",
+              "initializer-argument",
+              "not-deterministically-extractable"
+            ]
+          },
+          "argumentIndex": {
+            "oneOf": [
+              { "type": "integer", "minimum": 0 },
+              { "type": "null" }
+            ]
+          },
+          "argumentName": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "Canonical NFC ABI argument name, already trimmed, without controls or recognizable secret material, at most 256 UTF-8 bytes."
+              },
+              { "type": "null" }
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "staticSource": {
+                "enum": ["constructor-argument", "initializer-argument"]
+              },
+              "argumentIndex": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "argumentName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "required": ["staticSource", "argumentIndex", "argumentName"]
+          },
+          {
+            "properties": {
+              "staticSource": { "const": "not-deterministically-extractable" },
+              "argumentIndex": { "type": "null" },
+              "argumentName": { "type": "null" }
+            },
+            "required": ["staticSource", "argumentIndex", "argumentName"]
+          }
+        ],
+        "description": "A unique static constructor or initializer source is matched exactly when available. Otherwise both ABI leaves are null and arbitrary token architectures remain packageable.",
+        "additionalProperties": false
+      },
+      "ProjectTokenMetadataBindingV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "tokenTargetId",
+          "declarationBinding",
+          "standardReadModel",
+          "name",
+          "symbol",
+          "postDeploymentReadback"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.project-token-metadata-binding.v1" },
+          "tokenTargetId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+          },
+          "declarationBinding": { "const": "request-and-launch-id" },
+          "standardReadModel": {
+            "type": "object",
+            "required": ["name", "symbol"],
+            "properties": {
+              "name": { "type": "boolean" },
+              "symbol": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "name": { "$ref": "#/components/schemas/ProjectTokenMetadataStaticBindingV1" },
+          "symbol": { "$ref": "#/components/schemas/ProjectTokenMetadataStaticBindingV1" },
+          "postDeploymentReadback": { "const": "required" }
+        },
+        "description": "Derived nonblocking token declaration binding. Static extraction is enforced only when one exact ABI argument is unambiguous; final name and symbol still require onchain readback.",
+        "additionalProperties": false
+      },
+      "LaunchPresentationDraftV1": {
+        "type": "object",
+        "required": ["schemaVersion", "description", "image", "links"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.launch-presentation-draft.v1" },
+          "description": {
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Canonical NFC public text, already trimmed, at most 4,096 UTF-8 bytes."
+          },
+          "image": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["uri", "contentSha256", "mediaType", "byteLength", "width", "height"],
+                "properties": {
+                  "uri": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "description": "Canonical public HTTPS URI without query or fragment, canonical ipfs CID URI, or canonical ar transaction URI. HTTPS should expose browser-readable CORS bytes so wallet review can verify this object's digest, length, media type and dimensions; a failed remote check renders a placeholder and never mutates or signs the launch."
+                  },
+                  "contentSha256": {
+                    "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+                  },
+                  "mediaType": { "enum": ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+                  "byteLength": { "type": "integer", "minimum": 1, "maximum": 20971520 },
+                  "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+                  "height": { "type": "integer", "minimum": 1, "maximum": 8192 }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "links": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "required": ["kind", "uri"],
+              "properties": {
+                "kind": {
+                  "enum": ["website", "documentation", "x", "telegram", "discord", "github", "other"]
+                },
+                "uri": { "type": "string", "format": "uri", "maxLength": 2048, "pattern": "^https://" }
+              },
+              "additionalProperties": false
+            },
+            "description": "Unique entries in strict UTF-8 order by kind, NUL, then canonical public HTTPS URI."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectMetadataV1": {
+        "type": "object",
+        "required": ["schemaVersion", "token", "presentation", "tokenMetadataBinding"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.project-metadata.v1" },
+          "token": {
+            "type": "object",
+            "required": ["name", "symbol"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "Canonical NFC token name, already trimmed, at most 64 UTF-8 bytes."
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16,
+                "description": "Canonical NFC token symbol without whitespace, at most 16 UTF-8 bytes."
+              }
+            },
+            "additionalProperties": false
+          },
+          "presentation": { "$ref": "#/components/schemas/LaunchPresentationDraftV1" },
+          "tokenMetadataBinding": {
+            "$ref": "#/components/schemas/ProjectTokenMetadataBindingV1"
+          }
+        },
+        "description": "Canonical display metadata. Its domain-framed projectMetadataHash is included in the bound graphBundleHash, launch intent, prepared artifact, wallet review and onchain launch identity.",
+        "additionalProperties": false
+      },
+      "FinalizedCustomLaunchTokenMetadataReadbackV1": {
+        "type": "object",
+        "required": [
+          "status",
+          "declared",
+          "observed",
+          "observedAtBlockNumber",
+          "observedAt"
+        ],
+        "properties": {
+          "status": { "enum": ["matching", "mismatch", "unavailable"] },
+          "declared": {
+            "type": "object",
+            "required": ["name", "symbol"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "symbol": { "type": "string", "minLength": 1, "maxLength": 16 }
+            },
+            "additionalProperties": false
+          },
+          "observed": {
+            "type": "object",
+            "required": ["name", "symbol"],
+            "properties": {
+              "name": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 1024,
+                    "description": "Bounded onchain readback, at most 1,024 UTF-8 bytes."
+                  },
+                  { "type": "null" }
+                ]
+              },
+              "symbol": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 256,
+                    "description": "Bounded onchain readback, at most 256 UTF-8 bytes."
+                  },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "observedAtBlockNumber": {
+            "oneOf": [
+              { "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256" },
+              { "type": "null" }
+            ]
+          },
+          "observedAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "description": "Finality-scoped onchain name and symbol comparison. Unavailable is explicit and never converted into a matching claim.",
+        "additionalProperties": false
+      },
+      "FinalizedCustomLaunchMetadataV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "resourceId",
+          "routerLaunchId",
+          "chainId",
+          "router",
+          "token",
+          "hook",
+          "poolManager",
+          "poolId",
+          "projectMetadata",
+          "projectMetadataHash",
+          "bindings",
+          "tokenMetadataReadback",
+          "finality",
+          "createdAt",
+          "finalizedAt"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.finalized-custom-launch-metadata.v1" },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Public resource correlation only. Consumers key canonical identity by routerLaunchId."
+          },
+          "routerLaunchId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "chainId": { "const": "1" },
+          "router": { "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress" },
+          "token": { "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress" },
+          "hook": { "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress" },
+          "poolManager": { "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress" },
+          "poolId": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+          "projectMetadata": { "$ref": "#/components/schemas/ProjectMetadataV1" },
+          "projectMetadataHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "bindings": {
+            "type": "object",
+            "required": [
+              "requestHash",
+              "launchIntentHash",
+              "graphBundleHash",
+              "unboundGraphBundleHash",
+              "artifactHash"
+            ],
+            "properties": {
+              "requestHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+              "launchIntentHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+              "graphBundleHash": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+                "description": "Metadata-bound graph hash used by the Router launch identity."
+              },
+              "unboundGraphBundleHash": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+              },
+              "artifactHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+            },
+            "additionalProperties": false
+          },
+          "tokenMetadataReadback": {
+            "$ref": "#/components/schemas/FinalizedCustomLaunchTokenMetadataReadbackV1"
+          },
+          "finality": {
+            "type": "object",
+            "required": [
+              "state",
+              "transactionHash",
+              "blockNumber",
+              "blockHash",
+              "logIndex",
+              "confirmationDepth",
+              "requiredConfirmationDepth",
+              "finalizedCheckpoint"
+            ],
+            "properties": {
+              "state": { "const": "finalized" },
+              "transactionHash": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+              "blockNumber": { "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256" },
+              "blockHash": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+              "logIndex": { "type": "integer", "minimum": 0 },
+              "confirmationDepth": { "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256" },
+              "requiredConfirmationDepth": { "const": "64" },
+              "finalizedCheckpoint": { "$ref": "#/components/schemas/FinalizedCheckpointV1" }
+            },
+            "additionalProperties": false
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "finalizedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "FinalizedCustomLaunchMetadataListV1": {
+        "type": "object",
+        "required": ["schemaVersion", "generatedAt", "launches", "nextCursor"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.finalized-custom-launch-metadata-list.v1" },
+          "generatedAt": { "type": "string", "format": "date-time" },
+          "launches": {
+            "type": "array",
+            "maxItems": 25,
+            "items": { "$ref": "#/components/schemas/FinalizedCustomLaunchMetadataV1" }
+          },
+          "nextCursor": {
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 512 },
+              { "type": "null" }
+            ]
+          }
+        },
+        "description": "Finalized-only public backend page. It has no embedded LKG fallback; downstream services must label their own bounded fallback freshness.",
+        "additionalProperties": false
+      },
       "CustomLaunchCreateRequestV3": {
         "type": "object",
         "required": [
@@ -3226,6 +3731,13 @@
           "graphBundle": {
             "$ref": "#/components/schemas/CustomGraphBundleV3"
           },
+          "projectMetadata": {
+            "$ref": "#/components/schemas/ProjectMetadataV1"
+          },
+          "projectMetadataHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+            "description": "sha256 of the UTF-8 domain programmable.project-metadata.v1, one NUL byte, and canonical projectMetadata JSON."
+          },
           "launchProfile": {
             "$ref": "#/components/schemas/DirectNativeHookGraphProfileV1"
           },
@@ -3262,6 +3774,35 @@
                     "properties": {
                       "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
                       "profileRevision": { "const": 3 },
+                      "profileVersion": { "const": "3.2.0" }
+                    }
+                  },
+                  "launchProfileSelection": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v3" },
+                      "profileRevision": { "const": 3 }
+                    }
+                  },
+                  "verificationBundle": {
+                    "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
+                  }
+                },
+                "required": [
+                  "launchProfile",
+                  "launchProfileSelection",
+                  "verificationBundle",
+                  "projectMetadata",
+                  "projectMetadataHash"
+                ]
+              },
+              {
+                "properties": {
+                  "launchProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+                      "profileRevision": { "const": 3 },
                       "profileVersion": { "const": "3.1.0" }
                     }
                   },
@@ -3276,7 +3817,13 @@
                     "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
                   }
                 },
-                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"]
+                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"],
+                "not": {
+                  "anyOf": [
+                    { "required": ["projectMetadata"] },
+                    { "required": ["projectMetadataHash"] }
+                  ]
+                }
               },
               {
                 "properties": {
@@ -3299,7 +3846,13 @@
                     "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
                   }
                 },
-                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"]
+                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"],
+                "not": {
+                  "anyOf": [
+                    { "required": ["projectMetadata"] },
+                    { "required": ["projectMetadataHash"] }
+                  ]
+                }
               },
               {
                 "properties": {
@@ -3322,7 +3875,13 @@
                     "$ref": "./custom-launch-v2.json#/components/schemas/ExactSourceVerificationBundleV2"
                   }
                 },
-                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"]
+                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"],
+                "not": {
+                  "anyOf": [
+                    { "required": ["projectMetadata"] },
+                    { "required": ["projectMetadataHash"] }
+                  ]
+                }
               }
             ]
           },
@@ -3616,23 +4175,109 @@
         "additionalProperties": false
       },
       "PreparedLaunchArtifactV3": {
-        "allOf": [
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "verificationBundleHash",
+          "graphBundleHash",
+          "sourceBundleSha256",
+          "chainBindings",
+          "callerConstraints",
+          "timing",
+          "route",
+          "predictedComponents",
+          "market",
+          "stampRequest",
+          "stampRequestHash",
+          "permit",
+          "permitDigest",
+          "unsignedRouterTransaction",
+          "claims",
+          "artifactHash"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/schemaVersion"
+          },
+          "verificationBundleHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "graphBundleHash": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/graphBundleHash"
+          },
+          "unboundGraphBundleHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+            "description": "Raw sha256 of canonical graphBundle JSON before project metadata binding."
+          },
+          "projectMetadata": {
+            "$ref": "#/components/schemas/ProjectMetadataV1"
+          },
+          "projectMetadataHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "sourceBundleSha256": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/sourceBundleSha256"
+          },
+          "chainBindings": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/chainBindings"
+          },
+          "callerConstraints": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/callerConstraints"
+          },
+          "timing": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/timing"
+          },
+          "route": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/route"
+          },
+          "predictedComponents": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/predictedComponents"
+          },
+          "market": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/market"
+          },
+          "stampRequest": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/stampRequest"
+          },
+          "stampRequestHash": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/stampRequestHash"
+          },
+          "permit": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/permit"
+          },
+          "permitDigest": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/permitDigest"
+          },
+          "unsignedRouterTransaction": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/unsignedRouterTransaction"
+          },
+          "claims": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/claims"
+          },
+          "artifactHash": {
+            "$ref": "./custom-launch-v1.json#/components/schemas/PreparedLaunchArtifactV1/properties/artifactHash"
+          }
+        },
+        "oneOf": [
           {
-            "$ref": "./custom-launch-v2.json#/components/schemas/PreparedLaunchArtifactV1"
+            "required": [
+              "unboundGraphBundleHash",
+              "projectMetadata",
+              "projectMetadataHash"
+            ]
           },
           {
-            "type": "object",
-            "required": [
-              "verificationBundleHash"
-            ],
-            "properties": {
-              "verificationBundleHash": {
-                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
-              }
+            "not": {
+              "anyOf": [
+                { "required": ["unboundGraphBundleHash"] },
+                { "required": ["projectMetadata"] },
+                { "required": ["projectMetadataHash"] }
+              ]
             }
           }
         ],
-        "description": "Prepared Router artifact with the exact-source verification bundle required by the V3 admission contract."
+        "description": "Prepared Router artifact with the exact-source verification bundle required by the V3 admission contract. Current profile 3.2 artifacts contain the complete non-null metadata triple; exact legacy artifacts omit all three metadata fields.",
+        "additionalProperties": false
       },
       "FinalizedProviderObservationV1": {
         "type": "object",
@@ -4643,6 +5288,9 @@
           "ownerWallet",
           "status",
           "requestHash",
+          "launchProfileVersion",
+          "projectMetadata",
+          "projectMetadataHash",
           "launchProfileHash",
           "launchIntentHash",
           "fundingIntentHash",
@@ -4702,6 +5350,23 @@
           },
           "requestHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "launchProfileVersion": {
+            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0"],
+            "description": "Immutable persisted launchProfile.profileVersion. Metadata is required only for 3.2.0; exact 2.0.0, 3.0.0 and 3.1.0 resources retain legacy null metadata semantics."
+          },
+          "projectMetadata": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ProjectMetadataV1" },
+              { "type": "null" }
+            ],
+            "description": "Hash-bound current-profile metadata. Null only for byte-compatible legacy requests."
+          },
+          "projectMetadataHash": {
+            "oneOf": [
+              { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+              { "type": "null" }
+            ]
           },
           "launchProfileHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
@@ -4792,6 +5457,30 @@
             ]
           }
         },
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "launchProfileVersion": { "const": "3.2.0" },
+                  "projectMetadata": { "$ref": "#/components/schemas/ProjectMetadataV1" },
+                  "projectMetadataHash": {
+                    "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+                  }
+                },
+                "required": ["launchProfileVersion", "projectMetadata", "projectMetadataHash"]
+              },
+              {
+                "properties": {
+                  "launchProfileVersion": { "enum": ["2.0.0", "3.0.0", "3.1.0"] },
+                  "projectMetadata": { "type": "null" },
+                  "projectMetadataHash": { "type": "null" }
+                },
+                "required": ["launchProfileVersion", "projectMetadata", "projectMetadataHash"]
+              }
+            ]
+          }
+        ],
         "additionalProperties": false
       },
       "CustomLaunchSummaryV3": {

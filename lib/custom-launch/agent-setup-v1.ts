@@ -6,7 +6,7 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
     "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
   packConfigSchema:
     "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
-  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
+  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz",
   guide:
     "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
   openApi: "https://programmable.market/openapi/custom-launch-v3.json",
@@ -35,6 +35,8 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   `Public V3 OpenAPI: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi}`,
   `V2 read compatibility: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2Compatibility}`,
   `V1 read compatibility: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility}`,
+  "Before pack, collect the project name and symbol, an optional description, and optional website, docs, X, Telegram, Discord and GitHub links. For the image, provide both the local source file and its canonical public HTTPS, IPFS or Arweave URI, or explicitly use null. Never invent metadata or a public image URI.",
+  "The CLI derives the image content digest, media type, byte length and dimensions from the local bytes and binds the complete canonical project metadata into the request and launch identity. Never handwrite these derived fields. The website shows the same metadata read-only before either wallet step; changing it requires a newly packed request.",
   "Inspect the exact public source revision and create programmable-launch.config.json with schemaVersion programmable.launch-pack-config.v3. Validate it against the pack-config schema. Follow the generic catalog for funding, nonce/r/s/v ABI argument paths, liquidity and diagnostics. There is no project allowlist or private approval path.",
   "programmable-launch pack --config programmable-launch.config.json --output launch.json",
   "programmable-launch validate launch.json --config programmable-launch.config.json --remote",

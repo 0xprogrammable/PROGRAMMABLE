@@ -278,7 +278,7 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
 
 test("V3 profile binds static admission without claiming safety or fee behavior", () => {
   const profile = resolveDirectNativeProfile(SELECTION);
-  assert.equal(profile.profileVersion, "3.1.0");
+  assert.equal(profile.profileVersion, "3.2.0");
   assert.deepEqual(profile.platformFeePolicy, {
     schemaVersion: "programmable.platform-fee-policy.v1",
     accountingMode: "inclusive-selected-total",
@@ -338,14 +338,18 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
   assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
 });
 
-test("V3.1 preserves exact V3.0 embedded-profile validation for retries", () => {
+test("V3.2 preserves exact V3.1 and V3.0 embedded-profile validation for retries", () => {
   const current = resolveDirectNativeProfile(SELECTION);
+  const preMetadata = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.1.0" });
   const legacy = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.0.0" });
 
-  assert.equal(current.profileVersion, "3.1.0");
+  assert.equal(current.profileVersion, "3.2.0");
+  assert.equal(preMetadata.profileVersion, "3.1.0");
   assert.equal(legacy.profileVersion, "3.0.0");
   assert.deepEqual(validateEmbeddedDirectNativeProfile(current), current);
+  assert.deepEqual(validateEmbeddedDirectNativeProfile(preMetadata), preMetadata);
   assert.deepEqual(validateEmbeddedDirectNativeProfile(legacy), legacy);
+  assert.deepEqual(preMetadata.platformAdmissionPolicy, current.platformAdmissionPolicy);
   assert.deepEqual(
     legacy.platformAdmissionPolicy.blockingFindingRules.map(({ code }) => code),
     [
@@ -372,12 +376,12 @@ test("V3.1 preserves exact V3.0 embedded-profile validation for retries", () => 
     /closed embedded launchProfile/u,
   );
   assert.throws(
-    () => resolveDirectNativeProfile(SELECTION, { profileVersion: "3.2.0" }),
+    () => resolveDirectNativeProfile(SELECTION, { profileVersion: "3.3.0" }),
     /version is not supported/u,
   );
 });
 
-test("V3.2 keeps revision 2 profile and hash semantics available for exact retries", () => {
+test("V3 keeps revision 2 profile and hash semantics available for exact retries", () => {
   const legacy = resolveDirectNativeProfile(LEGACY_SELECTION);
   assert.equal(legacy.schemaVersion, "programmable.direct-native-hook-graph-profile.v2");
   assert.equal(legacy.profileRevision, 2);
