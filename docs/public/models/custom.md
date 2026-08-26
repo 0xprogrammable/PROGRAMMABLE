@@ -12,7 +12,7 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` 3.1.0 CLI derives the deterministic source manifest,
+Build and test the exact project. The public `programmable-launch` 3.2.0 CLI derives the deterministic source manifest,
 graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API
 schema](../developers/custom-launch.md). The default `programmable.direct-native-hook-graph-profile.v3` profile uses
 `profileRevision: 3`, `profileVersion: 3.0.0` and exact `solc 0.8.26+commit.8a97fa7a`; revision 2 remains compatible.

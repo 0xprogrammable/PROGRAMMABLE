@@ -394,7 +394,7 @@ export async function buildLaunch({ configPath }) {
     graphBundleHash,
     verificationBundleHash,
     predictions,
-    diagnostics,
+    ...(diagnostics.length === 0 ? {} : { diagnostics }),
   };
   if (apiVersion !== "v1") {
     result.launchProfileHash = launchProfileHash;
@@ -429,7 +429,7 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     && built.fundingIntentHash !== undefined) {
     result.fundingIntentHash = built.fundingIntentHash;
   }
-  if (built.diagnostics.length !== 0) result.diagnostics = built.diagnostics;
+  if ((built.diagnostics?.length ?? 0) !== 0) result.diagnostics = built.diagnostics;
   return result;
 }
 

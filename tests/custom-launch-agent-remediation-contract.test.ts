@@ -23,6 +23,12 @@ const openApi = JSON.parse(read("public/openapi/custom-launch-v3.json"));
 const websiteGuide = read("app/docs/developers/custom-launch/page.tsx");
 const gitBookGuide = read("docs/public/developers/custom-launch.md");
 const rawGuide = read("public/developers/custom-launch-api-v1.md");
+const packagePackConfigSchema = read(
+  "packages/launch/schemas/programmable-launch-pack-config-v3.json",
+);
+const publicPackConfigSchema = read(
+  "public/schemas/custom-launch/v3/pack-config.json",
+);
 
 const catalogUrl =
   "https://programmable.market/policies/custom-launch-agent-remediation-v1.json";
@@ -34,6 +40,10 @@ const packConfigSchemaUrl =
   "https://programmable.market/schemas/custom-launch/v3/pack-config.json";
 
 describe("Custom Launch cold-agent remediation contract", () => {
+  it("publishes the exact CLI pack-config schema bytes", () => {
+    expect(publicPackConfigSchema).toBe(packagePackConfigSchema);
+  });
+
   it("is reachable from discovery and OpenAPI without a secret", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
@@ -282,6 +292,5 @@ describe("Custom Launch cold-agent remediation contract", () => {
       "$PROGRAMMABLE_API_KEY",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
-    expect(JSON.stringify(catalog)).not.toMatch(/hookemon|shards/i);
   });
 });

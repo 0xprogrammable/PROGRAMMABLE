@@ -90,7 +90,7 @@ export async function validateLaunchFile({ launchPath, configPath }) {
   let diagnostics = [];
   if (configPath !== undefined) {
     const rebuilt = await buildLaunch({ configPath });
-    diagnostics = rebuilt.diagnostics;
+    diagnostics = rebuilt.diagnostics ?? [];
     if (!bytes.equals(rebuilt.requestBytes)) {
       throw new TypeError(
         `PACK_REPRODUCTION_MISMATCH: ${absolute} is not byte-identical to a fresh pack of ${path.resolve(configPath)}`,
