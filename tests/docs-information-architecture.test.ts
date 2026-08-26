@@ -285,7 +285,7 @@ describe("Docs information architecture", () => {
     }
 
     expect(read("docs/public/creators/launch.md")).toContain(
-      "https://api.programmable.market/v1/custom-launches",
+      "https://api.programmable.market/v3/custom-launches",
     );
     expect(read("docs/public/developers/README.md")).toContain(
       "The Developer API at `https://developers.programmable.family` is read only",

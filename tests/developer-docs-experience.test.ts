@@ -220,10 +220,10 @@ describe("Developer documentation experience", () => {
       "each consumer must implement the published verification procedure",
     );
     expect(developerDocsMarkdown).toMatch(
-      /Custom launch preparation is the separate authenticated write path/,
+      /Public V3 creation and lifecycle reads use a wallet-bound key/,
     );
     expect(developerDocsMarkdown).toContain(
-      "https://api.programmable.market/v1/custom-launches",
+      "https://api.programmable.market/v3/custom-launches",
     );
     expect(developerDocsMarkdown).toContain(
       "Router verification and the Developer API are read-only",
