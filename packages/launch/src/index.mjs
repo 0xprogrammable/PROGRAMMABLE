@@ -1,5 +1,6 @@
 export { submitLaunch, statusLaunch, ProgrammableApiError } from "./api-client.mjs";
 export { canonicalizeJson, parseStrictJson, StrictJsonError } from "./canonical-json.mjs";
+export { ProgrammableCliDiagnosticError } from "./diagnostics.mjs";
 export { buildLaunch, packLaunch } from "./pack.mjs";
 export {
   buildLaunchProfileBinding,
@@ -25,7 +26,10 @@ export {
 export { validateLaunchFile, validateLaunchRequest } from "./validate.mjs";
 export {
   API_KEYS_URL,
+  AGENT_REMEDIATION_CATALOG_URL,
   API_ORIGIN,
+  CLI_DIAGNOSTIC_SCHEMA,
+  EXISTING_PROJECT_INTEGRATION_GUIDE_URL,
   GUIDE_URL,
   OPENAPI_URL,
   OPENAPI_URL_V1,
@@ -35,6 +39,8 @@ export {
   PACK_CONFIG_SCHEMA_V1,
   PACK_CONFIG_SCHEMA_V2,
   PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_V3_CONTRACT_URL,
+  PACK_CONFIG_V3_EXAMPLE_URL,
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
@@ -56,4 +62,6 @@ export {
   DIRECT_NATIVE_PROFILE_SCHEMA_V3,
   RELEASE_URL,
   RELEASE_URL_V1,
+  FUNDING_SIGNATURE_PATCH_SCHEMA_V1,
+  FUNDING_SIGNATURE_PATCH_SCHEMA_V2,
 } from "./constants.mjs";

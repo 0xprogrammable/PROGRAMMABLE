@@ -22,9 +22,17 @@ import {
   PACK_CONFIG_SCHEMA_V1,
   PACK_CONFIG_SCHEMA_V2,
   PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_V3_CONTRACT_URL,
+  PACK_CONFIG_V3_EXAMPLE_URL,
   PACKAGE_VERSION,
   SOURCE_DESCRIPTOR_SCHEMA,
 } from "./constants.mjs";
+import {
+  createCliDiagnosticError,
+  createCliWarning,
+  observedError,
+} from "./diagnostics.mjs";
+import { inspectEip3009FundingCompatibility } from "./funding-compatibility.mjs";
 import { buildGraphBundle, deriveRouteNamespace } from "./graph.mjs";
 import {
   assertExactKeys,
@@ -64,8 +72,7 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 export async function buildLaunch({ configPath }) {
   const absoluteConfig = path.resolve(configPath);
-  const { value: config } = await readStrictJsonFile(absoluteConfig, 2_097_152);
-  const apiVersion = assertPackConfig(config);
+  const { config, apiVersion } = await readPackConfig(absoluteConfig);
   const launchProfileSelection = apiVersion === "v2"
     ? validateLaunchProfileSelection(config.launchProfile)
     : apiVersion === "v3"
@@ -96,6 +103,7 @@ export async function buildLaunch({ configPath }) {
         : {}),
     }));
   }
+  const diagnostics = [];
 
   const attestationEvidence = await buildAttestationEvidence(
     config.agentAttestation,
@@ -230,6 +238,33 @@ export async function buildLaunch({ configPath }) {
           targets.find(({ targetId }) => targetId === config.fundingSignaturePatch.targetId),
         )
       : undefined;
+    if (fundingSignaturePatch?.schemaVersion === "programmable.eip3009-signature-patch.v1") {
+      diagnostics.push(createCliWarning({
+        code: "FUNDING_SIGNATURE_PATCH_V1_LEGACY",
+        stage: "signature-patch",
+        targetId: fundingSignaturePatch.targetId,
+        targetRole: "initializer",
+        sourcePath: targets.find(({ targetId }) => targetId === fundingSignaturePatch.targetId)
+          ?.sourcePath,
+        summary: "The legacy r/s/v-only EIP-3009 patch remains readable for exact retries but new launches must use the v2 nonce+r+s+v ABI-path descriptor.",
+        expected: {
+          schemaVersion: "programmable.eip3009-authorization-patch.v2",
+          configFields: [
+            "targetId",
+            "nonceArgumentPath",
+            "rArgumentPath",
+            "sArgumentPath",
+            "vArgumentPath",
+          ],
+        },
+        observed: { schemaVersion: fundingSignaturePatch.schemaVersion },
+      }));
+      diagnostics.push(...inspectEip3009FundingCompatibility({
+        launchProfileSelection,
+        targets,
+        unitsById,
+      }));
+    }
     const launchProfileBinding = buildDirectNativeProfileBinding(
       launchProfileSelection,
       {
@@ -359,6 +394,7 @@ export async function buildLaunch({ configPath }) {
     graphBundleHash,
     verificationBundleHash,
     predictions,
+    diagnostics,
   };
   if (apiVersion !== "v1") {
     result.launchProfileHash = launchProfileHash;
@@ -393,7 +429,41 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     && built.fundingIntentHash !== undefined) {
     result.fundingIntentHash = built.fundingIntentHash;
   }
+  if (built.diagnostics.length !== 0) result.diagnostics = built.diagnostics;
   return result;
+}
+
+async function readPackConfig(absoluteConfig) {
+  let config;
+  try {
+    config = (await readStrictJsonFile(absoluteConfig, 2_097_152)).value;
+  } catch (error) {
+    throw invalidV3PackConfig(error, undefined);
+  }
+  try {
+    return { config, apiVersion: assertPackConfig(config) };
+  } catch (error) {
+    if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V1
+      || config?.schemaVersion === PACK_CONFIG_SCHEMA_V2) throw error;
+    throw invalidV3PackConfig(error, config?.schemaVersion);
+  }
+}
+
+function invalidV3PackConfig(error, schemaVersion) {
+  return createCliDiagnosticError({
+    code: "PACK_CONFIG_V3_INVALID",
+    stage: "pack-config",
+    summary: "The supplied pack config does not satisfy the public V3 config contract.",
+    expected: {
+      schemaVersion: PACK_CONFIG_SCHEMA_V3,
+      configContract: PACK_CONFIG_V3_CONTRACT_URL,
+      executableExample: PACK_CONFIG_V3_EXAMPLE_URL,
+    },
+    observed: {
+      schemaVersion: typeof schemaVersion === "string" ? schemaVersion : null,
+      ...observedError(error),
+    },
+  });
 }
 
 function assertPackConfig(config) {

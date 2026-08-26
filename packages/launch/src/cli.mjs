@@ -3,10 +3,14 @@ import {
   OPENAPI_URL_V1,
   OPENAPI_URL_V2,
   OPENAPI_URL_V3,
+  PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_V3_CONTRACT_URL,
+  PACK_CONFIG_V3_EXAMPLE_URL,
   PACKAGE_VERSION,
   RELEASE_URL,
   RELEASE_URL_V1,
 } from "./constants.mjs";
+import { createCliDiagnosticError } from "./diagnostics.mjs";
 import { packLaunch } from "./pack.mjs";
 import { validateLaunchFile } from "./validate.mjs";
 import { ProgrammableApiError, statusLaunch, submitLaunch } from "./api-client.mjs";
@@ -65,7 +69,7 @@ export async function main(argv) {
   if (command === "pack") {
     rejectPositionals(parsed, 0, "pack");
     result = await packLaunch({
-      configPath: requiredFlag(parsed, "config"),
+      configPath: requiredV3ConfigFlag(parsed),
       outputPath: parsed.flags.output,
       receiptPath: parsed.flags.receipt,
     });
@@ -79,7 +83,7 @@ export async function main(argv) {
     rejectPositionals(parsed, 1, "submit");
     result = await submitLaunch({
       launchPath: parsed.positionals[0],
-      configPath: requiredFlag(parsed, "config"),
+      configPath: requiredV3ConfigFlag(parsed),
       idempotencyKey: parsed.flags["idempotency-key"],
       apiOrigin: parsed.flags["api-origin"],
       stateDirectory: parsed.flags["state-dir"],
@@ -149,10 +153,21 @@ function rejectPositionals(parsed, expected, command) {
   }
 }
 
-function requiredFlag(parsed, name) {
-  const value = parsed.flags[name];
-  if (value === undefined) throw new TypeError(`--${name} is required`);
-  return value;
+function requiredV3ConfigFlag(parsed) {
+  const value = parsed.flags.config;
+  if (value !== undefined) return value;
+  throw createCliDiagnosticError({
+    code: "PACK_CONFIG_V3_MISSING",
+    stage: "pack-config",
+    summary: "This command requires the exact V3 pack config and build artifacts.",
+    expected: {
+      flag: "--config programmable-launch.config.json",
+      schemaVersion: PACK_CONFIG_SCHEMA_V3,
+      configContract: PACK_CONFIG_V3_CONTRACT_URL,
+      executableExample: PACK_CONFIG_V3_EXAMPLE_URL,
+    },
+    observed: { flag: null },
+  });
 }
 
 function integerFlag(parsed, name) {

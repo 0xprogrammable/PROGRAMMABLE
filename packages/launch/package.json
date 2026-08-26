@@ -1,6 +1,6 @@
 {
   "name": "@programmable/launch",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Deterministic pack, validation, submission, and status tooling for the Programmable Custom Launch API",
   "type": "module",
   "bin": {
@@ -13,6 +13,7 @@
     "bin",
     "contracts",
     "src",
+    "schemas",
     "examples",
     "README.md"
   ],
@@ -27,6 +28,7 @@
     "viem": "2.55.5"
   },
   "devDependencies": {
+    "ajv": "8.17.1",
     "solc": "0.8.26"
   },
   "license": "UNLICENSED",

@@ -8,16 +8,16 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.0.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.2.0.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.1.0`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.2.0`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
 The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
@@ -35,7 +35,7 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Package `3.1.0` supports production general profile
+Package `3.2.0` supports production general profile
 `programmable.direct-native-hook-graph.v1` version `3.0.0`. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
@@ -47,7 +47,7 @@ fallback-only route does not qualify. The 10 bps Programmable share may be addit
 and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are supported.
 
 Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
-USDC EIP-3009 descriptor with an exact signature patch. The connected wallet separately signs EIP-3009 data when that
+USDC EIP-3009 descriptor with an exact v2 nonce+r+s+v ABI-path patch. The connected wallet separately signs EIP-3009 data when that
 mode is selected. Only after exact-source graph admission and Router simulation does the website present the Router
 transaction. The CLI never accepts an API key argument, signs, requests approval, or broadcasts either wallet action.
 
@@ -83,8 +83,10 @@ can exchange against incoming assets. Funding mode `none` does not make an empty
    contain exact `content`; URL-only sources are rejected. Exact decoded Standard JSON is limited to 5,242,880 bytes
    per compilation unit and across all units in one request, with at most 2,048 sources per unit. Revision 3 requires
    exact solc `0.8.26+commit.8a97fa7a`.
-2. Create `programmable-launch.config.json` using the closed config contract below. Use exact file paths, constructor
-   values, initializer values, salts, public source revision, and evidence files. Do not enter derived hashes.
+2. Create `programmable-launch.config.json` using shipped schema
+   `schemas/programmable-launch-pack-config-v3.json` and the closed config contract below. Its byte-identical public URL
+   is <https://programmable.market/schemas/custom-launch/v3/pack-config.json>. Use exact file paths, constructor values,
+   initializer values, salts, public source revision, and evidence files. Do not enter derived hashes.
 3. Run the offline commands first:
 
 ```sh
@@ -163,6 +165,13 @@ Those fee values are decimal hundredths of a bip from `0` through `999999`; addi
 additional `1000` platform units fit the denominator. `payoutRecipient` is present only for the immutable mode and
 must equal `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The EIP-3009 mode additionally requires the exact
 `fundingAuthorization` and unsigned `fundingSignaturePatch` top-level objects; the other funding modes forbid them.
+For new requests the patch input contains exactly `targetId`, `nonceArgumentPath`, `rArgumentPath`, `sArgumentPath`,
+and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
+initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
+leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.2.0
+schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
+`FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
 Router transaction value, and EIP-3009 funding requires zero native deployment and initializer value.
 
@@ -195,6 +204,16 @@ manifest, source descriptor, graph bundle, address locators, CREATE2 predictions
 bundle, graph hash, verification hash, and exact request-byte hash. It rejects unresolved libraries. It derives the
 full expected runtime hash from the compiler runtime template and the required `runtimeImmutables`; it never accepts a
 hand-written runtime hash.
+
+## Machine-readable remediation
+
+Local integration failures expose `programmable.launch-cli-diagnostic.v1` on the thrown error and as canonical JSON
+after `Programmable CLI diagnostic:` on stderr. The object includes a stable code, stage, expected and observed values,
+and public documentation/catalog URLs. Stable local repair codes include `PACK_CONFIG_V3_MISSING`,
+`PACK_CONFIG_V3_INVALID`, `FUNDING_AUTHORIZATION_PATCH_PATH_INVALID`, and the legacy migration code
+`FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL`. Raw source-string indicators never become hard safety findings; a legacy
+descriptor may instead return nonblocking `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
+`FUNDING_NONCE_CONFORMANCE_UNPROVEN`. Exact Router simulation remains the execution gate.
 
 V3 deterministic packaging permits project-owned proxy or delegating hook runtimes. Exact source, compiler, config,
 runtime, graph, and request binding proves reproducibility, not safety approval. Role-aware platform admission,

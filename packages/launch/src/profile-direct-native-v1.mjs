@@ -35,6 +35,7 @@ import {
   FUNDING_AUTHORIZATION_METHOD,
   FUNDING_WALLET_TRANSACTION_VALUE_METHOD,
   FUNDING_SIGNATURE_PATCH_SCHEMA,
+  FUNDING_SIGNATURE_PATCH_SCHEMA_V2,
   FUNDING_INTENT_HASH_DOMAIN,
   FUNDING_NONCE_DOMAIN,
   GRAPH_FACTORY,
@@ -62,6 +63,7 @@ import {
   ROUTER,
   ROUTER_RUNTIME_CODE_HASH,
 } from "./constants.mjs";
+import { createCliDiagnosticError } from "./diagnostics.mjs";
 import { assertExactKeys, sha256Digest } from "./io.mjs";
 
 const HEX32 = /^0x[0-9a-f]{64}$/;
@@ -559,9 +561,95 @@ export function validateDirectNativePermitWindow(value, { nowSeconds } = {}) {
 }
 
 export function buildFundingSignaturePatch(input, graphBundle, initializerArtifact) {
+  if (isFundingAuthorizationPatchV2Input(input)) {
+    return buildFundingAuthorizationPatchV2(input, graphBundle, initializerArtifact);
+  }
   const patch = deriveFundingSignaturePatch(input, graphBundle);
   validateFundingSignaturePatchAbi(patch, graphBundle, initializerArtifact);
   return patch;
+}
+
+function buildFundingAuthorizationPatchV2(input, graphBundle, initializerArtifact) {
+  try {
+    return deriveFundingAuthorizationPatchV2(input, graphBundle, initializerArtifact);
+  } catch (error) {
+    if (error?.code === "FUNDING_AUTHORIZATION_PATCH_PATH_INVALID") throw error;
+    throw createCliDiagnosticError({
+      code: "FUNDING_AUTHORIZATION_PATCH_PATH_INVALID",
+      stage: "signature-patch",
+      targetId: typeof input?.targetId === "string" ? input.targetId : undefined,
+      targetRole: "initializer",
+      sourcePath: initializerArtifact?.sourcePath,
+      summary: "The EIP-3009 v2 authorization paths must resolve to four distinct zero-valued static ABI leaves in the exact initializer function.",
+      expected: {
+        pathFormat: "nonempty array of zero-based ABI component indices",
+        leafTypes: {
+          nonceArgumentPath: "bytes32",
+          rArgumentPath: "bytes32",
+          sArgumentPath: "bytes32",
+          vArgumentPath: "uint8",
+        },
+        parentTypes: "top-level input, static tuple, or fixed-size static array",
+        unsignedLeafValue: "zero",
+      },
+      observed: {
+        paths: {
+          nonceArgumentPath: input?.nonceArgumentPath ?? null,
+          rArgumentPath: input?.rArgumentPath ?? null,
+          sArgumentPath: input?.sArgumentPath ?? null,
+          vArgumentPath: input?.vArgumentPath ?? null,
+        },
+        reason: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+}
+
+function deriveFundingAuthorizationPatchV2(input, graphBundle, initializerArtifact) {
+  assertExactKeys(input, [
+    "targetId",
+    "nonceArgumentPath",
+    "rArgumentPath",
+    "sArgumentPath",
+    "vArgumentPath",
+  ], "fundingSignaturePatch v2 input");
+  const targetId = canonicalIdentifier(input.targetId, "fundingSignaturePatch.targetId");
+  const target = graphBundle.targets.find((candidate) => candidate.targetId === targetId);
+  if (!target) throw new TypeError("fundingSignaturePatch target is absent from graph");
+  const calldata = Buffer.from(target.initializerCalldata.slice(2), "hex");
+  const patch = {
+    schemaVersion: FUNDING_SIGNATURE_PATCH_SCHEMA_V2,
+    targetId,
+    unsignedInitializerCalldataSha256: sha256Digest(calldata),
+    initializerCalldataLengthBytes: calldata.byteLength,
+    authorizationEncoding: "eip3009-nonce-r-s-v-abi-leaves",
+    nonceArgumentPath: canonicalAbiArgumentPath(input.nonceArgumentPath, "nonceArgumentPath"),
+    rArgumentPath: canonicalAbiArgumentPath(input.rArgumentPath, "rArgumentPath"),
+    sArgumentPath: canonicalAbiArgumentPath(input.sArgumentPath, "sArgumentPath"),
+    vArgumentPath: canonicalAbiArgumentPath(input.vArgumentPath, "vArgumentPath"),
+  };
+  if (new Set([
+    patch.nonceArgumentPath,
+    patch.rArgumentPath,
+    patch.sArgumentPath,
+    patch.vArgumentPath,
+  ].map((argumentPath) => argumentPath.join("/"))).size !== 4) {
+    throw new TypeError("fundingSignaturePatch v2 argument paths must be distinct");
+  }
+  validateFundingAuthorizationPatchV2Abi(patch, graphBundle, initializerArtifact);
+  return patch;
+}
+
+function isFundingAuthorizationPatchV2Input(input) {
+  return input !== null
+    && typeof input === "object"
+    && !Array.isArray(input)
+    && [
+      "nonceArgumentPath",
+      "rArgumentPath",
+      "sArgumentPath",
+      "vArgumentPath",
+    ].some((key) => Object.hasOwn(input, key));
 }
 
 function deriveFundingSignaturePatch(input, graphBundle) {
@@ -724,6 +812,9 @@ function poolId(poolKey) {
 }
 
 function validateFundingSignaturePatch(value, initializerTargetId, graphBundle) {
+  if (value?.schemaVersion === FUNDING_SIGNATURE_PATCH_SCHEMA_V2) {
+    return validateFundingAuthorizationPatchV2(value, initializerTargetId, graphBundle);
+  }
   assertExactKeys(value, [
     "schemaVersion",
     "targetId",
@@ -747,6 +838,50 @@ function validateFundingSignaturePatch(value, initializerTargetId, graphBundle) 
   }, graphBundle);
   if (canonicalizeJson(value) !== canonicalizeJson(expected)) {
     throw new TypeError("fundingSignaturePatch does not match unsigned initializer calldata");
+  }
+  return expected;
+}
+
+function validateFundingAuthorizationPatchV2(value, initializerTargetId, graphBundle) {
+  assertExactKeys(value, [
+    "schemaVersion",
+    "targetId",
+    "unsignedInitializerCalldataSha256",
+    "initializerCalldataLengthBytes",
+    "authorizationEncoding",
+    "nonceArgumentPath",
+    "rArgumentPath",
+    "sArgumentPath",
+    "vArgumentPath",
+  ], "fundingSignaturePatch v2");
+  if (value.targetId !== initializerTargetId
+    || value.authorizationEncoding !== "eip3009-nonce-r-s-v-abi-leaves") {
+    throw new TypeError("fundingSignaturePatch v2 identity does not match the initializer role");
+  }
+  const target = graphBundle.targets.find(({ targetId }) => targetId === value.targetId);
+  if (!target) throw new TypeError("fundingSignaturePatch v2 target is absent from graph");
+  const calldata = Buffer.from(target.initializerCalldata.slice(2), "hex");
+  const expected = {
+    schemaVersion: FUNDING_SIGNATURE_PATCH_SCHEMA_V2,
+    targetId: value.targetId,
+    unsignedInitializerCalldataSha256: sha256Digest(calldata),
+    initializerCalldataLengthBytes: calldata.byteLength,
+    authorizationEncoding: "eip3009-nonce-r-s-v-abi-leaves",
+    nonceArgumentPath: canonicalAbiArgumentPath(value.nonceArgumentPath, "nonceArgumentPath"),
+    rArgumentPath: canonicalAbiArgumentPath(value.rArgumentPath, "rArgumentPath"),
+    sArgumentPath: canonicalAbiArgumentPath(value.sArgumentPath, "sArgumentPath"),
+    vArgumentPath: canonicalAbiArgumentPath(value.vArgumentPath, "vArgumentPath"),
+  };
+  if (new Set([
+    expected.nonceArgumentPath,
+    expected.rArgumentPath,
+    expected.sArgumentPath,
+    expected.vArgumentPath,
+  ].map((argumentPath) => argumentPath.join("/"))).size !== 4) {
+    throw new TypeError("fundingSignaturePatch v2 argument paths must be distinct");
+  }
+  if (canonicalizeJson(value) !== canonicalizeJson(expected)) {
+    throw new TypeError("fundingSignaturePatch v2 does not match unsigned initializer calldata");
   }
   return expected;
 }
@@ -816,6 +951,45 @@ function validateFundingSignaturePatchAbi(patch, graphBundle, initializerArtifac
       "fundingSignaturePatch initializer calldata is not the exact canonical full ABI encoding",
     );
   }
+  const legacySlots = [
+    { label: "r", offset: patch.rOffsetBytes, expectedType: "bytes32" },
+    { label: "s", offset: patch.sOffsetBytes, expectedType: "bytes32" },
+    { label: "v", offset: patch.vOffsetBytes, expectedType: "uint8" },
+  ].map((slot) => ({
+    ...slot,
+    observed: describeAbiWordLocation(selected.inputs ?? [], slot.offset),
+  }));
+  const incompatibleSlots = legacySlots.filter(({ expectedType, observed }) =>
+    observed.location !== "top-level-argument"
+      || observed.abiType !== expectedType);
+  if (incompatibleSlots.length !== 0) {
+    throw createCliDiagnosticError({
+      code: "FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL",
+      stage: "signature-patch",
+      targetId: patch.targetId,
+      targetRole: "initializer",
+      sourcePath: initializerArtifact.sourcePath,
+      summary: "Legacy EIP-3009 offsets do not identify top-level bytes32 r/s and top-level uint8 v ABI scalar arguments; use the v2 nonce+r+s+v argument-path descriptor.",
+      expected: {
+        legacyV1: {
+          r: { location: "top-level-argument", abiType: "bytes32" },
+          s: { location: "top-level-argument", abiType: "bytes32" },
+          v: { location: "top-level-argument", abiType: "uint8" },
+        },
+        preferredV2ConfigFields: [
+          "targetId",
+          "nonceArgumentPath",
+          "rArgumentPath",
+          "sArgumentPath",
+          "vArgumentPath",
+        ],
+      },
+      observed: {
+        initializerFunction: selected.name,
+        incompatibleSlots,
+      },
+    });
+  }
   assertPatchWordAbiType({
     calldata,
     abiEntry: selected,
@@ -852,6 +1026,168 @@ function validateFundingSignaturePatchAbi(patch, graphBundle, initializerArtifac
       [patch.vOffsetBytes, Buffer.concat([Buffer.alloc(31), Buffer.from([27])])],
     ],
   });
+}
+
+function validateFundingAuthorizationPatchV2Abi(patch, graphBundle, initializerArtifact) {
+  if (initializerArtifact === null
+    || typeof initializerArtifact !== "object"
+    || initializerArtifact.targetId !== patch.targetId
+    || !Array.isArray(initializerArtifact.abi)
+    || initializerArtifact.initializer === null
+    || typeof initializerArtifact.initializer !== "object"
+    || Array.isArray(initializerArtifact.initializer)
+    || typeof initializerArtifact.initializer.function !== "string") {
+    throw new TypeError(
+      "fundingSignaturePatch v2 requires the exact initializer target artifact and function",
+    );
+  }
+  const target = graphBundle.targets.find(({ targetId }) => targetId === patch.targetId);
+  if (!target) throw new TypeError("fundingSignaturePatch v2 initializer target is absent from graph");
+  const selector = target.initializerCalldata.slice(0, 10);
+  const candidates = initializerArtifact.abi.filter((entry) => {
+    if (entry?.type !== "function") return false;
+    try {
+      return toFunctionSelector(entry) === selector;
+    } catch {
+      return false;
+    }
+  });
+  if (candidates.length !== 1) {
+    throw new TypeError(
+      "fundingSignaturePatch v2 initializer selector must resolve to exactly one artifact ABI entry",
+    );
+  }
+  const selected = candidates[0];
+  if (selected.name !== initializerArtifact.initializer.function) {
+    throw new TypeError(
+      "fundingSignaturePatch v2 initializer selector does not match the configured artifact function",
+    );
+  }
+  const calldata = target.initializerCalldata;
+  assertCanonicalInitializerCalldata(calldata, selected, "fundingSignaturePatch v2");
+  const leaves = [
+    {
+      label: "nonce",
+      path: patch.nonceArgumentPath,
+      expectedType: "bytes32",
+      replacementWord: Buffer.from("33".repeat(32), "hex"),
+    },
+    {
+      label: "r",
+      path: patch.rArgumentPath,
+      expectedType: "bytes32",
+      replacementWord: Buffer.from("11".repeat(32), "hex"),
+    },
+    {
+      label: "s",
+      path: patch.sArgumentPath,
+      expectedType: "bytes32",
+      replacementWord: Buffer.from("22".repeat(32), "hex"),
+    },
+    {
+      label: "v",
+      path: patch.vArgumentPath,
+      expectedType: "uint8",
+      replacementWord: Buffer.concat([Buffer.alloc(31), Buffer.from([27])]),
+    },
+  ].map((leaf) => ({
+    ...leaf,
+    offset: abiStaticLeafOffset(
+      selected.inputs ?? [],
+      leaf.path,
+      leaf.expectedType,
+      `fundingSignaturePatch v2 ${leaf.label}ArgumentPath`,
+    ),
+  }));
+  if (new Set(leaves.map(({ offset }) => offset)).size !== leaves.length) {
+    throw new TypeError("fundingSignaturePatch v2 argument paths resolve to overlapping ABI words");
+  }
+  assertFundingAuthorizationPatchLocatorDisjointness(
+    leaves,
+    target.initializerAddressLocators ?? [],
+  );
+  for (const leaf of leaves) {
+    canonicalPatchOffset(
+      leaf.offset,
+      Buffer.from(calldata.slice(2), "hex"),
+      `v2 ${leaf.label}`,
+    );
+    assertCanonicalAbiWordPatch({
+      calldata,
+      abiEntry: selected,
+      offset: leaf.offset,
+      replacementWord: leaf.replacementWord,
+      label: `fundingSignaturePatch v2 ${leaf.label}`,
+    });
+  }
+  assertCombinedFundingSignaturePatchAbi({
+    calldata,
+    abiEntry: selected,
+    replacements: leaves.map(({ offset, replacementWord }) => [offset, replacementWord]),
+  });
+}
+
+function assertFundingAuthorizationPatchLocatorDisjointness(leaves, locators) {
+  for (const locator of locators) {
+    const locatorLength = locator.encoding === "abi-address-word"
+      ? 32
+      : locator.encoding === "packed-address-20"
+        ? 20
+        : null;
+    if (locatorLength === null
+      || !Number.isSafeInteger(locator.byteOffset)
+      || locator.byteOffset < 0) {
+      throw new TypeError("fundingSignaturePatch v2 target has an invalid initializer address locator");
+    }
+    const locatorEnd = locator.byteOffset + locatorLength;
+    for (const leaf of leaves) {
+      const leafEnd = leaf.offset + 32;
+      if (leaf.offset < locatorEnd && locator.byteOffset < leafEnd) {
+        throw new TypeError(
+          `fundingSignaturePatch v2 ${leaf.label} ABI leaf overlaps an ${locator.encoding} initializer address locator`,
+        );
+      }
+    }
+  }
+}
+
+function assertCanonicalInitializerCalldata(calldata, abiEntry, label) {
+  let decoded;
+  let reencoded;
+  try {
+    decoded = decodeFunctionData({ abi: [abiEntry], data: calldata });
+    reencoded = encodeFunctionData({
+      abi: [abiEntry],
+      functionName: abiEntry.name,
+      args: decoded.args ?? [],
+    }).toLowerCase();
+  } catch {
+    throw new TypeError(`${label} initializer calldata does not match the compiled ABI`);
+  }
+  if (decoded.functionName !== abiEntry.name || reencoded !== calldata) {
+    throw new TypeError(`${label} initializer calldata is not exact canonical ABI encoding`);
+  }
+}
+
+function assertCanonicalAbiWordPatch({ calldata, abiEntry, offset, replacementWord, label }) {
+  const bytes = Buffer.from(calldata.slice(2), "hex");
+  replacementWord.copy(bytes, offset);
+  const patchedCalldata = `0x${bytes.toString("hex")}`;
+  let decoded;
+  let reencoded;
+  try {
+    decoded = decodeFunctionData({ abi: [abiEntry], data: patchedCalldata });
+    reencoded = encodeFunctionData({
+      abi: [abiEntry],
+      functionName: abiEntry.name,
+      args: decoded.args ?? [],
+    }).toLowerCase();
+  } catch {
+    throw new TypeError(`${label} is not a decodable canonical static ABI leaf`);
+  }
+  if (reencoded !== patchedCalldata) {
+    throw new TypeError(`${label} is not a canonical static ABI leaf`);
+  }
 }
 
 function assertPatchWordAbiType({
@@ -925,6 +1261,93 @@ function topLevelInputIndexAtOffset(inputs, offset, expectedType) {
   return -1;
 }
 
+function describeAbiWordLocation(inputs, offset) {
+  let cursor = 4;
+  for (let index = 0; index < inputs.length; index += 1) {
+    const input = inputs[index];
+    const words = staticAbiWords(input);
+    const byteLength = 32 * (words ?? 1);
+    if (offset === cursor) {
+      return {
+        location: "top-level-argument",
+        inputIndex: index,
+        abiType: input.type,
+      };
+    }
+    if (words !== null && offset > cursor && offset < cursor + byteLength) {
+      return {
+        location: "nested-static-word",
+        parentInputIndex: index,
+        parentAbiType: input.type,
+        relativeOffsetBytes: offset - cursor,
+      };
+    }
+    cursor += byteLength;
+  }
+  return { location: "not-an-abi-argument-head" };
+}
+
+function canonicalAbiArgumentPath(value, label) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 16
+    || value.some((entry) => !Number.isSafeInteger(entry) || entry < 0 || entry > 255)) {
+    throw new TypeError(`${label} must be a nonempty array of zero-based ABI indices`);
+  }
+  return [...value];
+}
+
+function abiStaticLeafOffset(inputs, argumentPath, expectedType, label) {
+  const path = canonicalAbiArgumentPath(argumentPath, label);
+  const topLevelIndex = path[0];
+  if (topLevelIndex >= inputs.length) {
+    throw new TypeError(`${label} top-level input index is out of bounds`);
+  }
+  let offset = 4;
+  for (let index = 0; index < topLevelIndex; index += 1) {
+    offset += 32 * (staticAbiWords(inputs[index]) ?? 1);
+  }
+  let parameter = inputs[topLevelIndex];
+  for (const componentIndex of path.slice(1)) {
+    if (staticAbiWords(parameter) === null) {
+      throw new TypeError(`${label} descends through a dynamic ABI parent`);
+    }
+    const fixedArray = /^(.*)\[([0-9]+)\]$/u.exec(parameter.type);
+    if (fixedArray !== null) {
+      const arrayLength = Number(fixedArray[2]);
+      if (componentIndex >= arrayLength) {
+        throw new TypeError(`${label} fixed-array index is out of bounds`);
+      }
+      const element = { ...parameter, type: fixedArray[1] };
+      const elementWords = staticAbiWords(element);
+      if (elementWords === null) {
+        throw new TypeError(`${label} descends through a dynamic fixed-array element`);
+      }
+      offset += componentIndex * elementWords * 32;
+      parameter = element;
+      continue;
+    }
+    if (parameter.type !== "tuple") {
+      throw new TypeError(`${label} continues past a scalar ABI leaf`);
+    }
+    const components = parameter.components ?? [];
+    if (componentIndex >= components.length) {
+      throw new TypeError(`${label} tuple component index is out of bounds`);
+    }
+    for (let index = 0; index < componentIndex; index += 1) {
+      const words = staticAbiWords(components[index]);
+      if (words === null) throw new TypeError(`${label} descends through a dynamic tuple`);
+      offset += words * 32;
+    }
+    parameter = components[componentIndex];
+  }
+  if (parameter.type !== expectedType) {
+    throw new TypeError(`${label} resolves to ${parameter.type}, expected ${expectedType}`);
+  }
+  if (staticAbiWords(parameter) !== 1) {
+    throw new TypeError(`${label} must resolve to one static ABI word`);
+  }
+  return offset;
+}
+
 function staticAbiWords(parameter) {
   const array = /^(.*)\[([0-9]*)\]$/.exec(parameter.type);
   if (array !== null) {
@@ -960,12 +1383,12 @@ function assertCombinedFundingSignaturePatchAbi({ calldata, abiEntry, replacemen
     }).toLowerCase();
   } catch {
     throw new TypeError(
-      "fundingSignaturePatch combined r/s/v patch is not exact canonical initializer ABI calldata",
+      "fundingSignaturePatch combined nonce/r/s/v patch is not exact canonical initializer ABI calldata",
     );
   }
   if (reencoded !== patchedCalldata) {
     throw new TypeError(
-      "fundingSignaturePatch combined r/s/v patch is not exact canonical initializer ABI calldata",
+      "fundingSignaturePatch combined nonce/r/s/v patch is not exact canonical initializer ABI calldata",
     );
   }
 }
