@@ -294,7 +294,7 @@ describe("developer API key interface", () => {
       "pack -> validate --remote -> submit -> wallet -> status",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
-      "programmable-launch-v3.3.2",
+      "programmable-launch-v3.3.3",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "Before pack, collect the project name and symbol",
