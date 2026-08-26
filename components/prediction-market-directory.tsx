@@ -1,14 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, RotateCw } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ExploreModeSwitch } from "@/components/explore-mode-switch";
 import styles from "@/components/prediction-market-experience.module.css";
 import { predictionPreviewMarkets } from "@/components/prediction-market-preview";
-import { getPredictionMarketReleaseConfig } from "@/lib/prediction-market-chain";
+import {
+  createPredictionMarketPublicClients,
+  getPredictionMarketReleaseConfig,
+} from "@/lib/prediction-market-chain";
+import {
+  PREDICTION_DIRECTORY_LOAD_DEADLINE_MS,
+  PREDICTION_DIRECTORY_PAGE_SIZE,
+  PredictionDirectoryReadTimeoutError,
+  readPredictionDirectoryWithinDeadline,
+} from "@/lib/prediction-directory-load-policy";
 import { predictionMarketErrorMessage } from "@/lib/prediction-market-errors";
 import {
   formatPredictionPriceAtoms,
@@ -26,7 +35,10 @@ type DirectoryState =
     }
   | { kind: "error"; message: string };
 
-const DIRECTORY_PAGE_SIZE = 12;
+const DIRECTORY_TIMEOUT_MESSAGE =
+  "Two-provider verification did not finish in time. No unverified market data was shown.";
+const DIRECTORY_UNAVAILABLE_MESSAGE =
+  "The verified market list could not be loaded. No unverified market data was shown.";
 
 function errorMessage(error: unknown) {
   return predictionMarketErrorMessage(
@@ -127,10 +139,14 @@ export function PredictionMarketDirectoryView() {
   const [state, setState] = useState<DirectoryState>({ kind: "loading" });
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState("");
+  const [retryGeneration, setRetryGeneration] = useState(0);
+  const olderRequestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let active = true;
-    if (!release.config) {
+    const controller = new AbortController();
+    const config = release.config;
+    if (!config) {
       const timer = window.setTimeout(() => {
         if (!active) return;
         setState({
@@ -143,9 +159,14 @@ export function PredictionMarketDirectoryView() {
         window.clearTimeout(timer);
       };
     }
-    void readPredictionMarketDirectory({
-      config: release.config,
-      limit: DIRECTORY_PAGE_SIZE,
+    void readPredictionDirectoryWithinDeadline({
+      read: (signal) => readPredictionMarketDirectory({
+        clients: createPredictionMarketPublicClients(config, { signal }),
+        config,
+        limit: PREDICTION_DIRECTORY_PAGE_SIZE,
+      }),
+      signal: controller.signal,
+      timeoutMs: PREDICTION_DIRECTORY_LOAD_DEADLINE_MS,
     })
       .then((directory) => {
         if (active) {
@@ -157,29 +178,48 @@ export function PredictionMarketDirectoryView() {
         }
       })
       .catch((error) => {
-        if (active) setState({ kind: "error", message: errorMessage(error) });
+        if (!active || controller.signal.aborted) return;
+        setState({
+          kind: "error",
+          message: error instanceof PredictionDirectoryReadTimeoutError
+            ? DIRECTORY_TIMEOUT_MESSAGE
+            : DIRECTORY_UNAVAILABLE_MESSAGE,
+        });
       });
     return () => {
       active = false;
+      controller.abort();
+      olderRequestRef.current?.abort();
+      olderRequestRef.current = null;
     };
-  }, [release.config]);
+  }, [release.config, retryGeneration]);
 
   async function loadOlderMarkets() {
+    const config = release.config;
     if (
-      !release.config ||
+      !config ||
       state.kind !== "live" ||
       state.nextCursor === 0n ||
       loadingOlder
     )
       return;
+    const controller = new AbortController();
+    olderRequestRef.current?.abort();
+    olderRequestRef.current = controller;
     setLoadingOlder(true);
     setOlderError("");
     try {
-      const directory = await readPredictionMarketDirectory({
-        config: release.config,
-        cursor: state.nextCursor,
-        limit: DIRECTORY_PAGE_SIZE,
+      const directory = await readPredictionDirectoryWithinDeadline({
+        read: (signal) => readPredictionMarketDirectory({
+          clients: createPredictionMarketPublicClients(config, { signal }),
+          config,
+          cursor: state.nextCursor,
+          limit: PREDICTION_DIRECTORY_PAGE_SIZE,
+        }),
+        signal: controller.signal,
+        timeoutMs: PREDICTION_DIRECTORY_LOAD_DEADLINE_MS,
       });
+      if (controller.signal.aborted) return;
       setState((current) => {
         if (current.kind !== "live") return current;
         const known = new Set(
@@ -197,13 +237,26 @@ export function PredictionMarketDirectoryView() {
         };
       });
     } catch (error) {
-      setOlderError(errorMessage(error));
+      if (controller.signal.aborted) return;
+      setOlderError(
+        error instanceof PredictionDirectoryReadTimeoutError
+          ? DIRECTORY_TIMEOUT_MESSAGE
+          : DIRECTORY_UNAVAILABLE_MESSAGE,
+      );
     } finally {
-      setLoadingOlder(false);
+      if (olderRequestRef.current === controller) {
+        olderRequestRef.current = null;
+        setLoadingOlder(false);
+      }
     }
   }
 
   const markets = "markets" in state ? state.markets : [];
+
+  function retryDirectory() {
+    setState({ kind: "loading" });
+    setRetryGeneration((current) => current + 1);
+  }
 
   return (
     <main className={`page-width ${styles.directoryPage}`}>
@@ -228,16 +281,27 @@ export function PredictionMarketDirectoryView() {
       {release.error ? (
         <p className={styles.errorBanner}>{release.error}</p>
       ) : null}
-      {state.kind === "error" ? (
-        <p className={styles.errorBanner} role="alert">
-          {state.message}
-        </p>
-      ) : null}
-
-      <section className={styles.directoryList} aria-label="Prediction markets">
+      <section
+        aria-busy={state.kind === "loading" || loadingOlder || undefined}
+        className={styles.directoryList}
+        aria-label="Prediction markets"
+      >
         {state.kind === "loading" ? (
           <div className={styles.marketLoading} aria-live="polite">
             Loading predictions…
+          </div>
+        ) : state.kind === "error" ? (
+          <div className={styles.marketLoading} aria-live="polite">
+            <strong>Predictions are temporarily unavailable</strong>
+            <span>{state.message}</span>
+            <button
+              className={`${styles.loadMoreMarkets} ${styles.retryMarkets}`}
+              onClick={retryDirectory}
+              type="button"
+            >
+              <RotateCw aria-hidden="true" size={15} />
+              Retry
+            </button>
           </div>
         ) : markets.length ? (
           <div className={styles.marketGrid}>
