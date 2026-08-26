@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.2.0";
+export const PACKAGE_VERSION = "3.2.1";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -122,8 +122,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.2.0";
-export const RELEASE_TARBALL = "programmable-launch-3.2.0.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.2.1";
+export const RELEASE_TARBALL = "programmable-launch-3.2.1.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =

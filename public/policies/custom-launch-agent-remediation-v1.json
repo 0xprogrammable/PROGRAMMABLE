@@ -16,9 +16,11 @@
     "packConfigSchemaUrl": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
     "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
     "openApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
-    "cliReleaseVersion": "3.2.0",
-    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.0",
-    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz"
+    "cliReleaseVersion": "3.2.1",
+    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.1",
+    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+    "cliTarballSha256": "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",

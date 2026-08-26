@@ -452,7 +452,7 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.2.0" },
+    info: { version: "3.2.1" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileVersion: "3.0.0",
@@ -488,6 +488,22 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     chain: observation.chain,
   };
   observation.api.readinessIdentitySha256 = digest(Buffer.from(canonicalize(readiness)));
+  const launchTarballBytes = Buffer.from("fixture programmable launch package", "utf8");
+  const launchTarballSha256 = digest(launchTarballBytes);
+  const expectedLaunchPackageRelease = {
+    version: "3.2.1",
+    tarballUrl:
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+    checksumUrl:
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+    tarballSha256: launchTarballSha256,
+  };
+  const launchChecksumBytes = Buffer.from(
+    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.2.1.tgz\n`,
+    "utf8",
+  );
+  let launchTarballBody = launchTarballBytes;
+  let launchChecksumBody = launchChecksumBytes;
   const calls = [];
   let listBody = {
     schemaVersion: "programmable.custom-launch-list.v3",
@@ -496,17 +512,45 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   };
   const fetchImpl = async (input, init) => {
     const url = new URL(input);
-    calls.push({ url: url.href, method: init.method, authorization: init.headers.authorization });
+    calls.push({
+      url: url.href,
+      method: init.method,
+      authorization: init.headers.authorization,
+      bypass: init.headers["x-vercel-protection-bypass"],
+      redirect: init.redirect,
+    });
     if (url.pathname === "/openapi/custom-launch-v3.json") return new Response(openApiBytes, { status: 200 });
     if (url.pathname === "/.well-known/programmable.json") return Response.json({
       customLaunchApi: {
         versions: { v3: { status: "live", publicAuthorization: true } },
+        cli: {
+          releaseVersion: expectedLaunchPackageRelease.version,
+          tarballUrl: expectedLaunchPackageRelease.tarballUrl,
+          checksumUrl: expectedLaunchPackageRelease.checksumUrl,
+          tarballSha256: expectedLaunchPackageRelease.tarballSha256,
+        },
         legacyIntake: { registry: "closed", github: "closed" },
       },
     });
+    if (url.pathname === "/policies/custom-launch-agent-remediation-v1.json") {
+      return Response.json({
+        authoritativeSources: {
+          cliReleaseVersion: expectedLaunchPackageRelease.version,
+          cliTarballUrl: expectedLaunchPackageRelease.tarballUrl,
+          cliChecksumUrl: expectedLaunchPackageRelease.checksumUrl,
+          cliTarballSha256: expectedLaunchPackageRelease.tarballSha256,
+        },
+      });
+    }
     if (url.pathname === "/readyz") return Response.json(readiness, {
       headers: { "cache-control": "no-store" },
     });
+    if (url.href === expectedLaunchPackageRelease.tarballUrl) {
+      return new Response(launchTarballBody, { status: 200 });
+    }
+    if (url.href === expectedLaunchPackageRelease.checksumUrl) {
+      return new Response(launchChecksumBody, { status: 200 });
+    }
     if (url.pathname === "/v3/custom-launches") return Response.json(listBody);
     return new Response("not found", { status: 404 });
   };
@@ -517,6 +561,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     apiReleaseObservation: observation,
     apiKey: "canary-secret-value",
     vercelBypassSecret: "bypass-secret-value",
+    expectedLaunchPackageRelease,
     fetchImpl,
   });
   assert.equal(evidence.status, "passed");
@@ -524,7 +569,43 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   assert.equal(evidence.safety.transactionBroadcastObserved, false);
   assert.equal(JSON.stringify(evidence).includes("canary-secret-value"), false);
   assert.deepEqual(new Set(calls.map((call) => call.method)), new Set(["GET"]));
-  assert.equal(calls.at(-1).authorization, "Bearer canary-secret-value");
+  const githubCalls = calls.filter(({ url }) => url.startsWith("https://github.com/"));
+  assert.equal(githubCalls.length, 2);
+  assert.ok(githubCalls.every(({ authorization }) => authorization === undefined));
+  assert.ok(githubCalls.every(({ bypass }) => bypass === undefined));
+  assert.ok(githubCalls.every(({ redirect }) => redirect === "follow"));
+  assert.equal(
+    calls.find(({ url }) => url.includes("/v3/custom-launches?limit=1"))?.authorization,
+    "Bearer canary-secret-value",
+  );
+  assert.equal(evidence.website.cli.releaseVersion, "3.2.1");
+  assert.equal(evidence.website.cli.tarballSha256, launchTarballSha256);
+
+  launchTarballBody = Buffer.concat([launchTarballBytes, Buffer.from([0])]);
+  await assert.rejects(() => probeCustomLaunchV3Release({
+    websiteUrl: "https://launcher-candidate.vercel.app",
+    websiteDeploymentId: "dpl_candidateProduction123456789",
+    expectedWebsiteCommitSha: hashes.a,
+    apiReleaseObservation: observation,
+    apiKey: "canary-secret-value",
+    vercelBypassSecret: "bypass-secret-value",
+    expectedLaunchPackageRelease,
+    fetchImpl,
+  }), /package bytes differ/u);
+  launchTarballBody = launchTarballBytes;
+
+  launchChecksumBody = Buffer.from("incorrect checksum\n", "utf8");
+  await assert.rejects(() => probeCustomLaunchV3Release({
+    websiteUrl: "https://launcher-candidate.vercel.app",
+    websiteDeploymentId: "dpl_candidateProduction123456789",
+    expectedWebsiteCommitSha: hashes.a,
+    apiReleaseObservation: observation,
+    apiKey: "canary-secret-value",
+    vercelBypassSecret: "bypass-secret-value",
+    expectedLaunchPackageRelease,
+    fetchImpl,
+  }), /package checksum differs/u);
+  launchChecksumBody = launchChecksumBytes;
 
   listBody = {
     schemaVersion: "programmable.custom-launch-list.v3",
@@ -538,6 +619,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     apiReleaseObservation: observation,
     apiKey: "canary-secret-value",
     vercelBypassSecret: "bypass-secret-value",
+    expectedLaunchPackageRelease,
     fetchImpl,
   }), /Custom Launch API V3 list has an unexpected shape/u);
 });

@@ -34,7 +34,7 @@ const PUBLIC_PROFILE_SCHEMA_VERSION =
   "programmable.direct-native-hook-graph-admission-profile.v3";
 const PUBLIC_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
 const PUBLIC_PROFILE_VERSION = "3.0.0";
-const LAUNCH_PACKAGE_VERSION = "3.2.0";
+const LAUNCH_PACKAGE_VERSION = "3.2.1";
 const PLATFORM_ADMISSION_POLICY = Object.freeze({
   schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
   mode: "deterministic-exact-source-graph-static-baseline-v1",
@@ -420,7 +420,7 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   }
   if (launchPackage?.name !== "@programmable/launch"
     || launchPackage?.version !== LAUNCH_PACKAGE_VERSION) {
-    throw new Error("launch package manifest is not the 3.2.0 public CLI contract");
+    throw new Error("launch package manifest is not the 3.2.1 public CLI contract");
   }
 }
 

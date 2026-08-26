@@ -67,7 +67,8 @@ describe("Custom Launch API documentation", () => {
     expect(createGuide).not.toContain("integration-pending");
     expect(createGuide).toContain("Never sign or broadcast automatically");
     for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
-      expect(source).toMatch(/action_required[\s\S]{0,300}(?:platform review|not a wallet)/i);
+      expect(source).toMatch(/action_required[\s\S]{0,300}not a wallet/i);
+      expect(source).not.toMatch(/platform review (?:supplies|provides)/i);
     }
   });
 
@@ -106,7 +107,7 @@ describe("Custom Launch API documentation", () => {
 
   it("publishes the exact-source and no-broadcast cold-agent path", () => {
     for (const source of [gitBookGuide, rawGuide, developerDocsMarkdown]) {
-      expect(source).toContain("programmable-launch-3.2.0.tgz");
+      expect(source).toContain("programmable-launch-3.2.1.tgz");
       expect(source).toContain("verificationBundle");
       expect(source).toContain("exact_match");
       expect(source).toContain("PROGRAMMABLE_API_KEY");
@@ -118,7 +119,7 @@ describe("Custom Launch API documentation", () => {
   });
 
   it("keeps the website agent prompt on the current public CLI release", () => {
-    expect(createGuide).toContain("public CLI 3.2.0 flow");
+    expect(createGuide).toContain("public CLI 3.2.1 flow");
     expect(createGuide).not.toContain("public CLI 3.1.0 flow");
   });
 
@@ -180,7 +181,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("productionLaunchAuthorized: true");
       expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
       expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
-      expect(source).toContain("programmable-launch-3.2.0.tgz.sha256");
+      expect(source).toContain("programmable-launch-3.2.1.tgz.sha256");
       expect(source).toContain("shasum -a 256 -c");
       expect(source).toMatch(/platform admission|admission receipt|static admission/i);
       expect(source).toMatch(/concrete reachable\s+callback implementation/i);

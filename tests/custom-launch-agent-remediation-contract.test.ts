@@ -89,6 +89,9 @@ describe("Custom Launch cold-agent remediation contract", () => {
   });
 
   it("publishes one deterministic existing-project workflow", () => {
+    const document = programmableWellKnownDocumentV1(
+      PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+    );
     expect(catalog).toMatchObject({
       schemaVersion:
         "programmable.custom-launch-agent-remediation-catalog.v1",
@@ -96,7 +99,11 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.2.0",
+        cliReleaseVersion: "3.2.1",
+        cliChecksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+        cliTarballSha256:
+          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
@@ -131,6 +138,12 @@ describe("Custom Launch cold-agent remediation contract", () => {
       "programmable-launch submit launch.json --config programmable-launch.config.json",
       "programmable-launch status REQUEST_UUID --watch --until authorized",
     ]);
+    expect(catalog.authoritativeSources.cliChecksumUrl).toBe(
+      document.customLaunchApi.cli.checksumUrl,
+    );
+    expect(catalog.authoritativeSources.cliTarballSha256).toBe(
+      document.customLaunchApi.cli.tarballSha256,
+    );
     expect(catalog.packConfig).toMatchObject({
       schemaVersion: "programmable.launch-pack-config.v3",
       schemaUrl: packConfigSchemaUrl,
@@ -178,7 +191,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.2.0");
+    expect(openApi.info.version).toBe("3.2.1");
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([
