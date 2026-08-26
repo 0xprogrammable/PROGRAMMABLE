@@ -327,12 +327,37 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
     expect(historySource).toContain("Admission checks running");
-    expect(historySource).toContain("Platform review required");
+    expect(historySource).toContain("Changes required");
+    expect(historySource).toContain("Fix source or configuration");
     expect(historySource).toContain(
-      "A deterministic indicator blocked Router simulation.",
+      "Fix the reported source or configuration finding",
     );
-    expect(historySource).toContain("support with request ID");
+    expect(historySource).toContain('launch.routeId === "custom-launch:create:v3"');
+    expect(historySource).toContain('? "v3"');
+    expect(historySource).toContain('? "v2"');
+    expect(historySource).toContain(': "v1"}/custom-launches/{launch.launchId}');
+    expect(historySource).toContain("PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation");
+    expect(historySource).toContain("Read the remediation catalog");
+    expect(historySource).toContain("manual or project-specific allowlist");
+    expect(historySource).toContain("This automated result is not a");
+    expect(historySource).toContain("safety verdict");
+    expect(historySource).not.toContain("Review required");
+    expect(historySource).not.toContain("Platform review required");
+    expect(historySource).not.toContain("needs platform review");
+    expect(historySource).toContain(
+      'launch.failure && launch.status !== "action_required"',
+    );
+    expect(historySource).toContain(
+      "When an API error includes a request ID and retrying does not",
+    );
+    expect(historySource).toContain("contact support with that ID");
     expect(historySource).toContain("Never send your API key.");
+    expect(historySource.indexOf("Open Programmable support")).toBeLessThan(
+      historySource.indexOf('state === "ready" && launches.length === 0'),
+    );
+    expect(historySource.indexOf("Read the remediation catalog")).toBeGreaterThan(
+      historySource.indexOf('launch.status === "action_required"'),
+    );
   });
 
   it("releases a stalled history refresh with a clear retry state", () => {
@@ -433,7 +458,7 @@ describe("developer launch history interface", () => {
     );
     expect(preparationPoller).toContain('updated.status === "action_required"');
     expect(preparationPoller).toContain(
-      "Platform review is required before Router simulation. No wallet action is needed.",
+      "Source or configuration changes are required before Router simulation. No wallet action is needed.",
     );
     expect(preparationPoller).toContain('"pending_review"');
     expect(preparationPoller).toContain('"prepared"');

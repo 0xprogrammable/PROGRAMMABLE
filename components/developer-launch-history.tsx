@@ -23,6 +23,8 @@ import {
   type CustomLaunchFundingAuthorizationV3,
   type CustomLaunchRouterReviewV3,
 } from "@/lib/custom-launch/wallet-handoff-v3";
+import { PROGRAMMABLE_AGENT_SETUP_LINKS_V1 } from
+  "@/lib/custom-launch/agent-setup-v1";
 
 type JsonValue =
   | null
@@ -318,7 +320,7 @@ function statusCopy(status: LaunchStatus) {
     case "received": return "Received";
     case "validating": return "Validating";
     case "pending_review": return "Admission checks running";
-    case "action_required": return "Review required";
+    case "action_required": return "Changes required";
     case "prepared": return "Prepared";
     case "awaiting_funding_authorization": return "Funding signature required";
     case "funding_authorization_verified": return "Funding verified";
@@ -336,7 +338,7 @@ function statusDescription(status: LaunchStatus) {
     case "received": return "The API accepted this request.";
     case "validating": return "The API is validating the request.";
     case "pending_review": return "Exact-source checks and the bounded static baseline are still running.";
-    case "action_required": return "A blocking static indicator needs platform review before Router simulation.";
+    case "action_required": return "Fix the reported source or configuration finding, then rebuild and submit a new immutable request.";
     case "prepared": return "The launch transaction has been prepared.";
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
@@ -989,7 +991,7 @@ export function DeveloperLaunchHistory({
           }
           if (updated.status === "action_required") {
             setStatusMessage(
-              "Platform review is required before Router simulation. No wallet action is needed.",
+              "Source or configuration changes are required before Router simulation. No wallet action is needed.",
             );
             return;
           }
@@ -1316,6 +1318,17 @@ export function DeveloperLaunchHistory({
         <div className={styles.statePanel} role="alert">
           <h3>Launch history is unavailable</h3>
           <p>{error}</p>
+          <p>
+            When an API error includes a request ID and retrying does not
+            resolve it, contact support with that ID. Never send your API key.
+          </p>
+          <a
+            href="https://discord.com/invite/programmable"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open Programmable support
+          </a>
           <button className={styles.secondaryButton} type="button" onClick={refresh}>
             Try again
           </button>
@@ -1379,26 +1392,35 @@ export function DeveloperLaunchHistory({
                     </div>
                   ) : null}
                 </dl>
-                {launch.failure ? (
+                {launch.failure && launch.status !== "action_required" ? (
                   <p className={styles.failure} role="alert">
                     {launch.failure.message}
                   </p>
                 ) : null}
                 {launch.status === "action_required" ? (
                   <div className={styles.admissionNotice} role="status">
-                    <strong>Platform review required</strong>
+                    <strong>Fix source or configuration</strong>
                     <p>
-                      A deterministic indicator blocked Router simulation. This
-                      is not a wallet action, audit, or safety verdict. Contact
-                      support with request ID <code>{launch.requestId}</code>.
-                      Never send your API key.
+                      Read the machine-readable finding from{" "}
+                      <code>
+                        GET /{launch.routeId === "custom-launch:create:v3"
+                          ? "v3"
+                          : launch.routeId === "custom-launch:create:v2"
+                            ? "v2"
+                            : "v1"}/custom-launches/{launch.launchId}
+                      </code>
+                      ,
+                      follow its remediation, then rebuild, repack and submit a
+                      new immutable request. This automated result is not a
+                      safety verdict. A manual or project-specific allowlist
+                      cannot bypass it.
                     </p>
                     <a
-                      href="https://discord.com/invite/programmable"
+                      href={PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation}
                       rel="noreferrer"
                       target="_blank"
                     >
-                      Open Programmable support
+                      Read the remediation catalog
                     </a>
                   </div>
                 ) : null}
