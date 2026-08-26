@@ -213,7 +213,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("Create a Classic coin");
     expect(html).toContain('data-status="live">Live API</small>');
     expect(html).toContain(
-      "Package, validate and submit a deterministic Custom launch through the public V2 API. Your connected wallet reviews and signs separately.",
+      "Package, validate and submit a deterministic Custom launch through the public V3 API. Your connected wallet reviews and signs separately.",
     );
     expect(html).toContain("Launch with the API");
     expect(html).not.toContain("approved GitHub revision");
