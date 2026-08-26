@@ -1,5 +1,5 @@
 export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
-  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
   guide: "https://programmable.market/docs/developers/custom-launch",
   openApi: "https://programmable.market/openapi/custom-launch-v3.json",
   openApiV2Compatibility:

@@ -11,8 +11,11 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_REVISION_V3,
+  DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
+  MAX_STANDARD_JSON_SOURCES,
   OPENAPI_URL_V1,
   OPENAPI_URL_V2,
   OPENAPI_URL_V3,
@@ -76,12 +79,21 @@ export async function buildLaunch({ configPath }) {
   const launchWallet = getAddress(config.launchWallet);
   const nonce = canonicalNonce(config.nonce);
 
-  const units = await loadCompilationUnits(config.compilationUnits, sourceRoot);
+  const units = await loadCompilationUnits(config.compilationUnits, sourceRoot, {
+    ...(apiVersion === "v3"
+      && launchProfileSelection.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V3
+      ? { maximumSources: MAX_STANDARD_JSON_SOURCES }
+      : {}),
+  });
   const unitsById = new Map(units.map((unit) => [unit.compilationUnitId, unit]));
   const targets = [];
   for (const [index, target] of config.targets.entries()) {
     targets.push(await loadTargetArtifact(target, index, sourceRoot, unitsById, {
       apiVersion: apiVersion === "v1" ? "v1" : "v2",
+      ...(apiVersion === "v3"
+        && launchProfileSelection.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V3
+        ? { requiredCompilerVersion: DIRECT_NATIVE_REQUIRED_SOLC_VERSION }
+        : {}),
     }));
   }
 

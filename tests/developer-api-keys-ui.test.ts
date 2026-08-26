@@ -7,6 +7,7 @@ import {
   type ApiKeySummary,
 } from "../components/developer-api-keys";
 import {
+  launchPollingRetryAfterMs,
   mergeLaunchResources,
   parseHistoryPage,
   selectMonotonicLaunchResource,
@@ -77,6 +78,24 @@ function launch(
     updatedAt,
     output: null,
     failure: null,
+  };
+}
+
+function v3Launch(
+  status: LaunchStatus,
+  sequence: number,
+): LaunchResource {
+  return {
+    ...launch(
+      "request-v3",
+      status,
+      new Date(Date.UTC(2026, 7, 25, 10, 0, sequence)).toISOString(),
+    ),
+    schemaVersion: "programmable.custom-launch.v3",
+    routeId: "custom-launch:create:v3",
+    launchProfileHash: `sha256:${"11".repeat(32)}`,
+    launchIntentHash: `sha256:${"22".repeat(32)}`,
+    fundingIntentHash: `0x${"33".repeat(32)}`,
   };
 }
 
@@ -294,6 +313,13 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
+    expect(historySource).toContain("Admission checks running");
+    expect(historySource).toContain("Platform review required");
+    expect(historySource).toContain(
+      "A deterministic indicator blocked Router simulation.",
+    );
+    expect(historySource).toContain("support with request ID");
+    expect(historySource).toContain("Never send your API key.");
   });
 
   it("releases a stalled history refresh with a clear retry state", () => {
@@ -308,6 +334,98 @@ describe("developer launch history interface", () => {
       "Launch history refresh timed out.",
     );
     expect(historySource).toContain("setRefreshing(false)");
+  });
+
+  it("retries both bounded single-resource pollers after safe 503 responses", () => {
+    expect(launchPollingRetryAfterMs(429, 3_000)).toBe(3_000);
+    expect(launchPollingRetryAfterMs(503, 7_000)).toBe(7_000);
+    expect(launchPollingRetryAfterMs(503, null)).toBeNull();
+    expect(launchPollingRetryAfterMs(500, 7_000)).toBeNull();
+
+    const postWalletStart = historySource.indexOf(
+      "const startStatusPolling = useCallback",
+    );
+    const preparationStart = historySource.indexOf(
+      "const startV3PreparationPolling = useCallback",
+      postWalletStart,
+    );
+    const preparationEnd = historySource.indexOf(
+      "const submitFundingAuthorization = async",
+      preparationStart,
+    );
+    expect(postWalletStart).toBeGreaterThan(-1);
+    expect(preparationStart).toBeGreaterThan(postWalletStart);
+    expect(preparationEnd).toBeGreaterThan(preparationStart);
+
+    for (const poller of [
+      historySource.slice(postWalletStart, preparationStart),
+      historySource.slice(preparationStart, preparationEnd),
+    ]) {
+      expect(poller).toContain("launchPollingRetryAfterMs(");
+      expect(poller).toContain("waitMs = retryAfterMs;");
+      expect(poller).toContain("continue;");
+      expect(poller).toContain("while (!controller.signal.aborted)");
+      expect(poller).toContain("if (terminalStatus(updated.status))");
+    }
+  });
+
+  it("keeps the complete EIP-3009 preparation lifecycle monotonic", () => {
+    const statuses: LaunchStatus[] = [
+      "received",
+      "validating",
+      "awaiting_funding_authorization",
+      "funding_authorization_verified",
+      "pending_review",
+      "prepared",
+      "simulating",
+      "authorized",
+      "submitted",
+      "finalized",
+    ];
+    const lifecycle = statuses.map((status, sequence) =>
+      v3Launch(status, sequence));
+    let current = lifecycle[0]!;
+    for (const incoming of lifecycle.slice(1)) {
+      current = selectMonotonicLaunchResource(current, incoming);
+      expect(current).toBe(incoming);
+    }
+
+    const pendingReview = v3Launch("pending_review", 4);
+    const actionRequired = v3Launch("action_required", 5);
+    const olderPendingReview = v3Launch("pending_review", 4);
+    const preparedAfterReview = v3Launch("prepared", 6);
+    expect(selectMonotonicLaunchResource(
+      pendingReview,
+      actionRequired,
+    )).toBe(actionRequired);
+    expect(selectMonotonicLaunchResource(
+      actionRequired,
+      olderPendingReview,
+    )).toBe(actionRequired);
+    expect(selectMonotonicLaunchResource(
+      actionRequired,
+      preparedAfterReview,
+    )).toBe(preparedAfterReview);
+
+    const preparationStart = historySource.indexOf(
+      "const startV3PreparationPolling = useCallback",
+    );
+    const preparationEnd = historySource.indexOf(
+      "const submitFundingAuthorization = async",
+      preparationStart,
+    );
+    const preparationPoller = historySource.slice(
+      preparationStart,
+      preparationEnd,
+    );
+    expect(preparationPoller).toContain('updated.status === "action_required"');
+    expect(preparationPoller).toContain(
+      "Platform review is required before Router simulation. No wallet action is needed.",
+    );
+    expect(preparationPoller).toContain('"pending_review"');
+    expect(preparationPoller).toContain('"prepared"');
+    expect(preparationPoller.indexOf('updated.status === "action_required"'))
+      .toBeLessThan(preparationPoller.indexOf("unexpected preparation status"));
   });
 
   it("hydrates compact V3 rows and rechecks the reviewed bytes before either wallet action", () => {

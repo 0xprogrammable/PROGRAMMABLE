@@ -9,10 +9,14 @@ Ethereum deployment identity.
 
 The profile digest is release-scoped: `api.publicProfileSha256` is the lowercase
 SHA-256 of the RFC 8785/JCS bytes of
-`services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json`.
+`services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json`.
 It is never a per-launch hook runtime hash. Each launch keeps its own
-request-bound `launchProfileHash`. This V2 profile binding is additive; the
-immutable V1 release-record history and V1 API compatibility remain unchanged.
+request-bound `launchProfileHash`. The revision 3 artifact binds the exact
+role-aware static admission baseline and Router-simulation boundary. Admission
+is not an audit, honeypot guarantee, liquidity or tradeability guarantee, or
+fee-behavior certification. Historical bindings for the revision 2 artifact
+remain valid evidence; the immutable V1 release-record history and V1 API
+compatibility remain unchanged.
 
 ## Detached records
 
@@ -58,7 +62,7 @@ npm run release:custom-launch:v2:binding:generate -- \
 ```
 
 The generator derives both Git commit/tree identities, hashes the exact Website
-artifacts, recreates the backend migration inventory, checks all seven local and
+artifacts, recreates the backend migration inventory, checks all eight local and
 remote Supabase migration versions, proves every runtime/Supabase migration
 mirror byte-equal, checks the API contract and JCS profile/readiness identities,
 and binds the active Fly machines to the same tag and digest. The exact retained

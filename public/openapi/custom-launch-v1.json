@@ -1038,6 +1038,9 @@
           "schemaVersion": {
             "const": "programmable.prepared-custom-graph-launch.v1"
           },
+          "verificationBundleHash": {
+            "$ref": "#/components/schemas/Sha256Digest"
+          },
           "graphBundleHash": {
             "$ref": "#/components/schemas/Sha256Digest"
           },
@@ -1339,6 +1342,95 @@
         },
         "additionalProperties": false
       },
+      "FinalizedProviderObservationV1": {
+        "type": "object",
+        "required": [
+          "provider",
+          "finalizedBlockNumber",
+          "finalizedBlockHash",
+          "commonBlockHash"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "primary",
+              "secondary"
+            ]
+          },
+          "finalizedBlockNumber": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "finalizedBlockHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "commonBlockHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FinalizedCheckpointV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "blockNumber",
+          "blockHash",
+          "quorumSize",
+          "observations"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.ethereum-finalized-checkpoint-quorum.v1"
+          },
+          "blockNumber": {
+            "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "blockHash": {
+            "$ref": "#/components/schemas/LowerHex32"
+          },
+          "quorumSize": {
+            "const": 2
+          },
+          "observations": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FinalizedProviderObservationV1"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "const": "primary"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FinalizedProviderObservationV1"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "const": "secondary"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomLaunchOnchainEvidenceV1": {
         "type": "object",
         "description": "Canonical Router event and same-block launchStamp getter evidence matched to the prepared artifact. Finalized means confirmationDepth is at least 64.",
@@ -1417,6 +1509,9 @@
           },
           "observedAtBlockNumber": {
             "$ref": "#/components/schemas/CanonicalUint256"
+          },
+          "finalizedCheckpoint": {
+            "$ref": "#/components/schemas/FinalizedCheckpointV1"
           }
         },
         "additionalProperties": false
@@ -1789,7 +1884,8 @@
     "v3": {
       "status": "live",
       "profileId": "programmable.direct-native-hook-graph.v1",
-      "profileRevision": 2,
+      "profileRevision": 3,
+      "profileVersion": "3.0.0",
       "productionLaunchAuthorized": true,
       "createHttpStatus": 202,
       "replayHttpStatus": 200,

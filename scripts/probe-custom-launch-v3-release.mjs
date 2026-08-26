@@ -103,10 +103,16 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.0.0"
+    openApi?.info?.version !== "3.1.0"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
+    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.0.0"
+    || openApi?.["x-programmable-profile"]?.profileRevision !== 3
     || openApi?.["x-programmable-profile"]?.productionLaunchAuthorized !== true
+    || openApi?.["x-programmable-profile"]?.platformAdmissionReceiptRequired !== true
+    || openApi?.["x-programmable-profile"]?.routerSimulationRequiredBeforeAuthorization !== true
+    || openApi?.["x-programmable-profile"]?.safetyClaim !== false
+    || openApi?.["x-programmable-profile"]?.feeBehaviorClaim !== false
     || openApi?.["x-programmable-availability"]?.status !== "live"
     || openApi?.["x-programmable-availability"]?.publicAuthorized !== true
     || openApi?.paths?.["/v3/custom-launches"] === undefined

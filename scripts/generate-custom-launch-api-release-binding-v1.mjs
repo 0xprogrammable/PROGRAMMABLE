@@ -26,10 +26,86 @@ const BINDING_PATH =
   "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json";
 const SERVICE_PATH = "services/custom-launch-api-v1";
 const PROFILE_PATH =
-  `${SERVICE_PATH}/release/direct-native-hook-graph-admission-profile.v2.json`;
+  `${SERVICE_PATH}/release/direct-native-hook-graph-admission-profile.v3.json`;
 const API_CONTRACT_PATH = `${SERVICE_PATH}/release/custom-launch-api-contract.v3.json`;
 const PUBLIC_OPENAPI_PATH = "public/openapi/custom-launch-v3.json";
 const LAUNCH_PACKAGE_MANIFEST_PATH = "packages/launch/package.json";
+const PUBLIC_PROFILE_SCHEMA_VERSION =
+  "programmable.direct-native-hook-graph-admission-profile.v3";
+const PUBLIC_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
+const PUBLIC_PROFILE_VERSION = "3.0.0";
+const LAUNCH_PACKAGE_VERSION = "3.1.0";
+const PLATFORM_ADMISSION_POLICY = Object.freeze({
+  schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
+  mode: "deterministic-exact-source-graph-static-baseline-v1",
+  receiptSchemaVersion: "programmable.platform-admission-receipt.v1",
+  engineId: "programmable.direct-native-static-admission",
+  engineVersion: "1.0.0",
+  exactSourceCompilerGraphBindingRequired: true,
+  staticBaselineGateVersion: "1.0.0",
+  blockingFindingRules: Object.freeze([
+    Object.freeze({
+      code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+      targetRoles: Object.freeze(["any"]),
+    }),
+    Object.freeze({
+      code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+      targetRoles: Object.freeze(["hook"]),
+    }),
+    Object.freeze({
+      code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
+      targetRoles: Object.freeze(["hook"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+      targetRoles: Object.freeze(["token"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+      targetRoles: Object.freeze(["token"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_PUBLIC_MINT_SURFACE",
+      targetRoles: Object.freeze(["token"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_MUTABLE_PAUSE_SURFACE",
+      targetRoles: Object.freeze(["token"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+      targetRoles: Object.freeze(["token"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+      targetRoles: Object.freeze(["token", "hook"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_SELFDESTRUCT_SURFACE",
+      targetRoles: Object.freeze(["token", "hook"]),
+    }),
+    Object.freeze({
+      code: "RUNTIME_CALLCODE",
+      targetRoles: Object.freeze(["token", "hook"]),
+    }),
+    Object.freeze({
+      code: "RUNTIME_DELEGATECALL",
+      targetRoles: Object.freeze(["token", "hook"]),
+    }),
+    Object.freeze({
+      code: "RUNTIME_SELFDESTRUCT",
+      targetRoles: Object.freeze(["token", "hook"]),
+    }),
+  ]),
+  warningDisposition: "bound-and-visible",
+  noBlockingFindingDisposition: "router-simulation-eligible",
+  blockingFindingDisposition: "action-required",
+  routerSimulationRequiredBeforeAuthorization: true,
+  receiptAuthority: "platform-only",
+  assurance: "launch-admission-only",
+  safetyClaim: false,
+  feeBehaviorClaim: false,
+});
 const EXPECTED_MIGRATIONS = Object.freeze([
   "0001_custom_launch_api_private_schema_v1.sql",
   "0002_reserve_custom_launch_permit_nonce.sql",
@@ -38,6 +114,7 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   "0005_fee_enforced_launch_profile_v2.sql",
   "0006_public_launch_profile_rev3.sql",
   "0007_direct_native_hook_profile_v3.sql",
+  "0008_direct_native_platform_admission_v3.sql",
 ]);
 const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -47,6 +124,7 @@ const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260825123910_fee_enforced_launch_profile_v2.sql",
   "20260825203306_public_launch_profile_rev3.sql",
   "20260826000538_direct_native_hook_profile_v3.sql",
+  "20260826045034_direct_native_platform_admission_v3.sql",
 ]);
 const EXPECTED_API_ROUTES = Object.freeze([
   Object.freeze({ method: "GET", path: "/v3/custom-launches" }),
@@ -288,8 +366,8 @@ function validateApiContract(contract) {
   ])
     || contract.schemaVersion !== "programmable.custom-launch-api-contract.v3"
     || contract.requestSchemaVersion !== "programmable.custom-launch-create-request.v3"
-    || contract.profileId !== "programmable.direct-native-hook-graph.v1"
-    || contract.profileVersion !== "2.0.0"
+    || contract.profileId !== PUBLIC_PROFILE_ID
+    || contract.profileVersion !== PUBLIC_PROFILE_VERSION
     || !Array.isArray(contract.routes)
     || contract.routes.length !== EXPECTED_API_ROUTES.length) {
     throw new Error("backend API contract is invalid");
@@ -305,13 +383,44 @@ function validateApiContract(contract) {
 
 function validateProfile(profile) {
   if (!isObject(profile)
-    || profile.schemaVersion !== "programmable.direct-native-hook-graph-admission-profile.v2"
-    || profile.profileId !== "programmable.direct-native-hook-graph.v1"
-    || profile.profileVersion !== "2.0.0"
-    || profile.profileRevision !== 2
+    || profile.schemaVersion !== PUBLIC_PROFILE_SCHEMA_VERSION
+    || profile.profileId !== PUBLIC_PROFILE_ID
+    || profile.profileVersion !== PUBLIC_PROFILE_VERSION
+    || profile.profileRevision !== 3
     || profile.productionLaunchAuthorized !== true
-    || !isObject(profile.chain)) {
+    || !isObject(profile.chain)
+    || !isObject(profile.platformAdmissionPolicy)
+    || Object.hasOwn(profile, "platformFeeProofPolicy")
+    || canonicalize(profile.platformAdmissionPolicy)
+      !== canonicalize(PLATFORM_ADMISSION_POLICY)) {
     throw new Error("backend public admission profile is invalid");
+  }
+}
+
+function parseReleaseJson(bytes, label) {
+  try {
+    return JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new Error(`${label} is not UTF-8 JSON`);
+  }
+}
+
+function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes) {
+  const openApi = parseReleaseJson(publicOpenApiBytes, "Website V3 OpenAPI");
+  const launchPackage = parseReleaseJson(
+    launchPackageManifestBytes,
+    "launch package manifest",
+  );
+  if (openApi?.info?.version !== LAUNCH_PACKAGE_VERSION
+    || openApi?.["x-programmable-profile"]?.profileId !== PUBLIC_PROFILE_ID
+    || openApi?.["x-programmable-profile"]?.profileVersion !== PUBLIC_PROFILE_VERSION
+    || openApi?.["x-programmable-profile"]?.profileRevision !== 3
+    || openApi?.["x-programmable-profile"]?.productionLaunchAuthorized !== true) {
+    throw new Error("Website V3 OpenAPI is not the enabled revision 3 profile contract");
+  }
+  if (launchPackage?.name !== "@programmable/launch"
+    || launchPackage?.version !== LAUNCH_PACKAGE_VERSION) {
+    throw new Error("launch package manifest is not the 3.1.0 public CLI contract");
   }
 }
 
@@ -472,6 +581,7 @@ export async function materializeCustomLaunchApiReleaseBindingV1(input) {
     readJson(input.flyMachines, "Fly machines readback"),
     readJson(input.flyImages, "Fly images readback"),
   ]);
+  validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes);
   validateProfile(profileDocument.value);
   validateApiContract(apiContractDocument.value);
   const identities = validateReadiness(
@@ -526,8 +636,8 @@ export async function materializeCustomLaunchApiReleaseBindingV1(input) {
       readinessSchemaVersion: "programmable.custom-launch-api-readiness.v2",
       readinessIdentitySha256: identities.readinessIdentitySha256,
       apiContractSha256: identities.apiContractSha256,
-      profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "2.0.0",
+      profileId: PUBLIC_PROFILE_ID,
+      profileVersion: PUBLIC_PROFILE_VERSION,
       publicProfilePath: PROFILE_PATH,
       publicProfileSha256: identities.profileSha256,
     },

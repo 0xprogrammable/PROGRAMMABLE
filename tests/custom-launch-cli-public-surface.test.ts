@@ -32,9 +32,9 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.0.0",
+        releaseVersion: "3.1.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
       },
       compatibility: {
         v1: {
@@ -55,20 +55,21 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.0.0",
+          releaseVersion: "3.1.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
         },
       },
       generalHookProfile: {
         status: "live",
         apiVersion: "3",
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileRevision: 2,
+        profileRevision: 3,
+        profileVersion: "3.0.0",
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.0.0",
+        cliReleaseVersion: "3.1.0",
       },
       integrationPreview: {
         status: "live",
@@ -77,14 +78,17 @@ describe("public Custom Launch CLI surface", () => {
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileRevision: 2,
+        profileRevision: 3,
         requestSchemaVersion: "programmable.custom-launch-create-request.v3",
         minimumTargets: 3,
         maximumTargets: 16,
         projectOwnedToken: true,
         projectOwnedHook: true,
         hookPermissionMaskRange: { minimum: 0, maximum: 16_383 },
-        exactGraphReceiptRequired: true,
+        platformAdmissionReceiptRequired: true,
+        routerSimulationRequiredBeforeAuthorization: true,
+        safetyClaim: false,
+        feeBehaviorClaim: false,
         fundingAuthorization: {
           modes: [
             "none",
@@ -100,15 +104,15 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.0.0",
-        releaseTag: "programmable-launch-v3.0.0",
+        releaseVersion: "3.1.0",
+        releaseTag: "programmable-launch-v3.1.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
           profileId: "programmable.direct-native-hook-graph.v1",
-          profileRevision: 2,
+          profileRevision: 3,
           productionLaunchAuthorized: true,
           chainId: "1",
           network: "Ethereum Mainnet",
@@ -119,7 +123,10 @@ describe("public Custom Launch CLI surface", () => {
           ratePercent: "0.10%",
           rateBps: 10,
           recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          enforcement: "platform-signed-exact-graph-conformance-receipt",
+          enforcement: "role-aware-static-admission-plus-router-simulation",
+          admissionAssurance: "launch-admission-only",
+          safetyClaim: false,
+          feeBehaviorClaim: false,
           lpFee: "separate-from-platform-fee",
           genericFeeClaiming: "not-live",
           genericBuybackManagement: "not-live",
@@ -344,6 +351,10 @@ describe("public Custom Launch CLI surface", () => {
   });
 
   it("publishes the live general V3 profile without changing V2 compatibility", () => {
+    const v1 = JSON.parse(readFileSync(
+      join(root, "public/openapi/custom-launch-v1.json"),
+      "utf8",
+    ));
     const v2 = JSON.parse(readFileSync(
       join(root, "public/openapi/custom-launch-v2.json"),
       "utf8",
@@ -433,7 +444,29 @@ describe("public Custom Launch CLI surface", () => {
     ]);
     expect(request.properties.schemaVersion.const)
       .toBe("programmable.custom-launch-create-request.v3");
-    expect(request.allOf[0].then.required)
+    expect(request.allOf[0].oneOf).toHaveLength(2);
+    expect(request.allOf[0].oneOf[0].properties.launchProfile.properties)
+      .toMatchObject({
+        schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
+        profileRevision: { const: 3 },
+        profileVersion: { const: "3.0.0" },
+      });
+    expect(request.allOf[0].oneOf[0].properties.launchProfileSelection
+      .properties).toMatchObject({
+        schemaVersion: {
+          const: "programmable.direct-native-hook-graph-profile-selection-binding.v3",
+        },
+        profileRevision: { const: 3 },
+      });
+    expect(request.allOf[0].oneOf[0].properties.verificationBundle.$ref)
+      .toBe("#/components/schemas/DirectNativeExactSourceVerificationBundleV3");
+    expect(request.allOf[0].oneOf[1].properties.launchProfile.properties)
+      .toMatchObject({
+        schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v2" },
+        profileRevision: { const: 2 },
+        profileVersion: { const: "2.0.0" },
+      });
+    expect(request.allOf[1].then.required)
       .toEqual(["fundingAuthorization", "fundingIntentHash"]);
     expect(request.properties.permitWindow.$ref)
       .toBe("#/components/schemas/DirectNativePermitWindowV1");
@@ -446,13 +479,17 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(v3["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileRevision: 2,
+      profileRevision: 3,
+      profileVersion: "3.0.0",
       productionLaunchAuthorized: true,
       minimumHookPermissionMask: 0,
       maximumHookPermissionMask: 16383,
       projectOwnedToken: true,
       projectOwnedHook: true,
-      exactGraphReceiptRequired: true,
+      platformAdmissionReceiptRequired: true,
+      routerSimulationRequiredBeforeAuthorization: true,
+      safetyClaim: false,
+      feeBehaviorClaim: false,
     });
     expect(v3.components.schemas.DirectNativeHookPermissionPolicyV1.properties)
       .toMatchObject({
@@ -466,12 +503,12 @@ describe("public Custom Launch CLI surface", () => {
       "permitAuthority",
       "permitAuthorityRuntimeCodeHash",
       "platformFeePolicy",
-      "platformFeeProofPolicy",
     ]));
+    expect(profile.oneOf).toHaveLength(2);
     expect(profile.properties.permitAuthority.const)
       .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
     expect(profile.properties).toMatchObject({
-      profileVersion: { const: "2.0.0" },
+      profileVersion: { enum: ["2.0.0", "3.0.0"] },
       productionLaunchAuthorized: { const: true },
       routerRuntimeCodeHash: {
         const:
@@ -496,6 +533,40 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(profile.properties.platformFeePolicy.$ref)
       .toBe("#/components/schemas/PlatformFeePolicyV1");
+    expect(profile.properties.platformAdmissionPolicy.$ref)
+      .toBe("#/components/schemas/PlatformAdmissionPolicyV1");
+    expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties)
+      .toMatchObject({
+        warningDisposition: { const: "bound-and-visible" },
+        noBlockingFindingDisposition: { const: "router-simulation-eligible" },
+        blockingFindingDisposition: { const: "action-required" },
+        routerSimulationRequiredBeforeAuthorization: { const: true },
+        assurance: { const: "launch-admission-only" },
+        safetyClaim: { const: false },
+        feeBehaviorClaim: { const: false },
+      });
+    expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties
+      .blockingFindingRules.const).toEqual([
+        { code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] },
+        { code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] },
+        { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
+        { code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] },
+        { code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] },
+        { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] },
+        { code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] },
+        { code: "RUNTIME_DELEGATECALL", targetRoles: ["token", "hook"] },
+        { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["token", "hook"] },
+      ]);
+    expect(v3.components.schemas.StaticBaselineFindingV1.properties.code.enum)
+      .toContain("V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING");
+    expect(v3.components.schemas.DirectNativeExactSourceVerificationBundleV3
+      .allOf[1].properties.compilationUnits.items.allOf[1]
+      .properties.compilerVersion.const)
+      .toBe("0.8.26+commit.8a97fa7a");
     expect(v3.components.schemas.PlatformFeePolicyV1.properties)
       .toMatchObject({
         accountingMode: {
@@ -559,33 +630,183 @@ describe("public Custom Launch CLI surface", () => {
         "funding_authorization_verified",
         "authorized",
       ]));
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[0]
-      .properties.stage.const).toBe("platform-review-pending");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[1]
-      .properties.stage.const).toBe("funding-signature-required");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
-      .properties.stage.const).toBe("router-transaction-required");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
-      .properties.stage.const).toBe("platform-review-action-required");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
-      .properties.actionRequired.properties.kind.const).toBe("security-review");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
-      .required).toContain("staticBaseline");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.every(
+    const outputVariants = v3.components.schemas.CustomLaunchOutputV3.oneOf;
+    const outputForStage = (stage: string) => outputVariants.find(
+      (variant: { properties: { stage: { const?: string } } }) =>
+        variant.properties.stage.const === stage,
+    );
+    expect(outputForStage("platform-review-pending")).toBeDefined();
+    expect(outputForStage("funding-signature-required")).toBeDefined();
+    expect(outputForStage("funding-signature-verified")).toBeDefined();
+
+    const simulatingOutput = outputForStage("simulating");
+    expect(simulatingOutput.required).toEqual([
+      "schemaVersion",
+      "integrationState",
+      "stage",
+      "actionRequired",
+      "fundingBoundary",
+      "launchProfileHash",
+      "initializerTargetId",
+      "fundingMode",
+      "permitWindow",
+      "artifact",
+      "signedPermit",
+      "observationWindow",
+      "onchain",
+      "walletTransaction",
+      "transactionPreimageHash",
+      "simulation",
+    ]);
+    expect(simulatingOutput.properties).toMatchObject({
+      stage: { const: "simulating" },
+      actionRequired: { type: "null" },
+      artifact: {
+        $ref: "#/components/schemas/PreparedLaunchArtifactV3",
+      },
+      signedPermit: {
+        $ref: "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1",
+      },
+      observationWindow: {
+        $ref: "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1",
+      },
+      onchain: { type: "null" },
+      walletTransaction: {
+        $ref: "#/components/schemas/ExactWalletTransactionV3",
+      },
+      transactionPreimageHash: {
+        $ref: "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+      },
+      simulation: { type: "null" },
+    });
+    expect(simulatingOutput.additionalProperties).toBe(false);
+
+    const walletOutput = outputForStage("router-transaction-required");
+    expect(walletOutput.required).toEqual([
+      "schemaVersion",
+      "integrationState",
+      "stage",
+      "actionRequired",
+      "fundingBoundary",
+      "artifact",
+      "signedPermit",
+      "observationWindow",
+      "onchain",
+      "walletTransaction",
+      "simulation",
+    ]);
+    expect(walletOutput.properties).toMatchObject({
+      artifact: {
+        $ref: "#/components/schemas/PreparedLaunchArtifactV3",
+      },
+      signedPermit: {
+        $ref: "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1",
+      },
+      observationWindow: {
+        $ref: "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1",
+      },
+      onchain: {
+        oneOf: [
+          {
+            $ref: "#/components/schemas/CustomLaunchOnchainEvidenceV3",
+          },
+          { type: "null" },
+        ],
+      },
+      walletTransaction: {
+        $ref: "#/components/schemas/ExactWalletTransactionV3",
+      },
+      simulation: {
+        $ref: "#/components/schemas/ExactSimulationEvidenceV3",
+      },
+    });
+    expect(walletOutput.additionalProperties).toBe(false);
+    expect(v3.components.schemas.ExactSimulationEvidenceV3.required).toEqual([
+      "outcome",
+      "transactionPreimageHash",
+      "profileHash",
+      "blockNumber",
+      "blockHash",
+      "blockTimestamp",
+      "responseDigest",
+      "gasEstimate",
+    ]);
+    expect(v3.components.schemas.ExactSimulationEvidenceV3.additionalProperties)
+      .toBe(false);
+    expect(v1.components.schemas.PreparedLaunchArtifactV1.properties
+      .verificationBundleHash.$ref).toBe("#/components/schemas/Sha256Digest");
+    expect(v3.components.schemas.PreparedLaunchArtifactV3.allOf[1].required)
+      .toEqual(["verificationBundleHash"]);
+    expect(v3.components.schemas.CustomLaunchOnchainEvidenceV3.properties
+      .finalizedCheckpoint.$ref)
+      .toBe("#/components/schemas/FinalizedCheckpointV1");
+    expect(v1.components.schemas.CustomLaunchOnchainEvidenceV1.properties
+      .finalizedCheckpoint.$ref)
+      .toBe("#/components/schemas/FinalizedCheckpointV1");
+    expect(v3.components.schemas.FinalizedCheckpointV1).toMatchObject({
+      required: [
+        "schemaVersion",
+        "blockNumber",
+        "blockHash",
+        "quorumSize",
+        "observations",
+      ],
+      properties: {
+        schemaVersion: {
+          const: "programmable.ethereum-finalized-checkpoint-quorum.v1",
+        },
+        quorumSize: { const: 2 },
+        observations: { minItems: 2, maxItems: 2 },
+      },
+      additionalProperties: false,
+    });
+
+    const actionRequiredOutput = outputForStage("platform-review-action-required");
+    expect(actionRequiredOutput.properties.actionRequired.properties.kind.const)
+      .toBe("security-review");
+    expect(actionRequiredOutput.required).toContain("staticBaseline");
+    expect(outputVariants.every(
       (variant: { required: string[] }) =>
         variant.required.includes("fundingBoundary"),
     )).toBe(true);
+    expect(outputVariants.filter(
+      (variant: { properties: { stage: { const?: string } } }) =>
+        variant.properties.stage.const !== "platform-review-action-required",
+    ).every(
+      (variant: { properties: Record<string, unknown> }) =>
+        Object.hasOwn(variant.properties, "platformAdmission"),
+    )).toBe(true);
+    expect(v3.components.schemas.PlatformAdmissionStatusV1.properties)
+      .toMatchObject({
+        disposition: { const: "no_blocking_static_finding" },
+        routerSimulationRequiredBeforeAuthorization: { const: true },
+        safetyClaim: { const: false },
+        feeBehaviorClaim: { const: false },
+      });
     expect(v3.components.schemas.FundingBoundaryV3.properties).toMatchObject({
       approvalTransactionRequired: { const: false },
       permit2Used: { const: false },
       fundingSignatureProducedByService: { const: false },
       walletTransactionBroadcastByService: { const: false },
     });
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
-      .properties.actionRequired.required).toEqual(expect.arrayContaining([
+    expect(JSON.stringify(v3)).not.toContain("CUSTOM_LAUNCH_API_UNAVAILABLE");
+    expect(v3.components.responses.V3Unavailable.content["application/json"]
+      .example.error.code).toBe("CUSTOM_LAUNCH_V3_UNAVAILABLE");
+    expect(walletOutput.properties.actionRequired.required)
+      .toEqual(expect.arrayContaining([
       "permitDigest",
       "initializerCalldataHash",
     ]));
+    expect(v3.components.schemas.CustomLaunchListPageV3.properties.launches
+      .items.$ref).toBe("#/components/schemas/CustomLaunchSummaryV3");
+    expect(v3.components.schemas.CustomLaunchSummaryV3.allOf).toEqual([
+      { $ref: "#/components/schemas/CustomLaunchResourceV3" },
+      {
+        type: "object",
+        required: ["output"],
+        properties: { output: { type: "null" } },
+      },
+    ]);
 
     const serialized = JSON.stringify(v3);
     expect(serialized).not.toContain('"additive":true');
@@ -626,6 +847,16 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     ));
     expect(packageJson.files).toContain("examples");
+    const packageGuide = readFileSync(
+      join(root, "packages/launch/README.md"),
+      "utf8",
+    );
+    expect(packageGuide).toContain(
+      "Package `3.1.0` supports production general profile",
+    );
+    expect(packageGuide).toContain(
+      "`programmable.direct-native-hook-graph.v1` version `3.0.0`",
+    );
     const guide = readFileSync(
       join(root, "packages/launch/examples/no-broadcast/README.md"),
       "utf8",
@@ -666,6 +897,23 @@ describe("public Custom Launch CLI surface", () => {
         env: environment,
         stdio: "pipe",
       });
+      const rehearsalEvidence = JSON.parse(readFileSync(
+        join(projectRoot, "evidence/rehearsal.json"),
+        "utf8",
+      ));
+      const exampleBuildSource = readFileSync(
+        join(projectRoot, "build-and-configure.mjs"),
+        "utf8",
+      );
+      expect(rehearsalEvidence.profile).toMatchObject({
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileVersion: "3.0.0",
+        profileRevision: 3,
+        productionLaunchAuthorized: true,
+      });
+      expect(exampleBuildSource.match(/profileVersion: "3\.0\.0"/gu))
+        .toHaveLength(2);
+      expect(exampleBuildSource).not.toContain('profileVersion: "2.0.0"');
       const packOutput = JSON.parse(execFileSync(process.execPath, [
         cli,
         "pack",
@@ -702,12 +950,15 @@ describe("public Custom Launch CLI surface", () => {
       expect(request).toMatchObject({
         schemaVersion: "programmable.custom-launch-create-request.v3",
         launchProfile: {
-          profileVersion: "2.0.0",
-          profileRevision: 2,
+          schemaVersion: "programmable.direct-native-hook-graph-profile.v3",
+          profileVersion: "3.0.0",
+          profileRevision: 3,
           productionLaunchAuthorized: true,
         },
         launchProfileSelection: {
-          profileRevision: 2,
+          schemaVersion:
+            "programmable.direct-native-hook-graph-profile-selection-binding.v3",
+          profileRevision: 3,
           fundingMode: "eip-3009-receive-with-authorization",
         },
       });
@@ -758,7 +1009,8 @@ describe("public Custom Launch CLI surface", () => {
       v3: {
         status: "live",
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileRevision: 2,
+        profileRevision: 3,
+        profileVersion: "3.0.0",
         productionLaunchAuthorized: true,
         createHttpStatus: 202,
         replayHttpStatus: 200,
@@ -782,5 +1034,9 @@ describe("public Custom Launch CLI surface", () => {
     expect(constants).toContain("MAX_REQUEST_BYTES = 8_388_608");
     expect(constants).toContain("MAX_STANDARD_JSON_INPUT_BYTES = 5_242_880");
     expect(constants).toContain("MAX_TOTAL_STANDARD_JSON_INPUT_BYTES = 5_242_880");
+    expect(constants).toContain("MAX_STANDARD_JSON_SOURCES = 2_048");
+    expect(constants).toContain(
+      'DIRECT_NATIVE_REQUIRED_SOLC_VERSION = "0.8.26+commit.8a97fa7a"',
+    );
   });
 });

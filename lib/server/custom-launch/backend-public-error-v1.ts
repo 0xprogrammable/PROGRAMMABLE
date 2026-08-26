@@ -3,7 +3,22 @@ import "server-only";
 import { parseStrictJson } from "../projection-target/canonical-json";
 
 const MAXIMUM_ERROR_BODY_BYTES = 16_384;
-const PRESERVED_STATUSES = new Set([400, 409, 429, 503]);
+const PRESERVED_STATUSES = new Set([400, 404, 409, 422, 429, 503]);
+const PRESERVED_NOT_FOUND_CODES = new Set([
+  "LAUNCH_NOT_FOUND",
+]);
+const PRESERVED_UNPROCESSABLE_CODES = new Set([
+  "FUNDING_SIGNATURE_OWNER_MISMATCH",
+  "SIMULATION_REVERTED",
+]);
+const PRESERVED_UNAVAILABLE_CODES = new Set([
+  "CUSTOM_LAUNCH_V2_UNAVAILABLE",
+  "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+  "CUSTOM_LAUNCH_V3_UNAVAILABLE",
+  "LAUNCH_UNAVAILABLE",
+  "SIMULATION_UNAVAILABLE",
+  "WALLET_ADMIN_UNAVAILABLE",
+]);
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$/u;
 const ERROR_CODE = /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/u;
 const RETRY_AFTER_SECONDS = /^[1-9][0-9]{0,4}$/u;
@@ -65,9 +80,16 @@ export async function readPreservedBackendPublicErrorV1(
       || /[\u0000-\u001f\u007f]/u.test(error.message)
     ) return null;
     if (
+      response.status === 404
+      && !PRESERVED_NOT_FOUND_CODES.has(error.code)
+    ) return null;
+    if (
+      response.status === 422
+      && !PRESERVED_UNPROCESSABLE_CODES.has(error.code)
+    ) return null;
+    if (
       response.status === 503
-      && error.code !== "CUSTOM_LAUNCH_V2_UNAVAILABLE"
-      && error.code !== "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING"
+      && !PRESERVED_UNAVAILABLE_CODES.has(error.code)
     ) return null;
 
     const bodyRequestId = error.requestId;

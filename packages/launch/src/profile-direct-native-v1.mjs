@@ -12,16 +12,24 @@ import {
 import { canonicalizeJson } from "./canonical-json.mjs";
 import { canonicalIdentifier } from "./build.mjs";
 import {
-  DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN,
+  DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V2,
+  DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V3,
   DIRECT_NATIVE_LIQUIDITY_MODEL_ASSESSMENT_SCHEMA,
   DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
-  DIRECT_NATIVE_PROFILE_BINDING_SCHEMA,
-  DIRECT_NATIVE_PROFILE_HASH_DOMAIN,
+  DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V2,
+  DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2,
+  DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V3,
   DIRECT_NATIVE_PROFILE_ID,
-  DIRECT_NATIVE_PROFILE_REVISION,
-  DIRECT_NATIVE_PROFILE_SCHEMA,
-  DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA,
-  DIRECT_NATIVE_PROFILE_VERSION,
+  DIRECT_NATIVE_PROFILE_REVISION_V2,
+  DIRECT_NATIVE_PROFILE_REVISION_V3,
+  DIRECT_NATIVE_PROFILE_SCHEMA_V2,
+  DIRECT_NATIVE_PROFILE_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V2,
+  DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V2,
+  DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
   FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA,
   FUNDING_AUTHORIZATION_INPUT_SCHEMA,
   FUNDING_AUTHORIZATION_METHOD,
@@ -101,6 +109,59 @@ const PLATFORM_FEE_PROOF_POLICY = Object.freeze({
   subject: "final-graph-commitment-and-runtime-set",
   activationStatus: "live",
 });
+const PLATFORM_ADMISSION_BLOCKING_FINDING_RULES = Object.freeze([
+  Object.freeze({ code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: Object.freeze(["token"]) }),
+  Object.freeze({ code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: Object.freeze(["token"]) }),
+  Object.freeze({ code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: Object.freeze(["token"]) }),
+  Object.freeze({ code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: Object.freeze(["token"]) }),
+  Object.freeze({ code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: Object.freeze(["token"]) }),
+  Object.freeze({ code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: Object.freeze(["token", "hook"]) }),
+  Object.freeze({ code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: Object.freeze(["token", "hook"]) }),
+  Object.freeze({ code: "RUNTIME_CALLCODE", targetRoles: Object.freeze(["token", "hook"]) }),
+  Object.freeze({ code: "RUNTIME_DELEGATECALL", targetRoles: Object.freeze(["token", "hook"]) }),
+  Object.freeze({ code: "RUNTIME_SELFDESTRUCT", targetRoles: Object.freeze(["token", "hook"]) }),
+]);
+const PLATFORM_ADMISSION_POLICY = Object.freeze({
+  schemaVersion: DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
+  mode: "deterministic-exact-source-graph-static-baseline-v1",
+  receiptSchemaVersion: "programmable.platform-admission-receipt.v1",
+  engineId: "programmable.direct-native-static-admission",
+  engineVersion: "1.0.0",
+  exactSourceCompilerGraphBindingRequired: true,
+  staticBaselineGateVersion: "1.0.0",
+  blockingFindingRules: PLATFORM_ADMISSION_BLOCKING_FINDING_RULES,
+  warningDisposition: "bound-and-visible",
+  noBlockingFindingDisposition: "router-simulation-eligible",
+  blockingFindingDisposition: "action-required",
+  routerSimulationRequiredBeforeAuthorization: true,
+  receiptAuthority: "platform-only",
+  assurance: "launch-admission-only",
+  safetyClaim: false,
+  feeBehaviorClaim: false,
+});
+const DIRECT_NATIVE_PROFILE_CONTRACTS = Object.freeze({
+  [DIRECT_NATIVE_PROFILE_REVISION_V2]: Object.freeze({
+    selectionSchema: DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V2,
+    bindingSchema: DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V2,
+    profileSchema: DIRECT_NATIVE_PROFILE_SCHEMA_V2,
+    profileRevision: DIRECT_NATIVE_PROFILE_REVISION_V2,
+    profileVersion: DIRECT_NATIVE_PROFILE_VERSION_V2,
+    profileHashDomain: DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2,
+    launchIntentHashDomain: DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V2,
+  }),
+  [DIRECT_NATIVE_PROFILE_REVISION_V3]: Object.freeze({
+    selectionSchema: DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3,
+    bindingSchema: DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V3,
+    profileSchema: DIRECT_NATIVE_PROFILE_SCHEMA_V3,
+    profileRevision: DIRECT_NATIVE_PROFILE_REVISION_V3,
+    profileVersion: DIRECT_NATIVE_PROFILE_VERSION_V3,
+    profileHashDomain: DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V3,
+    launchIntentHashDomain: DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V3,
+  }),
+});
 const DEFAULT_EXTERNAL_LIQUIDITY_MODEL = Object.freeze({
   schemaVersion: DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
   model: "external-concentrated-liquidity",
@@ -128,11 +189,11 @@ export function validateDirectNativeProfileSelection(value) {
   assertExactKeys(value, claimMode === "immutable-payout-recipient"
     ? [...commonKeys, ...liquidityKeys, "payoutRecipient"]
     : [...commonKeys, ...liquidityKeys], "direct-native launchProfile");
-  if (value.schemaVersion !== DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA
-    || value.profileId !== DIRECT_NATIVE_PROFILE_ID
-    || value.profileRevision !== DIRECT_NATIVE_PROFILE_REVISION) {
-    throw new TypeError("direct-native launchProfile identity is not supported");
-  }
+  const profileContract = directNativeProfileContract(
+    value,
+    "selectionSchema",
+    "direct-native launchProfile identity is not supported",
+  );
   assertExactKeys(value.targetRoles, [
     "tokenTargetId",
     "hookTargetId",
@@ -155,9 +216,9 @@ export function validateDirectNativeProfileSelection(value) {
     value.feeCurrency,
   );
   return {
-    schemaVersion: DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA,
+    schemaVersion: profileContract.selectionSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
-    profileRevision: DIRECT_NATIVE_PROFILE_REVISION,
+    profileRevision: profileContract.profileRevision,
     targetRoles,
     fundingMode: canonicalFundingMode(value.fundingMode),
     accountingMode: canonicalAccountingMode(value.accountingMode),
@@ -184,11 +245,16 @@ export function validateDirectNativeProfileSelection(value) {
 
 export function resolveDirectNativeProfile(selection) {
   const normalized = validateDirectNativeProfileSelection(selection);
+  const profileContract = directNativeProfileContract(
+    normalized,
+    "selectionSchema",
+    "direct-native launchProfile identity is not supported",
+  );
   return {
-    schemaVersion: DIRECT_NATIVE_PROFILE_SCHEMA,
+    schemaVersion: profileContract.profileSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
-    profileRevision: DIRECT_NATIVE_PROFILE_REVISION,
-    profileVersion: DIRECT_NATIVE_PROFILE_VERSION,
+    profileRevision: profileContract.profileRevision,
+    profileVersion: profileContract.profileVersion,
     productionLaunchAuthorized: true,
     chainId: MAINNET_CHAIN_ID,
     router: ROUTER,
@@ -221,15 +287,22 @@ export function resolveDirectNativeProfile(selection) {
       normalized.assessmentBase,
       normalized.feeCurrency,
     ),
-    platformFeeProofPolicy: PLATFORM_FEE_PROOF_POLICY,
+    ...(profileContract.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V2
+      ? { platformFeeProofPolicy: PLATFORM_FEE_PROOF_POLICY }
+      : { platformAdmissionPolicy: PLATFORM_ADMISSION_POLICY }),
   };
 }
 
 export function validateEmbeddedDirectNativeProfile(value) {
+  const profileContract = directNativeProfileContract(
+    value,
+    "profileSchema",
+    "direct-native embedded launchProfile identity is not supported",
+  );
   const expected = resolveDirectNativeProfile({
-    schemaVersion: DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA,
+    schemaVersion: profileContract.selectionSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
-    profileRevision: DIRECT_NATIVE_PROFILE_REVISION,
+    profileRevision: profileContract.profileRevision,
     targetRoles: {
       tokenTargetId: "token",
       hookTargetId: "hook",
@@ -251,11 +324,21 @@ export function validateEmbeddedDirectNativeProfile(value) {
 }
 
 export function hashDirectNativeProfile(profile) {
-  return framedSha256(DIRECT_NATIVE_PROFILE_HASH_DOMAIN, profile);
+  const profileContract = directNativeProfileContract(
+    profile,
+    "profileSchema",
+    "direct-native embedded launchProfile identity is not supported",
+  );
+  return framedSha256(profileContract.profileHashDomain, profile);
 }
 
 export function buildDirectNativeProfileBinding(selection, context) {
   const normalized = validateDirectNativeProfileSelection(selection);
+  const profileContract = directNativeProfileContract(
+    normalized,
+    "selectionSchema",
+    "direct-native launchProfile identity is not supported",
+  );
   const byId = new Map(context.graphBundle.targets.map((target) => [target.targetId, target]));
   const predictions = new Map(context.predictions.map((prediction) => [
     prediction.targetId,
@@ -279,9 +362,9 @@ export function buildDirectNativeProfileBinding(selection, context) {
     hooks: hookAddress,
   };
   return {
-    schemaVersion: DIRECT_NATIVE_PROFILE_BINDING_SCHEMA,
+    schemaVersion: profileContract.bindingSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
-    profileRevision: DIRECT_NATIVE_PROFILE_REVISION,
+    profileRevision: profileContract.profileRevision,
     targetRoles,
     fundingMode: normalized.fundingMode,
     routeNamespace: context.routeNamespace,
@@ -324,10 +407,15 @@ export function buildDirectNativeProfileBinding(selection, context) {
 }
 
 export function validateDirectNativeProfileBinding(value, context) {
+  const profileContract = directNativeProfileContract(
+    value,
+    "bindingSchema",
+    "direct-native launchProfileSelection identity is not supported",
+  );
   const expected = buildDirectNativeProfileBinding({
-    schemaVersion: DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA,
+    schemaVersion: profileContract.selectionSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
-    profileRevision: DIRECT_NATIVE_PROFILE_REVISION,
+    profileRevision: profileContract.profileRevision,
     targetRoles: value?.targetRoles,
     fundingMode: value?.fundingMode,
     accountingMode: value?.platformFeeBinding?.accountingMode,
@@ -351,7 +439,8 @@ export function validateDirectNativeProfileBinding(value, context) {
 
 export function validateDirectNativeProfileGraph(profile, binding, graphBundle) {
   validateEmbeddedDirectNativeProfile(profile);
-  if (profile.fundingPolicy.mode !== binding.fundingMode
+  if (profile.profileRevision !== binding.profileRevision
+    || profile.fundingPolicy.mode !== binding.fundingMode
     || profile.platformFeePolicy.accountingMode
       !== binding.platformFeeBinding.accountingMode
     || profile.platformFeePolicy.assessmentBase
@@ -573,7 +662,12 @@ export function validateFundingAuthorization(value, fundingIntentHash, context) 
 }
 
 export function buildDirectNativeLaunchIntentHash(value) {
-  return framedSha256(DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN, value);
+  const profileContract = directNativeProfileContract(
+    value?.launchProfileSelection,
+    "bindingSchema",
+    "direct-native launchProfileSelection identity is not supported",
+  );
+  return framedSha256(profileContract.launchIntentHashDomain, value);
 }
 
 function framedSha256(domain, value) {
@@ -1229,7 +1323,17 @@ export const DIRECT_NATIVE_PROFILE_PUBLIC_CONSTANTS = Object.freeze({
   platformAccountingModes: PLATFORM_ACCOUNTING_MODES,
   platformFeeAssessmentPairs: PLATFORM_FEE_ASSESSMENT_PAIRS,
   platformFeeProofPolicy: PLATFORM_FEE_PROOF_POLICY,
+  platformAdmissionPolicy: PLATFORM_ADMISSION_POLICY,
 });
+
+function directNativeProfileContract(value, schemaField, message) {
+  if (value?.profileId !== DIRECT_NATIVE_PROFILE_ID) throw new TypeError(message);
+  const candidate = DIRECT_NATIVE_PROFILE_CONTRACTS[value?.profileRevision];
+  if (candidate === undefined || value?.schemaVersion !== candidate[schemaField]) {
+    throw new TypeError(message);
+  }
+  return candidate;
+}
 
 for (const digest of [MAINNET_USDC_DOMAIN_SEPARATOR, RECEIVE_WITH_AUTHORIZATION_TYPEHASH]) {
   if (!HEX32.test(digest)) throw new TypeError("direct-native funding digest is invalid");

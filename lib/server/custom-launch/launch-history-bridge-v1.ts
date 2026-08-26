@@ -28,7 +28,7 @@ export const CUSTOM_LAUNCH_HISTORY_SCHEMA_V1 =
 // authorized resource carries the exact graph transaction and can exceed
 // 128 KiB because initcode is bound in both the artifact and calldata.
 const MAXIMUM_BACKEND_LIST_BODY_BYTES = 262_144;
-const MAXIMUM_BACKEND_RESOURCE_BODY_BYTES = 1_048_576;
+const MAXIMUM_BACKEND_RESOURCE_BODY_BYTES = 8_388_608;
 const MAXIMUM_BROWSER_FUNDING_BODY_BYTES = 1_024;
 const DEFAULT_BACKEND_TIMEOUT_MS = 5_000;
 const DEFAULT_PAGE_SIZE = 5;
@@ -50,6 +50,8 @@ const STATUSES_V1 = new Set([
 const STATUSES_V2 = new Set([...STATUSES_V1, "simulating"]);
 const STATUSES_V3 = new Set([
   ...STATUSES_V2,
+  "pending_review",
+  "action_required",
   "awaiting_funding_authorization",
   "funding_authorization_verified",
 ]);
@@ -101,6 +103,20 @@ export type DeveloperCustomLaunchV2 = Readonly<{
   failure: DeveloperCustomLaunchV1["failure"];
 }>;
 
+type DeveloperCustomLaunchLiquidityIntentV3 =
+  | Readonly<{
+      model: "external-concentrated-liquidity";
+      declaredLaunchState: "liquidity_required";
+      binding: "explicit-request-hash" | "legacy-v3-default";
+    }>
+  | Readonly<{
+      model:
+        | "launch-seeded-concentrated-liquidity"
+        | "hook-inventory-custom-accounting";
+      declaredLaunchState: "assessment_required";
+      binding: "explicit-request-hash" | "legacy-v3-default";
+    }>;
+
 export type DeveloperCustomLaunchV3 = Readonly<{
   schemaVersion: "programmable.custom-launch.v3";
   launchId: string;
@@ -112,7 +128,8 @@ export type DeveloperCustomLaunchV3 = Readonly<{
   requestHash: string;
   launchProfileHash: `sha256:${string}`;
   launchIntentHash: `sha256:${string}`;
-  fundingIntentHash: `0x${string}`;
+  fundingIntentHash: `0x${string}` | null;
+  liquidityIntent: DeveloperCustomLaunchLiquidityIntentV3;
   createdAt: string;
   updatedAt: string;
   output: Readonly<Record<string, JsonValue>> | null;
@@ -712,7 +729,7 @@ function parseLaunch(
       || typeof record.launchIntentHash !== "string"
       || !REQUEST_HASH.test(record.launchIntentHash)
     ))
-    || (version === "v3" && (
+    || (version === "v3" && record.fundingIntentHash !== null && (
       typeof record.fundingIntentHash !== "string"
       || !LOWER_BYTES32.test(record.fundingIntentHash)
     ))
@@ -720,6 +737,9 @@ function parseLaunch(
   const output = record.output === null
     ? null
     : jsonRecord(record.output);
+  const fundingIntentHash = version === "v3"
+    ? validatedV3FundingIntentHash(record, output)
+    : null;
   const failure = record.failure === null
     ? null
     : parseFailure(record.failure);
@@ -757,8 +777,87 @@ function parseLaunch(
         ...profileBase,
         schemaVersion: "programmable.custom-launch.v3" as const,
         routeId: "custom-launch:create:v3" as const,
-        fundingIntentHash: record.fundingIntentHash as `0x${string}`,
+        fundingIntentHash,
+        liquidityIntent: parseV3LiquidityIntent(record.liquidityIntent),
       });
+}
+
+function parseV3LiquidityIntent(
+  value: JsonValue | undefined,
+): DeveloperCustomLaunchLiquidityIntentV3 {
+  const record = jsonRecord(value);
+  const keys = Object.keys(record);
+  if (
+    keys.length !== 3
+    || !keys.every((key) => [
+      "model",
+      "declaredLaunchState",
+      "binding",
+    ].includes(key))
+    || (record.binding !== "explicit-request-hash"
+      && record.binding !== "legacy-v3-default")
+  ) throw new BackendContractErrorV1();
+
+  if (record.model === "external-concentrated-liquidity") {
+    if (record.declaredLaunchState !== "liquidity_required") {
+      throw new BackendContractErrorV1();
+    }
+    return Object.freeze({
+      model: record.model,
+      declaredLaunchState: record.declaredLaunchState,
+      binding: record.binding,
+    });
+  }
+  if (
+    (record.model !== "launch-seeded-concentrated-liquidity"
+      && record.model !== "hook-inventory-custom-accounting")
+    || record.declaredLaunchState !== "assessment_required"
+  ) throw new BackendContractErrorV1();
+  return Object.freeze({
+    model: record.model,
+    declaredLaunchState: record.declaredLaunchState,
+    binding: record.binding,
+  });
+}
+
+function validatedV3FundingIntentHash(
+  record: Readonly<Record<string, JsonValue>>,
+  output: Readonly<Record<string, JsonValue>> | null,
+): `0x${string}` | null {
+  const fundingIntentHash = record.fundingIntentHash as `0x${string}` | null;
+  const statusRequiresFundingIntent = record.status === "awaiting_funding_authorization"
+    || record.status === "funding_authorization_verified";
+  if (statusRequiresFundingIntent && fundingIntentHash === null) {
+    throw new BackendContractErrorV1();
+  }
+  if (output === null) return fundingIntentHash;
+
+  const fundingMode = output.fundingMode;
+  if (fundingMode !== undefined) {
+    if (
+      fundingMode !== "none"
+      && fundingMode !== "wallet-transaction-value"
+      && fundingMode !== "eip-3009-receive-with-authorization"
+    ) throw new BackendContractErrorV1();
+    if (
+      (fundingMode === "eip-3009-receive-with-authorization")
+        !== (fundingIntentHash !== null)
+    ) throw new BackendContractErrorV1();
+  }
+
+  const actionRequired = output.actionRequired;
+  if (
+    actionRequired !== null
+    && actionRequired !== undefined
+    && !Array.isArray(actionRequired)
+    && typeof actionRequired === "object"
+    && actionRequired.method === "eip-3009-receive-with-authorization"
+    && (
+      fundingIntentHash === null
+      || actionRequired.fundingIntentHash !== fundingIntentHash
+    )
+  ) throw new BackendContractErrorV1();
+  return fundingIntentHash;
 }
 
 function parseFailure(value: JsonValue) {

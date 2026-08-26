@@ -35,6 +35,8 @@ type JsonValue =
 export type LaunchStatus =
   | "received"
   | "validating"
+  | "pending_review"
+  | "action_required"
   | "prepared"
   | "awaiting_funding_authorization"
   | "funding_authorization_verified"
@@ -99,6 +101,8 @@ const pageSize = 5;
 const statuses = new Set<LaunchStatus>([
   "received",
   "validating",
+  "pending_review",
+  "action_required",
   "prepared",
   "awaiting_funding_authorization",
   "funding_authorization_verified",
@@ -122,15 +126,17 @@ const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
 const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
   received: 0,
   validating: 1,
-  prepared: 2,
-  awaiting_funding_authorization: 3,
-  funding_authorization_verified: 4,
-  simulating: 5,
-  authorized: 6,
-  submitted: 7,
-  failed: 8,
-  cancelled: 8,
-  finalized: 9,
+  awaiting_funding_authorization: 2,
+  funding_authorization_verified: 3,
+  pending_review: 4,
+  action_required: 4,
+  prepared: 5,
+  simulating: 6,
+  authorized: 7,
+  submitted: 8,
+  failed: 9,
+  cancelled: 9,
+  finalized: 10,
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -188,7 +194,6 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     && /^0x[0-9a-f]{64}$/u.test(value.fundingIntentHash)
     ? value.fundingIntentHash as `0x${string}`
     : null;
-  if (v3 && !fundingIntentHash) return null;
   let failure: LaunchResource["failure"] = null;
   if (value.failure !== null) {
     if (
@@ -256,6 +261,15 @@ class LaunchHistoryRequestError extends Error {
   }
 }
 
+export function launchPollingRetryAfterMs(
+  status: number,
+  retryAfterMs: number | null,
+) {
+  return (status === 429 || status === 503) && retryAfterMs !== null
+    ? retryAfterMs
+    : null;
+}
+
 function readApiError(
   response: Response,
   value: unknown,
@@ -303,6 +317,8 @@ function statusCopy(status: LaunchStatus) {
   switch (status) {
     case "received": return "Received";
     case "validating": return "Validating";
+    case "pending_review": return "Admission checks running";
+    case "action_required": return "Review required";
     case "prepared": return "Prepared";
     case "awaiting_funding_authorization": return "Funding signature required";
     case "funding_authorization_verified": return "Funding verified";
@@ -319,6 +335,8 @@ function statusDescription(status: LaunchStatus) {
   switch (status) {
     case "received": return "The API accepted this request.";
     case "validating": return "The API is validating the request.";
+    case "pending_review": return "Exact-source checks and the bounded static baseline are still running.";
+    case "action_required": return "A blocking static indicator needs platform review before Router simulation.";
     case "prepared": return "The launch transaction has been prepared.";
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
@@ -921,13 +939,15 @@ export function DeveloperLaunchHistory({
               ? cause.message
               : "Unable to track the submitted transaction.",
           );
-          if (
-            cause instanceof LaunchHistoryRequestError
-            && cause.status === 429
-            && cause.retryAfterMs !== null
-          ) {
-            waitMs = cause.retryAfterMs;
-            continue;
+          if (cause instanceof LaunchHistoryRequestError) {
+            const retryAfterMs = launchPollingRetryAfterMs(
+              cause.status,
+              cause.retryAfterMs,
+            );
+            if (retryAfterMs !== null) {
+              waitMs = retryAfterMs;
+              continue;
+            }
           }
           return;
         }
@@ -967,6 +987,12 @@ export function DeveloperLaunchHistory({
             );
             return;
           }
+          if (updated.status === "action_required") {
+            setStatusMessage(
+              "Platform review is required before Router simulation. No wallet action is needed.",
+            );
+            return;
+          }
           if (terminalStatus(updated.status)) {
             setStatusMessage("Launch preparation reached a terminal state.");
             return;
@@ -976,6 +1002,8 @@ export function DeveloperLaunchHistory({
             || ![
               "awaiting_funding_authorization",
               "funding_authorization_verified",
+              "pending_review",
+              "prepared",
               "simulating",
             ].includes(updated.status)
           ) {
@@ -984,7 +1012,13 @@ export function DeveloperLaunchHistory({
           setStatusMessage(
             updated.status === "simulating"
               ? "The exact Router transaction is being simulated."
-              : "The funding authorization is verified. Preparing the Router transaction.",
+              : updated.status === "pending_review"
+                ? "Admission checks are still running before Router simulation."
+                : updated.status === "prepared"
+                  ? "The exact Router transaction is prepared and waiting for simulation."
+                  : updated.status === "awaiting_funding_authorization"
+                    ? "Funding authorization acceptance is still being reconciled."
+                    : "The funding authorization is verified. Preparing the Router transaction.",
           );
           waitMs = authorizedPollIntervalMs;
         } catch (cause) {
@@ -994,13 +1028,15 @@ export function DeveloperLaunchHistory({
               ? cause.message
               : "Unable to prepare the Router transaction.",
           );
-          if (
-            cause instanceof LaunchHistoryRequestError
-            && cause.status === 429
-            && cause.retryAfterMs !== null
-          ) {
-            waitMs = cause.retryAfterMs;
-            continue;
+          if (cause instanceof LaunchHistoryRequestError) {
+            const retryAfterMs = launchPollingRetryAfterMs(
+              cause.status,
+              cause.retryAfterMs,
+            );
+            if (retryAfterMs !== null) {
+              waitMs = retryAfterMs;
+              continue;
+            }
           }
           return;
         }
@@ -1347,6 +1383,24 @@ export function DeveloperLaunchHistory({
                   <p className={styles.failure} role="alert">
                     {launch.failure.message}
                   </p>
+                ) : null}
+                {launch.status === "action_required" ? (
+                  <div className={styles.admissionNotice} role="status">
+                    <strong>Platform review required</strong>
+                    <p>
+                      A deterministic indicator blocked Router simulation. This
+                      is not a wallet action, audit, or safety verdict. Contact
+                      support with request ID <code>{launch.requestId}</code>.
+                      Never send your API key.
+                    </p>
+                    <a
+                      href="https://discord.com/invite/programmable"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Open Programmable support
+                    </a>
+                  </div>
                 ) : null}
                 {fundingReview ? (
                   <div className={styles.fundingReview}>

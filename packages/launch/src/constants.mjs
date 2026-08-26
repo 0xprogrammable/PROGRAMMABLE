@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.0.0";
+export const PACKAGE_VERSION = "3.1.0";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -25,23 +25,47 @@ export const LAUNCH_PROFILE_REVISION = 3;
 export const LAUNCH_PROFILE_VERSION = "2.0.0";
 export const LAUNCH_PROFILE_HASH_DOMAIN = "programmable.fee-enforced-launch-profile.v2";
 export const LAUNCH_INTENT_HASH_DOMAIN = "programmable.custom-launch-intent.v2";
-export const DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA =
+export const DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V2 =
   "programmable.direct-native-hook-graph-profile-selection.v2";
-export const DIRECT_NATIVE_PROFILE_BINDING_SCHEMA =
+export const DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3 =
+  "programmable.direct-native-hook-graph-profile-selection.v3";
+export const DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA =
+  DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3;
+export const DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V2 =
   "programmable.direct-native-hook-graph-profile-selection-binding.v2";
-export const DIRECT_NATIVE_PROFILE_SCHEMA =
+export const DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V3 =
+  "programmable.direct-native-hook-graph-profile-selection-binding.v3";
+export const DIRECT_NATIVE_PROFILE_BINDING_SCHEMA =
+  DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V3;
+export const DIRECT_NATIVE_PROFILE_SCHEMA_V2 =
   "programmable.direct-native-hook-graph-profile.v2";
+export const DIRECT_NATIVE_PROFILE_SCHEMA_V3 =
+  "programmable.direct-native-hook-graph-profile.v3";
+export const DIRECT_NATIVE_PROFILE_SCHEMA = DIRECT_NATIVE_PROFILE_SCHEMA_V3;
 export const DIRECT_NATIVE_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
-export const DIRECT_NATIVE_PROFILE_REVISION = 2;
-export const DIRECT_NATIVE_PROFILE_VERSION = "2.0.0";
-export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN =
+export const DIRECT_NATIVE_PROFILE_REVISION_V2 = 2;
+export const DIRECT_NATIVE_PROFILE_REVISION_V3 = 3;
+export const DIRECT_NATIVE_PROFILE_REVISION = DIRECT_NATIVE_PROFILE_REVISION_V3;
+export const DIRECT_NATIVE_PROFILE_VERSION_V2 = "2.0.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.0.0";
+export const DIRECT_NATIVE_PROFILE_VERSION = DIRECT_NATIVE_PROFILE_VERSION_V3;
+export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2 =
   "programmable.direct-native-hook-graph-profile.v2";
-export const DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN =
+export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V3 =
+  "programmable.direct-native-hook-graph-profile.v3";
+export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN = DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V3;
+export const DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V2 =
   "programmable.direct-native-hook-graph-launch-intent.v2";
+export const DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V3 =
+  "programmable.direct-native-hook-graph-launch-intent.v3";
+export const DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN =
+  DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V3;
 export const PLATFORM_FEE_POLICY_SCHEMA =
   "programmable.platform-fee-policy.v1";
 export const PLATFORM_FEE_PROOF_POLICY_SCHEMA =
   "programmable.platform-fee-conformance-policy.v1";
+export const DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA =
+  "programmable.direct-native-platform-admission-policy.v1";
 export const PLATFORM_FEE_BINDING_SCHEMA =
   "programmable.platform-fee-binding.v2";
 export const DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA =
@@ -90,8 +114,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.0.0";
-export const RELEASE_TARBALL = "programmable-launch-3.0.0.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.1.0";
+export const RELEASE_TARBALL = "programmable-launch-3.1.0.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 
@@ -131,6 +155,8 @@ export const API_ROUTE_NAMESPACE_TYPE =
 export const MAX_REQUEST_BYTES = 8_388_608;
 export const MAX_STANDARD_JSON_INPUT_BYTES = 5_242_880;
 export const MAX_TOTAL_STANDARD_JSON_INPUT_BYTES = 5_242_880;
+export const MAX_STANDARD_JSON_SOURCES = 2_048;
+export const DIRECT_NATIVE_REQUIRED_SOLC_VERSION = "0.8.26+commit.8a97fa7a";
 export const MAX_GRAPH_TARGETS = 16;
 export const MAX_TARGET_INIT_CODE_BYTES = 49_152;
 export const MAX_TARGET_RUNTIME_CODE_BYTES = 24_576;
