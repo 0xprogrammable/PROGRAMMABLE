@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,9 +33,13 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.1.0",
+        releaseVersion: "3.2.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+        checksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+        tarballSha256:
+          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
       },
       compatibility: {
         v1: {
@@ -55,9 +60,13 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.1.0",
+          releaseVersion: "3.2.1",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+          checksumUrl:
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          tarballSha256:
+            "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
         },
       },
       generalHookProfile: {
@@ -69,7 +78,7 @@ describe("public Custom Launch CLI surface", () => {
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.1.0",
+        cliReleaseVersion: "3.2.1",
       },
       integrationPreview: {
         status: "live",
@@ -104,10 +113,14 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.1.0",
-        releaseTag: "programmable-launch-v3.1.0",
+        releaseVersion: "3.2.1",
+        releaseTag: "programmable-launch-v3.2.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+        checksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+        tarballSha256:
+          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -166,6 +179,31 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(JSON.stringify(document)).not.toContain("api-live");
     expect(JSON.stringify(document)).not.toContain("prelaunch");
+  });
+
+  it("binds the advertised CLI checksum to the exact local package bytes", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-launch-release-"));
+    try {
+      execFileSync("npm", [
+        "pack",
+        "./packages/launch",
+        "--pack-destination",
+        temporaryRoot,
+        "--ignore-scripts",
+        "--json",
+      ], { cwd: root, stdio: "pipe" });
+      const tarball = readFileSync(
+        join(temporaryRoot, "programmable-launch-3.2.1.tgz"),
+      );
+      const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
+      const document = programmableWellKnownDocumentV1(
+        PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+      );
+      expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
+      expect(tarball.byteLength).toBe(245_763);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   it("publishes a public, reference-complete V2 contract", () => {
@@ -764,6 +802,39 @@ describe("public Custom Launch CLI surface", () => {
     const actionRequiredOutput = outputForStage("platform-review-action-required");
     expect(actionRequiredOutput.properties.actionRequired.properties.kind.const)
       .toBe("security-review");
+    expect(actionRequiredOutput.properties.actionRequired.required)
+      .toContain("remediations");
+    expect(actionRequiredOutput.properties.actionRequired.properties.remediations)
+      .toMatchObject({
+        minItems: 1,
+        items: { $ref: "#/components/schemas/CustomLaunchRemediationV1" },
+      });
+    expect(v3.components.schemas.CustomLaunchRemediationV1).toMatchObject({
+      required: expect.arrayContaining([
+        "schemaVersion",
+        "remediationId",
+        "code",
+        "stage",
+        "requiredChange",
+        "retryable",
+        "requiresNewRequest",
+        "resumeAt",
+      ]),
+      properties: {
+        schemaVersion: { const: "programmable.custom-launch-remediation.v1" },
+        catalogUrl: {
+          const: "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+        },
+        guideUrl: {
+          const: "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+        },
+      },
+      additionalProperties: false,
+    });
+    expect(v3.components.schemas.CustomLaunchFailureV3.required)
+      .toEqual(["code", "message", "retryable", "remediations"]);
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties.failure.oneOf[0])
+      .toEqual({ $ref: "#/components/schemas/CustomLaunchFailureV3" });
     expect(actionRequiredOutput.required).toContain("staticBaseline");
     expect(outputVariants.every(
       (variant: { required: string[] }) =>
@@ -852,7 +923,7 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "Package `3.1.0` supports production general profile",
+      "Package `3.2.1` supports production general profile",
     );
     expect(packageGuide).toContain(
       "`programmable.direct-native-hook-graph.v1` version `3.0.0`",

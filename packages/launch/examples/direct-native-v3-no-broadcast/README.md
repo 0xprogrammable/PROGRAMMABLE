@@ -3,9 +3,9 @@
 This packaged fixture compiles real Solidity with exact `solc` 0.8.26, emits the Standard JSON input and selected
 compiler artifacts, then prepares and validates a three-target
 `programmable.direct-native-hook-graph.v1` revision 3 request. The hook target is the exact
-`ProgrammableVolumeFeeHookV2` reference source/build at permission mask `0x20cc`. The initializer target deliberately
-reverts if executed: it exists only to prove the compiler-ABI-validated EIP-3009 `r`/`s`/`v` patch surface without
-moving funds, signing, or broadcasting.
+`ProgrammableVolumeFeeHookV2` reference source/build at permission mask `0x20cc`. The initializer uses a static nested
+tuple and the real `receiveWithAuthorization` call shape. The CLI derives and proves v2 ABI paths for the API-derived
+nonce plus `r`/`s`/`v`; the initializer then deliberately reverts so this offline fixture cannot retain or move funds.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
 inputs. The embedded profile is the live revision 3 profile with `productionLaunchAuthorized: true`; that flag does
@@ -54,7 +54,9 @@ intentionally does not select it.
 
 Run `pack` promptly after `build`: the generated unsigned funding descriptor uses a fresh, at-most-one-hour validity
 window. Re-run `npm run build` to refresh an expired window. The packed request contains the nine-field unsigned
-EIP-3009 descriptor and zero `r`/`s`/`v` initializer words only—never a signature.
+EIP-3009 descriptor and a v2 authorization-patch descriptor. The unsigned initializer has zero nonce, `r`, `s`, and
+`v` leaves; those four leaves are patched only after the launch intent and funding nonce exist. It never contains a
+wallet signature during pack or validate.
 
 ## Optional API submit: stop at the unsigned challenge
 

@@ -5,9 +5,20 @@ import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_LAUNCH_TARBALL_BYTES = 4 * 1024 * 1024;
+const MAX_LAUNCH_CHECKSUM_BYTES = 256;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
 const CURSOR = /^[A-Za-z0-9_-]{16,512}$/u;
+const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
+  version: "3.2.1",
+  tarballUrl:
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+  checksumUrl:
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+  tarballSha256:
+    "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+});
 
 function canonicalize(value) {
   if (value === null || ["boolean", "number", "string"].includes(typeof value)) {
@@ -57,6 +68,20 @@ async function fetchBytes(url, options, fetchImpl) {
   return { response, bytes };
 }
 
+async function fetchReleaseAssetBytes(url, maximumBytes, fetchImpl) {
+  const response = await fetchImpl(url, {
+    method: "GET",
+    headers: { accept: "application/octet-stream" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(30_000),
+  });
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (response.status !== 200 || bytes.length < 1 || bytes.length > maximumBytes) {
+    throw new Error("public launch package asset is unavailable or unbounded");
+  }
+  return { response, bytes };
+}
+
 function parseJson(bytes, label) {
   try {
     return JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
@@ -86,16 +111,56 @@ export async function probeCustomLaunchV3Release(input) {
   const apiOrigin = new URL(observation.fly.origin);
   const fetchImpl = input.fetchImpl ?? fetch;
   const websiteHeaders = headers(input.vercelBypassSecret);
-  const [openApiResult, manifestResult, readinessResult] = await Promise.all([
+  const launchPackageRelease = input.expectedLaunchPackageRelease
+    ?? PUBLIC_LAUNCH_PACKAGE_RELEASE;
+  if (
+    typeof launchPackageRelease?.version !== "string"
+    || typeof launchPackageRelease?.tarballUrl !== "string"
+    || typeof launchPackageRelease?.checksumUrl !== "string"
+    || !SHA256.test(launchPackageRelease?.tarballSha256 ?? "")
+  ) throw new Error("public launch package release identity is invalid");
+  const launchTarballUrl = new URL(launchPackageRelease.tarballUrl);
+  const launchChecksumUrl = new URL(launchPackageRelease.checksumUrl);
+  const launchTarballName = launchTarballUrl.pathname.split("/").at(-1);
+  if (
+    launchTarballUrl.protocol !== "https:"
+    || launchTarballUrl.hostname !== "github.com"
+    || launchChecksumUrl.href !== `${launchTarballUrl.href}.sha256`
+    || launchTarballName !== `programmable-launch-${launchPackageRelease.version}.tgz`
+  ) throw new Error("public launch package release locator is invalid");
+  const [
+    openApiResult,
+    manifestResult,
+    remediationCatalogResult,
+    readinessResult,
+    launchTarballResult,
+    launchChecksumResult,
+  ] = await Promise.all([
     fetchBytes(new URL("/openapi/custom-launch-v3.json", websiteOrigin), {
       method: "GET", headers: websiteHeaders,
     }, fetchImpl),
     fetchBytes(new URL("/.well-known/programmable.json", websiteOrigin), {
       method: "GET", headers: websiteHeaders,
     }, fetchImpl),
+    fetchBytes(new URL(
+      "/policies/custom-launch-agent-remediation-v1.json",
+      websiteOrigin,
+    ), {
+      method: "GET", headers: websiteHeaders,
+    }, fetchImpl),
     fetchBytes(new URL("/readyz", apiOrigin), {
       method: "GET", headers: headers(),
     }, fetchImpl),
+    fetchReleaseAssetBytes(
+      launchTarballUrl,
+      MAX_LAUNCH_TARBALL_BYTES,
+      fetchImpl,
+    ),
+    fetchReleaseAssetBytes(
+      launchChecksumUrl,
+      MAX_LAUNCH_CHECKSUM_BYTES,
+      fetchImpl,
+    ),
   ]);
   if (openApiResult.response.status !== 200) throw new Error("staged V3 OpenAPI is unavailable");
   const openApiSha256 = sha256(openApiResult.bytes);
@@ -104,7 +169,7 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.1.0"
+    openApi?.info?.version !== "3.2.1"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || openApi?.["x-programmable-profile"]?.profileVersion !== "3.0.0"
@@ -125,11 +190,50 @@ export async function probeCustomLaunchV3Release(input) {
   if (
     manifest?.customLaunchApi?.versions?.v3?.status !== "live"
     || manifest?.customLaunchApi?.versions?.v3?.publicAuthorization !== true
+    || manifest?.customLaunchApi?.cli?.releaseVersion
+      !== launchPackageRelease.version
+    || manifest?.customLaunchApi?.cli?.tarballUrl
+      !== launchPackageRelease.tarballUrl
+    || manifest?.customLaunchApi?.cli?.checksumUrl
+      !== launchPackageRelease.checksumUrl
+    || manifest?.customLaunchApi?.cli?.tarballSha256
+      !== launchPackageRelease.tarballSha256
     || manifest?.customLaunchApi?.legacyIntake?.registry !== "closed"
     || manifest?.customLaunchApi?.legacyIntake?.github !== "closed"
     || serializedManifest.includes("CUSTOM_LAUNCH_V3_INTEGRATION_PENDING")
     || serializedManifest.includes("integration-pending")
   ) throw new Error("staged discovery does not advertise an enabled V3 API with legacy intake closed");
+
+  if (remediationCatalogResult.response.status !== 200) {
+    throw new Error("staged agent remediation catalog is unavailable");
+  }
+  const remediationCatalog = parseJson(
+    remediationCatalogResult.bytes,
+    "staged agent remediation catalog",
+  );
+  if (
+    remediationCatalog?.authoritativeSources?.cliReleaseVersion
+      !== launchPackageRelease.version
+    || remediationCatalog?.authoritativeSources?.cliTarballUrl
+      !== launchPackageRelease.tarballUrl
+    || remediationCatalog?.authoritativeSources?.cliChecksumUrl
+      !== launchPackageRelease.checksumUrl
+    || remediationCatalog?.authoritativeSources?.cliTarballSha256
+      !== launchPackageRelease.tarballSha256
+  ) throw new Error("staged agent remediation catalog differs from the CLI release contract");
+
+  if (
+    launchTarballResult.response.status !== 200
+    || sha256(launchTarballResult.bytes) !== launchPackageRelease.tarballSha256
+  ) throw new Error("public launch package bytes differ from the staged release contract");
+  const expectedChecksumBytes = Buffer.from(
+    `${launchPackageRelease.tarballSha256.slice("sha256:".length)}  ${launchTarballName}\n`,
+    "utf8",
+  );
+  if (
+    launchChecksumResult.response.status !== 200
+    || !launchChecksumResult.bytes.equals(expectedChecksumBytes)
+  ) throw new Error("public launch package checksum differs from the staged release contract");
 
   if (
     readinessResult.response.status !== 200
@@ -195,6 +299,13 @@ export async function probeCustomLaunchV3Release(input) {
       openApiSha256,
       discoveryStatus: "v3-live",
       legacyIntake: "closed",
+      cli: Object.freeze({
+        releaseVersion: launchPackageRelease.version,
+        tarballUrl: launchPackageRelease.tarballUrl,
+        checksumUrl: launchPackageRelease.checksumUrl,
+        tarballSha256: launchPackageRelease.tarballSha256,
+        tarballBytes: launchTarballResult.bytes.length,
+      }),
     }),
     api: Object.freeze({
       origin: apiOrigin.origin,

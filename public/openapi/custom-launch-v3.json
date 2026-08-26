@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.1.0",
+    "version": "3.2.1",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
     "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests remain readable and retryable with their original exact bytes.",
     "license": {
@@ -18,8 +18,8 @@
     }
   ],
   "externalDocs": {
-    "description": "Custom Launch API guide and activation boundary",
-    "url": "https://programmable.market/docs/developers/custom-launch"
+    "description": "Custom Launch API existing-project integration guide",
+    "url": "https://programmable.market/docs/developers/custom-launch#existing-project-integration"
   },
   "security": [
     {
@@ -39,6 +39,25 @@
     "stableProductionVersion": "3",
     "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
     "activationBlockers": []
+  },
+  "x-programmable-agent-integration": {
+    "schemaVersion": "programmable.custom-launch-agent-remediation-catalog.v1",
+    "startUrl": "https://programmable.market/.well-known/programmable.json",
+    "remediationCatalogUrl": "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+    "packConfigSchemaUrl": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
+    "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+    "requiredCommandOrder": [
+      "pack",
+      "validate",
+      "submit",
+      "status"
+    ],
+    "apiKeyEnvironmentVariable": "PROGRAMMABLE_API_KEY",
+    "apiKeyPlaceholder": "$PROGRAMMABLE_API_KEY",
+    "apiKeyContainsPolicy": false,
+    "manualProjectAllowlist": false,
+    "automaticAdmission": true,
+    "walletSigning": "separate-controller-action"
   },
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
@@ -63,6 +82,9 @@
       "eip-3009-receive-with-authorization"
     ],
     "descriptorSchemaVersion": "programmable.funding-authorization-descriptor.v1",
+    "authorizationPatchSchemaVersion": "programmable.eip3009-authorization-patch.v2",
+    "authorizationPatchEncoding": "eip3009-nonce-r-s-v-abi-leaves",
+    "legacySignaturePatchSchemaVersion": "programmable.eip3009-signature-patch.v1",
     "signatureIncludedInCreateRequest": false,
     "fundingIntentHashStage": "pre-signature",
     "excludedFromFundingIntentHash": [
@@ -1437,14 +1459,14 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
           },
           "fundingSignaturePatch": {
-            "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
+            "$ref": "#/components/schemas/FundingAuthorizationPatchDescriptor"
           },
           "platformFeeBinding": {
             "$ref": "#/components/schemas/DirectNativePlatformFeeBindingV1"
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "Current CLI 3.1.0 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
+            "description": "Current CLI 3.2.1 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
           }
         },
         "allOf": [
@@ -1530,6 +1552,76 @@
         "description": "Derived unsigned initializer binding. Offsets include the four-byte selector, are distinct, satisfy (offset-4)%32=0, remain in bounds and identify all-zero ABI words. The create request still contains no signature bytes.",
         "additionalProperties": false
       },
+      "AbiArgumentPathV2": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 16,
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "description": "Zero-based ABI argument path. The first index selects a top-level initializer input. Later indices descend only static tuple components or fixed-array elements; dynamic parents are invalid."
+      },
+      "FundingAuthorizationPatchDescriptorV2": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "targetId",
+          "unsignedInitializerCalldataSha256",
+          "initializerCalldataLengthBytes",
+          "authorizationEncoding",
+          "nonceArgumentPath",
+          "rArgumentPath",
+          "sArgumentPath",
+          "vArgumentPath"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.eip3009-authorization-patch.v2"
+          },
+          "targetId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier",
+            "description": "Must equal targetRoles.initializerTargetId."
+          },
+          "unsignedInitializerCalldataSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "initializerCalldataLengthBytes": {
+            "type": "integer",
+            "minimum": 132,
+            "maximum": 131072
+          },
+          "authorizationEncoding": {
+            "const": "eip3009-nonce-r-s-v-abi-leaves"
+          },
+          "nonceArgumentPath": {
+            "$ref": "#/components/schemas/AbiArgumentPathV2"
+          },
+          "rArgumentPath": {
+            "$ref": "#/components/schemas/AbiArgumentPathV2"
+          },
+          "sArgumentPath": {
+            "$ref": "#/components/schemas/AbiArgumentPathV2"
+          },
+          "vArgumentPath": {
+            "$ref": "#/components/schemas/AbiArgumentPathV2"
+          }
+        },
+        "description": "Current CLI-derived unsigned initializer binding. The four paths are distinct and resolve through static ABI containers to zero bytes32 nonce, bytes32 r, bytes32 s and uint8 v leaves. The CLI derives calldata offsets from the exact compiled ABI and proves canonical decode and re-encode; an applicant cannot submit offsets. The backend inserts only the derived nonce and verified wallet signature after the unsigned launch intent is bound. The create request contains no signature bytes.",
+        "additionalProperties": false
+      },
+      "FundingAuthorizationPatchDescriptor": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FundingAuthorizationPatchDescriptorV2"
+          },
+          {
+            "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
+          }
+        ],
+        "description": "CLI 3.2.1 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
+      },
       "Eip3009FundingAuthorizationDescriptorV1": {
         "type": "object",
         "required": [
@@ -1574,7 +1666,7 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
           }
         },
-        "description": "Unsigned descriptor only. It requires validAfter < now < validBefore. It contains no signature, v, r or s. Its nonce is derived from the pre-signature funding intent, not from signature-bearing initializer calldata.",
+        "description": "Unsigned descriptor only. It requires validAfter < now < validBefore. It contains the nonce derived from the pre-signature funding intent but no signature, v, r or s value. Authorization patch V2 derives that intent while nonce, r, s and v leaves are zero, then inserts the derived nonce and verified signature into the final initializer calldata.",
         "additionalProperties": false
       },
       "CustomGraphBundleV3": {
@@ -1700,7 +1792,7 @@
           },
           "fundingIntentHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32",
-            "description": "Pre-signature domain-separated funding intent. It is not a sha256: label and does not include signature-bearing initializer calldata or a final graph commitment."
+            "description": "Pre-signature domain-separated funding intent. It is not a sha256: label. Authorization patch V2 derives it from the unsigned launch intent whose nonce, r, s and v leaves are zero; it does not include the final graph containing the patched nonce or signature."
           },
           "agentAttestation": {
             "$ref": "./custom-launch-v2.json#/components/schemas/AgentLaunchAttestationV2"
@@ -2553,6 +2645,150 @@
         "description": "Deterministic bounded exact-source and runtime indicator report. It is neither approval nor a safety claim.",
         "additionalProperties": false
       },
+      "CustomLaunchRemediationV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "remediationId",
+          "code",
+          "stage",
+          "targetId",
+          "targetRole",
+          "sourcePath",
+          "expected",
+          "observed",
+          "requiredChange",
+          "catalogUrl",
+          "guideUrl",
+          "retryable",
+          "requiresNewRequest",
+          "resumeAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-remediation.v1"
+          },
+          "remediationId": {
+            "enum": [
+              "PLATFORM_ADMISSION_FINDING",
+              "PROFILE_INVALID",
+              "ROUTER_SIMULATION_REVERTED",
+              "ROUTER_SIMULATION_UNAVAILABLE"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "enum": [
+              "admission",
+              "validation-or-admission",
+              "simulation"
+            ]
+          },
+          "targetId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetRole": {
+            "oneOf": [
+              {
+                "enum": [
+                  "token",
+                  "hook",
+                  "initializer",
+                  "platform-fee-binding",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourcePath": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observed": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requiredChange": {
+            "type": "string",
+            "minLength": 1
+          },
+          "catalogUrl": {
+            "const": "https://programmable.market/policies/custom-launch-agent-remediation-v1.json"
+          },
+          "guideUrl": {
+            "const": "https://programmable.market/docs/developers/custom-launch#existing-project-integration"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "requiresNewRequest": {
+            "type": "boolean"
+          },
+          "resumeAt": {
+            "enum": [
+              "pack",
+              "inspect-project",
+              "status"
+            ]
+          }
+        },
+        "description": "Bounded machine-readable project remediation. It never contains credentials, signatures, source excerpts or provider diagnostics.",
+        "additionalProperties": false
+      },
+      "CustomLaunchFailureV3": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "remediations"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "remediations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomLaunchRemediationV1"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomLaunchOutputV3": {
         "oneOf": [
           {
@@ -2849,7 +3085,8 @@
                   "kind",
                   "reportSha256",
                   "findingCodes",
-                  "message"
+                  "message",
+                  "remediations"
                 ],
                 "properties": {
                   "kind": {
@@ -2866,7 +3103,14 @@
                     "minItems": 1
                   },
                   "message": {
-                    "const": "Additional platform review is required before wallet authorization."
+                    "const": "Automatic static admission found a blocking target-role condition. Follow the bound remediation before wallet authorization."
+                  },
+                  "remediations": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CustomLaunchRemediationV1"
+                    },
+                    "minItems": 1
                   }
                 },
                 "additionalProperties": false
@@ -2893,7 +3137,7 @@
                 "$ref": "#/components/schemas/FundingBoundaryV3"
               }
             },
-            "description": "A deterministic indicator requires additional platform review. This stage never asks the controller wallet to sign or broadcast.",
+            "description": "Automatic static admission found a blocking target-role condition. Follow the bound remediation before wallet authorization. This stage never asks the controller wallet to sign or broadcast.",
             "additionalProperties": false
           }
         ]
@@ -2948,7 +3192,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report for additional platform review and is not a wallet action. Only awaiting_funding_authorization and authorized expose separate controller-wallet handoffs.",
+            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report and bound remediation for an exact blocking target-role condition; it is not a wallet action or a request for manual approval. Only awaiting_funding_authorization and authorized expose separate controller-wallet handoffs.",
             "enum": [
               "received",
               "validating",
@@ -3008,7 +3252,7 @@
           "failure": {
             "oneOf": [
               {
-                "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchFailureV2"
+                "$ref": "#/components/schemas/CustomLaunchFailureV3"
               },
               {
                 "type": "null"

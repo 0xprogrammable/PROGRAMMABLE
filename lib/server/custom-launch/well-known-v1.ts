@@ -41,14 +41,53 @@ export function programmableWellKnownDocumentV1(
       openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       apiKeysUrl: "https://programmable.market/developers/api-keys",
       guideUrl: "https://programmable.market/docs/developers/custom-launch",
+      agentIntegration: Object.freeze({
+        status: "live" as const,
+        schemaVersion:
+          "programmable.custom-launch-agent-remediation-catalog.v1" as const,
+        startUrl:
+          "https://programmable.market/.well-known/programmable.json",
+        remediationCatalogUrl:
+          "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+        packConfigSchemaUrl:
+          "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
+        existingProjectGuideUrl:
+          "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+        openApiUrl:
+          "https://programmable.market/openapi/custom-launch-v3.json",
+        apiKeyEnvironmentVariable: "PROGRAMMABLE_API_KEY" as const,
+        apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY" as const,
+        apiKeyContainsPolicy: false as const,
+        manualProjectAllowlist: false as const,
+        automaticAdmission: true as const,
+        automaticRouterSimulation: true as const,
+        fundingAuthorizationPatch: Object.freeze({
+          schemaVersion:
+            "programmable.eip3009-authorization-patch.v2" as const,
+          configKey: "fundingSignaturePatch" as const,
+          authorizationEncoding:
+            "eip3009-nonce-r-s-v-abi-leaves" as const,
+        }),
+        walletSigning: "separate-controller-action" as const,
+        requiredCommandOrder: Object.freeze([
+          "pack",
+          "validate",
+          "submit",
+          "status",
+        ] as const),
+      }),
       cli: Object.freeze({
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.1.0",
+        releaseVersion: "3.2.1",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.1.0",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+        checksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+        tarballSha256:
+          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
       }),
       compatibility: Object.freeze({
         v1: Object.freeze({
@@ -73,11 +112,15 @@ export function programmableWellKnownDocumentV1(
         cli: Object.freeze({
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.1.0",
+          releaseVersion: "3.2.1",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.1.0",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.1",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+          checksumUrl:
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          tarballSha256:
+            "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
         }),
       }),
       generalHookProfile: Object.freeze({
@@ -90,7 +133,7 @@ export function programmableWellKnownDocumentV1(
         createPath: "/v3/custom-launches" as const,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.1.0" as const,
+        cliReleaseVersion: "3.2.1" as const,
       }),
       integrationPreview: Object.freeze({
         status: "live" as const,
@@ -132,12 +175,16 @@ export function programmableWellKnownDocumentV1(
         publicAuthorization: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.1.0",
-        releaseTag: "programmable-launch-v3.1.0",
+        releaseVersion: "3.2.1",
+        releaseTag: "programmable-launch-v3.2.1",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.1.0",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.1",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+        checksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+        tarballSha256:
+          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({

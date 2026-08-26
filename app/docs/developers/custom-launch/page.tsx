@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
+  { id: "existing-project-integration", label: "Existing projects" },
   { id: "v3-general", label: "V3 general hooks" },
   { id: "liquidity", label: "Liquidity and limits" },
   { id: "request", label: "Request contract" },
@@ -95,19 +96,19 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)',
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)',
     "Continue only after this reports OK.",
   ],
   [
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"',
     "Install the verified local bytes.",
   ],
 ] as const;
@@ -188,8 +189,8 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.1.0 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz">
+            Install <code>@programmable/launch</code> 3.2.1 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz">
               immutable GitHub Release asset
             </a>
             . The binary is{" "}
@@ -275,6 +276,93 @@ export default function CustomLaunchApiDocsPage() {
         </p>
       </section>
 
+      <section id="existing-project-integration">
+        <div className={styles.sectionIntro}>
+          <h2>Integrate an existing project without private instructions</h2>
+          <p>
+            An API key authorizes operations for its bound wallet. It does not
+            contain policy or project instructions. Every cold agent starts at{" "}
+            <a href="/.well-known/programmable.json">
+              <code>/.well-known/programmable.json</code>
+            </a>
+            , reads <code>customLaunchApi.agentIntegration</code>, then fetches
+            the advertised public contracts.
+          </p>
+        </div>
+
+        <ul className={styles.checkList}>
+          <li>
+            Use the{" "}
+            <a href="/policies/custom-launch-agent-remediation-v1.json">
+              machine-readable remediation catalog
+            </a>{" "}
+            to inspect the exact repository, create{" "}
+            <code>programmable-launch.config.json</code> and recover from local
+            or API findings. The same catalog applies to every project; there
+            is no project allowlist or private approval route.
+          </li>
+          <li>
+            Pin the public source repository and exact immutable Git object,
+            compile every target with{" "}
+            <code>solc 0.8.26+commit.8a97fa7a</code>, identify the distinct
+            token, hook and initializer roles, map address dependencies, and
+            declare the real hook permissions, pool, funding, liquidity, fee,
+            custody and withdrawal behavior.
+          </li>
+          <li>
+            Create a <code>programmable.launch-pack-config.v3</code> input from
+            exact source, Standard JSON, artifacts and structured ABI values,
+            following the{" "}
+            <a href="/schemas/custom-launch/v3/pack-config.json">
+              machine-readable pack-config schema
+            </a>
+            . The CLI derives every digest, locator, CREATE2 address and request
+            byte. Never copy or invent them.
+          </li>
+          <li>
+            In EIP-3009 mode, accept the exact CLI-derived funding descriptor.
+            Do not replace its funding intent or nonce domain. Current V2
+            authorization patching binds four zero ABI leaves:{" "}
+            <code>bytes32 nonce</code>, <code>bytes32 r</code>,{" "}
+            <code>bytes32 s</code> and <code>uint8 v</code>. Configure their
+            numeric ABI argument paths with 1–16 indices from 0 through 255.
+            Static tuple and fixed-array descendants are supported; dynamic
+            parents and applicant-supplied calldata offsets are not.
+          </li>
+          <li>
+            Tooling may report{" "}
+            <code>FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED</code> or{" "}
+            <code>FUNDING_NONCE_CONFORMANCE_UNPROVEN</code> when exact source,
+            ABI and compiler artifacts cannot prove the complete nonce dataflow
+            offline. Inspect a suspected conflict. The mandatory exact Router
+            simulation is the final execution-compatibility detector, not a
+            safety, admission, liquidity or fee-behavior claim.
+          </li>
+          <li>
+            Pool initialization does not add liquidity, and trading volume
+            cannot create the initial liquidity from nothing. Select the exact
+            external, launch-seeded or hook-inventory model implemented by the
+            project. V3 does not inject Classic liquidity automatically.
+          </li>
+          <li>
+            Admission is automatic. At <code>action_required</code>, read the
+            exact single-resource remediation, fix the reported target and
+            source or config, rebuild, repack and submit a new immutable
+            request. Retrying unchanged bytes or requesting a manual allowlist
+            cannot bypass a blocking finding.
+          </li>
+        </ul>
+
+        <aside className={styles.callout}>
+          <strong>One public contract for every project</strong>
+          <p>
+            Discovery, the remediation catalog, this guide, OpenAPI and the
+            pinned CLI release provide the complete public handoff. Only the
+            two controller-wallet signatures remain outside the agent flow.
+          </p>
+        </aside>
+      </section>
+
       <section id="v3-general">
         <div className={styles.sectionIntro}>
           <h2>Use the general V3 hook profile</h2>
@@ -316,7 +404,9 @@ export default function CustomLaunchApiDocsPage() {
             Funding can be absent, carried as the exact native value of the
             separately reviewed Router transaction, or use an unsigned USDC
             EIP-3009 descriptor. Only the EIP-3009 mode contains a funding
-            challenge and signature patch.
+            challenge and authorization patch. CLI 3.2.1 uses{" "}
+            <code>programmable.eip3009-authorization-patch.v2</code> to bind
+            the zero nonce, r, s and v ABI leaves before any wallet signature.
           </li>
           <li>
             For EIP-3009 funding, the website first validates and explicitly asks

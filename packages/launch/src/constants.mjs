@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.1.0";
+export const PACKAGE_VERSION = "3.2.1";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -87,8 +87,11 @@ export const FUNDING_AUTHORIZATION_INPUT_SCHEMA =
   "programmable.funding-authorization-input.v1";
 export const FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA =
   "programmable.funding-authorization-descriptor.v1";
-export const FUNDING_SIGNATURE_PATCH_SCHEMA =
+export const FUNDING_SIGNATURE_PATCH_SCHEMA_V1 =
   "programmable.eip3009-signature-patch.v1";
+export const FUNDING_SIGNATURE_PATCH_SCHEMA_V2 =
+  "programmable.eip3009-authorization-patch.v2";
+export const FUNDING_SIGNATURE_PATCH_SCHEMA = FUNDING_SIGNATURE_PATCH_SCHEMA_V1;
 export const FUNDING_AUTHORIZATION_METHOD =
   "eip-3009-receive-with-authorization";
 export const FUNDING_WALLET_TRANSACTION_VALUE_METHOD =
@@ -109,15 +112,24 @@ export const OPENAPI_URL_V2 = "https://programmable.market/openapi/custom-launch
 export const OPENAPI_URL_V3 = "https://programmable.market/openapi/custom-launch-v3.json";
 export const OPENAPI_URL = OPENAPI_URL_V3;
 export const GUIDE_URL = "https://programmable.market/docs/developers/custom-launch";
+export const EXISTING_PROJECT_INTEGRATION_GUIDE_URL =
+  `${GUIDE_URL}#existing-project-integration`;
+export const AGENT_REMEDIATION_CATALOG_URL =
+  "https://programmable.market/policies/custom-launch-agent-remediation-v1.json";
+export const CLI_DIAGNOSTIC_SCHEMA = "programmable.launch-cli-diagnostic.v1";
 export const API_KEYS_URL = "https://programmable.market/developers/api-keys";
 export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.1.0";
-export const RELEASE_TARBALL = "programmable-launch-3.1.0.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.2.1";
+export const RELEASE_TARBALL = "programmable-launch-3.2.1.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
+export const PACK_CONFIG_V3_CONTRACT_URL =
+  "https://programmable.market/schemas/custom-launch/v3/pack-config.json";
+export const PACK_CONFIG_V3_EXAMPLE_URL =
+  `https://github.com/0xprogrammable/PROGRAMMABLE/blob/${RELEASE_TAG}/packages/launch/examples/direct-native-v3-no-broadcast/README.md`;
 
 export const MAINNET_CHAIN_ID = "1";
 export const ROUTER = "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56";

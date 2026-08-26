@@ -342,7 +342,7 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
   assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
 });
 
-test("V3.1 keeps revision 2 profile and hash semantics available for exact retries", () => {
+test("V3.2 keeps revision 2 profile and hash semantics available for exact retries", () => {
   const legacy = resolveDirectNativeProfile(LEGACY_SELECTION);
   assert.equal(legacy.schemaVersion, "programmable.direct-native-hook-graph-profile.v2");
   assert.equal(legacy.profileRevision, 2);

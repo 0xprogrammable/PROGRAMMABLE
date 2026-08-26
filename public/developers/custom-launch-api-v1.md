@@ -15,6 +15,43 @@ Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
 
+## Existing-project integration
+
+The API key is authorization, not an instruction bundle. Start every cold-agent run at
+<https://programmable.market/.well-known/programmable.json>. Read `customLaunchApi.agentIntegration`, then fetch the
+advertised machine-readable remediation catalog:
+<https://programmable.market/policies/custom-launch-agent-remediation-v1.json>. The catalog, this guide, V3 OpenAPI and
+the pinned CLI release are the complete public integration path. There is no project allowlist or private approval
+step.
+
+For an existing repository, pin the exact public source object, compile every direct graph target with
+`solc 0.8.26+commit.8a97fa7a`, map the distinct token, hook and initializer roles plus all address dependencies, declare
+the exact permission mask, and choose the real funding, liquidity, fee, custody and withdrawal behavior. Create
+`programmable-launch.config.json` with `schemaVersion: programmable.launch-pack-config.v3` and validate it against
+<https://programmable.market/schemas/custom-launch/v3/pack-config.json>. The CLI derives every digest, locator, CREATE2
+address and request byte; never copy or hand-write them.
+
+USDC EIP-3009 projects must accept and forward the CLI-derived descriptor exactly. The funding domains are
+`programmable.direct-native-hook-graph.funding-intent.v1` and
+`programmable.direct-native-hook-graph.funding-nonce.v1`; project code must not replace them with an application-specific
+domain or nonce. Current authorization patch V2 binds four distinct zero ABI leaves: `bytes32 nonce`, `bytes32 r`,
+`bytes32 s` and `uint8 v`. Configure 1–16 zero-based ABI argument indices from 0 through 255 for each leaf. Paths can
+descend static tuple components and fixed arrays but not dynamic parents. The CLI derives exact offsets from the compiled ABI and
+proves canonical decode and re-encode; applicants never submit offsets. The backend later inserts only the derived
+nonce and verified signature.
+
+Tooling may report `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
+`FUNDING_NONCE_CONFORMANCE_UNPROVEN` when source, ABI and compiler artifacts cannot prove complete nonce dataflow
+offline. These are nonblocking warnings, not conformance or safety claims. Inspect a real conflict before submitting.
+The mandatory exact Router simulation is the final execution-compatibility detector for the prepared transaction; a
+successful simulation is not a safety, admission, liquidity, fee-behavior or economic-solvency claim.
+
+Pool initialization does not add liquidity, volume cannot create initial liquidity from nothing, and V3 does not
+inject Classic liquidity. Bind the implementation's actual `external-concentrated-liquidity`,
+`launch-seeded-concentrated-liquidity` or `hook-inventory-custom-accounting` model. After submission,
+`action_required` means fix the exact bound target/source finding, rebuild, repack and submit a new immutable request.
+Retrying unchanged bytes or asking for a manual allowlist cannot bypass it.
+
 ## V3 general hook boundary
 
 The `programmable.direct-native-hook-graph.v1` document is the V3 production request, resource and wallet-handoff
@@ -92,16 +129,16 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.1.0`. The package name is
+Continue only after the checksum command reports `OK` and the version command prints `3.2.1`. The package name is
 `@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:

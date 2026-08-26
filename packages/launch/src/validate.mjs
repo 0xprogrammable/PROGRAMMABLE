@@ -23,9 +23,13 @@ import {
   MAX_STANDARD_JSON_INPUT_BYTES,
   MAX_STANDARD_JSON_SOURCES,
   MAX_TOTAL_STANDARD_JSON_INPUT_BYTES,
+  PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_V3_CONTRACT_URL,
+  PACK_CONFIG_V3_EXAMPLE_URL,
   SOURCE_DESCRIPTOR_SCHEMA,
   SOURCE_MANIFEST_SCHEMA,
 } from "./constants.mjs";
+import { createCliDiagnosticError } from "./diagnostics.mjs";
 import { deriveRouteNamespace, normalizeAndPredictSubmittedGraph } from "./graph.mjs";
 import {
   assertAllowedKeys,
@@ -83,8 +87,10 @@ export async function validateLaunchFile({ launchPath, configPath }) {
   const isV3 = request?.schemaVersion === CREATE_REQUEST_SCHEMA_V3;
   if (isV3 && configPath === undefined) throw v3ArtifactConfigRequired();
   const result = isV3 ? validateV3LaunchRequest(request) : validateLaunchRequest(request);
+  let diagnostics = [];
   if (configPath !== undefined) {
     const rebuilt = await buildLaunch({ configPath });
+    diagnostics = rebuilt.diagnostics ?? [];
     if (!bytes.equals(rebuilt.requestBytes)) {
       throw new TypeError(
         `PACK_REPRODUCTION_MISMATCH: ${absolute} is not byte-identical to a fresh pack of ${path.resolve(configPath)}`,
@@ -96,6 +102,7 @@ export async function validateLaunchFile({ launchPath, configPath }) {
     requestSha256: sha256Digest(bytes),
     byteLength: bytes.byteLength,
     reproducedFromConfig: configPath !== undefined,
+    ...(diagnostics.length === 0 ? {} : { diagnostics }),
   };
 }
 
@@ -115,9 +122,22 @@ export function validateLaunchRequest(request) {
 }
 
 function v3ArtifactConfigRequired() {
-  return new TypeError(
-    "V3_ARTIFACT_CONFIG_REQUIRED: V3 validation requires exact config/build artifacts so the initializer ABI and signature patch are reproduced",
-  );
+  return createCliDiagnosticError({
+    code: "PACK_CONFIG_V3_MISSING",
+    stage: "pack-config",
+    summary: "V3 validation requires the exact pack config and build artifacts so the initializer ABI and authorization patch can be reproduced.",
+    expected: {
+      flag: "--config programmable-launch.config.json",
+      schemaVersion: PACK_CONFIG_SCHEMA_V3,
+      configContract: PACK_CONFIG_V3_CONTRACT_URL,
+      executableExample: PACK_CONFIG_V3_EXAMPLE_URL,
+    },
+    observed: {
+      flag: null,
+      requestSchemaVersion: CREATE_REQUEST_SCHEMA_V3,
+      legacyCode: "V3_ARTIFACT_CONFIG_REQUIRED",
+    },
+  });
 }
 
 function validateV1LaunchRequest(request) {
@@ -309,7 +329,8 @@ function validateV3LaunchRequest(request) {
   }
   // V3 binds the exact applicant runtime but does not impose the legacy V2
   // custom-module opcode profile. Upgradeable/delegating graphs remain subject
-  // to platform review instead of being silently made unpackageable.
+  // to automatic role-aware admission and exact Router simulation instead of
+  // being silently made unpackageable by the CLI.
   const launchProfileHash = hashDirectNativeProfile(launchProfile);
   if (request.launchProfileHash !== launchProfileHash) {
     throw new TypeError("launchProfileHash does not match the closed embedded V3 launchProfile");

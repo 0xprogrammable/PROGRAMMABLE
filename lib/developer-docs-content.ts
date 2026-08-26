@@ -25,7 +25,7 @@ const customLaunchHumanGuideUrl =
   "https://programmable.market/docs/developers/custom-launch";
 const customLaunchReadyzUrl = "https://api.programmable.market/readyz";
 const customLaunchCliReleaseUrl =
-  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz";
+  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz";
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
@@ -81,13 +81,13 @@ export function buildDeveloperDocsMarkdown(): string {
     "Verify the pinned public CLI checksum before installation:",
     "```sh",
     'programmable_cli_dir="$(mktemp -d)"',
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" ${customLaunchCliReleaseUrl}`,
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)',
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"',
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" ${customLaunchCliReleaseUrl}`,
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"',
     "programmable-launch --version",
     "```",
-    "Continue only after the checksum reports `OK` and the version is `3.1.0`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
+    "Continue only after the checksum reports `OK` and the version is `3.2.1`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
     "",
     "Run `pack` and `validate` locally, then `submit` the byte-identical V3 request. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. At `authorized`, stop for separate controller-wallet review and signing. The CLI never signs or broadcasts.",
     "",
@@ -404,7 +404,7 @@ export function buildProgrammableLlmsIndex(): string {
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
-    `- Programmable Launch CLI 3.1.0: ${customLaunchCliReleaseUrl}`,
+    `- Programmable Launch CLI 3.2.1: ${customLaunchCliReleaseUrl}`,
     `- V1 write fence: POST ${customLaunchApiOrigin}/v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY`,
     `- Create or list wallet-owned Custom launches: POST or GET ${customLaunchApiOrigin}/v3/custom-launches`,
     `- Read a Custom launch: GET ${customLaunchApiOrigin}/v3/custom-launches/{launchId}`,

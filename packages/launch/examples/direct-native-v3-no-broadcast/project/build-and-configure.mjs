@@ -208,9 +208,12 @@ const evidence = {
   declaredHookPermissionMask: "0x20cc",
   fundingSignaturePatch: {
     targetId: "initializer",
-    rOffsetBytes: 4,
-    sOffsetBytes: 36,
-    vOffsetBytes: 68,
+    schemaVersion: "programmable.eip3009-authorization-patch.v2",
+    nonceArgumentPath: [0, 4],
+    rArgumentPath: [0, 5, 0],
+    sArgumentPath: [0, 5, 1],
+    vArgumentPath: [0, 5, 2],
+    noncePresent: false,
     signaturePresent: false,
   },
 };
@@ -241,7 +244,14 @@ const config = {
       constructorArguments: [],
       initializer: {
         function: "initialize",
-        arguments: [ZERO_BYTES32, ZERO_BYTES32, 0],
+        arguments: [[
+          launchWallet,
+          fundingValue,
+          fundingWindow.validAfter,
+          fundingWindow.validBefore,
+          ZERO_BYTES32,
+          [ZERO_BYTES32, ZERO_BYTES32, 0],
+        ]],
       },
       deploymentValueWei: "0",
       initializerValueWei: "0",
@@ -329,9 +339,10 @@ const config = {
   },
   fundingSignaturePatch: {
     targetId: "initializer",
-    rOffsetBytes: 4,
-    sOffsetBytes: 36,
-    vOffsetBytes: 68,
+    nonceArgumentPath: [0, 4],
+    rArgumentPath: [0, 5, 0],
+    sArgumentPath: [0, 5, 1],
+    vArgumentPath: [0, 5, 2],
   },
   agentAttestation: {
     agentId: "programmable-direct-native-v3-no-broadcast",

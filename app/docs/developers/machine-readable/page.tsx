@@ -91,6 +91,26 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
+            <a href="/policies/custom-launch-agent-remediation-v1.json">
+              <code>/policies/custom-launch-agent-remediation-v1.json</code>
+            </a>
+            <span>
+              Versioned cold-agent contract for inspecting existing projects,
+              building V3 pack config, EIP-3009 compatibility, liquidity and
+              automatic remediation without a project allowlist.
+            </span>
+          </li>
+          <li>
+            <a href="/schemas/custom-launch/v3/pack-config.json">
+              <code>/schemas/custom-launch/v3/pack-config.json</code>
+            </a>
+            <span>
+              Canonical JSON Schema for{" "}
+              <code>programmable.launch-pack-config.v3</code>, including current
+              EIP-3009 authorization-patch argument paths.
+            </span>
+          </li>
+          <li>
             <a href="/developers/custom-launch-api-v1.md">
               <code>/developers/custom-launch-api-v1.md</code>
             </a>
@@ -99,8 +119,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz">
-              <code>@programmable/launch 3.1.0</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz">
+              <code>@programmable/launch 3.2.1</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
