@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.0.0-rc.1",
+    "version": "3.0.0",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
     "description": "This document freezes revision 2 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt from exact Standard JSON and materialized runtime bytes. A platform-issued receipt must bind the final graph and prove the declared 10 bps Programmable fee before the permit authority signs; the exact Router transaction is then simulated before it is returned for separate wallet review. Funding may be absent or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction.",
     "license": {
@@ -14,7 +14,7 @@
   "servers": [
     {
       "url": "https://api.programmable.market",
-      "description": "Programmable Custom Launch API. Revision 2 remains integration-pending until the conformance authority is promoted."
+      "description": "Programmable Custom Launch API production V3 general hook profile."
     }
   ],
   "externalDocs": {
@@ -27,27 +27,23 @@
     }
   ],
   "x-programmable-availability": {
-    "status": "integration-pending",
-    "publicAuthorized": false,
+    "status": "live",
+    "publicAuthorized": true,
     "publicCreate": {
-      "status": "integration-pending",
+      "status": "live",
       "path": "/v3/custom-launches",
-      "httpStatus": 503,
-      "errorCode": "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
-      "retryable": false
+      "httpStatus": 202,
+      "replayHttpStatus": 200,
+      "retryableErrors": [429, 503]
     },
-    "stableProductionVersion": "2",
-    "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v2.json",
-    "activationBlockers": [
-      "platform-fee-conformance-authority",
-      "production-deployment-readback",
-      "end-to-end-general-hook-wallet-handoff"
-    ]
+    "stableProductionVersion": "3",
+    "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
+    "activationBlockers": []
   },
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 2,
-    "productionLaunchAuthorized": false,
+    "productionLaunchAuthorized": true,
     "minimumTargets": 3,
     "maximumTargets": 16,
     "minimumHookPermissionMask": 0,
@@ -89,26 +85,26 @@
   },
   "tags": [
     {
-      "name": "V3 profile preview",
-      "description": "Schema preview only. It is not a production launch capability."
+      "name": "V3 general hooks",
+      "description": "Production project-owned token, hook and multi-contract graph launch capability."
     }
   ],
   "paths": {
     "/v3/custom-launches": {
       "post": {
         "operationId": "createDirectNativeCustomLaunchV3",
-        "summary": "Submit an integration-pending V3 request",
-        "description": "The route identifier and request schema are reserved, but production creation is not activated. Do not submit until discovery changes this operation to live after the V3 routes and existing permit-authority admission binding are verified. Each initializer remains per-launch bound to exact source, build, runtime, unsigned signature patch, final calldata and simulation evidence. The unsigned funding descriptor is derived before any wallet signature and is not circularly bound to signature-bearing initializer calldata.",
+        "summary": "Submit an exact V3 general-hook request",
+        "description": "Submit the byte-identical CLI-derived request. Every target remains per-launch bound to exact source, build, creation/runtime bytes, final calldata and simulation evidence. The permit signer is blocked until the exact final graph has a valid platform conformance receipt.",
         "tags": [
-          "V3 profile preview"
+          "V3 general hooks"
         ],
-        "x-programmable-public-availability": "integration-pending",
+        "x-programmable-public-availability": "live",
         "parameters": [
           {
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Reserved exact-request idempotency binding. It does not activate V3 and must not contain an API key or wallet signature.",
+            "description": "Exact-request idempotency binding. It must not contain an API key or wallet signature.",
             "schema": {
               "type": "string",
               "minLength": 16,
@@ -129,7 +125,7 @@
         },
         "responses": {
           "200": {
-            "description": "After activation only: an exact Idempotency-Key replay returns the existing V3 resource.",
+            "description": "An exact Idempotency-Key replay returns the existing V3 resource.",
             "content": {
               "application/json": {
                 "schema": {
@@ -139,7 +135,7 @@
             }
           },
           "202": {
-            "description": "After activation only: a new request is durably accepted and enters awaiting_funding_authorization after preparation.",
+            "description": "A new request is durably accepted for exact validation and conformance processing.",
             "headers": {
               "Location": {
                 "description": "Version-matched single-resource polling path.",
@@ -158,10 +154,10 @@
             }
           },
           "503": {
-            "description": "V3 remains fail-closed. Wait for discovery to advertise live activation; do not fall back to another create version or mutate request bytes.",
+            "description": "A transient dependency is unavailable. Honor Retry-After and retry only the byte-identical request; never fall back to another create version.",
             "headers": {
               "Retry-After": {
-                "description": "Current integration-pending response uses 30 seconds. Discovery, not repeated create attempts, is the activation authority.",
+                "description": "Delay before an exact retry.",
                 "schema": {
                   "type": "string",
                   "const": "30"
@@ -176,8 +172,8 @@
                 "example": {
                   "schemaVersion": "programmable.api-error.v1",
                   "error": {
-                    "code": "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
-                    "message": "V3 routes and permit-authority admission binding are not activated",
+                    "code": "CUSTOM_LAUNCH_API_UNAVAILABLE",
+                    "message": "A required production dependency is temporarily unavailable",
                     "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
                   }
                 }
@@ -189,11 +185,11 @@
       "get": {
         "operationId": "listDirectNativeCustomLaunchesV3",
         "summary": "List wallet-owned V3 resources",
-        "description": "Version-matched list contract. It is documented for integration parity but remains integration-pending until V3 activation.",
+        "description": "Version-matched newest-first wallet-owned list. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
         "tags": [
-          "V3 profile preview"
+          "V3 general hooks"
         ],
-        "x-programmable-public-availability": "integration-pending",
+        "x-programmable-public-availability": "live",
         "parameters": [
           {
             "name": "limit",
@@ -220,7 +216,7 @@
         ],
         "responses": {
           "200": {
-            "description": "After activation only: wallet-owned V3 resource page.",
+            "description": "Wallet-owned V3 resource page.",
             "content": {
               "application/json": {
                 "schema": {
@@ -239,11 +235,11 @@
       "get": {
         "operationId": "getDirectNativeCustomLaunchV3",
         "summary": "Read one wallet-owned V3 resource",
-        "description": "The single-resource contract is the source of the exact funding challenge and, after a separately validated funding signature, the exact Router transaction. The API never signs or broadcasts either action. This route remains integration-pending until V3 activation.",
+        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. The API never signs or broadcasts either wallet action.",
         "tags": [
-          "V3 profile preview"
+          "V3 general hooks"
         ],
-        "x-programmable-public-availability": "integration-pending",
+        "x-programmable-public-availability": "live",
         "parameters": [
           {
             "name": "launchId",
@@ -257,7 +253,7 @@
         ],
         "responses": {
           "200": {
-            "description": "After activation only: current durable V3 resource.",
+            "description": "Current durable V3 resource.",
             "content": {
               "application/json": {
                 "schema": {
@@ -288,9 +284,9 @@
         "summary": "Submit one explicitly wallet-signed EIP-3009 authorization",
         "description": "Website-BFF to backend handoff only; this is not an API-key CLI operation. The website must first authenticate the wallet principal, show and validate the exact challenge, request eth_signTypedData_v4 only after an explicit user action, verify the canonical signature client-side, and then submit it once with a durable Idempotency-Key. Acceptance does not send the separate Router transaction.",
         "tags": [
-          "V3 profile preview"
+          "V3 general hooks"
         ],
-        "x-programmable-public-availability": "integration-pending",
+        "x-programmable-public-availability": "live",
         "security": [
           {
             "CustomLaunchWebsiteToken": []
@@ -444,10 +440,10 @@
     },
     "responses": {
       "V3IntegrationPending": {
-        "description": "V3 routes and permit-authority admission binding are not activated.",
+        "description": "A required V3 production dependency is temporarily unavailable.",
         "headers": {
           "Retry-After": {
-            "description": "Current integration-pending response uses 30 seconds.",
+            "description": "Delay before an exact retry.",
             "schema": {
               "type": "string",
               "const": "30"
@@ -462,8 +458,8 @@
             "example": {
               "schemaVersion": "programmable.api-error.v1",
               "error": {
-                "code": "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
-                "message": "V3 routes and permit-authority admission binding are not activated",
+                "code": "CUSTOM_LAUNCH_API_UNAVAILABLE",
+                "message": "A required production dependency is temporarily unavailable",
                 "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
               }
             }
@@ -612,7 +608,7 @@
           "vectorSetVersion": { "const": "1.0.0" },
           "receiptAuthority": { "const": "platform-only" },
           "subject": { "const": "final-graph-commitment-and-runtime-set" },
-          "activationStatus": { "const": "integration-pending" }
+          "activationStatus": { "const": "live" }
         },
         "additionalProperties": false
       },
@@ -759,8 +755,8 @@
             "const": "2.0.0"
           },
           "productionLaunchAuthorized": {
-            "const": false,
-            "description": "The integration-preview value is false. A request value cannot activate the backend."
+            "const": true,
+            "description": "The V3 general profile is production authorized; runtime trust roots and conformance receipts still fail closed independently."
           },
           "chainId": {
             "const": "1"
@@ -1568,7 +1564,7 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "integration-pending"
+                "const": "ready"
               },
               "stage": {
                 "const": "platform-review-pending"
@@ -1596,7 +1592,7 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "integration-pending"
+                "const": "ready"
               },
               "stage": {
                 "const": "funding-signature-required"
@@ -1624,7 +1620,7 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "integration-pending"
+                "const": "ready"
               },
               "stage": {
                 "enum": [
@@ -1655,7 +1651,7 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "integration-pending"
+                "const": "ready"
               },
               "stage": {
                 "const": "router-transaction-required"

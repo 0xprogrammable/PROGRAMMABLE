@@ -95,7 +95,7 @@ const PLATFORM_FEE_PROOF_POLICY = Object.freeze({
   vectorSetVersion: "1.0.0",
   receiptAuthority: "platform-only",
   subject: "final-graph-commitment-and-runtime-set",
-  activationStatus: "integration-pending",
+  activationStatus: "live",
 });
 
 export function validateDirectNativeProfileSelection(value) {
@@ -174,7 +174,7 @@ export function resolveDirectNativeProfile(selection) {
     profileId: DIRECT_NATIVE_PROFILE_ID,
     profileRevision: DIRECT_NATIVE_PROFILE_REVISION,
     profileVersion: DIRECT_NATIVE_PROFILE_VERSION,
-    productionLaunchAuthorized: false,
+    productionLaunchAuthorized: true,
     chainId: MAINNET_CHAIN_ID,
     router: ROUTER,
     routerRuntimeCodeHash: ROUTER_RUNTIME_CODE_HASH,

@@ -15,55 +15,45 @@ programmable-launch --version
 That immutable release remains the V1 compatibility package. V1 request preparation and status reads remain valid,
 but new V1 submissions are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`.
 
-For public V2 preparation and submission, install the immutable `2.0.1` GitHub Release asset rather than an
+For public V3 general-hook preparation and submission, install the immutable `3.0.0` GitHub Release asset rather than an
 unverified npm-registry package with the same name:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz
 programmable-launch --version
 ```
 
-The V2 Rev3 profile is the public production profile. Package installation is not wallet authority: the API prepares
+The V3 general hook profile is the public production profile. Package installation is not wallet authority: the API prepares
 the exact Router transaction, then the connected controller reviews and signs it separately. The human guide is
 <https://programmable.market/docs/developers/custom-launch>.
 
-## V3 direct-native integration preview
+## V3 general hook profile
 
-The unreleased `3.0.0-rc.1` source adds offline pack and validation support for the versioned profile
-`programmable.direct-native-hook-graph.v1`. It does not replace the immutable V2 release and is not a production launch
-capability. The [V3 OpenAPI preview](https://programmable.market/openapi/custom-launch-v3.json) is
-`integration-pending` until the V3 routes and existing permit-authority admission binding are implemented and verified.
-No V3 GitHub Release asset is advertised.
+Version `3.0.0` supports the production general profile
+`programmable.direct-native-hook-graph.v1`. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
+is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
 The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
-and initializer roles are distinct, and it is restricted to the exact canonical
-`ProgrammableVolumeFeeHookV2` source/build with hook mask `0x20cc`; it does not treat arbitrary hook code as safe. The
-V3 pack config carries selected buy and sell totals from `0` through `999999` hundredths of a bip. The fixed
-Programmable share of `1000` is inclusive: `effectiveTotal = max(selectedTotal, 1000)`,
-`programmableShare = 1000`, and `projectShare = effectiveTotal - 1000`. Pack derives the effective and project values;
-they are not user-supplied request fields. Its Uniswap pool fee is a static integer from `0` through `999999`; the
-`0x800000` dynamic-fee sentinel is not accepted by this frozen V3 profile.
+and initializer roles are distinct. The token, hook and all other targets are project-owned exact artifacts. All valid
+Uniswap v4 permission masks are supported when the source declaration, compiled permissions and hook-address low bits
+match. The 10 bps Programmable share may be additive or included in the selected total; pack derives the effective
+and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are supported.
 
-The packed request contains an unsigned nine-field USDC EIP-3009 descriptor, its pre-signature `fundingIntentHash`,
-and a derived flat signature-patch descriptor binding the initializer target, unsigned calldata hash and exact zero
-ABI-word offsets for `r`, `s` and `v`. It contains no signature. The funding intent deliberately excludes the wallet
-signature, `initializerCalldataHash`, final `graphCommitment` and `permitDigest`; those are derived later. When the
-service is activated, the connected wallet
-must separately review and sign the exact typed data in the website; only after backend verification and simulation
-does the website present a separately reviewed Router transaction. The CLI never accepts an API key argument, signs,
-requests approval, or broadcasts either wallet action.
+Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
+USDC EIP-3009 descriptor with an exact signature patch. The connected wallet separately signs EIP-3009 data when that
+mode is selected. Only after exact graph conformance and transaction simulation does the website present the Router
+transaction. The CLI never accepts an API key argument, signs, requests approval, or broadcasts either wallet action.
 
-## Rev3 fee policy
+## Platform fee policy
 
-The frozen Rev3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
+The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
 For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the documented
-`gross-unspecified-pool-currency-amount` basis: `1,000 ppm = 0.10% = 10 bps`. It accrues in the profile's unspecified
-pool currency to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The frozen profile enforces this path independently
-of custom behavior; a Custom module cannot reduce or redirect it. A reverted swap rolls back the fee with the rest of
-the transaction.
+declared assessment basis: `1,000 ppm = 0.10% = 10 bps`. Its exact claim binding is controlled by
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. A platform-signed conformance receipt for the exact final graph is
+required before the launch permit signer can run. A reverted swap must roll back the fee with the rest of the transaction.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -83,32 +73,33 @@ programmable-launch pack --config programmable-launch.config.json --output launc
 programmable-launch validate launch.json --config programmable-launch.config.json
 ```
 
-For an executable V2 cold-room rehearsal, use `examples/fee-enforced-v2-no-broadcast/README.md` from the installed package.
-It invokes real solc 0.8.26, uses the exact distributed profile sources and artifacts, and ends after byte-reproducible
-`pack` and `validate`. The older `examples/no-broadcast` fixture remains only for V1 golden compatibility.
+Use the general V3 example shipped with the release for a no-broadcast cold-room rehearsal. It invokes real solc,
+uses exact sources and artifacts, and stops after byte-reproducible `pack` and `validate`.
 
 Save the API key only as the encrypted environment secret `PROGRAMMABLE_API_KEY` or in the supported OS
 secret store. Put the literal text `$PROGRAMMABLE_API_KEY` in agent setup or chat, never the key. On macOS, the fallback
 secret-store lookup is the Keychain service `api.programmable.market`, account `PROGRAMMABLE_API_KEY`.
 
-V2 `submit` routes only to `/v2/custom-launches`. It never falls back to V1. Preserve the exact request bytes and
+V3 `submit` routes only to `/v3/custom-launches`. It never falls back to an older create route. Preserve the exact request bytes and
 idempotency key across timeout, `429`, or `503` retries and honor `Retry-After`. At `authorized`, stop the agent flow:
 the controller reviews the exact `walletTransaction` and signs it in a separate wallet flow. After a human broadcast,
 use `status REQUEST_UUID --watch --until finalized`. `finalized`, `failed`, and `cancelled` always stop polling.
 
 The included rehearsal proves only offline pack and validation. It does not submit, poll, sign, or broadcast.
 
-## Pack config V2
+## Pack config V3
 
 The top-level fields are:
 
-- `schemaVersion`: `programmable.launch-pack-config.v2`
+- `schemaVersion`: `programmable.launch-pack-config.v3`
 - `launchWallet`, `chainId: "1"`, and a nonzero lowercase bytes32 `nonce`
 - `source`: relative `root`, non-empty exact `paths`, decimal `sourceLineageNonce`, and `publicOrigin` containing a
   public HTTPS `url` plus the exact lowercase merged production Git `revision` used for the release
 - `compilationUnits`: unique `{ compilationUnitId, standardJson }` entries
-- `targets`: 1–16 target definitions
+- `targets`: 3–16 target definitions
 - `pool`: exact token/hook target IDs, fee, and tick spacing
+- `permitWindow`: exact `validAfter` and `deadline`, no more than one hour apart
+- `launchProfile`: target roles, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
 
 Each target has exactly `targetId`, `compilationUnitId`, `artifact`, `applicantSalt`, `constructorArguments`,

@@ -212,9 +212,9 @@ test("V3 profile binds platform-owned proof policy without pinning applicant hoo
     vectorSetVersion: "1.0.0",
     receiptAuthority: "platform-only",
     subject: "final-graph-commitment-and-runtime-set",
-    activationStatus: "integration-pending",
+    activationStatus: "live",
   });
-  assert.equal(profile.productionLaunchAuthorized, false);
+  assert.equal(profile.productionLaunchAuthorized, true);
   assert.deepEqual(profile.graphPolicy, {
     minimumTargets: 3,
     maximumTargets: 16,

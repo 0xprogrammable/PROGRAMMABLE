@@ -197,7 +197,7 @@ function usage(command) {
     `Guide: ${GUIDE_URL}`,
     `OpenAPI V1 (read-only create): ${OPENAPI_URL_V1}`,
     `OpenAPI V2 (public create): ${OPENAPI_URL_V2}`,
-    `OpenAPI V3 (integration-pending profile): ${OPENAPI_URL_V3}`,
+    `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
     `Public V2 release: ${RELEASE_URL}`,
   ].join("\n");

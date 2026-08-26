@@ -13,7 +13,7 @@ import { programmableWellKnownDocumentV1 } from
 const root = process.cwd();
 
 describe("public Custom Launch CLI surface", () => {
-  it("advertises public V2 creation and retained V1 reads", () => {
+  it("advertises public V3 general-hook creation and retained earlier reads", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
@@ -35,23 +35,23 @@ describe("public Custom Launch CLI surface", () => {
       },
       publicRelease: {
         status: "live",
-        apiVersion: "2",
+        apiVersion: "3",
         guideUrl: "https://programmable.market/docs/developers/custom-launch",
-        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         authentication: "wallet-bound-api-key",
         walletBoundary: "separate-wallet-signature",
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "2.0.1",
+          releaseVersion: "3.0.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         },
       },
       integrationPreview: {
-        status: "integration-pending",
+        status: "live",
         apiVersion: "3",
-        publicAuthorization: false,
+        publicAuthorization: true,
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
@@ -64,48 +64,40 @@ describe("public Custom Launch CLI surface", () => {
         hookPermissionMaskRange: { minimum: 0, maximum: 16_383 },
         exactGraphReceiptRequired: true,
         fundingAuthorization: {
-          method: "eip-3009-receive-with-authorization",
+          modes: [
+            "none",
+            "wallet-transaction-value",
+            "eip-3009-receive-with-authorization",
+          ],
           createRequestSignatureIncluded: false,
           fundingIntentStage: "pre-signature",
         },
-        activationBlockers: [
-          "platform-fee-conformance-authority",
-          "production-deployment-readback",
-          "end-to-end-general-hook-wallet-handoff",
-        ],
-        errorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+        activationBlockers: [],
+        errorCode: null,
       },
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "2.0.1",
-        releaseTag: "programmable-launch-v2.0.1",
+        releaseVersion: "3.0.0",
+        releaseTag: "programmable-launch-v3.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         openApiUrl:
-          "https://programmable.market/openapi/custom-launch-v2.json",
+          "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
-          profileId:
-            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-          profileRevision: 3,
-          launchProfileHash:
-            "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+          profileId: "programmable.direct-native-hook-graph.v1",
+          profileRevision: 2,
           productionLaunchAuthorized: true,
           chainId: "1",
           network: "Ethereum Mainnet",
           chargeTrigger: "successful-swap",
-          basis: "gross-unspecified-pool-currency-amount",
-          assetMode: "unspecified-pool-currency-per-swap",
+          basis: "per-launch-declared-conformance-basis",
           ratePpm: 1_000,
           denominatorPpm: 1_000_000,
           ratePercent: "0.10%",
           rateBps: 10,
           recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          enforcement: {
-            frozenProfile: true,
-            customModuleMayReduce: false,
-            customModuleMayRedirect: false,
-          },
+          enforcement: "platform-signed-exact-graph-conformance-receipt",
           lpFee: "separate-from-platform-fee",
           genericFeeClaiming: "not-live",
           genericBuybackManagement: "not-live",
@@ -126,11 +118,10 @@ describe("public Custom Launch CLI surface", () => {
           retryAfter: "honor-on-429-or-503",
         },
         v3: {
-          status: "integration-pending",
-          publicAuthorization: false,
-          createHttpStatus: 503,
-          createErrorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
-          retryable: false,
+          status: "live",
+          publicAuthorization: true,
+          createHttpStatus: 202,
+          replayHttpStatus: 200,
         },
       },
     });
@@ -328,7 +319,7 @@ describe("public Custom Launch CLI surface", () => {
     visit(v2);
   });
 
-  it("publishes a parallel fail-closed V3 profile contract without changing V2", () => {
+  it("publishes the live general V3 profile without changing V2 compatibility", () => {
     const v2 = JSON.parse(readFileSync(
       join(root, "public/openapi/custom-launch-v2.json"),
       "utf8",
@@ -340,22 +331,18 @@ describe("public Custom Launch CLI surface", () => {
 
     expect(v3.openapi).toBe("3.1.0");
     expect(v3["x-programmable-availability"]).toMatchObject({
-      status: "integration-pending",
-      publicAuthorized: false,
+      status: "live",
+      publicAuthorized: true,
       publicCreate: {
-        status: "integration-pending",
+        status: "live",
         path: "/v3/custom-launches",
-        httpStatus: 503,
-        errorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+        httpStatus: 202,
+        replayHttpStatus: 200,
       },
-      stableProductionVersion: "2",
+      stableProductionVersion: "3",
       stableOpenApiUrl:
-        "https://programmable.market/openapi/custom-launch-v2.json",
-      activationBlockers: [
-        "platform-fee-conformance-authority",
-        "production-deployment-readback",
-        "end-to-end-general-hook-wallet-handoff",
-      ],
+        "https://programmable.market/openapi/custom-launch-v3.json",
+      activationBlockers: [],
     });
     expect(Object.keys(v3.paths).sort()).toEqual([
       "/v3/custom-launches",
@@ -363,7 +350,7 @@ describe("public Custom Launch CLI surface", () => {
       "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization",
     ]);
     expect(v3.paths["/v3/custom-launches"].post
-      ["x-programmable-public-availability"]).toBe("integration-pending");
+      ["x-programmable-public-availability"]).toBe("live");
     expect(v3.paths["/v3/custom-launches"].post.responses["503"]
       .headers["Retry-After"].schema.const).toBe("30");
     expect(v3.paths["/v3/custom-launches"].post.responses["202"])
@@ -432,7 +419,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(v3["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 2,
-      productionLaunchAuthorized: false,
+      productionLaunchAuthorized: true,
       minimumHookPermissionMask: 0,
       maximumHookPermissionMask: 16383,
       projectOwnedToken: true,
@@ -457,7 +444,7 @@ describe("public Custom Launch CLI surface", () => {
       .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
     expect(profile.properties).toMatchObject({
       profileVersion: { const: "2.0.0" },
-      productionLaunchAuthorized: { const: false },
+      productionLaunchAuthorized: { const: true },
       routerRuntimeCodeHash: {
         const:
           "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",

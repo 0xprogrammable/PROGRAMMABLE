@@ -104,18 +104,18 @@ describe("Custom Launch API documentation", () => {
 
   it("publishes the exact-source and no-broadcast cold-agent path", () => {
     for (const source of [gitBookGuide, rawGuide, developerDocsMarkdown]) {
-      expect(source).toContain("programmable-launch-2.0.1.tgz");
+      expect(source).toContain("programmable-launch-3.0.0.tgz");
       expect(source).toContain("verificationBundle");
       expect(source).toContain("exact_match");
       expect(source).toContain("PROGRAMMABLE_API_KEY");
       expect(source).toMatch(/(?:without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast(?:ing)?|never[^\n]{0,80}sign[^\n]{0,40}broadcast)/i);
     }
-    expect(gitBookGuide).toContain("examples/fee-enforced-v2-no-broadcast/README.md");
+    expect(gitBookGuide).toContain("examples/direct-native-v3-no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
     expect(gitBookGuide).toContain("programmable-launch submit ./launch.json");
   });
 
-  it("publishes public V2 while retaining the exact V1 write fence", () => {
+  it("publishes public V3 while retaining the exact V1 write fence", () => {
     for (const source of [
       gitBookGuide,
       websiteGuide,
@@ -124,13 +124,13 @@ describe("Custom Launch API documentation", () => {
     ]) {
       expect(source).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
       expect(source).toMatch(/V1[\s\S]{0,200}(?:read-only|read only|write fence)/i);
-      expect(source).toMatch(/Public V2/i);
+      expect(source).toMatch(/Public V3/i);
     }
     expect(createGuide).toContain("submit the byte-identical request");
     for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
       expect(source).toContain("Retry-After");
-      expect(source).toMatch(/V2[^\n]{0,120}(?:public|live)/i);
-      expect(source).toContain("/openapi/custom-launch-v2.json");
+      expect(source).toMatch(/V3[^\n]{0,120}(?:public|live)/i);
+      expect(source).toContain("/openapi/custom-launch-v3.json");
     }
 
     const combinedPost =
@@ -158,17 +158,16 @@ describe("Custom Launch API documentation", () => {
       });
   });
 
-  it("discloses the exact public Rev3 fee without conflating LP fees or future operations", () => {
+  it("discloses the exact public V3 fee without conflating LP fees or future operations", () => {
     for (const source of [gitBookGuide, websiteGuide, rawGuide, cliGuide]) {
       expect(source).toContain("Ethereum Mainnet");
       expect(source).toContain("productionLaunchAuthorized: true");
-      expect(source).toContain("gross-unspecified-pool-currency-amount");
       expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
       expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
-      expect(source).toContain("cannot reduce or redirect");
+      expect(source).toMatch(/conformance receipt|platform-signed receipt/i);
       expect(source).toContain("LP fee is separate");
       expect(source).toMatch(/Generic fee claiming and\s+buyback/);
-      expect(source).toMatch(/Rev3/i);
+      expect(source).toMatch(/V3/i);
     }
 
     expect(v2OpenApi["x-programmable-fee-policy"]).toEqual({
