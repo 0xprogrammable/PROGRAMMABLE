@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "programmable.custom-launch-release-record.v2",
+  "recordStatus": "staging_approved",
+  "createdAt": "2026-08-26T08:45:33Z",
+  "releaseIntent": {
+    "releaseId": "custom-launch-api-v3-20260826-001",
+    "product": "custom_launch_api_v3",
+    "chainId": "1",
+    "targetMode": "enabled"
+  },
+  "subject": {
+    "website": {
+      "repository": "0xprogrammable/programmable",
+      "commitSha": "73177e886ecbb433949a8d519aa3e250d3e36e1a",
+      "treeSha": "09987b64c5def07be842da433b52e27eb80f9009",
+      "reviewedDiffBaseSha": "77a8826128950d8863d5ed463539337f9a692533",
+      "reviewedDiffSha256": "sha256:9e15178cc9dee81624e1b3f3dc19c003034b0b0dbc4785debb8413da16194225",
+      "publicOpenApiSha256": "sha256:5c54548daa58437ccae6962b5f07d4dc28db7ceacaaf298d94c9057438eb31e1",
+      "launchPackageManifestSha256": "sha256:49e140908c16f548b88b52cf908be1af384d0d86358f8503f5c4c4465ec2efa9"
+    },
+    "apiService": {
+      "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+      "servicePath": "services/custom-launch-api-v1",
+      "bindingAttestationCommitSha": "1ceccd74eee66130c43256d0561dd1aa778330a9",
+      "bindingDocumentPath": "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json",
+      "bindingDocumentSha256": "sha256:c6a4e97e93ec2b5499afb3fcd9606f044ea97445c3bca030859283d845dda2ed",
+      "candidateCommitSha": "d229fc49d9e41b4a22cd6dade57fd15a9ba2c55b",
+      "candidateTreeSha": "389fd3c709f5a67534f4b337e70616eac650c856",
+      "imageDigest": "sha256:4cb3dce8016ae097ee66ad9d184bdc3960d243e91704d65c4d10514ef77818ca",
+      "flyReleaseVersion": 14,
+      "migrationInventorySha256": "sha256:0e0e26c9e3646a6f710bdd75bf6947c1dbb298f8ef7e6dce3bf4ce8b61d1b4a5",
+      "apiContractSha256": "sha256:fcb34c44c86a833618449700d5eb4ab7b5c5b5a7b34d88dfdbacbb46e216f5e9",
+      "readinessIdentitySha256": "sha256:7098aa8155e3fc16408f2232aa8f28db530643bf1152155c171474e02a6c777c"
+    },
+    "chain": {
+      "chainId": "1",
+      "router": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+      "routerRuntimeCodeHash": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+      "graphFactory": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+      "graphFactoryRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+      "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "poolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+      "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+    },
+    "releaseSubjectSha256": "sha256:11305fff11f590db2ad4de42efca79408b8fb4c9edba65b49a7a744316e0ed12"
+  },
+  "releaseApproval": {
+    "authority": "release_owner",
+    "status": "approved",
+    "decisionId": "custom-launch-v3-owner-authorization-01a03762",
+    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
+    "decidedAt": "2026-08-26T07:56:26Z",
+    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
+    "releaseSubjectSha256": "sha256:11305fff11f590db2ad4de42efca79408b8fb4c9edba65b49a7a744316e0ed12"
+  },
+  "validation": {
+    "gates": [
+      {
+        "id": "website_release",
+        "result": "passed",
+        "evidenceSha256": "sha256:fdc80f4efd02aa7d6ddbf017a63cd2778c47db44c60c81252edb7d9f70565df6",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/website_release.json",
+        "completedAt": "2026-08-26T08:45:33Z"
+      },
+      {
+        "id": "custom_launch_api_release",
+        "result": "passed",
+        "evidenceSha256": "sha256:117accbdae16f542b4dae699efd2416a6246e5998cca08187a78b6c9afb2e52c",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/custom_launch_api_release.json",
+        "completedAt": "2026-08-26T08:45:33Z"
+      },
+      {
+        "id": "database_migrations",
+        "result": "passed",
+        "evidenceSha256": "sha256:58cf5cc498599e91d739c04c09aeb99aaa4a1ae6df1560ae8e103a4fa3e35a77",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/database_migrations.json",
+        "completedAt": "2026-08-26T08:44:38Z"
+      },
+      {
+        "id": "security",
+        "result": "passed",
+        "evidenceSha256": "sha256:ba648b560ac418aed49d8af98942fc6528d0b15ae4cffa1fb343cbedf51bfefb",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/security.json",
+        "completedAt": "2026-08-26T08:41:31Z"
+      },
+      {
+        "id": "public_contract",
+        "result": "passed",
+        "evidenceSha256": "sha256:c714f9b647086b63bc06ff130f97f8d3e9087290e669a9672cf052f6d71271b7",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/public_contract.json",
+        "completedAt": "2026-08-26T08:45:33Z"
+      },
+      {
+        "id": "source_verification_pipeline",
+        "result": "passed",
+        "evidenceSha256": "sha256:41032660db9956af9564e95924bd124dac08570ae5a99d316ec6fcb2deedc5be",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/source_verification_pipeline.json",
+        "completedAt": "2026-08-26T08:08:35Z"
+      },
+      {
+        "id": "browser_qa",
+        "result": "passed",
+        "evidenceSha256": "sha256:0d090a2ba2f20668cd16603558dd00bf4c65a60c427890a55cfb00a048795421",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/browser_qa.json",
+        "completedAt": "2026-08-26T07:27:41Z"
+      },
+      {
+        "id": "rollback_snapshot",
+        "result": "passed",
+        "evidenceSha256": "sha256:f13eba4e570af6a32fed5e01494efded7e19163e994852ed1fdb300e1903309b",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/rollback_snapshot.json",
+        "completedAt": "2026-08-26T07:52:32Z"
+      },
+      {
+        "id": "clean_room_no_broadcast",
+        "result": "passed",
+        "evidenceSha256": "sha256:bfe15012b9d63a6e078723dbf31f6df30767d174c26f9cf338a922ba881926f9",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/clean_room_no_broadcast.json",
+        "completedAt": "2026-08-26T08:49:55Z"
+      }
+    ]
+  },
+  "rollback": {
+    "website": {
+      "deploymentId": "dpl_CAHEMcmzwLvATDzbGqugKDa4hnUE",
+      "immutableDeploymentUrl": "https://launcher-v4-pmagl3j8r-aficialais-projects.vercel.app",
+      "commitSha": "9e03874fd1c019452fde1af75e113a7651137216",
+      "configurationSnapshotSha256": "sha256:88cd0f9257a6f98920f3e4c2a15da5171e5c2aeb6bc7fcf82fbbd89b6d977cfc",
+      "capturedAt": "2026-08-26T04:28:51Z"
+    },
+    "apiService": {
+      "flyReleaseVersion": 13,
+      "imageDigest": "sha256:f064d62c8b1df05f4a22c079f15a8ea9c0d10e727ea7045857290e90ba31bb73",
+      "candidateCommitSha": "2a9763b77c1af3cf9d12c1777eb28957c0543fa5",
+      "capturedAt": "2026-08-26T07:52:32Z"
+    }
+  },
+  "candidate": {
+    "workflowRunId": null,
+    "workflowRunAttempt": null,
+    "workflowRunUrl": null,
+    "websiteDeploymentId": null,
+    "immutableWebsiteUrl": null,
+    "websiteCommitSha": null,
+    "apiOrigin": null,
+    "apiReadinessIdentitySha256": null,
+    "verificationEvidenceSha256": null,
+    "verifiedAt": null
+  },
+  "promotionApproval": {
+    "authority": "release_owner",
+    "status": "pending",
+    "decisionId": null,
+    "immutableReference": null,
+    "decidedAt": null,
+    "statementSha256": null,
+    "releaseSubjectSha256": null,
+    "candidateEvidenceSha256": null
+  },
+  "promoted": {
+    "websiteDeploymentId": null,
+    "immutableWebsiteUrl": null,
+    "productionAlias": null,
+    "evidenceSha256": null,
+    "promotedAt": null
+  },
+  "canary": {
+    "status": "pending",
+    "mode": "public-cli-wallet-handoff-no-broadcast",
+    "evidenceSha256": null,
+    "evidenceLocator": null,
+    "completedAt": null,
+    "walletSignatureObserved": false,
+    "transactionBroadcastObserved": false
+  },
+  "liveDeclaration": {
+    "authority": "release_owner",
+    "status": "pending",
+    "decisionId": null,
+    "immutableReference": null,
+    "decidedAt": null,
+    "statementSha256": null,
+    "releaseSubjectSha256": null
+  }
+}
