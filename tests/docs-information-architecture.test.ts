@@ -246,7 +246,9 @@ describe("Docs information architecture", () => {
     expect(creatorLaunchPage).toContain("The API does not control your wallet");
     expect(creatorLaunchPage).toContain("Manage Custom launch API keys");
     expect(creatorLaunchPage).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
-    expect(creatorLaunchPage).toContain("does not reproduce your build");
+    expect(creatorLaunchPage).toContain(
+      "does not reproduce project-specific tests",
+    );
     expect(creatorLaunchPage).not.toContain(
       "Open public wallet self-service is not active",
     );

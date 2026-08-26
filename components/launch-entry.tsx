@@ -302,7 +302,7 @@ export function LaunchModelPicker({
           id="launch-model-custom-description"
         >
           Package, validate and submit a deterministic Custom launch through
-          the public V2 API. Your connected wallet reviews and signs separately.
+          the public V3 API. Your connected wallet reviews and signs separately.
         </span>
         <span
           className={`launch-model-action ${launchExperience.modelAction}`}
