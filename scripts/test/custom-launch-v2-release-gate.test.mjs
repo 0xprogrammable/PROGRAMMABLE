@@ -133,7 +133,7 @@ async function stagingFixture() {
     },
     database: {
       migrationInventorySha256: record.subject.apiService.migrationInventorySha256,
-      lastMigration: "migrations/0008_direct_native_platform_admission_v3.sql",
+      lastMigration: "migrations/0010_durable_launch_lifecycle_queue_v3.sql",
       schemaEvidenceSha256: hashes.nine,
     },
     api: {
@@ -141,7 +141,7 @@ async function stagingFixture() {
       readinessIdentitySha256: record.subject.apiService.readinessIdentitySha256,
       apiContractSha256: record.subject.apiService.apiContractSha256,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.0.0",
+      profileVersion: "3.1.0",
       publicProfilePath:
         "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json",
       publicProfileSha256: hashes.nine,
@@ -175,15 +175,25 @@ test("V2 template validates without granting staging authority", async () => {
   assert.equal(record.recordStatus, "draft");
 });
 
-test("backend binding schema pairs current revision 3 and historical revision 2 evidence", async () => {
+test("backend binding schema pairs current 3.1 and compatible 3.0/2.0 evidence", async () => {
   const currentBytes = await readFile(new URL(
     "../../docs/operations/releases/custom-launch-v2/backend-release-binding.template.json",
     import.meta.url,
   ));
   const current = parseDeterministicCustomLaunchApiReleaseBindingV1(currentBytes);
-  assert.equal(current.api.profileVersion, "3.0.0");
+  assert.equal(current.api.profileVersion, "3.1.0");
   assert.match(current.api.publicProfilePath, /admission-profile\.v3\.json$/u);
-  assert.match(current.database.lastMigration, /0008_direct_native_platform_admission_v3/u);
+  assert.match(current.database.lastMigration, /0010_durable_launch_lifecycle_queue_v3/u);
+
+  const compatible = clone(current);
+  compatible.api.profileVersion = "3.0.0";
+  compatible.database.lastMigration =
+    "migrations/0008_direct_native_platform_admission_v3.sql";
+  const compatibleBytes = Buffer.from(`${JSON.stringify(compatible, null, 2)}\n`);
+  assert.equal(
+    parseDeterministicCustomLaunchApiReleaseBindingV1(compatibleBytes).api.profileVersion,
+    "3.0.0",
+  );
 
   const historical = clone(current);
   historical.api.profileVersion = "2.0.0";
@@ -452,10 +462,10 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.2.1" },
+    info: { version: "3.3.0" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.0.0",
+      profileVersion: "3.1.0",
       profileRevision: 3,
       productionLaunchAuthorized: true,
       platformAdmissionReceiptRequired: true,
@@ -463,11 +473,29 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
       safetyClaim: false,
       feeBehaviorClaim: false,
     },
+    "x-programmable-admission-policy": {
+      currentProfileVersion: "3.1.0",
+      legacyExactProfileVersions: ["3.0.0"],
+      manualProjectAllowlist: false,
+      hardBlockFindingRules: [
+        { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
+        { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["any"] },
+        { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["any"] },
+        { code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: ["hook"] },
+        { code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: ["hook"] },
+        { code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: ["hook"] },
+        { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
+      ],
+    },
     "x-programmable-availability": {
       status: "live",
       publicAuthorized: true,
     },
-    paths: { "/v3/custom-launches": { get: {}, post: {} } },
+    paths: {
+      "/v3/capabilities": { get: {} },
+      "/v3/custom-launches/preflight": { post: {} },
+      "/v3/custom-launches": { get: {}, post: {} },
+    },
   };
   const openApiBytes = Buffer.from(JSON.stringify(openApi));
   observation.website.publicOpenApiSha256 = digest(openApiBytes);
@@ -491,15 +519,15 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   const launchTarballBytes = Buffer.from("fixture programmable launch package", "utf8");
   const launchTarballSha256 = digest(launchTarballBytes);
   const expectedLaunchPackageRelease = {
-    version: "3.2.1",
+    version: "3.3.0",
     tarballUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
     checksumUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
     tarballSha256: launchTarballSha256,
   };
   const launchChecksumBytes = Buffer.from(
-    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.2.1.tgz\n`,
+    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.0.tgz\n`,
     "utf8",
   );
   let launchTarballBody = launchTarballBytes;
@@ -545,6 +573,42 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     if (url.pathname === "/readyz") return Response.json(readiness, {
       headers: { "cache-control": "no-store" },
     });
+    if (url.pathname === "/v3/capabilities") return Response.json({
+      schemaVersion: "programmable.custom-launch-capabilities.v1",
+      apiVersion: "v3",
+      profile: {
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 3,
+        profileVersion: "3.1.0",
+        productionLaunchAuthorized: true,
+      },
+      routes: {
+        create: "/v3/custom-launches",
+        preflight: "/v3/custom-launches/preflight",
+        status: "/v3/custom-launches/{launchId}",
+        list: "/v3/custom-launches",
+        capabilities: "/v3/capabilities",
+      },
+      preflight: {
+        quotaConsumed: false,
+        nonceAllocated: false,
+        persisted: false,
+        walletSignatureProduced: false,
+        transactionBroadcast: false,
+        exactProductionAdmissionEngine: true,
+      },
+      productTruthAxes: [
+        "deployment",
+        "trading",
+        "platform_fee_evidence",
+        "source_verification",
+        "indexing",
+        "featured",
+      ],
+      safetyClaim: false,
+      auditClaim: false,
+      universalCompatibilityClaim: false,
+    });
     if (url.href === expectedLaunchPackageRelease.tarballUrl) {
       return new Response(launchTarballBody, { status: 200 });
     }
@@ -578,8 +642,11 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     calls.find(({ url }) => url.includes("/v3/custom-launches?limit=1"))?.authorization,
     "Bearer canary-secret-value",
   );
-  assert.equal(evidence.website.cli.releaseVersion, "3.2.1");
+  assert.equal(evidence.website.cli.releaseVersion, "3.3.0");
   assert.equal(evidence.website.cli.tarballSha256, launchTarballSha256);
+  assert.equal(evidence.api.capabilitiesStatus, 200);
+  assert.equal(evidence.api.capabilitiesSchemaVersion,
+    "programmable.custom-launch-capabilities.v1");
 
   launchTarballBody = Buffer.concat([launchTarballBytes, Buffer.from([0])]);
   await assert.rejects(() => probeCustomLaunchV3Release({
