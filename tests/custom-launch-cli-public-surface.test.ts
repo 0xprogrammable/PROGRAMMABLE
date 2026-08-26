@@ -731,6 +731,23 @@ describe("public Custom Launch CLI surface", () => {
         env: environment,
         stdio: "pipe",
       });
+      const rehearsalEvidence = JSON.parse(readFileSync(
+        join(projectRoot, "evidence/rehearsal.json"),
+        "utf8",
+      ));
+      const exampleBuildSource = readFileSync(
+        join(projectRoot, "build-and-configure.mjs"),
+        "utf8",
+      );
+      expect(rehearsalEvidence.profile).toMatchObject({
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileVersion: "3.0.0",
+        profileRevision: 3,
+        productionLaunchAuthorized: true,
+      });
+      expect(exampleBuildSource.match(/profileVersion: "3\.0\.0"/gu))
+        .toHaveLength(2);
+      expect(exampleBuildSource).not.toContain('profileVersion: "2.0.0"');
       const packOutput = JSON.parse(execFileSync(process.execPath, [
         cli,
         "pack",

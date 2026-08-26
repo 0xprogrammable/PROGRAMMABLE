@@ -174,7 +174,7 @@ const evidence = {
   schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v3",
   profile: {
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "2.0.0",
+    profileVersion: "3.0.0",
     profileRevision: 3,
     productionLaunchAuthorized: true,
   },
@@ -350,7 +350,7 @@ await writeFile(
 process.stdout.write(`${JSON.stringify({
   schemaVersion: "programmable.direct-native-v3-config-result.v3",
   profileId: config.launchProfile.profileId,
-  profileVersion: "2.0.0",
+  profileVersion: "3.0.0",
   profileRevision: config.launchProfile.profileRevision,
   productionLaunchAuthorized: true,
   configPath: path.join(root, "programmable-launch.config.json"),
