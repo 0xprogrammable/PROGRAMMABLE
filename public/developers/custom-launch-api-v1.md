@@ -20,17 +20,16 @@ Readiness: <https://api.programmable.market/readyz>
 The `programmable.direct-native-hook-graph.v1` document freezes V3 request, resource and two-action wallet
 handoff schemas but does not activate them. Discovery remains `integration-pending`; Public V2 stays the stable
 production creation contract. The Router primitive supports 2-16 targets; this profile requires 3-16 because token,
-hook and initializer roles are distinct. It remains restricted to the exact canonical
-`ProgrammableVolumeFeeHookV2` kernel with mask `0x20cc`, not arbitrary self-reported hooks.
+hook and initializer roles are distinct. Revision 2 accepts a project-owned token, a project-owned hook, every valid
+Uniswap v4 permission mask and an exact multi-contract graph. It does not substitute a Programmable-owned hook.
 
-Its 1,000-hundredths-of-a-bip Programmable share is inside the selected total, not added on top:
-`effectiveTotal = max(selectedTotal, 1000)` and `projectShare = effectiveTotal - 1000`. The create request carries an
-unsigned USDC EIP-3009 descriptor, pre-signature `fundingIntentHash` and exact zero-word signature patch, never a
-signature. Funding typed-data signing and the later Router send are separate explicit website wallet actions; neither
-is automatic. Initializer source, build, runtime, final calldata and simulation are bound exactly per launch, with no
-separate global initializer trust root. The pool fee is restricted to static integers from 0 through 999999; the
-dynamic-fee sentinel is not accepted. The funding intent excludes the signature, `initializerCalldataHash`, final
-graph commitment and `permitDigest`.
+Its mandatory 1,000-hundredths-of-a-bip Programmable share may be declared as an additive platform share or included
+inside the selected total. The server recomputes both buy and sell economics. Before the permit authority can sign, a
+platform-issued conformance receipt must bind the final graph commitment, exact runtime set, fee semantics and claim
+destination. Source, compiler settings, constructor arguments, final calldata and simulation are bound per launch.
+The pool may use a static fee or the Uniswap v4 dynamic-fee sentinel. Funding may be absent or use an unsigned USDC
+EIP-3009 descriptor; the later funding signature and Router transaction remain separate explicit wallet actions and
+are never produced or sent by the API key.
 
 ## Rev3 fee policy
 

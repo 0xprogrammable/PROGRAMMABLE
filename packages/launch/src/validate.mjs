@@ -53,6 +53,7 @@ import {
   validateDirectNativeProfileBinding,
   validateDirectNativeProfileBuilds,
   validateDirectNativeProfileGraph,
+  validateDirectNativePermitWindow,
   validateEmbeddedDirectNativeProfile,
   validateFundingAuthorization,
 } from "./profile-direct-native-v1.mjs";
@@ -233,11 +234,13 @@ function validateV2LaunchRequest(request) {
 }
 
 function validateV3LaunchRequest(request) {
+  const fundingMode = request?.launchProfile?.fundingPolicy?.mode;
   assertExactKeys(request, [
     "schemaVersion",
     "launchWallet",
     "chainId",
     "nonce",
+    "permitWindow",
     "sourceDescriptor",
     "sourceBundleManifest",
     "graphBundle",
@@ -245,12 +248,14 @@ function validateV3LaunchRequest(request) {
     "launchProfileSelection",
     "launchProfileHash",
     "launchIntentHash",
-    "fundingAuthorization",
-    "fundingIntentHash",
+    ...(fundingMode === "eip-3009-receive-with-authorization"
+      ? ["fundingAuthorization", "fundingIntentHash"]
+      : []),
     "agentAttestation",
     "verificationBundle",
   ], "launch request");
   const common = validateCommonRequest(request);
+  const permitWindow = validateDirectNativePermitWindow(request.permitWindow);
   if (canonicalizeJson(request.graphBundle) !== canonicalizeJson(common.graph.graphBundle)) {
     throw new TypeError("V3 graphBundle must use the exact canonical target order and encoding");
   }
@@ -276,7 +281,9 @@ function validateV3LaunchRequest(request) {
       ),
       routeNonce: request.nonce,
       quoteCurrency,
-      fundingSignaturePatch: request.launchProfileSelection.fundingSignaturePatch,
+      ...(fundingMode === "eip-3009-receive-with-authorization"
+        ? { fundingSignaturePatch: request.launchProfileSelection.fundingSignaturePatch }
+        : {}),
     },
   );
   const hookRuntime = verification.runtimeCodes.get(
@@ -296,11 +303,9 @@ function validateV3LaunchRequest(request) {
     common.graph.graphBundle,
   );
   validateDirectNativeProfileBuilds(
-    launchProfile,
     launchProfileSelection,
     common.graph.graphBundle,
     request.verificationBundle,
-    common.manifest,
   );
   const launchIntentHash = buildDirectNativeLaunchIntentHash({
     schemaVersion: CREATE_REQUEST_SCHEMA_V3,
@@ -313,21 +318,29 @@ function validateV3LaunchRequest(request) {
     verificationBundleHash: verification.verificationBundleHash,
     launchProfileHash,
     launchProfileSelection,
+    permitWindow,
   });
   if (request.launchIntentHash !== launchIntentHash) {
     throw new TypeError("launchIntentHash does not match the normalized V3 launch intent");
   }
-  const funding = validateFundingAuthorization(
-    request.fundingAuthorization,
-    request.fundingIntentHash,
-    {
-      launchWallet: common.launchWallet,
-      predictedInitializer: launchProfileSelection.predictedInitializer,
-      routeNamespace: launchProfileSelection.routeNamespace,
-      routeNonce: launchProfileSelection.routeNonce,
-      launchIntentHash,
-    },
-  );
+  const funding = fundingMode === "eip-3009-receive-with-authorization"
+    ? validateFundingAuthorization(
+        request.fundingAuthorization,
+        request.fundingIntentHash,
+        {
+          launchWallet: common.launchWallet,
+          predictedInitializer: launchProfileSelection.predictedInitializer,
+          routeNamespace: launchProfileSelection.routeNamespace,
+          routeNonce: launchProfileSelection.routeNonce,
+          launchIntentHash,
+        },
+      )
+    : null;
+  if (funding !== null
+    && (funding.fundingAuthorization.validAfter !== permitWindow.validAfter
+      || funding.fundingAuthorization.validBefore !== permitWindow.deadline)) {
+    throw new TypeError("fundingAuthorization validity does not match permitWindow");
+  }
   validateAttestationV2(request.agentAttestation, launchIntentHash);
   return {
     schemaVersion: request.schemaVersion,
@@ -335,7 +348,7 @@ function validateV3LaunchRequest(request) {
     verificationBundleHash: verification.verificationBundleHash,
     launchProfileHash,
     launchIntentHash,
-    fundingIntentHash: funding.fundingIntentHash,
+    ...(funding === null ? {} : { fundingIntentHash: funding.fundingIntentHash }),
     productionLaunchAuthorized: launchProfile.productionLaunchAuthorized,
     exactSourceIncluded: true,
     predictions: common.graph.predictions,

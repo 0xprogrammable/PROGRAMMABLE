@@ -43,7 +43,6 @@ import {
   validateLaunchProfileSelection,
 } from "./profile-v2.mjs";
 import {
-  buildDirectNativeFeeEnforcement,
   buildDirectNativeLaunchIntentHash,
   buildDirectNativeProfileBinding,
   buildFundingAuthorization,
@@ -52,6 +51,7 @@ import {
   resolveDirectNativeProfile,
   validateDirectNativeProfileBuilds,
   validateDirectNativeProfileGraph,
+  validateDirectNativePermitWindow,
   validateDirectNativeProfileSelection,
 } from "./profile-direct-native-v1.mjs";
 
@@ -68,6 +68,9 @@ export async function buildLaunch({ configPath }) {
     : apiVersion === "v3"
       ? validateDirectNativeProfileSelection(config.launchProfile)
       : null;
+  const permitWindow = apiVersion === "v3"
+    ? validateDirectNativePermitWindow(config.permitWindow)
+    : null;
   const configDirectory = path.dirname(absoluteConfig);
   const sourceRoot = resolveSourceRoot(configDirectory, config.source.root);
   const launchWallet = getAddress(config.launchWallet);
@@ -209,11 +212,14 @@ export async function buildLaunch({ configPath }) {
       sourceBundle.bundleContentSha256,
       launchWallet,
     );
-    const fundingSignaturePatch = buildFundingSignaturePatch(
-      config.fundingSignaturePatch,
-      graphBundle,
-      targets.find(({ targetId }) => targetId === config.fundingSignaturePatch.targetId),
-    );
+    const fundingSignaturePatch = launchProfileSelection.fundingMode
+      === "eip-3009-receive-with-authorization"
+      ? buildFundingSignaturePatch(
+          config.fundingSignaturePatch,
+          graphBundle,
+          targets.find(({ targetId }) => targetId === config.fundingSignaturePatch.targetId),
+        )
+      : undefined;
     const launchProfileBinding = buildDirectNativeProfileBinding(
       launchProfileSelection,
       {
@@ -222,26 +228,15 @@ export async function buildLaunch({ configPath }) {
         routeNamespace,
         routeNonce: nonce,
         quoteCurrency: getAddress(config.pool.quoteCurrency),
-        fundingSignaturePatch,
+        ...(fundingSignaturePatch === undefined ? {} : { fundingSignaturePatch }),
       },
     );
-    const feeEnforcement = buildDirectNativeFeeEnforcement(
-      launchProfileBinding,
-      graphBundle,
-      verificationBundle,
-      sourceBundle.manifest,
-    );
-    const launchProfile = resolveDirectNativeProfile(
-      launchProfileSelection,
-      feeEnforcement,
-    );
+    const launchProfile = resolveDirectNativeProfile(launchProfileSelection);
     validateDirectNativeProfileGraph(launchProfile, launchProfileBinding, graphBundle);
     validateDirectNativeProfileBuilds(
-      launchProfile,
       launchProfileBinding,
       graphBundle,
       verificationBundle,
-      sourceBundle.manifest,
     );
     launchProfileHash = hashDirectNativeProfile(launchProfile);
     launchIntentHash = buildDirectNativeLaunchIntentHash({
@@ -255,15 +250,26 @@ export async function buildLaunch({ configPath }) {
       verificationBundleHash,
       launchProfileHash,
       launchProfileSelection: launchProfileBinding,
+      permitWindow,
     });
-    const funding = buildFundingAuthorization(config.fundingAuthorization, {
-      launchWallet,
-      predictedInitializer: launchProfileBinding.predictedInitializer,
-      routeNamespace,
-      routeNonce: nonce,
-      launchIntentHash,
-    });
-    fundingIntentHash = funding.fundingIntentHash;
+    if (launchProfileSelection.fundingMode === "eip-3009-receive-with-authorization"
+      && (config.fundingAuthorization.validAfter !== permitWindow.validAfter
+        || config.fundingAuthorization.validBefore !== permitWindow.deadline)) {
+      throw new TypeError(
+        "fundingAuthorization validity must exactly match permitWindow",
+      );
+    }
+    const funding = launchProfileSelection.fundingMode
+      === "eip-3009-receive-with-authorization"
+      ? buildFundingAuthorization(config.fundingAuthorization, {
+          launchWallet,
+          predictedInitializer: launchProfileBinding.predictedInitializer,
+          routeNamespace,
+          routeNonce: nonce,
+          launchIntentHash,
+        })
+      : null;
+    fundingIntentHash = funding?.fundingIntentHash ?? null;
     const agentAttestation = {
       schemaVersion: AGENT_ATTESTATION_SCHEMA_V2,
       subjectLaunchIntentHash: launchIntentHash,
@@ -276,6 +282,7 @@ export async function buildLaunch({ configPath }) {
       launchWallet,
       chainId: MAINNET_CHAIN_ID,
       nonce,
+      permitWindow,
       sourceDescriptor,
       sourceBundleManifest: sourceBundle.manifest,
       graphBundle,
@@ -283,8 +290,12 @@ export async function buildLaunch({ configPath }) {
       launchProfileSelection: launchProfileBinding,
       launchProfileHash,
       launchIntentHash,
-      fundingAuthorization: funding.fundingAuthorization,
-      fundingIntentHash,
+      ...(funding === null
+        ? {}
+        : {
+            fundingAuthorization: funding.fundingAuthorization,
+            fundingIntentHash,
+          }),
       agentAttestation,
       verificationBundle,
     };
@@ -324,6 +335,8 @@ export async function buildLaunch({ configPath }) {
     delete receipt.fundingIntentHash;
   } else if (apiVersion === "v2") {
     delete receipt.fundingIntentHash;
+  } else if (fundingIntentHash === null) {
+    delete receipt.fundingIntentHash;
   }
   const receiptBytes = Buffer.from(`${canonicalizeJson(receipt)}\n`, "utf8");
   const result = {
@@ -341,7 +354,9 @@ export async function buildLaunch({ configPath }) {
     result.launchProfileHash = launchProfileHash;
     result.launchIntentHash = launchIntentHash;
   }
-  if (apiVersion === "v3") result.fundingIntentHash = fundingIntentHash;
+  if (apiVersion === "v3" && fundingIntentHash !== null) {
+    result.fundingIntentHash = fundingIntentHash;
+  }
   return result;
 }
 
@@ -364,7 +379,8 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     result.launchProfileHash = built.launchProfileHash;
     result.launchIntentHash = built.launchIntentHash;
   }
-  if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
+  if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3
+    && built.fundingIntentHash !== undefined) {
     result.fundingIntentHash = built.fundingIntentHash;
   }
   return result;
@@ -392,13 +408,15 @@ function assertPackConfig(config) {
     validateLaunchProfileSelection(config.launchProfile);
   } else if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V3) {
     apiVersion = "v3";
+    const launchProfile = validateDirectNativeProfileSelection(config.launchProfile);
     assertExactKeys(config, [
       ...commonKeys,
       "launchProfile",
-      "fundingAuthorization",
-      "fundingSignaturePatch",
+      "permitWindow",
+      ...(launchProfile.fundingMode === "eip-3009-receive-with-authorization"
+        ? ["fundingAuthorization", "fundingSignaturePatch"]
+        : []),
     ], "pack config");
-    validateDirectNativeProfileSelection(config.launchProfile);
   } else {
     throw new TypeError(
       `pack config schemaVersion must be ${PACK_CONFIG_SCHEMA_V1}, ${PACK_CONFIG_SCHEMA_V2}, or ${PACK_CONFIG_SCHEMA_V3}`,

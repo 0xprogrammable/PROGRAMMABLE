@@ -1,10 +1,10 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Programmable Custom Launch API V3 profile preview",
+    "title": "Programmable Custom Launch API V3 general hook profile",
     "version": "3.0.0-rc.1",
-    "summary": "Integration-pending direct native hook graph request contract.",
-    "description": "This document freezes the versioned V3 request shape for programmable.direct-native-hook-graph.v1 without activating it. Public V2 remains the stable production creation contract. V3 fails closed with CUSTOM_LAUNCH_V3_INTEGRATION_PENDING until the V3 routes and existing permit-authority admission binding are implemented and verified end to end. The initializer is bound per launch through exact source, build, runtime, unsigned signature patch, final calldata and simulation evidence; there is no separate global initializer trust root. The create request carries an unsigned EIP-3009 descriptor and a pre-signature fundingIntentHash; it never carries v, r, s or a wallet signature.",
+    "summary": "General project-owned Uniswap v4 hook graph request contract.",
+    "description": "This document freezes revision 2 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt from exact Standard JSON and materialized runtime bytes. A platform-issued receipt must bind the final graph and prove the declared 10 bps Programmable fee before the permit authority signs; the exact Router transaction is then simulated before it is returned for separate wallet review. Funding may be absent or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -14,7 +14,7 @@
   "servers": [
     {
       "url": "https://api.programmable.market",
-      "description": "Programmable Custom Launch API. V3 is not activated."
+      "description": "Programmable Custom Launch API. Revision 2 remains integration-pending until the conformance authority is promoted."
     }
   ],
   "externalDocs": {
@@ -39,24 +39,29 @@
     "stableProductionVersion": "2",
     "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v2.json",
     "activationBlockers": [
-      "v3-route-implementation",
-      "permit-authority-admission-binding",
-      "end-to-end-wallet-handoff-verification"
+      "platform-fee-conformance-authority",
+      "production-deployment-readback",
+      "end-to-end-general-hook-wallet-handoff"
     ]
   },
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
-    "profileRevision": 1,
+    "profileRevision": 2,
     "productionLaunchAuthorized": false,
     "minimumTargets": 3,
     "maximumTargets": 16,
-    "referenceKernel": "ProgrammableVolumeFeeHookV2",
-    "requiredHookPermissionMask": 8396,
-    "requiredHookPermissionMaskHex": "0x20cc",
-    "arbitraryHookCodeAuthorized": false
+    "minimumHookPermissionMask": 0,
+    "maximumHookPermissionMask": 16383,
+    "projectOwnedToken": true,
+    "projectOwnedHook": true,
+    "exactGraphReceiptRequired": true
   },
   "x-programmable-funding-boundary": {
-    "method": "eip-3009-receive-with-authorization",
+    "modes": [
+      "none",
+      "wallet-transaction-value",
+      "eip-3009-receive-with-authorization"
+    ],
     "descriptorSchemaVersion": "programmable.funding-authorization-descriptor.v1",
     "signatureIncludedInCreateRequest": false,
     "fundingIntentHashStage": "pre-signature",
@@ -70,12 +75,17 @@
     "automaticBroadcast": false
   },
   "x-programmable-fee-accounting": {
-    "accountingMode": "inclusive-selected-total",
+    "accountingModes": [
+      "additive-platform-share",
+      "inclusive-selected-total"
+    ],
     "rateDenominator": "1000000",
     "programmableFeeHundredthsOfBip": "1000",
-    "minimumEffectiveSelectedHundredthsOfBip": "1000",
-    "invariant": "effectiveTotal=max(selectedTotal,1000); programmableShare=1000; projectShare=effectiveTotal-1000",
-    "derivedResultsAreRequestFields": false
+    "invariants": {
+      "additive-platform-share": "effectiveTotal=selected+1000; projectShare=selected",
+      "inclusive-selected-total": "effectiveTotal=max(selected,1000); projectShare=effectiveTotal-1000"
+    },
+    "derivedResultsAreRecomputedByServer": true
   },
   "tags": [
     {
@@ -494,68 +504,116 @@
           },
           "platformFeeBindingTargetId": {
             "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier",
-            "description": "Must equal hookTargetId."
+            "description": "May reference the hook or another exact direct graph target that implements the declared platform fee binding."
           }
         },
-        "description": "The token, hook and initializer IDs are distinct. The fee readback is bound to the selected hook target.",
+        "description": "The token, hook and initializer IDs are distinct. The platform fee binding target may be a separate project-owned component.",
         "additionalProperties": false
       },
-      "PlatformFeeReadbackSelectorsV1": {
+      "PlatformFeePolicyV1": {
         "type": "object",
         "required": [
-          "programmableHundredthsOfBip",
-          "programmableFeeOwner",
-          "programmableFeePolicyHash",
-          "runtimeConfigurationHash"
-        ],
-        "properties": {
-          "programmableHundredthsOfBip": {
-            "const": "0x8a9585e4"
-          },
-          "programmableFeeOwner": {
-            "const": "0x21466b6a"
-          },
-          "programmableFeePolicyHash": {
-            "const": "0x677d6592"
-          },
-          "runtimeConfigurationHash": {
-            "const": "0xca7751ad"
-          }
-        },
-        "additionalProperties": false
-      },
-      "InclusivePlatformFeeV1": {
-        "type": "object",
-        "required": [
+          "schemaVersion",
           "accountingMode",
+          "applicability",
           "rateDenominator",
           "programmableFeeHundredthsOfBip",
-          "minimumEffectiveSelectedHundredthsOfBip",
-          "recipient",
-          "readbackSelectors"
+          "assessmentBase",
+          "feeCurrency",
+          "roundingMode",
+          "claimAuthority"
         ],
         "properties": {
+          "schemaVersion": {
+            "const": "programmable.platform-fee-policy.v1"
+          },
           "accountingMode": {
-            "const": "inclusive-selected-total"
+            "enum": [
+              "additive-platform-share",
+              "inclusive-selected-total"
+            ]
+          },
+          "applicability": {
+            "const": "successful-pool-swaps"
           },
           "rateDenominator": {
             "const": "1000000"
           },
           "programmableFeeHundredthsOfBip": {
-            "const": "1000",
-            "description": "Programmable's inclusive share: 1,000 hundredths of a bip = 0.10% = 10 bps of the documented basis."
-          },
-          "minimumEffectiveSelectedHundredthsOfBip": {
             "const": "1000"
           },
-          "recipient": {
-            "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+          "assessmentBase": {
+            "enum": [
+              "executed-gross-declared-quote",
+              "settled-input-before-platform-fee"
+            ]
           },
-          "readbackSelectors": {
-            "$ref": "#/components/schemas/PlatformFeeReadbackSelectorsV1"
+          "feeCurrency": {
+            "enum": [
+              "declared-quote-currency",
+              "input-currency"
+            ]
+          },
+          "roundingMode": {
+            "const": "floor"
+          },
+          "claimAuthority": {
+            "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
           }
         },
-        "description": "The Programmable share is inside the selected total, not added on top. The CLI and backend derive effectiveTotal=max(selectedTotal,1000) and projectShare=effectiveTotal-1000.",
+        "description": "The exact assessment pair and accounting mode are intent-bound. The server recomputes all derived fee values.",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "assessmentBase": { "const": "executed-gross-declared-quote" }
+              }
+            },
+            "then": {
+              "properties": {
+                "feeCurrency": { "const": "declared-quote-currency" }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "assessmentBase": { "const": "settled-input-before-platform-fee" }
+              }
+            },
+            "then": {
+              "properties": {
+                "feeCurrency": { "const": "input-currency" }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "PlatformFeeProofPolicyV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "mode",
+          "receiptSchemaVersion",
+          "runnerId",
+          "runnerVersion",
+          "vectorSetVersion",
+          "receiptAuthority",
+          "subject",
+          "activationStatus"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.platform-fee-conformance-policy.v1" },
+          "mode": { "const": "platform-issued-exact-graph-receipt-v1" },
+          "receiptSchemaVersion": { "const": "programmable.platform-fee-conformance-receipt.v1" },
+          "runnerId": { "const": "programmable.platform-fee-conformance" },
+          "runnerVersion": { "const": "1.0.0" },
+          "vectorSetVersion": { "const": "1.0.0" },
+          "receiptAuthority": { "const": "platform-only" },
+          "subject": { "const": "final-graph-commitment-and-runtime-set" },
+          "activationStatus": { "const": "integration-pending" }
+        },
         "additionalProperties": false
       },
       "DirectNativeGraphPolicyV1": {
@@ -612,97 +670,54 @@
             "const": true
           }
         },
-        "description": "The general direct-graph validator checks the full 14-bit range and permission dependencies. This integration preview separately restricts fee enforcement to the exact canonical mask 0x20cc.",
-        "additionalProperties": false
-      },
-      "CanonicalVolumeFeeEnforcementV1": {
-        "type": "object",
-        "required": [
-          "mode",
-          "requiredHookPermissionMask",
-          "hookSourcePath",
-          "hookSourceSha256",
-          "factorySourcePath",
-          "factorySourceSha256",
-          "dependencyLockSha256",
-          "compilerVersion",
-          "compilerSettingsSha256",
-          "hookCreationBytecodeSha256",
-          "hookRuntimeTemplateSha256",
-          "hookRuntimeCodeHash"
-        ],
-        "properties": {
-          "mode": {
-            "const": "canonical-volume-fee-v2"
-          },
-          "requiredHookPermissionMask": {
-            "const": 8396
-          },
-          "hookSourcePath": {
-            "const": "src/ProgrammableVolumeFeeHookV2.sol"
-          },
-          "hookSourceSha256": {
-            "const": "sha256:41294f0701d3911b740a0cea160b936cb0eea4bdf2a664e7c6674a1c1e1b519d"
-          },
-          "factorySourcePath": {
-            "const": "src/ProgrammableVolumeFeeHookFactoryV2.sol"
-          },
-          "factorySourceSha256": {
-            "const": "sha256:aa2673f4635543b5c24b140030461fe3161138d2d02d24c1c8c1830c13d60145"
-          },
-          "dependencyLockSha256": {
-            "const": "sha256:e73b8f213af284c54550e7bdf5416e9bf1f17774b4f6e23d3bb8f6a150ede759"
-          },
-          "compilerVersion": {
-            "const": "0.8.26+commit.8a97fa7a"
-          },
-          "compilerSettingsSha256": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
-          },
-          "hookCreationBytecodeSha256": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
-          },
-          "hookRuntimeTemplateSha256": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
-          },
-          "hookRuntimeCodeHash": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
-          }
-        },
-        "description": "Exact canonical ProgrammableVolumeFeeHookV2 source and build binding. Arbitrary self-reported hook code is not authorized by this profile.",
+        "description": "All fourteen Uniswap v4 permission bits are supported. Return-delta permissions require their corresponding action permission and the hook address low bits must match the declaration.",
         "additionalProperties": false
       },
       "DirectNativeFundingPolicyV1": {
-        "type": "object",
-        "required": [
-          "method",
-          "primaryType",
-          "typeHash",
-          "domainName",
-          "domainVersion",
-          "maximumValiditySeconds"
-        ],
-        "properties": {
-          "method": {
-            "const": "eip-3009-receive-with-authorization"
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "mode", "launchFundingRequired", "signatureRequired", "valueSource"
+            ],
+            "properties": {
+              "mode": { "const": "wallet-transaction-value" },
+              "launchFundingRequired": { "const": true },
+              "signatureRequired": { "const": false },
+              "valueSource": { "const": "exact-router-transaction-msg-value" }
+            },
+            "description": "Native ETH value is carried only by the exact Router transaction returned after conformance and simulation for separate wallet review.",
+            "additionalProperties": false
           },
-          "primaryType": {
-            "const": "ReceiveWithAuthorization"
+          {
+            "type": "object",
+            "required": ["mode", "launchFundingRequired", "signatureRequired"],
+            "properties": {
+              "mode": { "const": "none" },
+              "launchFundingRequired": { "const": false },
+              "signatureRequired": { "const": false }
+            },
+            "additionalProperties": false
           },
-          "typeHash": {
-            "const": "0xd099cc98ef71107a616c4f0f941f04c322d8e254fe26b3c6668db87aae413de8"
-          },
-          "domainName": {
-            "const": "USD Coin"
-          },
-          "domainVersion": {
-            "const": "2"
-          },
-          "maximumValiditySeconds": {
-            "const": "3600"
+          {
+            "type": "object",
+            "required": [
+              "mode", "launchFundingRequired", "signatureRequired", "primaryType",
+              "typeHash", "domainName", "domainVersion", "maximumValiditySeconds"
+            ],
+            "properties": {
+              "mode": { "const": "eip-3009-receive-with-authorization" },
+              "launchFundingRequired": { "const": true },
+              "signatureRequired": { "const": true },
+              "primaryType": { "const": "ReceiveWithAuthorization" },
+              "typeHash": { "const": "0xd099cc98ef71107a616c4f0f941f04c322d8e254fe26b3c6668db87aae413de8" },
+              "domainName": { "const": "USD Coin" },
+              "domainVersion": { "const": "2" },
+              "maximumValiditySeconds": { "const": "3600" }
+            },
+            "additionalProperties": false
           }
-        },
-        "additionalProperties": false
+        ]
       },
       "DirectNativeHookGraphProfileV1": {
         "type": "object",
@@ -726,22 +741,22 @@
           "graphPolicy",
           "currencyPolicy",
           "hookPermissionPolicy",
-          "feeEnforcement",
           "fundingPolicy",
-          "platformFee"
+          "platformFeePolicy",
+          "platformFeeProofPolicy"
         ],
         "properties": {
           "schemaVersion": {
-            "const": "programmable.direct-native-hook-graph-profile.v1"
+            "const": "programmable.direct-native-hook-graph-profile.v2"
           },
           "profileId": {
             "const": "programmable.direct-native-hook-graph.v1"
           },
           "profileRevision": {
-            "const": 1
+            "const": 2
           },
           "profileVersion": {
-            "const": "1.0.0"
+            "const": "2.0.0"
           },
           "productionLaunchAuthorized": {
             "const": false,
@@ -789,17 +804,17 @@
           "hookPermissionPolicy": {
             "$ref": "#/components/schemas/DirectNativeHookPermissionPolicyV1"
           },
-          "feeEnforcement": {
-            "$ref": "#/components/schemas/CanonicalVolumeFeeEnforcementV1"
-          },
           "fundingPolicy": {
             "$ref": "#/components/schemas/DirectNativeFundingPolicyV1"
           },
-          "platformFee": {
-            "$ref": "#/components/schemas/InclusivePlatformFeeV1"
+          "platformFeePolicy": {
+            "$ref": "#/components/schemas/PlatformFeePolicyV1"
+          },
+          "platformFeeProofPolicy": {
+            "$ref": "#/components/schemas/PlatformFeeProofPolicyV1"
           }
         },
-        "description": "Closed integration-preview profile. The current embedded value has productionLaunchAuthorized false until V3 routes and the existing permit-authority admission binding are verified end to end. Initializer evidence is exact and per launch, not a separate global trust root.",
+        "description": "General direct-graph profile. The current embedded value remains false until the exact-graph fee-conformance authority and production readback are promoted; request bytes cannot activate it.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -819,10 +834,17 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
           },
           "fee": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 999999,
-            "description": "Static V3 pool fee. The dynamic-fee sentinel is not authorized by this frozen profile."
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 999999
+              },
+              {
+                "const": 8388608
+              }
+            ],
+            "description": "Static fee 0..999999 or the Uniswap v4 dynamic-fee sentinel 0x800000."
           },
           "tickSpacing": {
             "type": "integer",
@@ -833,29 +855,38 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
           }
         },
-        "description": "Currencies are distinct and sorted by numeric address. The hook address must expose low-bit permission mask 0x20cc.",
+        "description": "Currencies are distinct and sorted by numeric address. The hook address low bits must equal the declared 14-bit permission mask.",
         "additionalProperties": false
       },
       "DirectNativePlatformFeeBindingV1": {
         "type": "object",
         "required": [
+          "schemaVersion",
           "targetId",
           "accountingMode",
+          "applicability",
           "rateDenominator",
           "programmableFeeHundredthsOfBip",
-          "minimumEffectiveSelectedHundredthsOfBip",
-          "recipient",
-          "readbackSelectors",
-          "selectedBuyHundredthsOfBip",
-          "selectedSellHundredthsOfBip"
+          "assessmentBase",
+          "feeCurrency",
+          "roundingMode",
+          "claimAuthority",
+          "claimBinding",
+          "economics"
         ],
         "properties": {
+          "schemaVersion": {
+            "const": "programmable.platform-fee-binding.v2"
+          },
           "targetId": {
             "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier",
-            "description": "Must equal targetRoles.hookTargetId and targetRoles.platformFeeBindingTargetId."
+            "description": "Must equal targetRoles.platformFeeBindingTargetId and name an exact graph target."
           },
           "accountingMode": {
-            "const": "inclusive-selected-total"
+            "enum": ["additive-platform-share", "inclusive-selected-total"]
+          },
+          "applicability": {
+            "const": "successful-pool-swaps"
           },
           "rateDenominator": {
             "const": "1000000"
@@ -863,23 +894,73 @@
           "programmableFeeHundredthsOfBip": {
             "const": "1000"
           },
-          "minimumEffectiveSelectedHundredthsOfBip": {
-            "const": "1000"
+          "assessmentBase": {
+            "enum": ["executed-gross-declared-quote", "settled-input-before-platform-fee"]
           },
-          "recipient": {
+          "feeCurrency": {
+            "enum": ["declared-quote-currency", "input-currency"]
+          },
+          "roundingMode": {
+            "const": "floor"
+          },
+          "claimAuthority": {
             "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
           },
-          "readbackSelectors": {
-            "$ref": "#/components/schemas/PlatformFeeReadbackSelectorsV1"
+          "claimBinding": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["mode", "claimAuthority", "payoutRecipient"],
+                "properties": {
+                  "mode": { "const": "immutable-payout-recipient" },
+                  "claimAuthority": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+                  "payoutRecipient": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["mode", "claimAuthority", "destinationConstraint"],
+                "properties": {
+                  "mode": { "const": "claim-authority-selected-recipient" },
+                  "claimAuthority": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+                  "destinationConstraint": { "const": "nonzero-address" }
+                },
+                "additionalProperties": false
+              }
+            ]
           },
-          "selectedBuyHundredthsOfBip": {
+          "economics": {
+            "type": "object",
+            "required": ["buy", "sell"],
+            "properties": {
+              "buy": { "$ref": "#/components/schemas/PlatformFeeEconomicsV2" },
+              "sell": { "$ref": "#/components/schemas/PlatformFeeEconomicsV2" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "The server recomputes project and effective values for both directions and rejects any mismatch.",
+        "additionalProperties": false
+      },
+      "PlatformFeeEconomicsV2": {
+        "type": "object",
+        "required": [
+          "applicantSelectedHundredthsOfBip",
+          "projectHundredthsOfBip",
+          "effectiveTotalHundredthsOfBip"
+        ],
+        "properties": {
+          "applicantSelectedHundredthsOfBip": {
             "$ref": "#/components/schemas/SelectedFeeHundredthsOfBipV1"
           },
-          "selectedSellHundredthsOfBip": {
+          "projectHundredthsOfBip": {
+            "$ref": "#/components/schemas/SelectedFeeHundredthsOfBipV1"
+          },
+          "effectiveTotalHundredthsOfBip": {
             "$ref": "#/components/schemas/SelectedFeeHundredthsOfBipV1"
           }
         },
-        "description": "Selected totals are intent-bound inputs. Effective totals and project shares are derived, disclosed results and are not self-declared request fields.",
         "additionalProperties": false
       },
       "DirectNativeProfileSelectionBindingV1": {
@@ -889,27 +970,30 @@
           "profileId",
           "profileRevision",
           "targetRoles",
+          "fundingMode",
           "routeNamespace",
           "routeNonce",
           "hookPermissionMask",
           "predictedInitializer",
           "poolKey",
           "expectedPoolId",
-          "fundingSignaturePatch",
           "platformFeeBinding"
         ],
         "properties": {
           "schemaVersion": {
-            "const": "programmable.direct-native-hook-graph-profile-selection-binding.v1"
+            "const": "programmable.direct-native-hook-graph-profile-selection-binding.v2"
           },
           "profileId": {
             "const": "programmable.direct-native-hook-graph.v1"
           },
           "profileRevision": {
-            "const": 1
+            "const": 2
           },
           "targetRoles": {
             "$ref": "#/components/schemas/DirectNativeTargetRolesV1"
+          },
+          "fundingMode": {
+            "enum": ["none", "wallet-transaction-value", "eip-3009-receive-with-authorization"]
           },
           "routeNamespace": {
             "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
@@ -918,7 +1002,9 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/NonzeroLowerHex32"
           },
           "hookPermissionMask": {
-            "const": 8396
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16383
           },
           "predictedInitializer": {
             "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
@@ -936,6 +1022,21 @@
             "$ref": "#/components/schemas/DirectNativePlatformFeeBindingV1"
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "fundingMode": { "const": "eip-3009-receive-with-authorization" }
+              }
+            },
+            "then": {
+              "required": ["fundingSignaturePatch"]
+            },
+            "else": {
+              "not": { "required": ["fundingSignaturePatch"] }
+            }
+          }
+        ],
         "additionalProperties": false
       },
       "FundingSignaturePatchDescriptorV1": {
@@ -1051,7 +1152,21 @@
             }
           }
         ],
-        "description": "The Router primitive supports 2 through 16 targets, while this V3 profile narrows its request to 3 through 16 because token, hook and initializer roles are distinct. Return-delta permissions require their corresponding action permission; this canonical kernel uses exact mask 0x20cc."
+        "description": "The Router primitive supports 2 through 16 targets, while this V3 profile requires 3 through 16 because the project-owned token, project-owned hook and initializer roles are distinct. The hook may use any valid Uniswap v4 permission mask; return-delta permissions require their corresponding action permission."
+      },
+      "DirectNativePermitWindowV1": {
+        "type": "object",
+        "required": ["validAfter", "deadline"],
+        "properties": {
+          "validAfter": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/NonzeroCanonicalUint256"
+          }
+        },
+        "description": "Exact Router permit validity window. deadline must be after validAfter and no more than 3600 seconds later.",
+        "additionalProperties": false
       },
       "CustomLaunchCreateRequestV3": {
         "type": "object",
@@ -1060,6 +1175,7 @@
           "launchWallet",
           "chainId",
           "nonce",
+          "permitWindow",
           "sourceDescriptor",
           "sourceBundleManifest",
           "graphBundle",
@@ -1067,8 +1183,6 @@
           "launchProfileSelection",
           "launchProfileHash",
           "launchIntentHash",
-          "fundingAuthorization",
-          "fundingIntentHash",
           "agentAttestation",
           "verificationBundle"
         ],
@@ -1084,6 +1198,9 @@
           },
           "nonce": {
             "$ref": "./custom-launch-v2.json#/components/schemas/NonzeroLowerHex32"
+          },
+          "permitWindow": {
+            "$ref": "#/components/schemas/DirectNativePermitWindowV1"
           },
           "sourceDescriptor": {
             "$ref": "./custom-launch-v2.json#/components/schemas/DeterministicSourceBundleV2"
@@ -1120,7 +1237,33 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/ExactSourceVerificationBundleV2"
           }
         },
-        "description": "Closed unsigned V3 create envelope for the exact reference kernel. The request has no signature property and additional properties are rejected.",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "launchProfileSelection": {
+                  "properties": {
+                    "fundingMode": { "const": "eip-3009-receive-with-authorization" }
+                  },
+                  "required": ["fundingMode"]
+                }
+              },
+              "required": ["launchProfileSelection"]
+            },
+            "then": {
+              "required": ["fundingAuthorization", "fundingIntentHash"]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  { "required": ["fundingAuthorization"] },
+                  { "required": ["fundingIntentHash"] }
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Closed unsigned V3 create envelope for a project-owned token, project-owned hook and complete 3-16 target launch graph. The request contains no wallet signature or transaction approval, and additional properties are rejected.",
         "additionalProperties": false
       },
       "Eip3009FundingTypedDataV1": {
@@ -1425,7 +1568,35 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "ready"
+                "const": "integration-pending"
+              },
+              "stage": {
+                "const": "platform-review-pending"
+              },
+              "actionRequired": {
+                "type": "null"
+              },
+              "fundingBoundary": {
+                "$ref": "#/components/schemas/FundingBoundaryV3"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "integrationState",
+              "stage",
+              "actionRequired",
+              "fundingBoundary"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.custom-launch-authorization-result.v3"
+              },
+              "integrationState": {
+                "const": "integration-pending"
               },
               "stage": {
                 "const": "funding-signature-required"
@@ -1453,7 +1624,7 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "ready"
+                "const": "integration-pending"
               },
               "stage": {
                 "enum": [
@@ -1484,7 +1655,7 @@
                 "const": "programmable.custom-launch-authorization-result.v3"
               },
               "integrationState": {
-                "const": "ready"
+                "const": "integration-pending"
               },
               "stage": {
                 "const": "router-transaction-required"
@@ -1585,6 +1756,8 @@
             "enum": [
               "received",
               "validating",
+              "pending_review",
+              "action_required",
               "prepared",
               "simulating",
               "awaiting_funding_authorization",
@@ -1606,7 +1779,14 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
           },
           "fundingIntentHash": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+            "oneOf": [
+              {
+                "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "createdAt": {
             "type": "string",

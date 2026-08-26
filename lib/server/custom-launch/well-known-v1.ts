@@ -74,22 +74,27 @@ export function programmableWellKnownDocumentV1(
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1" as const,
-        profileRevision: 1 as const,
+        profileRevision: 2 as const,
         requestSchemaVersion:
           "programmable.custom-launch-create-request.v3" as const,
         minimumTargets: 3 as const,
         maximumTargets: 16 as const,
-        referenceKernel: "ProgrammableVolumeFeeHookV2" as const,
-        hookPermissionMask: "0x20cc" as const,
+        projectOwnedToken: true as const,
+        projectOwnedHook: true as const,
+        hookPermissionMaskRange: Object.freeze({
+          minimum: 0 as const,
+          maximum: 16_383 as const,
+        }),
+        exactGraphReceiptRequired: true as const,
         fundingAuthorization: Object.freeze({
           method: "eip-3009-receive-with-authorization" as const,
           createRequestSignatureIncluded: false as const,
           fundingIntentStage: "pre-signature" as const,
         }),
         activationBlockers: Object.freeze([
-          "v3-route-implementation",
-          "permit-authority-admission-binding",
-          "end-to-end-wallet-handoff-verification",
+          "platform-fee-conformance-authority",
+          "production-deployment-readback",
+          "end-to-end-general-hook-wallet-handoff",
         ] as const),
         errorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING" as const,
       }),

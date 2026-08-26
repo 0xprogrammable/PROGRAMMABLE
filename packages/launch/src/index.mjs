@@ -11,7 +11,6 @@ export {
   validateLaunchProfileSelection,
 } from "./profile-v2.mjs";
 export {
-  buildDirectNativeFeeEnforcement,
   buildDirectNativeLaunchIntentHash,
   buildDirectNativeProfileBinding,
   buildFundingAuthorization,
@@ -19,6 +18,7 @@ export {
   hashDirectNativeProfile,
   resolveDirectNativeProfile,
   validateDirectNativeProfileBinding,
+  validateDirectNativePermitWindow,
   validateDirectNativeProfileSelection,
   validateFundingAuthorizationInput,
 } from "./profile-direct-native-v1.mjs";

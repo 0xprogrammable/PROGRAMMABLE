@@ -135,7 +135,10 @@ export async function statusLaunch(options) {
     }
     const walletHandoffReady = status === WALLET_HANDOFF_STATUS
       || (requestPath === CREATE_PATH_V3 && status === "awaiting_funding_authorization");
+    const reviewPending = requestPath === CREATE_PATH_V3 && status === "pending_review";
+    const reviewActionRequired = requestPath === CREATE_PATH_V3 && status === "action_required";
     const stopped = TERMINAL_STATUSES.has(status)
+      || reviewActionRequired
       || (until === WALLET_HANDOFF_STATUS && walletHandoffReady)
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
@@ -143,6 +146,8 @@ export async function statusLaunch(options) {
         httpStatus: result.status,
         stopped,
         terminal: TERMINAL_STATUSES.has(status),
+        reviewPending,
+        reviewActionRequired,
         walletHandoffReady,
         walletHandoffStage: status === "awaiting_funding_authorization"
           ? "funding-signature-required"

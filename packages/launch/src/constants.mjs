@@ -26,18 +26,24 @@ export const LAUNCH_PROFILE_VERSION = "2.0.0";
 export const LAUNCH_PROFILE_HASH_DOMAIN = "programmable.fee-enforced-launch-profile.v2";
 export const LAUNCH_INTENT_HASH_DOMAIN = "programmable.custom-launch-intent.v2";
 export const DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA =
-  "programmable.direct-native-hook-graph-profile-selection.v1";
+  "programmable.direct-native-hook-graph-profile-selection.v2";
 export const DIRECT_NATIVE_PROFILE_BINDING_SCHEMA =
-  "programmable.direct-native-hook-graph-profile-selection-binding.v1";
+  "programmable.direct-native-hook-graph-profile-selection-binding.v2";
 export const DIRECT_NATIVE_PROFILE_SCHEMA =
-  "programmable.direct-native-hook-graph-profile.v1";
+  "programmable.direct-native-hook-graph-profile.v2";
 export const DIRECT_NATIVE_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
-export const DIRECT_NATIVE_PROFILE_REVISION = 1;
-export const DIRECT_NATIVE_PROFILE_VERSION = "1.0.0";
+export const DIRECT_NATIVE_PROFILE_REVISION = 2;
+export const DIRECT_NATIVE_PROFILE_VERSION = "2.0.0";
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN =
-  "programmable.direct-native-hook-graph-profile.v1";
+  "programmable.direct-native-hook-graph-profile.v2";
 export const DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN =
-  "programmable.direct-native-hook-graph-launch-intent.v1";
+  "programmable.direct-native-hook-graph-launch-intent.v2";
+export const PLATFORM_FEE_POLICY_SCHEMA =
+  "programmable.platform-fee-policy.v1";
+export const PLATFORM_FEE_PROOF_POLICY_SCHEMA =
+  "programmable.platform-fee-conformance-policy.v1";
+export const PLATFORM_FEE_BINDING_SCHEMA =
+  "programmable.platform-fee-binding.v2";
 export const FUNDING_AUTHORIZATION_INPUT_SCHEMA =
   "programmable.funding-authorization-input.v1";
 export const FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA =
@@ -46,6 +52,8 @@ export const FUNDING_SIGNATURE_PATCH_SCHEMA =
   "programmable.eip3009-signature-patch.v1";
 export const FUNDING_AUTHORIZATION_METHOD =
   "eip-3009-receive-with-authorization";
+export const FUNDING_WALLET_TRANSACTION_VALUE_METHOD =
+  "wallet-transaction-value";
 export const FUNDING_INTENT_HASH_DOMAIN =
   "programmable.direct-native-hook-graph.funding-intent.v1";
 export const FUNDING_NONCE_DOMAIN =
@@ -99,6 +107,7 @@ export const RECEIVE_WITH_AUTHORIZATION_TYPEHASH =
 export const PLATFORM_FEE_RATE_PPM = "1000";
 export const PLATFORM_FEE_DENOMINATOR = "1000000";
 export const PLATFORM_FEE_RECIPIENT = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+export const PLATFORM_FEE_CLAIM_AUTHORITY = PLATFORM_FEE_RECIPIENT;
 export const GRAPH_TARGET_SALT_TYPE =
   "ProgrammableCreate2GraphTargetSaltV1(uint256 chainId,address factory,bytes32 routeNamespace,bytes32 routeNonce,bytes32 targetIdHash,bytes32 applicantSalt,address authorizedLauncher)";
 export const API_ROUTE_NAMESPACE_TYPE =

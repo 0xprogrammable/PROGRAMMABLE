@@ -16,6 +16,7 @@ import {
   hashDirectNativeProfile,
   resolveDirectNativeProfile,
   validateDirectNativeProfileGraph,
+  validateDirectNativePermitWindow,
   validateDirectNativeProfileSelection,
 } from "../src/profile-direct-native-v1.mjs";
 import {
@@ -47,32 +48,22 @@ const INITIALIZER_ABI = [{
 }];
 
 const SELECTION = {
-  schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v1",
+  schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v2",
   profileId: "programmable.direct-native-hook-graph.v1",
-  profileRevision: 1,
+  profileRevision: 2,
   targetRoles: {
     tokenTargetId: "token",
     hookTargetId: "hook",
     initializerTargetId: "initializer",
     platformFeeBindingTargetId: "hook",
   },
-  selectedBuyHundredthsOfBip: "0",
-  selectedSellHundredthsOfBip: "30000",
-};
-
-const FEE_ENFORCEMENT = {
-  mode: "canonical-volume-fee-v2",
-  requiredHookPermissionMask: 0x20cc,
-  hookSourcePath: "src/ProgrammableVolumeFeeHookV2.sol",
-  hookSourceSha256: "sha256:41294f0701d3911b740a0cea160b936cb0eea4bdf2a664e7c6674a1c1e1b519d",
-  factorySourcePath: "src/ProgrammableVolumeFeeHookFactoryV2.sol",
-  factorySourceSha256: "sha256:aa2673f4635543b5c24b140030461fe3161138d2d02d24c1c8c1830c13d60145",
-  dependencyLockSha256: "sha256:e73b8f213af284c54550e7bdf5416e9bf1f17774b4f6e23d3bb8f6a150ede759",
-  compilerVersion: "0.8.26+commit.8a97fa7a",
-  compilerSettingsSha256: SHA,
-  hookCreationBytecodeSha256: SHA,
-  hookRuntimeTemplateSha256: SHA,
-  hookRuntimeCodeHash: RUNTIME_HASH,
+  fundingMode: "eip-3009-receive-with-authorization",
+  accountingMode: "inclusive-selected-total",
+  assessmentBase: "executed-gross-declared-quote",
+  feeCurrency: "declared-quote-currency",
+  claimMode: "claim-authority-selected-recipient",
+  applicantSelectedBuyHundredthsOfBip: "0",
+  applicantSelectedSellHundredthsOfBip: "30000",
 };
 
 function unsignedInitializerCalldata() {
@@ -147,35 +138,81 @@ function bundleWithInitializer(calldata) {
   return bundle;
 }
 
-test("V3 selection accepts canonical 0..999999 rates and rejects values above the kernel bound", () => {
+test("V3 selection closes funding, accounting, claim, and applicant-selected rate modes", () => {
   assert.deepEqual(validateDirectNativeProfileSelection(SELECTION), SELECTION);
   assert.equal(validateDirectNativeProfileSelection({
     ...SELECTION,
-    selectedBuyHundredthsOfBip: "999999",
-  }).selectedBuyHundredthsOfBip, "999999");
+    applicantSelectedBuyHundredthsOfBip: "999999",
+  }).applicantSelectedBuyHundredthsOfBip, "999999");
   assert.throws(
     () => validateDirectNativeProfileSelection({
       ...SELECTION,
-      selectedBuyHundredthsOfBip: "1000000",
+      applicantSelectedBuyHundredthsOfBip: "1000000",
     }),
     /between 0 and 999999/u,
   );
+  assert.throws(
+    () => validateDirectNativeProfileSelection({
+      ...SELECTION,
+      accountingMode: "additive-platform-share",
+      applicantSelectedBuyHundredthsOfBip: "999999",
+    }),
+    /must not exceed 998999/u,
+  );
+  assert.deepEqual(validateDirectNativeProfileSelection({
+    ...SELECTION,
+    fundingMode: "none",
+    claimMode: "immutable-payout-recipient",
+    payoutRecipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  }).payoutRecipient, "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
+  assert.throws(
+    () => validateDirectNativeProfileSelection({
+      ...SELECTION,
+      claimMode: "immutable-payout-recipient",
+      payoutRecipient: TOKEN_ADDRESS,
+    }),
+    /platform claim authority/u,
+  );
+  assert.throws(
+    () => validateDirectNativeProfileSelection({
+      ...SELECTION,
+      feeCurrency: "input-currency",
+    }),
+    /not a supported closed pair/u,
+  );
+  assert.deepEqual(validateDirectNativePermitWindow({
+    validAfter: "900",
+    deadline: "1200",
+  }), { validAfter: "900", deadline: "1200" });
+  assert.throws(
+    () => validateDirectNativePermitWindow({ validAfter: "900", deadline: "4501" }),
+    /must not exceed 3600 seconds/u,
+  );
 });
 
-test("V3 profile exposes inclusive fee accounting and never describes the fixed share as additive", () => {
-  const profile = resolveDirectNativeProfile(SELECTION, FEE_ENFORCEMENT);
-  assert.deepEqual(profile.platformFee, {
+test("V3 profile binds platform-owned proof policy without pinning applicant hook code", () => {
+  const profile = resolveDirectNativeProfile(SELECTION);
+  assert.deepEqual(profile.platformFeePolicy, {
+    schemaVersion: "programmable.platform-fee-policy.v1",
     accountingMode: "inclusive-selected-total",
+    applicability: "successful-pool-swaps",
     rateDenominator: "1000000",
     programmableFeeHundredthsOfBip: "1000",
-    minimumEffectiveSelectedHundredthsOfBip: "1000",
-    recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    readbackSelectors: {
-      programmableHundredthsOfBip: "0x8a9585e4",
-      programmableFeeOwner: "0x21466b6a",
-      programmableFeePolicyHash: "0x677d6592",
-      runtimeConfigurationHash: "0xca7751ad",
-    },
+    assessmentBase: "executed-gross-declared-quote",
+    feeCurrency: "declared-quote-currency",
+    roundingMode: "floor",
+    claimAuthority: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  });
+  assert.deepEqual(profile.platformFeeProofPolicy, {
+    schemaVersion: "programmable.platform-fee-conformance-policy.v1",
+    mode: "platform-issued-exact-graph-receipt-v1",
+    receiptSchemaVersion: "programmable.platform-fee-conformance-receipt.v1",
+    runnerId: "programmable.platform-fee-conformance",
+    runnerVersion: "1.0.0",
+    vectorSetVersion: "1.0.0",
+    receiptAuthority: "platform-only",
+    subject: "final-graph-commitment-and-runtime-set",
+    activationStatus: "integration-pending",
   });
   assert.equal(profile.productionLaunchAuthorized, false);
   assert.deepEqual(profile.graphPolicy, {
@@ -189,7 +226,13 @@ test("V3 profile exposes inclusive fee accounting and never describes the fixed 
     "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
   );
   assert.match(hashDirectNativeProfile(profile), /^sha256:[0-9a-f]{64}$/u);
-  assert.equal(JSON.stringify(profile).includes("additive"), false);
+  assert.equal(JSON.stringify(profile).includes("ProgrammableVolumeFeeHookV2"), false);
+  assert.equal(Object.hasOwn(profile, "feeEnforcement"), false);
+  const additive = resolveDirectNativeProfile({
+    ...SELECTION,
+    accountingMode: "additive-platform-share",
+  });
+  assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
 });
 
 test("funding signature patch derives only from aligned, distinct, zero initializer words", () => {
@@ -362,7 +405,7 @@ test("funding signature patch proves exact top-level ABI types and canonical ful
   );
 });
 
-test("V3 binding fixes route, pool id, signature patch, and inclusive selected fees", () => {
+test("V3 binding accepts applicant hook mask and discloses inclusive economics and claim mode", () => {
   const bundle = graphBundle();
   const binding = buildDirectNativeProfileBinding(SELECTION, {
     graphBundle: bundle,
@@ -377,24 +420,169 @@ test("V3 binding fixes route, pool id, signature patch, and inclusive selected f
     fundingSignaturePatch: signaturePatch(bundle),
   });
   assert.equal(binding.hookPermissionMask, 0x20cc);
-  assert.equal(binding.platformFeeBinding.selectedBuyHundredthsOfBip, "0");
-  assert.equal(binding.platformFeeBinding.selectedSellHundredthsOfBip, "30000");
+  assert.deepEqual(binding.platformFeeBinding.economics.buy, {
+    applicantSelectedHundredthsOfBip: "0",
+    projectHundredthsOfBip: "0",
+    effectiveTotalHundredthsOfBip: "1000",
+  });
+  assert.deepEqual(binding.platformFeeBinding.economics.sell, {
+    applicantSelectedHundredthsOfBip: "30000",
+    projectHundredthsOfBip: "29000",
+    effectiveTotalHundredthsOfBip: "30000",
+  });
+  assert.deepEqual(binding.platformFeeBinding.claimBinding, {
+    mode: "claim-authority-selected-recipient",
+    claimAuthority: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    destinationConstraint: "nonzero-address",
+  });
   assert.match(binding.expectedPoolId, /^0x[0-9a-f]{64}$/u);
   validateDirectNativeProfileGraph(
-    resolveDirectNativeProfile(SELECTION, FEE_ENFORCEMENT),
+    resolveDirectNativeProfile(SELECTION),
     binding,
     bundle,
   );
-  const dynamicFeeBundle = graphBundle();
-  dynamicFeeBundle.pool.fee = 0x800000;
+  const invalidFeeBundle = graphBundle();
+  invalidFeeBundle.pool.fee = 1_000_001;
   assert.throws(
     () => validateDirectNativeProfileGraph(
-      resolveDirectNativeProfile(SELECTION, FEE_ENFORCEMENT),
+      resolveDirectNativeProfile(SELECTION),
       binding,
-      dynamicFeeBundle,
+      invalidFeeBundle,
     ),
-    /pool fee must be between 0 and 999999/u,
+    /pool fee must be between 0 and 999999 or the dynamic-fee sentinel/u,
   );
+});
+
+test("V3 accepts the zero hook-permission mask only for the dynamic-fee sentinel", () => {
+  const bundle = graphBundle();
+  bundle.pool.fee = 0x800000;
+  bundle.targets = bundle.targets.map((candidate) => candidate.targetId === "hook"
+    ? { ...candidate, declaredHookPermissions: [] }
+    : candidate);
+  const selection = {
+    ...SELECTION,
+    fundingMode: "none",
+  };
+  const binding = buildDirectNativeProfileBinding(selection, {
+    graphBundle: bundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: "0x0000000000000000000000000000000000004000" },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+  });
+  assert.equal(binding.hookPermissionMask, 0);
+  validateDirectNativeProfileGraph(resolveDirectNativeProfile(selection), binding, bundle);
+
+  const staticFeeBundle = structuredClone(bundle);
+  staticFeeBundle.pool.fee = 3_000;
+  assert.throws(
+    () => validateDirectNativeProfileGraph(
+      resolveDirectNativeProfile(selection),
+      binding,
+      staticFeeBundle,
+    ),
+    /zero-permission hooks require the dynamic-fee sentinel/u,
+  );
+});
+
+test("V3 accepts a variable valid hook mask and a zero-value no-funding graph", () => {
+  const bundle = graphBundle();
+  bundle.targets = bundle.targets.map((candidate) => candidate.targetId === "hook"
+    ? { ...candidate, declaredHookPermissions: ["beforeSwap"] }
+    : candidate);
+  const selection = {
+    ...SELECTION,
+    fundingMode: "none",
+    accountingMode: "inclusive-selected-total",
+    claimMode: "immutable-payout-recipient",
+    payoutRecipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    applicantSelectedBuyHundredthsOfBip: "10000",
+    applicantSelectedSellHundredthsOfBip: "10000",
+  };
+  const binding = buildDirectNativeProfileBinding(selection, {
+    graphBundle: bundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: "0x0000000000000000000000000000000000001080" },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+  });
+  assert.equal(binding.hookPermissionMask, 0x80);
+  assert.equal(Object.hasOwn(binding, "fundingSignaturePatch"), false);
+  assert.deepEqual(binding.platformFeeBinding.claimBinding, {
+    mode: "immutable-payout-recipient",
+    claimAuthority: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    payoutRecipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  });
+  validateDirectNativeProfileGraph(resolveDirectNativeProfile(selection), binding, bundle);
+  const funded = structuredClone(bundle);
+  funded.targets[0].deploymentValueWei = "1";
+  assert.throws(
+    () => validateDirectNativeProfileGraph(resolveDirectNativeProfile(selection), binding, funded),
+    /fundingMode none requires zero deployment and initializer value/u,
+  );
+});
+
+test("V3 binds native launch value to the separately reviewed Router transaction", () => {
+  const bundle = graphBundle();
+  bundle.targets[2].initializerValueWei = "100000000000000000";
+  const selection = {
+    ...SELECTION,
+    fundingMode: "wallet-transaction-value",
+  };
+  const binding = buildDirectNativeProfileBinding(selection, {
+    graphBundle: bundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: HOOK_ADDRESS },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+  });
+  assert.deepEqual(resolveDirectNativeProfile(selection).fundingPolicy, {
+    mode: "wallet-transaction-value",
+    launchFundingRequired: true,
+    signatureRequired: false,
+    valueSource: "exact-router-transaction-msg-value",
+  });
+  assert.equal(Object.hasOwn(binding, "fundingSignaturePatch"), false);
+  validateDirectNativeProfileGraph(resolveDirectNativeProfile(selection), binding, bundle);
+});
+
+test("V3 additive accounting preserves the applicant project rate and adds exactly 1000 ppm", () => {
+  const bundle = graphBundle();
+  const selection = {
+    ...SELECTION,
+    accountingMode: "additive-platform-share",
+    applicantSelectedBuyHundredthsOfBip: "29000",
+    applicantSelectedSellHundredthsOfBip: "29000",
+  };
+  const binding = buildDirectNativeProfileBinding(selection, {
+    graphBundle: bundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: HOOK_ADDRESS },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+    fundingSignaturePatch: signaturePatch(bundle),
+  });
+  assert.deepEqual(binding.platformFeeBinding.economics.buy, {
+    applicantSelectedHundredthsOfBip: "29000",
+    projectHundredthsOfBip: "29000",
+    effectiveTotalHundredthsOfBip: "30000",
+  });
 });
 
 test("EIP-3009 intent is pre-signature, launch-intent-bound, and uses a separately derived nonce", () => {
@@ -450,6 +638,7 @@ test("V3 launch and funding intents match the cross-repository golden vectors", 
     graphBundleHash: `sha256:${repeated("4")}`,
     verificationBundleHash: `sha256:${repeated("5")}`,
     launchProfileHash: `sha256:${repeated("6")}`,
+    permitWindow: { validAfter: "900", deadline: "1200" },
     launchProfileSelection: {
       routeNamespace: `0x${repeated("1")}`,
       routeNonce: `0x${repeated("2")}`,
@@ -458,7 +647,7 @@ test("V3 launch and funding intents match the cross-repository golden vectors", 
   });
   assert.equal(
     launchIntentHash,
-    "sha256:fa398b12434bb4bf785612fc68530d9ba2af6db99eca93afea9ea93fe7bb82f4",
+    "sha256:a270e536f5c50ab56acdd1c54430e4af0e09d28a21ab88b1d779f9a5696738b2",
   );
 
   const context = {
@@ -479,11 +668,11 @@ test("V3 launch and funding intents match the cross-repository golden vectors", 
   const funding = buildFundingAuthorization(input, context);
   assert.equal(
     funding.fundingIntentHash,
-    "0x0db785d5e4a05390c7c2361be45a8db78ad29c11162057ba443c78cb661a1ea4",
+    "0x3351010e63b1b31609097e2464672d91275516c0dc961d062db04888ddd6d88a",
   );
   assert.equal(
     funding.fundingAuthorization.nonce,
-    "0x7b2fd24feab532b315eb5ce709950578f57d509bb12fe2ddde70417f1808c9bc",
+    "0x966166a956309504f2643039a56712990a82680b9048e0fcd7a1c16a5897eaca",
   );
 
   const excludedFinalState = buildFundingAuthorization(input, {
