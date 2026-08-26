@@ -647,11 +647,23 @@ export function shouldShowStockPairedEthClaimPath(
 type WaitForTransactionOptions = {
   maxAttempts?: number;
   intervalMs?: number;
+  requestTimeoutMs?: number;
+  overallTimeoutMs?: number;
   fetcher?: typeof fetch;
   wait?: (milliseconds: number) => Promise<void>;
   signal?: AbortSignal;
   policy?: "stock-paired";
 };
+
+const PROFILE_TRANSACTION_REQUEST_TIMEOUT_MS = 15_000;
+const PROFILE_TRANSACTION_OVERALL_TIMEOUT_MS = 75_000;
+
+class ProfileTransactionPollTimeoutError extends Error {
+  constructor() {
+    super("Transaction status check timed out");
+    this.name = "ProfileTransactionPollTimeoutError";
+  }
+}
 
 function throwIfTransactionPollAborted(signal?: AbortSignal) {
   if (!signal?.aborted) return;
@@ -689,6 +701,47 @@ function waitForTransactionInterval(
   });
 }
 
+async function runBoundedTransactionPollStep<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): Promise<T> {
+  throwIfTransactionPollAborted(parentSignal);
+  const controller = new AbortController();
+  const timeoutError = new ProfileTransactionPollTimeoutError();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let rejectForParentAbort: ((reason?: unknown) => void) | undefined;
+  const parentAbort = new Promise<never>((_, reject) => {
+    rejectForParentAbort = reject;
+  });
+  const abortFromParent = () => {
+    const reason = parentSignal?.reason instanceof Error
+      ? parentSignal.reason
+      : new DOMException("Transaction polling aborted", "AbortError");
+    controller.abort(reason);
+    rejectForParentAbort?.(reason);
+  };
+  parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, Math.max(1, timeoutMs));
+  });
+
+  try {
+    return await Promise.race([
+      operation(controller.signal),
+      deadline,
+      parentAbort,
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    parentSignal?.removeEventListener("abort", abortFromParent);
+  }
+}
+
 export async function waitForTransaction(
   transactionHash: Hex,
   chainId: number,
@@ -696,6 +749,19 @@ export async function waitForTransaction(
 ): Promise<"pending" | "not-found" | "confirmed" | "reverted"> {
   const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 40));
   const intervalMs = options.intervalMs ?? 1_500;
+  const requestTimeoutMs = Math.max(
+    1,
+    Math.floor(
+      options.requestTimeoutMs ?? PROFILE_TRANSACTION_REQUEST_TIMEOUT_MS,
+    ),
+  );
+  const overallTimeoutMs = Math.max(
+    1,
+    Math.floor(
+      options.overallTimeoutMs ?? PROFILE_TRANSACTION_OVERALL_TIMEOUT_MS,
+    ),
+  );
+  const deadlineAt = Date.now() + overallTimeoutMs;
   const fetcher = options.fetcher ?? fetch;
   const wait =
     options.wait ??
@@ -704,23 +770,40 @@ export async function waitForTransaction(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     throwIfTransactionPollAborted(options.signal);
-    const response = await fetcher(
-      `/api/transaction-status?hash=${encodeURIComponent(
-        transactionHash,
-      )}&chainId=${chainId}${
-        options.policy ? `&policy=${options.policy}` : ""
-      }`,
-      {
-        method: "GET",
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-        signal: options.signal,
-      },
-    );
-    throwIfTransactionPollAborted(options.signal);
-    const body = (await response.json()) as {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return "pending";
+    let response: Response;
+    let body: {
       status?: "pending" | "not-found" | "confirmed" | "reverted";
     };
+    try {
+      ({ response, body } = await runBoundedTransactionPollStep(
+        async (signal) => {
+          const nextResponse = await fetcher(
+            `/api/transaction-status?hash=${encodeURIComponent(
+              transactionHash,
+            )}&chainId=${chainId}${
+              options.policy ? `&policy=${options.policy}` : ""
+            }`,
+            {
+              method: "GET",
+              cache: "no-store",
+              headers: { Accept: "application/json" },
+              signal,
+            },
+          );
+          const nextBody = (await nextResponse.json()) as {
+            status?: "pending" | "not-found" | "confirmed" | "reverted";
+          };
+          return { response: nextResponse, body: nextBody };
+        },
+        Math.min(requestTimeoutMs, remainingMs),
+        options.signal,
+      ));
+    } catch (caught) {
+      if (caught instanceof ProfileTransactionPollTimeoutError) return "pending";
+      throw caught;
+    }
     throwIfTransactionPollAborted(options.signal);
     if (!response.ok) {
       throw new Error("The transaction status could not be checked");
@@ -738,7 +821,20 @@ export async function waitForTransaction(
     }
     if (attempt === maxAttempts - 1) return body.status;
     if (attempt < maxAttempts - 1) {
-      await wait(intervalMs);
+      const remainingAfterRequestMs = deadlineAt - Date.now();
+      if (remainingAfterRequestMs <= 0) return "pending";
+      try {
+        await runBoundedTransactionPollStep(
+          () => wait(Math.min(intervalMs, remainingAfterRequestMs)),
+          remainingAfterRequestMs,
+          options.signal,
+        );
+      } catch (caught) {
+        if (caught instanceof ProfileTransactionPollTimeoutError) {
+          return "pending";
+        }
+        throw caught;
+      }
       throwIfTransactionPollAborted(options.signal);
     }
   }
@@ -1286,6 +1382,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     new Set(),
   );
   const autoResumingProfileTransactionsRef = useRef<Set<string>>(new Set());
+  const autoReconciledProfileTransactionsRef = useRef<Set<string>>(new Set());
   const stockPairedActionLocksRef = useRef<Set<string>>(new Set());
   const hydratedPendingAccountRef = useRef<string | undefined>(undefined);
   const profileRefreshSequenceRef = useRef(0);
@@ -1329,6 +1426,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     active: false,
     id: 0,
   });
+  const [profileRefreshAnnouncement, setProfileRefreshAnnouncement] = useState({
+    account: "",
+    message: "",
+  });
   const liveProfileRefresh = useLiveDataRefresh({
     enabled: Boolean(account),
     intervalMs: PROFILE_LIVE_REFRESH_INTERVAL_MS,
@@ -1362,6 +1463,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     Boolean(account) &&
     profileRefreshState.active &&
     profileRefreshState.account === account?.toLowerCase();
+  const profileRefreshStatusMessage =
+    account &&
+    profileRefreshAnnouncement.account === account.toLowerCase()
+      ? profileRefreshAnnouncement.message
+      : "";
   const profileLoadKey = account
     ? `${account.toLowerCase()}:${profileRefresh}`
     : "";
@@ -1383,6 +1489,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       setProfileRefreshState((current) =>
         current.id === refreshId ? { ...current, active: false } : current
       );
+      setProfileRefreshAnnouncement({
+        account: active.account,
+        message: "Rewards check complete.",
+      });
     },
     [],
   );
@@ -1408,6 +1518,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           active: pending.size > 0,
           id: refreshId,
         });
+        setProfileRefreshAnnouncement({
+          account: account.toLowerCase(),
+          message: pending.size
+            ? "Refreshing rewards."
+            : "Rewards are already current.",
+        });
       } else if (!manual && account) {
         const active = activeProfileRefreshRef.current;
         if (active?.account === account.toLowerCase()) {
@@ -1430,6 +1546,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     if (previousAccount !== normalizedAccount) {
       abortTransactionPolls();
       autoResumingProfileTransactionsRef.current.clear();
+      autoReconciledProfileTransactionsRef.current.clear();
       hydratedPendingAccountRef.current = undefined;
       for (const targets of Object.values(
         confirmedProfileTransactionsRef.current,
@@ -1490,6 +1607,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       setProfileRefreshState((current) =>
         current.id === refreshId ? { ...current, active: false } : current
       );
+      setProfileRefreshAnnouncement({
+        account: active.account,
+        message: "Rewards refresh took too long. Try again.",
+      });
     }, PROFILE_MANUAL_REFRESH_TIMEOUT_MS);
     return () => window.clearTimeout(timeout);
   }, [profileRefreshState.active, profileRefreshState.id]);
@@ -2262,7 +2383,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         record.stateKey,
         record.transactionHash,
       ].join(":");
-      if (autoResumingProfileTransactionsRef.current.has(resumeKey)) continue;
+      if (
+        autoResumingProfileTransactionsRef.current.has(resumeKey) ||
+        autoReconciledProfileTransactionsRef.current.has(resumeKey)
+      ) {
+        continue;
+      }
+      autoReconciledProfileTransactionsRef.current.add(resumeKey);
       autoResumingProfileTransactionsRef.current.add(resumeKey);
       const setActionState = (
         state: Omit<ProfileClaimActionState, "account">,
@@ -3606,6 +3733,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         marketCaps={creatorProjectMarketCaps}
         walletProjects={creatorWalletProjects}
         onRefresh={retryProfileData}
+        refreshing={profileRefreshing}
       />
       <PredictionMarketPortfolio />
 
@@ -3630,6 +3758,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         onConnect={openWallet}
         onRetry={retryProfileData}
         refreshing={profileRefreshing}
+        refreshStatusMessage={profileRefreshStatusMessage}
         terminalErrorReady={terminalErrorReady}
       />
     </div>
@@ -4503,6 +4632,7 @@ function ProfileAccountWorkspace({
   onConnect,
   onRetry,
   refreshing,
+  refreshStatusMessage,
   terminalErrorReady,
 }: {
   connected: boolean;
@@ -4537,6 +4667,7 @@ function ProfileAccountWorkspace({
   onConnect: () => void;
   onRetry: () => void;
   refreshing: boolean;
+  refreshStatusMessage: string;
   terminalErrorReady: boolean;
 }) {
   const [claimPage, setClaimPage] = useState(1);
@@ -4729,6 +4860,14 @@ function ProfileAccountWorkspace({
               aria-atomic="true"
             >
               {refreshing ? "Refreshing rewards" : ""}
+            </span>
+            <span
+              className={styles.visuallyHidden}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {refreshing ? "" : refreshStatusMessage}
             </span>
             <div className={styles.claimPanelActions}>
               <button
@@ -5368,6 +5507,9 @@ function ProfileClaimRow({
     .flatMap((group) => group.actions)
     .map((action) => action.state);
   const rowActionState = prioritizedProfileActionState(rowActionStates);
+  const rowActionLabel = rowActionState
+    ? actionLabel(rowActionState)
+    : "Claim rewards";
 
   return (
     <article className={styles.claimRow}>
@@ -5407,17 +5549,23 @@ function ProfileClaimRow({
       <div className={styles.actions}>
         <button
           ref={claimTriggerRef}
-          className={styles.claimButton}
+          className={`${styles.claimButton} ${
+            rowActionPending ? styles.claimRefreshActive : ""
+          }`}
           type="button"
           aria-haspopup="dialog"
           aria-controls={dialogId}
           aria-expanded={claimDialogOpen}
           aria-busy={rowActionPending || undefined}
-          aria-label={`Claim rewards for ${token.name} (${token.symbol})`}
+          aria-label={`${rowActionLabel} for ${token.name} (${token.symbol})`}
           disabled={rowActionPending || claimGroups.length === 0}
+          style={rowActionPending ? { gap: 6 } : undefined}
           onClick={() => setClaimDialogOpen(true)}
         >
-          {rowActionState ? actionLabel(rowActionState) : "Claim rewards"}
+          {rowActionPending ? (
+            <RefreshCw aria-hidden="true" size={14} strokeWidth={1.8} />
+          ) : null}
+          <span>{rowActionLabel}</span>
         </button>
       </div>
 
@@ -5440,25 +5588,29 @@ function ProfileActionState({
 }: {
   state?: ProfileClaimActionState | ClassicV3ActionState;
 }) {
-  if (
-    !state ||
-    (state.status !== "pending" &&
-      state.status !== "confirmed" &&
-      state.status !== "error" &&
-      state.status !== "not-found")
-  ) {
-    return null;
-  }
+  let neutralStatus = false;
   if (profileActionStateUsesNeutralStatus(state)) {
-    return (
-      <span className={styles.visuallyHidden} role="status">
-        {state.message}
-      </span>
-    );
+    neutralStatus = true;
   }
+  const visibleError = Boolean(
+    state?.status === "error" &&
+    !neutralStatus,
+  );
   return (
-    <p className={styles.rowError} role="alert">
-      {state.message}
-    </p>
+    <>
+      <span
+        className={styles.visuallyHidden}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {visibleError ? "" : state?.message ?? ""}
+      </span>
+      {visibleError ? (
+        <p className={styles.rowError} role="alert">
+          {state?.message}
+        </p>
+      ) : null}
+    </>
   );
 }

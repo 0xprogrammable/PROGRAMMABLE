@@ -120,7 +120,7 @@ const PORTFOLIO_TIMEOUT_ERROR =
   "Prediction activity took too long. Any existing results are unchanged; try again.";
 const PORTFOLIO_PARTIAL_ERROR =
   "Some markets could not be verified. Refresh to try them again.";
-const PORTFOLIO_INITIAL_VISIBLE_ITEMS = 12;
+const PORTFOLIO_INITIAL_VISIBLE_ITEMS = 2;
 const PORTFOLIO_VISIBLE_ITEM_STEP = 12;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 export const predictionPortfolioLoadingPlaceholderCount = 3;

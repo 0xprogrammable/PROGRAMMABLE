@@ -1450,8 +1450,11 @@ describe("profile transaction status", () => {
 
   it("interrupts the polling delay and retains the submitted hash", async () => {
     const controller = new AbortController();
+    let requestSignal: AbortSignal | null = null;
     const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
-      expect(init?.signal).toBe(controller.signal);
+      requestSignal = init?.signal ?? null;
+      expect(requestSignal).not.toBe(controller.signal);
+      expect(requestSignal?.aborted).toBe(false);
       return new Response(JSON.stringify({ status: "pending" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },

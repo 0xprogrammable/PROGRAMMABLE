@@ -85,15 +85,77 @@ export function beginCreatorProjectOwnerRefreshV1(
     : { ownerAccount, phase: "loading", projects: [] };
 }
 
+function creatorProjectAbortError(signal: AbortSignal) {
+  if (signal.reason === creatorProjectRefreshTimeoutReason) {
+    return new Error(creatorProjectRefreshTimeoutReason);
+  }
+  if (signal.reason instanceof Error) return signal.reason;
+  const error = new Error("Creator project request aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+export async function loadCreatorProjectListV1(input: Readonly<{
+  fetchImpl?: typeof fetch;
+  getAuthHeaders: () => Promise<Record<string, string>>;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}>) {
+  const controller = new AbortController();
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const timeoutMs = input.timeoutMs ?? creatorProjectRefreshTimeoutMs;
+  const forwardAbort = () => controller.abort(input.signal?.reason);
+  if (input.signal?.aborted) forwardAbort();
+  else input.signal?.addEventListener("abort", forwardAbort, { once: true });
+
+  let rejectAbort: (() => void) | null = null;
+  const aborted = new Promise<never>((_, reject) => {
+    rejectAbort = () => reject(creatorProjectAbortError(controller.signal));
+    if (controller.signal.aborted) rejectAbort();
+    else controller.signal.addEventListener("abort", rejectAbort, { once: true });
+  });
+  const timeout = setTimeout(
+    () => controller.abort(creatorProjectRefreshTimeoutReason),
+    timeoutMs,
+  );
+
+  try {
+    return await Promise.race([
+      (async () => {
+        const authHeaders = await input.getAuthHeaders();
+        if (controller.signal.aborted) {
+          throw creatorProjectAbortError(controller.signal);
+        }
+        const response = await fetchImpl("/api/profile/projects", {
+          headers: { Accept: "application/json", ...authHeaders },
+          signal: controller.signal,
+        });
+        const body: unknown = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(readError(body));
+        return parseProjectList(body);
+      })(),
+      aborted,
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    input.signal?.removeEventListener("abort", forwardAbort);
+    if (rejectAbort) {
+      controller.signal.removeEventListener("abort", rejectAbort);
+    }
+  }
+}
+
 export function ProfileProjects({
   initialBuys = [],
   marketCaps = [],
   onRefresh,
+  refreshing = false,
   walletProjects = [],
 }: Readonly<{
   initialBuys?: readonly CreatorProjectInitialBuyV1[];
   marketCaps?: readonly CreatorProjectMarketCapV1[];
   onRefresh?: () => void;
+  refreshing?: boolean;
   walletProjects?: readonly CreatorProjectSummaryV1[];
 }>) {
   const { wallet, getAccessToken, getIdentityToken } = useWallet();
@@ -152,13 +214,10 @@ export function ProfileProjects({
     setProjectOwnerState((current) =>
       beginCreatorProjectOwnerRefreshV1(current, requestedAccount));
     try {
-      const response = await fetch("/api/profile/projects", {
-        headers: { Accept: "application/json", ...(await getAuthHeaders()) },
+      const nextProjects = await loadCreatorProjectListV1({
+        getAuthHeaders,
         signal,
       });
-      const body: unknown = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readError(body));
-      const nextProjects = parseProjectList(body);
       if (projectRequestRef.current !== requestId) return;
       setProjectOwnerState({
         ownerAccount: requestedAccount,
@@ -167,9 +226,8 @@ export function ProfileProjects({
       });
       editorRequestsRef.current.clear();
     } catch (error) {
-      const refreshTimedOut =
-        signal?.aborted
-        && signal.reason === creatorProjectRefreshTimeoutReason;
+      const refreshTimedOut = error instanceof Error
+        && error.message === creatorProjectRefreshTimeoutReason;
       if (projectRequestRef.current !== requestId) return;
       if (signal?.aborted && !refreshTimedOut) return;
       setProjectOwnerState((current) => current?.ownerAccount === requestedAccount
@@ -206,23 +264,20 @@ export function ProfileProjects({
     projectRefreshControllerRef.current = null;
   }, []);
 
+  const refreshInProgress = phase === "loading" || refreshing;
+
   const refreshProjects = useCallback(() => {
-    if (phase === "loading") return;
+    if (refreshInProgress) return;
     const controller = new AbortController();
     projectRefreshControllerRef.current?.abort();
     projectRefreshControllerRef.current = controller;
-    const timeout = window.setTimeout(
-      () => controller.abort(creatorProjectRefreshTimeoutReason),
-      creatorProjectRefreshTimeoutMs,
-    );
     onRefresh?.();
     void loadProjects(controller.signal).finally(() => {
-      window.clearTimeout(timeout);
       if (projectRefreshControllerRef.current === controller) {
         projectRefreshControllerRef.current = null;
       }
     });
-  }, [loadProjects, onRefresh, phase]);
+  }, [loadProjects, onRefresh, refreshInProgress]);
 
   const visibleProjects = useMemo(
     () => mergeCreatorWalletProjectsV1(walletProjects, projects),
@@ -324,19 +379,19 @@ export function ProfileProjects({
           <button
             className={styles.refresh}
             type="button"
-            aria-busy={phase === "loading"}
-            aria-label={phase === "loading"
+            aria-busy={refreshInProgress}
+            aria-label={refreshInProgress
               ? "Refreshing launches"
               : "Refresh launches"}
-            data-loading={phase === "loading"}
+            data-loading={refreshInProgress}
             onClick={refreshProjects}
-            disabled={phase === "loading"}
+            disabled={refreshInProgress}
           >
             <span className={styles.refreshIcon} aria-hidden="true">
               <RefreshCw size={15} strokeWidth={1.8} />
             </span>
             <span className={styles.refreshLabel}>
-              {phase === "loading" ? "Refreshing…" : "Refresh"}
+              {refreshInProgress ? "Refreshing…" : "Refresh"}
             </span>
           </button>
           {pageData.totalPages > 1 ? (
@@ -368,7 +423,9 @@ export function ProfileProjects({
         </div>
       </header>
       <span className={styles.visuallyHidden} role="status" aria-live="polite">
-        {phase === "loading" ? "Refreshing launches" : ""}
+        {refreshInProgress
+          ? "Refreshing launches"
+          : phase === "ready" ? "Launches updated" : ""}
       </span>
 
       {scopedProjectError && visibleProjects.length > 0 ? (
@@ -459,11 +516,10 @@ export function ProfileProjects({
                     <span
                       className={styles.articleActionState}
                       data-state={phase}
-                      aria-hidden="true"
                     >
                       {phase === "loading"
                         ? "Checking…"
-                        : phase === "error" ? "Unavailable" : ""}
+                        : "Unavailable"}
                     </span>
                   )}
                 </span>

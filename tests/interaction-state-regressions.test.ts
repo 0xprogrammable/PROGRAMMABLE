@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  actionLabel,
+  actionPending,
+  waitForTransaction,
+} from "../components/profile-view";
 
 const root = process.cwd();
 
@@ -62,6 +68,103 @@ describe("interaction state regressions", () => {
     );
     expect(source).toContain('return "Check status"');
     expect(source).not.toContain("View transaction");
+    expect(source).not.toContain("Rechecking");
+    expect(source).not.toContain("Transaction is not visible yet");
+  });
+
+  it.each(["fetch", "json"] as const)(
+    "bounds a never-resolving transaction-status %s step and preserves manual recovery",
+    async (hangingStep) => {
+      vi.useFakeTimers();
+      try {
+        const response = new Response(
+          JSON.stringify({ status: "confirmed" }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+        if (hangingStep === "json") {
+          vi.spyOn(response, "json").mockImplementation(
+            () => new Promise<never>(() => undefined),
+          );
+        }
+        const fetcher = vi.fn<typeof fetch>(() =>
+          hangingStep === "fetch"
+            ? new Promise<Response>(() => undefined)
+            : Promise.resolve(response),
+        );
+        const transactionHash = `0x${"a".repeat(64)}` as const;
+        const result = waitForTransaction(transactionHash, 1, {
+          maxAttempts: 1,
+          requestTimeoutMs: 25,
+          overallTimeoutMs: 50,
+          fetcher,
+        });
+
+        await vi.advanceTimersByTimeAsync(25);
+        await expect(result).resolves.toBe("pending");
+
+        const pendingState = {
+          account: "0x0000000000000000000000000000000000000001",
+          status: "pending" as const,
+          message:
+            "Waiting for confirmation. Select Check status to check again.",
+          transactionHash,
+        };
+        expect(actionPending(pendingState)).toBe(false);
+        expect(actionLabel(pendingState)).toBe("Check status");
+        expect(pendingState.transactionHash).toBe(transactionHash);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("auto-reconciles each persisted account and hash only once per mount", () => {
+    const source = readFileSync(
+      join(root, "components/profile-view.tsx"),
+      "utf8",
+    );
+    const recoverySource = source.slice(
+      source.indexOf("for (const record of pending)"),
+      source.indexOf("const submitCreatorClaim"),
+    );
+
+    expect(recoverySource).toContain(
+      "autoReconciledProfileTransactionsRef.current.has(resumeKey)",
+    );
+    expect(recoverySource).toContain(
+      "autoReconciledProfileTransactionsRef.current.add(resumeKey)",
+    );
+    expect(recoverySource).not.toContain(
+      "autoReconciledProfileTransactionsRef.current.delete(resumeKey)",
+    );
+    expect(source).toContain(
+      "autoReconciledProfileTransactionsRef.current.clear()",
+    );
+  });
+
+  it("keeps claim action and refresh announcements accessible and state-specific", () => {
+    const source = readFileSync(
+      join(root, "components/profile-view.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("const rowActionLabel = rowActionState");
+    expect(source).toContain(
+      "aria-label={`${rowActionLabel} for ${token.name} (${token.symbol})`}",
+    );
+    expect(source).toContain("<span>{rowActionLabel}</span>");
+    expect(source).toContain(
+      "rowActionPending ? styles.claimRefreshActive : \"\"",
+    );
+    expect(source).toContain('{visibleError ? "" : state?.message ?? ""}');
+    expect(source).toContain("Rewards check complete.");
+    expect(source).toContain("Rewards refresh took too long. Try again.");
+    expect(source).toContain(
+      '{refreshing ? "" : refreshStatusMessage}',
+    );
   });
 
   it("remounts token-detail trade state when the connected account changes", () => {
