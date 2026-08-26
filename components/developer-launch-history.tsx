@@ -25,6 +25,19 @@ import {
 } from "@/lib/custom-launch/wallet-handoff-v3";
 import { PROGRAMMABLE_AGENT_SETUP_LINKS_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
+import {
+  buildCustomLaunchAgentFixV1,
+  customLaunchRemediationsV1,
+  customLaunchTruthRowsV1,
+  customLaunchWalletHandoffExpiredV1,
+  customLaunchWarningFindingCodesV1,
+  parseCustomLaunchLiquidityIntentV3,
+  parseCustomLaunchWalletHandoffV1,
+  parseSourceVerificationStatusV1,
+  type CustomLaunchLiquidityIntentV3,
+  type CustomLaunchRemediationV1,
+  type SourceVerificationStatusV1,
+} from "@/lib/custom-launch/developer-launch-truth-v1";
 
 type JsonValue =
   | null
@@ -66,6 +79,11 @@ export type LaunchResource = Readonly<{
   launchProfileHash: `sha256:${string}` | null;
   launchIntentHash: `sha256:${string}` | null;
   fundingIntentHash: `0x${string}` | null;
+  liquidityIntent: CustomLaunchLiquidityIntentV3 | null;
+  sourceVerification: SourceVerificationStatusV1 | null;
+  walletHandoffUrl: string | null;
+  expiresAt: string | null;
+  secondsRemaining: number | null;
   createdAt: string;
   updatedAt: string;
   output: Record<string, JsonValue> | null;
@@ -73,6 +91,7 @@ export type LaunchResource = Readonly<{
     code: string;
     message: string;
     retryable: boolean;
+    remediations: readonly CustomLaunchRemediationV1[];
   }> | null;
 }>;
 
@@ -83,6 +102,7 @@ type HistoryPage = Readonly<{
 
 type DeveloperLaunchHistoryProps = Readonly<{
   account: `0x${string}`;
+  initialLaunchId: string | null;
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
   sendCustomLaunchWalletAction: (
@@ -125,6 +145,8 @@ const launchHistoryRefreshTimeoutMs = 12_000;
 const launchHistoryRefreshTimeoutReason = "launch-history-refresh-timeout";
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
 const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
+const requestIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
   received: 0,
   validating: 1,
@@ -159,7 +181,9 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     !isRecord(value)
     || (!v1 && !v2 && !v3)
     || typeof value.launchId !== "string"
+    || !requestIdPattern.test(value.launchId)
     || typeof value.requestId !== "string"
+    || !requestIdPattern.test(value.requestId)
     || value.requestId !== value.launchId
     || (value.onchainLaunchId !== null
       && typeof value.onchainLaunchId !== "string")
@@ -196,6 +220,28 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     && /^0x[0-9a-f]{64}$/u.test(value.fundingIntentHash)
     ? value.fundingIntentHash as `0x${string}`
     : null;
+  const liquidityIntent = v3
+    ? parseCustomLaunchLiquidityIntentV3(value.liquidityIntent)
+    : null;
+  if (v3 && !liquidityIntent) return null;
+  const sourceVerification = parseSourceVerificationStatusV1(
+    value.sourceVerification,
+  );
+  if (
+    value.sourceVerification !== undefined
+    && value.sourceVerification !== null
+    && !sourceVerification
+  ) return null;
+  if (sourceVerification && value.status !== "finalized") return null;
+  const walletHandoff = v3
+    ? parseCustomLaunchWalletHandoffV1(value, value.launchId)
+    : { walletHandoffUrl: null, expiresAt: null, secondsRemaining: null };
+  if (v3 && !walletHandoff) return null;
+  if (
+    walletHandoff?.walletHandoffUrl
+    && !["awaiting_funding_authorization", "authorized"]
+      .includes(value.status as string)
+  ) return null;
   let failure: LaunchResource["failure"] = null;
   if (value.failure !== null) {
     if (
@@ -208,6 +254,7 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
       code: value.failure.code,
       message: value.failure.message,
       retryable: value.failure.retryable,
+      remediations: customLaunchRemediationsV1(null, value.failure),
     };
   }
   return {
@@ -221,6 +268,11 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     launchProfileHash,
     launchIntentHash,
     fundingIntentHash,
+    liquidityIntent,
+    sourceVerification,
+    walletHandoffUrl: walletHandoff?.walletHandoffUrl ?? null,
+    expiresAt: walletHandoff?.expiresAt ?? null,
+    secondsRemaining: walletHandoff?.secondsRemaining ?? null,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     output: value.output as Record<string, JsonValue> | null,
@@ -343,12 +395,29 @@ function statusDescription(status: LaunchStatus) {
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
     case "simulating": return "The exact wallet transaction is being simulated.";
-    case "authorized": return "Review and sign the prepared transaction in your wallet.";
+    case "authorized": return "Review the exact Mainnet transaction, then ask your wallet to send it.";
     case "submitted": return "The wallet transaction is being tracked onchain.";
-    case "finalized": return "The Router recorded this launch.";
+    case "finalized": return "The Router launch reached 64+ confirmations. Source, liquidity, custody and trading remain separate states.";
     case "failed": return "This request did not complete.";
     case "cancelled": return "This request was cancelled.";
   }
+}
+
+async function copyToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  const copied = document.execCommand("copy");
+  field.remove();
+  if (!copied) throw new Error("Clipboard access is unavailable");
 }
 
 function walletTransaction(launch: LaunchResource) {
@@ -446,6 +515,32 @@ function fundingValidityCopy(value: string) {
   return Number.isSafeInteger(milliseconds)
     ? formatDate(new Date(milliseconds).toISOString())
     : "Invalid";
+}
+
+function fundingMode(launch: LaunchResource) {
+  const mode = launch.output?.fundingMode;
+  return mode === "none"
+    || mode === "wallet-transaction-value"
+    || mode === "eip-3009-receive-with-authorization"
+    ? mode
+    : null;
+}
+
+function handoffExpiryCopy(launch: LaunchResource) {
+  if (!launch.expiresAt) return null;
+  if (launch.secondsRemaining === 0) return "Expired";
+  const absolute = formatDate(launch.expiresAt);
+  if (launch.secondsRemaining === null) return absolute;
+  const minutes = Math.max(1, Math.ceil(launch.secondsRemaining / 60));
+  return `${absolute} · about ${minutes} minute${minutes === 1 ? "" : "s"} remaining`;
+}
+
+function sameWalletHandoff(
+  left: Pick<LaunchResource, "walletHandoffUrl" | "expiresAt">,
+  right: Pick<LaunchResource, "walletHandoffUrl" | "expiresAt">,
+) {
+  return left.walletHandoffUrl === right.walletHandoffUrl
+    && left.expiresAt === right.expiresAt;
 }
 
 function onchainTransactionHash(launch: LaunchResource) {
@@ -561,8 +656,129 @@ function HistorySkeleton() {
   );
 }
 
+function LaunchTruthLedger({ launch }: Readonly<{ launch: LaunchResource }>) {
+  const rows = customLaunchTruthRowsV1({
+    status: launch.status,
+    sourceVerification: launch.sourceVerification,
+    liquidityIntent: launch.liquidityIntent,
+  });
+  return (
+    <section className={styles.truthLedger} aria-labelledby={`truth-${launch.requestId}`}>
+      <div className={styles.truthHeading}>
+        <h4 id={`truth-${launch.requestId}`}>What this record proves</h4>
+        <span>Independent states</span>
+      </div>
+      <dl className={styles.truthGrid}>
+        {rows.map((row) => (
+          <div key={row.id} data-tone={row.tone}>
+            <dt>{row.label}</dt>
+            <dd>
+              <strong>{row.value}</strong>
+              <span>{row.detail}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function AdmissionWarnings({ codes }: Readonly<{ codes: readonly string[] }>) {
+  if (codes.length === 0) return null;
+  return (
+    <div className={styles.warningLedger}>
+      <strong>Admission passed with visible warnings</strong>
+      <p>
+        These findings did not block this request. They are not a safety,
+        fee-behavior, liquidity or trading guarantee.
+      </p>
+      <ul>
+        {codes.map((code) => <li key={code}><code>{code}</code></li>)}
+      </ul>
+    </div>
+  );
+}
+
+function RemediationDetails({
+  copyState,
+  onCopy,
+  remediations,
+}: Readonly<{
+  copyState: "copied" | "error" | undefined;
+  onCopy: () => void;
+  remediations: readonly CustomLaunchRemediationV1[];
+}>) {
+  if (remediations.length === 0) return null;
+  return (
+    <div className={styles.remediationDetails}>
+      <div className={styles.remediationHeading}>
+        <div>
+          <strong>Exact changes</strong>
+          <span>{remediations.length} machine-readable {remediations.length === 1 ? "fix" : "fixes"}</span>
+        </div>
+        <button className={styles.copyFixButton} type="button" onClick={onCopy}>
+          {copyState === "copied" ? "Fix copied" : "Copy fix for agent"}
+        </button>
+      </div>
+      {copyState === "error" ? (
+        <p className={styles.failure} role="alert">
+          Fix instructions could not be copied. Try again.
+        </p>
+      ) : null}
+      <ol className={styles.remediationList}>
+        {remediations.map((remediation) => (
+          <li key={[
+            remediation.remediationId,
+            remediation.code,
+            remediation.targetId,
+            remediation.sourcePath,
+          ].join(":")}>
+            <div className={styles.remediationCode}>
+              <code>{remediation.code}</code>
+              <span>{remediation.stage}</span>
+            </div>
+            <dl>
+              <div>
+                <dt>Target</dt>
+                <dd>{remediation.targetId ?? "Not specified"}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{remediation.targetRole ?? "Not specified"}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd><code>{remediation.sourcePath ?? "Not specified"}</code></dd>
+              </div>
+              <div>
+                <dt>Resume at</dt>
+                <dd><code>{remediation.resumeAt}</code></dd>
+              </div>
+            </dl>
+            <div className={styles.remediationChange}>
+              <p><span>Expected</span>{remediation.expected}</p>
+              <p><span>Observed</span>{remediation.observed}</p>
+              <p><span>Required change</span>{remediation.requiredChange}</p>
+            </div>
+            <p className={styles.requestBoundary}>
+              {remediation.requiresNewRequest
+                ? "Rebuild and submit a new immutable request. Do not sign this one."
+                : "Apply the change, then resume at the listed stage."}
+            </p>
+          </li>
+        ))}
+      </ol>
+      <p className={styles.copySafety}>
+        The copied fix contains only request and remediation data. It never
+        includes an API key, wallet signature or private key.
+      </p>
+    </div>
+  );
+}
+
 export function DeveloperLaunchHistory({
   account,
+  initialLaunchId,
   getAccessToken,
   getIdentityToken,
   sendCustomLaunchWalletAction,
@@ -580,6 +796,7 @@ export function DeveloperLaunchHistory({
   const [fundingRetryDelayMs, setFundingRetryDelayMs] = useState<number | null>(
     null,
   );
+  const [currentTimeMs, setCurrentTimeMs] = useState<number | null>(null);
   const [pendingFundingIds, setPendingFundingIds] = useState<
     Readonly<Record<string, true>>
   >({});
@@ -592,6 +809,12 @@ export function DeveloperLaunchHistory({
   const [hydratedReviews, setHydratedReviews] = useState<
     Readonly<Record<string, LaunchResource>>
   >({});
+  const [highlightedLaunchId, setHighlightedLaunchId] = useState<string | null>(
+    null,
+  );
+  const [fixCopyState, setFixCopyState] = useState<
+    Readonly<Record<string, "copied" | "error">>
+  >({});
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const requestSequenceRef = useRef(0);
@@ -601,6 +824,8 @@ export function DeveloperLaunchHistory({
   const hydrateInFlightRef = useRef(false);
   const sendInFlightRef = useRef(false);
   const fundingInFlightRef = useRef(false);
+  const deepLinkHandledRef = useRef<string | null>(null);
+  const exactHandoffLoadedRef = useRef<string | null>(null);
   const pendingFundingRef = useRef(new Map<string, Readonly<{
     authorization: CustomLaunchFundingAuthorizationV3;
     body: CustomLaunchFundingAuthorizationSubmissionV3;
@@ -707,7 +932,11 @@ export function DeveloperLaunchHistory({
       if (refreshTimedOut) {
         setStatusMessage("Launch history refresh timed out.");
       }
-      if (cursor === null && !refreshRequest) setState("error");
+      if (
+        cursor === null
+        && !refreshRequest
+        && !exactHandoffLoadedRef.current?.startsWith(`${account}:`)
+      ) setState("error");
     } finally {
       if (cursor !== null) loadMoreInFlightRef.current = false;
       if (requestSequence === requestSequenceRef.current) setLoadingMore(false);
@@ -755,6 +984,40 @@ export function DeveloperLaunchHistory({
     setLaunches((current) => mergeLaunchResources(current, [updated], false));
   }, []);
 
+  const readV3LaunchById = useCallback(async (
+    launchId: string,
+    signal?: AbortSignal,
+  ) => {
+    const response = await fetch(
+      `/api/developer/custom-launches/${encodeURIComponent(launchId)}?walletAddress=${encodeURIComponent(account)}&version=v3`,
+      {
+        cache: "no-store",
+        headers: await getAuthHeaders(),
+        signal,
+      },
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw readApiError(response, body, "Unable to open this wallet handoff.");
+    }
+    const launch = parseLaunch(body, account);
+    if (
+      !launch
+      || launch.requestId !== launchId
+      || launch.routeId !== "custom-launch:create:v3"
+    ) throw new Error("The API returned an invalid wallet handoff.");
+    return launch;
+  }, [account, getAuthHeaders]);
+
+  const focusLaunchCard = useCallback((launchId: string) => {
+    setHighlightedLaunchId(launchId);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById(`custom-launch-${launchId}`)?.focus();
+      });
+    });
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     const initialRead = window.setTimeout(() => {
@@ -765,6 +1028,67 @@ export function DeveloperLaunchHistory({
       controller.abort();
     };
   }, [load]);
+
+  useEffect(() => {
+    const updateClock = () => setCurrentTimeMs(Date.now());
+    const initialUpdate = window.setTimeout(updateClock, 0);
+    const interval = window.setInterval(updateClock, 15_000);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!initialLaunchId || !requestIdPattern.test(initialLaunchId)) return;
+    const deepLinkKey = `${account}:${initialLaunchId}`;
+    if (deepLinkHandledRef.current === deepLinkKey) return;
+    deepLinkHandledRef.current = deepLinkKey;
+    exactHandoffLoadedRef.current = null;
+    const controller = new AbortController();
+    hydrateInFlightRef.current = true;
+    setHydratingId(`custom-launch:create:v3:${initialLaunchId}`);
+    setError("");
+    setStatusMessage("Loading the exact wallet handoff.");
+    void readV3LaunchById(initialLaunchId, controller.signal)
+      .then((launch) => {
+        const key = launchResourceKey(launch);
+        updateLaunch(launch);
+        setHydratedReviews((current) => Object.freeze({
+          ...current,
+          [key]: launch,
+        }));
+        exactHandoffLoadedRef.current = deepLinkKey;
+        setState("ready");
+        setStatusMessage(
+          ["awaiting_funding_authorization", "authorized"]
+            .includes(launch.status)
+            ? "Wallet handoff loaded. Review every field before opening your wallet."
+            : "Launch loaded. Its current status does not request a wallet action.",
+        );
+        focusLaunchCard(launch.requestId);
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to open this wallet handoff.",
+        );
+      })
+      .finally(() => {
+        if (deepLinkHandledRef.current !== deepLinkKey) return;
+        hydrateInFlightRef.current = false;
+        setHydratingId(null);
+      });
+    return () => controller.abort();
+  }, [
+    account,
+    focusLaunchCard,
+    initialLaunchId,
+    readV3LaunchById,
+    updateLaunch,
+  ]);
 
   useEffect(() => () => {
     refreshControllerRef.current?.abort();
@@ -825,10 +1149,72 @@ export function DeveloperLaunchHistory({
     }
   };
 
+  const loadLaunchDetails = async (launch: LaunchResource) => {
+    const key = launchResourceKey(launch);
+    if (hydrateInFlightRef.current || hydratingId !== null) return;
+    hydrateInFlightRef.current = true;
+    setHydratingId(key);
+    setError("");
+    setStatusMessage("Loading the exact launch findings and evidence.");
+    try {
+      const current = await readLaunchResource(launch);
+      updateLaunch(current);
+      setHydratedReviews((reviews) => Object.freeze({
+        ...reviews,
+        [key]: current,
+      }));
+      setStatusMessage(
+        current.status === "action_required"
+          ? "Exact remediation loaded. Fix every listed item before creating a new request."
+          : "Exact launch evidence loaded.",
+      );
+      focusLaunchCard(current.requestId);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to load the exact launch details.",
+      );
+    } finally {
+      hydrateInFlightRef.current = false;
+      setHydratingId(null);
+    }
+  };
+
+  const copyAgentFix = async (
+    launch: LaunchResource,
+    remediations: readonly CustomLaunchRemediationV1[],
+  ) => {
+    const key = launchResourceKey(launch);
+    const fix = buildCustomLaunchAgentFixV1({
+      requestId: launch.requestId,
+      routeId: launch.routeId,
+      remediations,
+    });
+    if (!fix) return;
+    try {
+      await copyToClipboard(fix);
+      setFixCopyState((current) => Object.freeze({
+        ...current,
+        [key]: "copied",
+      }));
+      setStatusMessage(
+        "Fix instructions copied without an API key, wallet signature or private key.",
+      );
+    } catch {
+      setFixCopyState((current) => Object.freeze({
+        ...current,
+        [key]: "error",
+      }));
+      setStatusMessage("Fix instructions could not be copied.");
+    }
+  };
+
   const loadWalletReview = async (launch: LaunchResource) => {
     const key = launchResourceKey(launch);
     if (
       hydrateInFlightRef.current
+      || hydratingId !== null
       || launch.routeId !== "custom-launch:create:v3"
       || !["awaiting_funding_authorization", "authorized"]
         .includes(launch.status)
@@ -877,10 +1263,6 @@ export function DeveloperLaunchHistory({
         );
       }
       updateLaunch(current);
-      setHydratedReviews((reviews) => Object.freeze({
-        ...reviews,
-        [key]: current,
-      }));
       setHydratedReviews((reviews) => Object.freeze({
         ...reviews,
         [key]: current,
@@ -1074,6 +1456,12 @@ export function DeveloperLaunchHistory({
       }
       const current = await readLaunchResource(launch);
       updateLaunch(current);
+      if (!sameWalletHandoff(launch, current)) {
+        forgetPendingFunding(key);
+        throw new Error(
+          "The wallet handoff changed after review. Reload its exact fields; no wallet signature was requested.",
+        );
+      }
       if (
         current.routeId !== "custom-launch:create:v3"
         || current.status !== "awaiting_funding_authorization"
@@ -1096,6 +1484,12 @@ export function DeveloperLaunchHistory({
           "The funding authorization changed after review. Review the refreshed fields; no wallet signature was requested.",
         );
       }
+      if (customLaunchWalletHandoffExpiredV1(current, Date.now())) {
+        forgetPendingFunding(key);
+        throw new Error(
+          "This wallet handoff expired before signing. Reload the launch to request a current handoff.",
+        );
+      }
       let pending = pendingFundingRef.current.get(key);
       if (
         pending
@@ -1116,6 +1510,11 @@ export function DeveloperLaunchHistory({
         const signature = await signCustomLaunchFundingAuthorization(
           authorization,
         );
+        if (customLaunchWalletHandoffExpiredV1(current, Date.now())) {
+          throw new Error(
+            "This wallet handoff expired while the wallet was open. The signature was not submitted.",
+          );
+        }
         pending = Object.freeze({
           authorization,
           body: createCustomLaunchFundingSubmissionV3(
@@ -1224,6 +1623,16 @@ export function DeveloperLaunchHistory({
           "This launch is no longer awaiting a wallet signature. Review its current status.",
         );
       }
+      if (!sameWalletHandoff(launch, current)) {
+        throw new Error(
+          "The wallet handoff changed after review. Reload its exact fields; no transaction was requested.",
+        );
+      }
+      if (customLaunchWalletHandoffExpiredV1(current, Date.now())) {
+        throw new Error(
+          "This wallet handoff expired before the final wallet boundary. Reload the launch to request a current handoff.",
+        );
+      }
       let action: CustomLaunchWalletActionV1;
       if (current.routeId === "custom-launch:create:v3") {
         const currentRouter = prepareCustomLaunchRouterReviewV3(
@@ -1308,8 +1717,8 @@ export function DeveloperLaunchHistory({
       </div>
       <p className={styles.intro}>
         Requests prepared for this wallet. A launch is onchain only after the
-        wallet signs and broadcasts it. V3 funding authorization and Router
-        submission remain two separate reviews.
+        wallet sends its Router transaction. Only EIP-3009 funding adds a
+        separate signature first; it never broadcasts by itself.
       </p>
 
       {state === "loading" ? <HistorySkeleton /> : null}
@@ -1359,8 +1768,33 @@ export function DeveloperLaunchHistory({
             const transactionHash = onchainTransactionHash(reviewLaunch)
               ?? submittedHashes[key]
               ?? null;
+            const remediations = customLaunchRemediationsV1(
+              reviewLaunch.output,
+              reviewLaunch.failure,
+            );
+            const warningFindingCodes = customLaunchWarningFindingCodesV1(
+              reviewLaunch.output,
+            );
+            const showTruthLedger = reviewLaunch.routeId
+              === "custom-launch:create:v3"
+              && ["authorized", "submitted", "finalized"]
+                .includes(reviewLaunch.status);
+            const expiryCopy = handoffExpiryCopy(reviewLaunch);
+            const handoffExpired = reviewLaunch.secondsRemaining === 0
+              || customLaunchWalletHandoffExpiredV1(
+                reviewLaunch,
+                currentTimeMs ?? Number.NaN,
+              );
             return (
-              <li className={styles.launchItem} key={key}>
+              <li
+                id={`custom-launch-${launch.requestId}`}
+                className={styles.launchItem}
+                data-highlighted={
+                  highlightedLaunchId === launch.requestId ? "true" : "false"
+                }
+                key={key}
+                tabIndex={-1}
+              >
                 <div className={styles.launchTopline}>
                   <div>
                     <h3>Launch {shortId(launch.requestId)}</h3>
@@ -1391,30 +1825,54 @@ export function DeveloperLaunchHistory({
                       </dd>
                     </div>
                   ) : null}
+                  {reviewLaunch.walletHandoffUrl ? (
+                    <div>
+                      <dt>Wallet handoff</dt>
+                      <dd>
+                        <a href={reviewLaunch.walletHandoffUrl}>
+                          Open this launch
+                        </a>
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
-                {launch.failure && launch.status !== "action_required" ? (
+                <AdmissionWarnings codes={warningFindingCodes} />
+                {reviewLaunch.failure
+                  && reviewLaunch.status !== "action_required" ? (
                   <p className={styles.failure} role="alert">
-                    {launch.failure.message}
+                    {reviewLaunch.failure.message}
                   </p>
                 ) : null}
-                {launch.status === "action_required" ? (
+                {reviewLaunch.status === "action_required" ? (
                   <div className={styles.admissionNotice} role="status">
                     <strong>Fix source or configuration</strong>
                     <p>
-                      Read the machine-readable finding from{" "}
-                      <code>
-                        GET /{launch.routeId === "custom-launch:create:v3"
-                          ? "v3"
-                          : launch.routeId === "custom-launch:create:v2"
-                            ? "v2"
-                            : "v1"}/custom-launches/{launch.launchId}
-                      </code>
-                      ,
-                      follow its remediation, then rebuild, repack and submit a
-                      new immutable request. This automated result is not a
-                      safety verdict. A manual or project-specific allowlist
-                      cannot bypass it.
+                      Automatic admission found a blocking source or target-role
+                      condition. Apply every exact change below, then rebuild,
+                      repack and submit a new immutable request. Do not sign this
+                      request. This result is not an audit or safety verdict, and
+                      no manual or project allowlist can bypass it.
                     </p>
+                    {remediations.length === 0 ? (
+                      <button
+                        className={styles.loadDetailsButton}
+                        disabled={hydratingId !== null}
+                        type="button"
+                        onClick={() => void loadLaunchDetails(launch)}
+                      >
+                        {hydratingId === key
+                          ? "Loading exact fixes"
+                          : "View exact fixes"}
+                      </button>
+                    ) : null}
+                    <RemediationDetails
+                      copyState={fixCopyState[key]}
+                      remediations={remediations}
+                      onCopy={() => void copyAgentFix(
+                        reviewLaunch,
+                        remediations,
+                      )}
+                    />
                     <a
                       href={PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation}
                       rel="noreferrer"
@@ -1424,6 +1882,17 @@ export function DeveloperLaunchHistory({
                     </a>
                   </div>
                 ) : null}
+                {reviewLaunch.status !== "action_required"
+                  && remediations.length > 0 ? (
+                    <RemediationDetails
+                      copyState={fixCopyState[key]}
+                      remediations={remediations}
+                      onCopy={() => void copyAgentFix(
+                        reviewLaunch,
+                        remediations,
+                      )}
+                    />
+                  ) : null}
                 {fundingReview ? (
                   <div className={styles.fundingReview}>
                     <div className={styles.stepHeading}>
@@ -1445,6 +1914,14 @@ export function DeveloperLaunchHistory({
                         <dd>{fundingValidityCopy(fundingReview.validBefore)}</dd>
                       </div>
                       <div>
+                        <dt>Network</dt>
+                        <dd>Ethereum mainnet · chain {fundingReview.chainId}</dd>
+                      </div>
+                      <div>
+                        <dt>Valid after</dt>
+                        <dd>{fundingValidityCopy(fundingReview.validAfter)}</dd>
+                      </div>
+                      <div>
                         <dt>From</dt>
                         <dd><code>{fundingReview.from}</code></dd>
                       </div>
@@ -1459,6 +1936,14 @@ export function DeveloperLaunchHistory({
                       <div>
                         <dt>Authorization nonce</dt>
                         <dd><code>{fundingReview.nonce}</code></dd>
+                      </div>
+                      <div>
+                        <dt>Funding intent</dt>
+                        <dd><code>{fundingReview.fundingIntentHash}</code></dd>
+                      </div>
+                      <div>
+                        <dt>Typed-data digest</dt>
+                        <dd><code>{fundingReview.typedDataDigest}</code></dd>
                       </div>
                     </dl>
                   </div>
@@ -1485,13 +1970,19 @@ export function DeveloperLaunchHistory({
                 {routerReview ? (
                   <div className={styles.routerReview}>
                     <div className={styles.stepHeading}>
-                      <span>Step 2 of 2</span>
+                      <span>
+                        {fundingMode(reviewLaunch)
+                          === "eip-3009-receive-with-authorization"
+                          ? "Step 2 of 2"
+                          : "Step 1 of 1"}
+                      </span>
                       <strong>Router transaction</strong>
                     </div>
                     <p>
-                      The funding signature is verified and embedded in this
-                      exact CustomGraph route. Review the separate transaction
-                      in your wallet before sending it.
+                      This is the irreversible Ethereum Mainnet transaction.
+                      Your wallet will show gas and the exact native value before
+                      you choose whether to send it. Programmable never signs or
+                      broadcasts it automatically.
                     </p>
                     <dl className={styles.reviewGrid}>
                       <div>
@@ -1544,6 +2035,31 @@ export function DeveloperLaunchHistory({
                     <code>{transactionHash}</code>
                   </div>
                 ) : null}
+                {expiryCopy && [
+                  "awaiting_funding_authorization",
+                  "authorized",
+                ].includes(reviewLaunch.status) ? (
+                  <div
+                    className={styles.handoffExpiry}
+                    data-expired={handoffExpired ? "true" : "false"}
+                    role={handoffExpired ? "alert" : "status"}
+                  >
+                    <strong>
+                      {handoffExpired
+                        ? "Wallet handoff expired"
+                        : "Wallet handoff expires"}
+                    </strong>
+                    <span>{expiryCopy}</span>
+                    <p>
+                      The final wallet boundary always reloads the current
+                      resource. An expired handoff never opens a stale signature
+                      or transaction request.
+                    </p>
+                  </div>
+                ) : null}
+                {showTruthLedger ? (
+                  <LaunchTruthLedger launch={reviewLaunch} />
+                ) : null}
                 {[
                   "awaiting_funding_authorization",
                   "funding_authorization_verified",
@@ -1564,6 +2080,7 @@ export function DeveloperLaunchHistory({
                               || checkingId !== null
                               || Boolean(pollingIds[key])
                               || fundingRetryDelayMs !== null
+                              || handoffExpired
                             }
                             type="button"
                             onClick={() => void submitFundingAuthorization(
@@ -1582,6 +2099,7 @@ export function DeveloperLaunchHistory({
                             disabled={
                               hydratingId !== null
                               || fundingId !== null
+                              || handoffExpired
                               || submittingId !== null
                               || checkingId !== null
                               || Boolean(pollingIds[key])
@@ -1608,6 +2126,7 @@ export function DeveloperLaunchHistory({
                               || Boolean(pollingIds[key])
                               || checkingId !== null
                               || fundingId !== null
+                              || handoffExpired
                             }
                             type="button"
                             onClick={() => void submitWalletTransaction(
@@ -1617,10 +2136,8 @@ export function DeveloperLaunchHistory({
                             )}
                           >
                             {submittingId === key
-                              ? "Opening wallet review"
-                              : launch.routeId === "custom-launch:create:v3"
-                                ? "Review and sign in wallet"
-                                : "Review and sign in wallet"}
+                              ? "Opening wallet transaction review"
+                              : "Review and send launch transaction"}
                           </button>
                         ) : (
                           <button

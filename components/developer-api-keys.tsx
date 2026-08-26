@@ -27,7 +27,7 @@ export type ApiKeySummary = Readonly<{
   keyPrefix: string;
   scopes: readonly string[];
   createdAt: string;
-  expiresAt: string;
+  expiresAt: string | null;
   lastUsedAt: string | null;
   revokedAt: string | null;
 }>;
@@ -66,6 +66,8 @@ type ExpiryDays = (typeof expiryOptions)[number]["value"];
 
 const fixedScopes = ["custom-launch:create", "custom-launch:read"] as const;
 const schemaVersion = "programmable.custom-launch-api.v1";
+const launchRequestIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -86,6 +88,7 @@ function parseApiKeySummary(value: unknown): ApiKeySummary | null {
 
   const lastUsedAt = nullableString(value.lastUsedAt);
   const revokedAt = nullableString(value.revokedAt);
+  const expiresAt = nullableString(value.expiresAt);
   if (
     typeof value.id !== "string" ||
     typeof value.label !== "string" ||
@@ -93,7 +96,7 @@ function parseApiKeySummary(value: unknown): ApiKeySummary | null {
     !Array.isArray(value.scopes) ||
     !value.scopes.every((scope) => typeof scope === "string") ||
     typeof value.createdAt !== "string" ||
-    typeof value.expiresAt !== "string" ||
+    expiresAt === undefined ||
     lastUsedAt === undefined ||
     revokedAt === undefined
   ) {
@@ -106,7 +109,7 @@ function parseApiKeySummary(value: unknown): ApiKeySummary | null {
     keyPrefix: value.keyPrefix,
     scopes: value.scopes,
     createdAt: value.createdAt,
-    expiresAt: value.expiresAt,
+    expiresAt,
     lastUsedAt,
     revokedAt,
   };
@@ -492,6 +495,7 @@ function DeveloperApiKeysView({
   const [revokeError, setRevokeError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
+  const [initialLaunchId, setInitialLaunchId] = useState<string | null>(null);
   const [refreshingKeys, setRefreshingKeys] = useState(false);
   const [walletSessionTimedOut, setWalletSessionTimedOut] = useState(false);
   const labelRef = useRef<HTMLInputElement>(null);
@@ -623,6 +627,17 @@ function DeveloperApiKeysView({
     return () => window.clearTimeout(timeoutId);
   }, [authReady]);
 
+  useEffect(() => {
+    const candidate = new URL(window.location.href).searchParams.get("launchId");
+    if (!candidate || !launchRequestIdPattern.test(candidate)) return;
+    const update = window.setTimeout(() => {
+      setInitialLaunchId(candidate);
+      setActiveSection("history");
+      setStatusMessage("Opening the requested launch handoff.");
+    }, 0);
+    return () => window.clearTimeout(update);
+  }, []);
+
   const createApiKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!account || createState === "creating" || createInFlightRef.current) return;
@@ -730,6 +745,12 @@ function DeveloperApiKeysView({
 
   const showSection = (section: ActiveSection) => {
     setActiveSection(section);
+    const url = new URL(window.location.href);
+    if (section === "keys") {
+      url.searchParams.delete("launchId");
+      setInitialLaunchId(null);
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
     setStatusMessage(
       section === "keys" ? "Showing API keys." : "Showing launch history.",
     );
@@ -812,11 +833,92 @@ function DeveloperApiKeysView({
           <p className={styles.kicker}>Developer access</p>
           <h1>API keys</h1>
           <p className={styles.intro}>
-            Create and revoke keys for Custom launch workflows. A key can
-            prepare a launch, but only your wallet can sign it.
+            Create and revoke keys for eligible Custom launch workflows. A key
+            can inspect, preflight and submit a request, but only your wallet can
+            sign funding or send the launch transaction.
           </p>
         </div>
       </header>
+
+      {authReady && account ? (
+        <section
+          className={styles.launchPath}
+          aria-labelledby="custom-launch-path-title"
+        >
+          <div className={styles.launchPathHeading}>
+            <div>
+              <p className={styles.kicker}>API to wallet</p>
+              <h2 id="custom-launch-path-title">
+                Before anything reaches your wallet
+              </h2>
+            </div>
+            <a
+              href="https://programmable.market/docs/developers/custom-launch"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Read the Custom launch guide
+            </a>
+          </div>
+          <ol className={styles.launchSteps}>
+            <li>
+              <span>01</span>
+              <div>
+                <strong>Check capabilities</strong>
+                <p>
+                  The public endpoint lists supported project shapes before an
+                  agent packages source.
+                </p>
+                <a
+                  href="https://api.programmable.market/v3/capabilities"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open public capabilities
+                </a>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>Run preflight</strong>
+                <p>
+                  <code>POST /v3/custom-launches/preflight</code> is
+                  authenticated, quota-free and creates no request, nonce or
+                  wallet action.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>Submit eligible source</strong>
+                <p>
+                  Published automatic rules can return exact changes. Anyone
+                  can submit; unsupported or incomplete source does not bypass
+                  them.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span>04</span>
+              <div>
+                <strong>Review in your wallet</strong>
+                <p>
+                  Funding signatures and the Router transaction remain
+                  separate. Programmable never signs or broadcasts
+                  automatically.
+                </p>
+              </div>
+            </li>
+          </ol>
+          <p className={styles.truthBoundary}>
+            A finalized launch is not automatically source verified, liquid,
+            tradeable or LP locked. Launch history shows those states
+            separately when evidence exists.
+          </p>
+        </section>
+      ) : null}
 
       {!authReady ? (
         walletSessionTimedOut ? (
@@ -1222,6 +1324,7 @@ function DeveloperApiKeysView({
           ) : (
             <DeveloperLaunchHistory
               account={account}
+              initialLaunchId={initialLaunchId}
               getAccessToken={getAccessToken}
               getIdentityToken={getIdentityToken}
               sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}

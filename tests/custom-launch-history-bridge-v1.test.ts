@@ -115,6 +115,34 @@ const FUNDING_BOUNDARY = Object.freeze({
   fundingSignatureProducedByService: false,
   walletTransactionBroadcastByService: false,
 });
+const SOURCE_VERIFICATION = Object.freeze({
+  schemaVersion: "programmable.source-verification-status.v1",
+  status: "queued",
+  components: [Object.freeze({
+    targetId: "token",
+    address: "0x3333333333333333333333333333333333333333",
+    status: "queued",
+    provider: null,
+  })],
+  updatedAt: "2026-08-24T12:05:00.000Z",
+});
+const REMEDIATION = Object.freeze({
+  schemaVersion: "programmable.custom-launch-remediation.v1",
+  remediationId: "PLATFORM_ADMISSION_FINDING",
+  code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+  stage: "admission",
+  targetId: "token",
+  targetRole: "token",
+  sourcePath: "src/Token.sol",
+  expected: "No mutable transfer restriction",
+  observed: "Owner can change transfer state",
+  requiredChange: "Remove the mutable restriction and rebuild the bundle.",
+  catalogUrl: "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+  guideUrl: "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+  retryable: false,
+  requiresNewRequest: true,
+  resumeAt: "pack",
+});
 
 function launchV3Native(ownerWallet: string = WALLET) {
   return {
@@ -486,6 +514,98 @@ describe("developer launch history same-origin bridge", () => {
     const body = await response.json();
     expect(body).toEqual(launchV3Native());
     expect(body.liquidityIntent).toEqual(SEEDED_LIQUIDITY_INTENT);
+  });
+
+  it("preserves an exact same-origin wallet handoff", async () => {
+    const resource = {
+      ...launchV3Native(),
+      status: "authorized",
+      output: null,
+      walletHandoffUrl:
+        `/developers/api-keys?launchId=${V3_NATIVE_LAUNCH_ID}`,
+      expiresAt: "2026-08-24T12:15:00.000Z",
+      secondsRemaining: 600,
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(resource);
+  });
+
+  it("preserves source verification only as an independent finalized state", async () => {
+    const resource = {
+      ...launchV3Native(),
+      status: "finalized",
+      output: null,
+      sourceVerification: SOURCE_VERIFICATION,
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(resource);
+  });
+
+  it("fails closed on a cross-origin V3 wallet handoff", async () => {
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
+      ...launchV3Native(),
+      status: "authorized",
+      output: null,
+      walletHandoffUrl:
+        `https://evil.example/developers/api-keys?launchId=${V3_NATIVE_LAUNCH_ID}`,
+      expiresAt: "2026-08-24T12:15:00.000Z",
+      secondsRemaining: 600,
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe(
+      "launch_history_unavailable",
+    );
+  });
+
+  it("preserves bounded machine-readable V3 failure remediation", async () => {
+    const resource = {
+      ...launchV3Native(),
+      status: "failed",
+      output: null,
+      failure: {
+        code: "PLATFORM_ADMISSION_FAILED",
+        message: "Automatic admission found a blocking source condition.",
+        retryable: false,
+        remediations: [REMEDIATION],
+      },
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(resource);
   });
 
   it.each([

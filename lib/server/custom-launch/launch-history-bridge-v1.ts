@@ -2,6 +2,14 @@ import "server-only";
 
 import { getAddress, isAddress } from "viem";
 
+import {
+  parseCustomLaunchRemediationV1,
+  parseCustomLaunchWalletHandoffV1,
+  parseSourceVerificationStatusV1,
+  type CustomLaunchLiquidityIntentV3,
+  type CustomLaunchRemediationV1,
+  type SourceVerificationStatusV1,
+} from "../../custom-launch/developer-launch-truth-v1";
 import { parseStrictJson, type JsonValue } from
   "../projection-target/canonical-json";
 import {
@@ -79,11 +87,15 @@ export type DeveloperCustomLaunchV1 = Readonly<{
   createdAt: string;
   updatedAt: string;
   output: Readonly<Record<string, JsonValue>> | null;
-  failure: Readonly<{
-    code: string;
-    message: string;
-    retryable: boolean;
-  }> | null;
+  failure: DeveloperCustomLaunchFailureV1 | null;
+  sourceVerification?: SourceVerificationStatusV1;
+}>;
+
+type DeveloperCustomLaunchFailureV1 = Readonly<{
+  code: string;
+  message: string;
+  retryable: boolean;
+  remediations?: readonly CustomLaunchRemediationV1[];
 }>;
 
 export type DeveloperCustomLaunchV2 = Readonly<{
@@ -101,21 +113,8 @@ export type DeveloperCustomLaunchV2 = Readonly<{
   updatedAt: string;
   output: Readonly<Record<string, JsonValue>> | null;
   failure: DeveloperCustomLaunchV1["failure"];
+  sourceVerification?: SourceVerificationStatusV1;
 }>;
-
-type DeveloperCustomLaunchLiquidityIntentV3 =
-  | Readonly<{
-      model: "external-concentrated-liquidity";
-      declaredLaunchState: "liquidity_required";
-      binding: "explicit-request-hash" | "legacy-v3-default";
-    }>
-  | Readonly<{
-      model:
-        | "launch-seeded-concentrated-liquidity"
-        | "hook-inventory-custom-accounting";
-      declaredLaunchState: "assessment_required";
-      binding: "explicit-request-hash" | "legacy-v3-default";
-    }>;
 
 export type DeveloperCustomLaunchV3 = Readonly<{
   schemaVersion: "programmable.custom-launch.v3";
@@ -129,11 +128,15 @@ export type DeveloperCustomLaunchV3 = Readonly<{
   launchProfileHash: `sha256:${string}`;
   launchIntentHash: `sha256:${string}`;
   fundingIntentHash: `0x${string}` | null;
-  liquidityIntent: DeveloperCustomLaunchLiquidityIntentV3;
+  liquidityIntent: CustomLaunchLiquidityIntentV3;
+  walletHandoffUrl?: string | null;
+  expiresAt?: string | null;
+  secondsRemaining?: number | null;
   createdAt: string;
   updatedAt: string;
   output: Readonly<Record<string, JsonValue>> | null;
   failure: DeveloperCustomLaunchV1["failure"];
+  sourceVerification?: SourceVerificationStatusV1;
 }>;
 
 type DeveloperCustomLaunch = DeveloperCustomLaunchV1
@@ -742,7 +745,19 @@ function parseLaunch(
     : null;
   const failure = record.failure === null
     ? null
-    : parseFailure(record.failure);
+    : parseFailure(record.failure, version);
+  const sourceVerification = record.sourceVerification === undefined
+    || record.sourceVerification === null
+    ? null
+    : parseSourceVerificationStatusV1(record.sourceVerification);
+  if (
+    record.sourceVerification !== undefined
+    && record.sourceVerification !== null
+    && sourceVerification === null
+  ) throw new BackendContractErrorV1();
+  if (sourceVerification && record.status !== "finalized") {
+    throw new BackendContractErrorV1();
+  }
   const base = {
     launchId: record.launchId.toLowerCase(),
     requestId: record.requestId.toLowerCase(),
@@ -754,6 +769,7 @@ function parseLaunch(
     updatedAt: requiredTimestamp(record.updatedAt),
     output,
     failure,
+    ...(sourceVerification ? { sourceVerification } : {}),
   };
   if (version === "v1") {
     return Object.freeze({
@@ -779,12 +795,13 @@ function parseLaunch(
         routeId: "custom-launch:create:v3" as const,
         fundingIntentHash,
         liquidityIntent: parseV3LiquidityIntent(record.liquidityIntent),
+        ...parseOptionalWalletHandoff(record),
       });
 }
 
 function parseV3LiquidityIntent(
   value: JsonValue | undefined,
-): DeveloperCustomLaunchLiquidityIntentV3 {
+): CustomLaunchLiquidityIntentV3 {
   const record = jsonRecord(value);
   const keys = Object.keys(record);
   if (
@@ -860,7 +877,26 @@ function validatedV3FundingIntentHash(
   return fundingIntentHash;
 }
 
-function parseFailure(value: JsonValue) {
+function parseOptionalWalletHandoff(
+  record: Readonly<Record<string, JsonValue>>,
+) {
+  const hasHandoff = [
+    "walletHandoffUrl",
+    "expiresAt",
+    "secondsRemaining",
+  ].some((key) => Object.hasOwn(record, key));
+  if (!hasHandoff) return Object.freeze({});
+  const parsed = parseCustomLaunchWalletHandoffV1(record, String(record.requestId));
+  if (!parsed) throw new BackendContractErrorV1();
+  if (
+    parsed.walletHandoffUrl
+    && record.status !== "awaiting_funding_authorization"
+    && record.status !== "authorized"
+  ) throw new BackendContractErrorV1();
+  return parsed;
+}
+
+function parseFailure(value: JsonValue, version: BackendHistoryVersion) {
   const record = jsonRecord(value);
   if (
     typeof record.code !== "string"
@@ -871,10 +907,22 @@ function parseFailure(value: JsonValue) {
     || record.message.length > 512
     || typeof record.retryable !== "boolean"
   ) throw new BackendContractErrorV1();
+  const remediations: CustomLaunchRemediationV1[] = [];
+  if (version === "v3") {
+    if (!Array.isArray(record.remediations) || record.remediations.length > 32) {
+      throw new BackendContractErrorV1();
+    }
+    for (const candidate of record.remediations) {
+      const remediation = parseCustomLaunchRemediationV1(candidate);
+      if (!remediation) throw new BackendContractErrorV1();
+      remediations.push(remediation);
+    }
+  }
   return Object.freeze({
     code: record.code,
     message: record.message,
     retryable: record.retryable,
+    ...(version === "v3" ? { remediations: Object.freeze(remediations) } : {}),
   });
 }
 
