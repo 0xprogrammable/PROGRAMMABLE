@@ -61,7 +61,7 @@ export default function CreatorLaunchDocsPage() {
             <span>
               Keep contracts, tests, deployment logic and public project data
               together in the bundle described by the V3 API schema. The CLI
-              release includes the exact rev2 no-broadcast example at{" "}
+              release includes the exact V3 no-broadcast example at{" "}
               <code>examples/direct-native-v3-no-broadcast/README.md</code>.
             </span>
           </li>
@@ -69,8 +69,8 @@ export default function CreatorLaunchDocsPage() {
             <strong>Run the project checks.</strong>
             <span>
               Compile, test and verify the graph bundle before sending it to the
-              API. The API rechecks the declared manifest digest and exact graph
-              bindings, but does not reproduce your build.
+              API. The API rebuilds and binds the exact source and compilation
+              outputs, but does not reproduce project-specific tests.
             </span>
           </li>
           <li>

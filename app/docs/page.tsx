@@ -112,7 +112,7 @@ export default function DocsIndexPage() {
             <h3>Creators</h3>
             <p>
               Build and package a concrete project locally, then use the public
-              V2 API for a wallet-owned Custom launch on Ethereum Mainnet.
+              V3 API for a wallet-owned Custom launch on Ethereum Mainnet.
             </p>
           </div>
           <div>
