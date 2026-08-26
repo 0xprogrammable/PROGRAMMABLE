@@ -15,8 +15,9 @@ const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
   { id: "v3-general", label: "V3 general hooks" },
+  { id: "liquidity", label: "Liquidity and safety" },
   { id: "request", label: "Request contract" },
-  { id: "fees", label: "Rev3 fee policy" },
+  { id: "fees", label: "Platform fee policy" },
   { id: "verification", label: "Exact-source verification" },
   { id: "checks", label: "Attested checks" },
   { id: "submit", label: "Submit safely" },
@@ -49,6 +50,23 @@ const requestFields = [
 const lifecycle = [
   ["received", "The request is durably accepted."],
   ["validating", "Request and graph validation are running."],
+  [
+    "pending_review",
+    "The exact graph is waiting for platform fee-conformance review. No wallet transaction exists.",
+  ],
+  [
+    "action_required",
+    "A deterministic indicator requires additional platform review. Read the exact report and contact support with the request ID when directed. This is not a wallet-signing stage.",
+  ],
+  [
+    "awaiting_funding_authorization",
+    "EIP-3009 mode only: review and sign the exact typed data in the connected controller wallet.",
+  ],
+  [
+    "funding_authorization_verified",
+    "The separate funding signature was verified and final calldata construction can continue.",
+  ],
+  ["simulating", "The final graph and exact Router transaction are being simulated."],
   [
     "prepared",
     "The exact artifact exists. output.signedPermit and output.walletTransaction are both null. There is nothing for the wallet to sign yet.",
@@ -103,6 +121,10 @@ const errors = [
     "503",
     "Honor Retry-After and retry only the byte-identical request. Service availability never grants wallet signing authority.",
   ],
+  [
+    "500",
+    "Keep error.requestId for support and preserve the original request-byte binding.",
+  ],
 ] as const;
 
 export default function CustomLaunchApiDocsPage() {
@@ -130,8 +152,8 @@ export default function CustomLaunchApiDocsPage() {
             Public V3 launch creation is live on Ethereum Mainnet. V1 history
             reads remain available, while V1 creation stays read-only. Legacy
             Registry and GitHub submission intake is closed. Use the{" "}
-            <a href="/openapi/custom-launch-v2.json">
-              public V2 machine contract
+            <a href="/openapi/custom-launch-v3.json">
+              public V3 machine contract
             </a>{" "}
             for the exact request, response and retry contract.
           </p>
@@ -268,6 +290,37 @@ export default function CustomLaunchApiDocsPage() {
         </ul>
       </section>
 
+      <section id="liquidity">
+        <div className={styles.sectionIntro}>
+          <h2>Choose liquidity and controls explicitly</h2>
+          <p>
+            Pool initialization sets a Uniswap v4 starting price but does not
+            add liquidity. The project graph owns the liquidity design.
+          </p>
+        </div>
+
+        <ul className={styles.checkList}>
+          <li>
+            Ordinary concentrated liquidity requires the project to fund and
+            create a position. Trading volume cannot create initial liquidity
+            from nothing. Position custody, withdrawal and any lock or burn
+            must be disclosed.
+          </li>
+          <li>
+            Zero classical LP works only when the project hook and initializer
+            implement custom accounting or hold inventory that can exchange
+            against incoming assets. Funding mode <code>none</code> does not
+            make an empty ordinary pool liquid.
+          </li>
+          <li>
+            Exact source, permission, runtime, fee-conformance and simulation
+            checks do not prove arbitrary custom logic is free of honeypot
+            behavior, privileged controls or economic risk. Disclose transfer,
+            pause, upgrade, mint, liquidity-custody and buy/sell controls.
+          </li>
+        </ul>
+      </section>
+
       <section id="request">
         <div className={styles.sectionIntro}>
           <h2>Understand the public V3 request contract</h2>
@@ -312,24 +365,24 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="fees">
         <div className={styles.sectionIntro}>
-          <h2>Review the Rev3 fee policy</h2>
+          <h2>Review the V3 platform fee policy</h2>
           <p>
-            The frozen Rev3 profile is public on Ethereum Mainnet only
+            The general rev2 profile is public on Ethereum Mainnet only
             (<code>chainId: &quot;1&quot;</code>) and has{" "}
             <code>productionLaunchAuthorized: true</code>.
           </p>
         </div>
 
         <p className={styles.bodyCopy}>
-          For each successful swap, the mandatory platform charge is 1,000
-          parts per 1,000,000 of the documented{" "}
-          <code>gross-unspecified-pool-currency-amount</code> basis:{" "}
-          <code>1,000 ppm = 0.10% = 10 bps</code>. It accrues in the
-          profile&apos;s unspecified pool currency to{" "}
+          For each successful swap, the mandatory platform charge is{" "}
+          <code>1,000 ppm = 0.10% = 10 bps</code> of the request-bound
+          assessment basis. It may be additive to the selected fee or included
+          in that selected total. The server recomputes buy and sell project
+          share, effective total, fee currency and rounding, then requires a
+          platform-signed receipt for the exact graph and claim binding
+          controlled by{" "}
           <code>0x4957f49620AFf3Adbbe8195a4f633E49cc93376c</code>.
-          The frozen profile enforces this path independently of custom
-          behavior; a Custom module cannot reduce or redirect it. A reverted
-          swap rolls back the fee with the rest of the transaction.
+          A reverted swap rolls the fee back with the transaction.
         </p>
 
         <aside className={styles.callout}>
@@ -348,7 +401,7 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Bind exact source and follow server-authored status</h2>
           <p>
-            Optional <code>verificationBundle</code> binds exact UTF-8 Solidity
+            Required V3 <code>verificationBundle</code> binds exact UTF-8 Solidity
             Standard JSON bytes, their SHA-256, the exact solc build, source and
             contract identity and resolved constructor arguments to the
             prepared artifact.
@@ -425,7 +478,7 @@ export default function CustomLaunchApiDocsPage() {
         </p>
 
         <p className={styles.bodyCopy}>
-          New V2 requests share a durable global admission cap of 120 created
+          New V3 requests share a durable global admission cap of 120 created
           requests per hour and 500 per day. An exact idempotent replay is
           checked first and consumes no additional capacity.
         </p>
@@ -544,7 +597,7 @@ export default function CustomLaunchApiDocsPage() {
 
         <p className={styles.bodyCopy}>
           Generic fee claims, buyback management, reusable-template publication
-          and a public Hookbuilder are not granted by the V1 Custom Launch API.
+          and a public Hookbuilder are not granted by the V3 Custom Launch API.
           Reserved scopes promise no future behavior.
         </p>
       </section>
@@ -563,7 +616,12 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             <a href="/openapi/custom-launch-v2.json">
-              Inspect the public V2 contract
+              Inspect V2 compatibility
+            </a>
+          </li>
+          <li>
+            <a href="/openapi/custom-launch-v3.json">
+              Open the live V3 contract
             </a>
           </li>
           <li>

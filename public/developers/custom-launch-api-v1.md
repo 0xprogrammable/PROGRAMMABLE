@@ -36,14 +36,32 @@ by the API key.
 The general V3 production profile is available on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the documented
-declared assessment basis: `1,000 ppm = 0.10% = 10 bps`. It accrues under the exact claim binding controlled by
+For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
+assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either `additive-platform-share` or
+`inclusive-selected-total`; the server recomputes buy and sell project share, effective total, fee currency and
+rounding. It accrues under the exact claim binding controlled by
 `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The server requires an exact-graph conformance receipt before signing
 the launch permit. A reverted swap must roll back the fee with the rest of the transaction.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
 disabled.
+
+## Liquidity and safety boundary
+
+Normal Uniswap v4 pool initialization sets the starting price but adds no liquidity. A project using ordinary
+concentrated liquidity must fund and create its own position; trading volume cannot create the initial liquidity from
+nothing. Position custody, withdrawal and any lock or burn are project behavior and must be disclosed.
+
+Zero classical LP works only when the project hook and initializer implement custom accounting or hold launch
+inventory that can exchange against incoming assets. Buys may then grow assets held by the hook, but the initial token
+inventory and the buy, sell, redemption and withdrawal paths still come from the exact project graph. Funding mode
+`none` does not make an empty ordinary pool liquid.
+
+Programmable checks exact source/build bindings, hook permissions and address bits, runtime trust roots, the declared
+10 bps conformance receipt and the final Router simulation. Those checks do not prove that arbitrary custom code has
+no honeypot behavior, privileged controls or economic risk. A project must disclose transfer restrictions, pause or
+upgrade controls, liquidity custody, withdrawal behavior and buy/sell conditions.
 
 ## Install the public CLI
 
@@ -124,12 +142,18 @@ The list route may make a bounded best-effort reconciliation pass over pending r
 The single resource GET is the precise status and full output path.
 
 ```text
-received -> validating -> simulating -> prepared -> authorized -> submitted -> finalized
+received -> validating
+validating -> awaiting_funding_authorization -> funding_authorization_verified (EIP-3009 only)
+validating or funding_authorization_verified -> pending_review <-> action_required
+pending_review -> prepared -> simulating -> authorized -> submitted -> finalized
 ```
 
-`failed` and `cancelled` are terminal alternatives. `prepared` has no wallet transaction. `authorized` contains the
-exact transaction for separate controller wallet review, signing and broadcast. The API and CLI never sign or
-broadcast. After the wallet broadcasts, run:
+`failed` and `cancelled` are terminal alternatives. `pending_review` has no wallet action. `action_required` tells the
+agent that a deterministic indicator requires additional platform review. Inspect the exact report and contact
+support with the request ID when directed; it is not a wallet-signing stage. With `--until authorized`, the CLI also stops at
+`awaiting_funding_authorization`; complete the exact typed-data signature in the website, then run status again.
+`prepared` has no wallet transaction. `authorized` contains the exact Router transaction for separate controller
+wallet review, signing and broadcast. The API and CLI never sign or broadcast. After the wallet broadcasts, run:
 
 ```sh
 programmable-launch status REQUEST_UUID --watch --until finalized
@@ -148,8 +172,9 @@ market enrichment or an explorer is unavailable. Provenance is not an audit, liq
 
 ## Errors and support
 
-Fix nonretryable `400`, `403`, `409`, `413`, `415` and `422` responses before sending a new request. Preserve the
-exact journal binding for retryable `429`, `503` and ambiguous transport results. For support, send only
+Fix nonretryable `400`, `401`, `403`, `404`, `409`, `413`, `415` and `422` responses before sending a new request.
+Preserve the exact journal binding for retryable `429`, `503` and ambiguous transport results. A `500` response keeps
+the correlation request ID but does not authorize changing request bytes. For support, send only
 `error.requestId`, HTTP status, UTC time and the public error code. Never send the API key.
 
 Generic fee claiming and buyback management for arbitrary hooks are not live. FADE uses a specifically bound adapter.

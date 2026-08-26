@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 const sections = [
   { id: "access", label: "Start here" },
   { id: "prepare", label: "Prepare the project" },
+  { id: "liquidity", label: "Choose liquidity" },
   { id: "key", label: "Create an API key" },
   { id: "submit", label: "Submit safely" },
   { id: "prepared", label: "Prepared launch" },
@@ -26,7 +27,7 @@ export default function CreatorLaunchDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators/launch"
-      description="Package one deterministic bundle locally, submit the exact V2 request and stop for separate wallet review."
+      description="Package one deterministic bundle locally, submit the exact V3 request and stop for separate wallet review."
       parentHref="/docs/creators"
       parentLabel="Creators"
       sections={sections}
@@ -35,7 +36,7 @@ export default function CreatorLaunchDocsPage() {
       <section id="access">
         <h2>Start here</h2>
         <p>
-          Public V2 Custom launch creation is live on Ethereum Mainnet. Package
+          Public V3 general-hook creation is live on Ethereum Mainnet. Package
           and validate locally, then use a scoped API key to submit and track
           the bound wallet&apos;s request.
         </p>
@@ -59,7 +60,9 @@ export default function CreatorLaunchDocsPage() {
             <strong>Build a deterministic source bundle.</strong>
             <span>
               Keep contracts, tests, deployment logic and public project data
-              together in the bundle described by the API schema.
+              together in the bundle described by the V3 API schema. The CLI
+              release includes the exact rev2 no-broadcast example at{" "}
+              <code>examples/direct-native-v3-no-broadcast/README.md</code>.
             </span>
           </li>
           <li>
@@ -87,11 +90,28 @@ export default function CreatorLaunchDocsPage() {
         </ol>
       </section>
 
+      <section id="liquidity">
+        <h2>Choose the liquidity design</h2>
+        <p>
+          Initializing a normal Uniswap v4 pool sets its starting price but
+          does not add liquidity. A project using ordinary concentrated
+          liquidity must fund and create its own position. Trading volume
+          cannot create that initial liquidity from nothing.
+        </p>
+        <p>
+          Zero classical LP works only when the project hook and initializer
+          implement custom accounting or hold launch inventory that can
+          exchange against incoming assets. Funding mode <code>none</code> does
+          not make an empty ordinary pool liquid. Disclose the position owner,
+          withdrawal or lock path, transfer restrictions and buy/sell behavior.
+        </p>
+      </section>
+
       <section id="key">
         <h2>Manage an API key</h2>
         <p>
           Connect the controller wallet to manage its scoped keys. Use only the
-          authorized V2 operations for that bound wallet. API scopes never
+          authorized V3 operations for that bound wallet. API scopes never
           grant wallet signing. Keep every secret out of source control and
           public chats.
         </p>
@@ -101,9 +121,11 @@ export default function CreatorLaunchDocsPage() {
       </section>
 
       <section id="submit">
-        <h2>Submit the exact V2 request</h2>
+        <h2>Submit the exact V3 request</h2>
         <p>
-          Use <code>POST /v2/custom-launches</code>. Preserve the exact request
+          Run <code>pack</code>, <code>validate</code>, <code>submit</code> and
+          then <code>status</code>. Use <code>POST /v3/custom-launches</code>.
+          Preserve the exact request
           bytes and idempotency key across timeout, <code>429</code> and{" "}
           <code>503</code> retries, and honor <code>Retry-After</code>.
         </p>
@@ -128,7 +150,10 @@ export default function CreatorLaunchDocsPage() {
       <section id="launch">
         <h2>Wallet confirmation</h2>
         <p>
-          Wait for <code>authorized</code>, then review the exact permit-attached
+          In EIP-3009 mode, <code>awaiting_funding_authorization</code> first
+          requires one explicit typed-data signature in the website. Native
+          value and no-funding modes skip that separate signature. Wait for{" "}
+          <code>authorized</code>, then review the exact permit-attached
           transaction with the controller wallet. Only that wallet, or an agent
           separately authorized to use it, can sign and broadcast. The API key
           alone cannot do either.
@@ -153,6 +178,11 @@ export default function CreatorLaunchDocsPage() {
           <li>
             Treat a new contract version or materially changed control path as a
             new launch subject.
+          </li>
+          <li>
+            Keep the pool LP fee separate from the 10 bps Programmable share.
+            Generic fee claiming and buyback management are not live for
+            arbitrary hooks; FADE uses a specifically bound adapter only.
           </li>
         </ul>
       </section>

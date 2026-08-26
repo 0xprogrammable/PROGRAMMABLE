@@ -14,7 +14,7 @@ resource. An API key never signs or broadcasts a controller wallet transaction.
 The [public V3 OpenAPI document](https://programmable.market/openapi/custom-launch-v3.json) is normative for creation
 and current resources. The [V2 OpenAPI document](https://programmable.market/openapi/custom-launch-v2.json) and
 [V1 OpenAPI document](https://programmable.market/openapi/custom-launch-v1.json) remain
-compatibility contract. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is
+compatibility contracts. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is
 executable by a cold external agent.
 
 ## V3 general hook profile
@@ -30,8 +30,8 @@ the compiled declaration must match the hook-address low bits. The request binds
 creation bytecode, runtime, pool key, predicted initializer, expected pool ID and a flat
 `programmable.eip3009-signature-patch.v1` descriptor. The patch names the initializer target, unsigned calldata hash,
 calldata length and distinct selector-relative ABI-word offsets for `r`, `s` and `v`; those words must be zero before
-the wallet signature exists. The initializer has per-launch exact source, build, runtime, final-calldata and simulation
-evidence. There is no separate global initializer trust root.
+the wallet signature exists and is present only in EIP-3009 mode. The initializer has per-launch exact source, build,
+runtime, final-calldata and simulation evidence. There is no separate global initializer trust root.
 
 The V3 platform share may be additive or included inside the selected buy or sell total. The backend derives and
 discloses the exact effective, project and Programmable shares; the request never self-declares those results. The fixed
@@ -62,13 +62,32 @@ The public API key remains available only through `PROGRAMMABLE_API_KEY` or the 
 store. There is no key argument or prompt. V3 includes no ERC-20 approval, Permit2 approval, signer or
 platform-approval shortcut.
 
+## Liquidity is a project design
+
+Calling `PoolManager.initialize` creates a Uniswap v4 pool and its starting price; it does not add liquidity. A project
+using ordinary concentrated liquidity must fund and create its own position. Trading volume cannot create that initial
+liquidity from nothing. The exact position owner, withdrawal path and any lock or burn must be part of the project
+design and disclosed; the general profile does not silently lock a project-owned position.
+
+A launch can start with zero classical LP only when its project-owned hook and initializer implement custom accounting
+or hold launch inventory that can exchange against incoming assets. Buys can then increase assets held by that hook,
+but the token inventory, accounting and redemption or sell path still come from the project graph. `fundingMode: none`
+only means the Router transfers no launch funding; it does not make an empty ordinary pool liquid.
+
+The API checks exact source/build bindings, hook permission consistency, runtime trust roots, the declared platform-fee
+conformance receipt and the final Router simulation. These checks do not prove that arbitrary custom token or hook
+logic is free of honeypot behavior, privileged controls or economic risk. Projects must disclose transfer restrictions,
+pause or upgrade controls, liquidity custody, withdrawal rules and buy/sell behavior, and users must review them.
+
 ## Platform fee policy
 
 The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the documented
-declared assessment basis: `1,000 ppm = 0.10% = 10 bps`. Its exact claim binding is controlled by
+For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
+assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either
+`additive-platform-share` or `inclusive-selected-total`; the server recomputes the buy and sell project share,
+effective total, fee currency and rounding from the exact binding. Its exact claim binding is controlled by
 `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. A platform-signed receipt must bind the exact final graph and fee
 behavior before the launch permit is signed. A reverted swap must roll back the fee with the rest of the transaction.
 
@@ -99,7 +118,7 @@ Build the project from one pinned source revision and preserve:
 
 Create the closed `programmable.launch-pack-config.v3` file described in the installed package README. Set
 `source.publicOrigin.url` to the public HTTPS source repository and `source.publicOrigin.revision` to the exact
-lowercase merged production commit used for the release (`PROGRAMMABLE_SOURCE_REVISION` in the packaged Rev3 sample),
+lowercase 40-character Git commit containing the submitted source bytes (`PROGRAMMABLE_SOURCE_REVISION` in the packaged revision-2 sample),
 then run:
 
 ```bash
@@ -113,8 +132,10 @@ programmable-launch submit ./launch.json \
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
-At `authorized`, stop so the connected controller can review and sign the exact wallet transaction separately. After
-the wallet broadcasts, poll the same V3 resource until `finalized`.
+With `--until authorized`, the status command stops at either the EIP-3009 funding handoff or the Router handoff. In
+EIP-3009 mode, first complete the exact funding signature in the website, then run the same status command again. At
+`authorized`, stop again so the connected controller can review and sign the exact Router transaction separately.
+After the wallet broadcasts, continue with `--until finalized`; terminal failures always stop polling.
 
 Manage a wallet-bound key at [API keys](https://programmable.market/developers/api-keys). Store it in an encrypted
 secret or environment variable named `PROGRAMMABLE_API_KEY`. Put only the literal placeholder
@@ -222,6 +243,11 @@ failure state.
 | --- | --- |
 | `received` | The request is durably accepted. |
 | `validating` | Request and graph validation are running. |
+| `pending_review` | The exact graph is waiting for platform fee-conformance review. There is no wallet transaction to sign. |
+| `action_required` | A deterministic indicator requires additional platform review. Read the exact report and contact support with the request ID when directed; this is not a wallet-signing stage. |
+| `awaiting_funding_authorization` | EIP-3009 mode only: review and sign the exact typed data in the connected controller wallet. |
+| `funding_authorization_verified` | The separate funding signature was verified and final calldata construction can continue. |
+| `simulating` | The final graph and exact Router transaction are being simulated. |
 | `prepared` | The exact artifact exists. There is no wallet transaction to sign yet. |
 | `authorized` | The permit and exact wallet transaction exist. Review and sign in the controller wallet. |
 | `submitted` | Canonical Router evidence matches below 64 confirmations. |
@@ -259,6 +285,7 @@ public error code. Never send the API key.
 | `415` | Send `Content-Type: application/json`. |
 | `422` | Fix the reported source, graph, attestation, verification or permit binding. |
 | `429` | Honor `Retry-After`. |
+| `500` | Keep the response `error.requestId`; do not expose the key. Retry only when the operation is safe and the original bytes remain bound. |
 | `503` | Honor `Retry-After` and retry only the byte identical journaled request. |
 
 ## Current boundary

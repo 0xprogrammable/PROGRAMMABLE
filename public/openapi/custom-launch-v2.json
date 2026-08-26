@@ -3,8 +3,8 @@
   "info": {
     "title": "Programmable Custom Launch API V2",
     "version": "2.0.0",
-    "summary": "Public fee-enforced Custom launch creation and wallet-owned lifecycle reads.",
-    "description": "This machine contract describes the immutable 2.0.0 request, lifecycle and wallet-handoff shapes for public Ethereum Mainnet launch creation. V1 history reads remain governed by the separate V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
+    "summary": "V2 compatibility request and wallet-owned lifecycle contract.",
+    "description": "This compatibility contract describes the immutable V2 request, lifecycle and wallet-handoff shapes for existing Ethereum Mainnet resources. New general project-owned hook graphs use the separate public V3 contract. V1 history reads remain governed by the V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -31,7 +31,8 @@
       "status": "live"
     },
     "activationRule": "Only the exact published Rev3 production profile is accepted. API authorization never replaces separate controller-wallet review and signing.",
-    "v1Contract": "https://programmable.market/openapi/custom-launch-v1.json"
+    "v1Contract": "https://programmable.market/openapi/custom-launch-v1.json",
+    "currentProductionContract": "https://programmable.market/openapi/custom-launch-v3.json"
   },
   "x-programmable-release-candidate": {
     "status": "promoted-to-public",

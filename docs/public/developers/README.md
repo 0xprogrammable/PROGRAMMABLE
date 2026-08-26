@@ -4,16 +4,13 @@ description: Read only contracts and verification rules for detecting Programmab
 
 # Developer reference
 
-Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V2 creation and lifecycle reads are live for wallet-owned requests. V1 history remains readable and V1 creation remains read only.
-
-The [V3 direct-native OpenAPI](https://programmable.market/openapi/custom-launch-v3.json) is an
-`integration-pending` schema preview. It does not replace or activate the public V2 contract.
+Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V3 general-hook creation and lifecycle reads are live for wallet-owned requests. V2 and V1 history remain readable and V1 creation remains read only.
 
 ## Package locally and read existing launches
 
-Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` CLI to pack, validate, submit and track V2 requests, and manage a key at [Custom Launch API keys](https://programmable.market/developers/api-keys). The [public V2 contract](https://programmable.market/openapi/custom-launch-v2.json) remains the normative production contract. The [V3 contract](https://programmable.market/openapi/custom-launch-v3.json) may be packed and validated against its frozen profile, but must not be submitted until discovery advertises it as live. V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
+Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` 3.0.0 CLI to pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API keys](https://programmable.market/developers/api-keys). The [public V3 contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. The [V2 contract](https://programmable.market/openapi/custom-launch-v2.json) remains available for existing V2 resources. V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
-The key can create and read launch preparations for its wallet principal. Keep it only as `PROGRAMMABLE_API_KEY` in an encrypted secret store. It cannot authorize, sign or broadcast. In V2, a `prepared` response contains an exact artifact but no wallet transaction; only `authorized` contains the exact transaction for separate controller-wallet review and signing. After V3 activation, create remains unsigned and first returns `awaiting_funding_authorization`: the website explicitly reviews and signs the exact EIP-3009 funding typed data. Only after backend verification and simulation may it present the exact Router transaction for a fresh, separate wallet review and signature. Neither action is automatic.
+The key can create and read launch preparations for its wallet principal. Keep it only as `PROGRAMMABLE_API_KEY` in an encrypted secret store. It cannot authorize, sign or broadcast. A `prepared` response contains an exact artifact but no wallet transaction; only `authorized` contains the exact Router transaction for separate controller-wallet review and signing. In EIP-3009 funding mode, `awaiting_funding_authorization` first exposes exact typed data for an explicit website wallet signature. Native-value mode instead carries the exact ETH value on the Router transaction and requires no separate funding signature. Neither signing action is automatic.
 
 ## Start with discovery
 

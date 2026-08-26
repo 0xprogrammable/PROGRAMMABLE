@@ -8,7 +8,7 @@ coverY: 0
 
 Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or execution graph. Prediction Markets is the separately versioned launch model for onchain outcome markets.
 
-Classic and Prediction Markets are available from Create. Public V2 Custom launch creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. The V3 direct-native contract is an `integration-pending` schema preview, not a live launch capability. V1 history reads remain live, while authenticated V1 POST returns the nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the wallet reviews and signs its own transaction on the required network.
+Classic and Prediction Markets are available from Create. Public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable, while authenticated V1 POST returns the nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the wallet reviews and signs its own transaction on the required network.
 
 {% hint style="info" %}
 These docs describe current public products and the evidence available for them. A successful check, prepared artifact, authorized transaction or visible token page is not a guarantee of safety, liquidity or future value.
@@ -20,7 +20,7 @@ These docs describe current public products and the evidence available for them.
 | ---------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | Launch a standard token      | [Create Classic](https://programmable.market/launch)                                     | Configure the token, fees, reward recipients and Initial Buy before signing one Ethereum transaction                         |
 | Create a prediction market   | [Create Prediction Market](https://programmable.market/launch)                           | Choose an available market and review the current release requirements before signing                                        |
-| Build with a custom hook     | [Custom Launch API guide](developers/custom-launch.md)                                  | Build, package, validate, submit and track the exact V2 request; stop for separate wallet review and signing                    |
+| Build with a custom hook     | [Custom Launch API guide](developers/custom-launch.md)                                  | Build, package, validate, submit and track the exact V3 request; stop for separate wallet review and signing                    |
 | Verify or integrate launches | [Developer reference](developers/README.md)                                              | Resolve current deployments from the manifest and reproduce provenance from Ethereum                                         |
 
 To inspect an existing token, begin with [Explore](https://programmable.market/explore) and use its contract address rather than only a name or ticker.

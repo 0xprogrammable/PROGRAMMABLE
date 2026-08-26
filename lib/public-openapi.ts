@@ -20,11 +20,11 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.5.0",
+    version: "1.6.0",
     summary:
-      "Verified launch discovery plus public wallet-owned V2 Custom launch creation on Ethereum.",
+      "Verified launch discovery plus public wallet-owned V3 general-hook creation on Ethereum.",
     description:
-      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, public V2 creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation remains read-only with non-retryable 409 CUSTOM_LAUNCH_V1_READ_ONLY. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable and V1 creation remains read-only with non-retryable 409 CUSTOM_LAUNCH_V1_READ_ONLY. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -52,7 +52,7 @@ export const programmablePublicOpenApi = {
     {
       name: "Custom launch",
       description:
-        "Public wallet-bound V2 launch creation plus retained V1 history. Manage API keys at programmable.market/developers/api-keys.",
+        "Public wallet-bound V3 general-hook creation plus retained V2 and V1 history. Manage API keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {
@@ -1671,6 +1671,16 @@ export const programmablePublicOpenApi = {
       retryAfter: "honor-on-429-or-503",
       openApiUrl: `${SITE_ORIGIN}/openapi/custom-launch-v2.json`,
     },
+    v3: {
+      status: "live",
+      profileId: "programmable.direct-native-hook-graph.v1",
+      profileRevision: 2,
+      productionLaunchAuthorized: true,
+      createHttpStatus: 202,
+      replayHttpStatus: 200,
+      retryAfter: "honor-on-429-or-503",
+      openApiUrl: `${SITE_ORIGIN}/openapi/custom-launch-v3.json`,
+    },
     legacyIntake: { registry: "closed", github: "closed" },
   },
   "x-programmable-boundary": {
@@ -1685,13 +1695,13 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "Public V2 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V1 history remains readable and V1 creation remains write-fenced. Exact-source provider verification runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "Public V3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V2 and V1 history remain readable and V1 creation remains write-fenced. Exact-source provider verification runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {
-      state: "v1-write-fenced-v2-live",
+      state: "v1-write-fenced-v3-live",
       description:
-        "Authorized public V2 creation is live. V1 POST remains non-retryable CUSTOM_LAUNCH_V1_READ_ONLY.",
+        "Authorized public V3 general-hook creation is live. V2 remains compatible and V1 POST remains non-retryable CUSTOM_LAUNCH_V1_READ_ONLY.",
     },
     "custom-launch:read": {
       state: "grantable",
@@ -1699,11 +1709,13 @@ export const programmablePublicOpenApi = {
     },
     "fees:claim": {
       state: "reserved-disabled",
-      description: "Not grantable or callable in V1.",
+      description:
+        "Not grantable or callable for arbitrary Custom hooks. FADE uses a separately bound adapter.",
     },
     "buybacks:manage": {
       state: "reserved-disabled",
-      description: "Not grantable or callable in V1.",
+      description:
+        "Not grantable or callable for arbitrary Custom hooks. FADE uses a separately bound adapter.",
     },
     evolution:
       "New scopes and endpoints are additive. Existing keys never inherit a scope activated later.",

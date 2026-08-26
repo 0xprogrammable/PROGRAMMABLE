@@ -11,7 +11,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Public-read contracts, wallet-owned V1 history, Markdown guides, manifests and canonical verification files.",
+    "Public-read contracts, wallet-owned V3 resources, compatibility history, Markdown guides, manifests and canonical verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
@@ -50,7 +50,7 @@ export default function MachineReadableDocsPage() {
               Custom Launch API guide
             </Link>
             <span>
-              Canonical human guide for public V2 creation, lifecycle, wallet
+              Canonical human guide for public V3 creation, lifecycle, wallet
               handoff, errors, discovery and claims.
             </span>
           </li>
@@ -78,8 +78,7 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v2.json</code>
             </a>
             <span>
-              Public 2.0.0 machine contract for creation, idempotent retries,
-              lifecycle reads and separate wallet signing.
+              Compatibility contract for existing V2 resources and clients.
             </span>
           </li>
           <li>
@@ -87,9 +86,8 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v3.json</code>
             </a>
             <span>
-              Integration-pending V3 direct-native request, funding challenge
-              and separate Router-transaction schemas. Public V2 remains the
-              stable production contract.
+              Live V3 general-hook request, funding challenge, lifecycle and
+              separate Router-transaction schemas.
             </span>
           </li>
           <li>
@@ -261,22 +259,21 @@ export default function MachineReadableDocsPage() {
             no authentication.
           </li>
           <li>
-            <code>https://api.programmable.market/v2/custom-launches</code>{" "}
+            <code>https://api.programmable.market/v3/custom-launches</code>{" "}
             requires a wallet-bound <code>pm_live_</code> Bearer key.
           </li>
           <li>
-            Public V2 creation, list and single-resource reads are live. V1
-            history remains readable, while authenticated V1 POST returns
+            Public V3 creation, list and single-resource reads are live. V2 and
+            V1 history remain readable, while authenticated V1 POST returns
             non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
           </li>
           <li>
-            V3 direct-native routes remain <code>integration-pending</code>.
-            Their OpenAPI document freezes the exact canonical-kernel and
-            unsigned EIP-3009 handoff shapes without activating them.
+            V3 revision 2 supports project-owned tokens, hooks, 3–16 exact
+            direct graph targets and every valid Uniswap v4 permission mask.
           </li>
           <li>
             The platform validates manifest digest, graph, attestation shape,
-            evidence digests, exact-source build inputs, the Rev3 profile,
+            evidence digests, exact-source build inputs, the rev2 profile,
             simulation and permit bindings. It does not audit the
             project or attest safety.
           </li>
@@ -287,7 +284,7 @@ export default function MachineReadableDocsPage() {
             wallet authority.
           </li>
           <li>
-            <code>GET /v2/custom-launches</code> returns a wallet-owned,
+            <code>GET /v3/custom-launches</code> returns a wallet-owned,
             cursor-paginated snapshot. It makes a bounded best-effort
             reconciliation pass over pending rows and still returns durable
             history when RPC is unavailable.
@@ -315,7 +312,8 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             Fee claims and automated buybacks are not active Custom Launch API
-            operations for arbitrary hooks.
+            operations for arbitrary hooks. FADE uses a specifically bound
+            adapter, not a generic capability.
           </li>
           <li>Ethereum RPC authentication depends on your provider.</li>
           <li>

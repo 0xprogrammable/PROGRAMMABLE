@@ -4,7 +4,7 @@
     "title": "Programmable Custom Launch API",
     "version": "1.4.0",
     "summary": "Read existing wallet-bound V1 Custom launch history on Ethereum Mainnet.",
-    "description": "V1 list and single-resource reads remain live for existing wallet-bound launch requests. V1 creation is write-fenced: every authenticated POST /v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY and must not be retried. Public V2 creation and lifecycle reads are defined by the separate V2 contract. Legacy Registry and GitHub submission intake is closed. Existing finalized resources and server-authored exact-source verification remain readable. An API key is not wallet signing authority."
+    "description": "V1 list and single-resource reads remain live for existing wallet-bound launch requests. V1 creation is write-fenced: every authenticated POST /v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY and must not be retried. Public V3 general-hook creation and lifecycle reads are defined by the separate V3 contract; V2 remains available for its existing resources. Legacy Registry and GitHub submission intake is closed. Existing finalized resources and server-authored exact-source verification remain readable. An API key is not wallet signing authority."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -1785,6 +1785,16 @@
       "replayHttpStatus": 200,
       "retryAfter": "honor-on-429-or-503",
       "openApiUrl": "https://programmable.market/openapi/custom-launch-v2.json"
+    },
+    "v3": {
+      "status": "live",
+      "profileId": "programmable.direct-native-hook-graph.v1",
+      "profileRevision": 2,
+      "productionLaunchAuthorized": true,
+      "createHttpStatus": 202,
+      "replayHttpStatus": 200,
+      "retryAfter": "honor-on-429-or-503",
+      "openApiUrl": "https://programmable.market/openapi/custom-launch-v3.json"
     },
     "legacyIntake": {
       "registry": "closed",

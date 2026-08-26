@@ -8,9 +8,9 @@ reverts if executed: it exists only to prove the compiler-ABI-validated EIP-3009
 moving funds, signing, or broadcasting.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
-inputs. The embedded profile is the live revision 2 profile with `productionLaunchAuthorized: true`; that profile
-flag does not turn this deliberately non-executable fixture into an approved or submitted launch. This example is not
-deployment, a usable liquidity initializer, a wallet transaction, or a launched coin.
+inputs. The embedded profile is the live revision 2 profile with `productionLaunchAuthorized: true`; that flag does
+not turn this deliberately reverting rehearsal initializer into an approved or submitted launch. This fixture is not
+admission, deployment, a usable liquidity initializer, a wallet transaction, or a launched coin.
 
 ## Install, build, pack, validate
 
@@ -60,8 +60,8 @@ EIP-3009 descriptor and zero `r`/`s`/`v` initializer words only—never a signat
 
 The optional wrapper is intentionally one-shot. If and only if the V3 backend route is available, it submits the exact
 unsigned request and accepts only `awaiting_funding_authorization`. It never calls a wallet provider, submits a funding
-signature, requests the Router transaction, polls status, or broadcasts. A temporary service failure may return a
-fail-closed `503`; that is not launch evidence.
+signature, requests the Router transaction, polls status, or broadcasts. A transient `503` is not launch evidence and
+must be retried only with the same journaled bytes and idempotency key after `Retry-After`.
 
 Keep the API key in the encrypted `PROGRAMMABLE_API_KEY` environment secret or supported OS secret store. Never put
 the key in a config, command argument, log, or chat.

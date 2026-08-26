@@ -50,14 +50,20 @@ transaction. The CLI never accepts an API key argument, signs, requests approval
 The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the documented
-declared assessment basis: `1,000 ppm = 0.10% = 10 bps`. Its exact claim binding is controlled by
+For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
+assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is additive or inclusive, and the server
+recomputes both buy and sell economics. Its exact claim binding is controlled by
 `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. A platform-signed conformance receipt for the exact final graph is
 required before the launch permit signer can run. A reverted swap must roll back the fee with the rest of the transaction.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
 disabled.
+
+Normal Uniswap v4 initialization sets a starting price but does not add liquidity. A project using ordinary
+concentrated liquidity must fund and create its own position; volume cannot create initial liquidity from nothing.
+Zero classical LP works only when the project hook and initializer implement custom accounting or hold inventory that
+can exchange against incoming assets. Funding mode `none` does not make an empty ordinary pool liquid.
 
 ## Cold-agent flow
 
@@ -73,8 +79,9 @@ programmable-launch pack --config programmable-launch.config.json --output launc
 programmable-launch validate launch.json --config programmable-launch.config.json
 ```
 
-Use the general V3 example shipped with the release for a no-broadcast cold-room rehearsal. It invokes real solc,
-uses exact sources and artifacts, and stops after byte-reproducible `pack` and `validate`.
+Use `examples/direct-native-v3-no-broadcast/README.md` shipped with the release for a no-broadcast cold-room
+rehearsal. It invokes real solc, uses exact sources and artifacts, and stops after byte-reproducible `pack` and
+`validate`.
 
 Save the API key only as the encrypted environment secret `PROGRAMMABLE_API_KEY` or in the supported OS
 secret store. Put the literal text `$PROGRAMMABLE_API_KEY` in agent setup or chat, never the key. On macOS, the fallback
@@ -109,7 +116,7 @@ The top-level fields are:
 - `schemaVersion`: `programmable.launch-pack-config.v3`
 - `launchWallet`, `chainId: "1"`, and a nonzero lowercase bytes32 `nonce`
 - `source`: relative `root`, non-empty exact `paths`, decimal `sourceLineageNonce`, and `publicOrigin` containing a
-  public HTTPS `url` plus the exact lowercase merged production Git `revision` used for the release
+  public HTTPS `url` plus the exact lowercase 40-character Git commit containing the submitted source bytes
 - `compilationUnits`: unique `{ compilationUnitId, standardJson }` entries
 - `targets`: 3–16 target definitions
 - `pool`: exact token/hook target IDs, fee, tick spacing, and `quoteCurrency` address; use
@@ -202,4 +209,5 @@ UTC time, and the public error code. Never send the API key.
 
 This package prepares, submits, and tracks Custom launches. It contains no approval, platform signer, wallet signing,
 wallet broadcast, fee-claim, buyback-management, or public Hookbuilder logic. Generic fee claims and buyback management
-for arbitrary hooks are not active. The reserved `fees:claim` and `buybacks:manage` scopes grant no operation.
+for arbitrary hooks are not active. FADE uses a specifically bound adapter, not a generic capability. The reserved
+`fees:claim` and `buybacks:manage` scopes grant no operation.

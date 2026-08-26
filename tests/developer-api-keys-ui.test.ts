@@ -156,23 +156,21 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV3Preview,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "For V2, stop at authorized",
+      "pack, then validate, submit, and status",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "awaiting_funding_authorization",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "fresh, separate review and wallet signature for the exact Router transaction",
+      "review and sign the exact Router transaction",
     );
-    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "do not submit until discovery advertises it as live",
-    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("integration-pending");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
   });
 

@@ -25,15 +25,25 @@ describe("public Custom Launch CLI surface", () => {
     expect(document.customLaunchApi).toMatchObject({
       status: "live",
       readStatus: "live",
+      apiVersion: "3",
       readyzUrl: "https://api.programmable.market/readyz",
-      openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
+      openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       legacyIntake: { registry: "closed", github: "closed" },
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "1.0.1",
+        releaseVersion: "3.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+      },
+      compatibility: {
+        v1: {
+          openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
+          cliReleaseVersion: "1.0.1",
+        },
+        v2: {
+          openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        },
       },
       publicRelease: {
         status: "live",
@@ -49,6 +59,16 @@ describe("public Custom Launch CLI surface", () => {
           tarballUrl:
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         },
+      },
+      generalHookProfile: {
+        status: "live",
+        apiVersion: "3",
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 2,
+        productionLaunchAuthorized: true,
+        createPath: "/v3/custom-launches",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
+        cliReleaseVersion: "3.0.0",
       },
       integrationPreview: {
         status: "live",
@@ -130,6 +150,8 @@ describe("public Custom Launch CLI surface", () => {
     expect(document.publicCategories.custom).toMatchObject({
       discoveryStatus: "live",
       publicSubmissionStatus: "closed",
+      publicSubmissionStatusScope: "legacy-registry-intake",
+      publicApiCreateStatus: "live",
       customLaunchApiStatus: "live",
       registryDiscoveryStatus: "legacy-closed",
       legacyRegistrySubmissionStatus: "closed",
@@ -354,7 +376,11 @@ describe("public Custom Launch CLI surface", () => {
     expect(v3.paths["/v3/custom-launches"].post
       ["x-programmable-public-availability"]).toBe("live");
     expect(v3.paths["/v3/custom-launches"].post.responses["503"]
-      .headers["Retry-After"].schema.const).toBe("30");
+      .headers["Retry-After"].schema.pattern).toBe("^[1-9][0-9]*$");
+    expect(Object.keys(v3.paths["/v3/custom-launches"].post.responses))
+      .toEqual([
+        "200", "202", "400", "401", "403", "409", "413", "415", "422", "429", "500", "503",
+      ]);
     expect(v3.paths["/v3/custom-launches"].post.responses["202"])
       .toBeDefined();
     expect(v3.paths["/v3/custom-launches"].get.responses["200"])
@@ -377,7 +403,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(fundingSubmission.requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/FundingAuthorizationSubmissionV1");
     expect(Object.keys(fundingSubmission.responses).sort()).toEqual([
-      "200", "202", "400", "401", "403", "404", "409", "503",
+      "200", "202", "400", "401", "403", "404", "409", "413", "415", "422", "429", "500", "503",
     ]);
     expect(v3["x-programmable-funding-boundary"]
       .excludedFromFundingIntentHash).toEqual([
@@ -539,6 +565,12 @@ describe("public Custom Launch CLI surface", () => {
       .properties.stage.const).toBe("funding-signature-required");
     expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
       .properties.stage.const).toBe("router-transaction-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
+      .properties.stage.const).toBe("platform-review-action-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
+      .properties.actionRequired.properties.kind.const).toBe("security-review");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
+      .required).toContain("staticBaseline");
     expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.every(
       (variant: { required: string[] }) =>
         variant.required.includes("fundingBoundary"),
@@ -722,6 +754,16 @@ describe("public Custom Launch CLI surface", () => {
         replayHttpStatus: 200,
         retryAfter: "honor-on-429-or-503",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+      },
+      v3: {
+        status: "live",
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 2,
+        productionLaunchAuthorized: true,
+        createHttpStatus: 202,
+        replayHttpStatus: 200,
+        retryAfter: "honor-on-429-or-503",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       },
       legacyIntake: { registry: "closed", github: "closed" },
     });

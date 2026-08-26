@@ -4,7 +4,7 @@
     "title": "Programmable Custom Launch API V3 general hook profile",
     "version": "3.0.0",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document freezes revision 2 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt from exact Standard JSON and materialized runtime bytes. A platform-issued receipt must bind the final graph and prove the declared 10 bps Programmable fee before the permit authority signs; the exact Router transaction is then simulated before it is returned for separate wallet review. Funding may be absent or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction.",
+    "description": "This document freezes revision 2 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt from exact Standard JSON and materialized runtime bytes. A platform-issued receipt must bind the final graph and prove the declared 10 bps Programmable fee before the permit authority signs; the exact Router transaction is then simulated before it is returned for separate wallet review. Funding may be absent, carried as the exact native value of that Router transaction, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -153,6 +153,33 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/LaunchQuotaExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "description": "A transient dependency is unavailable. Honor Retry-After and retry only the byte-identical request; never fall back to another create version.",
             "headers": {
@@ -160,7 +187,7 @@
                 "description": "Delay before an exact retry.",
                 "schema": {
                   "type": "string",
-                  "const": "30"
+                  "pattern": "^[1-9][0-9]*$"
                 }
               }
             },
@@ -225,8 +252,20 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
-            "$ref": "#/components/responses/V3IntegrationPending"
+            "$ref": "#/components/responses/V3Unavailable"
           }
         }
       }
@@ -272,8 +311,17 @@
               }
             }
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
-            "$ref": "#/components/responses/V3IntegrationPending"
+            "$ref": "#/components/responses/V3Unavailable"
           }
         }
       }
@@ -416,8 +464,23 @@
               }
             }
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/LaunchQuotaExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
-            "$ref": "#/components/responses/V3IntegrationPending"
+            "$ref": "#/components/responses/V3Unavailable"
           }
         }
       }
@@ -439,14 +502,121 @@
       }
     },
     "responses": {
-      "V3IntegrationPending": {
+      "BadRequest": {
+        "description": "Malformed JSON, query values, Idempotency-Key, hash binding or closed V3 request shape.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "The required API key or website service credential is missing, malformed, expired, revoked or unknown.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Bearer challenge.",
+            "schema": {
+              "const": "Bearer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The required scope, wallet binding or verified website principal is missing.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The idempotency key, nonce, funding intent or durable launch state conflicts with the submitted bytes. Do not mutate a retry merely to bypass the conflict.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "RequestTooLarge": {
+        "description": "The streaming request body exceeded 8,388,608 bytes.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Content-Type must be application/json, optionally with charset=utf-8.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "The request parsed but failed source, graph, hook-permission, fee-conformance, funding, profile or exact-simulation validation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "LaunchQuotaExceeded": {
+        "description": "The launch admission quota or wallet-admin rate limit was reached. Honor Retry-After before retrying identical bytes.",
+        "headers": {
+          "Retry-After": {
+            "description": "Delay before the next exact retry.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected server failure. The response includes a correlation requestId and no secret.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+            }
+          }
+        }
+      },
+      "V3Unavailable": {
         "description": "A required V3 production dependency is temporarily unavailable.",
         "headers": {
           "Retry-After": {
             "description": "Delay before an exact retry.",
             "schema": {
               "type": "string",
-              "const": "30"
+              "pattern": "^[1-9][0-9]*$"
             }
           }
         },
@@ -477,7 +647,7 @@
       "SelectedFeeHundredthsOfBipV1": {
         "type": "string",
         "pattern": "^(?:0|[1-9][0-9]{0,5})$",
-        "description": "Intent-bound selected total from 0 through 999999 hundredths of a bip. The effective total is max(selected,1000)."
+        "description": "Intent-bound selected fee from 0 through 999999 hundredths of a bip. In additive mode the effective total is selected+1000; in inclusive mode it is max(selected,1000)."
       },
       "DirectNativeTargetRolesV1": {
         "type": "object",
@@ -682,7 +852,7 @@
               "signatureRequired": { "const": false },
               "valueSource": { "const": "exact-router-transaction-msg-value" }
             },
-            "description": "Native ETH value is carried only by the exact Router transaction returned after conformance and simulation for separate wallet review.",
+            "description": "Native ETH value is carried only by the exact Router transaction returned after conformance and simulation for separate wallet review. signatureRequired is false because there is no separate pre-Router funding signature; the wallet still explicitly signs the Router transaction.",
             "additionalProperties": false
           },
           {
@@ -693,6 +863,7 @@
               "launchFundingRequired": { "const": false },
               "signatureRequired": { "const": false }
             },
+            "description": "No launch funding is transferred by the graph. The final Router transaction still requires explicit wallet review and signing even when value is zero.",
             "additionalProperties": false
           },
           {
@@ -810,7 +981,7 @@
             "$ref": "#/components/schemas/PlatformFeeProofPolicyV1"
           }
         },
-        "description": "General direct-graph profile. The current embedded value remains false until the exact-graph fee-conformance authority and production readback are promoted; request bytes cannot activate it.",
+        "description": "Production-authorized general direct-graph profile. Runtime trust roots, exact-source reconstruction, the platform fee-conformance receipt and exact simulation still fail closed for every request; request bytes cannot bypass those checks.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -1520,7 +1691,7 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/HexData"
           }
         },
-        "description": "Exact Router transaction for a second, separate wallet review and explicit send. It is never auto-signed or auto-broadcast.",
+        "description": "Exact Router transaction for explicit wallet review and send. It is a second wallet action only for EIP-3009 funding; for native-value or no-funding mode it is the sole wallet action. It is never auto-signed or auto-broadcast.",
         "additionalProperties": false
       },
       "FundingBoundaryV3": {
@@ -1545,7 +1716,206 @@
             "const": false
           }
         },
-        "description": "Closed wallet-authority boundary repeated on every V3 output stage. Funding is EIP-3009 without an approval transaction or Permit2; the service neither produces the wallet signature nor broadcasts the Router transaction.",
+        "description": "Closed wallet-authority boundary repeated on every V3 output stage. No mode uses an approval transaction or Permit2. Only EIP-3009 mode adds a separate typed-data funding signature; native-value mode carries exact msg.value on the Router transaction and none mode carries no funding. The service never produces a wallet signature or broadcasts the Router transaction.",
+        "additionalProperties": false
+      },
+      "StaticBaselineSourceLocationV1": {
+        "type": "object",
+        "required": [
+          "compilationUnitId",
+          "sourcePath",
+          "contractName",
+          "line",
+          "column"
+        ],
+        "properties": {
+          "compilationUnitId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+          },
+          "sourcePath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contractName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "StaticBaselineRuntimeLocationV1": {
+        "type": "object",
+        "required": [
+          "targetId",
+          "programCounter",
+          "opcode"
+        ],
+        "properties": {
+          "targetId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+          },
+          "programCounter": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "opcode": {
+            "enum": [
+              "CALLCODE",
+              "DELEGATECALL",
+              "SELFDESTRUCT"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "StaticBaselineFindingV1": {
+        "type": "object",
+        "required": [
+          "code",
+          "disposition",
+          "evidenceAuthority",
+          "targetIds",
+          "detail",
+          "source",
+          "runtime"
+        ],
+        "properties": {
+          "code": {
+            "enum": [
+              "RUNTIME_CALLCODE",
+              "RUNTIME_DELEGATECALL",
+              "RUNTIME_SELFDESTRUCT",
+              "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+              "SOURCE_SELFDESTRUCT_SURFACE",
+              "SOURCE_MUTABLE_PAUSE_SURFACE",
+              "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+              "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+              "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+              "SOURCE_MUTABLE_ADMIN_SURFACE",
+              "SOURCE_PUBLIC_MINT_SURFACE",
+              "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+              "SOURCE_TARGET_ANALYSIS_INCOMPLETE"
+            ]
+          },
+          "disposition": {
+            "const": "action_required"
+          },
+          "evidenceAuthority": {
+            "const": "deterministic-exact-source-and-runtime-scan"
+          },
+          "targetIds": {
+            "type": "array",
+            "items": {
+              "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StaticBaselineSourceLocationV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runtime": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StaticBaselineRuntimeLocationV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "StaticBaselineReportV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "gateVersion",
+          "evidenceAuthority",
+          "disposition",
+          "approvalAuthority",
+          "safetyClaim",
+          "exactSourceGraphSha256",
+          "verificationBundleSha256",
+          "findings",
+          "limitations",
+          "reportSha256"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-static-baseline-gate.v1"
+          },
+          "gateVersion": {
+            "const": "1.0.0"
+          },
+          "evidenceAuthority": {
+            "const": "deterministic-exact-source-and-runtime-scan"
+          },
+          "disposition": {
+            "enum": [
+              "no_static_finding",
+              "action_required"
+            ]
+          },
+          "approvalAuthority": {
+            "const": false
+          },
+          "safetyClaim": {
+            "const": false
+          },
+          "exactSourceGraphSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "verificationBundleSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaticBaselineFindingV1"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "const": "Static indicators do not prove that a contract is safe, non-malicious, or economically solvent."
+              },
+              {
+                "const": "No static result replaces exact fork simulation of buys, sells, liquidity lifecycle, callbacks, or fee routing."
+              },
+              {
+                "const": "A no-static-finding result only permits later conformance review; it is never an approval or audit."
+              }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "reportSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          }
+        },
+        "description": "Deterministic bounded exact-source and runtime indicator report. It is neither approval nor a safety claim.",
         "additionalProperties": false
       },
       "CustomLaunchOutputV3": {
@@ -1697,6 +2067,79 @@
               }
             },
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "integrationState",
+              "stage",
+              "actionRequired",
+              "staticBaseline",
+              "fundingBoundary"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.custom-launch-authorization-result.v3"
+              },
+              "integrationState": {
+                "const": "ready"
+              },
+              "stage": {
+                "const": "platform-review-action-required"
+              },
+              "actionRequired": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "reportSha256",
+                  "findingCodes",
+                  "message"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "security-review"
+                  },
+                  "reportSha256": {
+                    "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+                  },
+                  "findingCodes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/StaticBaselineFindingV1/properties/code"
+                    },
+                    "minItems": 1
+                  },
+                  "message": {
+                    "const": "Additional platform review is required before wallet authorization."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "staticBaseline": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StaticBaselineReportV1"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "disposition": {
+                        "const": "action_required"
+                      },
+                      "findings": {
+                        "minItems": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              "fundingBoundary": {
+                "$ref": "#/components/schemas/FundingBoundaryV3"
+              }
+            },
+            "description": "A deterministic indicator requires additional platform review. This stage never asks the controller wallet to sign or broadcast.",
+            "additionalProperties": false
           }
         ]
       },
@@ -1749,6 +2192,7 @@
           },
           "status": {
             "type": "string",
+            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report for additional platform review and is not a wallet action. Only awaiting_funding_authorization and authorized expose separate controller-wallet handoffs.",
             "enum": [
               "received",
               "validating",

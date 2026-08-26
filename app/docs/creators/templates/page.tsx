@@ -171,7 +171,7 @@ export default function CreatorTemplateDocsPage() {
         <h2>Current status</h2>
         <p>
           Public template submissions and fee share activation are not active.
-          Public V2 Custom launch creation is live for concrete projects. Package
+          Public V3 Custom launch creation is live for concrete projects. Package
           the exact project locally and follow the Custom Launch API guide.
         </p>
         <p className={styles.inlineAction}>

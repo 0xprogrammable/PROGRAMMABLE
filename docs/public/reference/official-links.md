@@ -15,8 +15,8 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch API keys  | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)                         |
 | Custom Launch API guide | [programmable.market/developers/custom-launch-api-v1.md](https://programmable.market/developers/custom-launch-api-v1.md) |
 | Custom Launch V1 OpenAPI | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
-| Custom Launch V2 OpenAPI | [public creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v2.json)               |
-| Custom Launch V3 OpenAPI | [integration-pending direct-native profile preview](https://programmable.market/openapi/custom-launch-v3.json)     |
+| Custom Launch V2 OpenAPI | [V2 request and read compatibility](https://programmable.market/openapi/custom-launch-v2.json)                     |
+| Custom Launch V3 OpenAPI | [live general-hook creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v3.json)     |
 | Custom Launch API      | [api.programmable.market](https://api.programmable.market)                                                         |
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
 | Custom Launch CLI 3.0.0 | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz) |
@@ -28,4 +28,4 @@ description: Official Programmable product, source, community and analytics link
 | Dune                    | [Programmable analytics](https://dune.com/0xprogrammable6098/programmable-analytics)                               |
 | V4 token                | [Dexscreener](https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0) |
 
-Use `api.programmable.market` for authenticated public V2 creation and wallet-owned lifecycle reads. The V3 document is an `integration-pending` schema preview and does not grant a launch capability. V1 history remains readable, V1 creation remains read only, and legacy Registry and GitHub submission intake is closed. Use the read-only developer service and current deployment manifest when verifying Ethereum source or deployment data. Use the Prediction Markets repository for its current networks, contracts and release evidence. Community posts and analytics are useful context but do not replace the contract address, canonical chain record or versioned release evidence.
+Use `api.programmable.market` for authenticated public V3 general-hook creation and wallet-owned lifecycle reads. V2 and V1 history remain readable, V1 creation remains read only, and legacy Registry and GitHub submission intake is closed. Use the read-only developer service and current deployment manifest when verifying Ethereum source or deployment data. Use the Prediction Markets repository for its current networks, contracts and release evidence. Community posts and analytics are useful context but do not replace the contract address, canonical chain record or versioned release evidence.
